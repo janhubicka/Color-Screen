@@ -1,0 +1,13 @@
+#sh compile
+echo convert
+#convert $1 -normalize -gamma 2.2 -sharpen 2  /tmp/a.pnm || exit
+convert $1  /tmp/a.pnm || exit
+echo run
+if test -e `basename $1 .tif`.par 
+then
+  input=`basename $1 .tif`.par
+else
+  input=standard.inp
+fi
+echo $input
+~/barveni2/barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par <~/barveni2/$input

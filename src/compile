@@ -1,0 +1,6 @@
+rm a.out
+gob2 gtk-image-viewer.gob
+patch -p0 <viewer-patch
+#gcc -I /usr/include/netpbm -march=native  barveni.c gtk-image-viewer.c `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -lnetpbm -export-dynamic -g -ffast-math -funroll-all-loops  -lm -Ofast
+gcc -I /usr/include/netpbm -march=native  barveni.c gtk-image-viewer.c `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -lnetpbm -export-dynamic -g -ffast-math -funroll-all-loops  -lm   -Ofast  -o barveni-bin #-I /usr/include/pgm-5.2/pgm -I /usr/include/pgm-5.2
+#gcc -I /usr/include/netpbm -march=native  barveni.c `pkg-config --cflags gtkimageviewe0` `pkg-config --libs gtkimageviewer` `pkg-config gtk+-3.0 --cflags` `pkg-config gtk+-3.0 --libs` -lnetpbm -export-dynamic -g -ffast-math -funroll-all-loops  -lm -Ofast

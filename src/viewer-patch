@@ -1,0 +1,15 @@
+--- gtk-image-viewer.c	2013-11-01 14:53:51.232403930 +0100
++++ gtk-image-viewer.c	2013-11-01 14:54:12.624403644 +0100
+@@ -452,9 +452,9 @@
+ 			G_STRUCT_OFFSET (GtkImageViewerClass, set_scroll_adjustments),
+ 			NULL, NULL,
+ 			___marshal_Sig1,
+-			G_TYPE_BOOLEAN, 2,
+-			G_TYPE_OBJECT,
+-			G_TYPE_OBJECT);
++			G_TYPE_NONE, 2,
++			GTK_TYPE_ADJUSTMENT,
++			GTK_TYPE_ADJUSTMENT);
+ 	if ___GOB_UNLIKELY(sizeof(gboolean ) != sizeof(gboolean ) || sizeof(GtkAdjustment * ) != sizeof(GObject *) || sizeof(GtkAdjustment * ) != sizeof(GObject *) || parent_class == NULL /* avoid warning */) {
+ 		g_error("gtk-image-viewer.gob line 1496: Type mismatch of \"set_scroll_adjustments\" signal signature");
+ 	}
