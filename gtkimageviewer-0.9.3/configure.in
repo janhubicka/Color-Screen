@@ -1,0 +1,58 @@
+AC_INIT(src/gtk-image-viewer.gob)
+
+AM_CONFIG_HEADER(config.h)
+
+PACKAGE=gtkimageviewer
+GTKIV_API_VERSION=2.0
+
+AM_INIT_AUTOMAKE($PACKAGE,"0.9.3")
+
+dnl Use libtool to get shared libraries
+AC_PROG_CC
+AC_DISABLE_STATIC
+AC_PROG_LIBTOOL
+
+dnl dito install
+AC_PROG_INSTALL
+AM_MAINTAINER_MODE
+
+
+dnl Check for GTK+
+dnl ==============
+GTK_PACKAGES="gtk+-2.0"
+GTK_REQUIRED_VERSION=2.0.0
+
+AM_PATH_GTK_2_0($GTK_REQUIRED_VERSION, :,
+  AC_MSG_ERROR([
+*** GTK $GTK_REQUIRED_VERSION or better is required. The latest version of 
+*** GTK is always available from ftp://ftp.gtk.org/.]),
+  gtk+)
+
+GTKIMAGEVIEWER_PACKAGES="gtk+-2.0 gobject-2.0 gmodule-2.0 "
+GTKIMAGEVIEWER_DEP_LIBS="`$PKG_CONFIG --libs $GTK_IMAGE_VIEWER_PACKAGES` `freetype-config --libs`"
+GTK_IMAGE_VIEWER_DEP_CFLAGS="`$PKG_CONFIG --cflags $GTK_IMAGE_VIEWER_PACKAGES` `freetype-config --libs`"
+
+AC_SUBST(GTKIMAGEVIEWER_PACKAGES)
+AC_SUBST(GTKIMAGEVIEWER_DEP_LIBS)
+AC_SUBST(GTKIMAGEVIEWER_DEP_CFLAGS)
+
+gtkivtargetlib=libgtkimageviewer-$GTKIV_API_VERSION.la
+AC_SUBST(GTKIV_API_VERSION)
+AC_SUBST(gtkivtargetlib)
+
+##################################################
+# Checks for gtk-doc and docbook-tools
+##################################################
+
+AC_CHECK_PROG(DB2HTML, db2html, true, false)
+AM_CONDITIONAL(HAVE_DOCBOOK, $DB2HTML)
+
+dnl Define the files to be built by the configure script
+dnl
+AC_OUTPUT([
+Makefile
+src/Makefile
+docs/Makefile
+docs/tutorial/Makefile
+gtkimageviewer-2.0.pc
+])

@@ -1,0 +1,48 @@
+2009-02-06  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* Released 0.9.2
+
+2009-01-25  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* src/gtk-image-viewer.c, src/gtk-image-viewer-fixed.c: Fixed
+	signal type error by postprocessing the gob output.
+
+2008-10-21  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* example/agg-lion.c : Added example that renders the agg lion.
+
+2008-10-18  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* Relased 0.9.1
+
+	* gtk-image-vier.gob : Updated license info.
+
+	* COPYING : Changed license to LGPL v3, which is what I what I
+	intended.
+
+2008-10-10  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* examples/*.c* : Fixed compilation warnings.
+
+	* examples/Makefile : Fixed compilation problems.
+
+	* Makefile.am : Added forgotten file examples/lena.ppm
+
+	* gtk-image-viewer.gob : Created dummy adjustments during flipping
+	if no real adjustments exists. This enables flipping when no
+	scrollbars have been attached. (Problem reported by zentera)
+
+2008-10-08  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* Released 0.9.0
+
+2008-10-03  Dov Grobgeld  <dov.grobgeld@gmail.com>
+
+	* Fixed autofilling when scrollbar policy is GTK_POLICY_ALWAYS.
+
+	* Added keyboard binding 'f' for fit in window.
+
+	* Fixed bug in initialization.
+
+	* Separated out from giv.
+

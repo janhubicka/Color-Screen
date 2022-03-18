@@ -1,0 +1,26 @@
+            GtkImageViewer - An image viewer widget for gtk
+                Dov Grobgeld <dov.grobgeld@gmail.com>
+                        Wednesday 2008-10-08 10:22 
+             http://giv.sourceforge.net/gtk-image-viewer/
+                           License: LPGPL v3
+
+As a writer of several scientific image displaying tools I have always
+wanted a good general purpose image display widget. The goal of the
+GtkImageViewer widget is to fullfill that gap. Its interaction is a
+mixture of the user interfaces of Gimp and of xv. The widget itself
+handles zoom and panning. Additional functionality may be added
+through callbacks.
+
+Considerable emphasis has been put into the speed and the memory
+requirements of the widget. While panning only the exposed areas
+are redrawn, and the zoomed up image outside the display area is
+never kept in memory. 
+
+The GtkImageViewer is perfectly suited to be used by any photo display
+program and will provide a uniform interface for interacting with
+images.
+
+The 0.9 series is a major rewrite of the gtk image viewer with a new 
+callback model.
+
+See docs/tutorial for a description of how to use the widget.
