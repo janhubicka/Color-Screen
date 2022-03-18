@@ -10,4 +10,4 @@ else
   input=standard.inp
 fi
 echo $input
-~/barveni2/barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par <~/barveni2/$input
+./barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par <$input
