@@ -4,8 +4,8 @@
 #include <assert.h>
 #include <gtk/gtkbuilder.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
-#include <pgm.h>
-#include <ppm.h>
+#include <netpbm/pgm.h>
+#include <netpbm/ppm.h>
 #include <math.h>
 #include <cairo.h>
 #include <gtkimageviewer-2.0/gtk-image-viewer.h>
