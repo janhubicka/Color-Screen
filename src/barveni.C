@@ -11,6 +11,8 @@
 #include <gtkimageviewer-2.0/gtk-image-viewer.h>
 #include <stdbool.h>
 
+#include "matrix.h"
+
 #define UNDOLEVELS 100 
 
 extern "C" {
