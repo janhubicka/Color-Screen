@@ -13,13 +13,24 @@
 
 #define UNDOLEVELS 100 
 
+/* Structure describing the position of the screen.  */
 struct parameters {
+  /* This is a center of rotation of screen (a green dot).  */
   double xstart, ystart;
+  /* This defines horizontal vector of the screen.  */
   double xend, yend;
+  /* I originally believed that Library of Congress scans are 1000 DPI
+     and later found that they differs in their vertical and horisontal DPIs.
+     XM is a correction to horisontal DPI and YM is a correction to vertical.
+     Since the DPI information is inprecise this does not have any really 
+     good meaning.  */
   double xm, ym;
+  /* This was added later to allow distortions along each edge of the scan.
+     It should be perpective correction in one direction and it is not.  */
   double xs,ys,xs2,ys2;
 };
 
+/* Undo history and the state of UI.  */
 struct parameters undobuf[UNDOLEVELS];
 struct parameters current;
 int undopos;
@@ -27,12 +38,14 @@ int undopos;
 char *oname, *paroname;
 static void bigrender (int xoffset, int yoffset, double bigscale,
 		       GdkPixbuf * bigpixbuf);
+
+/* The graymap with original scan is stored here.  */
 int xsize, ysize;
-/*double ys,xs,xs2,ys2;
-double xstart = 10, ystart = 10, xend = 1000, yend = 10, num, xm = 1, ym = 1;*/
 gray **graydata;
 gray maxval;
 int initialized = 0;
+
+/* Status of the main window.  */
 int offsetx = 8, offsety = 8;
 int bigscale = 4;
 
@@ -96,15 +109,17 @@ struct pattern
 
 struct pattern pattern;
 
+/* This should render the viewing screen, but because I though the older Thames screen was used
+   it is wrong: it renders color dots rather than diagonal squares.
+   It is not used anymore since I implemented better rendering algorithm.  */
+
 /* The pattern is sqare.  In the center there is green circle
-   of diameter DG, on corners there are red circles of diameter
-   D  
+   of diameter DG, on corners there are red circles of diameter D  
    RR is a blurring radius.  */
 #define D 70
 #define DG 70
 
 #define RR 2048
-
 static void
 init_render_pattern ()
 {
@@ -155,6 +170,8 @@ init_render_pattern ()
 	  }
       }
 }
+
+/* This computes the grid displayed by UI.  */
 
 static void
 init_preview_pattern ()
@@ -254,6 +271,8 @@ cb_show_about (GtkButton * button, Data * data)
      gtk_widget_hide( data->about ); */
 }
 
+/* Load the input file. */
+
 static void
 openimage (int *argc, char **argv)
 {
@@ -270,6 +289,8 @@ openimage (int *argc, char **argv)
   maxval++;
 }
 
+/* Get values displayed in the UI.  */
+
 static void
 getvals (void)
 {
@@ -282,6 +303,8 @@ getvals (void)
   /*printf ("%lf %lf %lf %lf %lf %lf %lf\n", current.xstart, current.ystart, current.xend, current.yend, num,
 	  current.xm, current.ym);*/
 }
+
+/* Set values displayed by the UI.  */
 
 static void
 setvals (void)
@@ -296,6 +319,7 @@ setvals (void)
   initialized = 1;
 }
 
+/* Render image into the main window.  */
 static void
 cb_image_annotate (GtkImageViewer * imgv,
 		   GdkPixbuf * pixbuf,
@@ -310,7 +334,6 @@ cb_image_annotate (GtkImageViewer * imgv,
   guint8 *buf = gdk_pixbuf_get_pixels (pixbuf);
   int col_idx, row_idx;
 
-/*printf ("%i %i\n",shift_x, shift_y);*/
   if (shift_x < scale_x * 2 || shift_y < scale_x * 2)
     {
       gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER
@@ -321,18 +344,18 @@ cb_image_annotate (GtkImageViewer * imgv,
   if (shift_y < scale_x * 2)
     abort ();
   assert (scale_x == scale_y);
-/*fprintf (stderr, "zoom: %i %i %f\n", shift_x, shift_y, scale_x);*/
   bigrender (shift_x, shift_y, scale_x, pixbuf);
 }
 
 int setcenter;
 
+/* Handle all the magic keys.  */
 static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 {
   gint k = event->keyval;
 
-  if (k == 'c' || k == 's')
+  if (k == 'c')
     setcenter = 1;
   if (k == 'q')
     {
@@ -405,6 +428,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 }
 
 
+/* Initialize the GUI.  */
 static GtkWidget *
 initgtk (int *argc, char **argv)
 {
@@ -416,7 +440,11 @@ initgtk (int *argc, char **argv)
 
   /* Create builder and load interface */
   builder = gtk_builder_new ();
-  gtk_builder_add_from_file (builder, "barveni.glade", NULL);
+  if (!gtk_builder_add_from_file (builder, "barveni.glade", NULL))
+    {
+      fprintf (stderr, "Can not open barveni.glade\n");
+      exit (1);
+    }
 
   /* Obtain widgets that we need */
   window = GTK_WIDGET (gtk_builder_get_object (builder, "window"));
@@ -468,29 +496,16 @@ initgtk (int *argc, char **argv)
   return window;
 }
 
-static void
-compute_start ()
-{
-#if 0
-  /*if (num == 0) */
-  num =
-    sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm +
-	  (current.yend - current.ystart) * (current.yend -
-			     current.ystart) * current.ym * current.ym) / (8.750032 /** 800/ 1000*/ );
-  ox = (current.xend - current.xstart) / (double) num *current.xm;
-  oy = (current.yend - current.ystart) / (double) num *current.ym;
-  fprintf (stderr, "Delka %f, normovane %f, num %f\n",
-	   sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm +
-		 (current.yend - current.ystart) * (current.yend - current.ystart) * current.ym * current.ym),
-	   sqrt (ox * ox + oy * oy), num);
-#endif
-}
+/* During rendering we use 2x2 transformation matrix to represent the mapping from image to screen
+   and back.  */
 
 struct transformation_data
 {
+  /* Number of repetitions of the screen pattern along the edge (xstart,xstart),(xend,yend)  */
   double num;
-  double recip_num, recip_xm, recip_ym;
+  /* image->screen translation and rotation matrix.  */
   double m1, m2, m3, m4;
+  /* screen->image translation and rotation matrix (an inverse of above).  */
   double im1, im2, im3, im4;
 } transform_data;
 
@@ -519,6 +534,8 @@ init_transformation_data (struct transformation_data *trans)
   trans->m4 = a / (a * d - b * c);
 }
 
+/* Transform coordinates of screen to image data.  */
+
 static inline void
 finlay_to_image (struct transformation_data *trans, double x, double y,
 		 double *xp, double *yp)
@@ -531,6 +548,9 @@ finlay_to_image (struct transformation_data *trans, double x, double y,
   *yp += current.ystart;
 }
 
+/* Inverse transformation.
+   FIXME: This is clearly missing xs/ys/xs2/ys2 handling.  */
+
 static inline void
 image_to_finlay (struct transformation_data *trans, double x, double y,
 		 double *xp, double *yp)
@@ -541,11 +561,7 @@ image_to_finlay (struct transformation_data *trans, double x, double y,
   *yp = (px) * trans->m3 + (py) * trans->m4;
 }
 
-#define TRANSFORM(xx,yy,x,y) \
-   px = ((x) - current.xstart) * xm; \
-   py = ((y) - ystart) * ym; \
-   xx = (px)*m1+(py)*m2;\
-   yy = (px)*m3+(py)*m4;
+/* Apply pattern to a given pixel.  */
 
 static inline void
 handle_pixel (struct transformation_data *trans, double scale,
@@ -564,6 +580,9 @@ handle_pixel (struct transformation_data *trans, double scale,
   *g += graydata * pattern.mult[ix][iy][0] + pattern.add[ix][iy][0];
   *b += graydata * pattern.mult[ix][iy][2] + pattern.add[ix][iy][2];
 }
+
+/* Compute one row of the color image.
+   This is the basic rendering routing which is no longer used.  */
 
 static void
 compute_row (double y, gray * data, pixel * outrow, int size, int offset,
@@ -609,6 +628,8 @@ compute_row (double y, gray * data, pixel * outrow, int size, int offset,
     }
 }
 
+/* Compute one row.  This is used to draw the small preview winow. */
+
 static void
 compute_row_fast (double y, gray * data, pixel * outrow, int size, int offset,
 		  double scale)
@@ -635,6 +656,8 @@ compute_row_fast (double y, gray * data, pixel * outrow, int size, int offset,
     }
 }
 
+/* Uused to draw into the previews.  Differs by data type.  */
+
 static inline void
 my_putpixel2 (guint8 * pixels, int rowstride, int x, int y, int r, int g,
 	      int b)
@@ -653,6 +676,7 @@ my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
   *(pixels + y * rowstride + x * 3 + 2) = b;
 }
 
+/* Determine grayscale value at a given position in the screen coordinates.  */
 
 static double
 sample (struct transformation_data *trans, double x, double y)
@@ -699,6 +723,8 @@ getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y)
   int line = (pos + NRED + x + y) % NRED;
   return sample[line][((xp + y * 2 - x * 2) - shift[line]) / 4];
 }
+
+/* This renders the small preview widget.   */
 
 static void
 previewrender (GdkPixbuf ** pixbuf)
@@ -1156,7 +1182,6 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   pxsize = gdk_pixbuf_get_width (bigpixbuf);
   pysize = gdk_pixbuf_get_height (bigpixbuf);
   outrow = ppm_allocrow (pxsize);
-  compute_start ();
   /*printf ("Bigrender %i %i %i\n", pxsize, pysize, bigrowstride); */
   init_preview_pattern ();
   if (xoffset < bigscale)
@@ -1260,7 +1285,6 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 static void
 display ()
 {
-  compute_start ();
   gtk_image_viewer_redraw (data.image_viewer, 1);
   previewrender (&data.smallpixbuf);
   gtk_image_set_from_pixbuf (data.smallimage, data.smallpixbuf);
@@ -1436,7 +1460,6 @@ init_render_pattern ();
       sprintf (fname,"out-%2.2f.pgm",angle);
       out = fopen (fname, "w");
       angle = angle*2*3.14/360;
-      compute_start ();
       ppm_writeppminit (out, xsize, ysize-2, 65535, 0);
       for (y = 1; y < ysize-1; y++)
 	{
@@ -1454,7 +1477,6 @@ init_render_pattern ();
   assert (scale < 16);
   for (y = 0; y < scale; y++)
     outrows[y] = ppm_allocrow (samples.xsize * scale * 4);
-  compute_start ();
   ppm_writeppminit (out, samples.xsize * scale * 4, samples.ysize * scale * 4,
 		    65535, 0);
   for (y = 0; y < samples.ysize * 4; y++)
