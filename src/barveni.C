@@ -505,12 +505,10 @@ initgtk (int *argc, char **argv)
 
 struct transformation_data
 {
+  /* Screen->image translation matrix.  */
+  matrix4x4 matrix;
   /* Number of repetitions of the screen pattern along the edge (xstart,xstart),(xend,yend)  */
   double num;
-  /* image->screen translation and rotation matrix.  */
-  double m1, m2, m3, m4;
-  /* screen->image translation and rotation matrix (an inverse of above).  */
-  double im1, im2, im3, im4;
 } transform_data;
 
 static inline void
@@ -523,19 +521,19 @@ init_transformation_data (struct transformation_data *trans)
 	       / (8.750032);	/* 8.75 pixels per pattern in the LOC 1000DPI scans.  */
   ox = (current.xend - current.xstart) * current.xm / (double) trans->num;
   oy = (current.yend - current.ystart) * current.ym / (double) trans->num;
-  trans->im1 = ox;
 
-  /* Finaly->image translation and rotation matrix.  */
-  trans->im1 = a = ox / current.xm;
-  trans->im2 = b = -oy / current.xm;
-  trans->im3 = c = oy / current.ym;
-  trans->im4 = d = ox / current.ym;
+  /* Translate 0 xstart/ystart.  */
+  matrix4x4 translation;
+  translation.m_elements[0][2] = current.xstart;
+  translation.m_elements[1][2] = current.ystart;
 
-  /* Inverse image->finlay.  */
-  trans->m1 = d / (a * d - b * c);
-  trans->m2 = -b / (a * d - b * c);
-  trans->m3 = -c / (a * d - b * c);
-  trans->m4 = a / (a * d - b * c);
+  /* Change basis.  */
+  matrix4x4 basis;
+  basis.m_elements[0][0] = a = ox / current.xm;
+  basis.m_elements[0][1] = b = -oy / current.xm;
+  basis.m_elements[1][0] = c = oy / current.ym;
+  basis.m_elements[1][1] = d = ox / current.ym;
+  trans->matrix = translation * basis;
 }
 
 /* Transform coordinates of screen to image data.  */
@@ -544,25 +542,16 @@ static inline void
 finlay_to_image (struct transformation_data *trans, double x, double y,
 		 double *xp, double *yp)
 {
-  *xp = x * trans->im1 + y * trans->im2;
-  *yp = x * trans->im3 + y * trans->im4;
-  *xp *= 1+(current.ys)* (*yp+current.ystart) + (current.ys2) * (ysize - *yp - current.ystart);
-  *yp *= 1+(current.xs)* (*xp+current.xstart) + (current.xs2) * (xsize - *xp - current.xstart);
-  *xp += current.xstart;
-  *yp += current.ystart;
+  trans->matrix.perspective_transform (x,y, *xp, *yp);
 }
 
-/* Inverse transformation.
-   FIXME: This is clearly missing xs/ys/xs2/ys2 handling.  */
+/* Inverse transformation.  */
 
 static inline void
 image_to_finlay (struct transformation_data *trans, double x, double y,
 		 double *xp, double *yp)
 {
-  double px = ((x) - current.xstart);
-  double py = ((y) - current.ystart);
-  *xp = (px) * trans->m1 + (py) * trans->m2;
-  *yp = (px) * trans->m3 + (py) * trans->m4;
+  trans->matrix.inverse_perspective_transform (x,y, *xp, *yp);
 }
 
 /* Apply pattern to a given pixel.  */

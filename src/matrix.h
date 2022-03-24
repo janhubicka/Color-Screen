@@ -25,9 +25,32 @@ public:
 	m_elements[j][i]=rand()%100;
   }
 
-  matrix(matrix &m)
+  matrix(const matrix &m)
   {
     memcpy(m_elements,m.m_elements,sizeof (m_elements));
+  }
+
+  matrix<dim> operator+ (const matrix<dim>& rhs) const
+  {
+    matrix<dim> ret;
+    for (int j = 0; j < m_dim; j++)
+      for (int i = 0; i < m_dim; i++)
+	ret.m_elements[j][i] = m_elements[j][i] + rhs.m_elements[j][i];
+    return ret;
+  }
+
+  matrix<dim> operator* (const matrix<dim>& rhs) const
+  {
+    matrix<dim> ret;
+    for (int j = 0; j < m_dim; j++)
+      for (int i = 0; i < m_dim; i++)
+	{
+	  double a = 0;
+	  for (int k = 0; k < m_dim; k++)
+	    a += m_elements[j][k] * rhs.m_elements[k][i];
+	  ret.m_elements[j][i] = a;
+	}
+    return ret;
   }
 
   void
@@ -76,6 +99,12 @@ class matrix4x4 : public matrix<4>
 {
 public:
   matrix4x4 () { }
+
+  matrix4x4& operator=(const matrix<4>rhs)
+  {
+    memcpy(m_elements,rhs.m_elements,sizeof (m_elements));
+    return *this;
+  }
 
   inline void
   perspective_transform (double x, double y, double &xr, double &yr)
