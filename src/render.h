@@ -92,11 +92,11 @@ render::get_img_pixel (double xp, double yp)
   if (sx < 1 || sx >= m_img_width - 2 || sy < 1 || sy >= m_img_height - 2)
     return 0;
   double rx = xp - sx, ry = yp - sy;
-  val = cubic_interpolate (cubic_interpolate (m_img[sy-1][sx-1], m_img[sy][sx-1], m_img[sy+1][sx-1], m_img[sy+2][sx-1], rx),
-			   cubic_interpolate (m_img[sy-1][sx-0], m_img[sy][sx-0], m_img[sy+1][sx-0], m_img[sy+2][sx-0], rx),
-			   cubic_interpolate (m_img[sy-1][sx+1], m_img[sy][sx+1], m_img[sy+1][sx+1], m_img[sy+2][sx+1], rx),
-			   cubic_interpolate (m_img[sy-1][sx+2], m_img[sy][sx+2], m_img[sy+1][sx+2], m_img[sy+2][sx+2], rx),
-			   ry);
+  val = cubic_interpolate (cubic_interpolate (m_img[sy-1][sx-1], m_img[sy][sx-1], m_img[sy+1][sx-1], m_img[sy+2][sx-1], ry),
+			   cubic_interpolate (m_img[sy-1][sx-0], m_img[sy][sx-0], m_img[sy+1][sx-0], m_img[sy+2][sx-0], ry),
+			   cubic_interpolate (m_img[sy-1][sx+1], m_img[sy][sx+1], m_img[sy+1][sx+1], m_img[sy+2][sx+1], ry),
+			   cubic_interpolate (m_img[sy-1][sx+2], m_img[sy][sx+2], m_img[sy+1][sx+2], m_img[sy+2][sx+2], ry),
+			   rx);
   if (val < 0)
     val = 0;
   if (val > m_maxval - 1)

@@ -5,7 +5,7 @@ all: barveni-bin matrix
 check:
 	./matrix
 
-barveni.o: barveni.C matrix.h scr-to-img.h render.h gtk-image-viewer.h screen.h
+barveni.o: barveni.C matrix.h scr-to-img.h render.h gtk-image-viewer.h screen.h render-superposeimg.h
 
 scr-to-img.o: scr-to-img.h
 

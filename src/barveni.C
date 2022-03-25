@@ -15,6 +15,7 @@
 #include "scr-to-img.h"
 #include "render-fast.h"
 #include "screen.h"
+#include "render-superposeimg.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 400
@@ -44,10 +45,7 @@ struct parameters current;
 int undopos;
 
 char *oname, *paroname;
-static void bigrender (int xoffset, int yoffset, double bigscale,
-		       GdkPixbuf * bigpixbuf);
-
-screen screen;
+static void bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf);
 
 /* The graymap with original scan is stored here.  */
 int xsize, ysize;
@@ -201,19 +199,9 @@ cb_image_annotate (GtkImageViewer * imgv,
   int img_width = gdk_pixbuf_get_width (pixbuf);
   int img_height = gdk_pixbuf_get_height (pixbuf);
   int row_stride = gdk_pixbuf_get_rowstride (pixbuf);
-  int pix_stride = 4;
   guint8 *buf = gdk_pixbuf_get_pixels (pixbuf);
   int col_idx, row_idx;
 
-  if (shift_x < scale_x * 2 || shift_y < scale_x * 2)
-    {
-      gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER
-					    (data.image_viewer), 4.0, 4.0, 64,
-					    64);
-      return;
-    }
-  if (shift_y < scale_x * 2)
-    abort ();
   assert (scale_x == scale_y);
   bigrender (shift_x, shift_y, scale_x, pixbuf);
 }
@@ -392,101 +380,6 @@ static inline void
 init_transformation_data (scr_to_img *trans)
 {
   trans->set_parameters (get_scr_to_img_parameters ());
-}
-
-/* Apply screen to a given pixel.  */
-
-static inline void
-handle_pixel (scr_to_img *map, double scale,
-	      double x, double y,
-	      double graydata, double factor, double *r, double *g, double *b)
-{
-  double gg, rr, bb;
-  double xx, yy;
-  int ix, iy;
-
-  map->to_scr (x / scale, y / scale, &xx, &yy);
-  ix = (long long) (xx * 256) & 255;
-  iy = (long long) (yy * 256) & 255;
-  graydata *= factor;
-  *r += graydata * screen.mult[ix][iy][1] + screen.add[ix][iy][1];
-  *g += graydata * screen.mult[ix][iy][0] + screen.add[ix][iy][0];
-  *b += graydata * screen.mult[ix][iy][2] + screen.add[ix][iy][2];
-}
-
-/* Compute one row of the color image.
-   This is the basic rendering routing which is no longer used.  */
-
-static void
-compute_row (double y, gray * data, pixel * outrow, int size, int offset,
-	     double scale)
-{
-  int x;
-  double graymul = 1, basemul = 0;
-  double valscale = 65536 / 8 / (double) maxval;
-  scr_to_img map;
-
-  init_transformation_data (&map);
-  for (x = 0; x < size; x++)
-    {
-      int rr, gg, bb;
-      double r, g, b;
-
-      r = g = b = 0;
-
-      handle_pixel (&map , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
-		    data[x], 0.5, &r, &g, &b);
-      handle_pixel (&map , scale, offset + x - 1.0 / 3, y, data[x],
-		    1, &r, &g, &b);
-      handle_pixel (&map , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
-		    data[x], 0.5, &r, &g, &b);
-
-      handle_pixel (&map , scale, offset + x, y - 1.0 / 3, data[x],
-		    1, &r, &g, &b);
-      handle_pixel (&map , scale, offset + x, y, data[x], 2, &r, &g,
-		    &b);
-      handle_pixel (&map , scale, offset + x, y - 1.0 / 3, data[x],
-		    1, &r, &g, &b);
-
-      handle_pixel (&map , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
-		    data[x], 0.5, &r, &g, &b);
-      handle_pixel (&map , scale, offset + x + 1.0 / 3, y, data[x],
-		    1, &r, &g, &b);
-      handle_pixel (&map , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
-		    data[x], 0.5, &r, &g, &b);
-
-      outrow[x].r = r * valscale;
-      outrow[x].g = g * valscale;
-      outrow[x].b = b * valscale;
-    }
-}
-
-/* Compute one row.  This is used to draw the small preview winow. */
-
-static void
-compute_row_fast (double y, gray * data, pixel * outrow, int size, int offset,
-		  double scale)
-{
-  int x;
-  double graymul = 1, basemul = 0;
-  double valscale = 65536 / (double) maxval;
-  scr_to_img map;
-
-  init_transformation_data (&map);
-  for (x = 0; x < size; x++)
-    {
-      int rr, gg, bb;
-      double r, g, b;
-
-      r = g = b = 0;
-
-      handle_pixel (&map , scale, offset + x, y, data[x], 1, &r, &g,
-		    &b);
-
-      outrow[x].r = r * valscale;
-      outrow[x].g = g * valscale;
-      outrow[x].b = b * valscale;
-    }
 }
 
 /* Uused to draw into the previews.  Differs by data type.  */
@@ -951,120 +844,42 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
 static void
 bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 {
-  int bigrowstride, smallrowstride;
-  int x, y;
-  guint8 *bigpixels;
-  int smallxsize = (xsize) / SCALE + 1;
-  int smallysize = (ysize) / SCALE + 1;
-  int maxr = 1, maxg = 1, maxb = 1;
-  gray *biggraydata = (gray *)malloc (sizeof (gray) * xsize * bigscale);;
-  int pxsize;
-  int pysize;
-  pixel *outrow;
-
-  bigrowstride = gdk_pixbuf_get_rowstride (bigpixbuf);
-  bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
-  pxsize = gdk_pixbuf_get_width (bigpixbuf);
-  pysize = gdk_pixbuf_get_height (bigpixbuf);
-  outrow = ppm_allocrow (pxsize);
-  /*printf ("Bigrender %i %i %i\n", pxsize, pysize, bigrowstride); */
+  int bigrowstride = gdk_pixbuf_get_rowstride (bigpixbuf);
+  guint8 *bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
+  int pxsize = gdk_pixbuf_get_width (bigpixbuf);
+  int pysize = gdk_pixbuf_get_height (bigpixbuf);
+  screen screen;
   screen.preview (maxval);
-  if (xoffset < bigscale)
-    xoffset = bigscale;
-  if (yoffset < bigscale)
-    yoffset = bigscale;
-  for (y = 0; y < pysize; y++)
-    {
-      int sy = (y + yoffset) / bigscale;
-      double py = (y + yoffset) / bigscale;
-      double p[4];
-      double arr[4];
-      double lx;
-      int offset = 0;
-      py = py - (int) py;
-      int sx = xoffset / bigscale;
+  render_superpose_img render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval, 256, &screen);
 
-      p[0] = graydata[sy - 1][sx - 1];
-      p[1] = graydata[sy - 0][sx - 1];
-      p[2] = graydata[sy + 1][sx - 1];
-      p[3] = graydata[sy + 2][sx - 1];
-      arr[0] = cubicInterpolate (p, py);
-      p[0] = graydata[sy - 1][sx];
-      p[1] = graydata[sy - 0][sx];
-      p[2] = graydata[sy + 1][sx];
-      p[3] = graydata[sy + 2][sx];
-      arr[1] = cubicInterpolate (p, py);
-      p[0] = graydata[sy - 1][sx + 1];
-      p[1] = graydata[sy - 0][sx + 1];
-      p[2] = graydata[sy + 1][sx + 1];
-      p[3] = graydata[sy + 2][sx + 1];
-      arr[2] = cubicInterpolate (p, py);
-      p[0] = graydata[sy - 1][sx + 2];
-      p[1] = graydata[sy - 0][sx + 2];
-      p[2] = graydata[sy + 1][sx + 2];
-      p[3] = graydata[sy + 2][sx + 2];
-      arr[3] = cubicInterpolate (p, py);
-      lx = sx;
-      for (x = 0; x < pxsize; x++)
+  for (int y = 0; y < pysize; y++)
+    {
+      double py = (y + yoffset) / bigscale;
+      for (int x = 0; x < pxsize; x++)
 	{
-	  int sx = (x + xoffset) / bigscale;
-	  double px = (x + xoffset) / bigscale;
-	  double val;
-	  px = px - (int) px;
-	  if (lx != sx)
-	    {
-	      arr[0] = arr[1];
-	      arr[1] = arr[2];
-	      arr[2] = arr[3];
-	      p[0] = graydata[sy - 1][sx + 2];
-	      p[1] = graydata[sy - 0][sx + 2];
-	      p[2] = graydata[sy + 1][sx + 2];
-	      p[3] = graydata[sy + 2][sx + 2];
-	      arr[3] = cubicInterpolate (p, py);
-	      lx = sx;
-	    }
-	  val = cubicInterpolate (arr, px);
-	  if (val < 0)
-	    val = 0;
-	  if (val > maxval - 1)
-	    val = maxval - 1;
-	  biggraydata[x] = val;
-	}
-      compute_row_fast (y + yoffset, biggraydata, outrow, pxsize, xoffset,
-			bigscale);
-      for (x = 0; x < pxsize; x++)
-	{
-	  int r = outrow[x].r / 256;
-	  int g = outrow[x].g / 256;
-	  int b = outrow[x].b / 256;
+	  int r, g, b;
+	  render.render_pixel ((x + xoffset) / bigscale, py, &r, &g, &b);
 	  my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	}
     }
-  {
-    cairo_surface_t *surface
-      =
-      cairo_image_surface_create_for_data (gdk_pixbuf_get_pixels (bigpixbuf),
+
+  cairo_surface_t *surface
+    = cairo_image_surface_create_for_data (bigpixels,
 					   CAIRO_FORMAT_RGB24,
 					   pxsize,
 					   pysize,
-					   gdk_pixbuf_get_rowstride
-					   (bigpixbuf));
-    cairo_t *cr = cairo_create (surface);
-    cairo_translate (cr, -xoffset, -yoffset);
-    cairo_scale (cr, bigscale, bigscale);
+					   bigrowstride);
+  cairo_t *cr = cairo_create (surface);
+  cairo_translate (cr, -xoffset, -yoffset);
+  cairo_scale (cr, bigscale, bigscale);
 
-    cairo_set_source_rgba (cr, 0, 0, 1.0, 0.5);
-    cairo_arc (cr, current.xstart, current.ystart, 3, 0.0, 2 * G_PI);
+  cairo_set_source_rgba (cr, 0, 0, 1.0, 0.5);
+  cairo_arc (cr, current.xstart, current.ystart, 3, 0.0, 2 * G_PI);
 
-    cairo_fill (cr);
+  cairo_fill (cr);
 
-
-    cairo_surface_destroy (surface);
-    cairo_destroy (cr);
-
-  }
-  free (outrow);
-  free (biggraydata);
+  cairo_surface_destroy (surface);
+  cairo_destroy (cr);
 }
 
 static void
