@@ -2,6 +2,12 @@
 #define RENDER_H
 #include <netpbm/pgm.h>
 #include "scr-to-img.h"
+
+/* Base class for rendering routines.  It holds
+     - scr-to-img transformation info
+     - the scanned image data
+     - the desired range of input and output values
+   and provides way to get a pixel at given screen or image coordinates.  */
 class render
 {
 public:
@@ -11,13 +17,20 @@ public:
   inline double get_img_pixel_scr (double x, double y);
 
 protected:
+  /* Pointer to image data.  */
   gray **m_img;
+  /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
+  /* Dimensions of image data.  */
   int m_img_width, m_img_height;
+  /* Maximal value of the image data.  */
   int m_maxval;
+  /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
 };
 
+/* Base class for renderes tha works in screen coordinates (so output image is
+   geometrically corrected.  */
 class render_to_scr : public render
 {
 public:
@@ -26,15 +39,21 @@ public:
   {
     m_scr_to_img.get_range (img_width, img_height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
   }
+  /* This returns screen coordinate width of rendered output.  */
   int get_width ()
   {
     return m_scr_width;
   }
+  /* This returns screen coordinate height of rendered output.  */
   int get_height ()
   {
     return m_scr_height;
   }
 protected:
+  /* Rectangular section of the screen to which the whole image fits.
+
+     The section is having dimensions scr_width x scr_height and will
+     start at position (-scr_xshift, -scr_yshift).  */
   int m_scr_xshift, m_scr_yshift;
   int m_scr_width, m_scr_height;
 };
