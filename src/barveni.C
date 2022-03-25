@@ -700,7 +700,6 @@ previewrender (GdkPixbuf ** pixbuf)
   int scale = 1;
   render_fast render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval);
   int my_xsize = render.get_width (), my_ysize = render.get_height (), rowstride;
-  scr_to_img map;
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf =
