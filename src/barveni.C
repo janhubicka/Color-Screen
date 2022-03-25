@@ -14,6 +14,7 @@
 #include "matrix.h"
 #include "scr-to-img.h"
 #include "render-fast.h"
+#include "screen.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 400
@@ -45,6 +46,8 @@ int undopos;
 char *oname, *paroname;
 static void bigrender (int xoffset, int yoffset, double bigscale,
 		       GdkPixbuf * bigpixbuf);
+
+screen screen;
 
 /* The graymap with original scan is stored here.  */
 int xsize, ysize;
@@ -100,143 +103,6 @@ bicubicInterpolate (double p[4][4], double x, double y)
   arr[2] = cubicInterpolate (p[2], y);
   arr[3] = cubicInterpolate (p[3], y);
   return cubicInterpolate (arr, x);
-}
-
-
-
-/* Mult specify how much one should multiply, add how much add
-   and keep how much keep in the color.  */
-struct pattern
-{
-  double mult[256][256][3];
-  double add[256][256][3];
-};
-
-struct pattern pattern;
-
-/* This should render the viewing screen, but because I though the older Thames screen was used
-   it is wrong: it renders color dots rather than diagonal squares.
-   It is not used anymore since I implemented better rendering algorithm.  */
-
-/* The pattern is sqare.  In the center there is green circle
-   of diameter DG, on corners there are red circles of diameter D  
-   RR is a blurring radius.  */
-#define D 70
-#define DG 70
-
-#define RR 2048
-static void
-init_render_pattern ()
-{
-  int xx, yy;
-  for (xx = 0; xx < 256; xx++)
-    for (yy = 0; yy < 256; yy++)
-      {
-	int d11 = xx * xx + yy * yy;
-	int d21 = (256 - xx) * (256 - xx) + yy * yy;
-	int d22 = (256 - xx) * (256 - xx) + (256 - yy) * (256 - yy);
-	int d23 = xx * xx + (256 - yy) * (256 - yy);
-	int dc = (128 - xx) * (128 - xx) + (128 - yy) * (128 - yy);
-	int dl = xx * xx + (128 - yy) * (128 - yy);
-	int dr = (256 - xx) * (256 - xx) + (128 - yy) * (128 - yy);
-	int dt = (128 - xx) * (128 - xx) + (yy) * (yy);
-	int db = (128 - xx) * (128 - xx) + (256 - yy) * (256 - yy);
-	int d1, d3;
-
-	pattern.add[xx][yy][0] = 0;
-	pattern.add[xx][yy][1] = 0;
-	pattern.add[xx][yy][2] = 0;
-
-	d1 = sqrt (fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc)))));
-	d3 = sqrt (fmin (dl, fmin (dr, fmin (dt, db))));
-	if (d1 < (128 - DG))
-	  {
-	    pattern.mult[xx][yy][0] = RR * ((0.5 - d1 - DG) / (0.5 - DG));
-	    if (pattern.mult[xx][yy][0] > 1)
-	      pattern.mult[xx][yy][0] = 1;
-	    pattern.mult[xx][yy][1] = 0;
-	    pattern.mult[xx][yy][2] = 1 - pattern.mult[xx][yy][0];
-	    continue;
-	  }
-	else if (d3 < (128 - D))
-	  {
-	    pattern.mult[xx][yy][1] = RR * ((0.5 - d3 - D) / (0.5 - D));
-	    if (pattern.mult[xx][yy][1] > 1)
-	      pattern.mult[xx][yy][1] = 1;
-	    pattern.mult[xx][yy][2] = 0;
-	    pattern.mult[xx][yy][2] = 1 - pattern.mult[xx][yy][1];
-	    continue;
-	  }
-	else
-	  {
-	    pattern.mult[xx][yy][0] = 0;
-	    pattern.mult[xx][yy][1] = 0;
-	    pattern.mult[xx][yy][2] = 1;
-	  }
-      }
-}
-
-/* This computes the grid displayed by UI.  */
-
-static void
-init_preview_pattern ()
-{
-  int xx, yy;
-  for (xx = 0; xx < 256; xx++)
-    for (yy = 0; yy < 256; yy++)
-      {
-	int d11 = xx * xx + yy * yy;
-	int d21 = (256 - xx) * (256 - xx) + yy * yy;
-	int d22 = (256 - xx) * (256 - xx) + (256 - yy) * (256 - yy);
-	int d23 = xx * xx + (256 - yy) * (256 - yy);
-	int dc = (128 - xx) * (128 - xx) + (128 - yy) * (128 - yy);
-	int dl = xx * xx + (128 - yy) * (128 - yy);
-	int dr = (256 - xx) * (256 - xx) + (128 - yy) * (128 - yy);
-	int dt = (128 - xx) * (128 - xx) + (yy) * (yy);
-	int db = (128 - xx) * (128 - xx) + (256 - yy) * (256 - yy);
-	int d1, d3;
-
-	d1 = sqrt (fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc)))));
-	d3 = sqrt (fmin (dl, fmin (dr, fmin (dt, db))));
-	pattern.add[xx][yy][0] = 0;
-	pattern.add[xx][yy][1] = 0;
-	pattern.add[xx][yy][2] = 0;
-	pattern.mult[xx][yy][0] = 1;
-	pattern.mult[xx][yy][1] = 1;
-	pattern.mult[xx][yy][2] = 1;
-	if (d1 < 30)
-	  {
-	    pattern.add[xx][yy][0] = 0.5 * (maxval - 1);
-	    pattern.add[xx][yy][1] = 0;
-	    pattern.add[xx][yy][2] = 0;
-	    pattern.mult[xx][yy][0] = 0.5;
-	    pattern.mult[xx][yy][1] = 0.25;
-	    pattern.mult[xx][yy][2] = 0.25;
-	    continue;
-	  }
-	else if (d3 < 30)
-	  {
-	    pattern.add[xx][yy][0] = 0;
-	    pattern.add[xx][yy][1] = 0.5 * (maxval - 1);
-	    pattern.add[xx][yy][2] = 0;
-	    pattern.mult[xx][yy][0] = 0.25;
-	    pattern.mult[xx][yy][1] = 0.5;
-	    pattern.mult[xx][yy][2] = 0.25;
-	    continue;
-	  }
-	else
-	  {
-	    if (xx < 10 || xx > 256 - 10 || yy < 10 || yy > 256 - 10)
-	      {
-		pattern.add[xx][yy][0] = 0;
-		pattern.add[xx][yy][1] = 0;
-		pattern.add[xx][yy][2] = 0.5 * (maxval - 1);
-		pattern.mult[xx][yy][0] = 0.25;
-		pattern.mult[xx][yy][1] = 0.25;
-		pattern.mult[xx][yy][2] = 0.5;
-	      }
-	  }
-      }
 }
 
 
@@ -508,7 +374,7 @@ get_scr_to_img_parameters ()
   double ox,oy;
   double num = sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm
 		     + (current.yend - current.ystart) * (current.yend - current.ystart) * current.ym * current.ym)
-	       / (8.750032);	/* 8.75 pixels per pattern in the LOC 1000DPI scans.  */
+	       / (8.750032);	/* 8.75 pixels per screen in the LOC 1000DPI scans.  */
   ox = (current.xend - current.xstart) * current.xm / (double) num;
   oy = (current.yend - current.ystart) * current.ym / (double) num;
 
@@ -528,7 +394,7 @@ init_transformation_data (scr_to_img *trans)
   trans->set_parameters (get_scr_to_img_parameters ());
 }
 
-/* Apply pattern to a given pixel.  */
+/* Apply screen to a given pixel.  */
 
 static inline void
 handle_pixel (scr_to_img *map, double scale,
@@ -543,9 +409,9 @@ handle_pixel (scr_to_img *map, double scale,
   ix = (long long) (xx * 256) & 255;
   iy = (long long) (yy * 256) & 255;
   graydata *= factor;
-  *r += graydata * pattern.mult[ix][iy][1] + pattern.add[ix][iy][1];
-  *g += graydata * pattern.mult[ix][iy][0] + pattern.add[ix][iy][0];
-  *b += graydata * pattern.mult[ix][iy][2] + pattern.add[ix][iy][2];
+  *r += graydata * screen.mult[ix][iy][1] + screen.add[ix][iy][1];
+  *g += graydata * screen.mult[ix][iy][0] + screen.add[ix][iy][0];
+  *b += graydata * screen.mult[ix][iy][2] + screen.add[ix][iy][2];
 }
 
 /* Compute one row of the color image.
@@ -1102,7 +968,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   pysize = gdk_pixbuf_get_height (bigpixbuf);
   outrow = ppm_allocrow (pxsize);
   /*printf ("Bigrender %i %i %i\n", pxsize, pysize, bigrowstride); */
-  init_preview_pattern ();
+  screen.preview (maxval);
   if (xoffset < bigscale)
     xoffset = bigscale;
   if (yoffset < bigscale)
@@ -1371,7 +1237,7 @@ cb_save (GtkButton * button, Data * data)
   fclose (out);
 
 #if 0
-init_render_pattern ();
+init_render_screen ();
     {
       double angle = 0;
       char fname[256];
