@@ -9,7 +9,7 @@ render_fast::render_fast (scr_to_img_parameters param, gray **img, int img_width
 void
 render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 {
-  double dx = (x - m_scr_xshift) + 0.5, dy = (y - m_scr_yshift) + 0.5;
+  double dx = (x - m_scr_xshift), dy = (y - m_scr_yshift);
 
 /*  This is precise version:
 

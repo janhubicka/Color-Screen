@@ -16,6 +16,7 @@
 #include "render-fast.h"
 #include "screen.h"
 #include "render-superposeimg.h"
+#include "render-interpolate.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 400
@@ -1032,18 +1033,13 @@ cb_drag (GtkImage * image, GdkEventMotion * event, Data * data2)
 	       button1_pressed ? 1 : button3_pressed ? 3 : 0);
 }
 
-#define RANGE 2
-#define STEPS 201
-
 G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
   pixel *outrow;
   pixel *outrows[16];
   FILE *out;
-  int y;
   double xend2 = current.xend, yend2 = current.yend;
-  int i;
   struct samples samples;
   int scale;
   out = fopen (paroname, "w");
@@ -1051,45 +1047,23 @@ cb_save (GtkButton * button, Data * data)
 	   0.0, current.xm, current.ym,current.xs,current.ys,current.xs2,current.ys2);
   fclose (out);
 
-#if 0
-init_render_screen ();
-    {
-      double angle = 0;
-      char fname[256];
-      printf ("Save %f\n",angle);
-      outrow = ppm_allocrow (xsize);
-      sprintf (fname,"out-%2.2f.pgm",angle);
-      out = fopen (fname, "w");
-      angle = angle*2*3.14/360;
-      ppm_writeppminit (out, xsize, ysize-2, 65535, 0);
-      for (y = 1; y < ysize-1; y++)
-	{
-	  compute_row (y,graydata[y],outrow, xsize, 0, 1);
-	  ppm_writeppmrow (out, outrow, xsize, 65535, 0);
-	}
-      fclose (out);
-    }
-#endif
-
-
   scale = 4;
-  init_finalrender (&samples, scale);
+  render_interpolate render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval, 256, scale);
   out = fopen (oname, "w");
   assert (scale < 16);
-  for (y = 0; y < scale; y++)
-    outrows[y] = ppm_allocrow (samples.xsize * scale * 4);
-  ppm_writeppminit (out, samples.xsize * scale * 4, samples.ysize * scale * 4,
+  for (int y = 0; y < scale; y++)
+    outrows[y] = ppm_allocrow (render.get_width () * scale * 4);
+  ppm_writeppminit (out, render.get_width () * scale * 4, render.get_height() * scale * 4,
 		    65535, 0);
-  for (y = 0; y < samples.ysize * 4; y++)
+  for (int y = 0; y < render.get_height () * 4; y++)
     {
-      int yy;
-      finalrender_row (y, outrows, &samples);
-      for (yy = 0; yy < scale; yy++)
-	ppm_writeppmrow (out, outrows[yy], samples.xsize * scale * 4, 65535,
+      render.render_row (y, outrows);
+      for (int yy = 0; yy < scale; yy++)
+	ppm_writeppmrow (out, outrows[yy], render.get_width() * scale * 4, 65535,
 			 0);
     }
   fclose (out);
-  for (y = 0; y < scale; y++)
+  for (int y = 0; y < scale; y++)
     free (outrows[y]);
 }
 
