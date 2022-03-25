@@ -509,7 +509,28 @@ struct transformation_data
   matrix4x4 matrix;
   /* Number of repetitions of the screen pattern along the edge (xstart,xstart),(xend,yend)  */
   double num;
+  /* Smallest rectagular region of the screens which contains all of the image.  */
+  int scr_xshift, scr_yshift, scr_xsize, scr_ysize;
 } transform_data;
+
+/* Transform coordinates of screen to image data.  */
+
+static inline void
+finlay_to_image (struct transformation_data *trans, double x, double y,
+		 double *xp, double *yp)
+{
+  trans->matrix.perspective_transform (x,y, *xp, *yp);
+}
+
+/* Inverse transformation.  */
+
+static inline void
+image_to_finlay (struct transformation_data *trans, double x, double y,
+		 double *xp, double *yp)
+{
+  trans->matrix.inverse_perspective_transform (x,y, *xp, *yp);
+}
+
 
 static inline void
 init_transformation_data (struct transformation_data *trans)
@@ -534,24 +555,26 @@ init_transformation_data (struct transformation_data *trans)
   basis.m_elements[1][0] = c = oy / current.ym;
   basis.m_elements[1][1] = d = ox / current.ym;
   trans->matrix = translation * basis;
-}
 
-/* Transform coordinates of screen to image data.  */
+  /* Now compute all the corners.  */
+  double xul,xur,xdl,xdr;
+  double yul,yur,ydl,ydr;
+  image_to_finlay (trans, 0, 0, &xul, &yul);
+  image_to_finlay (trans, xsize, 0, &xur, &yur);
+  image_to_finlay (trans, 0, ysize, &xdl, &ydl);
+  image_to_finlay (trans, xsize, ysize, &xdr, &ydr);
 
-static inline void
-finlay_to_image (struct transformation_data *trans, double x, double y,
-		 double *xp, double *yp)
-{
-  trans->matrix.perspective_transform (x,y, *xp, *yp);
-}
+  /* Find extremas.  */
+  double minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
+  double miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
+  double maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
+  double maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
-/* Inverse transformation.  */
-
-static inline void
-image_to_finlay (struct transformation_data *trans, double x, double y,
-		 double *xp, double *yp)
-{
-  trans->matrix.inverse_perspective_transform (x,y, *xp, *yp);
+  /* Determine the coordinates.  */
+  trans->scr_xshift = -minx - 1;
+  trans->scr_yshift = -miny - 1;
+  trans->scr_xsize = maxx-minx + 2;
+  trans->scr_ysize = maxy-miny + 2;
 }
 
 /* Apply pattern to a given pixel.  */
@@ -731,10 +754,16 @@ previewrender (GdkPixbuf ** pixbuf)
 
   init_transformation_data (&trans);
 
+#if 0
   xshift = (current.xstart * trans.num / (current.xend - current.xstart));
   yshift = (current.ystart * trans.num / (current.xend - current.xstart));
   my_xsize = (xsize * trans.num / (current.xend - current.xstart));
   my_ysize = (ysize * trans.num / (current.xend - current.xstart));
+#endif
+  xshift = trans.scr_xshift;
+  yshift = trans.scr_yshift;
+  my_xsize = trans.scr_xsize;
+  my_ysize = trans.scr_ysize;
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf =
