@@ -8,9 +8,9 @@ render_fast::render_fast (scr_to_img_parameters param, gray **img, int img_width
 void
 render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 {
-  double dx = (x - m_scr_xshift) + 0.5 - m_scr_xshift, dy = (y - m_scr_yshift) + 0.5;
+  double dx = (x - m_scr_xshift) + 0.5, dy = (y - m_scr_yshift) + 0.5;
   double avg;
-  /* Finlay and paget screen is organized as follows:
+  /* Thames, Finlay and Paget screen are organized as follows:
     
      G   R   G
        B   B
@@ -39,12 +39,12 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
     red = 0;
   if (red >= m_maxval * 256)
     red = m_maxval * 256 - 1;
-  green = avg + (green - avg);
+  green = avg + (green - avg) * 5;
   if (green < 0)
     green = 0;
   if (green >= m_maxval * 256)
     green = m_maxval * 256 - 1;
-  blue = avg + (blue - avg);
+  blue = avg + (blue - avg) * 5;
   if (blue < 0)
     blue = 0;
   if (blue >= m_maxval * 256)
