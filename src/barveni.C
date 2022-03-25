@@ -23,42 +23,25 @@
 
 extern "C" {
 
-/* Structure describing the position of the screen.  */
-struct parameters {
-  /* This is a center of rotation of screen (a green dot).  */
-  double xstart, ystart;
-  /* This defines horizontal vector of the screen.  */
-  double xend, yend;
-  /* I originally believed that Library of Congress scans are 1000 DPI
-     and later found that they differs in their vertical and horisontal DPIs.
-     XM is a correction to horisontal DPI and YM is a correction to vertical.
-     Since the DPI information is inprecise this does not have any really 
-     good meaning.  */
-  double xm, ym;
-  /* This was added later to allow distortions along each edge of the scan.
-     It should be perpective correction in one direction and it is not.  */
-  double xs,ys,xs2,ys2;
-};
-
 /* Undo history and the state of UI.  */
-struct parameters undobuf[UNDOLEVELS];
-struct parameters current;
-int undopos;
+static struct scr_to_img_parameters undobuf[UNDOLEVELS];
+static struct scr_to_img_parameters current;
+static int undopos;
 
-char *oname, *paroname;
+static char *oname, *paroname;
 static void bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf);
 
 /* The graymap with original scan is stored here.  */
-int xsize, ysize;
-gray **graydata;
-gray maxval;
-int initialized = 0;
+static int xsize, ysize;
+static gray **graydata;
+static gray maxval;
+static int initialized = 0;
 
 /* Status of the main window.  */
-int offsetx = 8, offsety = 8;
-int bigscale = 4;
+static int offsetx = 8, offsety = 8;
+static int bigscale = 4;
 
-bool display_scheduled = true;
+static bool display_scheduled = true;
 
 /* How much is the image scaled in the small view.  */
 #define SCALE 16
@@ -81,27 +64,6 @@ redo_parameters (void)
 {
   undopos  = (undopos + 1) % UNDOLEVELS;
   current = undobuf[undopos];
-}
-
-static inline double
-cubicInterpolate (double p[4], double x)
-{
-  return p[1] + 0.5 * x * (p[2] - p[0] +
-			   x * (2.0 * p[0] - 5.0 * p[1] + 4.0 * p[2] - p[3] +
-				x * (3.0 * (p[1] - p[2]) + p[3] - p[0])));
-}
-
-static inline double
-bicubicInterpolate (double p[4][4], double x, double y)
-{
-  double arr[4];
-  if (x < 0 || x > 1 || y < 0 || y > 1)
-    abort ();
-  arr[0] = cubicInterpolate (p[0], y);
-  arr[1] = cubicInterpolate (p[1], y);
-  arr[2] = cubicInterpolate (p[2], y);
-  arr[3] = cubicInterpolate (p[3], y);
-  return cubicInterpolate (arr, x);
 }
 
 
@@ -164,6 +126,7 @@ openimage (int *argc, char **argv)
 static void
 getvals (void)
 {
+#if 0
   current.xstart = gtk_spin_button_get_value (data.x1);
   current.ystart = gtk_spin_button_get_value (data.y1);
   current.xend = gtk_spin_button_get_value (data.x2);
@@ -172,6 +135,7 @@ getvals (void)
   current.ym = 1 / (gtk_spin_button_get_value (data.ydpi) / 1000);
   /*printf ("%lf %lf %lf %lf %lf %lf %lf\n", current.xstart, current.ystart, current.xend, current.yend, num,
 	  current.xm, current.ym);*/
+#endif
 }
 
 /* Set values displayed by the UI.  */
@@ -180,12 +144,14 @@ static void
 setvals (void)
 {
   initialized = 0;
+#if 0
   gtk_spin_button_set_value (data.x1, current.xstart);
   gtk_spin_button_set_value (data.y1, current.ystart);
   gtk_spin_button_set_value (data.x2, current.xend);
   gtk_spin_button_set_value (data.y2, current.yend);
   gtk_spin_button_set_value (data.xdpi, (1 / current.xm) * 1000 + 0.00000005);
   gtk_spin_button_set_value (data.ydpi, (1 / current.ym) * 1000 + 0.00000005);
+#endif
   initialized = 1;
 }
 
@@ -207,7 +173,9 @@ cb_image_annotate (GtkImageViewer * imgv,
   bigrender (shift_x, shift_y, scale_x, pixbuf);
 }
 
-int setcenter;
+static bool setcenter;
+static bool freeze_x = false;
+static bool freeze_y = false;
 
 /* Handle all the magic keys.  */
 static gint
@@ -216,61 +184,22 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   gint k = event->keyval;
 
   if (k == 'c')
-    setcenter = 1;
-  if (k == 'q')
+    setcenter = true;
+  if (k == 'x')
     {
-      save_parameters ();
-      current.ys += 0.00000003;
-      display_scheduled = 1;
+      freeze_x = false;
+      freeze_y = true;
     }
-  if (k == 'w')
+  if (k == 'y')
     {
-      save_parameters ();
-      current.ys -= 0.00000003;
-      display_scheduled = 1;
+      freeze_x = true;
+      freeze_y = false;
     }
   if (k == 'a')
     {
-      save_parameters ();
-      current.xs += 0.00000003;
-      display_scheduled = 1;
+      freeze_x = false;
+      freeze_y = false;
     }
-  if (k == 's')
-    {
-      save_parameters ();
-      current.xs -= 0.00000003;
-      display_scheduled = 1;
-    }
-  if (k == 'e')
-    {
-      save_parameters ();
-      current.ys2 += 0.00000003;
-      display_scheduled = 1;
-    }
-  if (k == 'r')
-    {
-      save_parameters ();
-      current.ys2 -= 0.00000003;
-      display_scheduled = 1;
-    }
-  if (k == 'd')
-    {
-      save_parameters ();
-      current.xs2 += 0.00000003;
-      display_scheduled = 1;
-    }
-  if (k == 'f')
-    {
-      save_parameters ();
-      current.xs2 -= 0.00000003;
-      display_scheduled = 1;
-    }
-  if (k == 't')
-{
-      save_parameters ();
-    current.xs=current.ys=current.xs2=current.ys2=0;
-      display_scheduled = 1;
-}
   if (k == 'u')
     {
       undo_parameters ();	
@@ -359,6 +288,7 @@ initgtk (int *argc, char **argv)
 static struct scr_to_img_parameters
 get_scr_to_img_parameters ()
 {
+#if 0
   double a, b, c, d;
   double ox,oy;
   double num = sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm
@@ -375,6 +305,8 @@ get_scr_to_img_parameters ()
   param.coordinate2_x = oy / current.ym;
   param.coordinate2_y = ox / current.ym;
   return param;
+#endif
+  return current;
 }
 
 static inline void
@@ -401,54 +333,6 @@ my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
   *(pixels + y * rowstride + x * 3) = r;
   *(pixels + y * rowstride + x * 3 + 1) = g;
   *(pixels + y * rowstride + x * 3 + 2) = b;
-}
-
-/* Determine grayscale value at a given position in the screen coordinates.  */
-
-static double
-sample (scr_to_img *map, double x, double y)
-{
-  double xp, yp;
-  int sx, sy;
-  double p[4][4];
-  double val;
-  map->to_img (x, y, &xp, &yp);
-  sx = xp, sy = yp;
-
-  if (xp < 2 || xp >= xsize - 2 || yp < 2 || yp >= ysize - 2)
-    return 0;
-  p[0][0] = graydata[sy - 1][sx - 1];
-  p[1][0] = graydata[sy - 1][sx - 0];
-  p[2][0] = graydata[sy - 1][sx + 1];
-  p[3][0] = graydata[sy - 1][sx + 2];
-  p[0][1] = graydata[sy - 0][sx - 1];
-  p[1][1] = graydata[sy - 0][sx - 0];
-  p[2][1] = graydata[sy - 0][sx + 1];
-  p[3][1] = graydata[sy - 0][sx + 2];
-  p[0][2] = graydata[sy + 1][sx - 1];
-  p[1][2] = graydata[sy + 1][sx - 0];
-  p[2][2] = graydata[sy + 1][sx + 1];
-  p[3][2] = graydata[sy + 1][sx + 2];
-  p[0][3] = graydata[sy + 2][sx - 1];
-  p[1][3] = graydata[sy + 2][sx - 0];
-  p[2][3] = graydata[sy + 2][sx + 1];
-  p[3][3] = graydata[sy + 2][sx + 2];
-  val = bicubicInterpolate (p, xp - sx, yp - sy);
-  if (val < 0)
-    val = 0;
-  if (val > maxval - 1)
-    val = maxval - 1;
-  return val;
-}
-
-#define NBLUE 8			/* We need 6 rows of blue.  */
-#define NRED 8			/* We need 7 rows of the others.  */
-
-inline int
-getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y)
-{
-  int line = (pos + NRED + x + y) % NRED;
-  return sample[line][((xp + y * 2 - x * 2) - shift[line]) / 4];
 }
 
 /* This renders the small preview widget.   */
@@ -479,367 +363,20 @@ previewrender (GdkPixbuf ** pixbuf)
       }
 }
 
-struct samples
-{
-  int xshift, yshift;
-  int xsize, ysize;
-  double *redsample[8];
-  double *greensample[8];
-  double *bluesample[NBLUE];
-  int bluepos[NBLUE];
-  int redpos[8];
-  int redshift[8];
-  int greenpos[8];
-  int greenshift[8];
-  int redp, greenp, bluep;
-  int scale;
-};
-
 static void
-init_finalrender (struct samples *samples, int scale)
+draw_circle (cairo_surface_t *surface, double bigscale,
+    	     int xoffset, int yoffset,
+    	     double x, double y, double r, double g, double b)
 {
-  int i;
-  scr_to_img map;
+  cairo_t *cr = cairo_create (surface);
+  cairo_translate (cr, -xoffset, -yoffset);
+  cairo_scale (cr, bigscale, bigscale);
 
-  init_transformation_data (&map);
-  map.get_range (xsize, ysize, &samples->xshift, &samples->yshift, &samples->xsize, &samples->ysize);
-  samples->scale = scale;
-  for (i = 0; i < 8; i++)
-    {
-      samples->redsample[i] = (double *)malloc (sizeof (double) * samples->xsize);
-      samples->greensample[i] = (double *)malloc (sizeof (double) * samples->xsize);
-    }
-  for (i = 0; i < NBLUE; i++)
-    samples->bluesample[i] = (double *)malloc (sizeof (double) * samples->xsize * 2);
-  samples->bluep = samples->redp = samples->greenp = 0;
-}
+  cairo_set_source_rgba (cr, r, g, b, 0.5);
+  cairo_arc (cr, x, y, 3, 0.0, 2 * G_PI);
 
-static void
-finalrender_row (int y, pixel ** outrow, struct samples *samples)
-{
-  double **redsample = samples->redsample;
-  double **greensample = samples->greensample;
-  double **bluesample = samples->bluesample;
-  int *bluepos = samples->bluepos;
-  int *redpos = samples->redpos;
-  int *redshift = samples->redshift;
-  int *greenpos = samples->greenpos;
-  int *greenshift = samples->greenshift;
-  int x;
-  int sx;
-  int sy;
-  int scale = samples->scale;
-  scr_to_img map;
-
-  init_transformation_data (&map);
-
-  if (y % 4 == 0)
-    {
-      for (x = 0; x < samples->xsize; x++)
-	greensample[samples->greenp][x] =
-	  sample (&map, x - samples->xshift,
-		  (y - samples->yshift * 4) / 4.0);
-      samples->greenpos[samples->greenp] = y;
-      greenshift[samples->greenp] = 0;
-      samples->greenp++;
-      samples->greenp %= 8;
-
-      for (x = 0; x < samples->xsize; x++)
-	redsample[samples->redp][x] =
-	  sample (&map, x - samples->xshift + 0.5,
-		  (y - samples->yshift * 4) / 4.0);
-      redpos[samples->redp] = y;
-      redshift[samples->redp] = 2;
-      samples->redp++;
-      samples->redp %= 8;
-    }
-  if (y % 4 == 2)
-    {
-      for (x = 0; x < samples->xsize; x++)
-	redsample[samples->redp][x] =
-	  sample (&map, x - samples->xshift,
-		  (y - samples->yshift * 4) / 4.0);
-      redpos[samples->redp] = y;
-      redshift[samples->redp] = 0;
-      samples->redp++;
-      samples->redp %= 8;
-
-      for (x = 0; x < samples->xsize; x++)
-	greensample[samples->greenp][x] =
-	  sample (&map, x - samples->xshift + 0.5,
-		  (y - samples->yshift * 4) / 4.0);
-      samples->greenpos[samples->greenp] = y;
-      greenshift[samples->greenp] = 2;
-      samples->greenp++;
-      samples->greenp %= 8;
-    }
-  if (y % 4 == 1 || y % 4 == 3)
-    {
-      bluepos[samples->bluep] = y;
-      for (x = 0; x < samples->xsize; x++)
-	{
-	  bluesample[samples->bluep][x * 2] =
-	    sample (&map, x - samples->xshift + 0.25,
-		    (y - samples->yshift * 4) / 4.0);
-	  bluesample[samples->bluep][x * 2 + 1] =
-	    sample (&map, x - samples->xshift + 0.75,
-		    (y - samples->yshift * 4) / 4.0);
-	}
-      samples->bluep++;
-      samples->bluep %= NBLUE;
-    }
-  if (y > 8 * 4)
-    {
-#define OFFSET  7
-      int rendery = y - OFFSET;
-      int bluestart =
-	(samples->bluep + NBLUE - ((OFFSET + 1) / 2 + 2)) % NBLUE;
-      double bluey;
-      int redcenter = (samples->redp + NRED - ((OFFSET + 3) / 2)) % NRED;
-      int greencenter = (samples->greenp + NRED - ((OFFSET + 3) / 2)) % NRED;
-      int xx, yy;
-      printf ("%i %i\n", y, scale);
-
-      if (bluepos[(bluestart + 2) % NBLUE] == rendery)
-	bluestart = (bluestart + 1) % NBLUE;
-      /*fprintf (stderr, "baf:bp:%i rendery:%i:%i %i %i %f\n", bluepos[(bluestart + 1) % NBLUE], rendery,y, bluey, bluep, bluey); */
-      assert (bluepos[(bluestart + 1) % NBLUE] <= rendery);
-      assert (bluepos[(bluestart + 2) % NBLUE] > rendery);
-
-      if (redpos[(redcenter + 1) % NRED] == rendery)
-	redcenter = (redcenter + 1) % NRED;
-      assert (redpos[(redcenter) % NBLUE] <= rendery);
-      assert (redpos[(redcenter + 1) % NBLUE] > rendery);
-
-      if (greenpos[(greencenter + 1) % NRED] == rendery)
-	greencenter = (greencenter + 1) % NRED;
-      assert (greenpos[(greencenter) % NBLUE] <= rendery);
-      assert (greenpos[(greencenter + 1) % NBLUE] > rendery);
-      for (yy = 0; yy < scale; yy++)
-	{
-	  bluey =
-	    (rendery + ((double) yy) / scale -
-	     bluepos[(bluestart + 1) % NBLUE]) / 2.0;
-	  for (x = 8; x < samples->xsize * 4; x++)
-	    for (xx = 0; xx < scale; xx++)
-	      {
-		double p[4][4];
-		double red, green, blue;
-		double xo, yo;
-		int np;
-		int bluex = (x - 1) / 2;
-		int val;
-
-		p[0][0] = bluesample[bluestart][bluex - 1];
-		p[1][0] = bluesample[bluestart][bluex];
-		p[2][0] = bluesample[bluestart][bluex + 1];
-		p[3][0] = bluesample[bluestart][bluex + 2];
-		p[0][1] = bluesample[(bluestart + 1) % NBLUE][bluex - 1];
-		p[1][1] = bluesample[(bluestart + 1) % NBLUE][bluex];
-		p[2][1] = bluesample[(bluestart + 1) % NBLUE][bluex + 1];
-		p[3][1] = bluesample[(bluestart + 1) % NBLUE][bluex + 2];
-		p[0][2] = bluesample[(bluestart + 2) % NBLUE][bluex - 1];
-		p[1][2] = bluesample[(bluestart + 2) % NBLUE][bluex];
-		p[2][2] = bluesample[(bluestart + 2) % NBLUE][bluex + 1];
-		p[3][2] = bluesample[(bluestart + 2) % NBLUE][bluex + 2];
-		p[0][3] = bluesample[(bluestart + 3) % NBLUE][bluex - 1];
-		p[1][3] = bluesample[(bluestart + 3) % NBLUE][bluex];
-		p[2][3] = bluesample[(bluestart + 3) % NBLUE][bluex + 1];
-		p[3][3] = bluesample[(bluestart + 3) % NBLUE][bluex + 2];
-		xo = (double) (x + ((double) xx) / scale - 1) / 2;
-		blue = bicubicInterpolate (p, xo - (int) xo, bluey);
-		if (blue < 0)
-		  blue = 0;
-		if (blue > maxval - 1)
-		  blue = maxval - 1;
-		{
-		  int sx = ((x - redshift[redcenter]) + 2) / 4;
-		  int dx = (x - redshift[redcenter]) - sx * 4;
-		  int dy = rendery - redpos[redcenter];
-		  int currcenter = redcenter;
-		  int distx, disty;
-
-		  if (abs (dx) > dy)
-		    {
-		      currcenter = (redcenter + NRED - 1) % NRED;
-		      sx = ((x - redshift[currcenter]) + 2) / 4;
-		    }
-		  red = redsample[currcenter][sx];
-
-		  /*red = getmatrixsample (redsample, redshift, currcenter, sx * 4 + redshift[currcenter], 0, 0); */
-		  sx = sx * 4 + redshift[currcenter];
-		  p[0][0] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -1,
-				     -1);
-		  p[0][1] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -1,
-				     0);
-		  p[0][2] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -1,
-				     1);
-		  p[0][3] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -1,
-				     2);
-		  p[1][0] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -0,
-				     -1);
-		  p[1][1] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -0,
-				     0);
-		  p[1][2] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -0,
-				     1);
-		  p[1][3] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, -0,
-				     2);
-		  p[2][0] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +1,
-				     -1);
-		  p[2][1] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +1,
-				     0);
-		  p[2][2] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +1,
-				     1);
-		  p[2][3] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +1,
-				     2);
-		  p[3][0] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +2,
-				     -1);
-		  p[3][1] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +2,
-				     0);
-		  p[3][2] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +2,
-				     1);
-		  p[3][3] =
-		    getmatrixsample (redsample, redshift, currcenter, sx, +2,
-				     2);
-		  distx = x - sx;
-		  disty = rendery - redpos[currcenter];
-		  red =
-		    bicubicInterpolate (p, (disty - distx) / 4.0,
-					(distx + disty) / 4.0);
-		  if (red < 0)
-		    red = 0;
-		  if (red > maxval - 1)
-		    red = maxval - 1;
-		}
-		{
-		  int sx = ((x - greenshift[greencenter]) + 2) / 4;
-		  int dx = (x - greenshift[greencenter]) - sx * 4;
-		  int dy = rendery - greenpos[greencenter];
-		  int currcenter = greencenter;
-		  int distx, disty;
-
-		  if (abs (dx) > dy)
-		    {
-		      currcenter = (greencenter + NRED - 1) % NRED;
-		      sx = ((x - greenshift[currcenter]) + 2) / 4;
-		    }
-		  green = greensample[currcenter][sx];
-
-		  /*green = getmatrixsample (greensample, greenshift, currcenter, sx * 4 + greenshift[currcenter], 0, 0); */
-		  sx = sx * 4 + greenshift[currcenter];
-		  p[0][0] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -1, -1);
-		  p[0][1] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -1, 0);
-		  p[0][2] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -1, 1);
-		  p[0][3] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -1, 2);
-		  p[1][0] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -0, -1);
-		  p[1][1] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -0, 0);
-		  p[1][2] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -0, 1);
-		  p[1][3] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     -0, 2);
-		  p[2][0] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +1, -1);
-		  p[2][1] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +1, 0);
-		  p[2][2] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +1, 1);
-		  p[2][3] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +1, 2);
-		  p[3][0] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +2, -1);
-		  p[3][1] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +2, 0);
-		  p[3][2] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +2, 1);
-		  p[3][3] =
-		    getmatrixsample (greensample, greenshift, currcenter, sx,
-				     +2, 2);
-		  distx = x - sx;
-		  disty = rendery - greenpos[currcenter];
-		  green =
-		    bicubicInterpolate (p, (disty - distx) / 4.0,
-					(distx + disty) / 4.0);
-		  if (green < 0)
-		    green = 0;
-		  if (green > maxval - 1)
-		    green = maxval - 1;
-		}
-
-
-#if 1
-		val =
-		  sample (&map, (x - samples->xshift * 4 +
-				   xx / (double) scale) / 4.0,
-			  (rendery - samples->yshift * 4 +
-			   yy / (double) scale) / 4.0) * 256;
-		if (red != 0 || green != 0 || blue != 0)
-		  {
-		    double sum = (red + green + blue) / 3;
-		    red = red * val / sum;
-		    green = green * val / sum;
-		    blue = blue * val / sum;
-		  }
-		else
-		  red = green = blue = val;
-#else
-		red *= 256;
-		green *= 256;
-		blue *= 256;
-#endif
-		if (red > 65536 - 1)
-		  red = 65536 - 1;
-		if (red < 0)
-		  red = 0;
-		if (green > 65536 - 1)
-		  green = 65536 - 1;
-		if (green < 0)
-		  green = 0;
-		if (blue > 65536 - 1)
-		  blue = 65536 - 1;
-		if (blue < 0)
-		  blue = 0;
-		outrow[yy][(x * scale + xx)].r = red;
-		outrow[yy][(x * scale + xx)].g = green;
-		outrow[yy][(x * scale + xx)].b = blue;
-	      }
-	}
-    }
+  cairo_fill (cr);
+  cairo_destroy (cr);
 }
 
 static void
@@ -870,17 +407,11 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 					   pxsize,
 					   pysize,
 					   bigrowstride);
-  cairo_t *cr = cairo_create (surface);
-  cairo_translate (cr, -xoffset, -yoffset);
-  cairo_scale (cr, bigscale, bigscale);
-
-  cairo_set_source_rgba (cr, 0, 0, 1.0, 0.5);
-  cairo_arc (cr, current.xstart, current.ystart, 3, 0.0, 2 * G_PI);
-
-  cairo_fill (cr);
+  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x, current.center_y, 0, 0, 1);
+  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
+  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
 
   cairo_surface_destroy (surface);
-  cairo_destroy (cr);
 }
 
 static void
@@ -918,12 +449,11 @@ cb_press_small (GtkImage * image, GdkEventButton * event, Data * data)
     }
 }
 
-double xpress, ypress;
-double xpress1, ypress1;
-double pressxend, pressyend;
-double pressxstart, pressystart;
-bool button1_pressed;
-bool button3_pressed;
+static double xpress, ypress;
+static double xpress1, ypress1;
+static bool button1_pressed;
+static bool button3_pressed;
+static struct scr_to_img_parameters press_parameters;
 
 G_MODULE_EXPORT void
 cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
@@ -940,25 +470,20 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	  (int) shift_x, (int) shift_y);
   if (event->button == 1 && setcenter)
     {
-      double newxstart;
-      double newystart;
-      newxstart = (event->x + shift_x) / scale_x;
-      newystart = (event->y + shift_y) / scale_y;
-      if (newxstart != current.xstart || newystart != current.ystart)
+      double newcenter_x;
+      double newcenter_y;
+      newcenter_x = (event->x + shift_x) / scale_x;
+      newcenter_y = (event->y + shift_y) / scale_y;
+      if (newcenter_x != current.center_x || newcenter_y != current.center_y)
 	{
-	  current.xend += newxstart - current.xstart;
-	  current.yend += newystart - current.ystart;
-	  current.xstart = newxstart;
-	  current.ystart = newystart;
-	  setcenter = 0;
+	  current.center_x = newcenter_x;
+	  current.center_y = newcenter_y;
+	  setcenter = false;
 	  setvals ();
 	  display_scheduled = true;
 	}
     }
-  pressxstart = current.xstart;
-  pressystart = current.ystart;
-  pressxend = current.xend;
-  pressyend = current.yend;
+  press_parameters = current;
   if (event->button == 1)
     {
       xpress1 = event->x;
@@ -985,31 +510,38 @@ handle_drag (int x, int y, int button)
     {
       double xoffset = (x - xpress1) / scale_x;
       double yoffset = (y - ypress1) / scale_y;
-      if (current.xstart == pressxstart + xoffset && current.ystart == pressystart + yoffset)
+      if (current.center_x == press_parameters.center_x + xoffset
+          && current.center_y == press_parameters.center_y + yoffset)
 	return;
-      current.xend = pressxend + xoffset;
-      current.yend = pressyend + yoffset;
-      current.xstart = pressxstart + xoffset;
-      current.ystart = pressystart + yoffset;
+      current.center_x = press_parameters.center_x + xoffset;
+      current.center_y = press_parameters.center_y + yoffset;
       setvals ();
       display_scheduled = true;
     }
   else if (button == 3)
     {
-      double x1 = (xpress - current.xstart);
-      double y1 = (ypress - current.ystart);
-      double x2 = (x + shift_x) / scale_x - current.xstart;
-      double y2 = (y + shift_y) / scale_y - current.ystart;
+      double x1 = (xpress - current.center_x);
+      double y1 = (ypress - current.center_y);
+      double x2 = (x + shift_x) / scale_x - current.center_x;
+      double y2 = (y + shift_y) / scale_y - current.center_y;
+      double scale = sqrt ((x2 * x2) + (y2 * y2))/sqrt ((x1*x1) + (y1*y1));
       double angle = atan2f (y2, x2) - atan2f (y1, x1);
       if (!angle)
 	return;
-      current.xend =
-	current.xstart + (pressxend - current.xstart) * cos (angle) + (pressyend -
-						       current.ystart) * sin (angle);
-      current.yend =
-	current.ystart + (pressxend - current.xstart) * sin (angle) + (pressyend -
-						       current.ystart) * cos (angle);
-
+      if (!freeze_x)
+	{
+	  current.coordinate1_x = (press_parameters.coordinate1_x * cos (angle)
+				  + press_parameters.coordinate1_y * sin (angle)) * scale;
+	  current.coordinate1_y = (press_parameters.coordinate1_x * sin (angle)
+				  + press_parameters.coordinate1_y * cos (angle)) * scale;
+	}
+      if (!freeze_y)
+	{
+	  current.coordinate2_x = (press_parameters.coordinate2_x * cos (-angle)
+				  + press_parameters.coordinate2_y * sin (-angle)) * scale;
+	  current.coordinate2_y = (press_parameters.coordinate2_x * sin (-angle)
+				  + press_parameters.coordinate2_y * cos (-angle)) * scale;
+	}
       setvals ();
       display_scheduled = true;
     }
@@ -1039,15 +571,14 @@ cb_save (GtkButton * button, Data * data)
   pixel *outrow;
   pixel *outrows[16];
   FILE *out;
-  double xend2 = current.xend, yend2 = current.yend;
-  struct samples samples;
-  int scale;
+  int scale = 4;
   out = fopen (paroname, "w");
+#if 0
   fprintf (out, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf", current.xstart, current.ystart, current.xend, current.yend,
 	   0.0, current.xm, current.ym,current.xs,current.ys,current.xs2,current.ys2);
+#endif
   fclose (out);
 
-  scale = 4;
   render_interpolate render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval, 256, scale);
   out = fopen (oname, "w");
   assert (scale < 16);
@@ -1078,8 +609,17 @@ main (int argc, char **argv)
   openimage (&argc, argv);
   oname = argv[2];
   paroname = argv[3];
+
+  current.center_x = 0;
+  current.center_y = 0;
+  current.coordinate1_x = 50;
+  current.coordinate1_y = 0;
+  current.coordinate2_x = 0;
+  current.coordinate2_y = 50;
+#if 0
   scanf ("%lf %lf %lf %lf %lf %lf %lf", &current.xstart, &current.ystart, &current.xend, &current.yend, &num,
 	 &current.xm, &current.ym);
+#endif
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;
