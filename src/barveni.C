@@ -332,7 +332,7 @@ initgtk (int *argc, char **argv)
   // Set the scroll region and zoom range
   gtk_image_viewer_set_scroll_region (GTK_IMAGE_VIEWER (image_viewer),
 				      20, 20, xsize - 20, ysize - 20);
-  gtk_image_viewer_set_zoom_range (GTK_IMAGE_VIEWER (image_viewer), 2, 64);
+  gtk_image_viewer_set_zoom_range (GTK_IMAGE_VIEWER (image_viewer), 0.1, 64);
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (image_viewer), 4.0,
 					4.0, 64, 64);
 
