@@ -1,3 +1,5 @@
+#ifndef SCR_TO_IMG_H
+#define SCR_TO_IMG_H
 #include <netpbm/pgm.h>
 #include "matrix.h"
 /* This implements to translate image coordiantes to coordinates of the viewing screen.
@@ -22,6 +24,7 @@ struct scr_to_img_parameters
 /* Mapping between screen and image.  */
 class scr_to_img
 {
+public:
   void set_parameters (scr_to_img_parameters param);
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
@@ -43,3 +46,4 @@ private:
   matrix4x4 m_matrix;
   scr_to_img_parameters m_param;
 };
+#endif

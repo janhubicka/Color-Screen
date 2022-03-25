@@ -12,6 +12,8 @@
 #include <stdbool.h>
 
 #include "matrix.h"
+#include "scr-to-img.h"
+#include "render-fast.h"
 
 #define UNDOLEVELS 100 
 
@@ -78,7 +80,7 @@ redo_parameters (void)
   current = undobuf[undopos];
 }
 
-double inline
+static inline double
 cubicInterpolate (double p[4], double x)
 {
   return p[1] + 0.5 * x * (p[2] - p[0] +
@@ -86,14 +88,12 @@ cubicInterpolate (double p[4], double x)
 				x * (3.0 * (p[1] - p[2]) + p[3] - p[0])));
 }
 
-double inline
+static inline double
 bicubicInterpolate (double p[4][4], double x, double y)
 {
   double arr[4];
   if (x < 0 || x > 1 || y < 0 || y > 1)
     abort ();
-  /*x+=1;
-     y+=1; */
   arr[0] = cubicInterpolate (p[0], y);
   arr[1] = cubicInterpolate (p[1], y);
   arr[2] = cubicInterpolate (p[2], y);
@@ -500,38 +500,8 @@ initgtk (int *argc, char **argv)
   return window;
 }
 
-/* During rendering we use 2x2 transformation matrix to represent the mapping from image to screen
-   and back.  */
-
-struct transformation_data
-{
-  /* Screen->image translation matrix.  */
-  matrix4x4 matrix;
-  /* Smallest rectagular region of the screens which contains all of the image.  */
-  int scr_xshift, scr_yshift, scr_xsize, scr_ysize;
-} transform_data;
-
-/* Transform coordinates of screen to image data.  */
-
-static inline void
-finlay_to_image (struct transformation_data *trans, double x, double y,
-		 double *xp, double *yp)
-{
-  trans->matrix.perspective_transform (x,y, *xp, *yp);
-}
-
-/* Inverse transformation.  */
-
-static inline void
-image_to_finlay (struct transformation_data *trans, double x, double y,
-		 double *xp, double *yp)
-{
-  trans->matrix.inverse_perspective_transform (x,y, *xp, *yp);
-}
-
-
-static inline void
-init_transformation_data (struct transformation_data *trans)
+static struct scr_to_img_parameters
+get_scr_to_img_parameters ()
 {
   double a, b, c, d;
   double ox,oy;
@@ -541,44 +511,26 @@ init_transformation_data (struct transformation_data *trans)
   ox = (current.xend - current.xstart) * current.xm / (double) num;
   oy = (current.yend - current.ystart) * current.ym / (double) num;
 
-  /* Translate 0 xstart/ystart.  */
-  matrix4x4 translation;
-  translation.m_elements[0][2] = current.xstart;
-  translation.m_elements[1][2] = current.ystart;
+  struct scr_to_img_parameters param;
+  param.center_x = current.xstart;
+  param.center_y = current.ystart;
+  param.coordinate1_x = ox / current.xm;
+  param.coordinate1_y = -oy / current.xm;
+  param.coordinate2_x = oy / current.ym;
+  param.coordinate2_y = ox / current.ym;
+  return param;
+}
 
-  /* Change basis.  */
-  matrix4x4 basis;
-  basis.m_elements[0][0] = a = ox / current.xm;
-  basis.m_elements[0][1] = b = -oy / current.xm;
-  basis.m_elements[1][0] = c = oy / current.ym;
-  basis.m_elements[1][1] = d = ox / current.ym;
-  trans->matrix = translation * basis;
-
-  /* Now compute all the corners.  */
-  double xul,xur,xdl,xdr;
-  double yul,yur,ydl,ydr;
-  image_to_finlay (trans, 0, 0, &xul, &yul);
-  image_to_finlay (trans, xsize, 0, &xur, &yur);
-  image_to_finlay (trans, 0, ysize, &xdl, &ydl);
-  image_to_finlay (trans, xsize, ysize, &xdr, &ydr);
-
-  /* Find extremas.  */
-  double minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
-  double miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
-  double maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
-  double maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
-
-  /* Determine the coordinates.  */
-  trans->scr_xshift = -minx - 1;
-  trans->scr_yshift = -miny - 1;
-  trans->scr_xsize = maxx-minx + 2;
-  trans->scr_ysize = maxy-miny + 2;
+static inline void
+init_transformation_data (scr_to_img *trans)
+{
+  trans->set_parameters (get_scr_to_img_parameters ());
 }
 
 /* Apply pattern to a given pixel.  */
 
 static inline void
-handle_pixel (struct transformation_data *trans, double scale,
+handle_pixel (scr_to_img *map, double scale,
 	      double x, double y,
 	      double graydata, double factor, double *r, double *g, double *b)
 {
@@ -586,7 +538,7 @@ handle_pixel (struct transformation_data *trans, double scale,
   double xx, yy;
   int ix, iy;
 
-  image_to_finlay (trans, x / scale, y / scale, &xx, &yy);
+  map->to_scr (x / scale, y / scale, &xx, &yy);
   ix = (long long) (xx * 256) & 255;
   iy = (long long) (yy * 256) & 255;
   graydata *= factor;
@@ -605,9 +557,9 @@ compute_row (double y, gray * data, pixel * outrow, int size, int offset,
   int x;
   double graymul = 1, basemul = 0;
   double valscale = 65536 / 8 / (double) maxval;
-  struct transformation_data trans;
+  scr_to_img map;
 
-  init_transformation_data (&trans);
+  init_transformation_data (&map);
   for (x = 0; x < size; x++)
     {
       int rr, gg, bb;
@@ -615,25 +567,25 @@ compute_row (double y, gray * data, pixel * outrow, int size, int offset,
 
       r = g = b = 0;
 
-      handle_pixel (&trans , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
+      handle_pixel (&map , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
 		    data[x], 0.5, &r, &g, &b);
-      handle_pixel (&trans , scale, offset + x - 1.0 / 3, y, data[x],
+      handle_pixel (&map , scale, offset + x - 1.0 / 3, y, data[x],
 		    1, &r, &g, &b);
-      handle_pixel (&trans , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
+      handle_pixel (&map , scale, offset + x - 1.0 / 3, y - 1.0 / 3,
 		    data[x], 0.5, &r, &g, &b);
 
-      handle_pixel (&trans , scale, offset + x, y - 1.0 / 3, data[x],
+      handle_pixel (&map , scale, offset + x, y - 1.0 / 3, data[x],
 		    1, &r, &g, &b);
-      handle_pixel (&trans , scale, offset + x, y, data[x], 2, &r, &g,
+      handle_pixel (&map , scale, offset + x, y, data[x], 2, &r, &g,
 		    &b);
-      handle_pixel (&trans , scale, offset + x, y - 1.0 / 3, data[x],
+      handle_pixel (&map , scale, offset + x, y - 1.0 / 3, data[x],
 		    1, &r, &g, &b);
 
-      handle_pixel (&trans , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
+      handle_pixel (&map , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
 		    data[x], 0.5, &r, &g, &b);
-      handle_pixel (&trans , scale, offset + x + 1.0 / 3, y, data[x],
+      handle_pixel (&map , scale, offset + x + 1.0 / 3, y, data[x],
 		    1, &r, &g, &b);
-      handle_pixel (&trans , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
+      handle_pixel (&map , scale, offset + x + 1.0 / 3, y - 1.0 / 3,
 		    data[x], 0.5, &r, &g, &b);
 
       outrow[x].r = r * valscale;
@@ -651,9 +603,9 @@ compute_row_fast (double y, gray * data, pixel * outrow, int size, int offset,
   int x;
   double graymul = 1, basemul = 0;
   double valscale = 65536 / (double) maxval;
-  struct transformation_data trans;
+  scr_to_img map;
 
-  init_transformation_data (&trans);
+  init_transformation_data (&map);
   for (x = 0; x < size; x++)
     {
       int rr, gg, bb;
@@ -661,7 +613,7 @@ compute_row_fast (double y, gray * data, pixel * outrow, int size, int offset,
 
       r = g = b = 0;
 
-      handle_pixel (&trans , scale, offset + x, y, data[x], 1, &r, &g,
+      handle_pixel (&map , scale, offset + x, y, data[x], 1, &r, &g,
 		    &b);
 
       outrow[x].r = r * valscale;
@@ -693,13 +645,13 @@ my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
 /* Determine grayscale value at a given position in the screen coordinates.  */
 
 static double
-sample (struct transformation_data *trans, double x, double y)
+sample (scr_to_img *map, double x, double y)
 {
   double xp, yp;
   int sx, sy;
   double p[4][4];
   double val;
-  finlay_to_image (trans, x, y, &xp, &yp);
+  map->to_img (x, y, &xp, &yp);
   sx = xp, sy = yp;
 
   if (xp < 2 || xp >= xsize - 2 || yp < 2 || yp >= ysize - 2)
@@ -744,18 +696,11 @@ static void
 previewrender (GdkPixbuf ** pixbuf)
 {
   int x, y;
-  int my_xsize, my_ysize, rowstride;
   guint8 *pixels;
-  int xshift = 0, yshift = 0;
   int scale = 1;
-  struct transformation_data trans;
-
-  init_transformation_data (&trans);
-
-  xshift = trans.scr_xshift;
-  yshift = trans.scr_yshift;
-  my_xsize = trans.scr_xsize;
-  my_ysize = trans.scr_ysize;
+  render_fast render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval);
+  int my_xsize = render.get_width (), my_ysize = render.get_height (), rowstride;
+  scr_to_img map;
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf =
@@ -768,44 +713,8 @@ previewrender (GdkPixbuf ** pixbuf)
   for (y = 0; y < my_ysize; y += scale)
     for (x = 0; x < my_xsize; x += scale)
       {
-	double dx = x + 0.5 - xshift, dy = y + 0.5 - yshift;
-	double avg;
-	double green =
-	  sample (&trans, dx, dy) + sample (&trans, dx + 1,
-					    dy + 1) + sample (&trans, dx,
-							      dy + 1) +
-	  sample (&trans, dx + 1, dy) + sample (&trans, dx + 0.5, dy + 0.5);
-	double red =
-	  sample (&trans, dx + 0.5, dy) + sample (&trans, dx,
-						  dy + 0.5) + sample (&trans,
-								      dx + 1,
-								      dy +
-								      0.5) +
-	  sample (&trans, dx + 0.5, dy + 1);
-	double blue =
-	  sample (&trans, dx + 0.25, dy + 0.25) + sample (&trans, dx + 0.75,
-							  dy + 0.25) +
-	  sample (&trans, dx + 0.25,
-		  dy + 0.75) + sample (&trans, dx + 0.75, dy + 0.75);
-	green = green * 51;
-	red = red * 64;
-	blue = blue * 64;
-	avg = (red + green + blue) / 3;
-	red = avg + (red - avg) * 5;
-	if (red < 0)
-	  red = 0;
-	if (red >= maxval * 256)
-	  red = maxval * 256 - 1;
-	green = avg + (green - avg);
-	if (green < 0)
-	  green = 0;
-	if (green >= maxval * 256)
-	  green = maxval * 256 - 1;
-	blue = avg + (blue - avg);
-	if (blue < 0)
-	  blue = 0;
-	if (blue >= maxval * 256)
-	  blue = maxval * 256 - 1;
+	int red, green, blue;
+	render.render_pixel (x, y, &red, &green, &blue);
 	my_putpixel (pixels, rowstride, x / scale, y / scale, red / maxval,
 		     green / maxval, blue / maxval);
       }
@@ -831,13 +740,10 @@ static void
 init_finalrender (struct samples *samples, int scale)
 {
   int i;
-  struct transformation_data trans;
+  scr_to_img map;
 
-  init_transformation_data (&trans);
-  samples->xshift = trans.scr_xshift;
-  samples->yshift = trans.scr_yshift;
-  samples->xsize = trans.scr_xsize;
-  samples->ysize = trans.scr_ysize;
+  init_transformation_data (&map);
+  map.get_range (xsize, ysize, &samples->xshift, &samples->yshift, &samples->xsize, &samples->ysize);
   samples->scale = scale;
   for (i = 0; i < 8; i++)
     {
@@ -864,15 +770,15 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
   int sx;
   int sy;
   int scale = samples->scale;
-  struct transformation_data trans;
+  scr_to_img map;
 
-  init_transformation_data (&trans);
+  init_transformation_data (&map);
 
   if (y % 4 == 0)
     {
       for (x = 0; x < samples->xsize; x++)
 	greensample[samples->greenp][x] =
-	  sample (&trans, x - samples->xshift,
+	  sample (&map, x - samples->xshift,
 		  (y - samples->yshift * 4) / 4.0);
       samples->greenpos[samples->greenp] = y;
       greenshift[samples->greenp] = 0;
@@ -881,7 +787,7 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
 
       for (x = 0; x < samples->xsize; x++)
 	redsample[samples->redp][x] =
-	  sample (&trans, x - samples->xshift + 0.5,
+	  sample (&map, x - samples->xshift + 0.5,
 		  (y - samples->yshift * 4) / 4.0);
       redpos[samples->redp] = y;
       redshift[samples->redp] = 2;
@@ -892,7 +798,7 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
     {
       for (x = 0; x < samples->xsize; x++)
 	redsample[samples->redp][x] =
-	  sample (&trans, x - samples->xshift,
+	  sample (&map, x - samples->xshift,
 		  (y - samples->yshift * 4) / 4.0);
       redpos[samples->redp] = y;
       redshift[samples->redp] = 0;
@@ -901,7 +807,7 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
 
       for (x = 0; x < samples->xsize; x++)
 	greensample[samples->greenp][x] =
-	  sample (&trans, x - samples->xshift + 0.5,
+	  sample (&map, x - samples->xshift + 0.5,
 		  (y - samples->yshift * 4) / 4.0);
       samples->greenpos[samples->greenp] = y;
       greenshift[samples->greenp] = 2;
@@ -914,10 +820,10 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
       for (x = 0; x < samples->xsize; x++)
 	{
 	  bluesample[samples->bluep][x * 2] =
-	    sample (&trans, x - samples->xshift + 0.25,
+	    sample (&map, x - samples->xshift + 0.25,
 		    (y - samples->yshift * 4) / 4.0);
 	  bluesample[samples->bluep][x * 2 + 1] =
-	    sample (&trans, x - samples->xshift + 0.75,
+	    sample (&map, x - samples->xshift + 0.75,
 		    (y - samples->yshift * 4) / 4.0);
 	}
       samples->bluep++;
@@ -1139,7 +1045,7 @@ finalrender_row (int y, pixel ** outrow, struct samples *samples)
 
 #if 1
 		val =
-		  sample (&trans, (x - samples->xshift * 4 +
+		  sample (&map, (x - samples->xshift * 4 +
 				   xx / (double) scale) / 4.0,
 			  (rendery - samples->yshift * 4 +
 			   yy / (double) scale) / 4.0) * 256;

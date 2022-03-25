@@ -1,3 +1,5 @@
+#ifndef MATRIX_H
+#define MATRIX_H
 /* Basic template for square matrix.  */
 #include <cstring>
 #include <stdio.h>
@@ -130,3 +132,4 @@ public:
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;
   }
 };
+#endif
