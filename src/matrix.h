@@ -90,8 +90,8 @@ public:
     double b = m_elements[0][1];
     double c = m_elements[1][0];
     double d = m_elements[1][1];
-    double det = a * d - b * c;
-    matrix2x2 ret (d / det, -b / det, -c / det, a / det);
+    double det_rec = 1 / (a * d - b * c);
+    matrix2x2 ret (d * det_rec, -b * det_rec, -c * det_rec, a * det_rec);
     return ret;
   }
 };

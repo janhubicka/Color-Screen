@@ -16,6 +16,7 @@
 #include "render-fast.h"
 
 #define UNDOLEVELS 100 
+#define PREVIEWSIZE 400
 
 extern "C" {
 
@@ -697,25 +698,24 @@ previewrender (GdkPixbuf ** pixbuf)
 {
   int x, y;
   guint8 *pixels;
-  int scale = 1;
-  render_fast render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval);
-  int my_xsize = render.get_width (), my_ysize = render.get_height (), rowstride;
+  render_fast render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval, 256);
+  int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
+  int max_size = std::max (scr_xsize, scr_ysize);
+  double step = max_size / (double)PREVIEWSIZE;
+  int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
 
   gdk_pixbuf_unref (*pixbuf);
-  *pixbuf =
-    gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, (my_xsize + scale - 1) / scale,
-		    (my_ysize + scale - 1) / scale);
+  *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
   rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
 
-  for (y = 0; y < my_ysize; y += scale)
-    for (x = 0; x < my_xsize; x += scale)
+  for (y = 0; y < my_ysize; y ++)
+    for (x = 0; x < my_xsize; x ++)
       {
 	int red, green, blue;
-	render.render_pixel (x, y, &red, &green, &blue);
-	my_putpixel (pixels, rowstride, x / scale, y / scale, red / maxval,
-		     green / maxval, blue / maxval);
+	render.render_pixel (x * step, y * step, &red, &green, &blue);
+	my_putpixel (pixels, rowstride, x, y, red, green, blue);
       }
 }
 
