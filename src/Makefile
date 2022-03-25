@@ -5,7 +5,13 @@ all: barveni-bin matrix
 check:
 	./matrix
 
-barveni-bin: barveni.o gtk-image-viewer.o
+barveni.o: barveni.C matrix.h scr-to-img.h gtk-image-viewer.h
+
+scr-to-img.o: scr-to-img.h
+
+matrix.o: matrix.h
+
+barveni-bin: barveni.o gtk-image-viewer.o scr-to-img.o
 	$(CC) -o $@ $^ $(CFLAGS)  `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -lnetpbm -export-dynamic -lm
 
 matrix: matrix.o
