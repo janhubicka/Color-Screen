@@ -507,8 +507,6 @@ struct transformation_data
 {
   /* Screen->image translation matrix.  */
   matrix4x4 matrix;
-  /* Number of repetitions of the screen pattern along the edge (xstart,xstart),(xend,yend)  */
-  double num;
   /* Smallest rectagular region of the screens which contains all of the image.  */
   int scr_xshift, scr_yshift, scr_xsize, scr_ysize;
 } transform_data;
@@ -537,11 +535,11 @@ init_transformation_data (struct transformation_data *trans)
 {
   double a, b, c, d;
   double ox,oy;
-  trans->num = sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm
+  double num = sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm
 		     + (current.yend - current.ystart) * (current.yend - current.ystart) * current.ym * current.ym)
 	       / (8.750032);	/* 8.75 pixels per pattern in the LOC 1000DPI scans.  */
-  ox = (current.xend - current.xstart) * current.xm / (double) trans->num;
-  oy = (current.yend - current.ystart) * current.ym / (double) trans->num;
+  ox = (current.xend - current.xstart) * current.xm / (double) num;
+  oy = (current.yend - current.ystart) * current.ym / (double) num;
 
   /* Translate 0 xstart/ystart.  */
   matrix4x4 translation;
@@ -754,12 +752,6 @@ previewrender (GdkPixbuf ** pixbuf)
 
   init_transformation_data (&trans);
 
-#if 0
-  xshift = (current.xstart * trans.num / (current.xend - current.xstart));
-  yshift = (current.ystart * trans.num / (current.xend - current.xstart));
-  my_xsize = (xsize * trans.num / (current.xend - current.xstart));
-  my_ysize = (ysize * trans.num / (current.xend - current.xstart));
-#endif
   xshift = trans.scr_xshift;
   yshift = trans.scr_yshift;
   my_xsize = trans.scr_xsize;
@@ -842,10 +834,10 @@ init_finalrender (struct samples *samples, int scale)
   struct transformation_data trans;
 
   init_transformation_data (&trans);
-  samples->xshift = (current.xstart * trans.num / (current.xend - current.xstart));
-  samples->yshift = (current.ystart * trans.num / (current.xend - current.xstart));
-  samples->xsize = (xsize * trans.num / (current.xend - current.xstart));
-  samples->ysize = (ysize * trans.num / (current.xend - current.xstart));
+  samples->xshift = trans.scr_xshift;
+  samples->yshift = trans.scr_yshift;
+  samples->xsize = trans.scr_xsize;
+  samples->ysize = trans.scr_ysize;
   samples->scale = scale;
   for (i = 0; i < 8; i++)
     {

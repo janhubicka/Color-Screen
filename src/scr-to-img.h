@@ -9,20 +9,23 @@ struct scr_to_img_parameters
 {
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
   double center_x, center_y;
-  /* First base vector:
-     image coordinates (center_x+base1_x, centr_y+base1_y) should describe
+  /* First coordinate vector:
+     image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
      a green dot just on the right side of (center_x, center_y).  */
-  double base1_x, base1_y;
-  /* Second bsae vector:
-     image coordinates (center_x+base1_x, centr_y+base1_y) should describe
+  double coordinate1_x, coordinate1_y;
+  /* Second coordinate vector:
+     image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
      a green dot just below (center_x, center_y).  */
-  double base2_x, base2_y;
+  double coordinate2_x, coordinate2_y;
 };
 
 /* Mapping between screen and image.  */
 class scr_to_img
 {
   void set_parameters (scr_to_img_parameters param);
+  void get_range (int img_width, int img_height,
+		  int *scr_xshift, int *scr_yshift,
+		  int *scr_width, int *scr_height);
   /* Map screen coordinates to image coordinates.  */
   void
   to_img (double x, double y, double *xp, double *yp)
