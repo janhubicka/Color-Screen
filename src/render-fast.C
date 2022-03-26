@@ -15,8 +15,8 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 
        #define pixel(xo,yo) get_img_pixel_scr (dx + xo, dy + yo)
 
-    In the following we assume that map is linear within single repeetition
-    of the screen.  */
+    In the following we assume that map is linear within single repetition
+    of the screen.  This saves some matrix multiplication  */
   double zx, zy;
   double xx, xy;
   double yx, yy;
@@ -28,7 +28,7 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
   yx = yx - zx;
   yy = yy - zy;
 
-#define pixel(xo,yo) get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
+#define pixel(xo,yo) fast_get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
   
   /* Thames, Finlay and Paget screen are organized as follows:
     
