@@ -472,8 +472,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       double newcenter_x;
       double newcenter_y;
-      newcenter_x = (event->x + shift_x) / scale_x;
-      newcenter_y = (event->y + shift_y) / scale_y;
+      newcenter_x = (event->x + shift_x) / scale_x + 0.5;
+      newcenter_y = (event->y + shift_y) / scale_y + 0.5;
       if (newcenter_x != current.center_x || newcenter_y != current.center_y)
 	{
 	  current.center_x = newcenter_x;
@@ -492,8 +492,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     }
   else if (event->button == 3)
     {
-      xpress = (event->x + shift_x) / scale_x;
-      ypress = (event->y + shift_y) / scale_y;
+      xpress = (event->x + shift_x) / scale_x + 0.5;
+      ypress = (event->y + shift_y) / scale_y + 0.5;
       button3_pressed = true;
     }
 }
@@ -522,8 +522,8 @@ handle_drag (int x, int y, int button)
     {
       double x1 = (xpress - current.center_x);
       double y1 = (ypress - current.center_y);
-      double x2 = (x + shift_x) / scale_x - current.center_x;
-      double y2 = (y + shift_y) / scale_y - current.center_y;
+      double x2 = (x + shift_x) / scale_x + 0.5 - current.center_x;
+      double y2 = (y + shift_y) / scale_y + 0.5 - current.center_y;
       double scale = sqrt ((x2 * x2) + (y2 * y2))/sqrt ((x1*x1) + (y1*y1));
       double angle = atan2f (y2, x2) - atan2f (y1, x1);
       if (!angle)
@@ -643,14 +643,14 @@ main (int argc, char **argv)
   current.coordinate2_y = 5;
   FILE *in = fopen (paroname, "r");
   if (in
-      && expect_string (stdin, HEADER)
-      && expect_string (stdin, "screen_shift:")
+      && expect_string (in, HEADER)
+      && expect_string (in, "screen_shift:")
       && fscanf (in, "%lf %lf\n", &current.center_x, &current.center_y) == 2)
     {
-      if (expect_string (stdin, "coordinate_x:")
+      if (expect_string (in, "coordinate_x:")
           && fscanf (in, "%lf %lf\n", &current.coordinate1_x, &current.coordinate1_y) == 2)
 	{
-          if (expect_string (stdin, "coordinate_y:")
+          if (expect_string (in, "coordinate_y:")
 	      && fscanf (in, "%lf %lf\n", &current.coordinate2_x, &current.coordinate2_y))
 	    printf ("Reading ok\n");
 	}
