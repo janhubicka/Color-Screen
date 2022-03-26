@@ -565,6 +565,15 @@ cb_drag (GtkImage * image, GdkEventMotion * event, Data * data2)
 	       button1_pressed ? 1 : button3_pressed ? 3 : 0);
 }
 
+#define HEADER "screen_alignment_version: 1\nscreen_type: PagetFinlay\n"
+void write_current (FILE *out)
+{
+  fprintf (out, HEADER "screen_shift: %f %f\n", current.center_x, current.center_y);
+  fprintf (out, "coordinate_x: %f %f\n", current.coordinate1_x, current.coordinate1_y);
+  fprintf (out, "coordinate_y: %f %f\n", current.coordinate2_x, current.coordinate2_y);
+}
+
+
 G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
@@ -573,10 +582,7 @@ cb_save (GtkButton * button, Data * data)
   FILE *out;
   int scale = 4;
   out = fopen (paroname, "w");
-#if 0
-  fprintf (out, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf", current.xstart, current.ystart, current.xend, current.yend,
-	   0.0, current.xm, current.ym,current.xs,current.ys,current.xs2,current.ys2);
-#endif
+  write_current (out);
   fclose (out);
 
   render_interpolate render (get_scr_to_img_parameters (), graydata, xsize, ysize, maxval, 256, scale);
@@ -599,7 +605,16 @@ cb_save (GtkButton * button, Data * data)
 }
 
 
-
+bool
+expect_string (FILE *f, const char *str)
+{
+  int len = strlen (str);
+  char s[len];
+  if (fread (s, 1, strlen (str), f) != len
+      || memcmp (s, str, len))
+    return false;
+  return true;
+}
 
 int
 main (int argc, char **argv)
@@ -612,10 +627,23 @@ main (int argc, char **argv)
 
   current.center_x = 0;
   current.center_y = 0;
-  current.coordinate1_x = 50;
+  current.coordinate1_x = 5;
   current.coordinate1_y = 0;
   current.coordinate2_x = 0;
-  current.coordinate2_y = 50;
+  current.coordinate2_y = 5;
+  if (expect_string (stdin, HEADER)
+      && expect_string (stdin, "screen_shift:")
+      && scanf ("%lf %lf\n", &current.center_x, &current.center_y) == 2)
+    {
+      if (expect_string (stdin, "coordinate_x:")
+          && scanf ("%lf %lf\n", &current.coordinate1_x, &current.coordinate1_y) == 2)
+	{
+          if (expect_string (stdin, "coordinate_y:")
+	      && scanf ("%lf %lf\n", &current.coordinate2_x, &current.coordinate2_y))
+	    printf ("Reading ok\n");
+	}
+    }
+  write_current (stdout);
 #if 0
   scanf ("%lf %lf %lf %lf %lf %lf %lf", &current.xstart, &current.ystart, &current.xend, &current.yend, &num,
 	 &current.xm, &current.ym);
