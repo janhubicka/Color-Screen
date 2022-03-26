@@ -1,4 +1,4 @@
-CFLAGS= -g -ffast-math -funroll-all-loops -Wno-deprecated-declarations -Ofast `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -march=native
+CFLAGS= -g `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -march=native -ffast-math -funroll-all-loops -Wno-deprecated-declarations -Ofast  -fno-exceptions
 
 all: barveni-bin matrix
 

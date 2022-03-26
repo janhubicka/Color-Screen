@@ -1,5 +1,6 @@
 #ifndef RENDER_H
 #define RENDER_H
+#include <math.h>
 #include <netpbm/pgm.h>
 #include "scr-to-img.h"
 
@@ -22,17 +23,23 @@ class render
 {
 public:
   render (scr_to_img_parameters param, image_data &img, int dstmaxval);
+  ~render ();
   inline double get_img_pixel (double x, double y);
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
 
 protected:
+  inline double get_data (int x, int y);
+  inline void set_color (double, double, double, int *, int *, int *);
+
   /* Scanned image.  */
   image_data m_img;
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
+  /* Translates input gray values into normalized range 0...1 gamma 1.  */
+  double *m_lookup_table;
 };
 
 /* Base class for renderes tha works in screen coordinates (so output image is
@@ -74,6 +81,36 @@ cubic_interpolate (double p0, double p1, double p2, double p3, double x)
 			      x * (3.0 * (p1 - p2) + p3 - p0)));
 }
 
+/* Get image data in normalized range 0...1.  */
+
+inline double
+render::get_data (int x, int y)
+{
+  return m_lookup_table [m_img.data[y][x]];
+}
+
+/* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
+
+inline void
+render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
+{
+  if (r < 0)
+    r = 0;
+  if (g < 0)
+    g = 0;
+  if (b < 0)
+    b = 0;
+  if (r > 1)
+    r = 1;
+  if (g > 1)
+    g = 1;
+  if (b > 1)
+    b = 1;
+  *rr = pow (r, 2.2) * (m_dst_maxval) + 0.5;
+  *gg = pow (g, 2.2) * (m_dst_maxval) + 0.5;
+  *bb = pow (b, 2.2) * (m_dst_maxval) + 0.5;
+}
+
 /* Determine grayscale value at a given position in the image.  */
 
 inline double
@@ -82,7 +119,7 @@ render::fast_get_img_pixel (double xp, double yp)
   int x = xp + 0.5, y = yp + 0.5;
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
-  return m_img.data[y][x];
+  return render::get_data (x, y);
 }
 
 
@@ -98,15 +135,11 @@ render::get_img_pixel (double xp, double yp)
   if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
     return 0;
   double rx = xp - sx, ry = yp - sy;
-  val = cubic_interpolate (cubic_interpolate (m_img.data[sy-1][sx-1], m_img.data[sy][sx-1], m_img.data[sy+1][sx-1], m_img.data[sy+2][sx-1], ry),
-			   cubic_interpolate (m_img.data[sy-1][sx-0], m_img.data[sy][sx-0], m_img.data[sy+1][sx-0], m_img.data[sy+2][sx-0], ry),
-			   cubic_interpolate (m_img.data[sy-1][sx+1], m_img.data[sy][sx+1], m_img.data[sy+1][sx+1], m_img.data[sy+2][sx+1], ry),
-			   cubic_interpolate (m_img.data[sy-1][sx+2], m_img.data[sy][sx+2], m_img.data[sy+1][sx+2], m_img.data[sy+2][sx+2], ry),
+  val = cubic_interpolate (cubic_interpolate (get_data ( sx-1, sy-1), get_data (sx-1, sy), get_data (sx-1, sy+1), get_data (sx-1, sy+2), ry),
+			   cubic_interpolate (get_data ( sx-0, sy-1), get_data (sx-0, sy), get_data (sx-0, sy+1), get_data (sx-0, sy+2), ry),
+			   cubic_interpolate (get_data ( sx+1, sy-1), get_data (sx+1, sy), get_data (sx+1, sy+1), get_data (sx+1, sy+2), ry),
+			   cubic_interpolate (get_data ( sx+2, sy-1), get_data (sx+2, sy), get_data (sx+2, sy+1), get_data (sx+2, sy+2), ry),
 			   rx);
-  if (val < 0)
-    val = 0;
-  if (val > m_img.maxval - 1)
-    val = m_img.maxval - 1;
   return val;
 }
 

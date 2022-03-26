@@ -120,7 +120,7 @@ openimage (int *argc, char **argv)
     }
   graydata = pgm_readpgm (fopen (argv[1], "r"), &xsize, &ysize, &maxval);
   scan.width = xsize;
-  scan.height = xsize;
+  scan.height = ysize;
   scan.maxval = maxval;
   scan.data = graydata;
   maxval++;
@@ -347,7 +347,7 @@ previewrender (GdkPixbuf ** pixbuf)
 {
   int x, y;
   guint8 *pixels;
-  render_fast render (get_scr_to_img_parameters (), scan, 256);
+  render_fast render (get_scr_to_img_parameters (), scan, 255);
   int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
   double step = max_size / (double)PREVIEWSIZE;
@@ -392,8 +392,8 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
   screen screen;
-  screen.preview (maxval);
-  render_superpose_img render (get_scr_to_img_parameters (), scan, 256, &screen);
+  screen.preview ();
+  render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
 
   for (int y = 0; y < pysize; y++)
     {
@@ -590,7 +590,7 @@ cb_save (GtkButton * button, Data * data)
   write_current (out);
   fclose (out);
 
-  render_interpolate render (get_scr_to_img_parameters (), scan, 256, scale);
+  render_interpolate render (get_scr_to_img_parameters (), scan, 65535, scale);
   out = fopen (oname, "w");
   assert (scale < 16);
   for (int y = 0; y < scale; y++)

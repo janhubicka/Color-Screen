@@ -11,8 +11,8 @@ struct screen
   double mult[size][size][3];
   double add[size][size][3];
   /* Initialize screen to the thames screen plate (unused).  */
-  void thames (int maxval);
+  void thames ();
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
-  void preview (int maxval);
+  void preview ();
 };
 #endif

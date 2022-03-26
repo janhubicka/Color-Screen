@@ -12,7 +12,7 @@
 
 #define RR 2048
 void
-screen::thames (int maxval)
+screen::thames ()
 {
   int xx, yy;
   for (xx = 0; xx < size; xx++)
@@ -65,7 +65,7 @@ screen::thames (int maxval)
 /* This computes the grid displayed by UI.  */
 
 void
-screen::preview (int maxval)
+screen::preview ()
 {
   int xx, yy;
   for (xx = 0; xx < size; xx++)
@@ -92,7 +92,7 @@ screen::preview (int maxval)
 	mult[xx][yy][2] = 1;
 	if (d1 < 30)
 	  {
-	    add[xx][yy][0] = 0.5 * (maxval - 1);
+	    add[xx][yy][0] = 0.5;
 	    add[xx][yy][1] = 0;
 	    add[xx][yy][2] = 0;
 	    mult[xx][yy][0] = 0.5;
@@ -103,7 +103,7 @@ screen::preview (int maxval)
 	else if (d3 < 30)
 	  {
 	    add[xx][yy][0] = 0;
-	    add[xx][yy][1] = 0.5 * (maxval - 1);
+	    add[xx][yy][1] = 0.5;
 	    add[xx][yy][2] = 0;
 	    mult[xx][yy][0] = 0.25;
 	    mult[xx][yy][1] = 0.5;
@@ -116,7 +116,7 @@ screen::preview (int maxval)
 	      {
 		add[xx][yy][0] = 0;
 		add[xx][yy][1] = 0;
-		add[xx][yy][2] = 0.5 * (maxval - 1);
+		add[xx][yy][2] = 0.5;
 		mult[xx][yy][0] = 0.25;
 		mult[xx][yy][1] = 0.25;
 		mult[xx][yy][2] = 0.5;

@@ -35,7 +35,7 @@ bicubicInterpolate (double p[4][4], double x, double y)
   return cubicInterpolate (arr, x);
 }
 
-int
+double
 render_interpolate::getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y)
 {
   int line = (pos + NRED + x + y) % NRED;
@@ -151,7 +151,7 @@ render_interpolate::render_row (int y, pixel ** outrow)
 		double xo, yo;
 		int np;
 		int bluex = (x - 1) / 2;
-		int val;
+		double val;
 
 		p[0][0] = bluesample[bluestart][bluex - 1];
 		p[1][0] = bluesample[bluestart][bluex];
@@ -171,10 +171,6 @@ render_interpolate::render_row (int y, pixel ** outrow)
 		p[3][3] = bluesample[(bluestart + 3) % NBLUE][bluex + 2];
 		xo = (double) (x + ((double) xx) / scale - 1) / 2;
 		blue = bicubicInterpolate (p, xo - (int) xo, bluey);
-		if (blue < 0)
-		  blue = 0;
-		if (blue > m_img.maxval - 1)
-		  blue = m_img.maxval - 1;
 		{
 		  int sx = ((x - redshift[redcenter]) + 2) / 4;
 		  int dx = (x - redshift[redcenter]) - sx * 4;
@@ -244,10 +240,6 @@ render_interpolate::render_row (int y, pixel ** outrow)
 		  red =
 		    bicubicInterpolate (p, (disty - distx) / 4.0,
 					(distx + disty) / 4.0);
-		  if (red < 0)
-		    red = 0;
-		  if (red > m_img.maxval - 1)
-		    red = m_img.maxval - 1;
 		}
 		{
 		  int sx = ((x - greenshift[greencenter]) + 2) / 4;
@@ -318,48 +310,27 @@ render_interpolate::render_row (int y, pixel ** outrow)
 		  green =
 		    bicubicInterpolate (p, (disty - distx) / 4.0,
 					(distx + disty) / 4.0);
-		  if (green < 0)
-		    green = 0;
-		  if (green > m_img.maxval - 1)
-		    green = m_img.maxval - 1;
 		}
 
 
-#if 1
+#if 0
 		val =
-		  get_img_pixel_scr ((x - m_scr_xshift * 4 +
-				   xx / (double) m_scale) / 4.0,
-			  (rendery - m_scr_yshift * 4 +
-			   yy / (double) m_scale) / 4.0) * 256;
+		  get_img_pixel_scr ((x - m_scr_xshift * 4 + xx / (double) m_scale) / 4.0, (rendery - m_scr_yshift * 4 + yy / (double) m_scale) / 4.0);
 		if (red != 0 || green != 0 || blue != 0)
 		  {
-		    double sum = (red + green + blue) / 3;
+		    double sum = (red + green + blue) * 0.33333;
 		    red = red * val / sum;
 		    green = green * val / sum;
 		    blue = blue * val / sum;
 		  }
 		else
 		  red = green = blue = val;
-#else
-		red *= 256;
-		green *= 256;
-		blue *= 256;
 #endif
-		if (red > 65536 - 1)
-		  red = 65536 - 1;
-		if (red < 0)
-		  red = 0;
-		if (green > 65536 - 1)
-		  green = 65536 - 1;
-		if (green < 0)
-		  green = 0;
-		if (blue > 65536 - 1)
-		  blue = 65536 - 1;
-		if (blue < 0)
-		  blue = 0;
-		outrow[yy][(x * scale + xx)].r = red;
-		outrow[yy][(x * scale + xx)].g = green;
-		outrow[yy][(x * scale + xx)].b = blue;
+		int rr, gg, bb;
+		set_color (red, green, blue, &rr, &gg, &bb);
+		outrow[yy][(x * scale + xx)].r = rr;
+		outrow[yy][(x * scale + xx)].g = gg;
+		outrow[yy][(x * scale + xx)].b = bb;
 	      }
 	}
     }

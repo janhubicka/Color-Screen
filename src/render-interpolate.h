@@ -12,7 +12,7 @@ private:
   static const int NBLUE = 8;			/* We need 6 rows of blue.  */
   static const int NRED = 8;			/* We need 7 rows of the others.  */
 
-  inline int getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y);
+  inline double getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y);
 
   double *m_redsample[8];
   double *m_greensample[8];

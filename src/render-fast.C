@@ -46,21 +46,5 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
   red = (avg + (red - avg) * 5) * m_scale;
   green = (avg + (green - avg) * 5) * m_scale;
   blue = (avg + (blue - avg) * 5) * m_scale;
-  if (red < 0)
-    red = 0;
-  if (red >= m_dst_maxval)
-    red = m_dst_maxval - 1;
-  if (green < 0)
-    green = 0;
-  if (green >= m_dst_maxval)
-    green = m_dst_maxval - 1;
-  if (blue < 0)
-    blue = 0;
-  if (blue >= m_dst_maxval)
-    blue = m_dst_maxval - 1;
-
-
-  *r = red;
-  *g = green;
-  *b = blue;
+  set_color (red, green, blue, r, g, b);
 }
