@@ -1,9 +1,9 @@
 #include "render-fast.h"
 
-render_fast::render_fast (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dst_maxval)
- : render_to_scr (param, img, img_width, img_height, maxval, dst_maxval)
+render_fast::render_fast (scr_to_img_parameters param, image_data &img, int dst_maxval)
+ : render_to_scr (param, img, dst_maxval)
 {
-  m_scale = m_dst_maxval / (m_maxval * 2.0);
+  m_scale = m_dst_maxval / (m_img.maxval * 2.0);
 }
 
 void

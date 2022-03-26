@@ -5,8 +5,8 @@
 class render_superpose_img : public render
 {
 public:
-  inline render_superpose_img (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dst_maxval, screen *screen)
-   : render (param, img, img_width, img_height, maxval, dst_maxval),
+  inline render_superpose_img (scr_to_img_parameters param, image_data &data, int dst_maxval, screen *screen)
+   : render (param, data, dst_maxval),
      m_screen (screen) { }
   void inline render_pixel (double x, double y, int *r, int *g, int *b);
 private:

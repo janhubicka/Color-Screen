@@ -1,8 +1,8 @@
 #include <assert.h>
 #include "render-interpolate.h"
 
-render_interpolate::render_interpolate (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dst_maxval, int scale)
-   : render_to_scr (param, img, img_width, img_height, maxval, dst_maxval), m_scale (scale)
+render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval, int scale)
+   : render_to_scr (param, img, dst_maxval), m_scale (scale)
 {
   for (int i = 0; i < 8; i++)
     {
@@ -173,8 +173,8 @@ render_interpolate::render_row (int y, pixel ** outrow)
 		blue = bicubicInterpolate (p, xo - (int) xo, bluey);
 		if (blue < 0)
 		  blue = 0;
-		if (blue > m_maxval - 1)
-		  blue = m_maxval - 1;
+		if (blue > m_img.maxval - 1)
+		  blue = m_img.maxval - 1;
 		{
 		  int sx = ((x - redshift[redcenter]) + 2) / 4;
 		  int dx = (x - redshift[redcenter]) - sx * 4;
@@ -246,8 +246,8 @@ render_interpolate::render_row (int y, pixel ** outrow)
 					(distx + disty) / 4.0);
 		  if (red < 0)
 		    red = 0;
-		  if (red > m_maxval - 1)
-		    red = m_maxval - 1;
+		  if (red > m_img.maxval - 1)
+		    red = m_img.maxval - 1;
 		}
 		{
 		  int sx = ((x - greenshift[greencenter]) + 2) / 4;
@@ -320,8 +320,8 @@ render_interpolate::render_row (int y, pixel ** outrow)
 					(distx + disty) / 4.0);
 		  if (green < 0)
 		    green = 0;
-		  if (green > m_maxval - 1)
-		    green = m_maxval - 1;
+		  if (green > m_img.maxval - 1)
+		    green = m_img.maxval - 1;
 		}
 
 

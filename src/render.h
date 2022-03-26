@@ -3,6 +3,16 @@
 #include <netpbm/pgm.h>
 #include "scr-to-img.h"
 
+/* Scanned image descriptor.  */
+struct image_data
+{
+  gray **data;
+  /* Dimensions of image data.  */
+  int width, height;
+  /* Maximal value of the image data.  */
+  int maxval;
+};
+
 /* Base class for rendering routines.  It holds
      - scr-to-img transformation info
      - the scanned image data
@@ -11,20 +21,16 @@
 class render
 {
 public:
-  render (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dstmaxval);
+  render (scr_to_img_parameters param, image_data &img, int dstmaxval);
   inline double get_img_pixel (double x, double y);
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
 
 protected:
-  /* Pointer to image data.  */
-  gray **m_img;
+  /* Scanned image.  */
+  image_data m_img;
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
-  /* Dimensions of image data.  */
-  int m_img_width, m_img_height;
-  /* Maximal value of the image data.  */
-  int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
 };
@@ -34,10 +40,10 @@ protected:
 class render_to_scr : public render
 {
 public:
-  render_to_scr (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dstmaxval)
-    : render (param, img, img_width, img_height, maxval, dstmaxval)
+  render_to_scr (scr_to_img_parameters param, image_data &img, int dstmaxval)
+    : render (param, img, dstmaxval)
   {
-    m_scr_to_img.get_range (img_width, img_height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
+    m_scr_to_img.get_range (m_img.width, m_img.height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
   }
   /* This returns screen coordinate width of rendered output.  */
   int get_width ()
@@ -74,9 +80,9 @@ inline double
 render::fast_get_img_pixel (double xp, double yp)
 {
   int x = xp + 0.5, y = yp + 0.5;
-  if (x < 0 || x >= m_img_width || y < 0 || y >= m_img_height)
+  if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
-  return m_img[y][x];
+  return m_img.data[y][x];
 }
 
 
@@ -89,18 +95,18 @@ render::get_img_pixel (double xp, double yp)
   double val;
   int sx = xp, sy = yp;
 
-  if (sx < 1 || sx >= m_img_width - 2 || sy < 1 || sy >= m_img_height - 2)
+  if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
     return 0;
   double rx = xp - sx, ry = yp - sy;
-  val = cubic_interpolate (cubic_interpolate (m_img[sy-1][sx-1], m_img[sy][sx-1], m_img[sy+1][sx-1], m_img[sy+2][sx-1], ry),
-			   cubic_interpolate (m_img[sy-1][sx-0], m_img[sy][sx-0], m_img[sy+1][sx-0], m_img[sy+2][sx-0], ry),
-			   cubic_interpolate (m_img[sy-1][sx+1], m_img[sy][sx+1], m_img[sy+1][sx+1], m_img[sy+2][sx+1], ry),
-			   cubic_interpolate (m_img[sy-1][sx+2], m_img[sy][sx+2], m_img[sy+1][sx+2], m_img[sy+2][sx+2], ry),
+  val = cubic_interpolate (cubic_interpolate (m_img.data[sy-1][sx-1], m_img.data[sy][sx-1], m_img.data[sy+1][sx-1], m_img.data[sy+2][sx-1], ry),
+			   cubic_interpolate (m_img.data[sy-1][sx-0], m_img.data[sy][sx-0], m_img.data[sy+1][sx-0], m_img.data[sy+2][sx-0], ry),
+			   cubic_interpolate (m_img.data[sy-1][sx+1], m_img.data[sy][sx+1], m_img.data[sy+1][sx+1], m_img.data[sy+2][sx+1], ry),
+			   cubic_interpolate (m_img.data[sy-1][sx+2], m_img.data[sy][sx+2], m_img.data[sy+1][sx+2], m_img.data[sy+2][sx+2], ry),
 			   rx);
   if (val < 0)
     val = 0;
-  if (val > m_maxval - 1)
-    val = m_maxval - 1;
+  if (val > m_img.maxval - 1)
+    val = m_img.maxval - 1;
   return val;
 }
 

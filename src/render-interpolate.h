@@ -6,7 +6,7 @@
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters param, gray **img, int img_width, int img_height, int maxval, int dst_maxval, int scale);
+  render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval, int scale);
   void render_row (int y, pixel ** outrow);
 private:
   static const int NBLUE = 8;			/* We need 6 rows of blue.  */
