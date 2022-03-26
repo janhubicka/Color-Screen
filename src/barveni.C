@@ -373,7 +373,7 @@ draw_circle (cairo_surface_t *surface, double bigscale,
   cairo_scale (cr, bigscale, bigscale);
 
   cairo_set_source_rgba (cr, r, g, b, 0.5);
-  cairo_arc (cr, x, y, 3, 0.0, 2 * G_PI);
+  cairo_arc (cr, x - 0.5, y - 0.5, 3, 0.0, 2 * G_PI);
 
   cairo_fill (cr);
   cairo_destroy (cr);
