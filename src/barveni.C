@@ -621,6 +621,16 @@ main (int argc, char **argv)
 {
   GtkWidget *window;
   double num;
+  if (argc != 4)
+    {
+      fprintf (stderr, "Invocation: %s scan.pgm output.pnm scan.par\n\n"
+	       "Here scan.pgm is the scan as a greyscale.\n"
+	       "output.pnm is a filename where resulting image will be stored.\n"
+	       "If scan.par exists then its parametrs will be read.\n"
+	       "Parameters will be saved to scan.par after pressing save button.\n",
+	       argv[0]);
+      exit (1);
+    }
   openimage (&argc, argv);
   oname = argv[2];
   paroname = argv[3];
@@ -631,17 +641,26 @@ main (int argc, char **argv)
   current.coordinate1_y = 0;
   current.coordinate2_x = 0;
   current.coordinate2_y = 5;
-  if (expect_string (stdin, HEADER)
+  FILE *in = fopen (paroname, "r");
+  if (in
+      && expect_string (stdin, HEADER)
       && expect_string (stdin, "screen_shift:")
-      && scanf ("%lf %lf\n", &current.center_x, &current.center_y) == 2)
+      && fscanf (in, "%lf %lf\n", &current.center_x, &current.center_y) == 2)
     {
       if (expect_string (stdin, "coordinate_x:")
-          && scanf ("%lf %lf\n", &current.coordinate1_x, &current.coordinate1_y) == 2)
+          && fscanf (in, "%lf %lf\n", &current.coordinate1_x, &current.coordinate1_y) == 2)
 	{
           if (expect_string (stdin, "coordinate_y:")
-	      && scanf ("%lf %lf\n", &current.coordinate2_x, &current.coordinate2_y))
+	      && fscanf (in, "%lf %lf\n", &current.coordinate2_x, &current.coordinate2_y))
 	    printf ("Reading ok\n");
 	}
+    }
+  if (in)
+    fclose (in);
+  else
+    {
+      fprintf (stderr, "Can not open param file \"%s\": ", paroname);
+      perror ("");
     }
   write_current (stdout);
 #if 0
