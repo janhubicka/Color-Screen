@@ -3,7 +3,6 @@
 render_fast::render_fast (scr_to_img_parameters param, image_data &img, int dst_maxval)
  : render_to_scr (param, img, dst_maxval)
 {
-  m_scale = m_dst_maxval / (m_img.maxval * 2.0);
 }
 
 void
@@ -43,8 +42,8 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
   double blue = (pixel (0.25, 0.25) + pixel (0.75, 0.25) + pixel (0.25, 0.75) + pixel (0.75, 0.75)) * 0.5;
 #undef getpixel
   double avg = (red + green + blue) * 0.3333;
-  red = (avg + (red - avg) * 5) * m_scale;
-  green = (avg + (green - avg) * 5) * m_scale;
-  blue = (avg + (blue - avg) * 5) * m_scale;
+  red = (avg + (red - avg) * 5) * 0.5;
+  green = (avg + (green - avg) * 5) * 0.5;
+  blue = (avg + (blue - avg) * 5) * 0.5;
   set_color (red, green, blue, r, g, b);
 }

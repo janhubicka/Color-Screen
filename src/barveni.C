@@ -181,6 +181,7 @@ cb_image_annotate (GtkImageViewer * imgv,
 static bool setcenter;
 static bool freeze_x = false;
 static bool freeze_y = false;
+static bool preview;
 
 /* Handle all the magic keys.  */
 static gint
@@ -204,6 +205,11 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       freeze_x = false;
       freeze_y = false;
+    }
+  if (k == 'p')
+    {
+      preview = !preview;
+      display_scheduled = 1;
     }
   if (k == 'u')
     {
@@ -391,18 +397,42 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   guint8 *bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
-  screen screen;
-  screen.preview ();
-  render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
 
-  for (int y = 0; y < pysize; y++)
+  if (!preview)
     {
-      double py = (y + yoffset) / bigscale;
-      for (int x = 0; x < pxsize; x++)
+      screen screen;
+      screen.preview ();
+      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+
+      for (int y = 0; y < pysize; y++)
 	{
-	  int r, g, b;
-	  render.render_pixel ((x + xoffset) / bigscale, py, &r, &g, &b);
-	  my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	  double py = (y + yoffset) / bigscale;
+	  for (int x = 0; x < pxsize; x++)
+	    {
+	      int r, g, b;
+	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	    }
+	}
+    }
+  else
+    {
+      render_interpolate render (get_scr_to_img_parameters (), scan, 255, 4);
+      render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
+	  			   (pxsize+xoffset) / bigscale, 
+				   (pysize+yoffset) / bigscale);
+
+      for (int y = 0; y < pysize; y++)
+	{
+	  double py = (y + yoffset) / bigscale;
+	  for (int x = 0; x < pxsize; x++)
+	    {
+	      int r, g, b;
+	      bool sx, sy;
+	      
+	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	    }
 	}
     }
 
@@ -591,6 +621,7 @@ cb_save (GtkButton * button, Data * data)
   fclose (out);
 
   render_interpolate render (get_scr_to_img_parameters (), scan, 65535, scale);
+  render.precompute_all ();
   out = fopen (oname, "w");
   assert (scale < 16);
   for (int y = 0; y < scale; y++)

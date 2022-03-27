@@ -106,9 +106,19 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
     g = 1;
   if (b > 1)
     b = 1;
-  *rr = pow (r, 2.2) * (m_dst_maxval) + 0.5;
-  *gg = pow (g, 2.2) * (m_dst_maxval) + 0.5;
-  *bb = pow (b, 2.2) * (m_dst_maxval) + 0.5;
+#if 0
+  *rr = pow (0.85 * r + 0.00 * g + 0.15 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *gg = pow (0.15 * r + 0.85 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *bb = pow (0.00 * r + 0.00 * g + 1.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+#endif
+#if 0
+  *rr = pow (0.80 * r + 0.20 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *gg = pow (0.20 * r + 0.80 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *bb = pow (0.08 * r + 0.12 * g + 0.80 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+#endif
+  *rr = pow (1.00 * r + 0.00 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *gg = pow (0.00 * r + 1.00 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *bb = pow (0.00 * r + 0.00 * g + 1.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
 }
 
 /* Determine grayscale value at a given position in the image.  */

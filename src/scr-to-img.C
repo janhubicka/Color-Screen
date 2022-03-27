@@ -26,7 +26,8 @@ scr_to_img::set_parameters (scr_to_img_parameters param)
    The section is having dimensions scr_width x scr_height and will
    start at position (-scr_xshift, -scr_yshift).  */
 void
-scr_to_img::get_range (int img_width, int img_height,
+scr_to_img::get_range (double x1, double y1,
+		       double x2, double y2,
 		       int *scr_xshift, int *scr_yshift,
 		       int *scr_width, int *scr_height)
 {
@@ -34,10 +35,10 @@ scr_to_img::get_range (int img_width, int img_height,
   double xul,xur,xdl,xdr;
   double yul,yur,ydl,ydr;
 
-  to_scr (0, 0, &xul, &yul);
-  to_scr (img_width, 0, &xur, &yur);
-  to_scr (0, img_height, &xdl, &ydl);
-  to_scr (img_width, img_height, &xdr, &ydr);
+  to_scr (x1, y1, &xul, &yul);
+  to_scr (x2, y1, &xur, &yur);
+  to_scr (x1, y2, &xdl, &ydl);
+  to_scr (x2, y2, &xdr, &ydr);
 
   /* Find extremas.  */
   double minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
@@ -50,4 +51,18 @@ scr_to_img::get_range (int img_width, int img_height,
   *scr_yshift = -miny - 1;
   *scr_width = maxx-minx + 2;
   *scr_height = maxy-miny + 2;
+}
+/* Determine rectangular section of the screen to which the whole image
+   with dimension img_width x img_height fits.
+
+   The section is having dimensions scr_width x scr_height and will
+   start at position (-scr_xshift, -scr_yshift).  */
+void
+scr_to_img::get_range (int img_width, int img_height,
+		       int *scr_xshift, int *scr_yshift,
+		       int *scr_width, int *scr_height)
+{
+  get_range (0.0, 0.0, (double)img_width, (double)img_height,
+	     scr_xshift, scr_yshift,
+	     scr_width, scr_height);
 }

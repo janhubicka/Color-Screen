@@ -7,6 +7,5 @@ public:
   render_fast (scr_to_img_parameters param, image_data &img, int dst_maxval);
   void render_pixel (int x, int y, int *r, int *g, int *b);
 private:
-  double m_scale;
 };
 #endif

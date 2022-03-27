@@ -20,7 +20,7 @@ render-interpolate.o: render.h scr-to-img.h render-interpolate.h
 matrix.o: matrix.h
 
 barveni-bin: barveni.o gtk-image-viewer.o scr-to-img.o render.o render-fast.o screen.o render-interpolate.o
-	$(CC) -o $@ $^ $(CFLAGS)  `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -lnetpbm -export-dynamic -lm
+	$(CXX) -o $@ $^ $(CFLAGS)  `pkg-config gtk+-x11-2.0 --cflags` `pkg-config gtk+-x11-2.0 --libs` -lnetpbm -export-dynamic -lm
 
 matrix: matrix.o
 

@@ -8,13 +8,13 @@ public:
   inline render_superpose_img (scr_to_img_parameters param, image_data &data, int dst_maxval, screen *screen)
    : render (param, data, dst_maxval),
      m_screen (screen) { }
-  void inline render_pixel (double x, double y, int *r, int *g, int *b);
+  void inline render_pixel_img (double x, double y, int *r, int *g, int *b);
 private:
   screen *m_screen;
 };
 
 void
-render_superpose_img::render_pixel (double x, double y, int *r, int *g, int *b)
+render_superpose_img::render_pixel_img (double x, double y, int *r, int *g, int *b)
 {
   double gg, rr, bb;
   double xx, yy;

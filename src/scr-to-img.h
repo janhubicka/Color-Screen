@@ -29,6 +29,10 @@ public:
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
 		  int *scr_width, int *scr_height);
+  void get_range (double x1, double y1,
+      		  double x2, double y2,
+		  int *scr_xshift, int *scr_yshift,
+		  int *scr_width, int *scr_height);
   /* Map screen coordinates to image coordinates.  */
   void
   to_img (double x, double y, double *xp, double *yp)
