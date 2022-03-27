@@ -6,9 +6,8 @@
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval, int scale);
+  render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval);
   ~render_interpolate ();
-  void render_row (int y, pixel ** outrow);
   void precompute (double xmin, double ymin, double xmax, double ymax);
   void render_pixel (double x, double y, int *r, int *g, int *b);
   void render_pixel_img (double x, double y, int *r, int *g, int *b)
@@ -28,22 +27,6 @@ public:
     precompute (-xshift, -yshift, -xshift + width, -yshift + height);
   }
 private:
-  static const int NBLUE = 8;			/* We need 6 rows of blue.  */
-  static const int NRED = 8;			/* We need 7 rows of the others.  */
-
-  inline double getmatrixsample (double **sample, int *shift, int pos, int xp, int x, int y);
-
-  double *m_redsample[8];
-  double *m_greensample[8];
-  double *m_bluesample[NBLUE];
-  int m_bluepos[NBLUE];
-  int m_redpos[8];
-  int m_redshift[8];
-  int m_greenpos[8];
-  int m_greenshift[8];
-  int m_redp, m_greenp, m_bluep;
-  int m_scale;
-
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
   double *m_prec_red;
   double *m_prec_green;

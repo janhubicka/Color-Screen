@@ -417,7 +417,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else
     {
-      render_interpolate render (get_scr_to_img_parameters (), scan, 255, 4);
+      render_interpolate render (get_scr_to_img_parameters (), scan, 255);
       render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
@@ -620,16 +620,25 @@ cb_save (GtkButton * button, Data * data)
   write_current (out);
   fclose (out);
 
-  render_interpolate render (get_scr_to_img_parameters (), scan, 65535, scale);
+  render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
   render.precompute_all ();
+#if 0
   out = fopen (oname, "w");
   assert (scale < 16);
   for (int y = 0; y < scale; y++)
     outrows[y] = ppm_allocrow (render.get_width () * scale * 4);
   ppm_writeppminit (out, render.get_width () * scale * 4, render.get_height() * scale * 4,
 		    65535, 0);
-  for (int y = 0; y < render.get_height () * 4; y++)
+  for (int y = 0; y < render.get_height () * 4 * scale; y++)
     {
+      for (int x = 0; x < render.get_width () * 4 * scale; x++)
+	{
+	  int rr, gg, bb;
+	  render_pixel ((x - m_scr_xshift * 4 + xx / (double) m_scale) / 4.0, (rendery - m_scr_yshift * 4 + yy / (double) m_scale) / 4.0,&rr, &gg, &bb);
+	  outrow[yy][(x * scale + xx)].r = rr;
+	  outrow[yy][(x * scale + xx)].g = gg;
+	  outrow[yy][(x * scale + xx)].b = bb;
+	}
       render.render_row (y, outrows);
       for (int yy = 0; yy < scale; yy++)
 	ppm_writeppmrow (out, outrows[yy], render.get_width() * scale * 4, 65535,
@@ -638,6 +647,7 @@ cb_save (GtkButton * button, Data * data)
   fclose (out);
   for (int y = 0; y < scale; y++)
     free (outrows[y]);
+#endif
 }
 
 

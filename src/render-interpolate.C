@@ -1,19 +1,12 @@
 #include <assert.h>
 #include "render-interpolate.h"
 
-render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval, int scale)
-   : render_to_scr (param, img, dst_maxval), m_scale (scale), m_prec_red (0), m_prec_green (0), m_prec_blue (0)
+render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval)
+   : render_to_scr (param, img, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0)
 {
-  for (int i = 0; i < 8; i++)
-    {
-      m_redsample[i] = (double *)calloc (sizeof (double), m_scr_width);
-      m_greensample[i] = (double *)calloc (sizeof (double), m_scr_width);
-    }
-  for (int i = 0; i < NBLUE; i++)
-    m_bluesample[i] = (double *)calloc (sizeof (double), m_scr_width * 2);
-  m_bluep = m_redp = m_greenp = 0;
 }
 
+#if 0
 static inline double
 cubicInterpolate (double p[4], double x)
 {
@@ -337,6 +330,7 @@ render_interpolate::render_row (int y, pixel ** outrow)
 	}
     }
 }
+#endif
 
 void
 render_interpolate::precompute (double xmin, double ymin, double xmax, double ymax)
