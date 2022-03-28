@@ -12,8 +12,10 @@ struct screen
   double add[size][size][3];
   /* Initialize empty screen.  */
   void empty ();
-  /* Initialize screen to the thames screen plate (unused).  */
+  /* Initialize screen to the thames screen plate.  */
   void thames ();
+  /* Initialize screen to the paget/finlay screen plate.  */
+  void paget_finlay ();
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
 };

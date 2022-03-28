@@ -413,7 +413,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 1)
         screen.preview ();
       else
-        screen.thames ();
+        screen.paget_finlay ();
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
 
       for (int y = 0; y < pysize; y++)
