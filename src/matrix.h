@@ -102,6 +102,18 @@ class matrix4x4 : public matrix<4>
 public:
   matrix4x4 () { }
 
+  matrix4x4 (double e00, double e01, double e02, double e03,
+	     double e10, double e11, double e12, double e13,
+	     double e20, double e21, double e22, double e23,
+	     double e30, double e31, double e32, double e33)
+  {
+    m_elements[0][0]=e00; m_elements[1][0]=e01; m_elements[2][0]=e02; m_elements[3][0]=e03;
+    m_elements[0][1]=e10; m_elements[1][1]=e11; m_elements[2][1]=e12; m_elements[3][1]=e03;
+    m_elements[0][2]=e20; m_elements[1][2]=e21; m_elements[2][2]=e22; m_elements[3][2]=e03;
+    m_elements[0][3]=e30; m_elements[1][3]=e31; m_elements[2][3]=e32; m_elements[3][3]=e03;
+  }
+
+
   matrix4x4& operator=(const matrix<4>rhs)
   {
     memcpy(m_elements,rhs.m_elements,sizeof (m_elements));
@@ -131,5 +143,28 @@ public:
     xr = m2.m_elements[0][0] * xx + m2.m_elements[0][1] * yy;
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;
   }
+
+  inline void
+  apply_to_rgb (double r, double g, double b, double *rr, double *gg, double *bb)
+  {
+    *rr = r * m_elements[0][0] + g * m_elements[1][0] + b * m_elements[2][0] + m_elements[3][0];
+    *gg = r * m_elements[0][1] + g * m_elements[1][1] + b * m_elements[2][1] + m_elements[3][1];
+    *bb = r * m_elements[0][2] + g * m_elements[1][2] + b * m_elements[2][2] + m_elements[3][2];
+  }
+};
+
+// http://www.graficaobscura.com/matrix/index.html
+static const double rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
+
+// http://www.graficaobscura.com/matrix/index.html
+class saturation_matrix : public matrix4x4
+{
+public:
+  saturation_matrix (double s)
+  : matrix4x4 ((1-s)*rwght + s, (1-s)*gwght    , (1-s)*bwght    , 0,
+	       (1-s)*rwght    , (1-s)*gwght + s, (1-s)*bwght    , 0,
+	       (1-s)*rwght    , (1-s)*gwght    , (1-s)*bwght + s, 0,
+	       0,             0,              0,                  0)
+  {}
 };
 #endif
