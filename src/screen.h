@@ -10,6 +10,8 @@ struct screen
      and keep how much keep in the color.  */
   double mult[size][size][3];
   double add[size][size][3];
+  /* Initialize empty screen.  */
+  void empty ();
   /* Initialize screen to the thames screen plate (unused).  */
   void thames ();
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */

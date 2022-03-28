@@ -29,6 +29,7 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 
 #define pixel(xo,yo) fast_get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
   
+#if 1
   /* Thames, Finlay and Paget screen are organized as follows:
     
      G   R   G
@@ -37,11 +38,16 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
        B   B
      G   R   G  */
 
-#if 1
   double green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25 + pixel (0.5, 0.5);
   double red = (pixel (0.5, 0) + pixel (0, 0.5) + pixel (1, 0.5) + pixel (0.5, 1)) * 0.5;
   double blue = (pixel (0.25, 0.25) + pixel (0.75, 0.25) + pixel (0.25, 0.75) + pixel (0.75, 0.75)) * 0.5;
 #else
+  /* Dufay screen is 
+     G   B   G
+
+     R   R   R
+
+     G   B   G  */
   double green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.5;
   double red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.5;
   double blue = (pixel (0.5, 0) + pixel (0.5, 1));

@@ -12,6 +12,8 @@ struct image_data
   int width, height;
   /* Maximal value of the image data.  */
   int maxval;
+  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
+  double gamma;
 };
 
 /* Base class for rendering routines.  It holds
@@ -27,6 +29,7 @@ public:
   inline double get_img_pixel (double x, double y);
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
+  void set_saturation (double s) { m_saturate = s; }
 
 protected:
   inline double get_data (int x, int y);
@@ -40,6 +43,8 @@ protected:
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
   double *m_lookup_table;
+  /* Saturation increase.  */
+  double m_saturate;
 };
 
 /* Base class for renderes tha works in screen coordinates (so output image is
@@ -94,6 +99,11 @@ render::get_data (int x, int y)
 inline void
 render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 {
+  if (m_saturate != 1)
+  {
+    saturation_matrix m (m_saturate);
+    m.apply_to_rgb (r, g, b, &r, &g, &b);
+  }
   if (r < 0)
     r = 0;
   if (g < 0)
@@ -106,19 +116,9 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
     g = 1;
   if (b > 1)
     b = 1;
-#if 0
-  *rr = pow (0.85 * r + 0.00 * g + 0.15 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *gg = pow (0.15 * r + 0.85 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *bb = pow (0.00 * r + 0.00 * g + 1.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-#endif
-#if 0
-  *rr = pow (0.80 * r + 0.20 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *gg = pow (0.20 * r + 0.80 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *bb = pow (0.08 * r + 0.12 * g + 0.80 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-#endif
-  *rr = pow (1.00 * r + 0.00 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *gg = pow (0.00 * r + 1.00 * g + 0.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
-  *bb = pow (0.00 * r + 0.00 * g + 1.00 * b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *rr = pow (r, 1/2.2) * (m_dst_maxval) + 0.5;
+  *gg = pow (g, 1/2.2) * (m_dst_maxval) + 0.5;
+  *bb = pow (b, 1/2.2) * (m_dst_maxval) + 0.5;
 }
 
 /* Determine grayscale value at a given position in the image.  */

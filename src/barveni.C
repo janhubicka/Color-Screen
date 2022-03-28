@@ -42,6 +42,7 @@ static int initialized = 0;
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
 
+static int display_type = 0;
 static bool display_scheduled = true;
 
 /* How much is the image scaled in the small view.  */
@@ -123,6 +124,7 @@ openimage (int *argc, char **argv)
   scan.height = ysize;
   scan.maxval = maxval;
   scan.data = graydata;
+  scan.gamma = 2.2;
   maxval++;
 }
 
@@ -206,9 +208,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       freeze_x = false;
       freeze_y = false;
     }
-  if (k == 'p')
+  if (k >= '1' && k <='5')
     {
-      preview = !preview;
+      display_type = k - '1';
       display_scheduled = 1;
     }
   if (k == 'u')
@@ -358,6 +360,7 @@ previewrender (GdkPixbuf ** pixbuf)
   int max_size = std::max (scr_xsize, scr_ysize);
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
+  render.set_saturation (3);
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
@@ -398,10 +401,15 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
 
-  if (!preview)
+  if (display_type < 3)
     {
       screen screen;
-      screen.preview ();
+      if (!display_type)
+	screen.empty ();
+      else if (display_type == 1)
+        screen.preview ();
+      else
+        screen.thames ();
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
 
       for (int y = 0; y < pysize; y++)
@@ -415,7 +423,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	    }
 	}
     }
-  else
+  else if (display_type == 3)
     {
       render_interpolate render (get_scr_to_img_parameters (), scan, 255);
       render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
@@ -430,6 +438,23 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	      int r, g, b;
 	      bool sx, sy;
 	      
+	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	    }
+	}
+    }
+  else
+    {
+      render_fast render (get_scr_to_img_parameters (), scan, 255);
+
+      for (int y = 0; y < pysize; y++)
+	{
+	  double py = (y + yoffset) / bigscale;
+	  for (int x = 0; x < pxsize; x++)
+	    {
+	      int r, g, b;
+	      bool sx, sy;
+
 	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }

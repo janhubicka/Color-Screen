@@ -1,5 +1,22 @@
 #include <math.h>
 #include "screen.h"
+
+/* Produce empty screen.  */
+void
+screen::empty ()
+{
+  int xx, yy;
+  for (xx = 0; xx < size; xx++)
+    for (yy = 0; yy < size; yy++)
+      {
+	add[xx][yy][0] = 0;
+	add[xx][yy][1] = 0;
+	add[xx][yy][2] = 0;
+	mult[xx][yy][0] = 1;
+	mult[xx][yy][1] = 1;
+	mult[xx][yy][2] = 1;
+      }
+}
 /* The screen is sqare.  In the center there is green circle
    of diameter DG, on corners there are red circles of diameter D  
    RR is a blurring radius.  */
@@ -30,7 +47,7 @@ screen::thames ()
 	int d1, d3;
 
 	add[xx][yy][0] = 0;
-	add[xx][yy][1] = 0;
+	add[xx][yy][1] = 0.5;
 	add[xx][yy][2] = 0;
 
 	d1 = sqrt (fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc)))));
