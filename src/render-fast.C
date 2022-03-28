@@ -19,6 +19,7 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
   double zx, zy;
   double xx, xy;
   double yx, yy;
+  double red, green, blue;
   m_scr_to_img.to_img (dx, dy, &zx, &zy);
   m_scr_to_img.to_img (dx+1, dy, &xx, &xy);
   m_scr_to_img.to_img (dx, dy+1, &yx, &yy);
@@ -29,30 +30,32 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 
 #define pixel(xo,yo) fast_get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
   
-#if 1
-  /* Thames, Finlay and Paget screen are organized as follows:
-    
-     G   R   G
-       B   B
-     R   G   R
-       B   B
-     G   R   G  */
+  if (m_scr_to_img.get_type () != Dufay)
+    {
+      /* Thames, Finlay and Paget screen are organized as follows:
+	
+	 G   R   G
+	   B   B
+	 R   G   R
+	   B   B
+	 G   R   G  */
 
-  double green = ((pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25 + pixel (0.5, 0.5)) * 0.5;
-  double red = (pixel (0.5, 0) + pixel (0, 0.5) + pixel (1, 0.5) + pixel (0.5, 1)) * 0.25;
-  double blue = (pixel (0.25, 0.25) + pixel (0.75, 0.25) + pixel (0.25, 0.75) + pixel (0.75, 0.75)) * 0.25;
-#else
-  /* Dufay screen is 
-     G   B   G
+      green = ((pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25 + pixel (0.5, 0.5)) * 0.5;
+      red = (pixel (0.5, 0) + pixel (0, 0.5) + pixel (1, 0.5) + pixel (0.5, 1)) * 0.25;
+      blue = (pixel (0.25, 0.25) + pixel (0.75, 0.25) + pixel (0.25, 0.75) + pixel (0.75, 0.75)) * 0.25;
+    }
+  else
+    {
+      /* Dufay screen is 
+	 G   B   G
 
-     R   R   R
+	 R   R   R
 
-     G   B   G  */
-  double green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.5;
-  double red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.5;
-  double blue = (pixel (0.5, 0) + pixel (0.5, 1));
-#endif
+	 G   B   G  */
+      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.5;
+      red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.5;
+      blue = (pixel (0.5, 0) + pixel (0.5, 1));
+    }
 #undef getpixel
-  double avg = (red + green + blue) * 0.3333;
   set_color (red, green, blue, r, g, b);
 }

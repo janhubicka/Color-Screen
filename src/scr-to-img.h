@@ -2,6 +2,17 @@
 #define SCR_TO_IMG_H
 #include <netpbm/pgm.h>
 #include "matrix.h"
+
+/* Types of supported screens.  */
+enum scr_type
+{
+   Paget,
+   Thames,
+   Finlay,
+   Dufay,
+   max_scr_type
+};
+
 /* This implements to translate image coordiantes to coordinates of the viewing screen.
    In the viewing screen the coordinats (0,0) describe a green dot and
    the screen is periodic with period 1: that is all integer coordinates describes
@@ -19,6 +30,7 @@ struct scr_to_img_parameters
      image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
      a green dot just below (center_x, center_y).  */
   double coordinate2_x, coordinate2_y;
+  enum scr_type type;
 };
 
 /* Mapping between screen and image.  */
@@ -44,6 +56,11 @@ public:
   to_scr (double x, double y, double *xp, double *yp)
   {
     m_matrix.inverse_perspective_transform (x,y, *xp, *yp);
+  }
+  enum scr_type
+  get_type ()
+  {
+    return m_param.type;
   }
 private:
   /* Screen->image translation matrix.  */

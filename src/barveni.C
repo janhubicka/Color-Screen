@@ -212,6 +212,24 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       freeze_x = false;
       freeze_y = false;
     }
+  if (k == 'd' && current.type != Dufay)
+  {
+    save_parameters ();
+    current.type = Dufay;
+    display_scheduled = 1;
+  }
+  if (k == 'p' && current.type != Paget)
+  {
+    save_parameters ();
+    current.type = Paget;
+    display_scheduled = 1;
+  }
+  if (k == 'f' && current.type != Finlay)
+  {
+    save_parameters ();
+    current.type = Finlay;
+    display_scheduled = 1;
+  }
   if (k >= '1' && k <='5')
     {
       display_type = k - '1';
@@ -405,15 +423,13 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
 
-  if (display_type < 3)
+  if (display_type <= 1)
     {
       screen screen;
       if (!display_type)
 	screen.empty ();
       else if (display_type == 1)
-        screen.preview ();
-      else
-        screen.paget_finlay ();
+        screen.initialize_preview (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
 
       for (int y = 0; y < pysize; y++)
@@ -427,11 +443,12 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	    }
 	}
     }
-  else if (display_type < 3)
+  else if (display_type == 2)
     {
       screen screen;
 
-      screen.paget_finlay ();
+      //screen.paget_finlay ();
+      screen.initialize (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
       render.set_saturation (saturation);
 
@@ -441,7 +458,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      render.render_pixel_img_antialias ((x + xoffset) / bigscale, py, 1 / bigscale, 4, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -771,8 +788,12 @@ main (int argc, char **argv)
 		    (ysize) / SCALE + 1);
   /* Show main window and start main loop */
   gtk_widget_show (window);
+  int pxsize = 1024/*gdk_pixbuf_get_width (data.image_viewer);*/;
+  int pysize = 1024/*gdk_pixbuf_get_height (data.image_viewer);*/;
+  double scale1 = pxsize / (double) scan.width;
+  double scale2 = pxsize / (double) scan.height;
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER ((GtkImageViewer *)data.image_viewer),
-					4.0, 4.0, 64, 64);
+					std::min (scale1, scale2), std::min (scale1, scale2), 0, 0);
   gtk_image_viewer_redraw ((GtkImageViewer *)data.image_viewer, 1);
 
   while (true)
