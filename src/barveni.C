@@ -41,6 +41,7 @@ static int initialized = 0;
 /* Status of the main window.  */
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
+static double saturation = 1.0;
 
 static int display_type = 0;
 static bool display_scheduled = true;
@@ -79,7 +80,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *x1, *y1, *x2, *y2, *xdpi, *ydpi;
+  GtkSpinButton *gamma, *y1, *saturation, *y2, *xdpi, *ydpi;
 };
 Data data;
 
@@ -133,8 +134,9 @@ openimage (int *argc, char **argv)
 static void
 getvals (void)
 {
+  scan.gamma = gtk_spin_button_get_value (data.gamma);
+  saturation = gtk_spin_button_get_value (data.saturation);
 #if 0
-  current.xstart = gtk_spin_button_get_value (data.x1);
   current.ystart = gtk_spin_button_get_value (data.y1);
   current.xend = gtk_spin_button_get_value (data.x2);
   current.yend = gtk_spin_button_get_value (data.y2);
@@ -151,6 +153,8 @@ static void
 setvals (void)
 {
   initialized = 0;
+  gtk_spin_button_set_value (data.gamma, scan.gamma);
+  gtk_spin_button_set_value (data.saturation, saturation);
 #if 0
   gtk_spin_button_set_value (data.x1, current.xstart);
   gtk_spin_button_set_value (data.y1, current.ystart);
@@ -282,9 +286,9 @@ initgtk (int *argc, char **argv)
   // Need to do a manual zoom fit at creation because a bug when
   // not using an image.
   gtk_image_viewer_zoom_fit (GTK_IMAGE_VIEWER (image_viewer));
-  data.x1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "x1"));
+  data.gamma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "gamma"));
   data.y1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y1"));
-  data.x2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "x2"));
+  data.saturation = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "saturation"));
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
   data.xdpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "xdpi"));
   data.ydpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "ydpi"));
@@ -360,7 +364,7 @@ previewrender (GdkPixbuf ** pixbuf)
   int max_size = std::max (scr_xsize, scr_ysize);
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
-  render.set_saturation (3);
+  render.set_saturation (saturation);
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
@@ -429,6 +433,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
+      render.set_saturation (saturation);
 
       for (int y = 0; y < pysize; y++)
 	{
@@ -446,6 +451,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   else
     {
       render_fast render (get_scr_to_img_parameters (), scan, 255);
+      render.set_saturation (saturation);
 
       for (int y = 0; y < pysize; y++)
 	{

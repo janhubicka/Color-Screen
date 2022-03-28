@@ -20,14 +20,9 @@ screen::empty ()
 /* The screen is sqare.  In the center there is green circle
    of diameter DG, on corners there are red circles of diameter D  
    RR is a blurring radius.  */
-#define D (70 * size) / size
-#define DG (70 * size) / size
+#define D (85 * size) / size
+#define DG (85 * size) / size
 
-/* This should render the viewing screen, but because I though the older Thames screen was used
-   it is wrong: it renders color dots rather than diagonal squares.
-   It is not used anymore since I implemented better rendering algorithm.  */
-
-#define RR 2048
 void
 screen::thames ()
 {
@@ -47,27 +42,23 @@ screen::thames ()
 	int d1, d3;
 
 	add[xx][yy][0] = 0;
-	add[xx][yy][1] = 0.5;
+	add[xx][yy][1] = 0;
 	add[xx][yy][2] = 0;
 
 	d1 = sqrt (fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc)))));
 	d3 = sqrt (fmin (dl, fmin (dr, fmin (dt, db))));
 	if (d1 < ((size/2) - DG))
 	  {
-	    mult[xx][yy][0] = RR * ((0.5 - d1 - DG) / (0.5 - DG));
-	    if (mult[xx][yy][0] > 1)
-	      mult[xx][yy][0] = 1;
+	    mult[xx][yy][0] = 1;
 	    mult[xx][yy][1] = 0;
-	    mult[xx][yy][2] = 1 - mult[xx][yy][0];
+	    mult[xx][yy][2] = 0;
 	    continue;
 	  }
 	else if (d3 < ((size/2) - D))
 	  {
-	    mult[xx][yy][1] = RR * ((0.5 - d3 - D) / (0.5 - D));
-	    if (mult[xx][yy][1] > 1)
-	      mult[xx][yy][1] = 1;
+	    mult[xx][yy][0] = 0;
+	    mult[xx][yy][1] = 1;
 	    mult[xx][yy][2] = 0;
-	    mult[xx][yy][2] = 1 - mult[xx][yy][1];
 	    continue;
 	  }
 	else
