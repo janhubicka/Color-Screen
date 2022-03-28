@@ -427,6 +427,25 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	    }
 	}
     }
+  else if (display_type < 3)
+    {
+      screen screen;
+
+      screen.paget_finlay ();
+      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      render.set_saturation (saturation);
+
+      for (int y = 0; y < pysize; y++)
+	{
+	  double py = (y + yoffset) / bigscale;
+	  for (int x = 0; x < pxsize; x++)
+	    {
+	      int r, g, b;
+	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	    }
+	}
+    }
   else if (display_type == 3)
     {
       render_interpolate render (get_scr_to_img_parameters (), scan, 255);

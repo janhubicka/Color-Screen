@@ -24,8 +24,8 @@ render_superpose_img::render_pixel_img (double x, double y, int *r, int *g, int 
   ix = (long long) ((xx * screen::size + 0.5)) & (screen::size - 1);
   iy = (long long) ((yy * screen::size + 0.5)) & (screen::size - 1);
   double graydata = get_img_pixel (x, y);
-  set_color (graydata * m_screen->mult[ix][iy][1] + m_screen->add[ix][iy][1],
-	     graydata * m_screen->mult[ix][iy][0] + m_screen->add[ix][iy][0],
+  set_color (graydata * m_screen->mult[ix][iy][0] + m_screen->add[ix][iy][0],
+	     graydata * m_screen->mult[ix][iy][1] + m_screen->add[ix][iy][1],
 	     graydata * m_screen->mult[ix][iy][2] + m_screen->add[ix][iy][2],
 	     r,g,b);
 }

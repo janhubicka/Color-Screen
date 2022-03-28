@@ -51,7 +51,7 @@ screen::thames ()
 	d3 = sqrt (fmin (dl, fmin (dr, fmin (dt, db))));
 	if (d1 < ((size/2) - DG))
 	  {
-	    /* Blue.  */
+	    /* Green.  */
 	    mult[xx][yy][0] = 0.714;
 	    mult[xx][yy][1] = 0.192;
 	    mult[xx][yy][2] = 0.298;
@@ -59,7 +59,7 @@ screen::thames ()
 	  }
 	else if (d3 < ((size/2) - D))
 	  {
-	    /* Green.  */
+	    /* Red.  */
 	    mult[xx][yy][0] = 0.275;
 	    mult[xx][yy][1] = 0.557;
 	    mult[xx][yy][2] = 0.463;
@@ -72,6 +72,9 @@ screen::thames ()
 	    mult[xx][yy][1] = 0.388;
 	    mult[xx][yy][2] = 0.584;
 	  }
+	mult[xx][yy][0] = pow (mult[xx][yy][0], 2.2);
+	mult[xx][yy][1] = pow (mult[xx][yy][1], 2.2);
+	mult[xx][yy][2] = pow (mult[xx][yy][2], 2.2);
       }
 }
 
@@ -105,27 +108,30 @@ screen::paget_finlay ()
 	d3 = fmin (dl, fmin (dr, fmin (dt, db)));
 	if (d1 < ((size/2) - PDG))
 	  {
-	    /* Blue.  */
-	    mult[xx][yy][0] = 0.714;
-	    mult[xx][yy][1] = 0.192;
-	    mult[xx][yy][2] = 0.298;
+	    /* Green.  */
+	    mult[xx][yy][0] = 0.56;
+	    mult[xx][yy][1] = 0.771;
+	    mult[xx][yy][2] = 0.0590;
 	    continue;
 	  }
 	else if (d3 < ((size/2) - PD))
 	  {
-	    /* Green.  */
-	    mult[xx][yy][0] = 0.275;
-	    mult[xx][yy][1] = 0.557;
-	    mult[xx][yy][2] = 0.463;
+	    /* Red.  */
+	    mult[xx][yy][0] = 0.768;
+	    mult[xx][yy][1] = 0.0;
+	    mult[xx][yy][2] = 0.442;
 	    continue;
 	  }
 	else
 	  {
 	    /* Blue.  */
-	    mult[xx][yy][0] = 0.435;
-	    mult[xx][yy][1] = 0.388;
-	    mult[xx][yy][2] = 0.584;
+	    mult[xx][yy][0] = 0.45;
+	    mult[xx][yy][1] = 0.015;
+	    mult[xx][yy][2] = 0.683;
 	  }
+	mult[xx][yy][0] = pow (mult[xx][yy][0], 2.2);
+	mult[xx][yy][1] = pow (mult[xx][yy][1], 2.2);
+	mult[xx][yy][2] = pow (mult[xx][yy][2], 2.2);
       }
 }
 
@@ -138,16 +144,18 @@ screen::preview ()
   for (xx = 0; xx < size; xx++)
     for (yy = 0; yy < size; yy++)
       {
-	int d11 = xx * xx + yy * yy;
-	int d21 = (size - xx) * (size - xx) + yy * yy;
-	int d22 = (size - xx) * (size - xx) + (size - yy) * (size - yy);
-	int d23 = xx * xx + (size - yy) * (size - yy);
-	int dc = ((size/2) - xx) * ((size/2) - xx) + ((size/2) - yy) * ((size/2) - yy);
-	int dl = xx * xx + ((size/2) - yy) * ((size/2) - yy);
-	int dr = (size - xx) * (size - xx) + ((size/2) - yy) * ((size/2) - yy);
-	int dt = ((size/2) - xx) * ((size/2) - xx) + (yy) * (yy);
-	int db = ((size/2) - xx) * ((size/2) - xx) + (size - yy) * (size - yy);
+#define dist(x, y) (xx-(x)*size) * (xx-(x)*size) +  (yy-(y)*size) * (yy-(y)*size)
+	int d11 = dist (0, 0);
+	int d21 = dist (1, 0);
+	int d22 = dist (1, 1);
+	int d23 = dist (0, 1);
+	int dc = dist (0.5, 0.5);
+	int dl = dist (0, 0.5);
+	int dr = dist (1, 0.5);
+	int dt = dist (0.5, 0);
+	int db = dist (0.5, 1);
 	int d1, d3;
+#undef dist
 
 	d1 = sqrt (fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc)))));
 	d3 = sqrt (fmin (dl, fmin (dr, fmin (dt, db))));
@@ -159,16 +167,7 @@ screen::preview ()
 	mult[xx][yy][2] = 1;
 	if (d1 < 30)
 	  {
-	    add[xx][yy][0] = 0.5;
-	    add[xx][yy][1] = 0;
-	    add[xx][yy][2] = 0;
-	    mult[xx][yy][0] = 0.5;
-	    mult[xx][yy][1] = 0.25;
-	    mult[xx][yy][2] = 0.25;
-	    continue;
-	  }
-	else if (d3 < 30)
-	  {
+	    /* Green.  */
 	    add[xx][yy][0] = 0;
 	    add[xx][yy][1] = 0.5;
 	    add[xx][yy][2] = 0;
@@ -177,10 +176,22 @@ screen::preview ()
 	    mult[xx][yy][2] = 0.25;
 	    continue;
 	  }
+	else if (d3 < 30)
+	  {
+	    /* Red.  */
+	    add[xx][yy][0] = 0.5;
+	    add[xx][yy][1] = 0;
+	    add[xx][yy][2] = 0;
+	    mult[xx][yy][0] = 0.5;
+	    mult[xx][yy][1] = 0.25;
+	    mult[xx][yy][2] = 0.25;
+	    continue;
+	  }
 	else
 	  {
 	    if (xx < 10 || xx > size - 10 || yy < 10 || yy > size - 10)
 	      {
+	        /* Maybe blue.  */
 		add[xx][yy][0] = 0;
 		add[xx][yy][1] = 0;
 		add[xx][yy][2] = 0.5;
