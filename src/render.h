@@ -43,6 +43,8 @@ protected:
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
   double *m_lookup_table;
+  /* Translates back to gamma 2.  */
+  double *m_out_lookup_table;
   /* Saturation increase.  */
   double m_saturate;
 };
@@ -104,6 +106,10 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
     saturation_matrix m (m_saturate);
     m.apply_to_rgb (r, g, b, &r, &g, &b);
   }
+  {
+    finlay_matrix m;
+    m.apply_to_rgb (r, g, b, &r, &g, &b);
+  }
   if (r < 0)
     r = 0;
   if (g < 0)
@@ -116,9 +122,9 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
     g = 1;
   if (b > 1)
     b = 1;
-  *rr = pow (r, 1/2.2) * (m_dst_maxval) + 0.5;
-  *gg = pow (g, 1/2.2) * (m_dst_maxval) + 0.5;
-  *bb = pow (b, 1/2.2) * (m_dst_maxval) + 0.5;
+  *rr = m_out_lookup_table [(int)(r * 65535.5)];
+  *gg = m_out_lookup_table [(int)(g * 65535.5)];
+  *bb = m_out_lookup_table [(int)(b * 65535.5)];
 }
 
 /* Determine grayscale value at a given position in the image.  */

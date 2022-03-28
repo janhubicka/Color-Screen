@@ -28,7 +28,7 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
   yx = yx - zx;
   yy = yy - zy;
 
-#define pixel(xo,yo) fast_get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
+#define pixel(xo,yo) get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
   
   if (m_scr_to_img.get_type () != Dufay)
     {

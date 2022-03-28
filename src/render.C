@@ -1,9 +1,12 @@
 #include <cassert>
 #include "render.h"
 static double lookup_table_uses;
+static double out_lookup_table_uses;
 static int lookup_table_maxval;
+static int out_lookup_table_maxval;
 static double lookup_table_gamma;
 static double lookup_table[65536];
+static double out_lookup_table[65536];
 
 render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
 {
@@ -11,6 +14,7 @@ render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
   m_scr_to_img.set_parameters (param);
   m_dst_maxval = dst_maxval;
   m_lookup_table = lookup_table;
+  m_out_lookup_table = out_lookup_table;
   m_saturate = 1;
   if (lookup_table_maxval != img.maxval || lookup_table_gamma != img.gamma)
     {
@@ -21,10 +25,18 @@ render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
       for (int i = 0; i <= img.maxval; i++)
 	lookup_table [i] = pow (i / (double)img.maxval, img.gamma);
     }
+  if (dst_maxval != out_lookup_table_maxval)
+    {
+      assert (!out_lookup_table_uses);
+      for (int i = 0; i < 65536; i++)
+	out_lookup_table[i] = pow ((i+ 0.5) / 65535, 1/2.2) * dst_maxval;
+    }
   lookup_table_uses ++;
+  out_lookup_table_uses ++;
 }
 
 render::~render ()
 {
   lookup_table_uses --;
+  out_lookup_table_uses --;
 }

@@ -151,6 +151,17 @@ public:
     *gg = r * m_elements[0][1] + g * m_elements[1][1] + b * m_elements[2][1] + m_elements[3][1];
     *bb = r * m_elements[0][2] + g * m_elements[1][2] + b * m_elements[2][2] + m_elements[3][2];
   }
+
+  inline void
+  normalize ()
+  {
+    for (int i = 0; i < 3; i++)
+    {
+      double sum =  m_elements[0][i] + m_elements[1][i] + m_elements[2][i] + m_elements[3][i];
+      for (int j = 0; j <4; j++)
+	      m_elements[j][i]/=sum;
+    }
+  }
 };
 
 // http://www.graficaobscura.com/matrix/index.html
@@ -166,5 +177,41 @@ public:
 	       (1-s)*rwght    , (1-s)*gwght    , (1-s)*bwght + s, 0,
 	       0,             0,              0,                  0)
   {}
+};
+class finlay_matrix : public matrix4x4
+{
+public:
+  finlay_matrix ()
+  //: matrix4x4 (0.69, -0.368, -0.06, 0,
+	       //-1.92, 0.64, -0.61, 0,
+	       //-0.105,-0.129, 0.506, 0,
+	       //0,             0,              0,                  0)
+  //: matrix4x4 (1,0,0, 0,
+	       //0,1,0, 0,
+	       //0,0,1, 0,
+	       //0,             0,              0,                  0)
+#if 0
+  : matrix4x4 (0.69, -1.92, -0.105, 0,
+	       -0.368,0.64,-0.129, 0,
+	       -0.06,-0.61, 0.506, 0,
+	       0,             0,              0,                  0)
+#endif
+  //: matrix4x4 (0.69, -1.92, -0.105, 0,
+	       //-0.368,0.64,-0.129, 0,
+	       //-0.06,-0.61, 0.506, 0,
+	       //0,             0,              0,                  0)
+#if 0
+  : matrix4x4 (1.9, -0.6, -0.9, 0,
+	        0.1,0.7,0, 0,
+	       0,-0.9, 1.4, 0,
+	       0,             0,              0,                  0)
+#endif
+#if 1
+  : matrix4x4 (1,-0.3,-0.1, 0,
+	       0.45,1,-0.1, 0,
+	       +0.05,-0.55,1, -0.2,
+	       0,             0,              0,                  0)
+#endif
+  { normalize (); }
 };
 #endif

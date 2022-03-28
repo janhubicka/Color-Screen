@@ -52,29 +52,49 @@ screen::thames ()
 	if (d1 < ((size/2) - DG))
 	  {
 	    /* Green.  */
+#if 1
 	    mult[yy][xx][0] = 0.714;
 	    mult[yy][xx][1] = 0.192;
 	    mult[yy][xx][2] = 0.298;
+#else
+	    mult[yy][xx][0] = -1.92;
+	    mult[yy][xx][1] = 0.64;
+	    mult[yy][xx][2] = -0.61;
+#endif
 	    continue;
 	  }
 	else if (d3 < ((size/2) - D))
 	  {
 	    /* Red.  */
+#if 1
 	    mult[yy][xx][0] = 0.275;
 	    mult[yy][xx][1] = 0.557;
 	    mult[yy][xx][2] = 0.463;
+#else
+	    mult[yy][xx][0] = 0.69;
+	    mult[yy][xx][1] = -0.368;
+	    mult[yy][xx][2] = -0.06;
+#endif
 	    continue;
 	  }
 	else
 	  {
 	    /* Blue.  */
+#if 1
 	    mult[yy][xx][0] = 0.435;
 	    mult[yy][xx][1] = 0.388;
 	    mult[yy][xx][2] = 0.584;
+#else
+	    mult[yy][xx][0] = -0.105;
+	    mult[yy][xx][1] = -0.129;
+	    mult[yy][xx][2] = 0.506;
+#endif
 	  }
+#if 1
 	mult[yy][xx][0] = pow (mult[yy][xx][0], 2.2);
 	mult[yy][xx][1] = pow (mult[yy][xx][1], 2.2);
 	mult[yy][xx][2] = pow (mult[yy][xx][2], 2.2);
+#endif
       }
 }
 
@@ -109,44 +129,55 @@ screen::paget_finlay ()
 	if (d1 < ((size/2) - PDG))
 	  {
 	    /* Green.  */
+#if 1
 	    mult[yy][xx][0] = 0.56;
 	    mult[yy][xx][1] = 0.771;
 	    mult[yy][xx][2] = 0.0590;
-#if 0
 	    mult[yy][xx][0] = 0;
 	    mult[yy][xx][1] = 1;
 	    mult[yy][xx][2] = 0;
 #endif
+	    mult[yy][xx][0] = -1.92;
+	    mult[yy][xx][1] = 0.64;
+	    mult[yy][xx][2] = -0.61;
 	    continue;
 	  }
 	else if (d3 < ((size/2) - PD))
 	  {
 	    /* Red.  */
+#if 1
 	    mult[yy][xx][0] = 0.768;
 	    mult[yy][xx][1] = 0.0;
 	    mult[yy][xx][2] = 0.442;
-#if 0
 	    mult[yy][xx][0] = 1;
 	    mult[yy][xx][1] = 0;
 	    mult[yy][xx][2] = 0;
 #endif
+	    mult[yy][xx][0] = 0.69;
+	    mult[yy][xx][1] = -0.368;
+	    mult[yy][xx][2] = -0.06;
 	    continue;
 	  }
 	else
 	  {
 	    /* Blue.  */
+#if 1
 	    mult[yy][xx][0] = 0.45;
 	    mult[yy][xx][1] = 0.015;
 	    mult[yy][xx][2] = 0.683;
-#if 0
 	    mult[yy][xx][0] = 0;
 	    mult[yy][xx][1] = 0;
 	    mult[yy][xx][2] = 1;
 #endif
+	    mult[yy][xx][0] = -0.105;
+	    mult[yy][xx][1] = -0.129;
+	    mult[yy][xx][2] = 0.506;
 	  }
+#if 0
 	mult[yy][xx][0] = pow (mult[yy][xx][0], 2.2);
 	mult[yy][xx][1] = pow (mult[yy][xx][1], 2.2);
 	mult[yy][xx][2] = pow (mult[yy][xx][2], 2.2);
+#endif
       }
 }
 

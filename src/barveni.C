@@ -679,42 +679,32 @@ void write_current (FILE *out)
 G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
-  pixel *outrow;
-  pixel *outrows[16];
   FILE *out;
-  int scale = 4;
+  int scale = 1;
   out = fopen (paroname, "w");
   write_current (out);
   fclose (out);
 
-  render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
-  render.precompute_all ();
-#if 0
+  /*render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
+  render.precompute_all ();*/
+  render_fast render (get_scr_to_img_parameters (), scan, 65535);
   out = fopen (oname, "w");
-  assert (scale < 16);
-  for (int y = 0; y < scale; y++)
-    outrows[y] = ppm_allocrow (render.get_width () * scale * 4);
-  ppm_writeppminit (out, render.get_width () * scale * 4, render.get_height() * scale * 4,
-		    65535, 0);
-  for (int y = 0; y < render.get_height () * 4 * scale; y++)
+  pixel *outrow = ppm_allocrow (render.get_width () * scale);
+  ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
+  for (int y = 0; y < render.get_height () * scale; y++)
     {
-      for (int x = 0; x < render.get_width () * 4 * scale; x++)
+      for (int x = 0; x < render.get_width () * scale; x++)
 	{
 	  int rr, gg, bb;
-	  render_pixel ((x - m_scr_xshift * 4 + xx / (double) m_scale) / 4.0, (rendery - m_scr_yshift * 4 + yy / (double) m_scale) / 4.0,&rr, &gg, &bb);
-	  outrow[yy][(x * scale + xx)].r = rr;
-	  outrow[yy][(x * scale + xx)].g = gg;
-	  outrow[yy][(x * scale + xx)].b = bb;
+	  render.render_pixel (x/scale, y/scale,&rr, &gg, &bb);
+	  outrow[x].r = rr;
+	  outrow[x].g = gg;
+	  outrow[x].b = bb;
 	}
-      render.render_row (y, outrows);
-      for (int yy = 0; yy < scale; yy++)
-	ppm_writeppmrow (out, outrows[yy], render.get_width() * scale * 4, 65535,
-			 0);
+      ppm_writeppmrow (out, outrow, render.get_width() * scale, 65535, 0);
     }
+  free (outrow);
   fclose (out);
-  for (int y = 0; y < scale; y++)
-    free (outrows[y]);
-#endif
 }
 
 
