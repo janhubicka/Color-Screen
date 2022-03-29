@@ -50,6 +50,6 @@ render_superpose_img::render_pixel_img_antialias (double x, double y, double pix
 	bb += bbb;
 	gg += ggg;
       }
-  set_color (3 * rr / (steps * steps), 3 * gg / (steps * steps), 3 * bb / (steps * steps), r,g,b);
+  set_color (rr / (steps * steps), gg / (steps * steps), bb / (steps * steps), r,g,b);
 }
 #endif

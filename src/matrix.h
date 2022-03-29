@@ -55,6 +55,13 @@ public:
     return ret;
   }
 
+  void transpose()
+  {
+    for (int j = 0; j < m_dim; j++)
+      for (int i = 0; i < j; i++)
+	std::swap (m_elements[j][i], m_elements[i][j]);
+  }
+
   void
   print (FILE *f)
   {
@@ -102,15 +109,15 @@ class matrix4x4 : public matrix<4>
 public:
   matrix4x4 () { }
 
-  matrix4x4 (double e00, double e01, double e02, double e03,
-	     double e10, double e11, double e12, double e13,
-	     double e20, double e21, double e22, double e23,
-	     double e30, double e31, double e32, double e33)
+  matrix4x4 (double e00, double e10, double e20, double e30,
+	     double e01, double e11, double e21, double e31,
+	     double e02, double e12, double e22, double e32,
+	     double e03, double e13, double e23, double e33)
   {
-    m_elements[0][0]=e00; m_elements[1][0]=e01; m_elements[2][0]=e02; m_elements[3][0]=e03;
-    m_elements[0][1]=e10; m_elements[1][1]=e11; m_elements[2][1]=e12; m_elements[3][1]=e03;
-    m_elements[0][2]=e20; m_elements[1][2]=e21; m_elements[2][2]=e22; m_elements[3][2]=e03;
-    m_elements[0][3]=e30; m_elements[1][3]=e31; m_elements[2][3]=e32; m_elements[3][3]=e03;
+    m_elements[0][0]=e00; m_elements[1][0]=e10; m_elements[2][0]=e20; m_elements[3][0]=e30;
+    m_elements[0][1]=e01; m_elements[1][1]=e11; m_elements[2][1]=e21; m_elements[3][1]=e31;
+    m_elements[0][2]=e02; m_elements[1][2]=e12; m_elements[2][2]=e22; m_elements[3][2]=e32;
+    m_elements[0][3]=e03; m_elements[1][3]=e13; m_elements[2][3]=e23; m_elements[3][3]=e33;
   }
 
 
@@ -155,14 +162,12 @@ public:
   inline void
   normalize ()
   {
-#if 1
     for (int i = 0; i < 3; i++)
     {
       double sum =  m_elements[0][i] + m_elements[1][i] + m_elements[2][i] + m_elements[3][i];
       for (int j = 0; j <4; j++)
 	      m_elements[j][i]/=sum;
     }
-#endif
   }
 };
 
@@ -188,17 +193,14 @@ public:
 	       //-1.92, 0.64, -0.61, 0,
 	       //-0.105,-0.129, 0.506, 0,
 	       //0,             0,              0,                  0)
-  //: matrix4x4 (1,0,0, 0,
-	       //0,1,0, 0,
-	       //0,0,1, 0,
-	       //0,             0,              0,                  0)
 #if 0
-  : matrix4x4 (0.69, -1.92, -0.105, 0,
-	       -0.368,0.64,-0.129, 0,
-	       -0.06,-0.61, 0.506, 0,
+	  : matrix4x4 (1,0,0, 0,
+	       0,1,0, 0,
+	       0,0,1, 0,
 	       0,             0,              0,                  0)
 #endif
 #if 0
+  /* Based on gimp measurements of Finlay filter scan on eversmart.   */
   : matrix4x4 (0.69, -1.92, -0.105, 0,
 	       -0.368,0.64,-0.129, 0,
 	       -0.06,-0.61, 0.506, 0,
@@ -210,12 +212,52 @@ public:
 	       0,-0.9, 1.4, 0,
 	       0,             0,              0,                  0)
 #endif
-#if 1
+#if 0
+  /* Matrix I decided works well for kimono picture.  */
   : matrix4x4 (1,-0.4,-0.1, 0,
 	       0.25,1,-0.1, 0,
 	       +0.05,-0.55,1.05, -0.2,
 	       0,             0,              0,                  0)
 #endif
-  { normalize (); }
+#if 1
+  /* Based on XYZ measurements of Finlay filter scan on eversmart.   */
+#if 0
+  : matrix4x4 (0.213670,0.283705,0.052463, 0,
+	       0.105508,0.384819,0.109658, 0,
+	       0.109658,0.052463,0.268750, 0,
+	       0,             0,              0,                  0)
+#endif
+  : matrix4x4 (0.212460,0.277829,0.119398, 0,
+	       0.105123,0.378966,0.058030, 0,
+	       0.107493,0.054566,0.261890, 0,
+	       0,             0,              0,                  0)
+#else
+  : matrix4x4 (0.4124564,  0.3575761,  0.1804375, 0,
+ 	       0.2126729,  0.7151522,  0.0721750, 0,
+ 	       0.0193339,  0.1191920,  0.9503041, 0,
+	       0,             0,              0,                  0)
+#endif
+  { /*normalize ();*/
+    /*transpose ();*/ }
+};
+class srgb_xyz_matrix : public matrix4x4
+{
+public:
+  srgb_xyz_matrix ()
+  : matrix4x4 (0.4124564,  0.3575761,  0.1804375, 0,
+ 	       0.2126729,  0.7151522,  0.0721750, 0,
+ 	       0.0193339,  0.1191920,  0.9503041, 0,
+	       0,             0,              0,                  0)
+  {}
+};
+class xyz_srgb_matrix : public matrix4x4
+{
+public:
+  xyz_srgb_matrix ()
+  : matrix4x4 (3.2404542, -1.5371385, -0.4985314, 0,
+	      -0.9692660,  1.8760108,  0.0415560, 0,
+	       0.0556434, -0.2040259,  1.0572252, 0,
+	       0,             0,              0,                  0)
+  {}
 };
 #endif

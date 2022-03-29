@@ -101,13 +101,18 @@ render::get_data (int x, int y)
 inline void
 render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 {
+#if 0
+  {
+    finlay_matrix m;
+    xyz_srgb_matrix m2;
+    matrix4x4 mm;
+    mm = m2 * m;
+    mm.apply_to_rgb (r, g, b, &r, &g, &b);
+  }
+#endif
   if (m_saturate != 1)
   {
     saturation_matrix m (m_saturate);
-    m.apply_to_rgb (r, g, b, &r, &g, &b);
-  }
-  {
-    finlay_matrix m;
     m.apply_to_rgb (r, g, b, &r, &g, &b);
   }
   if (r < 0)
