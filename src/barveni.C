@@ -680,14 +680,14 @@ G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
   FILE *out;
-  int scale = 1;
+  int scale = 4;
   out = fopen (paroname, "w");
   write_current (out);
   fclose (out);
 
-  /*render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
-  render.precompute_all ();*/
-  render_fast render (get_scr_to_img_parameters (), scan, 65535);
+  render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
+  render.precompute_all ();
+  /*render_fast render (get_scr_to_img_parameters (), scan, 65535);*/
   out = fopen (oname, "w");
   pixel *outrow = ppm_allocrow (render.get_width () * scale);
   ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
@@ -696,7 +696,7 @@ cb_save (GtkButton * button, Data * data)
       for (int x = 0; x < render.get_width () * scale; x++)
 	{
 	  int rr, gg, bb;
-	  render.render_pixel (x/scale, y/scale,&rr, &gg, &bb);
+	  render.render_pixel (x/(double)scale, y/(double)scale,&rr, &gg, &bb);
 	  outrow[x].r = rr;
 	  outrow[x].g = gg;
 	  outrow[x].b = bb;

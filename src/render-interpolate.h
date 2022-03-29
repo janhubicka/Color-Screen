@@ -9,12 +9,15 @@ public:
   render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval);
   ~render_interpolate ();
   void precompute (double xmin, double ymin, double xmax, double ymax);
-  void render_pixel (double x, double y, int *r, int *g, int *b);
+  void render_pixel (double x, double y, int *r, int *g, int *b)
+  {
+    render_pixel_scr (x - m_scr_xshift, y - m_scr_yshift, r, g, b);
+  }
   void render_pixel_img (double x, double y, int *r, int *g, int *b)
   {
     double xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);
-    render_pixel (xx, yy, r, g, b);
+    render_pixel_scr (xx, yy, r, g, b);
   }
   void precompute_all ()
   {
@@ -35,6 +38,7 @@ private:
   double &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
   double &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}
   double &prec_green (int x, int y) { return m_prec_green [y * m_prec_width + x];}
+  void render_pixel_scr (double x, double y, int *r, int *g, int *b);
 
   /* Diagonal cooredinates have coordiate vectors (0.5,0.5) and (-0.5,0.5)  */
   inline void to_diagonal_coordinates (double x, double y, double *xx, double *yy)

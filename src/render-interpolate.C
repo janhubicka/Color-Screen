@@ -369,7 +369,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
 }
 
 void
-render_interpolate::render_pixel (double x, double y, int *r, int *g, int *b)
+render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b)
 {
   x += m_prec_xshift;
   y += m_prec_yshift;
