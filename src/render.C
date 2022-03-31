@@ -4,6 +4,7 @@ static double lookup_table_uses;
 static double out_lookup_table_uses;
 static int lookup_table_maxval;
 static int out_lookup_table_maxval;
+static int lookup_table_gray_min, lookup_table_gray_max;
 static double lookup_table_gamma;
 static double lookup_table[65536];
 static double out_lookup_table[65536];
@@ -13,6 +14,8 @@ render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
   m_img = img;
   m_scr_to_img.set_parameters (param);
   m_dst_maxval = dst_maxval;
+  m_gray_min = 0;
+  m_gray_max = img.maxval;
   m_lookup_table = NULL;
   m_out_lookup_table = NULL;
   m_saturate = 1;
@@ -23,14 +26,19 @@ render::precompute_all ()
 {
   m_lookup_table = lookup_table;
   m_out_lookup_table = out_lookup_table;
-  if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_img.gamma)
+  if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_img.gamma
+      || lookup_table_gray_min != m_gray_min || lookup_table_gray_max != m_gray_max)
     {
       assert (!lookup_table_uses);
       assert (m_img.maxval < 65536);
       lookup_table_gamma = m_img.gamma; 
       lookup_table_maxval = m_img.maxval;
+      lookup_table_gray_min = m_gray_min; 
+      lookup_table_gray_max = m_gray_max;
+      double min = pow (m_gray_min / (double)m_img.maxval, m_img.gamma);
+      double max = pow (m_gray_max / (double)m_img.maxval, m_img.gamma);
       for (int i = 0; i <= m_img.maxval; i++)
-	lookup_table [i] = pow (i / (double)m_img.maxval, m_img.gamma);
+	lookup_table [i] = (pow (i / (double)m_img.maxval, m_img.gamma) - min) * (1 / (max-min));
     }
   if (m_dst_maxval != out_lookup_table_maxval)
     {

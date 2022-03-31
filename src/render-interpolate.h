@@ -34,6 +34,7 @@ private:
   double *m_prec_red;
   double *m_prec_green;
   double *m_prec_blue;
+  double m_precise;
 
   double &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
   double &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}

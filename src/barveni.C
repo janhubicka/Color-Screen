@@ -37,6 +37,8 @@ static gray **graydata;
 static gray maxval;
 static image_data scan;
 static int initialized = 0;
+static int mingray;
+static int maxgray = 0;
 
 /* Status of the main window.  */
 static int offsetx = 8, offsety = 8;
@@ -126,6 +128,8 @@ openimage (int *argc, char **argv)
   scan.maxval = maxval;
   scan.data = graydata;
   scan.gamma = 2.2;
+  mingray = 0;
+  maxgray = maxval;
   maxval++;
 }
 
@@ -247,6 +251,34 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       setvals ();
       display_scheduled = 1;
     }
+  if (k == ' ')
+    {
+      gdouble scale_x, scale_y;
+      gint shift_x, shift_y;
+      gint pxsize =  /*gtk_image_viewer_get_image_width (GTK_IMAGE_VIEWER (data.image_viewer))*/1024;
+      gint pysize =  /*gtk_image_viewer_get_image_height (GTK_IMAGE_VIEWER (data.image_viewer))*/800;
+      gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+					    &scale_x, &scale_y, &shift_x,
+					    &shift_y);
+      int minx = std::max ((int)(shift_x / scale_x), 0);
+      int maxx = std::min ((int)((shift_x + pxsize) / scale_x), scan.width);
+      int miny = std::max ((int)(shift_y / scale_y), 0);
+      int maxy = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
+      printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
+      if (minx < maxx && miny < maxy)
+	{
+	  mingray = maxval;
+	  maxgray = 0;
+	  for (int y = std::max ((int)(shift_y / scale_y), 0);
+	       y < std::min ((int)((shift_y + pysize) / scale_y), scan.height); y++)
+	     for (int x = minx; x < maxx; x++)
+	       {
+		 mingray = std::min ((int)scan.data[y][x], mingray);
+		 maxgray = std::max ((int)scan.data[y][x], maxgray);
+	       }
+	  display_scheduled = 1;
+	}
+     }
 
   return FALSE;
 }
@@ -423,15 +455,6 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   guint8 *bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
-  int mingray = maxval;
-  int maxgray = 0;
-
-  for (int y = 0; y < pysize/bigscale; y++)
-     for (int x = 0; x < pxsize; x++)
-       {
-	 mingray = std::min ((int)scan.data[y][x], mingray);
-	 maxgray = std::max ((int)scan.data[y][x], maxgray);
-       }
 
 
   if (display_type <= 1)
@@ -442,6 +465,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 1)
         screen.initialize_preview (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
@@ -463,6 +487,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       screen.initialize (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
       render.set_saturation (saturation);
+      render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
@@ -483,6 +508,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
       render.set_saturation (saturation);
+      render.set_gray_range (mingray, maxgray);
 
       for (int y = 0; y < pysize; y++)
 	{
@@ -501,6 +527,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     {
       render_fast render (get_scr_to_img_parameters (), scan, 255);
       render.set_saturation (saturation);
+      render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
