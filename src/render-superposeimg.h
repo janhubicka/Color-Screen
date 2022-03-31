@@ -21,8 +21,8 @@ render_superpose_img::sample_pixel_img (double x, double y, double scr_x, double
   double gg, rr, bb;
   int ix, iy;
 
-  ix = (long long) ((scr_x * screen::size + 0.5)) & (screen::size - 1);
-  iy = (long long) ((scr_y* screen::size + 0.5)) & (screen::size - 1);
+  ix = (long long) round (scr_x* screen::size) & (screen::size - 1);
+  iy = (long long) round (scr_y* screen::size) & (screen::size - 1);
   double graydata = get_img_pixel (x, y);
   *r = graydata * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0];
   *g = graydata * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1];
@@ -33,7 +33,7 @@ render_superpose_img::render_pixel_img (double x, double y, int *r, int *g, int 
 {
   double rr, gg, bb;
   double scr_x, scr_y;
-  m_scr_to_img.to_scr (x+0.5, y+0.5, &scr_x, &scr_y);
+  m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
   render_superpose_img::sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
   set_color (rr, gg, bb, r,g,b);
 }
@@ -45,7 +45,7 @@ render_superpose_img::render_pixel_img_antialias (double x, double y, double pix
 
   if (pixelsize <= 1)
     {
-      m_scr_to_img.to_scr (x+0.5, y+0.5, &scr_x, &scr_y);
+      m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
       sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
       set_color (rr, gg, bb, r,g,b);
       return;

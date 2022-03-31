@@ -29,6 +29,7 @@ public:
   inline double get_img_pixel (double x, double y);
   inline double sample_img_square (double xc, double yc, double x1, double y1, double x2, double y2);
   inline double sample_scr_diag_square (double xc, double yc, double s);
+  inline double sample_scr_square (double xc, double yc, double s);
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
   void set_saturation (double s) { m_saturate = s; }
@@ -130,10 +131,10 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
     mm.apply_to_rgb (r, g, b, &r, &g, &b);
   }
   if (m_saturate != 1)
-  {
-    saturation_matrix m (m_saturate);
-    m.apply_to_rgb (r, g, b, &r, &g, &b);
-  }
+    {
+      saturation_matrix m (m_saturate);
+      m.apply_to_rgb (r, g, b, &r, &g, &b);
+    }
   if (r < 0)
     r = 0;
   if (g < 0)
@@ -156,7 +157,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 inline double
 render::fast_get_img_pixel (double xp, double yp)
 {
-  int x = xp + 0.5, y = yp + 0.5;
+  int x = xp, y = yp;
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
   return render::get_data (x, y);
@@ -170,6 +171,11 @@ inline double
 render::get_img_pixel (double xp, double yp)
 {
   double val;
+  //return fast_get_img_pixel (xp, yp);
+
+  /* Center of pixel [0,0] is [0.5,0.5].  */
+  xp -= 0.5;
+  yp -= 0.5;
   int sx = xp, sy = yp;
 
   if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
@@ -189,41 +195,62 @@ double
 render::sample_img_square (double xc, double yc, double x1, double y1, double x2, double y2)
 {
   double acc = 0, weights = 0;
-#if 0
-  /* Maybe this will give more reproducible results, but it is very slow.  */
-  int samples = (sqrt (x1 * x1 + y1 * y1) + 0.5) * 2;
-  double rec = 1.0 / samples;
-  if (!samples)
-    return get_img_pixel (xc, yc);
-  double acc = 0, weights = 0;
-  for (int y = -samples ; y <= samples; y++)
-    for (int x = -samples ; x <= samples; x++)
-      {
-        double w = 1 + (samples - abs (x) - abs (y));
-	if (w < 0)
-	  continue;
-	acc += w * get_img_pixel (xc + (x1 * x + x2 * y) * rec, yc + (y1 * x + y2 * y) * rec);
-	weights += w;
-      }
-#endif
-  if (fabs (x1) + fabs (y1) < 2)
-    return get_img_pixel (xc, yc);
+  x1 *= 0.5;
+  y1 *= 0.5;
+  x2 *= 0.5;
+  y2 *= 0.5;
   int xmin = std::max ((int)(std::min (std::min (std::min (xc - x1, xc + x1), xc - x2), xc + x2) - 0.5), 0);
-  int xmax = std::min ((int)ceil (std::max(std::max (std::max (xc - x1, xc + x1), xc - x2), xc + x2) - 0.5), m_img.width - 1);
-  int ymin = std::max ((int)(std::min (std::min (std::min (yc - y1, yc + y1), yc - y2), yc + y2) - 0.5), 0);
-  int ymax = std::min ((int)ceil (std::max(std::max (std::max (yc - y1, yc + y1), yc - y2), yc + y2) - 0.5), m_img.height - 1);
-  double rad = fabs (x1) + fabs (y1);
-  for (int y = ymin; y <= ymax; y++)
-    for (int x = xmin ; x <= xmax; x++)
-      {
-        double w = fabs (x+0.5-xc) + fabs (y+0.5-yc);
-	if (w < rad)
+  int xmax = std::min ((int)ceil (std::max(std::max (std::max (xc - x1, xc + x1), xc - x2), xc + x2) + 0.5), m_img.width - 1);
+  if (xmax-xmin < 2)
+    return get_img_pixel (xc, yc);
+  if (xmax-xmin < 6)
+    {
+      /* Maybe this will give more reproducible results, but it is very slow.  */
+      int samples = (sqrt (x1 * x1 + y1 * y1) + 0.5) * 2;
+      double rec = 1.0 / samples;
+      if (!samples)
+	return get_img_pixel (xc, yc);
+      for (int y = -samples ; y <= samples; y++)
+	for (int x = -samples ; x <= samples; x++)
 	  {
-	    w = (rad - w);
-	    acc += w * get_data (x, y);
+	    double w = 1 + (samples - abs (x) - abs (y));
+	    if (w < 0)
+	      continue;
+	    acc += w * get_img_pixel (xc + (x1 * x + x2 * y) * rec, yc + (y1 * x + y2 * y) * rec);
 	    weights += w;
 	  }
-      }
+    }
+  else
+    {
+      int ymin = std::max ((int)(std::min (std::min (std::min (yc - y1, yc + y1), yc - y2), yc + y2) - 0.5), 0);
+      int ymax = std::min ((int)ceil (std::max(std::max (std::max (yc - y1, yc + y1), yc - y2), yc + y2) + 0.5), m_img.height - 1);
+      matrix2x2 base (x1, x2,
+		      y1, y2);
+      matrix2x2 inv = base.invert ();
+      for (int y = ymin; y <= ymax; y++)
+	{
+	  for (int x = xmin ; x <= xmax; x++)
+	    {
+	      double cx = x+0.5 -xc;
+	      double cy = y+0.5 -yc;
+	      double ccx, ccy;
+	      inv.apply_to_vector (cx, cy, &ccx, &ccy);
+	      double w = fabs (ccx) + fabs (ccy);
+
+	      //if (w < 1)
+		//printf ("%.1f ",w);
+	      //else
+		//printf ("    ",w);
+	      if (w < 1)
+		{
+		  w = (1 - w);
+		  acc += w * get_data (x, y);
+		  weights += w;
+		}
+	    }
+	    //printf ("\n");
+	 }
+    }
   if (weights)
     return acc / weights;
   return 0;
@@ -235,8 +262,19 @@ render::sample_scr_diag_square (double xc, double yc, double size)
 {
   double xxc, yyc, x1, y1, x2, y2;
   m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
-  m_scr_to_img.to_img (xc + size * 0.5, yc, &x1, &y1);
-  m_scr_to_img.to_img (xc, yc + size * 0.5, &x2, &y2);
+  m_scr_to_img.to_img (xc + size, yc, &x1, &y1);
+  m_scr_to_img.to_img (xc, yc + size, &x2, &y2);
+  return sample_img_square (xxc, yyc, x1 - xxc, y1 - yyc, x2 - xxc, y2 - yyc);
+}
+
+/* Sample diagonal square.  */
+double
+render::sample_scr_square (double xc, double yc, double size)
+{
+  double xxc, yyc, x1, y1, x2, y2;
+  m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
+  m_scr_to_img.to_img (xc - size, yc + size, &x1, &y1);
+  m_scr_to_img.to_img (xc + size, yc + size, &x2, &y2);
   return sample_img_square (xxc, yyc, x1 - xxc, y1 - yyc, x2 - xxc, y2 - yyc);
 }
 

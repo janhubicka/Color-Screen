@@ -80,7 +80,7 @@ public:
 class matrix2x2 : public matrix<2>
 {
 public:
-  matrix2x2 (double m00, double m01, double m10, double m11)
+  matrix2x2 (double m00, double m10, double m01, double m11)
   {
     m_elements[0][0]=m00;
     m_elements[0][1]=m01;
@@ -90,6 +90,13 @@ public:
 
   matrix2x2 ()
   {
+  }
+
+  inline void
+  apply_to_vector (double x, double y, double *xx, double *yy)
+  {
+    *xx = x * m_elements[0][0] + y * m_elements[1][0];
+    *yy = x * m_elements[0][1] + y * m_elements[1][1];
   }
 
   inline matrix2x2

@@ -52,9 +52,9 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 	 R   R   R
 
 	 G   B   G  */
-      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.5;
-      red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.5;
-      blue = (pixel (0.5, 0) + pixel (0.5, 1));
+      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
+      red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
+      blue = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
     }
 #undef getpixel
   set_color (red, green, blue, r, g, b);

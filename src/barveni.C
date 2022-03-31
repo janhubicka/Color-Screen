@@ -44,6 +44,7 @@ static int maxgray = 0;
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
 static double saturation = 1.0;
+static bool precise = false;
 
 static int display_type = 0;
 static bool display_scheduled = true;
@@ -215,6 +216,16 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       freeze_x = false;
       freeze_y = false;
+    }
+  if (k == 'S')
+    {
+      precise = true;
+      display_scheduled = 1;
+    }
+  if (k == 's')
+    {
+      precise = false;
+      display_scheduled = 1;
     }
   if (k == 'd' && current.type != Dufay)
   {
@@ -442,7 +453,7 @@ draw_circle (cairo_surface_t *surface, double bigscale,
   cairo_scale (cr, bigscale, bigscale);
 
   cairo_set_source_rgba (cr, r, g, b, 0.5);
-  cairo_arc (cr, x - 0.5, y - 0.5, 3, 0.0, 2 * G_PI);
+  cairo_arc (cr, x, y, 3, 0.0, 2 * G_PI);
 
   cairo_fill (cr);
   cairo_destroy (cr);
@@ -504,11 +515,13 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   else if (display_type == 3)
     {
       render_interpolate render (get_scr_to_img_parameters (), scan, 255);
+      render.set_saturation (saturation);
+      render.set_gray_range (mingray, maxgray);
+      if (precise)
+        render.set_precise ();
       render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
-      render.set_saturation (saturation);
-      render.set_gray_range (mingray, maxgray);
 
       for (int y = 0; y < pysize; y++)
 	{
@@ -615,8 +628,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       double newcenter_x;
       double newcenter_y;
-      newcenter_x = (event->x + shift_x) / scale_x + 0.5;
-      newcenter_y = (event->y + shift_y) / scale_y + 0.5;
+      newcenter_x = (event->x + shift_x) / scale_x;
+      newcenter_y = (event->y + shift_y) / scale_y;
       if (newcenter_x != current.center_x || newcenter_y != current.center_y)
 	{
 	  current.center_x = newcenter_x;
@@ -635,8 +648,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     }
   else if (event->button == 3)
     {
-      xpress = (event->x + shift_x) / scale_x + 0.5;
-      ypress = (event->y + shift_y) / scale_y + 0.5;
+      xpress = (event->x + shift_x) / scale_x;
+      ypress = (event->y + shift_y) / scale_y;
       button3_pressed = true;
     }
 }
@@ -665,8 +678,8 @@ handle_drag (int x, int y, int button)
     {
       double x1 = (xpress - current.center_x);
       double y1 = (ypress - current.center_y);
-      double x2 = (x + shift_x) / scale_x + 0.5 - current.center_x;
-      double y2 = (y + shift_y) / scale_y + 0.5 - current.center_y;
+      double x2 = (x + shift_x) / scale_x - current.center_x;
+      double y2 = (y + shift_y) / scale_y - current.center_y;
       double scale = sqrt ((x2 * x2) + (y2 * y2))/sqrt ((x1*x1) + (y1*y1));
       double angle = atan2f (y2, x2) - atan2f (y1, x1);
       if (!angle)

@@ -29,6 +29,10 @@ public:
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
     precompute (-xshift, -yshift, -xshift + width, -yshift + height);
   }
+  void set_precise ()
+  {
+    m_precise = true;
+  }
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
   double *m_prec_red;
@@ -39,6 +43,9 @@ private:
   double &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
   double &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}
   double &prec_green (int x, int y) { return m_prec_green [y * m_prec_width + x];}
+  double &dufay_prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width + x];}
+  double &dufay_prec_red (int x, int y) { return m_prec_red [y * m_prec_width * 2 + x];}
+  double &dufay_prec_green (int x, int y) { return m_prec_green [y * m_prec_width + x];}
   void render_pixel_scr (double x, double y, int *r, int *g, int *b);
 
   /* Diagonal cooredinates have coordiate vectors (0.5,0.5) and (-0.5,0.5)  */
@@ -52,7 +59,7 @@ private:
   {
      unsigned int xx = x + y;
      unsigned int yy = -x + y;
-     return prec_green (xx / 2, yy);
+     return prec_green (xx / 2 /*+ (yy&1)*/, yy);
   }
   /* Green pixel in diagonal coordinates.  */
   double prec_diag_red (unsigned int x, unsigned int y)
