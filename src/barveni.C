@@ -383,6 +383,7 @@ previewrender (GdkPixbuf ** pixbuf)
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
   render.set_saturation (saturation);
+  render.precompute_all ();
 
   gdk_pixbuf_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
@@ -422,6 +423,16 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   guint8 *bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
+  int mingray = maxval;
+  int maxgray = 0;
+
+  for (int y = 0; y < pysize/bigscale; y++)
+     for (int x = 0; x < pxsize; x++)
+       {
+	 mingray = std::min ((int)scan.data[y][x], mingray);
+	 maxgray = std::max ((int)scan.data[y][x], maxgray);
+       }
+
 
   if (display_type <= 1)
     {
@@ -431,6 +442,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 1)
         screen.initialize_preview (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
 	{
@@ -451,6 +463,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       screen.initialize (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
       render.set_saturation (saturation);
+      render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
 	{
@@ -458,7 +471,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      render.render_pixel_img_antialias ((x + xoffset) / bigscale, py, 1 / bigscale, 4, &r, &g, &b);
+	      render.render_pixel_img_antialias ((x + xoffset) / bigscale, py, 1 / bigscale, 8, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -488,6 +501,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     {
       render_fast render (get_scr_to_img_parameters (), scan, 255);
       render.set_saturation (saturation);
+      render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
 	{

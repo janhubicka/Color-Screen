@@ -30,6 +30,11 @@ public:
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
   void set_saturation (double s) { m_saturate = s; }
+  void set_gray_range (int min, int max);
+  void precompute_all ();
+  void precompute (double, double, double, double) {precompute_all ();}
+  void precompute_img_range (double, double, double, double) {precompute_all ();}
+    
 
 protected:
   inline double get_data (int x, int y);
@@ -101,15 +106,14 @@ render::get_data (int x, int y)
 inline void
 render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 {
-#if 0
   {
     finlay_matrix m;
     xyz_srgb_matrix m2;
+    m.normalize ();
     matrix4x4 mm;
     mm = m2 * m;
     mm.apply_to_rgb (r, g, b, &r, &g, &b);
   }
-#endif
   if (m_saturate != 1)
   {
     saturation_matrix m (m_saturate);

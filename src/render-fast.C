@@ -5,7 +5,7 @@ render_fast::render_fast (scr_to_img_parameters param, image_data &img, int dst_
 {
 }
 
-void
+flatten_attr void
 render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 {
   double dx = (x - m_scr_xshift), dy = (y - m_scr_yshift);

@@ -336,6 +336,7 @@ void
 render_interpolate::precompute (double xmin, double ymin, double xmax, double ymax)
 {
   assert (!m_prec_red);
+  render::precompute (xmin, ymin, xmax, ymax);
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
   m_prec_xshift = -(xmin - 4);

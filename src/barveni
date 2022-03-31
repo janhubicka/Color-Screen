@@ -6,4 +6,5 @@ fi
 echo convert
 convert $1  /tmp/a.pnm || exit
 echo run
+#gdb --args 
 ./barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par 

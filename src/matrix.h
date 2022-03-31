@@ -4,6 +4,8 @@
 #include <cstring>
 #include <stdio.h>
 
+#define flatten_attr __attribute__ ((__flatten__))
+
 /* Square matrix template.  */
 template <size_t dim>
 class matrix
@@ -219,17 +221,18 @@ public:
 	       +0.05,-0.55,1.05, -0.2,
 	       0,             0,              0,                  0)
 #endif
-#if 1
-  /* Based on XYZ measurements of Finlay filter scan on eversmart.   */
 #if 0
-  : matrix4x4 (0.213670,0.283705,0.052463, 0,
-	       0.105508,0.384819,0.109658, 0,
-	       0.109658,0.052463,0.268750, 0,
-	       0,             0,              0,                  0)
-#endif
+  /* Based on XYZ measurements of Finlay filter scan on eversmart.   */
   : matrix4x4 (0.212460,0.277829,0.119398, 0,
 	       0.105123,0.378966,0.058030, 0,
 	       0.107493,0.054566,0.261890, 0,
+	       0,             0,              0,                  0)
+#endif
+#if 1
+  /* Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
+  : matrix4x4 (0.116325,0.148173,0.060772, 0,
+	       0.059402,0.201094,0.028883, 0,
+	       0.005753,0.030250,0.136011, 0,
 	       0,             0,              0,                  0)
 #else
   : matrix4x4 (0.4124564,  0.3575761,  0.1804375, 0,
