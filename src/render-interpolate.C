@@ -51,8 +51,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
   x += m_prec_xshift;
   y += m_prec_yshift;
 
-  int xp = 2*(x-0.25), yp = 2*(y-0.25);
-  double xo = 2*(x-0.25) - xp, yo = 2*(y-0.25) - yp;
+  double xx = 2*(x-0.25);
+  double yy = 2*(y-0.25);
+  int xp = floor (xx), yp = floor (yy);
+  double xo = xx - floor (xx), yo = yy - floor (yy);
 #define get_blue(xx, yy) prec_blue (xp + (xx), yp + (yy))
   double blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				   cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
@@ -65,8 +67,8 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
   to_diagonal_coordinates (x, y, &xd, &yd);
   xp = floor (xd);
   yp = floor (yd);
-  xo = xd - xp;
-  yo = yd - yp;
+  xo = xd - floor (xp);
+  yo = yd - floor (yp);
   /*xo=1;
   yo=1;*/
 #define get_green(xx, yy) prec_diag_green (xp + (xx), yp + (yy))
@@ -79,8 +81,8 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
   to_diagonal_coordinates (x + 0.5, y, &xd, &yd);
   xp = floor (xd);
   yp = floor (yd);
-  xo = xd - xp;
-  yo = yd - yp;
+  xo = xd - floor (xp);
+  yo = yd - floor (yp);
   /*xo=1;
   yo=1;*/
 #define get_red(xx, yy) prec_diag_red (xp + (xx), yp + (yy))

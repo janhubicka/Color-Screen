@@ -224,7 +224,9 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
 	    weights += w;
 	  }
       }
-  return acc / weights;
+  if (weights)
+    return acc / weights;
+  return 0;
 }
 
 /* Sample diagonal square.  */
