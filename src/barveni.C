@@ -45,6 +45,7 @@ static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
 static double saturation = 1.0;
 static bool precise = false;
+static int color_model = 0;
 
 static int display_type = 0;
 static bool display_scheduled = true;
@@ -245,7 +246,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     current.type = Finlay;
     display_scheduled = 1;
   }
-  if (k >= '1' && k <='5')
+  if (k >= '1' && k <='7')
     {
       display_type = k - '1';
       display_scheduled = 1;
@@ -260,6 +261,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       redo_parameters ();
       setvals ();
+      display_scheduled = 1;
+    }
+  if (k == 'm')
+    {
+      color_model++;
+      if (color_model >= render::num_color_models)
+	color_model = 0;
       display_scheduled = 1;
     }
   if (k == ' ')
@@ -426,6 +434,7 @@ previewrender (GdkPixbuf ** pixbuf)
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
   render.set_saturation (saturation);
+  render.set_color_model (color_model);
   render.precompute_all ();
 
   gdk_pixbuf_unref (*pixbuf);
@@ -498,6 +507,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       screen.initialize (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
       render.set_saturation (saturation);
+      render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
@@ -512,10 +522,21 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	    }
 	}
     }
-  else if (display_type == 3)
+  else if (display_type <= 5)
     {
       render_interpolate render (get_scr_to_img_parameters (), scan, 255);
+      screen screen;
+      if (display_type == 4)
+	{
+	  render.set_adjust_luminosity ();
+	}
+      else if (display_type == 5)
+	{
+          screen.initialize (current.type);
+          render.set_screen (&screen);	
+	}
       render.set_saturation (saturation);
+      render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       if (precise)
         render.set_precise ();
@@ -540,6 +561,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     {
       render_fast render (get_scr_to_img_parameters (), scan, 255);
       render.set_saturation (saturation);
+      render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 

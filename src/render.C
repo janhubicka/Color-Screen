@@ -48,6 +48,28 @@ render::precompute_all ()
     }
   lookup_table_uses ++;
   out_lookup_table_uses ++;
+
+  matrix4x4 color;
+  if (m_color_model == 1)
+    {
+      finlay_matrix m;
+      xyz_srgb_matrix m2;
+      matrix4x4 mm;
+      mm = m2 * m;
+      mm.normalize ();
+      color = color * mm;
+    }
+  if (m_color_model == 2)
+    {
+      grading_matrix m;
+      color = color * m;
+    }
+  if (m_saturate != 1)
+    {
+      saturation_matrix m (m_saturate);
+      color = color * m;
+    }
+  m_color_matrix = color;
 }
 
 render::~render ()

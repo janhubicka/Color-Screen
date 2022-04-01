@@ -33,12 +33,21 @@ public:
   {
     m_precise = true;
   }
+  void set_adjust_luminosity ()
+  {
+    m_adjust_luminosity = true;
+  }
+  void set_screen (screen *s)
+  {
+    m_screen = s;
+  }
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
   double *m_prec_red;
   double *m_prec_green;
   double *m_prec_blue;
-  double m_precise;
+  bool m_precise, m_adjust_luminosity;
+  screen *m_screen;
 
   double &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
   double &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}

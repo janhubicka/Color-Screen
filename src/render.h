@@ -34,14 +34,16 @@ public:
   inline double get_img_pixel_scr (double x, double y);
   void set_saturation (double s) { m_saturate = s; }
   void set_gray_range (int min, int max);
+  void set_color_model (int m) { m_color_model = m; }
   void precompute_all ();
   void precompute (double, double, double, double) {precompute_all ();}
   void precompute_img_range (double, double, double, double) {precompute_all ();}
     
-
+  static const int num_color_models = 3;
 protected:
   inline double get_data (int x, int y);
   inline void set_color (double, double, double, int *, int *, int *);
+  inline void set_color_luminosity (double, double, double, double, int *, int *, int *);
 
   /* Scanned image.  */
   image_data m_img;
@@ -57,6 +59,10 @@ protected:
   double m_saturate;
   /* Gray range to boot to full contrast.  */
   int m_gray_min, m_gray_max;
+  /* If true apply color model of Finlay taking plate.  */
+  int m_color_model;
+  /* Color matrix.  */
+  matrix4x4 m_color_matrix;
 };
 
 /* Base class for renderes tha works in screen coordinates (so output image is
@@ -122,31 +128,38 @@ render::get_data (int x, int y)
 inline void
 render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 {
-  {
-    finlay_matrix m;
-    xyz_srgb_matrix m2;
-    m.normalize ();
-    matrix4x4 mm;
-    mm = m2 * m;
-    mm.apply_to_rgb (r, g, b, &r, &g, &b);
-  }
-  if (m_saturate != 1)
+  m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  r = std::min (1.0, std::max (0.0, r));
+  g = std::min (1.0, std::max (0.0, g));
+  b = std::min (1.0, std::max (0.0, b));
+  *rr = m_out_lookup_table [(int)(r * 65535.5)];
+  *gg = m_out_lookup_table [(int)(g * 65535.5)];
+  *bb = m_out_lookup_table [(int)(b * 65535.5)];
+}
+/* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
+
+inline void
+render::set_color_luminosity (double r, double g, double b, double l, int *rr, int *gg, int *bb)
+{
+  m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  r = std::min (1.0, std::max (0.0, r));
+  g = std::min (1.0, std::max (0.0, g));
+  b = std::min (1.0, std::max (0.0, b));
+  l = std::min (1.0, std::max (0.0, l));
+  double gr = (r * rwght + g * gwght + b * bwght);
+  if (gr <= 0.00001 || l <= 0.00001)
+    r = g = b = l;
+  else
     {
-      saturation_matrix m (m_saturate);
-      m.apply_to_rgb (r, g, b, &r, &g, &b);
+      gr = l / gr;
+      r *= gr;
+      g *= gr;
+      b *= gr;
     }
-  if (r < 0)
-    r = 0;
-  if (g < 0)
-    g = 0;
-  if (b < 0)
-    b = 0;
-  if (r > 1)
-    r = 1;
-  if (g > 1)
-    g = 1;
-  if (b > 1)
-    b = 1;
+  r = std::min (1.0, std::max (0.0, r));
+  g = std::min (1.0, std::max (0.0, g));
+  b = std::min (1.0, std::max (0.0, b));
+
   *rr = m_out_lookup_table [(int)(r * 65535.5)];
   *gg = m_out_lookup_table [(int)(g * 65535.5)];
   *bb = m_out_lookup_table [(int)(b * 65535.5)];
@@ -203,7 +216,7 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
   int xmax = std::min ((int)ceil (std::max(std::max (std::max (xc - x1, xc + x1), xc - x2), xc + x2) + 0.5), m_img.width - 1);
   if (xmax-xmin < 2)
     return get_img_pixel (xc, yc);
-  if (xmax-xmin < 6)
+  if (xmax-xmin < 6 && 0)
     {
       /* Maybe this will give more reproducible results, but it is very slow.  */
       int samples = (sqrt (x1 * x1 + y1 * y1) + 0.5) * 2;

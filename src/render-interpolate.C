@@ -2,7 +2,7 @@
 #include "render-interpolate.h"
 
 render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval)
-   : render_to_scr (param, img, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_precise (/*true*/false)
+   : render_to_scr (param, img, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_precise (false), m_screen (NULL), m_adjust_luminosity (NULL)
 {
 }
 
@@ -71,6 +71,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
 flatten_attr void
 render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b)
 {
+  double red, green, blue;
   x += m_prec_xshift;
   y += m_prec_yshift;
 
@@ -81,11 +82,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       int xp = floor (xx), yp = floor (yy);
       double xo = xx - floor (xx), yo = yy - floor (yy);
 #define get_blue(xx, yy) prec_blue (xp + (xx), yp + (yy))
-      double blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
-				       cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
-				       cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
-				       cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo),
-				       xo);
+      blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
+				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
+				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
+				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
 
       double xd, yd;
@@ -96,11 +96,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       yo = yd - floor (yd);
 
 #define get_green(xx, yy) prec_diag_green (xp + (xx), yp + (yy))
-      double green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
-				        cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
-				        cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
-				        cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo),
-				        xo);
+      green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
+				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
+				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
+				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
       to_diagonal_coordinates (x + 0.5, y, &xd, &yd);
       xp = floor (xd);
@@ -108,14 +107,11 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       xo = xd - floor (xd);
       yo = yd - floor (yd);
 #define get_red(xx, yy) prec_diag_red (xp + (xx), yp + (yy))
-      double red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
-				      cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
-				      cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
-				      cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo),
-				      xo);
+      red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
+			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
+			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
+			       cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo), xo);
 #undef get_red
-      //green=red;
-      set_color (red, green, blue, r, g, b);
     }
   else
     {
@@ -124,11 +120,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       int xp = floor (xx), yp = floor (yy);
       double xo = xx - floor (xx), yo = yy - floor (yy);
 #define get_red(xx, yy) dufay_prec_red (xp + (xx), yp + (yy))
-      double red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
-				      cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
-				      cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
-				      cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo),
-				      xo);
+      red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
+			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
+			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
+			       cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo), xo);
 #undef get_red
       xx = x;
       yy = y;
@@ -137,11 +132,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       xo = xx - floor (xx);
       yo = yy - floor (yy);
 #define get_green(xx, yy) dufay_prec_green (xp + (xx), yp + (yy))
-      double green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
-				        cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
-				        cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
-				        cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo),
-				        xo);
+      green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
+				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
+				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
+				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
       xx = x-0.5;
       yy = y;
@@ -150,14 +144,36 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       xo = xx - floor (xx);
       yo = yy - floor (yy);
 #define get_blue(xx, yy) dufay_prec_blue (xp + (xx), yp + (yy))
-      double blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
-				        cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
-				        cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
-				        cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo),
-				        xo);
+      blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
+				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
+				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
+				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
-      set_color (red, green, blue, r, g, b);
     }
+  if (m_screen)
+    {
+      double lum = get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift);
+      int ix = (long long) round ((x - m_prec_xshift) * screen::size) & (screen::size - 1);
+      int iy = (long long) round ((y - m_prec_yshift) * screen::size) & (screen::size - 1);
+      double sr = m_screen->mult[iy][ix][0];
+      double sg = m_screen->mult[iy][ix][1];
+      double sb = m_screen->mult[iy][ix][2];
+      double llum = red * sr + green * sg + blue * sb;
+      red = std::min (1.0, std::max (0.0, red));
+      green = std::min (1.0, std::max (0.0, green));
+      blue = std::min (1.0, std::max (0.0, blue));
+      if (llum < 0.0001)
+	llum = 0.0001;
+      if (llum > 1)
+	llum = 1;
+      if (lum / llum > 2)
+	lum = 2 * llum;
+      set_color_luminosity (red, green, blue, lum / llum * (red * rwght + green * gwght + blue * bwght), r, g, b);
+    }
+  else if (m_adjust_luminosity)
+    set_color_luminosity (red, green, blue, get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift), r, g, b);
+  else
+    set_color (red, green, blue, r, g, b);
 }
 
 render_interpolate::~render_interpolate ()

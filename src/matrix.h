@@ -14,6 +14,8 @@ public:
   static const int m_dim = dim;
   double m_elements[m_dim][m_dim];
 
+  /* Default constructor: build identity matrix.  */
+  inline
   matrix()
   {
     for (int j = 0; j < m_dim; j++)
@@ -21,6 +23,7 @@ public:
 	m_elements[j][i]=(double) (i==j);
   }
 
+  /* Make matrix random (for unit testing).  */
   void
   randomize ()
   {
@@ -29,12 +32,16 @@ public:
 	m_elements[j][i]=rand()%100;
   }
 
+  /* Copy constructor.  */
+  inline
   matrix(const matrix &m)
   {
     memcpy(m_elements,m.m_elements,sizeof (m_elements));
   }
 
-  matrix<dim> operator+ (const matrix<dim>& rhs) const
+  /* Usual matrix operations.  */
+  inline matrix<dim>
+  operator+ (const matrix<dim>& rhs) const
   {
     matrix<dim> ret;
     for (int j = 0; j < m_dim; j++)
@@ -43,7 +50,8 @@ public:
     return ret;
   }
 
-  matrix<dim> operator* (const matrix<dim>& rhs) const
+  inline matrix<dim>
+  operator* (const matrix<dim>& rhs) const
   {
     matrix<dim> ret;
     for (int j = 0; j < m_dim; j++)
@@ -57,7 +65,8 @@ public:
     return ret;
   }
 
-  void transpose()
+  inline void
+  transpose()
   {
     for (int j = 0; j < m_dim; j++)
       for (int i = 0; i < j; i++)
@@ -80,7 +89,9 @@ public:
 class matrix2x2 : public matrix<2>
 {
 public:
-  matrix2x2 (double m00, double m10, double m01, double m11)
+  inline
+  matrix2x2 (double m00, double m10,
+	     double m01, double m11)
   {
     m_elements[0][0]=m00;
     m_elements[0][1]=m01;
@@ -88,10 +99,12 @@ public:
     m_elements[1][1]=m11;
   }
 
+  inline
   matrix2x2 ()
   {
   }
 
+  /* Matrix-vector multiplication.  */
   inline void
   apply_to_vector (double x, double y, double *xx, double *yy)
   {
@@ -99,6 +112,7 @@ public:
     *yy = x * m_elements[0][1] + y * m_elements[1][1];
   }
 
+  /* Compute inversion.  */
   inline matrix2x2
   invert ()
   {
@@ -118,6 +132,7 @@ class matrix4x4 : public matrix<4>
 public:
   matrix4x4 () { }
 
+  inline
   matrix4x4 (double e00, double e10, double e20, double e30,
 	     double e01, double e11, double e21, double e31,
 	     double e02, double e12, double e22, double e32,
@@ -129,13 +144,14 @@ public:
     m_elements[0][3]=e03; m_elements[1][3]=e13; m_elements[2][3]=e23; m_elements[3][3]=e33;
   }
 
-
+  inline
   matrix4x4& operator=(const matrix<4>rhs)
   {
     memcpy(m_elements,rhs.m_elements,sizeof (m_elements));
     return *this;
   }
 
+  /* Apply matrix to 2 dimensional coordinates and do perspective projetion.  */
   inline void
   perspective_transform (double x, double y, double &xr, double &yr)
   {
@@ -145,6 +161,7 @@ public:
 	 / (x * m_elements[3][0] + y * m_elements[3][1] + m_elements[3][2] + m_elements[3][3]);
   }
 
+  /* Inverse transform for the operation above.  */
   inline void
   inverse_perspective_transform (double x, double y, double &xr, double &yr)
   {
@@ -160,6 +177,7 @@ public:
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;
   }
 
+  /* Matrix-vector multiplication used for RGB values.  */
   inline void
   apply_to_rgb (double r, double g, double b, double *rr, double *gg, double *bb)
   {
@@ -168,6 +186,8 @@ public:
     *bb = r * m_elements[0][2] + g * m_elements[1][2] + b * m_elements[2][2] + m_elements[3][2];
   }
 
+  /* Make every row sum to 1.
+     This makes profile to preserve grayscales.  */
   inline void
   normalize ()
   {
@@ -175,7 +195,7 @@ public:
     {
       double sum =  m_elements[0][i] + m_elements[1][i] + m_elements[2][i] + m_elements[3][i];
       for (int j = 0; j <4; j++)
-	      m_elements[j][i]/=sum;
+        m_elements[j][i]/=sum;
     }
   }
 };
@@ -187,6 +207,7 @@ static const double rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 class saturation_matrix : public matrix4x4
 {
 public:
+  inline
   saturation_matrix (double s)
   : matrix4x4 ((1-s)*rwght + s, (1-s)*gwght    , (1-s)*bwght    , 0,
 	       (1-s)*rwght    , (1-s)*gwght + s, (1-s)*bwght    , 0,
@@ -194,65 +215,36 @@ public:
 	       0,             0,              0,                  0)
   {}
 };
+/* Matrix profile of Finlay taking screen
+   Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
 class finlay_matrix : public matrix4x4
 {
 public:
+  inline
   finlay_matrix ()
-  //: matrix4x4 (0.69, -0.368, -0.06, 0,
-	       //-1.92, 0.64, -0.61, 0,
-	       //-0.105,-0.129, 0.506, 0,
-	       //0,             0,              0,                  0)
-#if 0
-	  : matrix4x4 (1,0,0, 0,
-	       0,1,0, 0,
-	       0,0,1, 0,
-	       0,             0,              0,                  0)
-#endif
-#if 0
-  /* Based on gimp measurements of Finlay filter scan on eversmart.   */
-  : matrix4x4 (0.69, -1.92, -0.105, 0,
-	       -0.368,0.64,-0.129, 0,
-	       -0.06,-0.61, 0.506, 0,
-	       0,             0,              0,                  0)
-#endif
-#if 0
-  : matrix4x4 (1.9, -0.6, -0.9, 0,
-	        0.1,0.7,0, 0,
-	       0,-0.9, 1.4, 0,
-	       0,             0,              0,                  0)
-#endif
-#if 0
-  /* Matrix I decided works well for kimono picture.  */
-  : matrix4x4 (1,-0.4,-0.1, 0,
-	       0.25,1,-0.1, 0,
-	       +0.05,-0.55,1.05, -0.2,
-	       0,             0,              0,                  0)
-#endif
-#if 0
-  /* Based on XYZ measurements of Finlay filter scan on eversmart.   */
-  : matrix4x4 (0.212460,0.277829,0.119398, 0,
-	       0.105123,0.378966,0.058030, 0,
-	       0.107493,0.054566,0.261890, 0,
-	       0,             0,              0,                  0)
-#endif
-#if 1
-  /* Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
   : matrix4x4 (0.116325,0.148173,0.060772, 0,
 	       0.059402,0.201094,0.028883, 0,
 	       0.005753,0.030250,0.136011, 0,
 	       0,             0,              0,                  0)
-#else
-  : matrix4x4 (0.4124564,  0.3575761,  0.1804375, 0,
- 	       0.2126729,  0.7151522,  0.0721750, 0,
- 	       0.0193339,  0.1191920,  0.9503041, 0,
-	       0,             0,              0,                  0)
-#endif
-  { /*normalize ();*/
-    /*transpose ();*/ }
+  { }
 };
+/* Matrix I decided works well for kimono picture (sRGB).  */
+class grading_matrix : public matrix4x4
+{
+public:
+  inline
+  grading_matrix ()
+  : matrix4x4 (1,-0.4,-0.1, 0,
+	       0.25,1,-0.1, 0,
+	       +0.05,-0.55,1.05, 0,
+	       0,             0,              0,                  0)
+  { normalize (); }
+};
+/* sRGB->XYZ conversion matrix.  */
 class srgb_xyz_matrix : public matrix4x4
 {
 public:
+  inline
   srgb_xyz_matrix ()
   : matrix4x4 (0.4124564,  0.3575761,  0.1804375, 0,
  	       0.2126729,  0.7151522,  0.0721750, 0,
@@ -260,9 +252,11 @@ public:
 	       0,             0,              0,                  0)
   {}
 };
+/* XYZ->sRGB conversion matrix.  */
 class xyz_srgb_matrix : public matrix4x4
 {
 public:
+  inline
   xyz_srgb_matrix ()
   : matrix4x4 (3.2404542, -1.5371385, -0.4985314, 0,
 	      -0.9692660,  1.8760108,  0.0415560, 0,
