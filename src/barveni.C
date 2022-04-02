@@ -46,6 +46,7 @@ static int bigscale = 4;
 static double saturation = 1.0;
 static bool precise = false;
 static int color_model = 0;
+static bool color_display = false;
 
 static int display_type = 0;
 static bool display_scheduled = true;
@@ -125,6 +126,12 @@ openimage (int *argc, char **argv)
       exit (1);
     }
   graydata = pgm_readpgm (fopen (argv[1], "r"), &xsize, &ysize, &maxval);
+  if (!graydata)
+    {
+      fprintf (stderr, "Failed to read scan\n");
+      exit (1);
+    }
+  fclose (in);
   scan.width = xsize;
   scan.height = ysize;
   scan.maxval = maxval;
@@ -133,6 +140,35 @@ openimage (int *argc, char **argv)
   mingray = 0;
   maxgray = maxval;
   maxval++;
+  if (*argc == 5)
+    {
+      in = fopen (argv[4], "r");
+      if (!in)
+	{
+	  perror (argv[4]);
+	  exit (1);
+	}
+      scan.rgbdata = ppm_readppm (fopen (argv[4], "r"), &xsize, &ysize, &maxval);
+      fclose (in);
+      if (!graydata)
+	{
+	  fprintf (stderr, "Failed to read RGB scan\n");
+	  exit (1);
+	}
+      if (scan.width != xsize || scan.height != ysize)
+	{
+	  fprintf (stderr, "scan and RGB scan must have same dimensions\n");
+	  exit (1);
+	}
+      if (scan.maxval != maxval)
+	{
+	  fprintf (stderr, "scan and RGB scan must have same bit depth\n");
+	  exit (1);
+	}
+      printf ("RGB data read\n");
+    }
+  else
+    scan.rgbdata = NULL;
 }
 
 /* Get values displayed in the UI.  */
@@ -203,6 +239,11 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 
   if (k == 'c')
     setcenter = true;
+  if (k == 'o')
+    {
+      color_display = !color_display;
+      display_scheduled = 1;
+    }
   if (k == 'x')
     {
       freeze_x = false;
@@ -485,6 +526,8 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 1)
         screen.initialize_preview (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      if (color_display)
+	render.set_color_display ();
       render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
@@ -506,6 +549,8 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       //screen.paget_finlay ();
       screen.initialize (current.type);
       render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      if (color_display)
+	render.set_color_display ();
       render.set_saturation (saturation);
       render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
@@ -800,13 +845,14 @@ main (int argc, char **argv)
 {
   GtkWidget *window;
   double num;
-  if (argc != 4)
+  if (argc != 4 && argc != 5)
     {
-      fprintf (stderr, "Invocation: %s scan.pgm output.pnm scan.par\n\n"
-	       "Here scan.pgm is the scan as a greyscale.\n"
+      fprintf (stderr, "Invocation: %s scan.pgm output.pnm scan.par [scan-rgb.pnm]\n\n"
+	       "scan.pgm is the scan as a greyscale.\n"
 	       "output.pnm is a filename where resulting image will be stored.\n"
 	       "If scan.par exists then its parametrs will be read.\n"
-	       "Parameters will be saved to scan.par after pressing save button.\n",
+	       "Parameters will be saved to scan.par after pressing save button.\n"
+	       "scan-rgb.pnm is an optional RGB scan of the same original.\n",
 	       argv[0]);
       exit (1);
     }
@@ -855,11 +901,12 @@ main (int argc, char **argv)
   /* Show main window and start main loop */
   gtk_widget_show (window);
   int pxsize = 1024/*gdk_pixbuf_get_width (data.image_viewer);*/;
-  int pysize = 1024/*gdk_pixbuf_get_height (data.image_viewer);*/;
+  int pysize = 800/*gdk_pixbuf_get_height (data.image_viewer);*/;
   double scale1 = pxsize / (double) scan.width;
   double scale2 = pxsize / (double) scan.height;
+  double scale =  std::max (std::min (scale1, scale2), 0.1);
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER ((GtkImageViewer *)data.image_viewer),
-					std::min (scale1, scale2), std::min (scale1, scale2), 0, 0);
+					scale, scale, 0, 0);
   gtk_image_viewer_redraw ((GtkImageViewer *)data.image_viewer, 1);
 
   while (true)

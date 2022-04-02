@@ -52,12 +52,24 @@ render::precompute_all ()
   matrix4x4 color;
   if (m_color_model == 1)
     {
-      finlay_matrix m;
-      xyz_srgb_matrix m2;
-      matrix4x4 mm;
-      mm = m2 * m;
-      mm.normalize ();
-      color = color * mm;
+      if (m_scr_to_img.get_type () != Dufay)
+	{
+	  finlay_matrix m;
+	  xyz_srgb_matrix m2;
+	  matrix4x4 mm;
+	  mm = m * m2;
+	  mm.normalize_grayscale ();
+	  color = color * mm;
+	}
+      else
+	{
+	  dufay_matrix m;
+	  xyz_srgb_matrix m2;
+	  matrix4x4 mm;
+	  mm = m * m2;
+	  mm.normalize_grayscale (1.02, 1.05, 1);
+	  color = color * mm;
+	}
     }
   if (m_color_model == 2)
     {

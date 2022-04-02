@@ -30,7 +30,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 4);
-#define pixel(xo,yo,rad) m_precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, rad)\
+#define pixel(xo,yo,diag) m_precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
@@ -54,15 +54,15 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
-#define pixel(xo,yo,rad) m_precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, rad)\
+#define pixel(xo,yo,width,height) m_precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
 	  {
-	    dufay_prec_red (2 * x, y) = pixel (0, 0.5, 0.3);
-	    dufay_prec_red (2 * x + 1, y) = pixel (0.5, 0.5, 0.3);
-	    dufay_prec_green (x, y) = pixel (0, 0, 0.3);
-	    dufay_prec_blue (x, y) = pixel (0.5, 0, 0.3);
+	    dufay_prec_red (2 * x, y) = pixel (0, 0.5,0.5, 0.3333);
+	    dufay_prec_red (2 * x + 1, y) = pixel (0.5, 0.5, 0.5, 0.3333);
+	    dufay_prec_green (x, y) = pixel (0, 0, 0.5, 1 - 0.333);
+	    dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 1 - 0.333);
 	  }
 #undef pixel
     }
@@ -159,6 +159,9 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       double sg = m_screen->mult[iy][ix][1];
       double sb = m_screen->mult[iy][ix][2];
       double llum = red * sr + green * sg + blue * sb;
+      double correction = std::max (std::min (lum / llum, 5.0), 0.0);
+      set_color (red * correction, green * correction, blue * correction, r, g, b);
+#if 0
       red = std::min (1.0, std::max (0.0, red));
       green = std::min (1.0, std::max (0.0, green));
       blue = std::min (1.0, std::max (0.0, blue));
@@ -168,7 +171,9 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
 	llum = 1;
       if (lum / llum > 2)
 	lum = 2 * llum;
-      set_color_luminosity (red, green, blue, lum / llum * (red * rwght + green * gwght + blue * bwght), r, g, b);
+      //set_color_luminosity (red, green, blue, lum / llum * (red * rwght + green * gwght + blue * bwght), r, g, b);
+      //set_color_luminosity (red, green, blue, lum / llum * (red + green + blue)*0.333, r, g, b);
+#endif
     }
   else if (m_adjust_luminosity)
     set_color_luminosity (red, green, blue, get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift), r, g, b);

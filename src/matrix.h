@@ -185,18 +185,19 @@ public:
     *gg = r * m_elements[0][1] + g * m_elements[1][1] + b * m_elements[2][1] + m_elements[3][1];
     *bb = r * m_elements[0][2] + g * m_elements[1][2] + b * m_elements[2][2] + m_elements[3][2];
   }
-
-  /* Make every row sum to 1.
-     This makes profile to preserve grayscales.  */
+  /* This adjust the profile so grayscale has given r,g,b values.  */
   inline void
-  normalize ()
+  normalize_grayscale (double r = 1, double g = 1, double b = 1)
   {
-    for (int i = 0; i < 3; i++)
-    {
-      double sum =  m_elements[0][i] + m_elements[1][i] + m_elements[2][i] + m_elements[3][i];
-      for (int j = 0; j <4; j++)
-        m_elements[j][i]/=sum;
-    }
+    double scale =  r / (m_elements[0][0] + m_elements[1][0] + m_elements[2][0] + m_elements[3][0]);
+    for (int j = 0; j < 4; j++)
+      m_elements[j][0] *= scale;
+    scale =  g / (m_elements[0][1] + m_elements[1][1] + m_elements[2][1] + m_elements[3][1]);
+    for (int j = 0; j < 4; j++)
+      m_elements[j][1] *= scale;
+    scale =  b / (m_elements[0][2] + m_elements[1][2] + m_elements[2][2] + m_elements[3][2]);
+    for (int j = 0; j < 4; j++)
+      m_elements[j][2] *= scale;
   }
 };
 
@@ -228,6 +229,19 @@ public:
 	       0,             0,              0,                  0)
   { }
 };
+/* Matrix profile of dufay taken from Nikon steamroler.
+   In XYZ.  */
+class dufay_matrix : public matrix4x4
+{
+public:
+  inline
+  dufay_matrix ()
+  : matrix4x4 (0.321001,0.205657,0.072222, 0,
+	       0.178050,0.406124,0.071736, 0,
+	       0.006007,0.040292,0.240037, 0,
+	       0,             0,              0,                  0)
+  { }
+};
 /* Matrix I decided works well for kimono picture (sRGB).  */
 class grading_matrix : public matrix4x4
 {
@@ -238,7 +252,7 @@ public:
 	       0.25,1,-0.1, 0,
 	       +0.05,-0.55,1.05, 0,
 	       0,             0,              0,                  0)
-  { normalize (); }
+  { normalize_grayscale (); }
 };
 /* sRGB->XYZ conversion matrix.  */
 class srgb_xyz_matrix : public matrix4x4
