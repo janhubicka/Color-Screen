@@ -6,6 +6,28 @@ render_interpolate::render_interpolate (scr_to_img_parameters param, image_data 
 {
 }
 
+void
+render_interpolate::set_screen (double radius)
+{
+  static screen blured_screen;
+  static double r = -1;
+  static enum scr_type t;
+  double x, y, x2, y2;
+  m_scr_to_img.to_scr (0, 0, &x, &y);
+  m_scr_to_img.to_scr (1, 0, &x2, &y2);
+  radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+
+  if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
+    {
+      screen *s = new screen;
+      s->initialize (m_scr_to_img.get_type ());
+      blured_screen.initialize_with_blur (*s, radius);
+      t = m_scr_to_img.get_type ();
+      r = radius;
+    }
+  m_screen = &blured_screen;
+}
+
 flatten_attr void
 render_interpolate::precompute (double xmin, double ymin, double xmax, double ymax)
 {

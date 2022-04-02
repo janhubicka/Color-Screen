@@ -154,6 +154,8 @@ render::get_data_blue (int x, int y)
 inline double
 cap_color (double val, double weight, double *diff, int *cnt_neg, int *cnt_pos)
 {
+  if (isnan (val))
+    return 0;
   if (val < 0)
     {
       *cnt_neg++;
@@ -188,19 +190,13 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
   if (fabs (diff) > 0.001)
     {
-      while (fabs (diff) > 0.001)
+      double lum = r * rwght + g * gwght + b * bwght;
+      if (lum + diff < 0.00001)
+	r = g = b = 0;
+      if (lum + diff > 0.99999)
+	r = g = b = 1;
+      else while (fabs (diff) > 0.001)
 	{
-          double lum = r * rwght + g * gwght + b * bwght;
-	  if (lum < 0)
-	    {
-	      r = g = b = 0;
-	      break;
-	    }
-	  if (lum > 1)
-	    {
-	      r = g = b = 1;
-	      break;
-	    }
 	  if (diff > 0)
 	    {
 	      double add = diff / (3 - cnt_pos);

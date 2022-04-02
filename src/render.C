@@ -35,10 +35,13 @@ render::precompute_all ()
       lookup_table_maxval = m_img.maxval;
       lookup_table_gray_min = m_gray_min; 
       lookup_table_gray_max = m_gray_max;
-      double min = pow (m_gray_min / (double)m_img.maxval, m_img.gamma);
-      double max = pow (m_gray_max / (double)m_img.maxval, m_img.gamma);
+      double gamma = std::min (std::max (m_img.gamma, 0.0001), 10.0);
+      double min = pow (m_gray_min / (double)m_img.maxval, gamma);
+      double max = pow (m_gray_max / (double)m_img.maxval, gamma);
+      if (min >= max)
+	max += 0.0001;
       for (int i = 0; i <= m_img.maxval; i++)
-	lookup_table [i] = (pow (i / (double)m_img.maxval, m_img.gamma) - min) * (1 / (max-min));
+	lookup_table [i] = (pow (i / (double)m_img.maxval, gamma) - min) * (1 / (max-min));
     }
   if (m_dst_maxval != out_lookup_table_maxval)
     {

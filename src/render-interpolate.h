@@ -37,10 +37,7 @@ public:
   {
     m_adjust_luminosity = true;
   }
-  void set_screen (screen *s)
-  {
-    m_screen = s;
-  }
+  void set_screen (double radius);
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
   double *m_prec_red;

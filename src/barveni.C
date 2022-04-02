@@ -44,7 +44,7 @@ static int maxgray = 0;
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
 static double saturation = 1.0;
-static bool precise = false;
+static bool precise = true;
 static int color_model = 0;
 static bool color_display = false;
 
@@ -520,12 +520,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 
   if (display_type <= 1)
     {
-      screen screen;
-      if (!display_type)
-	screen.empty ();
-      else if (display_type == 1)
-        screen.initialize_preview (current.type);
-      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, !display_type, display_type, 0.0);
       if (color_display)
 	render.set_color_display ();
       render.set_gray_range (mingray, maxgray);
@@ -544,11 +539,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else if (display_type == 2)
     {
-      screen screen;
-
-      //screen.paget_finlay ();
-      screen.initialize (current.type);
-      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, &screen);
+      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, false, false, 1);
       if (color_display)
 	render.set_color_display ();
       render.set_saturation (saturation);
@@ -578,7 +569,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 5)
 	{
           screen.initialize (current.type);
-          render.set_screen (&screen);	
+          render.set_screen (2);	
 	}
       render.set_saturation (saturation);
       render.set_color_model (color_model);

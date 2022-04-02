@@ -42,6 +42,8 @@ struct screen
     else
       preview ();
   }
+  /* Initialize imitating lens blur.  */
+  void initialize_with_blur (screen &scr, double blur_radius);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

@@ -20,8 +20,8 @@ screen::empty ()
 /* The screen is sqare.  In the center there is green circle
    of diameter DG, on corners there are red circles of diameter D  
    RR is a blurring radius.  */
-#define D (85 * size) / size
-#define DG (85 * size) / size
+#define D (85 * size) / 256
+#define DG (85 * size) / 256
 
 void
 screen::thames ()
@@ -75,8 +75,8 @@ screen::thames ()
       }
 }
 
-#define PD (58 * size) / size
-#define PDG (58 * size) / size
+#define PD (58 * size) / 256
+#define PDG (58 * size) /256
 void
 screen::paget_finlay ()
 {
@@ -194,7 +194,7 @@ screen::preview ()
 	mult[yy][xx][0] = 1;
 	mult[yy][xx][1] = 1;
 	mult[yy][xx][2] = 1;
-	if (d1 < 30)
+	if (d1 < 30 * size / 256)
 	  {
 	    /* Green.  */
 	    add[yy][xx][0] = 0;
@@ -205,7 +205,7 @@ screen::preview ()
 	    mult[yy][xx][2] = 0.25;
 	    continue;
 	  }
-	else if (d3 < 30)
+	else if (d3 < 30 * size / 256)
 	  {
 	    /* Red.  */
 	    add[yy][xx][0] = 0.5;
@@ -218,7 +218,7 @@ screen::preview ()
 	  }
 	else
 	  {
-	    if (xx < 10 || xx > size - 10 || yy < 10 || yy > size - 10)
+	    if (xx < 10 * size / 256 || xx > size - 10 * size / 256 || yy < 10 * size / 256 || yy > size - 10 * size / 256)
 	      {
 	        /* Maybe blue.  */
 		add[yy][xx][0] = 0;
@@ -275,5 +275,59 @@ screen::preview_dufay ()
 	    mult[yy][xx][1] = 0.25;
 	    mult[yy][xx][2] = 0.25;
 	  }
+      }
+}
+
+void
+screen::initialize_with_blur (screen &scr, double blur_radius)
+{
+  if (blur_radius <= 0)
+    {
+      memcpy (mult, scr.mult, sizeof (mult));
+      memcpy (add, scr.add, sizeof (add));
+      return;
+    }
+  if (blur_radius >= 1)
+    blur_radius = 1;
+
+  int radius = ceil (blur_radius * size);
+  if (radius > size)
+    radius = size;
+  double weights[size * 2][size * 2];
+  double weight = 0;
+  printf ("radiu: %i\n", radius);
+
+  for (int yy = radius; yy <= 2 * radius; yy++)
+    for (int xx = radius; xx <= 2 * radius; xx++)
+      {
+        double dist = sqrt ((yy-radius) * (yy - radius) + (xx - radius) * (xx - radius)) / size;
+        if (dist < blur_radius)
+	  {
+	    double w = blur_radius - dist;
+	    weights[yy][xx] = w;
+	    weight += w;
+	  }
+	else
+	  weights[yy][xx] = 0;
+      }
+  printf ("weight: %f\n", weight);
+  for (int y = 0; y < size; y++)
+    for (int x = 0; x < size; x++)
+      {
+	double r = 0, g = 0, b = 0;
+	for (int yy = y - radius; yy <= y + radius; yy++)
+	  for (int xx = x - radius; xx <= x + radius; xx++)
+	    {
+	      double w = weights [yy - (y - radius)][xx - (x - radius)];
+	      r += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][0] * w;
+	      g += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][1] * w;
+	      b += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][2] * w;
+	    }
+	mult[y][x][0] = r / weight;
+	mult[y][x][1] = g / weight;
+	mult[y][x][2] = b / weight;
+	add[y][x][0] = scr.add[y][x][0];
+	add[y][x][1] = scr.add[y][x][1];
+	add[y][x][2] = scr.add[y][x][2];
       }
 }
