@@ -19,6 +19,7 @@ render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
   m_lookup_table = NULL;
   m_out_lookup_table = NULL;
   m_saturate = 1;
+  m_brightness = 1;
 }
 
 void
@@ -84,6 +85,7 @@ render::precompute_all ()
       saturation_matrix m (m_saturate);
       color = color * m;
     }
+  color = color * m_brightness;
   m_color_matrix = color;
 }
 

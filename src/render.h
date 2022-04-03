@@ -38,6 +38,7 @@ public:
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
   void set_saturation (double s) { m_saturate = s; }
+  void set_brightness (double b) { m_brightness = b; }
   void set_gray_range (int min, int max);
   void set_color_model (int m) { m_color_model = m; }
   void precompute_all ();
@@ -65,6 +66,8 @@ protected:
   double *m_out_lookup_table;
   /* Saturation increase.  */
   double m_saturate;
+  /* Brightness adjustments.  */
+  double m_brightness;
   /* Gray range to boot to full contrast.  */
   int m_gray_min, m_gray_max;
   /* If true apply color model of Finlay taking plate.  */
@@ -180,11 +183,6 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
   int cnt_neg = 0;
   int cnt_pos = 0;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
-#if 0
-  r = std::min (1.0, std::max (0.0, r));
-  g = std::min (1.0, std::max (0.0, g));
-  b = std::min (1.0, std::max (0.0, b));
-#endif
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
@@ -193,7 +191,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
       double lum = r * rwght + g * gwght + b * bwght;
       if (lum + diff < 0.00001)
 	r = g = b = 0;
-      if (lum + diff > 0.99999)
+      else if (lum + diff > 0.99999)
 	r = g = b = 1;
       else while (fabs (diff) > 0.001)
 	{

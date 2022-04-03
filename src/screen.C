@@ -75,8 +75,8 @@ screen::thames ()
       }
 }
 
-#define PD (58 * size) / 256
-#define PDG (58 * size) /256
+#define PD (54 * size) / 256
+#define PDG (54 * size) /256
 void
 screen::paget_finlay ()
 {
@@ -290,15 +290,15 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
   if (blur_radius >= 1)
     blur_radius = 1;
 
-  int radius = ceil (blur_radius * size);
-  if (radius > size)
-    radius = size;
+  int radius = blur_radius * size;
+  if (radius >= size)
+    radius = size - 1;
   double weights[size * 2][size * 2];
   double weight = 0;
   printf ("radiu: %i\n", radius);
 
-  for (int yy = radius; yy <= 2 * radius; yy++)
-    for (int xx = radius; xx <= 2 * radius; xx++)
+  for (int yy = 0; yy <= 2 * radius; yy++)
+    for (int xx = 0; xx <= 2 * radius; xx++)
       {
         double dist = sqrt ((yy-radius) * (yy - radius) + (xx - radius) * (xx - radius)) / size;
         if (dist < blur_radius)
@@ -310,7 +310,6 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
 	else
 	  weights[yy][xx] = 0;
       }
-  printf ("weight: %f\n", weight);
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {

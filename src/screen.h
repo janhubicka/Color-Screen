@@ -6,7 +6,7 @@
 struct screen
 {
   /* Size of the arrays holding the screen.  Must be power of 2.  */
-  static const int size=256;
+  static const int size=128;
   /* Mult specify how much one should multiply, add how much add
      and keep how much keep in the color.  */
   double mult[size][size][3];

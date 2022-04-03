@@ -65,6 +65,16 @@ public:
     return ret;
   }
 
+  inline matrix<dim>
+  operator* (const double rhs) const
+  {
+    matrix<dim> ret;
+    for (int j = 0; j < m_dim; j++)
+      for (int i = 0; i < m_dim; i++)
+	ret.m_elements[j][i] = m_elements[j][i] * rhs;
+    return ret;
+  }
+
   inline void
   transpose()
   {

@@ -8,8 +8,6 @@ if test "$#" -gt 2; then
   exit 1
 fi
 echo convert
-#convert $1 -strip -rotate 90 /tmp/a.pnm || exit
 convert $1 -strip  /tmp/a.pnm || exit
 echo run
-#gdb --args 
 ./barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par $2

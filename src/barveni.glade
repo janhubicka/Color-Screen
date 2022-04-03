@@ -131,7 +131,7 @@
                       <object class="GtkLabel" id="label2">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">y1</property>
+                        <property name="label" translatable="yes">screen blur</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -140,7 +140,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="y1">
+                      <object class="GtkSpinButton" id="blur">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
@@ -258,7 +258,7 @@
                       <object class="GtkLabel" id="label5">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">X DPI</property>
+                        <property name="label" translatable="yes">Brightness</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -267,7 +267,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="xdpi">
+                      <object class="GtkSpinButton" id="brightness">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>

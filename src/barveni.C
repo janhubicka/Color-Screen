@@ -43,9 +43,11 @@ static int maxgray = 0;
 /* Status of the main window.  */
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
-static double saturation = 1.0;
+static double saturation = 1.8;
+static double brightness = 1.0;
+static double screen_blur = 2.5;
 static bool precise = true;
-static int color_model = 0;
+static int color_model = 1;
 static bool color_display = false;
 
 static int display_type = 0;
@@ -85,7 +87,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *y1, *saturation, *y2, *xdpi, *ydpi;
+  GtkSpinButton *gamma, *screen_blur, *saturation, *y2, *brightness, *ydpi;
 };
 Data data;
 
@@ -178,6 +180,8 @@ getvals (void)
 {
   scan.gamma = gtk_spin_button_get_value (data.gamma);
   saturation = gtk_spin_button_get_value (data.saturation);
+  screen_blur = gtk_spin_button_get_value (data.screen_blur);
+  brightness = gtk_spin_button_get_value (data.brightness);
 #if 0
   current.ystart = gtk_spin_button_get_value (data.y1);
   current.xend = gtk_spin_button_get_value (data.x2);
@@ -197,6 +201,8 @@ setvals (void)
   initialized = 0;
   gtk_spin_button_set_value (data.gamma, scan.gamma);
   gtk_spin_button_set_value (data.saturation, saturation);
+  gtk_spin_button_set_value (data.screen_blur, screen_blur);
+  gtk_spin_button_set_value (data.brightness, brightness);
 #if 0
   gtk_spin_button_set_value (data.x1, current.xstart);
   gtk_spin_button_set_value (data.y1, current.ystart);
@@ -397,10 +403,10 @@ initgtk (int *argc, char **argv)
   // not using an image.
   gtk_image_viewer_zoom_fit (GTK_IMAGE_VIEWER (image_viewer));
   data.gamma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "gamma"));
-  data.y1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y1"));
+  data.screen_blur = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "blur"));
   data.saturation = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "saturation"));
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
-  data.xdpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "xdpi"));
+  data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
   data.ydpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "ydpi"));
   /*data.about = GTK_WIDGET( gtk_builder_get_object( builder, "aboutdialog1" ) ); */
 
@@ -475,6 +481,7 @@ previewrender (GdkPixbuf ** pixbuf)
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
   render.set_saturation (saturation);
+  render.set_brightness (brightness);
   render.set_color_model (color_model);
   render.precompute_all ();
 
@@ -539,10 +546,11 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else if (display_type == 2)
     {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, false, false, 1);
+      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, false, false, screen_blur);
       if (color_display)
 	render.set_color_display ();
       render.set_saturation (saturation);
+      render.set_brightness (brightness);
       render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
@@ -569,9 +577,10 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       else if (display_type == 5)
 	{
           screen.initialize (current.type);
-          render.set_screen (2);	
+          render.set_screen (screen_blur);	
 	}
       render.set_saturation (saturation);
+      render.set_brightness (brightness);
       render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       if (precise)
@@ -597,6 +606,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     {
       render_fast render (get_scr_to_img_parameters (), scan, 255);
       render.set_saturation (saturation);
+      render.set_brightness (brightness);
       render.set_color_model (color_model);
       render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
