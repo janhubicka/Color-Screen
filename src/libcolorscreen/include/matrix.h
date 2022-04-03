@@ -1,6 +1,7 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 /* Basic template for square matrix.  */
+#include <algorithm>
 #include <cstring>
 #include <stdio.h>
 

@@ -343,9 +343,9 @@ initgtk (int *argc, char **argv)
   /* Create builder and load interface */
   builder = gtk_builder_new ();
   if (!gtk_builder_add_from_file (builder,
-      DATADIR"/colorscreen/barveni.glade", NULL))
+      DATADIR "/colorscreen/barveni.glade", NULL))
     {
-      fprintf (stderr, "Can not open "DATADIR"/colorscreen/barveni.glade\n");
+      fprintf (stderr, "Can not open " DATADIR "/colorscreen/barveni.glade\n");
       exit (1);
     }
 
