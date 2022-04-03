@@ -7,4 +7,4 @@ echo convert
 convert $1 -alpha extract  -strip   /tmp/a.pgm || exit
 convert $1 -strip   /tmp/b.ppm || exit
 echo run
-./barveni-bin /tmp/a.pgm `basename $1 .tif`.pnm `basename $1 .tif`.par /tmp/b.ppm
+@bindir@/barveni-bin /tmp/a.pgm `basename $1 .tif`.pnm `basename $1 .tif`.par /tmp/b.ppm

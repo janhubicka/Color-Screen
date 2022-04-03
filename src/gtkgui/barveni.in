@@ -10,4 +10,4 @@ fi
 echo convert
 convert $1 -strip  /tmp/a.pnm || exit
 echo run
-./barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par $2
+@bindir@/barveni-bin /tmp/a.pnm `basename $1 .tif`.pnm `basename $1 .tif`.par $2

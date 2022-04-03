@@ -33,6 +33,8 @@ AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
 fi
 #AC_SEARCH_LIBS(gtk_image_viewer_redraw,[gtk_image_viewer],[check_image_viewer_h="gtkimageviewer-2.0/gtk-image-viewer.h"],
  #[ echo "gtkimageviewer needed"])
+AC_CONFIG_HEADERS([src/gtkgui/config.h])
+#AC_DEFINE_UNQUOTED([DATADIR], ["$datadir"], [Data directory.])
 
 CXXFLAGS="-Ofast"
 

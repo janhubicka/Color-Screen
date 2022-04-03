@@ -11,6 +11,7 @@
 #include <gtkimageviewer-2.0/gtk-image-viewer.h>
 #include <stdbool.h>
 
+#include "config.h"
 #include "../libcolorscreen/include/matrix.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/render-fast.h"
@@ -362,9 +363,10 @@ initgtk (int *argc, char **argv)
 
   /* Create builder and load interface */
   builder = gtk_builder_new ();
-  if (!gtk_builder_add_from_file (builder, "barveni.glade", NULL))
+  if (!gtk_builder_add_from_file (builder,
+      DATADIR"/colorscreen/barveni.glade", NULL))
     {
-      fprintf (stderr, "Can not open barveni.glade\n");
+      fprintf (stderr, "Can not open "DATADIR"/colorscreen/barveni.glade\n");
       exit (1);
     }
 
