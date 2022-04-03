@@ -10,8 +10,8 @@ barvenirgb: barvenirgb.in Makefile
 	chmod +x barvenirgb
 dist_pkgdata_DATA = barveni.glade
 
-AM_CFLAGS = $(BARVENI_BIN_CFLAGS)
-AM_CXXFLAGS = $(BARVENI_BIN_CFLAGS) -export-dynamic -D DATADIR='"$(datadir)"'
+AM_CFLAGS = $(BARVENI_BIN_CFLAGS) -Wno-implicit-function-declaration
+AM_CXXFLAGS = $(BARVENI_BIN_CFLAGS)  -D DATADIR='"$(datadir)"' #-rdynamic
 bin_PROGRAMS=barveni-bin
 LDADD = ../libcolorscreen/libcolorscreen.la $(BARVENI_BIN_LIBS)
 barveni_bin_SOURCES=barveni.C gtk-image-viewer.c
