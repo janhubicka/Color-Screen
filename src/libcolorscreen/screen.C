@@ -295,7 +295,6 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
     radius = size - 1;
   double weights[size * 2][size * 2];
   double weight = 0;
-  printf ("radiu: %i\n", radius);
 
   for (int yy = 0; yy <= 2 * radius; yy++)
     for (int xx = 0; xx <= 2 * radius; xx++)

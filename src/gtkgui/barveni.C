@@ -98,6 +98,7 @@ cb_delete_event (GtkWidget * window, GdkEvent * event, Data * data)
   /*response = gtk_dialog_run( GTK_DIALOG( data->quit ) );
      gtk_widget_hide( data->quit ); */
 
+  exit (0);
   return (1 != response);
 }
 
@@ -178,15 +179,6 @@ getvals (void)
   saturation = gtk_spin_button_get_value (data.saturation);
   screen_blur = gtk_spin_button_get_value (data.screen_blur);
   brightness = gtk_spin_button_get_value (data.brightness);
-#if 0
-  current.ystart = gtk_spin_button_get_value (data.y1);
-  current.xend = gtk_spin_button_get_value (data.x2);
-  current.yend = gtk_spin_button_get_value (data.y2);
-  current.xm = 1 / (gtk_spin_button_get_value (data.xdpi) / 1000);
-  current.ym = 1 / (gtk_spin_button_get_value (data.ydpi) / 1000);
-  /*printf ("%lf %lf %lf %lf %lf %lf %lf\n", current.xstart, current.ystart, current.xend, current.yend, num,
-	  current.xm, current.ym);*/
-#endif
 }
 
 /* Set values displayed by the UI.  */
@@ -199,14 +191,6 @@ setvals (void)
   gtk_spin_button_set_value (data.saturation, saturation);
   gtk_spin_button_set_value (data.screen_blur, screen_blur);
   gtk_spin_button_set_value (data.brightness, brightness);
-#if 0
-  gtk_spin_button_set_value (data.x1, current.xstart);
-  gtk_spin_button_set_value (data.y1, current.ystart);
-  gtk_spin_button_set_value (data.x2, current.xend);
-  gtk_spin_button_set_value (data.y2, current.yend);
-  gtk_spin_button_set_value (data.xdpi, (1 / current.xm) * 1000 + 0.00000005);
-  gtk_spin_button_set_value (data.ydpi, (1 / current.ym) * 1000 + 0.00000005);
-#endif
   initialized = 1;
 }
 
@@ -418,24 +402,6 @@ initgtk (int *argc, char **argv)
 static struct scr_to_img_parameters
 get_scr_to_img_parameters ()
 {
-#if 0
-  double a, b, c, d;
-  double ox,oy;
-  double num = sqrt ((current.xend - current.xstart) * (current.xend - current.xstart) * current.xm * current.xm
-		     + (current.yend - current.ystart) * (current.yend - current.ystart) * current.ym * current.ym)
-	       / (8.750032);	/* 8.75 pixels per screen in the LOC 1000DPI scans.  */
-  ox = (current.xend - current.xstart) * current.xm / (double) num;
-  oy = (current.yend - current.ystart) * current.ym / (double) num;
-
-  struct scr_to_img_parameters param;
-  param.center_x = current.xstart;
-  param.center_y = current.ystart;
-  param.coordinate1_x = ox / current.xm;
-  param.coordinate1_y = -oy / current.xm;
-  param.coordinate2_x = oy / current.ym;
-  param.coordinate2_y = ox / current.ym;
-  return param;
-#endif
   return current;
 }
 
@@ -886,10 +852,6 @@ main (int argc, char **argv)
       perror ("");
     }
   write_current (stdout);
-#if 0
-  scanf ("%lf %lf %lf %lf %lf %lf %lf", &current.xstart, &current.ystart, &current.xend, &current.yend, &num,
-	 &current.xm, &current.ym);
-#endif
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;
