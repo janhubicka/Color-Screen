@@ -16757,6 +16757,7 @@ fi
 
 fi
 
+gtkgui="no"
 # Check whether --enable-gtkgui was given.
 if test "${enable_gtkgui+set}" = set; then :
   enableval=$enable_gtkgui;  gtkgui = "yes"

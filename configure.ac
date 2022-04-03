@@ -30,6 +30,7 @@ AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
  [ echo " * * * try option --with-netpbm=PATH"])
 fi
 
+gtkgui="no"
 AC_ARG_ENABLE(gtkgui,
  [  --with-gtkgui      enable gtkgui],
  [ gtkgui = "yes" ],
