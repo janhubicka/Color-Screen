@@ -1,6 +1,7 @@
 #ifndef RENDER_H
 #define RENDER_H
 #include <math.h>
+#include <algorithm>
 #include <netpbm/pgm.h>
 #include <netpbm/ppm.h>
 #include "scr-to-img.h"
@@ -340,13 +341,6 @@ double
 render::sample_img_square (double xc, double yc, double x1, double y1, double x2, double y2)
 {
   double acc = 0, weights = 0;
-#if 0
-  /* Sampling whole patch leads to poor saturation.  */
-  x1 *= 0.5;
-  y1 *= 0.5;
-  x2 *= 0.5;
-  y2 *= 0.5;
-#endif
   int xmin = std::max ((int)(std::min (std::min (std::min (xc - x1, xc + x1), xc - x2), xc + x2) - 0.5), 0);
   int xmax = std::min ((int)ceil (std::max(std::max (std::max (xc - x1, xc + x1), xc - x2), xc + x2) + 0.5), m_img.width - 1);
   /* If the resolution is too small, just sample given point.  */
