@@ -1,5 +1,5 @@
 #include <assert.h>
-#include "render-interpolate.h"
+#include "include/render-interpolate.h"
 
 render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval)
    : render_to_scr (param, img, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_precise (false), m_screen (NULL), m_adjust_luminosity (NULL)

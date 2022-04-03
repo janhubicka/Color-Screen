@@ -1,5 +1,5 @@
 #include <cassert>
-#include "render.h"
+#include "include/render.h"
 static double lookup_table_uses;
 static double out_lookup_table_uses;
 static int lookup_table_maxval;

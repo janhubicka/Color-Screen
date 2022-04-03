@@ -1,5 +1,5 @@
 #include <math.h>
-#include "screen.h"
+#include "include/screen.h"
 
 /* Produce empty screen.  */
 void

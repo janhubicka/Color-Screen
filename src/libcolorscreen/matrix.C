@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <math.h>
-#include "matrix.h"
+#include "include/matrix.h"
 
 /* Simple unit test that inversion works. */
 int

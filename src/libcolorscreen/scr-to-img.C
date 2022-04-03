@@ -1,5 +1,5 @@
 #include <algorithm>
-#include "scr-to-img.h"
+#include "include/scr-to-img.h"
 
 /* Initilalize the translation matrix to PARAM.  */
 void

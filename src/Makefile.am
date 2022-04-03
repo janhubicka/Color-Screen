@@ -1,0 +1,1 @@
+SUBDIRS = libcolorscreen gtkgui

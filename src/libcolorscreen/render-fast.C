@@ -1,4 +1,4 @@
-#include "render-fast.h"
+#include "include/render-fast.h"
 
 render_fast::render_fast (scr_to_img_parameters param, image_data &img, int dst_maxval)
  : render_to_scr (param, img, dst_maxval)
