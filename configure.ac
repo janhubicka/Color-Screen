@@ -30,19 +30,16 @@ AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
  [ echo " * * * try option --with-netpbm=PATH"])
 fi
 
-gtkgui="no"
-AC_ARG_ENABLE(gtkgui,
- [  --with-gtkgui      enable gtkgui],
- [ gtkgui = "yes" ],
- [ gtkgui = "no" ])
-if test "$gtkgui" != "no"; then
+do_gtkgui=no
+AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
+if test "$do_gtkgui" != "no"; then
   AC_CONFIG_HEADERS([src/gtkgui/config.h])
   PKG_CHECK_MODULES([BARVENI_BIN], [
     glib-2.0
     gtk+-2.0
   ])
 fi
-AM_CONDITIONAL([gtkgui], [test "$gtkgui" != "no"])
+AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile])
 
 AC_OUTPUT
