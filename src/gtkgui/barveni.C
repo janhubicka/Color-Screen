@@ -12,12 +12,7 @@
 #include <stdbool.h>
 
 #include "config.h"
-#include "../libcolorscreen/include/matrix.h"
-#include "../libcolorscreen/include/scr-to-img.h"
-#include "../libcolorscreen/include/render-fast.h"
-#include "../libcolorscreen/include/screen.h"
-#include "../libcolorscreen/include/render-superposeimg.h"
-#include "../libcolorscreen/include/render-interpolate.h"
+#include "../libcolorscreen/include/colorscreen.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 400
