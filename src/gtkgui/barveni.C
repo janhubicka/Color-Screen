@@ -8,10 +8,10 @@
 #include <netpbm/ppm.h>
 #include <math.h>
 #include <cairo.h>
-#include <gtkimageviewer-2.0/gtk-image-viewer.h>
 #include <stdbool.h>
 
 #include "config.h"
+#include "gtk-image-viewer.h"
 #include "../libcolorscreen/include/colorscreen.h"
 
 #define UNDOLEVELS 100 
