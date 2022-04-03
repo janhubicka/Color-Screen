@@ -8,10 +8,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-PKG_CHECK_MODULES([BARVENI_BIN], [
-    glib-2.0
-    gtk+-2.0
-])
+CXXFLAGS="-Ofast"
 AC_ARG_WITH(netpbm,
  [  --with-netpbm=PATH      enter the PATH to netpbm package],
  [ if test "$withval" != "no"; then
@@ -31,15 +28,19 @@ LDFLAGS="-lm $LDFLAGS"
 AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
  [ echo " * * * try option --with-netpbm=PATH"])
 fi
-#AC_SEARCH_LIBS(gtk_image_viewer_redraw,[gtk_image_viewer],[check_image_viewer_h="gtkimageviewer-2.0/gtk-image-viewer.h"],
- #[ echo "gtkimageviewer needed"])
-AC_CONFIG_HEADERS([src/gtkgui/config.h])
-#AC_DEFINE_UNQUOTED([DATADIR], ["$datadir"], [Data directory.])
 
-CXXFLAGS="-Ofast"
-
-AC_CONFIG_MACRO_DIR([m4])
-
+AC_ARG_ENABLE(gtkgui,
+ [  --with-gtkgui      enable gtkgui],
+ [ gtkgui = "yes" ],
+ [ gtkgui = "no" ])
+if test "$gtkgui" != "no"; then
+  AC_CONFIG_HEADERS([src/gtkgui/config.h])
+  PKG_CHECK_MODULES([BARVENI_BIN], [
+    glib-2.0
+    gtk+-2.0
+  ])
+fi
+AM_CONDITIONAL([gtkgui], [test "$gtkgui" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile])
 
 AC_OUTPUT

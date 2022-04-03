@@ -588,6 +588,8 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
+gtkgui_FALSE
+gtkgui_TRUE
 BARVENI_BIN_LIBS
 BARVENI_BIN_CFLAGS
 PKG_CONFIG_LIBDIR
@@ -691,6 +693,7 @@ enable_option_checking
 enable_silent_rules
 enable_dependency_tracking
 with_netpbm
+enable_gtkgui
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1328,6 +1331,7 @@ Optional Features:
                           do not reject slow dependency extractors
   --disable-dependency-tracking
                           speeds up one-time build
+  --with-gtkgui      enable gtkgui
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -4198,124 +4202,7 @@ $as_echo "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for BARVENI_BIN" >&5
-$as_echo_n "checking for BARVENI_BIN... " >&6; }
-
-if test -n "$BARVENI_BIN_CFLAGS"; then
-    pkg_cv_BARVENI_BIN_CFLAGS="$BARVENI_BIN_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
-    glib-2.0
-    gtk+-2.0
-\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "
-    glib-2.0
-    gtk+-2.0
-") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_BARVENI_BIN_CFLAGS=`$PKG_CONFIG --cflags "
-    glib-2.0
-    gtk+-2.0
-" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$BARVENI_BIN_LIBS"; then
-    pkg_cv_BARVENI_BIN_LIBS="$BARVENI_BIN_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
-    glib-2.0
-    gtk+-2.0
-\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "
-    glib-2.0
-    gtk+-2.0
-") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_BARVENI_BIN_LIBS=`$PKG_CONFIG --libs "
-    glib-2.0
-    gtk+-2.0
-" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "
-    glib-2.0
-    gtk+-2.0
-" 2>&1`
-        else
-	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "
-    glib-2.0
-    gtk+-2.0
-" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$BARVENI_BIN_PKG_ERRORS" >&5
-
-	as_fn_error $? "Package requirements (
-    glib-2.0
-    gtk+-2.0
-) were not met:
-
-$BARVENI_BIN_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
-and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
-and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
-else
-	BARVENI_BIN_CFLAGS=$pkg_cv_BARVENI_BIN_CFLAGS
-	BARVENI_BIN_LIBS=$pkg_cv_BARVENI_BIN_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-
-fi
+CXXFLAGS="-Ofast"
 
 # Check whether --with-netpbm was given.
 if test "${with_netpbm+set}" = set; then :
@@ -4394,15 +4281,143 @@ else
 fi
 
 fi
-#AC_SEARCH_LIBS(gtk_image_viewer_redraw,[gtk_image_viewer],[check_image_viewer_h="gtkimageviewer-2.0/gtk-image-viewer.h"],
- #[ echo "gtkimageviewer needed"])
-ac_config_headers="$ac_config_headers src/gtkgui/config.h"
 
-#AC_DEFINE_UNQUOTED([DATADIR], ["$datadir"], [Data directory.])
+# Check whether --enable-gtkgui was given.
+if test "${enable_gtkgui+set}" = set; then :
+  enableval=$enable_gtkgui;  gtkgui = "yes"
+else
+   gtkgui = "no"
+fi
 
-CXXFLAGS="-Ofast"
+if test "$gtkgui" != "no"; then
+  ac_config_headers="$ac_config_headers src/gtkgui/config.h"
 
 
+pkg_failed=no
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for BARVENI_BIN" >&5
+$as_echo_n "checking for BARVENI_BIN... " >&6; }
+
+if test -n "$BARVENI_BIN_CFLAGS"; then
+    pkg_cv_BARVENI_BIN_CFLAGS="$BARVENI_BIN_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
+    glib-2.0
+    gtk+-2.0
+  \""; } >&5
+  ($PKG_CONFIG --exists --print-errors "
+    glib-2.0
+    gtk+-2.0
+  ") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_BARVENI_BIN_CFLAGS=`$PKG_CONFIG --cflags "
+    glib-2.0
+    gtk+-2.0
+  " 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$BARVENI_BIN_LIBS"; then
+    pkg_cv_BARVENI_BIN_LIBS="$BARVENI_BIN_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
+    glib-2.0
+    gtk+-2.0
+  \""; } >&5
+  ($PKG_CONFIG --exists --print-errors "
+    glib-2.0
+    gtk+-2.0
+  ") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_BARVENI_BIN_LIBS=`$PKG_CONFIG --libs "
+    glib-2.0
+    gtk+-2.0
+  " 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "
+    glib-2.0
+    gtk+-2.0
+  " 2>&1`
+        else
+	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "
+    glib-2.0
+    gtk+-2.0
+  " 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$BARVENI_BIN_PKG_ERRORS" >&5
+
+	as_fn_error $? "Package requirements (
+    glib-2.0
+    gtk+-2.0
+  ) were not met:
+
+$BARVENI_BIN_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
+and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
+and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
+else
+	BARVENI_BIN_CFLAGS=$pkg_cv_BARVENI_BIN_CFLAGS
+	BARVENI_BIN_LIBS=$pkg_cv_BARVENI_BIN_LIBS
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+fi
+fi
+ if test "$gtkgui" != "no"; then
+  gtkgui_TRUE=
+  gtkgui_FALSE='#'
+else
+  gtkgui_TRUE='#'
+  gtkgui_FALSE=
+fi
 
 ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile"
 
@@ -4542,6 +4557,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCC_TRUE}" && test -z "${am__fastdepCC_FALSE}"; then
   as_fn_error $? "conditional \"am__fastdepCC\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then
+  as_fn_error $? "conditional \"gtkgui\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 

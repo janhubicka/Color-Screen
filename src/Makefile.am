@@ -1,1 +1,4 @@
-SUBDIRS = libcolorscreen gtkgui
+SUBDIRS = libcolorscreen 
+if gtkgui
+  SUBDIRS += gtkgui
+endif
