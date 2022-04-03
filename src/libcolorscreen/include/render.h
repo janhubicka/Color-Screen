@@ -162,13 +162,13 @@ cap_color (double val, double weight, double *diff, int *cnt_neg, int *cnt_pos)
     return 0;
   if (val < 0)
     {
-      *cnt_neg++;
+      (*cnt_neg)++;
       *diff += val * weight;
       val = 0;
     }
   if (val > 1)
     {
-      *cnt_pos++;
+      (*cnt_pos)++;
       *diff += (val - 1) * weight;
       val = 1;
     }
