@@ -54,37 +54,60 @@ render::precompute_all ()
   out_lookup_table_uses ++;
 
   matrix4x4 color;
-  if (m_color_model == 1)
+#if 1
+  if (m_saturate != 1)
+    {
+      presaturation_matrix m (m_saturate);
+      color = m * color;
+    }
+#endif
+  if (m_color_model == 1 || m_color_model == 2)
     {
       if (m_scr_to_img.get_type () != Dufay)
 	{
 	  finlay_matrix m;
 	  xyz_srgb_matrix m2;
 	  matrix4x4 mm;
-	  mm = m * m2;
-	  mm.normalize_grayscale ();
-	  color = color * mm;
+	  mm = m2 * m;
+	  if (m_color_model != 2)
+	    mm.normalize_grayscale ();
+	  color = mm * color;
 	}
       else
 	{
 	  dufay_matrix m;
 	  xyz_srgb_matrix m2;
 	  matrix4x4 mm;
-	  mm = m * m2;
-	  mm.normalize_grayscale (1.02, 1.05, 1);
-	  color = color * mm;
+	  mm = m2 * m;
+	  if (m_color_model != 2)
+	    mm.normalize_grayscale (1.02, 1.05, 1);
+	  color = mm * color;
 	}
     }
-  if (m_color_model == 2)
+  if (m_color_model == 3)
     {
-      grading_matrix m;
-      color = color * m;
+      if (m_scr_to_img.get_type () != Dufay)
+	{
+	  adjusted_finlay_matrix m;
+	  xyz_srgb_matrix m2;
+	  matrix4x4 mm;
+	  mm = m2 * m;
+	  mm.normalize_grayscale ();
+	  color = mm * color;
+	}
+      else
+        {
+          grading_matrix m;
+          color = m * color;
+	}
     }
+#if 0
   if (m_saturate != 1)
     {
       saturation_matrix m (m_saturate);
-      color = color * m;
+      color = m * color;
     }
+#endif
   color = color * m_brightness;
   m_color_matrix = color;
 }

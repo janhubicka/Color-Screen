@@ -17,7 +17,7 @@ scr_to_img::set_parameters (scr_to_img_parameters param)
   basis.m_elements[1][0] = param.coordinate1_y;
   basis.m_elements[0][1] = param.coordinate2_x;
   basis.m_elements[1][1] = param.coordinate2_y;
-  m_matrix = translation * basis;
+  m_matrix = basis * translation;
 }
 
 /* Determine rectangular section of the screen to which the whole image

@@ -5,6 +5,7 @@
 #include <netpbm/pgm.h>
 #include <netpbm/ppm.h>
 #include "scr-to-img.h"
+#include "color.h"
 
 /* Scanned image descriptor.  */
 struct image_data
@@ -46,7 +47,7 @@ public:
   void precompute (double, double, double, double) {precompute_all ();}
   void precompute_img_range (double, double, double, double) {precompute_all ();}
     
-  static const int num_color_models = 3;
+  static const int num_color_models = 4;
 protected:
   inline double get_data (int x, int y);
   inline double get_data_red (int x, int y);
@@ -156,19 +157,19 @@ render::get_data_blue (int x, int y)
 }
 
 inline double
-cap_color (double val, double weight, double *diff, int *cnt_neg, int *cnt_pos)
+cap_color (double val, double weight, double *diff, double *cnt_neg, double *cnt_pos)
 {
   if (isnan (val))
-    return 0;
+    return 1;
   if (val < 0)
     {
-      (*cnt_neg)++;
+      *cnt_neg += weight;
       *diff += val * weight;
       val = 0;
     }
   if (val > 1)
     {
-      (*cnt_pos)++;
+      *cnt_pos += weight;
       *diff += (val - 1) * weight;
       val = 1;
     }
@@ -181,20 +182,22 @@ inline void
 render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 {
   double diff = 0;
-  int cnt_neg = 0;
-  int cnt_pos = 0;
+  double cnt_neg = 0;
+  double cnt_pos = 0;
+  double r1 =r, g1= g, b1 = b;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  double r2 =r, g2= g, b2 = b;
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
-  if (fabs (diff) > 0.001)
+  if (fabs (diff) > 0.0001)
     {
       double lum = r * rwght + g * gwght + b * bwght;
       if (lum + diff < 0.00001)
 	r = g = b = 0;
       else if (lum + diff > 0.99999)
 	r = g = b = 1;
-      else while (fabs (diff) > 0.001)
+      else while (fabs (diff) > 0.0001)
 	{
 	  if (diff > 0)
 	    {
