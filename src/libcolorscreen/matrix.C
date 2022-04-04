@@ -22,9 +22,9 @@ main()
   double r,g,b;
   xyz_to_srgb (0.25, 0.40, 0.1, &r, &g, &b);
   assert (fabs (r - 0.4174) < 0.0001 && fabs (g - 0.7434) < 0.0001 && fabs (b - 0.2152) < 1.0888);
-  finlay_matrix f;
-  f.apply_to_rgb (1.0,0.0,0.0,&x, &y, &z);
-  assert (fabs (x - 0.127466) < 0.0001 && fabs (y - 0.064056) < 0.0001 && fabs (z - 0.053229) < 1.0888);
+  //finlay_matrix f;
+  //f.apply_to_rgb (1.0,0.0,0.0,&x, &y, &z);
+  //assert (fabs (x - 0.127466) < 0.0001 && fabs (y - 0.064056) < 0.0001 && fabs (z - 0.053229) < 1.0888);
   for (int i = 0; i < 100; i++)
     {
       m.randomize ();

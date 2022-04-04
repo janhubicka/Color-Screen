@@ -32,7 +32,7 @@ public:
 };
 /* Matrix profile of Finlay taking screen
    Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
-#if 0
+#if 1
 class finlay_matrix : public matrix4x4
 {
 public:
@@ -45,6 +45,8 @@ public:
   { }
 };
 #else
+#if 0
+/* Based on second measurement. */
 class finlay_matrix : public matrix4x4
 {
 public:
@@ -53,6 +55,33 @@ public:
   : matrix4x4 (0.127466,0.147393,0.060898, 0,
 	       0.064056,0.200520,0.028144, 0,
 	       0.053229,0.028117,0.138672, 0,
+	       0,             0,              0,                  1)
+  { }
+};
+#endif
+#if 0
+/* Based on second measurement. */
+class finlay_matrix : public matrix4x4
+{
+public:
+  inline
+  finlay_matrix ()
+  : matrix4x4 (0.212141,0.276332,0.102475, 0,
+	       0.104568,0.378063,0.050871, 0,
+	       0.102475,0.057676,0.267136, 0,
+	       0,             0,              0,                  1)
+  { }
+};
+#endif
+/* Based on third measurement. */
+class finlay_matrix : public matrix4x4
+{
+public:
+  inline
+  finlay_matrix ()
+  : matrix4x4 (0.158378,0.191719,0.078963, 0,
+	       0.079810,0.258469,0.036660, 0,
+	       0.072299,0.038142,0.179542, 0,
 	       0,             0,              0,                  1)
   { }
 };

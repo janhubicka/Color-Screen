@@ -190,6 +190,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
+#if 0
   if (fabs (diff) > 0.0001)
     {
       double lum = r * rwght + g * gwght + b * bwght;
@@ -227,6 +228,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 	  b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
 	}
     }
+#endif
   *rr = m_out_lookup_table [(int)(r * 65535.5)];
   *gg = m_out_lookup_table [(int)(g * 65535.5)];
   *bb = m_out_lookup_table [(int)(b * 65535.5)];

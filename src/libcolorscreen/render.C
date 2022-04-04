@@ -48,7 +48,7 @@ render::precompute_all ()
     {
       assert (!out_lookup_table_uses);
       for (int i = 0; i < 65536; i++)
-	out_lookup_table[i] = pow ((i+ 0.5) / 65535, 1/2.2) * m_dst_maxval;
+	out_lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * m_dst_maxval;
     }
   lookup_table_uses ++;
   out_lookup_table_uses ++;
