@@ -53,7 +53,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 4);
 #define pixel(xo,yo,diag) m_params.precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-      #pragma omp parallel for
+      #pragma omp parallel for default (none) 
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
 	  {
@@ -78,7 +78,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
 #define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-      #pragma omp parallel for
+      #pragma omp parallel for default (none)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
 	  {

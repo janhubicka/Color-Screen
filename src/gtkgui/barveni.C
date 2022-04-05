@@ -141,7 +141,7 @@ openimage (int *argc, char **argv)
 static void
 getvals (void)
 {
-  scan.gamma = gtk_spin_button_get_value (data.gamma);
+  rparams.gamma = gtk_spin_button_get_value (data.gamma);
   rparams.saturation = gtk_spin_button_get_value (data.saturation);
   rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
   rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
@@ -154,7 +154,7 @@ static void
 setvals (void)
 {
   initialized = 0;
-  gtk_spin_button_set_value (data.gamma, scan.gamma);
+  gtk_spin_button_set_value (data.gamma, rparams.gamma);
   gtk_spin_button_set_value (data.saturation, rparams.saturation);
   gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
   gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
@@ -418,7 +418,7 @@ previewrender (GdkPixbuf ** pixbuf)
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
   rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
-#pragma omp parallel for // shared(render,pixels) private(my_ysize,my_xsize,rowstride)
+#pragma omp parallel for default(none) shared(render,pixels,step,my_ysize,my_xsize,rowstride)
   for (int y = 0; y < my_ysize; y ++)
     for (int x = 0; x < my_xsize; x ++)
       {
@@ -460,7 +460,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
  
-      #pragma omp parallel for //shared(render,bigpixels) private (pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -479,7 +479,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
 
-      #pragma omp parallel for
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -498,7 +498,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
 
-      #pragma omp parallel for
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -520,7 +520,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
 
-      #pragma omp parallel for
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -539,7 +539,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
       render.precompute_all ();
 
-      #pragma omp parallel for
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -718,14 +718,6 @@ cb_drag (GtkImage * image, GdkEventMotion * event, Data * data2)
 	       button1_pressed ? 1 : button3_pressed ? 3 : 0);
 }
 
-#define HEADER "screen_alignment_version: 1\nscreen_type: PagetFinlay\n"
-void write_current (FILE *out)
-{
-  fprintf (out, HEADER "screen_shift: %f %f\n", current.center_x, current.center_y);
-  fprintf (out, "coordinate_x: %f %f\n", current.coordinate1_x, current.coordinate1_y);
-  fprintf (out, "coordinate_y: %f %f\n", current.coordinate2_x, current.coordinate2_y);
-}
-
 
 G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
@@ -733,7 +725,7 @@ cb_save (GtkButton * button, Data * data)
   FILE *out;
   int scale = 4;
   out = fopen (paroname, "w");
-  write_current (out);
+  save_csp (out, current, rparams);
   fclose (out);
 
 #if 0
@@ -761,17 +753,6 @@ cb_save (GtkButton * button, Data * data)
 }
 
 
-bool
-expect_string (FILE *f, const char *str)
-{
-  int len = strlen (str);
-  char s[len];
-  if (fread (s, 1, strlen (str), f) != len
-      || memcmp (s, str, len))
-    return false;
-  return true;
-}
-
 int
 main (int argc, char **argv)
 {
@@ -792,26 +773,10 @@ main (int argc, char **argv)
   oname = argv[2];
   paroname = argv[3];
 
-  current.center_x = 0;
-  current.center_y = 0;
-  current.coordinate1_x = 5;
-  current.coordinate1_y = 0;
-  current.coordinate2_x = 0;
-  current.coordinate2_y = 5;
-  FILE *in = fopen (paroname, "r");
-  if (in
-      && expect_string (in, HEADER)
-      && expect_string (in, "screen_shift:")
-      && fscanf (in, "%lf %lf\n", &current.center_x, &current.center_y) == 2)
-    {
-      if (expect_string (in, "coordinate_x:")
-          && fscanf (in, "%lf %lf\n", &current.coordinate1_x, &current.coordinate1_y) == 2)
-	{
-          if (expect_string (in, "coordinate_y:")
-	      && fscanf (in, "%lf %lf\n", &current.coordinate2_x, &current.coordinate2_y))
-	    printf ("Reading ok\n");
-	}
-    }
+  FILE *in = fopen (paroname, "rt");
+  const char *error;
+  if (in && !load_csp (in, current, rparams, &error))
+    fprintf (stderr, "%s\n", error);
   if (in)
     fclose (in);
   else
@@ -819,7 +784,7 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
     }
-  write_current (stdout);
+  save_csp (stdout, current, rparams);
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;

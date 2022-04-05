@@ -2,7 +2,7 @@ include_HEADERS = include/matrix.h include/render-fast.h include/render.h includ
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C
+libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1
 
 noinst_PROGRAMS=matrix

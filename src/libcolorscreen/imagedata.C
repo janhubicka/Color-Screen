@@ -9,7 +9,6 @@ image_data::load_pnm (FILE *grayfile, FILE *colorfile, const char **error)
       *error = "Failed to read scan";
       return false;
     }
-  gamma=2.2;
   if (colorfile)
     {
       int rgb_width, rgb_height;

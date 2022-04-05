@@ -20,6 +20,9 @@ enum scr_type
 
 struct scr_to_img_parameters
 {
+  scr_to_img_parameters ()
+  : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5), type (Finlay)
+  { }
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
   double center_x, center_y;
   /* First coordinate vector:

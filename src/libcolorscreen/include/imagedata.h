@@ -14,8 +14,6 @@ struct image_data
   int width, height;
   /* Maximal value of the image data.  */
   gray maxval;
-  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
-  double gamma;
 
   /* Load image data from PNM file.  */
   bool load_pnm (FILE *graydata, FILE *colordata, const char **error);

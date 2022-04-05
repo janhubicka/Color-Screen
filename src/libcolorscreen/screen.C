@@ -309,7 +309,7 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
 	else
 	  weights[yy][xx] = 0;
       }
-  #pragma omp parallel for 
+  #pragma omp parallel for default(none) shared(radius,scr,weights,weight)
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {

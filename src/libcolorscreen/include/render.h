@@ -10,10 +10,12 @@
 struct render_parameters
 {
   render_parameters()
-  : presaturation (1), saturation (1), brightness (1), screen_blur_radius (1.3),
+  : gamma (2.2), presaturation (2), saturation (1), brightness (1), screen_blur_radius (1.3),
     color_model (1), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
+  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
+  double gamma;
   /* Pre-saturation increase (this works on data collected from the scan before
      color model is applied and is intended to compensate for loss of sharpness.  */
   double presaturation;
@@ -82,6 +84,9 @@ protected:
   /* Color matrix.  */
   matrix4x4 m_color_matrix;
 };
+
+bool save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam);
+bool load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, const char **error);
 
 /* Do no rendering of color screen.  */
 class render_img : public render

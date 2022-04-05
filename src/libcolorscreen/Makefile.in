@@ -134,7 +134,8 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libcolorscreen_la_LIBADD =
 am_libcolorscreen_la_OBJECTS = render.lo render-fast.lo \
-	render-interpolate.lo screen.lo scr-to-img.lo imagedata.lo
+	render-interpolate.lo screen.lo scr-to-img.lo imagedata.lo \
+	loadsave.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -162,7 +163,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/gtkgui
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/imagedata.Plo ./$(DEPDIR)/matrix.Po \
+am__depfiles_remade = ./$(DEPDIR)/imagedata.Plo \
+	./$(DEPDIR)/loadsave.Plo ./$(DEPDIR)/matrix.Po \
 	./$(DEPDIR)/render-fast.Plo ./$(DEPDIR)/render-interpolate.Plo \
 	./$(DEPDIR)/render.Plo ./$(DEPDIR)/scr-to-img.Plo \
 	./$(DEPDIR)/screen.Plo
@@ -344,7 +346,7 @@ include_HEADERS = include/matrix.h include/render-fast.h include/render.h includ
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C
+libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1
 matrix_SOURCES = matrix.C
 all: all-am
@@ -439,6 +441,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imagedata.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loadsave.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render-fast.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render-interpolate.Plo@am__quote@ # am--include-marker
@@ -628,6 +631,7 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/imagedata.Plo
+	-rm -f ./$(DEPDIR)/loadsave.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
 	-rm -f ./$(DEPDIR)/render-interpolate.Plo
@@ -680,6 +684,7 @@ installcheck-am:
 
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/imagedata.Plo
+	-rm -f ./$(DEPDIR)/loadsave.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
 	-rm -f ./$(DEPDIR)/render-interpolate.Plo

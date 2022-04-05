@@ -22,16 +22,16 @@ render::precompute_all ()
 {
   m_lookup_table = lookup_table;
   m_out_lookup_table = out_lookup_table;
-  if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_img.gamma
+  if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_params.gamma
       || lookup_table_gray_min != m_params.gray_min || lookup_table_gray_max != m_params.gray_max)
     {
       assert (!lookup_table_uses);
       assert (m_img.maxval < 65536);
-      lookup_table_gamma = m_img.gamma; 
+      lookup_table_gamma = m_params.gamma; 
       lookup_table_maxval = m_img.maxval;
       lookup_table_gray_min = m_params.gray_min; 
       lookup_table_gray_max = m_params.gray_max;
-      double gamma = std::min (std::max (m_img.gamma, 0.0001), 10.0);
+      double gamma = std::min (std::max (m_params.gamma, 0.0001), 10.0);
       double min = pow (m_params.gray_min / (double)m_img.maxval, gamma);
       double max = pow (m_params.gray_max / (double)m_img.maxval, gamma);
       if (min >= max)
@@ -94,9 +94,9 @@ render::precompute_all ()
           color = m * color;
 	}
     }
-  if (m_params.presaturation != 1)
+  if (m_params.saturation != 1)
     {
-      saturation_matrix m (m_params.presaturation);
+      saturation_matrix m (m_params.saturation);
       color = m * color;
     }
   color = color * m_params.brightness;
