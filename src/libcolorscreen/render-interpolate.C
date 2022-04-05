@@ -1,31 +1,9 @@
 #include <assert.h>
 #include "include/render-interpolate.h"
 
-render_interpolate::render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval)
-   : render_to_scr (param, img, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_precise (false), m_screen (NULL), m_adjust_luminosity (NULL)
+render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
+   : render_to_scr (param, img, rparam, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_screen (NULL)
 {
-}
-
-void
-render_interpolate::set_screen (double radius)
-{
-  static screen blured_screen;
-  static double r = -1;
-  static enum scr_type t;
-  double x, y, x2, y2;
-  m_scr_to_img.to_scr (0, 0, &x, &y);
-  m_scr_to_img.to_scr (1, 0, &x2, &y2);
-  radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
-
-  if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
-    {
-      screen *s = new screen;
-      s->initialize (m_scr_to_img.get_type ());
-      blured_screen.initialize_with_blur (*s, radius);
-      t = m_scr_to_img.get_type ();
-      r = radius;
-    }
-  m_screen = &blured_screen;
 }
 
 flatten_attr void
@@ -33,6 +11,27 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
 {
   assert (!m_prec_red);
   render::precompute (xmin, ymin, xmax, ymax);
+  if (m_params.screen_compensation)
+    {
+      static screen blured_screen;
+      static double r = -1;
+      static enum scr_type t;
+      double x, y, x2, y2;
+      double radius = m_params.screen_blur_radius;
+      m_scr_to_img.to_scr (0, 0, &x, &y);
+      m_scr_to_img.to_scr (1, 0, &x2, &y2);
+      radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+
+      if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
+	{
+	  screen *s = new screen;
+	  s->initialize (m_scr_to_img.get_type ());
+	  blured_screen.initialize_with_blur (*s, radius);
+	  t = m_scr_to_img.get_type ();
+	  r = radius;
+	}
+      m_screen = &blured_screen;
+    }
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
   m_prec_xshift = -(xmin - 4);
@@ -52,7 +51,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 4);
-#define pixel(xo,yo,diag) m_precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
+#define pixel(xo,yo,diag) m_params.precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
@@ -76,7 +75,7 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
       m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
       m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
-#define pixel(xo,yo,width,height) m_precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
+#define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
@@ -197,7 +196,7 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
       //set_color_luminosity (red, green, blue, lum / llum * (red + green + blue)*0.333, r, g, b);
 #endif
     }
-  else if (m_adjust_luminosity)
+  else if (m_params.adjust_luminosity)
     set_color_luminosity (red, green, blue, get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift), r, g, b);
   else
     set_color (red, green, blue, r, g, b);

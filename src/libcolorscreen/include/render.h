@@ -6,6 +6,37 @@
 #include "imagedata.h"
 #include "color.h"
 
+/* Parameters of rendering algorithms.  */
+struct render_parameters
+{
+  render_parameters()
+  : presaturation (1), saturation (1), brightness (1), screen_blur_radius (1.3),
+    color_model (1), gray_min (0), gray_max (255), precise (true),
+    screen_compensation (true), adjust_luminosity (false)
+  {}
+  /* Pre-saturation increase (this works on data collected from the scan before
+     color model is applied and is intended to compensate for loss of sharpness.  */
+  double presaturation;
+  /* Saturation increase.  */
+  double saturation;
+  /* Brightness adjustments.  */
+  double brightness;
+  /* Radius (in image pixels) the screen should be blured.  */
+  double screen_blur_radius;
+  /* If true apply color model of Finlay taking plate.  */
+  int color_model;
+  /* Gray range to boot to full contrast.  */
+  int gray_min, gray_max;
+
+  /* The following is used by interpolated rendering only.  */
+  /* If true use precise data collection.  */
+  bool precise;
+  /* If true try to compensate for screen.  */
+  bool screen_compensation;
+  /* If true use luminosity from scan.  */
+  bool adjust_luminosity;
+};
+
 /* Base class for rendering routines.  It holds
      - scr-to-img transformation info
      - the scanned image data
@@ -14,7 +45,7 @@
 class render
 {
 public:
-  render (scr_to_img_parameters param, image_data &img, int dstmaxval);
+  render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval);
   ~render ();
   inline double get_img_pixel (double x, double y);
   inline void get_img_rgb_pixel (double x, double y, double *r, double *g, double *b);
@@ -23,11 +54,6 @@ public:
   inline double sample_scr_square (double xc, double yc, double w, double h);
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
-  void set_saturation (double s) { m_saturate = s; }
-  void set_presaturation (double s) { m_presaturate = s; }
-  void set_brightness (double b) { m_brightness = b; }
-  void set_gray_range (int min, int max);
-  void set_color_model (int m) { m_color_model = m; }
   void precompute_all ();
   void precompute (double, double, double, double) {precompute_all ();}
   void precompute_img_range (double, double, double, double) {precompute_all ();}
@@ -45,23 +71,14 @@ protected:
   image_data m_img;
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
+  /* Rendering parameters.  */
+  render_parameters m_params;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
   double *m_lookup_table;
   /* Translates back to gamma 2.  */
   double *m_out_lookup_table;
-  /* Pre-saturation increase (this works on data collected from the scan before
-     color model is applied and is intended to compensate for loss of sharpness.  */
-  double m_presaturate;
-  /* Saturation increase.  */
-  double m_saturate;
-  /* Brightness adjustments.  */
-  double m_brightness;
-  /* Gray range to boot to full contrast.  */
-  int m_gray_min, m_gray_max;
-  /* If true apply color model of Finlay taking plate.  */
-  int m_color_model;
   /* Color matrix.  */
   matrix4x4 m_color_matrix;
 };
@@ -71,8 +88,8 @@ protected:
 class render_to_scr : public render
 {
 public:
-  render_to_scr (scr_to_img_parameters param, image_data &img, int dstmaxval)
-    : render (param, img, dstmaxval)
+  render_to_scr (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+    : render (param, img, rparam, dstmaxval)
   {
     m_scr_to_img.get_range (m_img.width, m_img.height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
   }
@@ -94,17 +111,6 @@ protected:
   int m_scr_xshift, m_scr_yshift;
   int m_scr_width, m_scr_height;
 };
-
-/* Set range of input grayscale that should be boosted to full contrast.  */
-
-inline void
-render::set_gray_range (int min, int max)
-{
-  m_gray_min = min;
-  if (min == max)
-    max++;
-  m_gray_max = max;
-}
 
 /* Cubic interpolation helper.  */
 
@@ -144,7 +150,8 @@ render::get_data_blue (int x, int y)
   return m_lookup_table [m_img.rgbdata[y][x].b];
 }
 
-inline double
+#if 0
+static inline double
 cap_color (double val, double weight, double *diff, double *cnt_neg, double *cnt_pos)
 {
   if (isnan (val))
@@ -163,6 +170,7 @@ cap_color (double val, double weight, double *diff, double *cnt_neg, double *cnt
     }
   return val;
 }
+#endif
 
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
 
@@ -175,10 +183,13 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
   double r1 =r, g1= g, b1 = b;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   double r2 =r, g2= g, b2 = b;
+  r = std::min (1.0, std::max (0.0, r));
+  g = std::min (1.0, std::max (0.0, g));
+  b = std::min (1.0, std::max (0.0, b));
+#if 0
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
-#if 0
   if (fabs (diff) > 0.0001)
     {
       double lum = r * rwght + g * gwght + b * bwght;

@@ -9,18 +9,12 @@ static double lookup_table_gamma;
 static double lookup_table[65536];
 static double out_lookup_table[65536];
 
-render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
+render::render (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
 {
   m_img = img;
   m_scr_to_img.set_parameters (param);
   m_dst_maxval = dst_maxval;
-  m_gray_min = 0;
-  m_gray_max = img.maxval;
-  m_lookup_table = NULL;
-  m_out_lookup_table = NULL;
-  m_saturate = 1;
-  m_presaturate = 1;
-  m_brightness = 1;
+  m_params = params;
 }
 
 void
@@ -29,17 +23,17 @@ render::precompute_all ()
   m_lookup_table = lookup_table;
   m_out_lookup_table = out_lookup_table;
   if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_img.gamma
-      || lookup_table_gray_min != m_gray_min || lookup_table_gray_max != m_gray_max)
+      || lookup_table_gray_min != m_params.gray_min || lookup_table_gray_max != m_params.gray_max)
     {
       assert (!lookup_table_uses);
       assert (m_img.maxval < 65536);
       lookup_table_gamma = m_img.gamma; 
       lookup_table_maxval = m_img.maxval;
-      lookup_table_gray_min = m_gray_min; 
-      lookup_table_gray_max = m_gray_max;
+      lookup_table_gray_min = m_params.gray_min; 
+      lookup_table_gray_max = m_params.gray_max;
       double gamma = std::min (std::max (m_img.gamma, 0.0001), 10.0);
-      double min = pow (m_gray_min / (double)m_img.maxval, gamma);
-      double max = pow (m_gray_max / (double)m_img.maxval, gamma);
+      double min = pow (m_params.gray_min / (double)m_img.maxval, gamma);
+      double max = pow (m_params.gray_max / (double)m_img.maxval, gamma);
       if (min >= max)
 	max += 0.0001;
       for (int i = 0; i <= m_img.maxval; i++)
@@ -55,12 +49,12 @@ render::precompute_all ()
   out_lookup_table_uses ++;
 
   matrix4x4 color;
-  if (m_presaturate != 1)
+  if (m_params.presaturation != 1)
     {
-      presaturation_matrix m (m_presaturate);
+      presaturation_matrix m (m_params.presaturation);
       color = m * color;
     }
-  if (m_color_model == 1 || m_color_model == 2)
+  if (m_params.color_model == 1 || m_params.color_model == 2)
     {
       if (m_scr_to_img.get_type () != Dufay)
 	{
@@ -68,7 +62,7 @@ render::precompute_all ()
 	  xyz_srgb_matrix m2;
 	  matrix4x4 mm;
 	  mm = m2 * m;
-	  if (m_color_model != 2)
+	  if (m_params.color_model != 2)
 	    mm.normalize_grayscale ();
 	  color = mm * color;
 	}
@@ -78,12 +72,12 @@ render::precompute_all ()
 	  xyz_srgb_matrix m2;
 	  matrix4x4 mm;
 	  mm = m2 * m;
-	  if (m_color_model != 2)
+	  if (m_params.color_model != 2)
 	    mm.normalize_grayscale (1.02, 1.05, 1);
 	  color = mm * color;
 	}
     }
-  if (m_color_model == 3)
+  if (m_params.color_model == 3)
     {
       if (m_scr_to_img.get_type () != Dufay)
 	{
@@ -100,12 +94,12 @@ render::precompute_all ()
           color = m * color;
 	}
     }
-  if (m_saturate != 1)
+  if (m_params.presaturation != 1)
     {
-      saturation_matrix m (m_saturate);
+      saturation_matrix m (m_params.presaturation);
       color = m * color;
     }
-  color = color * m_brightness;
+  color = color * m_params.brightness;
   m_color_matrix = color;
 }
 

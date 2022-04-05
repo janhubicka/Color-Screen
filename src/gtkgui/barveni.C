@@ -30,18 +30,11 @@ static void bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bi
 /* The graymap with original scan is stored here.  */
 static image_data scan;
 static int initialized = 0;
-static int mingray;
-static int maxgray = 0;
+static render_parameters rparams;
 
 /* Status of the main window.  */
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
-static double saturation = 1.0;
-static double presaturation = 1.8;
-static double brightness = 1.0;
-static double screen_blur = 1.2;
-static bool precise = true;
-static int color_model = 3;
 static bool color_display = false;
 
 static int display_type = 0;
@@ -136,8 +129,8 @@ openimage (int *argc, char **argv)
       fprintf (stderr, "%s\n", error);
       exit (1);
     }
-  mingray = 0;
-  maxgray = scan.maxval;
+  rparams.gray_min = 0;
+  rparams.gray_max = scan.maxval;
   fclose (in);
   if (rgbin)
     fclose (rgbin);
@@ -149,10 +142,10 @@ static void
 getvals (void)
 {
   scan.gamma = gtk_spin_button_get_value (data.gamma);
-  saturation = gtk_spin_button_get_value (data.saturation);
-  presaturation = gtk_spin_button_get_value (data.presaturation);
-  screen_blur = gtk_spin_button_get_value (data.screen_blur);
-  brightness = gtk_spin_button_get_value (data.brightness);
+  rparams.saturation = gtk_spin_button_get_value (data.saturation);
+  rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
+  rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
+  rparams.brightness = gtk_spin_button_get_value (data.brightness);
 }
 
 /* Set values displayed by the UI.  */
@@ -162,10 +155,10 @@ setvals (void)
 {
   initialized = 0;
   gtk_spin_button_set_value (data.gamma, scan.gamma);
-  gtk_spin_button_set_value (data.saturation, saturation);
-  gtk_spin_button_set_value (data.presaturation, presaturation);
-  gtk_spin_button_set_value (data.screen_blur, screen_blur);
-  gtk_spin_button_set_value (data.brightness, brightness);
+  gtk_spin_button_set_value (data.saturation, rparams.saturation);
+  gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
+  gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
+  gtk_spin_button_set_value (data.brightness, rparams.brightness);
   initialized = 1;
 }
 
@@ -222,12 +215,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (k == 'S')
     {
-      precise = true;
+      rparams.precise = true;
       display_scheduled = 1;
     }
   if (k == 's')
     {
-      precise = false;
+      rparams.precise = false;
       display_scheduled = 1;
     }
   if (k == 'd' && current.type != Dufay)
@@ -267,9 +260,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (k == 'm')
     {
-      color_model++;
-      if (color_model >= render::num_color_models)
-	color_model = 0;
+      rparams.color_model++;
+      if (rparams.color_model >= render::num_color_models)
+	rparams.color_model = 0;
       display_scheduled = 1;
     }
   if (k == ' ')
@@ -288,14 +281,14 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
       if (minx < maxx && miny < maxy)
 	{
-	  mingray = scan.maxval;
-	  maxgray = 0;
+	  rparams.gray_min = scan.maxval;
+	  rparams.gray_max = 0;
 	  for (int y = std::max ((int)(shift_y / scale_y), 0);
 	       y < std::min ((int)((shift_y + pysize) / scale_y), scan.height); y++)
 	     for (int x = minx; x < maxx; x++)
 	       {
-		 mingray = std::min ((int)scan.data[y][x], mingray);
-		 maxgray = std::max ((int)scan.data[y][x], maxgray);
+		 rparams.gray_min = std::min ((int)scan.data[y][x], rparams.gray_min);
+		 rparams.gray_max = std::max ((int)scan.data[y][x], rparams.gray_max);
 	       }
 	  display_scheduled = 1;
 	}
@@ -375,7 +368,7 @@ initgtk (int *argc, char **argv)
   return window;
 }
 
-static struct scr_to_img_parameters
+static struct scr_to_img_parameters &
 get_scr_to_img_parameters ()
 {
   return current;
@@ -414,15 +407,11 @@ previewrender (GdkPixbuf ** pixbuf)
 {
   int x, y;
   guint8 *pixels;
-  render_fast render (get_scr_to_img_parameters (), scan, 255);
+  render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
   double step = max_size / (double)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
-  render.set_saturation (saturation);
-  render.set_presaturation (presaturation);
-  render.set_brightness (brightness);
-  render.set_color_model (color_model);
   render.precompute_all ();
 
   gdk_pixbuf_unref (*pixbuf);
@@ -467,10 +456,9 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 
   if (display_type <= 1)
     {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, !display_type, display_type, 0.0);
+      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, !display_type, display_type);
       if (color_display)
 	render.set_color_display ();
-      render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
@@ -486,14 +474,9 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else if (display_type == 2)
     {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, 255, false, false, screen_blur);
+      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, false, false);
       if (color_display)
 	render.set_color_display ();
-      render.set_saturation (saturation);
-      render.set_presaturation (presaturation);
-      render.set_brightness (brightness);
-      render.set_color_model (color_model);
-      render.set_gray_range (mingray, maxgray);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
@@ -509,24 +492,10 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else if (display_type <= 5)
     {
-      render_interpolate render (get_scr_to_img_parameters (), scan, 255);
+      rparams.adjust_luminosity = (display_type == 4);
+      rparams.screen_compensation = (display_type == 5);
+      render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 255);
       screen screen;
-      if (display_type == 4)
-	{
-	  render.set_adjust_luminosity ();
-	}
-      else if (display_type == 5)
-	{
-          screen.initialize (current.type);
-          render.set_screen (screen_blur);	
-	}
-      render.set_saturation (saturation);
-      render.set_presaturation (presaturation);
-      render.set_brightness (brightness);
-      render.set_color_model (color_model);
-      render.set_gray_range (mingray, maxgray);
-      if (precise)
-        render.set_precise ();
       render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
@@ -546,11 +515,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
     }
   else
     {
-      render_fast render (get_scr_to_img_parameters (), scan, 255);
-      render.set_presaturation (presaturation);
-      render.set_brightness (brightness);
-      render.set_color_model (color_model);
-      render.set_gray_range (mingray, maxgray);
+      render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
       render.precompute_all ();
 
       for (int y = 0; y < pysize; y++)
@@ -749,7 +714,8 @@ cb_save (GtkButton * button, Data * data)
   write_current (out);
   fclose (out);
 
-  render_interpolate render (get_scr_to_img_parameters (), scan, 65535);
+#if 0
+  render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 65535);
   render.precompute_all ();
   /*render_fast render (get_scr_to_img_parameters (), scan, 65535);*/
   out = fopen (oname, "w");
@@ -769,6 +735,7 @@ cb_save (GtkButton * button, Data * data)
     }
   free (outrow);
   fclose (out);
+#endif
 }
 
 

@@ -5,8 +5,8 @@
 class render_superpose_img : public render
 {
 public:
-  inline render_superpose_img (scr_to_img_parameters param, image_data &data, int dst_maxval, bool empty, bool preview, double radius)
-   : render (param, data, dst_maxval),
+  inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval, bool empty, bool preview)
+   : render (param, data, rparam, dst_maxval),
      m_color (false)
   { 
     double x,x2, y, y2;
@@ -38,6 +38,7 @@ public:
         static screen blured_screen;
 	static double r = -1;
 	static enum scr_type t;
+	double radius = m_params.screen_blur_radius;
 	m_scr_to_img.to_scr (0, 0, &x, &y);
 	m_scr_to_img.to_scr (1, 0, &x2, &y2);
 	radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));

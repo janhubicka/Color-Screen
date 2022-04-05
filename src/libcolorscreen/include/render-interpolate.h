@@ -6,7 +6,7 @@
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters param, image_data &img, int dst_maxval);
+  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
   ~render_interpolate ();
   void precompute (double xmin, double ymin, double xmax, double ymax);
   void render_pixel (double x, double y, int *r, int *g, int *b)
@@ -29,21 +29,11 @@ public:
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
     precompute (-xshift, -yshift, -xshift + width, -yshift + height);
   }
-  void set_precise ()
-  {
-    m_precise = true;
-  }
-  void set_adjust_luminosity ()
-  {
-    m_adjust_luminosity = true;
-  }
-  void set_screen (double radius);
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
   double *m_prec_red;
   double *m_prec_green;
   double *m_prec_blue;
-  bool m_precise, m_adjust_luminosity;
   screen *m_screen;
 
   double &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
@@ -65,7 +55,7 @@ private:
   {
      unsigned int xx = x + y;
      unsigned int yy = -x + y;
-     return prec_green (xx / 2 /*+ (yy&1)*/, yy);
+     return prec_green (xx / 2, yy);
   }
   /* Green pixel in diagonal coordinates.  */
   double prec_diag_red (unsigned int x, unsigned int y)
