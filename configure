@@ -16678,7 +16678,7 @@ $as_echo "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
-CXXFLAGS="-Ofast"
+CXXFLAGS="-Ofast -fopenmp"
 
 # Check whether --with-netpbm was given.
 if test "${with_netpbm+set}" = set; then :

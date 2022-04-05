@@ -405,7 +405,6 @@ my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
 static void
 previewrender (GdkPixbuf ** pixbuf)
 {
-  int x, y;
   guint8 *pixels;
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
@@ -419,9 +418,9 @@ previewrender (GdkPixbuf ** pixbuf)
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
   rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
-
-  for (y = 0; y < my_ysize; y ++)
-    for (x = 0; x < my_xsize; x ++)
+#pragma omp parallel for // shared(render,pixels) private(my_ysize,my_xsize,rowstride)
+  for (int y = 0; y < my_ysize; y ++)
+    for (int x = 0; x < my_xsize; x ++)
       {
 	int red, green, blue;
 	render.render_pixel (x * step, y * step, &red, &green, &blue);
@@ -461,7 +460,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
  
-      #pragma omp parallel for
+      #pragma omp parallel for //shared(render,bigpixels) private (pysize, pxsize,bigscale,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;

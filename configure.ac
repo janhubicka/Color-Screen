@@ -9,7 +9,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-CXXFLAGS="-Ofast"
+CXXFLAGS="-Ofast -fopenmp"
 AC_ARG_WITH(netpbm,
  [  --with-netpbm=PATH      enter the PATH to netpbm package],
  [ if test "$withval" != "no"; then
