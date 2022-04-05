@@ -2,25 +2,9 @@
 #define RENDER_H
 #include <math.h>
 #include <algorithm>
-#include <netpbm/pgm.h>
-#include <netpbm/ppm.h>
 #include "scr-to-img.h"
+#include "imagedata.h"
 #include "color.h"
-
-/* Scanned image descriptor.  */
-struct image_data
-{
-  /* Grayscale scan.  */
-  gray **data;
-  /* Optional color scan.  */
-  pixel **rgbdata;
-  /* Dimensions of image data.  */
-  int width, height;
-  /* Maximal value of the image data.  */
-  int maxval;
-  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
-  double gamma;
-};
 
 /* Base class for rendering routines.  It holds
      - scr-to-img transformation info

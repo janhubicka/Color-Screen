@@ -28,9 +28,6 @@ static char *oname, *paroname;
 static void bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf);
 
 /* The graymap with original scan is stored here.  */
-static int xsize, ysize;
-static gray **graydata;
-static gray maxval;
 static image_data scan;
 static int initialized = 0;
 static int mingray;
@@ -116,59 +113,34 @@ cb_show_about (GtkButton * button, Data * data)
 static void
 openimage (int *argc, char **argv)
 {
-  FILE *in;
+  FILE *in, *rgbin = NULL;
+  const char *error;
   pgm_init (argc, argv);
-  ppm_init (argc, argv);
   in = fopen (argv[1], "r");
   if (!in)
     {
       perror (argv[1]);
       exit (1);
     }
-  graydata = pgm_readpgm (fopen (argv[1], "r"), &xsize, &ysize, &maxval);
-  if (!graydata)
-    {
-      fprintf (stderr, "Failed to read scan\n");
-      exit (1);
-    }
-  fclose (in);
-  scan.width = xsize;
-  scan.height = ysize;
-  scan.maxval = maxval;
-  scan.data = graydata;
-  scan.gamma = 2.2;
-  mingray = 0;
-  maxgray = maxval;
-  maxval++;
   if (*argc == 5)
     {
-      in = fopen (argv[4], "r");
-      if (!in)
+      rgbin = fopen (argv[4], "r");
+      if (!rgbin)
 	{
 	  perror (argv[4]);
 	  exit (1);
 	}
-      scan.rgbdata = ppm_readppm (fopen (argv[4], "r"), &xsize, &ysize, &maxval);
-      fclose (in);
-      if (!graydata)
-	{
-	  fprintf (stderr, "Failed to read RGB scan\n");
-	  exit (1);
-	}
-      if (scan.width != xsize || scan.height != ysize)
-	{
-	  fprintf (stderr, "scan and RGB scan must have same dimensions\n");
-	  exit (1);
-	}
-      if (scan.maxval != maxval)
-	{
-	  fprintf (stderr, "scan and RGB scan must have same bit depth\n");
-	  exit (1);
-	}
-      printf ("RGB data read\n");
     }
-  else
-    scan.rgbdata = NULL;
+  if (!scan.load_pnm (in, rgbin, &error))
+    {
+      fprintf (stderr, "%s\n", error);
+      exit (1);
+    }
+  mingray = 0;
+  maxgray = scan.maxval;
+  fclose (in);
+  if (rgbin)
+    fclose (rgbin);
 }
 
 /* Get values displayed in the UI.  */
@@ -316,7 +288,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
       if (minx < maxx && miny < maxy)
 	{
-	  mingray = maxval;
+	  mingray = scan.maxval;
 	  maxgray = 0;
 	  for (int y = std::max ((int)(shift_y / scale_y), 0);
 	       y < std::min ((int)((shift_y + pysize) / scale_y), scan.height); y++)
@@ -378,7 +350,7 @@ initgtk (int *argc, char **argv)
 
   // Set the scroll region and zoom range
   gtk_image_viewer_set_scroll_region (GTK_IMAGE_VIEWER (image_viewer),
-				      20, 20, xsize - 20, ysize - 20);
+				      20, 20, scan.width - 20, scan.height - 20);
   gtk_image_viewer_set_zoom_range (GTK_IMAGE_VIEWER (image_viewer), 0.1, 64);
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (image_viewer), 4.0,
 					4.0, 64, 64);
@@ -634,11 +606,11 @@ cb_press_small (GtkImage * image, GdkEventButton * event, Data * data)
     {
       offsetx =
 	8 +
-	(event->x) * xsize * bigscale /
+	(event->x) * scan.width * bigscale /
 	gdk_pixbuf_get_width (data->smallpixbuf);
       offsety =
 	8 +
-	(event->y) * ysize * bigscale /
+	(event->y) * scan.height * bigscale /
 	gdk_pixbuf_get_height (data->smallpixbuf);
     }
 }
@@ -863,8 +835,8 @@ main (int argc, char **argv)
   setvals ();
   initialized = 1;
   data.smallpixbuf =
-    gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, (xsize) / SCALE + 1,
-		    (ysize) / SCALE + 1);
+    gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, (scan.width) / SCALE + 1,
+		    (scan.height) / SCALE + 1);
   /* Show main window and start main loop */
   gtk_widget_show (window);
   int pxsize = 1024/*gdk_pixbuf_get_width (data.image_viewer);*/;
