@@ -19,6 +19,7 @@ render::render (scr_to_img_parameters param, image_data &img, int dst_maxval)
   m_lookup_table = NULL;
   m_out_lookup_table = NULL;
   m_saturate = 1;
+  m_presaturate = 1;
   m_brightness = 1;
 }
 
@@ -54,13 +55,11 @@ render::precompute_all ()
   out_lookup_table_uses ++;
 
   matrix4x4 color;
-#if 1
-  if (m_saturate != 1)
+  if (m_presaturate != 1)
     {
-      presaturation_matrix m (m_saturate);
+      presaturation_matrix m (m_presaturate);
       color = m * color;
     }
-#endif
   if (m_color_model == 1 || m_color_model == 2)
     {
       if (m_scr_to_img.get_type () != Dufay)
@@ -101,13 +100,11 @@ render::precompute_all ()
           color = m * color;
 	}
     }
-#if 0
   if (m_saturate != 1)
     {
       saturation_matrix m (m_saturate);
       color = m * color;
     }
-#endif
   color = color * m_brightness;
   m_color_matrix = color;
 }

@@ -179,7 +179,7 @@
                       <object class="GtkLabel" id="label3">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">saturation</property>
+                        <property name="label" translatable="yes">presaturation</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -188,7 +188,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="saturation">
+                      <object class="GtkSpinButton" id="presaturation">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
@@ -213,7 +213,7 @@
                       <object class="GtkLabel" id="label4">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">y2</property>
+                        <property name="label" translatable="yes">saturation</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -222,7 +222,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="y2">
+                      <object class="GtkSpinButton" id="saturation">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>

@@ -40,6 +40,7 @@ public:
   inline double fast_get_img_pixel (double x, double y);
   inline double get_img_pixel_scr (double x, double y);
   void set_saturation (double s) { m_saturate = s; }
+  void set_presaturation (double s) { m_presaturate = s; }
   void set_brightness (double b) { m_brightness = b; }
   void set_gray_range (int min, int max);
   void set_color_model (int m) { m_color_model = m; }
@@ -66,6 +67,9 @@ protected:
   double *m_lookup_table;
   /* Translates back to gamma 2.  */
   double *m_out_lookup_table;
+  /* Pre-saturation increase (this works on data collected from the scan before
+     color model is applied and is intended to compensate for loss of sharpness.  */
+  double m_presaturate;
   /* Saturation increase.  */
   double m_saturate;
   /* Brightness adjustments.  */
