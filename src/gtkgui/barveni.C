@@ -454,13 +454,33 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
 
 
-  if (display_type <= 1)
+  if (display_type == 0)
     {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, !display_type, display_type);
+      render_img render (get_scr_to_img_parameters (), scan, rparams, 255);
+      if (color_display)
+	render.set_color_display ();
+      render.precompute_all ();
+ 
+      #pragma omp parallel for
+      for (int y = 0; y < pysize; y++)
+	{
+	  double py = (y + yoffset) / bigscale;
+	  for (int x = 0; x < pxsize; x++)
+	    {
+	      int r, g, b;
+	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
+	    }
+	}
+    }
+  else if (display_type == 1)
+    {
+      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, false, true);
       if (color_display)
 	render.set_color_display ();
       render.precompute_all ();
 
+      #pragma omp parallel for
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -479,6 +499,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
 
+      #pragma omp parallel for
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -500,6 +521,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	  			   (pxsize+xoffset) / bigscale, 
 				   (pysize+yoffset) / bigscale);
 
+      #pragma omp parallel for
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;
@@ -518,6 +540,7 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
       render.precompute_all ();
 
+      #pragma omp parallel for
       for (int y = 0; y < pysize; y++)
 	{
 	  double py = (y + yoffset) / bigscale;

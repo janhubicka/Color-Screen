@@ -95,7 +95,7 @@ render_superpose_img::render_pixel_img (double x, double y, int *r, int *g, int 
   double rr, gg, bb;
   double scr_x, scr_y;
   m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
-  render_superpose_img::sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
+  sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
   set_color (rr, gg, bb, r,g,b);
 }
 flatten_attr void

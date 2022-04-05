@@ -83,6 +83,27 @@ protected:
   matrix4x4 m_color_matrix;
 };
 
+/* Do no rendering of color screen.  */
+class render_img : public render
+{
+public:
+  render_img (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+    : render (param, img, rparam, dstmaxval), m_color (false)
+  { }
+  void set_color_display () { if (m_img.rgbdata) m_color = 1; }
+  void inline render_pixel_img (double x, double y, int *r, int *g, int *b)
+  {
+    double gg, rr, bb;
+    if (!m_color)
+      rr = gg = bb = get_img_pixel (x, y);
+    else
+      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
+    set_color (rr, gg, bb, r, g, b);
+  }
+private:
+  bool m_color;
+};
+
 /* Base class for renderes tha works in screen coordinates (so output image is
    geometrically corrected.  */
 class render_to_scr : public render
@@ -282,7 +303,6 @@ inline double
 render::get_img_pixel (double xp, double yp)
 {
   double val;
-  //return fast_get_img_pixel (xp, yp);
 
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= 0.5;
