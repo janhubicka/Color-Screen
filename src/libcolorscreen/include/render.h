@@ -399,8 +399,8 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
     {
       int ymin = std::max ((int)(std::min (std::min (std::min (yc - y1, yc + y1), yc - y2), yc + y2) - 0.5), 0);
       int ymax = std::min ((int)ceil (std::max(std::max (std::max (yc - y1, yc + y1), yc - y2), yc + y2) + 0.5), m_img.height - 1);
-      matrix2x2 base (x1, x2,
-		      y1, y2);
+      matrix2x2<double> base (x1, x2,
+			      y1, y2);
       matrix2x2 inv = base.invert ();
       for (int y = ymin; y <= ymax; y++)
 	{

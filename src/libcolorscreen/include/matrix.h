@@ -98,12 +98,11 @@ public:
       }
   }
 };
-
 /* 2x2 matrix with inverse opration.  */
+template<typename T>
 class matrix2x2 : public matrix<double, 2>
 {
 public:
-  typedef double T;
   inline
   matrix2x2 (T m00, T m10,
 	     T m01, T m11)
@@ -187,11 +186,11 @@ public:
   inline void
   inverse_perspective_transform (T x, T y, T &xr, T &yr)
   {
-    matrix2x2 m (m_elements[0][0] - m_elements[2][0] * x,
-		 m_elements[0][1] - m_elements[2][1] * x,
-		 m_elements[1][0] - m_elements[3][0] * y,
-		 m_elements[1][1] - m_elements[3][1] * y);
-    matrix2x2 m2 = m.invert ();
+    matrix2x2<double> m (m_elements[0][0] - m_elements[2][0] * x,
+	         m_elements[0][1] - m_elements[2][1] * x,
+	         m_elements[1][0] - m_elements[3][0] * y,
+	         m_elements[1][1] - m_elements[3][1] * y);
+    matrix2x2<double> m2 = m.invert ();
     T xx = (m_elements[2][2]+m_elements[2][3])*x - m_elements[0][2] - m_elements[0][3];
     T yy = (m_elements[3][2]+m_elements[3][3])*y - m_elements[1][2] - m_elements[1][3];
 
