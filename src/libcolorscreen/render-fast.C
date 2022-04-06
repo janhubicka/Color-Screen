@@ -8,7 +8,7 @@ render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_
 flatten_attr void
 render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 {
-  double dx = (x - m_scr_xshift), dy = (y - m_scr_yshift);
+  coord_t dx = (x - m_scr_xshift), dy = (y - m_scr_yshift);
 
 /*  This is precise version:
 
@@ -16,10 +16,10 @@ render_fast::render_pixel (int x, int y, int *r, int *g, int *b)
 
     In the following we assume that map is linear within single repetition
     of the screen.  This saves some matrix multiplication  */
-  double zx, zy;
-  double xx, xy;
-  double yx, yy;
-  double red, green, blue;
+  coord_t zx, zy;
+  coord_t xx, xy;
+  coord_t yx, yy;
+  luminosity_t red, green, blue;
   m_scr_to_img.to_img (dx, dy, &zx, &zy);
   m_scr_to_img.to_img (dx+1, dy, &xx, &xy);
   m_scr_to_img.to_img (dx, dy+1, &yx, &yy);

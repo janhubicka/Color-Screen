@@ -100,17 +100,18 @@ public:
 };
 /* 2x2 matrix with inverse opration.  */
 template<typename T>
-class matrix2x2 : public matrix<double, 2>
+class matrix2x2 : public matrix<T, 2>
 {
+  typedef matrix<T, 2> B;
 public:
   inline
   matrix2x2 (T m00, T m10,
 	     T m01, T m11)
   {
-    m_elements[0][0]=m00;
-    m_elements[0][1]=m01;
-    m_elements[1][0]=m10;
-    m_elements[1][1]=m11;
+    B::m_elements[0][0]=m00;
+    B::m_elements[0][1]=m01;
+    B::m_elements[1][0]=m10;
+    B::m_elements[1][1]=m11;
   }
 
   inline
@@ -121,7 +122,7 @@ public:
   inline
   matrix2x2& operator=(const matrix<T, 2>rhs)
   {
-    memcpy(m_elements,rhs.m_elements,sizeof (m_elements));
+    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
     return *this;
   }
 
@@ -129,46 +130,47 @@ public:
   inline void
   apply_to_vector (T x, T y, T *xx, T *yy)
   {
-    *xx = x * m_elements[0][0] + y * m_elements[1][0];
-    *yy = x * m_elements[0][1] + y * m_elements[1][1];
+    *xx = x * B::m_elements[0][0] + y * B::m_elements[1][0];
+    *yy = x * B::m_elements[0][1] + y * B::m_elements[1][1];
   }
 
   /* Compute inversion.  */
   inline matrix2x2
   invert ()
   {
-    T a = m_elements[0][0];
-    T b = m_elements[0][1];
-    T c = m_elements[1][0];
-    T d = m_elements[1][1];
+    T a = B::m_elements[0][0];
+    T b = B::m_elements[0][1];
+    T c = B::m_elements[1][0];
+    T d = B::m_elements[1][1];
     T det_rec = 1 / (a * d - b * c);
     matrix2x2 ret (d * det_rec, -b * det_rec, -c * det_rec, a * det_rec);
     return ret;
   }
 };
 /* 4x4 matrix with perspective projection and its inverse.  */
-class matrix4x4 : public matrix<double, 4>
+template<typename T>
+class matrix4x4 : public matrix<T, 4>
 {
+  typedef matrix<T, 4> B;
 public:
-  typedef double T;
-  matrix4x4 () { }
+  matrix4x4<T> () { }
 
   inline
-  matrix4x4 (T e00, T e10, T e20, T e30,
-	     T e01, T e11, T e21, T e31,
-	     T e02, T e12, T e22, T e32,
-	     T e03, T e13, T e23, T e33)
+  matrix4x4<T> (T e00, T e10, T e20, T e30,
+	        T e01, T e11, T e21, T e31,
+	        T e02, T e12, T e22, T e32,
+	        T e03, T e13, T e23, T e33)
   {
-    m_elements[0][0]=e00; m_elements[1][0]=e10; m_elements[2][0]=e20; m_elements[3][0]=e30;
-    m_elements[0][1]=e01; m_elements[1][1]=e11; m_elements[2][1]=e21; m_elements[3][1]=e31;
-    m_elements[0][2]=e02; m_elements[1][2]=e12; m_elements[2][2]=e22; m_elements[3][2]=e32;
-    m_elements[0][3]=e03; m_elements[1][3]=e13; m_elements[2][3]=e23; m_elements[3][3]=e33;
+    B::m_elements[0][0]=e00; B::m_elements[1][0]=e10; B::m_elements[2][0]=e20; B::m_elements[3][0]=e30;
+    B::m_elements[0][1]=e01; B::m_elements[1][1]=e11; B::m_elements[2][1]=e21; B::m_elements[3][1]=e31;
+    B::m_elements[0][2]=e02; B::m_elements[1][2]=e12; B::m_elements[2][2]=e22; B::m_elements[3][2]=e32;
+    B::m_elements[0][3]=e03; B::m_elements[1][3]=e13; B::m_elements[2][3]=e23; B::m_elements[3][3]=e33;
   }
 
   inline
-  matrix4x4& operator=(const matrix<T, 4>rhs)
+  matrix4x4<T>& operator=(const matrix<T, 4>rhs)
   {
-    memcpy(m_elements,rhs.m_elements,sizeof (m_elements));
+    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
     return *this;
   }
 
@@ -176,23 +178,23 @@ public:
   inline void
   perspective_transform (T x, T y, T &xr, T &yr)
   {
-    xr = (x * m_elements[0][0] + y * m_elements[0][1] + m_elements[0][2] + m_elements[0][3])
-	 / (x * m_elements[2][0] + y * m_elements[2][1] + m_elements[2][2] + m_elements[2][3]);
-    yr = (x * m_elements[1][0] + y * m_elements[1][1] + m_elements[1][2] + m_elements[1][3])
-	 / (x * m_elements[3][0] + y * m_elements[3][1] + m_elements[3][2] + m_elements[3][3]);
+    xr = (x * B::m_elements[0][0] + y * B::m_elements[0][1] + B::m_elements[0][2] + B::m_elements[0][3])
+	 / (x * B::m_elements[2][0] + y * B::m_elements[2][1] + B::m_elements[2][2] + B::m_elements[2][3]);
+    yr = (x * B::m_elements[1][0] + y * B::m_elements[1][1] + B::m_elements[1][2] + B::m_elements[1][3])
+	 / (x * B::m_elements[3][0] + y * B::m_elements[3][1] + B::m_elements[3][2] + B::m_elements[3][3]);
   }
 
   /* Inverse transform for the operation above.  */
   inline void
   inverse_perspective_transform (T x, T y, T &xr, T &yr)
   {
-    matrix2x2<double> m (m_elements[0][0] - m_elements[2][0] * x,
-	         m_elements[0][1] - m_elements[2][1] * x,
-	         m_elements[1][0] - m_elements[3][0] * y,
-	         m_elements[1][1] - m_elements[3][1] * y);
-    matrix2x2<double> m2 = m.invert ();
-    T xx = (m_elements[2][2]+m_elements[2][3])*x - m_elements[0][2] - m_elements[0][3];
-    T yy = (m_elements[3][2]+m_elements[3][3])*y - m_elements[1][2] - m_elements[1][3];
+    matrix2x2<T> m (B::m_elements[0][0] - B::m_elements[2][0] * x,
+	            B::m_elements[0][1] - B::m_elements[2][1] * x,
+	            B::m_elements[1][0] - B::m_elements[3][0] * y,
+	            B::m_elements[1][1] - B::m_elements[3][1] * y);
+    matrix2x2<T> m2 = m.invert ();
+    T xx = (B::m_elements[2][2]+B::m_elements[2][3])*x - B::m_elements[0][2] - B::m_elements[0][3];
+    T yy = (B::m_elements[3][2]+B::m_elements[3][3])*y - B::m_elements[1][2] - B::m_elements[1][3];
 
     xr = m2.m_elements[0][0] * xx + m2.m_elements[0][1] * yy;
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;
@@ -202,23 +204,23 @@ public:
   inline void
   apply_to_rgb (T r, T g, T b, T *rr, T *gg, T *bb)
   {
-    *rr = r * m_elements[0][0] + g * m_elements[1][0] + b * m_elements[2][0] + m_elements[3][0];
-    *gg = r * m_elements[0][1] + g * m_elements[1][1] + b * m_elements[2][1] + m_elements[3][1];
-    *bb = r * m_elements[0][2] + g * m_elements[1][2] + b * m_elements[2][2] + m_elements[3][2];
+    *rr = r * B::m_elements[0][0] + g * B::m_elements[1][0] + b * B::m_elements[2][0] + B::m_elements[3][0];
+    *gg = r * B::m_elements[0][1] + g * B::m_elements[1][1] + b * B::m_elements[2][1] + B::m_elements[3][1];
+    *bb = r * B::m_elements[0][2] + g * B::m_elements[1][2] + b * B::m_elements[2][2] + B::m_elements[3][2];
   }
   /* This adjust the profile so grayscale has given r,g,b values.  */
   inline void
   normalize_grayscale (T r = 1, T g = 1, T b = 1)
   {
-    T scale =  r / (m_elements[0][0] + m_elements[1][0] + m_elements[2][0] + m_elements[3][0]);
+    T scale =  r / (B::m_elements[0][0] + B::m_elements[1][0] + B::m_elements[2][0] + B::m_elements[3][0]);
     for (int j = 0; j < 4; j++)
-      m_elements[j][0] *= scale;
-    scale =  g / (m_elements[0][1] + m_elements[1][1] + m_elements[2][1] + m_elements[3][1]);
+      B::m_elements[j][0] *= scale;
+    scale =  g / (B::m_elements[0][1] + B::m_elements[1][1] + B::m_elements[2][1] + B::m_elements[3][1]);
     for (int j = 0; j < 4; j++)
-      m_elements[j][1] *= scale;
-    scale =  b / (m_elements[0][2] + m_elements[1][2] + m_elements[2][2] + m_elements[3][2]);
+      B::m_elements[j][1] *= scale;
+    scale =  b / (B::m_elements[0][2] + B::m_elements[1][2] + B::m_elements[2][2] + B::m_elements[3][2]);
     for (int j = 0; j < 4; j++)
-      m_elements[j][2] *= scale;
+      B::m_elements[j][2] *= scale;
   }
 };
 #endif

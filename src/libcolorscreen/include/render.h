@@ -15,16 +15,16 @@ struct render_parameters
     screen_compensation (true), adjust_luminosity (false)
   {}
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
-  double gamma;
+  luminosity_t gamma;
   /* Pre-saturation increase (this works on data collected from the scan before
      color model is applied and is intended to compensate for loss of sharpness.  */
-  double presaturation;
+  luminosity_t presaturation;
   /* Saturation increase.  */
-  double saturation;
+  luminosity_t saturation;
   /* Brightness adjustments.  */
-  double brightness;
+  luminosity_t brightness;
   /* Radius (in image pixels) the screen should be blured.  */
-  double screen_blur_radius;
+  coord_t screen_blur_radius;
   /* If true apply color model of Finlay taking plate.  */
   int color_model;
   /* Gray range to boot to full contrast.  */
@@ -49,25 +49,25 @@ class render
 public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval);
   ~render ();
-  inline double get_img_pixel (double x, double y);
-  inline void get_img_rgb_pixel (double x, double y, double *r, double *g, double *b);
-  inline double sample_img_square (double xc, double yc, double x1, double y1, double x2, double y2);
-  inline double sample_scr_diag_square (double xc, double yc, double s);
-  inline double sample_scr_square (double xc, double yc, double w, double h);
-  inline double fast_get_img_pixel (double x, double y);
-  inline double get_img_pixel_scr (double x, double y);
+  inline luminosity_t get_img_pixel (coord_t x, coord_t y);
+  inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
+  inline luminosity_t sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2);
+  inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
+  inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
+  inline luminosity_t fast_get_img_pixel (coord_t x, coord_t y);
+  inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   void precompute_all ();
-  void precompute (double, double, double, double) {precompute_all ();}
-  void precompute_img_range (double, double, double, double) {precompute_all ();}
+  void precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
+  void precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
     
   static const int num_color_models = 4;
 protected:
-  inline double get_data (int x, int y);
-  inline double get_data_red (int x, int y);
-  inline double get_data_green (int x, int y);
-  inline double get_data_blue (int x, int y);
-  inline void set_color (double, double, double, int *, int *, int *);
-  inline void set_color_luminosity (double, double, double, double, int *, int *, int *);
+  inline luminosity_t get_data (int x, int y);
+  inline luminosity_t get_data_red (int x, int y);
+  inline luminosity_t get_data_green (int x, int y);
+  inline luminosity_t get_data_blue (int x, int y);
+  inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
+  inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
 
   /* Scanned image.  */
   image_data m_img;
@@ -78,11 +78,11 @@ protected:
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
-  double *m_lookup_table;
+  luminosity_t *m_lookup_table;
   /* Translates back to gamma 2.  */
-  double *m_out_lookup_table;
+  luminosity_t *m_out_lookup_table;
   /* Color matrix.  */
-  matrix4x4 m_color_matrix;
+  color_matrix m_color_matrix;
 };
 
 bool save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam);
@@ -96,9 +96,9 @@ public:
     : render (param, img, rparam, dstmaxval), m_color (false)
   { }
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
-  void inline render_pixel_img (double x, double y, int *r, int *g, int *b)
+  void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    double gg, rr, bb;
+    luminosity_t gg, rr, bb;
     if (!m_color)
       rr = gg = bb = get_img_pixel (x, y);
     else
@@ -140,17 +140,17 @@ protected:
 
 /* Cubic interpolation helper.  */
 
-static inline double
-cubic_interpolate (double p0, double p1, double p2, double p3, double x)
+static inline luminosity_t
+cubic_interpolate (coord_t p0, coord_t p1, coord_t p2, coord_t p3, coord_t x)
 {
-  return p1 + 0.5 * x * (p2 - p0 +
-			 x * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 +
-			      x * (3.0 * (p1 - p2) + p3 - p0)));
+  return p1 + (coord_t)0.5 * x * (p2 - p0 +
+			 x * ((coord_t)2.0 * p0 - (coord_t)5.0 * p1 + (coord_t)4.0 * p2 - p3 +
+			      x * ((coord_t)3.0 * (p1 - p2) + p3 - p0)));
 }
 
 /* Get image data in normalized range 0...1.  */
 
-inline double
+inline luminosity_t
 render::get_data (int x, int y)
 {
   return m_lookup_table [m_img.data[y][x]];
@@ -158,27 +158,27 @@ render::get_data (int x, int y)
 
 /* Get same for rgb data.  */
 
-inline double
+inline luminosity_t
 render::get_data_red (int x, int y)
 {
   return m_lookup_table [m_img.rgbdata[y][x].r];
 }
 
-inline double
+inline luminosity_t
 render::get_data_green (int x, int y)
 {
   return m_lookup_table [m_img.rgbdata[y][x].g];
 }
 
-inline double
+inline luminosity_t
 render::get_data_blue (int x, int y)
 {
   return m_lookup_table [m_img.rgbdata[y][x].b];
 }
 
 #if 0
-static inline double
-cap_color (double val, double weight, double *diff, double *cnt_neg, double *cnt_pos)
+static inline luminosity_t
+cap_color (luminosity_t val, luminosity_t weight, luminosity_t *diff, luminosity_t *cnt_neg, luminosity_t *cnt_pos)
 {
   if (isnan (val))
     return 1;
@@ -201,14 +201,14 @@ cap_color (double val, double weight, double *diff, double *cnt_neg, double *cnt
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
 
 inline void
-render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
+render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
-  double diff = 0;
-  double cnt_neg = 0;
-  double cnt_pos = 0;
-  double r1 =r, g1= g, b1 = b;
+  luminosity_t diff = 0;
+  luminosity_t cnt_neg = 0;
+  luminosity_t cnt_pos = 0;
+  luminosity_t r1 =r, g1= g, b1 = b;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
-  double r2 =r, g2= g, b2 = b;
+  luminosity_t r2 =r, g2= g, b2 = b;
   r = std::min (1.0, std::max (0.0, r));
   g = std::min (1.0, std::max (0.0, g));
   b = std::min (1.0, std::max (0.0, b));
@@ -218,7 +218,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
   if (fabs (diff) > 0.0001)
     {
-      double lum = r * rwght + g * gwght + b * bwght;
+      luminosity_t lum = r * rwght + g * gwght + b * bwght;
       if (lum + diff < 0.00001)
 	r = g = b = 0;
       else if (lum + diff > 0.99999)
@@ -227,7 +227,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 	{
 	  if (diff > 0)
 	    {
-	      double add = diff / (3 - cnt_pos);
+	      luminosity_t add = diff / (3 - cnt_pos);
 	      if (r < 1)
 		r += add;
 	      if (g < 1)
@@ -237,7 +237,7 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
 	    }
 	  if (diff < 0)
 	    {
-	      double add = diff / (3 - cnt_neg);
+	      luminosity_t add = diff / (3 - cnt_neg);
 	      if (r > 0)
 		r += add;
 	      if (g > 0)
@@ -263,14 +263,14 @@ render::set_color (double r, double g, double b, int *rr, int *gg, int *bb)
    combining color and luminosity information.  */
 
 inline void
-render::set_color_luminosity (double r, double g, double b, double l, int *rr, int *gg, int *bb)
+render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t l, int *rr, int *gg, int *bb)
 {
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   r = std::min (1.0, std::max (0.0, r));
   g = std::min (1.0, std::max (0.0, g));
   b = std::min (1.0, std::max (0.0, b));
   l = std::min (1.0, std::max (0.0, l));
-  double gr = (r * rwght + g * gwght + b * bwght);
+  luminosity_t gr = (r * rwght + g * gwght + b * bwght);
   if (gr <= 0.00001 || l <= 0.00001)
     r = g = b = l;
   else
@@ -291,8 +291,8 @@ render::set_color_luminosity (double r, double g, double b, double l, int *rr, i
 
 /* Determine grayscale value at a given position in the image.  */
 
-inline double
-render::fast_get_img_pixel (double xp, double yp)
+inline luminosity_t
+render::fast_get_img_pixel (coord_t xp, coord_t yp)
 {
   int x = xp, y = yp;
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
@@ -304,19 +304,19 @@ render::fast_get_img_pixel (double xp, double yp)
 /* Determine grayscale value at a given position in the image.
    Use bicubic interpolation.  */
 
-inline double
-render::get_img_pixel (double xp, double yp)
+inline luminosity_t
+render::get_img_pixel (coord_t xp, coord_t yp)
 {
-  double val;
+  luminosity_t val;
 
   /* Center of pixel [0,0] is [0.5,0.5].  */
-  xp -= 0.5;
-  yp -= 0.5;
+  xp -= (coord_t)0.5;
+  yp -= (coord_t)0.5;
   int sx = xp, sy = yp;
 
   if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
     return 0;
-  double rx = xp - sx, ry = yp - sy;
+  luminosity_t rx = xp - sx, ry = yp - sy;
   val = cubic_interpolate (cubic_interpolate (get_data ( sx-1, sy-1), get_data (sx-1, sy), get_data (sx-1, sy+1), get_data (sx-1, sy+2), ry),
 			   cubic_interpolate (get_data ( sx-0, sy-1), get_data (sx-0, sy), get_data (sx-0, sy+1), get_data (sx-0, sy+2), ry),
 			   cubic_interpolate (get_data ( sx+1, sy-1), get_data (sx+1, sy), get_data (sx+1, sy+1), get_data (sx+1, sy+2), ry),
@@ -329,14 +329,14 @@ render::get_img_pixel (double xp, double yp)
    Use bicubic interpolation.  */
 
 inline void
-render::get_img_rgb_pixel (double xp, double yp, double *r, double *g, double *b)
+render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
-  double val;
+  luminosity_t val;
   //return fast_get_img_pixel (xp, yp);
 
   /* Center of pixel [0,0] is [0.5,0.5].  */
-  xp -= 0.5;
-  yp -= 0.5;
+  xp -= (coord_t)0.5;
+  yp -= (coord_t)0.5;
   int sx = xp, sy = yp;
 
   if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
@@ -346,7 +346,7 @@ render::get_img_rgb_pixel (double xp, double yp, double *r, double *g, double *b
       *b = 0;
       return;
     }
-  double rx = xp - sx, ry = yp - sy;
+  coord_t rx = xp - sx, ry = yp - sy;
   *r = cubic_interpolate (cubic_interpolate (get_data_red ( sx-1, sy-1), get_data_red (sx-1, sy), get_data_red (sx-1, sy+1), get_data_red (sx-1, sy+2), ry),
 			  cubic_interpolate (get_data_red ( sx-0, sy-1), get_data_red (sx-0, sy), get_data_red (sx-0, sy+1), get_data_red (sx-0, sy+2), ry),
 			  cubic_interpolate (get_data_red ( sx+1, sy-1), get_data_red (sx+1, sy), get_data_red (sx+1, sy+1), get_data_red (sx+1, sy+2), ry),
@@ -366,10 +366,10 @@ render::get_img_rgb_pixel (double xp, double yp, double *r, double *g, double *b
 
 /* Sample square patch with center xc and yc and x1/y1, x2/y2 determining a coordinates
    of top left and top right corner.  */
-double
-render::sample_img_square (double xc, double yc, double x1, double y1, double x2, double y2)
+luminosity_t
+render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2)
 {
-  double acc = 0, weights = 0;
+  luminosity_t acc = 0, weights = 0;
   int xmin = std::max ((int)(std::min (std::min (std::min (xc - x1, xc + x1), xc - x2), xc + x2) - 0.5), 0);
   int xmax = std::min ((int)ceil (std::max(std::max (std::max (xc - x1, xc + x1), xc - x2), xc + x2) + 0.5), m_img.width - 1);
   /* If the resolution is too small, just sample given point.  */
@@ -380,13 +380,13 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
     {
       /* Maybe this will give more reproducible results, but it is very slow.  */
       int samples = (sqrt (x1 * x1 + y1 * y1) + 0.5) * 2;
-      double rec = 1.0 / samples;
+      luminosity_t rec = 1.0 / samples;
       if (!samples)
 	return get_img_pixel (xc, yc);
       for (int y = -samples ; y <= samples; y++)
 	for (int x = -samples ; x <= samples; x++)
 	  {
-	    double w = 1 + (samples - abs (x) - abs (y));
+	    luminosity_t w = 1 + (samples - abs (x) - abs (y));
 	    if (w < 0)
 	      continue;
 	    acc += w * get_img_pixel (xc + (x1 * x + x2 * y) * rec, yc + (y1 * x + y2 * y) * rec);
@@ -399,18 +399,18 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
     {
       int ymin = std::max ((int)(std::min (std::min (std::min (yc - y1, yc + y1), yc - y2), yc + y2) - 0.5), 0);
       int ymax = std::min ((int)ceil (std::max(std::max (std::max (yc - y1, yc + y1), yc - y2), yc + y2) + 0.5), m_img.height - 1);
-      matrix2x2<double> base (x1, x2,
+      matrix2x2<coord_t> base (x1, x2,
 			      y1, y2);
       matrix2x2 inv = base.invert ();
       for (int y = ymin; y <= ymax; y++)
 	{
 	  for (int x = xmin ; x <= xmax; x++)
 	    {
-	      double cx = x+0.5 -xc;
-	      double cy = y+0.5 -yc;
-	      double ccx, ccy;
+	      luminosity_t cx = x+0.5 -xc;
+	      luminosity_t cy = y+0.5 -yc;
+	      luminosity_t ccx, ccy;
 	      inv.apply_to_vector (cx, cy, &ccx, &ccy);
-	      double w = fabs (ccx) + fabs (ccy);
+	      luminosity_t w = fabs (ccx) + fabs (ccy);
 
 	      //if (w < 1)
 		//printf ("%.1f ",w);
@@ -433,10 +433,10 @@ render::sample_img_square (double xc, double yc, double x1, double y1, double x2
 
 /* Sample diagonal square.
    Square is specified by its center and size of diagonal.  */
-double
-render::sample_scr_diag_square (double xc, double yc, double diagonal_size)
+luminosity_t
+render::sample_scr_diag_square (coord_t xc, coord_t yc, coord_t diagonal_size)
 {
-  double xxc, yyc, x1, y1, x2, y2;
+  coord_t xxc, yyc, x1, y1, x2, y2;
   m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
   m_scr_to_img.to_img (xc + diagonal_size / 2, yc, &x1, &y1);
   m_scr_to_img.to_img (xc, yc + diagonal_size / 2, &x2, &y2);
@@ -445,10 +445,10 @@ render::sample_scr_diag_square (double xc, double yc, double diagonal_size)
 
 /* Sample diagonal square.
    Square is specified by center and width/height  */
-double
-render::sample_scr_square (double xc, double yc, double width, double height)
+luminosity_t
+render::sample_scr_square (coord_t xc, coord_t yc, coord_t width, coord_t height)
 {
-  double xxc, yyc, x1, y1, x2, y2;
+  coord_t xxc, yyc, x1, y1, x2, y2;
   m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
   m_scr_to_img.to_img (xc - width / 2, yc + height / 2, &x1, &y1);
   m_scr_to_img.to_img (xc + width / 2, yc + height / 2, &x2, &y2);
@@ -457,10 +457,10 @@ render::sample_scr_square (double xc, double yc, double width, double height)
 
 /* Determine grayscale value at a given position in the image.
    The position is in the screen coordinates.  */
-inline double
-render::get_img_pixel_scr (double x, double y)
+inline luminosity_t
+render::get_img_pixel_scr (coord_t x, coord_t y)
 {
-  double xp, yp;
+  coord_t xp, yp;
   m_scr_to_img.to_img (x, y, &xp, &yp);
   return get_img_pixel (xp, yp);
 }

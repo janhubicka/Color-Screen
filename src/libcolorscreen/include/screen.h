@@ -1,5 +1,6 @@
 #ifndef SCREEN_H
 #define SCREEN_H
+#include "color.h"
 #include "scr-to-img.h"
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
@@ -9,8 +10,8 @@ struct screen
   static const int size=128;
   /* Mult specify how much one should multiply, add how much add
      and keep how much keep in the color.  */
-  double mult[size][size][3];
-  double add[size][size][3];
+  luminosity_t mult[size][size][3];
+  luminosity_t add[size][size][3];
 
   /* Initialize empty screen (so rendering will show original image).  */
   void empty ();
@@ -43,7 +44,7 @@ struct screen
       preview ();
   }
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, double blur_radius);
+  void initialize_with_blur (screen &scr, coord_t blur_radius);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

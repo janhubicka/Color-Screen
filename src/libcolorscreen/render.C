@@ -1,13 +1,13 @@
 #include <cassert>
 #include "include/render.h"
-static double lookup_table_uses;
-static double out_lookup_table_uses;
+static int lookup_table_uses;
+static int out_lookup_table_uses;
 static int lookup_table_maxval;
 static int out_lookup_table_maxval;
 static int lookup_table_gray_min, lookup_table_gray_max;
-static double lookup_table_gamma;
-static double lookup_table[65536];
-static double out_lookup_table[65536];
+static luminosity_t lookup_table_gamma;
+static luminosity_t lookup_table[65536];
+static luminosity_t out_lookup_table[65536];
 
 render::render (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
 {
@@ -31,13 +31,13 @@ render::precompute_all ()
       lookup_table_maxval = m_img.maxval;
       lookup_table_gray_min = m_params.gray_min; 
       lookup_table_gray_max = m_params.gray_max;
-      double gamma = std::min (std::max (m_params.gamma, 0.0001), 10.0);
-      double min = pow (m_params.gray_min / (double)m_img.maxval, gamma);
-      double max = pow (m_params.gray_max / (double)m_img.maxval, gamma);
+      luminosity_t gamma = std::min (std::max (m_params.gamma, 0.0001), 10.0);
+      luminosity_t min = pow (m_params.gray_min / (luminosity_t)m_img.maxval, gamma);
+      luminosity_t max = pow (m_params.gray_max / (luminosity_t)m_img.maxval, gamma);
       if (min >= max)
 	max += 0.0001;
       for (int i = 0; i <= m_img.maxval; i++)
-	lookup_table [i] = (pow (i / (double)m_img.maxval, gamma) - min) * (1 / (max-min));
+	lookup_table [i] = (pow (i / (luminosity_t)m_img.maxval, gamma) - min) * (1 / (max-min));
     }
   if (m_dst_maxval != out_lookup_table_maxval)
     {
@@ -48,7 +48,7 @@ render::precompute_all ()
   lookup_table_uses ++;
   out_lookup_table_uses ++;
 
-  matrix4x4 color;
+  color_matrix color;
   if (m_params.presaturation != 1)
     {
       presaturation_matrix m (m_params.presaturation);
@@ -60,7 +60,7 @@ render::precompute_all ()
 	{
 	  finlay_matrix m;
 	  xyz_srgb_matrix m2;
-	  matrix4x4 mm;
+	  color_matrix mm;
 	  mm = m2 * m;
 	  if (m_params.color_model != 2)
 	    mm.normalize_grayscale ();
@@ -70,7 +70,7 @@ render::precompute_all ()
 	{
 	  dufay_matrix m;
 	  xyz_srgb_matrix m2;
-	  matrix4x4 mm;
+	  color_matrix mm;
 	  mm = m2 * m;
 	  if (m_params.color_model != 2)
 	    mm.normalize_grayscale (1.02, 1.05, 1);
@@ -83,7 +83,7 @@ render::precompute_all ()
 	{
 	  adjusted_finlay_matrix m;
 	  xyz_srgb_matrix m2;
-	  matrix4x4 mm;
+	  color_matrix mm;
 	  mm = m2 * m;
 	  mm.normalize_grayscale ();
 	  color = mm * color;

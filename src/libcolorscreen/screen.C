@@ -279,7 +279,7 @@ screen::preview_dufay ()
 }
 
 void
-screen::initialize_with_blur (screen &scr, double blur_radius)
+screen::initialize_with_blur (screen &scr, coord_t blur_radius)
 {
   if (blur_radius <= 0)
     {
@@ -293,16 +293,16 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
   int radius = blur_radius * size;
   if (radius >= size)
     radius = size - 1;
-  double weights[size * 2][size * 2];
-  double weight = 0;
+  luminosity_t weights[size * 2][size * 2];
+  luminosity_t weight = 0;
 
   for (int yy = 0; yy <= 2 * radius; yy++)
     for (int xx = 0; xx <= 2 * radius; xx++)
       {
-        double dist = sqrt ((yy-radius) * (yy - radius) + (xx - radius) * (xx - radius)) / size;
+        coord_t dist = sqrt ((yy-radius) * (yy - radius) + (xx - radius) * (xx - radius)) / size;
         if (dist < blur_radius)
 	  {
-	    double w = blur_radius - dist;
+	    coord_t w = blur_radius - dist;
 	    weights[yy][xx] = w;
 	    weight += w;
 	  }
@@ -313,11 +313,11 @@ screen::initialize_with_blur (screen &scr, double blur_radius)
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {
-	double r = 0, g = 0, b = 0;
+	luminosity_t r = 0, g = 0, b = 0;
 	for (int yy = y - radius; yy <= y + radius; yy++)
 	  for (int xx = x - radius; xx <= x + radius; xx++)
 	    {
-	      double w = weights [yy - (y - radius)][xx - (x - radius)];
+	      luminosity_t w = weights [yy - (y - radius)][xx - (x - radius)];
 	      r += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][0] * w;
 	      g += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][1] * w;
 	      b += scr.mult[(yy + size) & (size - 1)][(xx + size) & (size - 1)][2] * w;

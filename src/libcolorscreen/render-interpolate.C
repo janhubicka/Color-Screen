@@ -7,17 +7,17 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data
 }
 
 flatten_attr void
-render_interpolate::precompute (double xmin, double ymin, double xmax, double ymax)
+render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax)
 {
   assert (!m_prec_red);
   render::precompute (xmin, ymin, xmax, ymax);
   if (m_params.screen_compensation)
     {
       static screen blured_screen;
-      static double r = -1;
+      static coord_t r = -1;
       static enum scr_type t;
-      double x, y, x2, y2;
-      double radius = m_params.screen_blur_radius;
+      coord_t x, y, x2, y2;
+      coord_t radius = m_params.screen_blur_radius;
       m_scr_to_img.to_scr (0, 0, &x, &y);
       m_scr_to_img.to_scr (1, 0, &x2, &y2);
       radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
@@ -48,9 +48,9 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
 	   B   B
 	 .   .   .  
 	 2 reds and greens per one screen tile while there are 4 blues.  */
-      m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
-      m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
-      m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 4);
+      m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 2);
+      m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 2);
+      m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 4);
 #define pixel(xo,yo,diag) m_params.precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       #pragma omp parallel for default (none) 
@@ -73,9 +73,9 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
       /* G B .
 	 R R .
 	 . . .  */
-      m_prec_red = (double *)malloc (m_prec_width * m_prec_height * sizeof (double) * 2);
-      m_prec_green = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
-      m_prec_blue = (double *)malloc (m_prec_width * m_prec_height * sizeof (double));
+      m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 2);
+      m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
+      m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
 #define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
       #pragma omp parallel for default (none)
@@ -92,18 +92,18 @@ render_interpolate::precompute (double xmin, double ymin, double xmax, double ym
 }
 
 flatten_attr void
-render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b)
+render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
 {
-  double red, green, blue;
+  luminosity_t red, green, blue;
   x += m_prec_xshift;
   y += m_prec_yshift;
 
   if (m_scr_to_img.get_type () != Dufay)
     {
-      double xx = 2*(x-0.25);
-      double yy = 2*(y-0.25);
+      coord_t xx = 2*(x-0.25);
+      coord_t yy = 2*(y-0.25);
       int xp = floor (xx), yp = floor (yy);
-      double xo = xx - floor (xx), yo = yy - floor (yy);
+      coord_t xo = xx - floor (xx), yo = yy - floor (yy);
 #define get_blue(xx, yy) prec_blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
@@ -111,7 +111,7 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
 
-      double xd, yd;
+      coord_t xd, yd;
       to_diagonal_coordinates (x, y, &xd, &yd);
       xp = floor (xd);
       yp = floor (yd);
@@ -138,10 +138,10 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
     }
   else
     {
-      double xx = 2*(x);
-      double yy = y-0.5;
+      coord_t xx = 2*(x);
+      coord_t yy = y-0.5;
       int xp = floor (xx), yp = floor (yy);
-      double xo = xx - floor (xx), yo = yy - floor (yy);
+      coord_t xo = xx - floor (xx), yo = yy - floor (yy);
 #define get_red(xx, yy) dufay_prec_red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
@@ -175,14 +175,14 @@ render_interpolate::render_pixel_scr (double x, double y, int *r, int *g, int *b
     }
   if (m_screen)
     {
-      double lum = get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift);
+      coord_t lum = get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift);
       int ix = (long long) round ((x - m_prec_xshift) * screen::size) & (screen::size - 1);
       int iy = (long long) round ((y - m_prec_yshift) * screen::size) & (screen::size - 1);
-      double sr = m_screen->mult[iy][ix][0];
-      double sg = m_screen->mult[iy][ix][1];
-      double sb = m_screen->mult[iy][ix][2];
-      double llum = red * sr + green * sg + blue * sb;
-      double correction = std::max (std::min (lum / llum, 5.0), 0.0);
+      luminosity_t sr = m_screen->mult[iy][ix][0];
+      luminosity_t sg = m_screen->mult[iy][ix][1];
+      luminosity_t sb = m_screen->mult[iy][ix][2];
+      luminosity_t llum = red * sr + green * sg + blue * sb;
+      luminosity_t correction = std::max (std::min (lum / llum, 5.0), 0.0);
       set_color (red * correction, green * correction, blue * correction, r, g, b);
 #if 0
       red = std::min (1.0, std::max (0.0, red));
