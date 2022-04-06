@@ -297,6 +297,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   return FALSE;
 }
 
+void destroy(GtkWidget *widget, gpointer *data)
+{
+    gtk_main_quit();
+}
 
 /* Initialize the GUI.  */
 static GtkWidget *
@@ -319,6 +323,7 @@ initgtk (int *argc, char **argv)
 
   /* Obtain widgets that we need */
   window = GTK_WIDGET (gtk_builder_get_object (builder, "window"));
+  gtk_signal_connect (GTK_OBJECT (window), "destroy", (GtkSignalFunc) destroy, NULL);
   data.save = GTK_WIDGET (gtk_builder_get_object (builder, "save"));
   /*data.bigimage = GTK_IMAGE (gtk_builder_get_object (builder, "bigimage")); */
   data.smallimage =

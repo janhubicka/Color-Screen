@@ -40,6 +40,6 @@ if test "$do_gtkgui" != "no"; then
   ])
 fi
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
-AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile])
 
 AC_OUTPUT

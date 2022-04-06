@@ -16895,7 +16895,7 @@ else
   gtkgui_FALSE=
 fi
 
-ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile"
 
 
 cat >confcache <<\_ACEOF
@@ -18023,6 +18023,7 @@ do
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/libcolorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/libcolorscreen/Makefile" ;;
     "src/gtkgui/Makefile") CONFIG_FILES="$CONFIG_FILES src/gtkgui/Makefile" ;;
+    "src/colorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/colorscreen/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
