@@ -6,7 +6,7 @@ main (int argc, char **argv)
   bool verbose = 1;
   if (argc != 4)
     {
-      fprintf (stderr, "%s <scan>.pgm <config>.csp <out>.pnm");
+      fprintf (stderr, "%s <scan>.pgm <config>.csp <out>.pnm", argv[0]);
       exit (1);
     }
   infname = argv[1];
