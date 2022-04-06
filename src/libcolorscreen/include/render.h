@@ -10,8 +10,8 @@
 struct render_parameters
 {
   render_parameters()
-  : gamma (2.2), presaturation (2), saturation (1), brightness (1), screen_blur_radius (1.3),
-    color_model (1), gray_min (0), gray_max (255), precise (true),
+  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), screen_blur_radius (1.3),
+    color_model (3), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
