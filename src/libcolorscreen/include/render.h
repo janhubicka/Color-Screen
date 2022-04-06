@@ -209,9 +209,9 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
   luminosity_t r1 =r, g1= g, b1 = b;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   luminosity_t r2 =r, g2= g, b2 = b;
-  r = std::min (1.0, std::max (0.0, r));
-  g = std::min (1.0, std::max (0.0, g));
-  b = std::min (1.0, std::max (0.0, b));
+  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
+  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
+  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
 #if 0
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
@@ -266,10 +266,10 @@ inline void
 render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t l, int *rr, int *gg, int *bb)
 {
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
-  r = std::min (1.0, std::max (0.0, r));
-  g = std::min (1.0, std::max (0.0, g));
-  b = std::min (1.0, std::max (0.0, b));
-  l = std::min (1.0, std::max (0.0, l));
+  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
+  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
+  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
+  l = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, l));
   luminosity_t gr = (r * rwght + g * gwght + b * bwght);
   if (gr <= 0.00001 || l <= 0.00001)
     r = g = b = l;
@@ -280,9 +280,9 @@ render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, lu
       g *= gr;
       b *= gr;
     }
-  r = std::min (1.0, std::max (0.0, r));
-  g = std::min (1.0, std::max (0.0, g));
-  b = std::min (1.0, std::max (0.0, b));
+  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
+  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
+  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
 
   *rr = m_out_lookup_table [(int)(r * 65535.5)];
   *gg = m_out_lookup_table [(int)(g * 65535.5)];
@@ -406,9 +406,9 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
 	{
 	  for (int x = xmin ; x <= xmax; x++)
 	    {
-	      luminosity_t cx = x+0.5 -xc;
-	      luminosity_t cy = y+0.5 -yc;
-	      luminosity_t ccx, ccy;
+	      coord_t cx = x+0.5 -xc;
+	      coord_t cy = y+0.5 -yc;
+	      coord_t ccx, ccy;
 	      inv.apply_to_vector (cx, cy, &ccx, &ccy);
 	      luminosity_t w = fabs (ccx) + fabs (ccy);
 

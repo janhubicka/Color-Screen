@@ -3,7 +3,7 @@
 #include <netpbm/pgm.h>
 #include "matrix.h"
 
-typedef double coord_t;
+typedef float coord_t;
 typedef matrix4x4<coord_t> trans_matrix;
 
 /* Types of supported screens.  */

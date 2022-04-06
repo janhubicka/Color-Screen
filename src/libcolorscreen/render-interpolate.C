@@ -182,7 +182,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       luminosity_t sg = m_screen->mult[iy][ix][1];
       luminosity_t sb = m_screen->mult[iy][ix][2];
       luminosity_t llum = red * sr + green * sg + blue * sb;
-      luminosity_t correction = std::max (std::min (lum / llum, 5.0), 0.0);
+      luminosity_t correction = std::max (std::min (lum / llum, (luminosity_t)5.0), (luminosity_t)0.0);
       set_color (red * correction, green * correction, blue * correction, r, g, b);
 #if 0
       red = std::min (1.0, std::max (0.0, red));

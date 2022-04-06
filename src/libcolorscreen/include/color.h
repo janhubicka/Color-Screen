@@ -2,7 +2,7 @@
 #define COLOR_H
 #include "matrix.h"
 
-typedef double luminosity_t;
+typedef float luminosity_t;
 typedef matrix4x4<luminosity_t> color_matrix;
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
