@@ -4,8 +4,6 @@
 #include <assert.h>
 #include <gtk/gtkbuilder.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
-#include <netpbm/pgm.h>
-#include <netpbm/ppm.h>
 #include <math.h>
 #include <cairo.h>
 #include <stdbool.h>
@@ -732,29 +730,6 @@ cb_save (GtkButton * button, Data * data)
   out = fopen (paroname, "w");
   save_csp (out, current, rparams);
   fclose (out);
-
-#if 0
-  render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 65535);
-  render.precompute_all ();
-  /*render_fast render (get_scr_to_img_parameters (), scan, 65535);*/
-  out = fopen (oname, "w");
-  pixel *outrow = ppm_allocrow (render.get_width () * scale);
-  ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
-  for (int y = 0; y < render.get_height () * scale; y++)
-    {
-      for (int x = 0; x < render.get_width () * scale; x++)
-	{
-	  int rr, gg, bb;
-	  render.render_pixel (x/(double)scale, y/(double)scale,&rr, &gg, &bb);
-	  outrow[x].r = rr;
-	  outrow[x].g = gg;
-	  outrow[x].b = bb;
-	}
-      ppm_writeppmrow (out, outrow, render.get_width() * scale, 65535, 0);
-    }
-  free (outrow);
-  fclose (out);
-#endif
 }
 
 

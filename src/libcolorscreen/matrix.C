@@ -3,7 +3,6 @@
 #include "include/matrix.h"
 #include <assert.h>
 #include "include/color.h"
-
 /* Simple unit test that inversion works. */
 int
 main()
@@ -12,7 +11,7 @@ main()
 		3,4);
   matrix2x2 m2 (5,6,
 		7,8);
-  matrix<2> mm = m1 * m2;
+  matrix<double, 2> mm = m1 * m2;
   assert (mm.m_elements[0][0]==19 && mm.m_elements[1][0]==22 && mm.m_elements[0][1]==43 && mm.m_elements[1][1]==50);
   matrix4x4 m;
   double xr, yr;

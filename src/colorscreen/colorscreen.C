@@ -6,13 +6,14 @@ main (int argc, char **argv)
   bool verbose = 1;
   if (argc != 4)
     {
-      fprintf (stderr, "%s <scan>.pgm <config>.csp <out>.pnm", argv[0]);
+      fprintf (stderr, "%s <scan>.pgm <config>.csp <out>.pnm\n", argv[0]);
       exit (1);
     }
   infname = argv[1];
   cspname = argv[2];
   outfname = argv[3];
 
+  /* Load scan data.  */
   FILE *in = fopen (infname, "r");
   if (!in)
     {
@@ -29,6 +30,7 @@ main (int argc, char **argv)
     }
   fclose (in);
 
+  /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
   render_parameters rparam;
   in = fopen (cspname, "rt");
@@ -48,6 +50,9 @@ main (int argc, char **argv)
 
   if (verbose)
     printf ("Precomputing\n");
+
+  /* Initialize rendering engine.  */
+
   render_interpolate render (param, scan, rparam, 65535);
   render.precompute_all ();
   FILE *out = fopen (outfname, "w");
@@ -58,6 +63,8 @@ main (int argc, char **argv)
     }
   if (verbose)
     printf ("Rendering\n");
+
+  /* Produce output file.  */
   int scale = 4;
   pixel *outrow = ppm_allocrow (render.get_width () * scale);
   ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
