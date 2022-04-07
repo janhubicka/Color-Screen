@@ -1,5 +1,23 @@
+#include <sys/time.h>
 #include <tiffio.h>
 #include "../libcolorscreen/include/colorscreen.h"
+
+static struct timeval start_time;
+
+static void
+record_time ()
+{
+  gettimeofday (&start_time, NULL);
+}
+
+static void
+print_time ()
+{
+  struct timeval end_time;
+  gettimeofday (&end_time, NULL);
+  double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
+  printf (" ... done in %.3fs\n", time);
+}
 int
 main (int argc, char **argv)
 {
@@ -17,19 +35,24 @@ main (int argc, char **argv)
   /* Load scan data.  */
   image_data scan;
   if (verbose)
-    printf ("Loading: %s\n", infname);
+    {
+      printf ("Loading scan %s:", infname);
+      fflush (stdout);
+      record_time ();
+    }
   if (!scan.load (infname, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
+  print_time ();
 
   /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
   render_parameters rparam;
   FILE *in = fopen (cspname, "rt");
   if (verbose)
-    printf ("Loading: %s\n", cspname);
+    printf ("Loading color screen parameters: %s\n", cspname);
   if (!in)
     {
       perror (cspname);
@@ -43,7 +66,11 @@ main (int argc, char **argv)
   fclose (in);
 
   if (verbose)
-    printf ("Precomputing\n");
+    {
+      printf ("Precomputing...");
+      fflush (stdout);
+      record_time ();
+    }
 
   /* Initialize rendering engine.  */
 
@@ -51,6 +78,8 @@ main (int argc, char **argv)
   rparam.adjust_luminosity = false;
   render_interpolate render (param, scan, rparam, 65535);
   render.precompute_all ();
+  if (verbose)
+    print_time ();
   /* Produce output file.  */
   TIFF *out= TIFFOpen(outfname, "wb");
   if (!out)
@@ -75,7 +104,11 @@ main (int argc, char **argv)
       exit (1);
     }
   if (verbose)
-    printf ("Rendering %s %ix%i\n", outfname, outwidth, outheight);
+    {
+      printf ("Rendering %s in resolution %ix%i:", outfname, outwidth, outheight);
+      fflush (stdout);
+      record_time ();
+    }
   for (int y = 0; y < render.get_height () * scale; y++)
     {
       for (int x = 0; x < render.get_width () * scale; x++)
@@ -92,6 +125,8 @@ main (int argc, char **argv)
 	  exit (1);
 	}
     }
+  if (verbose)
+    print_time ();
   TIFFClose (out);
   return 0;
 }
