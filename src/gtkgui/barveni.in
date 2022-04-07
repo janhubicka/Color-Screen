@@ -7,9 +7,6 @@ if test "$#" -gt 2; then
   echo I expect scan filename and optional rgb scan as an parametr
   exit 1
 fi
-echo convert
-convert "$1" -strip  /tmp/a.tif || exit
-echo run
 f="$(basename -s .tif -- $1)"
 echo f is:$f
-@bindir@/barveni-bin /tmp/a.tif "$f".pnm "$f".par $2
+@bindir@/barveni-bin $1 "$f".pnm "$f".par $2

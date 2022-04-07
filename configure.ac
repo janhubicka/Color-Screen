@@ -9,26 +9,8 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-#CXXFLAGS="-Ofast -fopenmp"
-AC_ARG_WITH(netpbm,
- [  --with-netpbm=PATH      enter the PATH to netpbm package],
- [ if test "$withval" != "no"; then
-    LDFLAGS="-L$withval/lib $LDFLAGS";\
-   fi ])
-if test -n "$with_netpbm"; then echo "option: with_netpbm $with_netpbm"; fi
-
-dnl Checks for libraries.
-if test "$with_netpbm" != "no"; then
-# netpbm-10.26 + SuSE-10.0: netpbm needs mathlib -lm
-# netpbm-10    : libnetpbm + pam.h (+ p[bgpn]m.h, libp[bgpn]m.so as links)
-# netpbm-9     : libpnm    + pnm.h (+ p[bgp]m.h)
-# pnm_readpaminit (netpbm-10)
-# pnm_readpnminit (netpbm-9,10)
-# ToDo: how to check that -lm is needed?
+CXXFLAGS="-Ofast -fopenmp"
 LDFLAGS="-lm $LDFLAGS"
-AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
- [ echo " * * * try option --with-netpbm=PATH"])
-fi
 
 AC_ARG_WITH(libtiff,
  [  --with-libtiff=PATH      enter the PATH to libtiff package],
@@ -37,11 +19,21 @@ AC_ARG_WITH(libtiff,
    fi ])
 if test -n "$with_libtiff"; then echo "option: with_libtiff $with_libtiff"; fi
 
-dnl Checks for libraries.
 if test "$with_libtiff" != "no"; then
-LDFLAGS="-lm $LDFLAGS"
 AC_SEARCH_LIBS(TIFFOpen,[tiff],[check_libtiff_h="tiffio.h"],
  [ echo " * * * try option --with-libtiff=PATH"])
+fi
+
+AC_ARG_WITH(libjpeg,
+ [  --with-libjpeg=PATH      enter the PATH to libjpeg package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_libjpeg"; then echo "option: with_libjpeg $with_libjpeg"; fi
+
+if test "$with_libjpeg" != "no"; then
+AC_SEARCH_LIBS(tjInitDecompress,[turbojpeg],[check_libjpeg_h="turbojpeg.h"],
+ [ echo " * * * try option --with-libjpeg=PATH"])
 fi
 
 do_gtkgui=no

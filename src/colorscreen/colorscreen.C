@@ -6,7 +6,7 @@ main (int argc, char **argv)
   bool verbose = 1;
   if (argc != 4)
     {
-      fprintf (stderr, "%s <scan>.pgm <config>.csp <out>.pnm\n", argv[0]);
+      fprintf (stderr, "%s <scan> <config>.csp <out>.tif\n", argv[0]);
       exit (1);
     }
   infname = argv[1];
@@ -23,7 +23,7 @@ main (int argc, char **argv)
   image_data scan;
   if (verbose)
     printf ("Loading: %s\n", infname);
-  if (!scan.load_pnm (in, NULL, &error))
+  if (!scan.load (infname, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
@@ -65,6 +65,7 @@ main (int argc, char **argv)
     printf ("Rendering\n");
 
   /* Produce output file.  */
+#if 0
   int scale = 4;
   pixel *outrow = ppm_allocrow (render.get_width () * scale);
   ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
@@ -82,6 +83,7 @@ main (int argc, char **argv)
     }
   free (outrow);
   fclose (out);
+#endif
 
   return 0;
 }

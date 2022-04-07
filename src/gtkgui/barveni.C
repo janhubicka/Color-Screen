@@ -104,42 +104,14 @@ cb_show_about (GtkButton * button, Data * data)
 static void
 openimage (int *argc, char **argv)
 {
-#if 0
-  FILE *in, *rgbin = NULL;
   const char *error;
-  pgm_init (argc, argv);
-  in = fopen (argv[1], "r");
-  if (!in)
-    {
-      perror (argv[1]);
-      exit (1);
-    }
-  if (*argc == 5)
-    {
-      rgbin = fopen (argv[4], "r");
-      if (!rgbin)
-	{
-	  perror (argv[4]);
-	  exit (1);
-	}
-    }
-  if (!scan.load_pnm (in, rgbin, &error))
+  if (!scan.load (argv[1], &error))
     {
       fprintf (stderr, "%s\n", error);
       exit (1);
     }
   rparams.gray_min = 0;
   rparams.gray_max = scan.maxval;
-  fclose (in);
-  if (rgbin)
-    fclose (rgbin);
-#endif
-  const char *error;
-  if (!scan.load_tiff (argv[1], &error))
-    {
-      fprintf (stderr, "%s\n", error);
-      exit (1);
-    }
 }
 
 /* Get values displayed in the UI.  */

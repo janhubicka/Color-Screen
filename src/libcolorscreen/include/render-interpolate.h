@@ -1,6 +1,5 @@
 #ifndef RENDEINTERPOLATE_H
 #define RENDEINTERPOLATE_H
-#include <netpbm/ppm.h>
 #include "render.h"
 #include "screen.h"
 class render_interpolate : public render_to_scr

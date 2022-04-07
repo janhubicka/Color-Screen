@@ -1,6 +1,5 @@
 #ifndef SCR_TO_IMG_H
 #define SCR_TO_IMG_H
-#include <netpbm/pgm.h>
 #include "matrix.h"
 
 typedef float coord_t;
