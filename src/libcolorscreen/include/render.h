@@ -300,6 +300,23 @@ render::fast_get_img_pixel (coord_t xp, coord_t yp)
   return render::get_data (x, y);
 }
 
+/* Like modf but always round down.  */
+static inline float
+my_modf (float x, int *ptr)
+{
+  float f = floorf (x);
+  float ret = x - f;
+  *ptr = f;
+  return ret;
+}
+static inline double
+my_modf (double x, int *ptr)
+{
+  float f = floorf (x);
+  float ret = x - f;
+  *ptr = f;
+  return ret;
+}
 
 /* Determine grayscale value at a given position in the image.
    Use bicubic interpolation.  */
@@ -312,11 +329,14 @@ render::get_img_pixel (coord_t xp, coord_t yp)
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
   yp -= (coord_t)0.5;
-  int sx = xp, sy = yp;
+  //int sx = xp, sy = yp;
+  //luminosity_t rx = xp - sx, ry = yp - sy;
+  int sx, sy;
+  coord_t rx = my_modf (xp, &sx);
+  coord_t ry = my_modf (yp, &sy);
 
   if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
     return 0;
-  luminosity_t rx = xp - sx, ry = yp - sy;
   val = cubic_interpolate (cubic_interpolate (get_data ( sx-1, sy-1), get_data (sx-1, sy), get_data (sx-1, sy+1), get_data (sx-1, sy+2), ry),
 			   cubic_interpolate (get_data ( sx-0, sy-1), get_data (sx-0, sy), get_data (sx-0, sy+1), get_data (sx-0, sy+2), ry),
 			   cubic_interpolate (get_data ( sx+1, sy-1), get_data (sx+1, sy), get_data (sx+1, sy+1), get_data (sx+1, sy+2), ry),

@@ -53,7 +53,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 4);
 #define pixel(xo,yo,diag) m_params.precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-      #pragma omp parallel for default (none) 
+#pragma omp parallel for default (none) 
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
 	  {
@@ -78,7 +78,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
 #define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-      #pragma omp parallel for default (none)
+#pragma omp parallel for default (none)
       for (int x = 0; x < m_prec_width; x++)
 	for (int y = 0 ; y < m_prec_height; y++)
 	  {
@@ -102,8 +102,9 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
     {
       coord_t xx = 2*(x-0.25);
       coord_t yy = 2*(y-0.25);
-      int xp = floor (xx), yp = floor (yy);
-      coord_t xo = xx - floor (xx), yo = yy - floor (yy);
+      int xp, yp;
+      coord_t xo = my_modf (xx, &xp);
+      coord_t yo = my_modf (yy, &yp);
 #define get_blue(xx, yy) prec_blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
@@ -113,10 +114,8 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 
       coord_t xd, yd;
       to_diagonal_coordinates (x, y, &xd, &yd);
-      xp = floor (xd);
-      yp = floor (yd);
-      xo = xd - floor (xd);
-      yo = yd - floor (yd);
+      xo = my_modf (xd, &xp);
+      yo = my_modf (yd, &yp);
 
 #define get_green(xx, yy) prec_diag_green (xp + (xx), yp + (yy))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
@@ -125,10 +124,8 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
       to_diagonal_coordinates (x + 0.5, y, &xd, &yd);
-      xp = floor (xd);
-      yp = floor (yd);
-      xo = xd - floor (xd);
-      yo = yd - floor (yd);
+      xo = my_modf (xd, &xp);
+      yo = my_modf (yd, &yp);
 #define get_red(xx, yy) prec_diag_red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
@@ -140,8 +137,9 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
     {
       coord_t xx = 2*(x);
       coord_t yy = y-0.5;
-      int xp = floor (xx), yp = floor (yy);
-      coord_t xo = xx - floor (xx), yo = yy - floor (yy);
+      int xp, yp;
+      coord_t xo = my_modf (xx, &xp);
+      coord_t yo = my_modf (yy, &yp);
 #define get_red(xx, yy) dufay_prec_red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
@@ -150,10 +148,8 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 #undef get_red
       xx = x;
       yy = y;
-      xp = floor (xx);
-      yp = floor (yy);
-      xo = xx - floor (xx);
-      yo = yy - floor (yy);
+      xo = my_modf (xx, &xp);
+      yo = my_modf (yy, &yp);
 #define get_green(xx, yy) dufay_prec_green (xp + (xx), yp + (yy))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
@@ -162,10 +158,8 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 #undef get_green
       xx = x-0.5;
       yy = y;
-      xp = floor (xx);
-      yp = floor (yy);
-      xo = xx - floor (xx);
-      yo = yy - floor (yy);
+      xo = my_modf (xx, &xp);
+      yo = my_modf (yy, &yp);
 #define get_blue(xx, yy) dufay_prec_blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
