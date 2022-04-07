@@ -9,7 +9,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-CXXFLAGS="-Ofast -fopenmp"
+#CXXFLAGS="-Ofast -fopenmp"
 AC_ARG_WITH(netpbm,
  [  --with-netpbm=PATH      enter the PATH to netpbm package],
  [ if test "$withval" != "no"; then
@@ -28,6 +28,20 @@ if test "$with_netpbm" != "no"; then
 LDFLAGS="-lm $LDFLAGS"
 AC_SEARCH_LIBS(pnm_readpnminit,[netpbm pnm],[check_netpbm_h="pam.h pnm.h"],
  [ echo " * * * try option --with-netpbm=PATH"])
+fi
+
+AC_ARG_WITH(libtiff,
+ [  --with-libtiff=PATH      enter the PATH to libtiff package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_libtiff"; then echo "option: with_libtiff $with_libtiff"; fi
+
+dnl Checks for libraries.
+if test "$with_libtiff" != "no"; then
+LDFLAGS="-lm $LDFLAGS"
+AC_SEARCH_LIBS(TIFFOpen,[tiff],[check_libtiff_h="tiffio.h"],
+ [ echo " * * * try option --with-libtiff=PATH"])
 fi
 
 do_gtkgui=no

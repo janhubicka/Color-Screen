@@ -47,7 +47,11 @@ struct render_parameters
 class render
 {
 public:
-  render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval);
+  render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  : m_img (img), m_dst_maxval (dstmaxval), m_params (rparam)
+  {
+    m_scr_to_img.set_parameters (param);
+  }
   ~render ();
   inline luminosity_t get_img_pixel (coord_t x, coord_t y);
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
@@ -70,11 +74,11 @@ protected:
   inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
 
   /* Scanned image.  */
-  image_data m_img;
+  image_data &m_img;
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
   /* Rendering parameters.  */
-  render_parameters m_params;
+  render_parameters &m_params;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */

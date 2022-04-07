@@ -9,14 +9,6 @@ static luminosity_t lookup_table_gamma;
 static luminosity_t lookup_table[65536];
 static luminosity_t out_lookup_table[65536];
 
-render::render (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
-{
-  m_img = img;
-  m_scr_to_img.set_parameters (param);
-  m_dst_maxval = dst_maxval;
-  m_params = params;
-}
-
 void
 render::precompute_all ()
 {
