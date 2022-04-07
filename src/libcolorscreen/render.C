@@ -23,7 +23,7 @@ render::precompute_all ()
       lookup_table_maxval = m_img.maxval;
       lookup_table_gray_min = m_params.gray_min; 
       lookup_table_gray_max = m_params.gray_max;
-      luminosity_t gamma = std::min (std::max (m_params.gamma, (luminosity_t)0.0001), (luminosity_t)10.0);
+      luminosity_t gamma = std::min (std::max (m_params.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
       luminosity_t min = pow (m_params.gray_min / (luminosity_t)m_img.maxval, gamma);
       luminosity_t max = pow (m_params.gray_max / (luminosity_t)m_img.maxval, gamma);
       if (min >= max)

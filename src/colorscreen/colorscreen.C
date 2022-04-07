@@ -75,7 +75,12 @@ main (int argc, char **argv)
   /* Initialize rendering engine.  */
 
   rparam.screen_compensation = false;
-  rparam.adjust_luminosity = false;
+  rparam.adjust_luminosity = true;
+  rparam.precise = true;
+
+  /* TODO: Jedno rendruje interpolacne a druhe simuluje screen.
+     az budu mit cas tak ten kod sjednotim.  */
+#if 1
   render_interpolate render (param, scan, rparam, 65535);
   render.precompute_all ();
   if (verbose)
@@ -87,7 +92,7 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open %s\n", outfname);
       exit (1);
     }
-  int scale = 4;
+  int scale = 16;
   int outwidth = render.get_width () * scale;
   int outheight = render.get_height () * scale;
   TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth);
@@ -125,6 +130,57 @@ main (int argc, char **argv)
 	  exit (1);
 	}
     }
+#else
+  render_superpose_img render (param, scan, rparam, 65535, false, false);
+  render.precompute_all ();
+  if (verbose)
+    print_time ();
+  /* Produce output file.  */
+  TIFF *out= TIFFOpen(outfname, "wb");
+  if (!out)
+    {
+      fprintf (stderr, "Can not open %s\n", outfname);
+      exit (1);
+    }
+  int scale = 1;
+  int outwidth = scan.width;
+  int outheight = scan.height;
+  TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth);
+  TIFFSetField(out, TIFFTAG_IMAGELENGTH, outheight);
+  TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 3);
+  TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 16);
+  TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+  TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+  TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+  uint16_t *outrow = (uint16_t *)malloc (outwidth * 2 * 3);
+  if (!outrow)
+    {
+      fprintf (stderr, "Out of memory allocating output buffer\n");
+      exit (1);
+    }
+  if (verbose)
+    {
+      printf ("Rendering %s in resolution %ix%i:", outfname, outwidth, outheight);
+      fflush (stdout);
+      record_time ();
+    }
+  for (int y = 0; y < scan.height * scale; y++)
+    {
+      for (int x = 0; x < scan.width * scale; x++)
+	{
+	  int rr, gg, bb;
+	  render.render_pixel_img_antialias (x/(double)scale, y/(double)scale, 1.0 / scale, 128 ,&rr, &gg, &bb);
+	  outrow[3*x] = rr;
+	  outrow[3*x+1] = gg;
+	  outrow[3*x+2] = bb;
+	}
+      if (TIFFWriteScanline(out, outrow, y, 0) < 0)
+	{
+	  fprintf (stderr, "Write error on line %s\n", y);
+	  exit (1);
+	}
+    }
+#endif
   if (verbose)
     print_time ();
   TIFFClose (out);
