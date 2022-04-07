@@ -95,7 +95,6 @@ image_data::load_tiff (const char *name, const char **error)
 	  return false;
 	}
     }
-  printf ("%i %i\n", bitspersample, samples);
   tdata_t buf = _TIFFmalloc(TIFFScanlineSize(tif));
   if (!buf)
     {
@@ -222,7 +221,6 @@ image_data::load_jpg (const char *name, const char **error)
       return false;
     }
   /* RGB is 0 and gray is 2.  */
-  fprintf (stderr, "%i\n",inColorspace);
   if (inColorspace != 1 && inColorspace != 2)
     {
       *error = "only grayscale and rgb jpeg files are supported";

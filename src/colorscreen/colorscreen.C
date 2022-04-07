@@ -1,3 +1,4 @@
+#include <tiffio.h>
 #include "../libcolorscreen/include/colorscreen.h"
 int
 main (int argc, char **argv)
@@ -55,35 +56,47 @@ main (int argc, char **argv)
 
   render_interpolate render (param, scan, rparam, 65535);
   render.precompute_all ();
-  FILE *out = fopen (outfname, "w");
+  /* Produce output file.  */
+  TIFF *out= TIFFOpen("new.tif", "w");
   if (!out)
     {
-      fprintf (stderr, "Can not open %s: %s\n", cspname, error);
+      fprintf (stderr, "Can not open %s\n", outfname);
+      exit (1);
+    }
+  int scale = 4;
+  int outwidth = render.get_width () * scale;
+  int outheight = render.get_height () * scale;
+  TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth);
+  TIFFSetField(out, TIFFTAG_IMAGELENGTH, outheight);
+  TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 3);
+  TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 16);
+  TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+  TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+  TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+  uint16_t *outrow = (uint16_t *)malloc (outwidth * 2 * 3);
+  if (!outrow)
+    {
+      fprintf (stderr, "Out of memory allocating output buffer\n");
       exit (1);
     }
   if (verbose)
-    printf ("Rendering\n");
-
-  /* Produce output file.  */
-#if 0
-  int scale = 4;
-  pixel *outrow = ppm_allocrow (render.get_width () * scale);
-  ppm_writeppminit (out, render.get_width () * scale, render.get_height() * scale, 65535, 0);
+    printf ("Rendering %s %ix%i\n", outfname, outwidth, outheight);
   for (int y = 0; y < render.get_height () * scale; y++)
     {
       for (int x = 0; x < render.get_width () * scale; x++)
 	{
 	  int rr, gg, bb;
 	  render.render_pixel (x/(double)scale, y/(double)scale,&rr, &gg, &bb);
-	  outrow[x].r = rr;
-	  outrow[x].g = gg;
-	  outrow[x].b = bb;
+	  outrow[3*x] = rr;
+	  outrow[3*x+1] = gg;
+	  outrow[3*x+2] = bb;
 	}
-      ppm_writeppmrow (out, outrow, render.get_width() * scale, 65535, 0);
+      if (TIFFWriteScanline(out, outrow, y, 0) < 0)
+	{
+	  fprintf (stderr, "Write error on line %s\n", y);
+	  exit (1);
+	}
     }
-  free (outrow);
-  fclose (out);
-#endif
-
+  TIFFClose (out);
   return 0;
 }
