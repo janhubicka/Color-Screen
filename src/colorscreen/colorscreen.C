@@ -15,12 +15,6 @@ main (int argc, char **argv)
   outfname = argv[3];
 
   /* Load scan data.  */
-  FILE *in = fopen (infname, "r");
-  if (!in)
-    {
-      perror (infname);
-      exit (1);
-    }
   image_data scan;
   if (verbose)
     printf ("Loading: %s\n", infname);
@@ -29,12 +23,11 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
-  fclose (in);
 
   /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
   render_parameters rparam;
-  in = fopen (cspname, "rt");
+  FILE *in = fopen (cspname, "rt");
   if (verbose)
     printf ("Loading: %s\n", cspname);
   if (!in)
@@ -54,10 +47,12 @@ main (int argc, char **argv)
 
   /* Initialize rendering engine.  */
 
+  rparam.screen_compensation = false;
+  rparam.adjust_luminosity = false;
   render_interpolate render (param, scan, rparam, 65535);
   render.precompute_all ();
   /* Produce output file.  */
-  TIFF *out= TIFFOpen("new.tif", "w");
+  TIFF *out= TIFFOpen(outfname, "wb");
   if (!out)
     {
       fprintf (stderr, "Can not open %s\n", outfname);
