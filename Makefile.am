@@ -1,5 +1,4 @@
 SUBDIRS = src
 
-examples:
-	cd examples/amcolony
-	make examples
+examples: src/colorscreen/colorscreen
+	cd examples/amcolony ; make examples

@@ -45,7 +45,11 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
-  print_time ();
+  if (verbose)
+    {
+      printf (" resolution: %ix%i\n", scan.width, scan.height);
+      print_time ();
+    }
 
   /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
@@ -74,8 +78,8 @@ main (int argc, char **argv)
 
   /* Initialize rendering engine.  */
 
-  rparam.screen_compensation = false;
-  rparam.adjust_luminosity = true;
+  rparam.screen_compensation = true;
+  rparam.adjust_luminosity = false;
   rparam.precise = true;
 
   /* TODO: Jedno rendruje interpolacne a druhe simuluje screen.
@@ -92,7 +96,7 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open %s\n", outfname);
       exit (1);
     }
-  int scale = 16;
+  int scale = 8;
   int outwidth = render.get_width () * scale;
   int outheight = render.get_height () * scale;
   TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth);
