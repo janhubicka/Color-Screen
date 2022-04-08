@@ -1,0 +1,14 @@
+screen_alignment_version: 1
+screen_type: Finlay
+screen_shift: 2417.031494 290.879059
+coordinate_x: 8.750361 -0.061740
+coordinate_y: 0.046420 8.775631
+gamma: 2.200000
+presaturation: 1.000000
+saturation: 1.200000
+brightness: 1.000000
+scren_blur_radius: 1.300000
+gray_range: 1 255
+precise: no
+screen_compensation: yes
+adjust_luminosity: yes
