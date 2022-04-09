@@ -26,7 +26,7 @@ render::precompute_all ()
       luminosity_t gamma = std::min (std::max (m_params.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
       luminosity_t min = pow (m_params.gray_min / (luminosity_t)m_img.maxval, gamma);
       luminosity_t max = pow (m_params.gray_max / (luminosity_t)m_img.maxval, gamma);
-      if (min >= max)
+      if (min == max)
 	max += 0.0001;
       for (int i = 0; i <= m_img.maxval; i++)
 	lookup_table [i] = (pow (i / (luminosity_t)m_img.maxval, gamma) - min) * (1 / (max-min));
@@ -34,6 +34,7 @@ render::precompute_all ()
   if (m_dst_maxval != out_lookup_table_maxval)
     {
       assert (!out_lookup_table_uses);
+      out_lookup_table_maxval = m_dst_maxval;
       for (int i = 0; i < 65536; i++)
 	out_lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * m_dst_maxval;
     }
@@ -97,6 +98,9 @@ render::precompute_all ()
 
 render::~render ()
 {
-  lookup_table_uses --;
-  out_lookup_table_uses --;
+  if (lookup_table)
+    {
+      lookup_table_uses --;
+      out_lookup_table_uses --;
+    }
 }

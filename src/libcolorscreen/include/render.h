@@ -58,7 +58,7 @@ public:
   inline luminosity_t sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2);
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
-  inline luminosity_t fast_get_img_pixel (coord_t x, coord_t y);
+  inline luminosity_t fast_get_img_pixel (int x, int y);
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   void precompute_all ();
   void precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
@@ -296,9 +296,8 @@ render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, lu
 /* Determine grayscale value at a given position in the image.  */
 
 inline luminosity_t
-render::fast_get_img_pixel (coord_t xp, coord_t yp)
+render::fast_get_img_pixel (int x, int y)
 {
-  int x = xp, y = yp;
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
   return render::get_data (x, y);

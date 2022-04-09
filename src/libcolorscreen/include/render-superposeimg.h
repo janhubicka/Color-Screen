@@ -1,5 +1,6 @@
 #ifndef RENDERSUPERPOSEIMG_H
 #define RENDERSUPERPOSEIMG_H
+#include <assert.h>
 #include "render.h"
 #include "screen.h"
 class render_superpose_img : public render
@@ -57,6 +58,7 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);
+  void inline analyze_tile (int x, int y, int w, int h, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
 private:
@@ -71,8 +73,8 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
   luminosity_t gg, rr, bb;
   int ix, iy;
 
-  ix = (long long) round (scr_x* screen::size) & (screen::size - 1);
-  iy = (long long) round (scr_y* screen::size) & (screen::size - 1);
+  ix = (unsigned long long) round (scr_x* screen::size) & (unsigned)(screen::size - 1);
+  iy = (unsigned long long) round (scr_y* screen::size) & (unsigned)(screen::size - 1);
   if (!m_color)
     {
       luminosity_t graydata = get_img_pixel (x, y);
@@ -133,5 +135,49 @@ render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t 
 	gg += ggg;
       }
   set_color (3 * rr / (steps * steps), 3 * gg / (steps * steps), 3 * bb / (steps * steps), r,g,b);
+}
+
+/* Analyze average r, g and b color in a given tile in the image coordinates.  */
+flatten_attr inline void
+render_superpose_img::analyze_tile (int xs, int ys, int w, int h, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  double rw = 0, rr = 0, gw = 0, gg = 0, bw = 0, bb = 0;
+  for (int x = xs; x < xs + w; x+=16)
+    for (int y = ys; y < ys + h; y+=16)
+      {
+	coord_t scr_x, scr_y;
+	luminosity_t l = fast_get_img_pixel (x, y);
+
+	m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
+	int ix = (unsigned long long) round (scr_x * screen::size) & (unsigned)(screen::size - 1);
+ 	int iy = (unsigned long long) round (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	if (m_screen->mult[iy][ix][0] > 0.8)
+	  {
+	    rr += m_screen->mult[iy][ix][0] * l;
+	    rw += m_screen->mult[iy][ix][0];
+	  }
+	if (m_screen->mult[iy][ix][1] > 0.8)
+	  {
+	    gg += m_screen->mult[iy][ix][1] * l;
+	    gw += m_screen->mult[iy][ix][1];
+	  }
+	if (m_screen->mult[iy][ix][2] > 0.8)
+	  {
+	    bb += m_screen->mult[iy][ix][2] * l;
+	    bw += m_screen->mult[iy][ix][2];
+	  }
+      }
+  if (rw)
+    *r = rr / rw;
+  else
+    *r = 0;
+  if (gw)
+    *g = gg / gw;
+  else
+    *g = 0;
+  if (bw)
+    *b = bb / bw;
+  else
+    *b = 0;
 }
 #endif
