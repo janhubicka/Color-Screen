@@ -24,7 +24,7 @@ struct scr_to_img_parameters
 {
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    tilt_x_x (0.001), tilt_x_y(0), tilt_y_x (0.001), tilt_y_y (0), type (Finlay)
+    tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), type (Finlay)
   { }
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
   coord_t center_x, center_y;
@@ -61,11 +61,15 @@ public:
   to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
     m_matrix.perspective_transform (x,y, *xp, *yp);
+    *xp += m_param.center_x;
+    *yp += m_param.center_y;
   }
   /* Map image coordinats to screen.  */
   void
   to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
+    x -= m_param.center_x;
+    y -= m_param.center_y;
     m_matrix.inverse_perspective_transform (x,y, *xp, *yp);
   }
   enum scr_type
@@ -97,10 +101,8 @@ public:
   change_of_basis_matrix (coord_t c1_x, coord_t c1_y,
 			  coord_t c2_x, coord_t c2_y)
   {
-    m_elements[0][0] = c1_x;
-    m_elements[1][0] = c1_y;
-    m_elements[0][1] = c2_x;
-    m_elements[1][1] = c2_y;
+    m_elements[0][0] = c1_x; m_elements[1][0] = c1_y;
+    m_elements[0][1] = c2_x; m_elements[1][1] = c2_y;
   }
 };
 
@@ -112,10 +114,8 @@ public:
   rotation_matrix (double angle, int coord1, int coord2)
   {
     double rad = (double)angle * M_PI / 180;
-    m_elements[coord1][coord1] = cos (rad);
-    m_elements[coord2][coord1] = -sin (rad);
-    m_elements[coord1][coord2] = sin (rad);
-    m_elements[coord2][coord2] = cos (rad);
+    m_elements[coord1][coord1] = cos (rad);  m_elements[coord2][coord1] = sin (rad);
+    m_elements[coord1][coord2] = -sin (rad); m_elements[coord2][coord2] = cos (rad);
   }
 };
 #endif

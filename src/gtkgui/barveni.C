@@ -129,7 +129,6 @@ getvals (void)
   current.tilt_x_y = gtk_spin_button_get_value (data.tilt_x_y);
   current.tilt_y_x = gtk_spin_button_get_value (data.tilt_y_x);
   current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
-  printf ("%f %f %f %f\n", data.tilt_x_x, data.tilt_x_y, data.tilt_y_x, data.tilt_y_y);
 }
 
 /* Set values displayed by the UI.  */
@@ -823,9 +822,6 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 					&shift_y);
   if (!initialized)
     return;
-  printf ("Press x:%i y:%i zoomx:%f zoomy:%f shiftx:%i shifty:%i \n",
-	  (int) event->x, (int) event->y, (double) scale_x, (double) scale_y,
-	  (int) shift_x, (int) shift_y);
   if (event->button == 1 && setcenter)
     {
       double newcenter_x;

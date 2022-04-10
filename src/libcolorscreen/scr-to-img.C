@@ -9,10 +9,6 @@ scr_to_img::set_parameters (scr_to_img_parameters param)
   m_param = param;
   trans_matrix m;
 
-  /* Translate (0,0) to xstart/ystart.  */
-  translation_matrix translation (param.center_x, param.center_y);
-  m = translation * m;
-
   if (param.tilt_x_x!= 0)
     {
       rotation_matrix rotation (param.tilt_x_x, 0, 2);
@@ -33,10 +29,13 @@ scr_to_img::set_parameters (scr_to_img_parameters param)
       rotation_matrix rotation (param.tilt_y_y, 1, 3);
       m = rotation * m;
     }
+  coord_t c1x, c1y;
+  coord_t c2x, c2y;
+  m.inverse_perspective_transform (param.coordinate1_x, param.coordinate1_y, c1x, c1y);
+  m.inverse_perspective_transform (param.coordinate2_x, param.coordinate2_y, c2x, c2y);
 
   /* Change-of-basis matrix.  */
-  change_of_basis_matrix basis (param.coordinate1_x, param.coordinate1_y,
-				param.coordinate2_x, param.coordinate2_y);
+  change_of_basis_matrix basis (c1x, c1y, c2x, c2y);
   m_matrix = basis * m;
 }
 
