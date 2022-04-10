@@ -3,11 +3,11 @@
 #include <assert.h>
 #include "render.h"
 #include "screen.h"
-class render_superpose_img : public render
+class render_superpose_img : public render_to_scr
 {
 public:
   inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval, bool empty, bool preview)
-   : render (param, data, rparam, dst_maxval),
+   : render_to_scr (param, data, rparam, dst_maxval),
      m_color (false)
   { 
     coord_t x,x2, y, y2;
@@ -58,7 +58,7 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);
-  void inline analyze_tile (int x, int y, int w, int h, luminosity_t *r, luminosity_t *g, luminosity_t *b);
+  void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
 private:
@@ -139,11 +139,11 @@ render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t 
 
 /* Analyze average r, g and b color in a given tile in the image coordinates.  */
 flatten_attr inline void
-render_superpose_img::analyze_tile (int xs, int ys, int w, int h, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
   double rw = 0, rr = 0, gw = 0, gg = 0, bw = 0, bb = 0;
-  for (int x = xs; x < xs + w; x+=16)
-    for (int y = ys; y < ys + h; y+=16)
+  for (int x = xs; x < xs + w; x+=stepx)
+    for (int y = ys; y < ys + h; y+=stepy)
       {
 	coord_t scr_x, scr_y;
 	luminosity_t l = fast_get_img_pixel (x, y);

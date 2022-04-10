@@ -48,7 +48,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	   B   B
 	 .   .   .  
 	 2 reds and greens per one screen tile while there are 4 blues.  */
-      if (1)
+      if (m_params.precise)
 	{
 	  m_prec_red = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
 	  m_prec_green = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
@@ -170,7 +170,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
 	  m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
 	  m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * 4 * sizeof (luminosity_t));
-#define pixel(xo,yo,diag) m_params.precise ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
+#define pixel(xo,yo,diag) m_params.precise && 0 ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
 #pragma omp parallel for default (none)
 	  for (int x = 0; x < m_prec_width; x++)

@@ -1,3 +1,4 @@
+#include <math.h>
 #include <algorithm>
 #include "include/scr-to-img.h"
 
@@ -6,18 +7,37 @@ void
 scr_to_img::set_parameters (scr_to_img_parameters param)
 {
   m_param = param;
+  trans_matrix m;
+
   /* Translate (0,0) to xstart/ystart.  */
-  trans_matrix translation;
-  translation.m_elements[0][2] = param.center_x;
-  translation.m_elements[1][2] = param.center_y;
+  translation_matrix translation (param.center_x, param.center_y);
+  m = translation * m;
+
+  if (param.tilt_x_x!= 0)
+    {
+      rotation_matrix rotation (param.tilt_x_x, 0, 2);
+      m = rotation * m;
+    }
+  if (param.tilt_x_y!= 0)
+    {
+      rotation_matrix rotation (param.tilt_x_y, 1, 2);
+      m = rotation * m;
+    }
+  if (param.tilt_y_x!= 0)
+    {
+      rotation_matrix rotation (param.tilt_y_x, 0, 3);
+      m = rotation * m;
+    }
+  if (param.tilt_y_y!= 0)
+    {
+      rotation_matrix rotation (param.tilt_y_y, 1, 3);
+      m = rotation * m;
+    }
 
   /* Change-of-basis matrix.  */
-  trans_matrix basis;
-  basis.m_elements[0][0] = param.coordinate1_x;
-  basis.m_elements[1][0] = param.coordinate1_y;
-  basis.m_elements[0][1] = param.coordinate2_x;
-  basis.m_elements[1][1] = param.coordinate2_y;
-  m_matrix = basis * translation;
+  change_of_basis_matrix basis (param.coordinate1_x, param.coordinate1_y,
+				param.coordinate2_x, param.coordinate2_y);
+  m_matrix = basis * m;
 }
 
 /* Determine rectangular section of the screen to which the whole image

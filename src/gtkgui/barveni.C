@@ -13,7 +13,7 @@
 #include "../libcolorscreen/include/colorscreen.h"
 
 #define UNDOLEVELS 100 
-#define PREVIEWSIZE 400
+#define PREVIEWSIZE 600
 
 extern "C" {
 
@@ -72,7 +72,8 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *y2, *brightness, *ydpi;
+  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *y2, *brightness, *ydpi,
+	       	*tilt_x_x, *tilt_x_y, *tilt_y_x, *tilt_y_y;
 };
 Data data;
 
@@ -124,6 +125,11 @@ getvals (void)
   rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
   rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
+  current.tilt_x_x = gtk_spin_button_get_value (data.tilt_x_x);
+  current.tilt_x_y = gtk_spin_button_get_value (data.tilt_x_y);
+  current.tilt_y_x = gtk_spin_button_get_value (data.tilt_y_x);
+  current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
+  printf ("%f %f %f %f\n", data.tilt_x_x, data.tilt_x_y, data.tilt_y_x, data.tilt_y_y);
 }
 
 /* Set values displayed by the UI.  */
@@ -137,6 +143,10 @@ setvals (void)
   gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
   gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
+  gtk_spin_button_set_value (data.tilt_x_x, current.tilt_x_x);
+  gtk_spin_button_set_value (data.tilt_x_y, current.tilt_x_y);
+  gtk_spin_button_set_value (data.tilt_y_x, current.tilt_y_x);
+  gtk_spin_button_set_value (data.tilt_y_y, current.tilt_y_y);
   initialized = 1;
 }
 
@@ -162,6 +172,176 @@ static bool setcenter;
 static bool freeze_x = false;
 static bool freeze_y = false;
 static bool preview;
+static void display ();
+
+static void
+optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
+	  double r1, int steps1, double r2, int steps2)
+{
+  scr_to_img_parameters best;
+  scr_to_img_parameters c = current;
+  double max = -1;
+  static const int outertiles = 8;
+  static const int innertiles = 128;
+  save_parameters ();
+  double xxc = 0;
+  double yyc = 0;
+  rparams.saturation = 4;
+  rparams.screen_blur_radius = 0;
+  printf ("optimization %i %i %i\n", stepsc, steps1, steps2);
+//#pragma openmp parallel for
+  for (double xx1 = x1 - r1; xx1 <= x1 + r1; xx1 += 2 * r1 / steps1)
+    {
+      for (double yy1 = y1 - r1; yy1 <= y1 + r1; yy1 += 2 * r1 / steps1)
+	{
+	  if (fabs (xx1) >= 3 * fabs (yy1))
+	  for (double xxc = xc - cr; xxc <= xc + cr; xxc += 2 * cr / stepsc)
+	    {
+	      for (double yyc = yc - cr; yyc <= yc + cr;
+		   yyc += 2 * cr / stepsc)
+		{
+		  for (double xx2 = 1 - r2; xx2 <= 1 + r2;
+		       xx2 += 2 * r2 / steps2)
+		    {
+		      for (double yy2 = 1 - r2; yy2 <= 1 + r2;
+			   yy2 += 2 * r2 / steps2)
+			{
+			  c.center_x = xxc;
+			  c.center_y = yyc;
+			  c.coordinate1_x = xx1;
+			  c.coordinate1_y = yy1;
+			  c.coordinate2_x = -yy1 * xx2;
+			  c.coordinate2_y = xx1 * yy2;
+			  double acc = 0;
+			  bool found = true;
+			  {
+			    render_superpose_img render (c, scan, rparams, 255, false, false);
+			    double scr_xsize =
+			      render.get_width (), scr_ysize =
+			      render.get_height ();
+				render.precompute_all ();
+			    if ((scr_xsize > 600 || scr_ysize > 600) && scr_xsize < 20000)
+			    {
+			      found = true;
+			    int tilewidth = scan.width / outertiles;
+			    int tileheight = scan.height / outertiles;
+			    int stepwidth = tilewidth / innertiles;
+			    int stepheight = tileheight / innertiles;
+			    render.precompute_all ();
+			    for (int x = 0; x < outertiles; x++)
+			      for (int y = 0; y < outertiles; y++)
+				{
+				  luminosity_t red = 0, green = 0, blue = 0;
+				  render.analyze_tile (x * tilewidth, y * tileheight,
+						       tilewidth, tileheight,
+						       stepwidth, stepheight,
+						       &red, &green, &blue);
+				  double sum = (red + green + blue);
+				  if (sum)
+				  {
+				    sum = 1/sum;
+				    acc +=
+				      fabs (1 - red * sum) + fabs (1 - green * sum) +
+				      fabs (1 - blue * sum);
+				  }
+				}
+			    }
+
+#if 0
+			    render_fast render (c, scan, rparams, 65536);
+			    double scr_xsize =
+			      render.get_width (), scr_ysize =
+			      render.get_height ();
+				render.precompute_all ();
+			    if ((scr_xsize > 600 || scr_ysize > 600) && scr_xsize < 20000)
+			      {
+				found = true;
+				int gg=0,bb=0,rr=0;
+				for (int x = 0; x < outertiles; x++)
+				  for (int y = 0; y < outertiles; y++)
+				    {
+				      int red = 0, green = 0, blue = 0;
+				      for (int sx = 0; sx < innertiles; sx++)
+					for (int sy = 0; sy < innertiles;
+					     sy++)
+					  {
+					    int r, g, b;
+					    render.
+					      render_pixel ((x * innertiles +
+							     sx) * scr_xsize /
+							    (innertiles *
+							     outertiles),
+							    (y * innertiles +
+							     sy) * scr_ysize /
+							    (innertiles *
+							     outertiles), &r,
+							    &g, &b);
+					    red += r;
+					    green += g;
+					    blue += b;
+					    if (r > g && r > b)
+					      rr++;
+					    else if (b > r && b > g)
+					      bb++;
+					    else if (g > r && g > b)
+					      gg++;
+					  }
+#if 0
+				      //acc += std::max (rr, std::max (gg, bb));
+				      if (rr / 3 > innertiles * innertiles / 2)
+					acc++;
+				      if (gg / 3 > innertiles * innertiles / 2)
+					acc++;
+				      if (bb / 3 > innertiles * innertiles / 2)
+					acc++;
+#endif
+#if 1
+				      int avg = (red + green + blue) / 3;
+				      acc +=
+					abs (avg - red) + abs (avg - green) +
+					abs (avg - blue);
+				      //(avg - red) * (avg - red) + (avg - green) * (avg -green) + (avg - blue) * (avg-blue);
+#endif
+				    }
+			      }
+#endif
+			  }
+			  if (acc > max)
+			    {
+//#pragma openmp critical
+			      if (acc > max)
+				{
+				  max = acc;
+				  printf ("%f %f\n", (double)acc, (double)max);
+				  best = c;
+				  save_csp (stdout, c, rparams);
+				  current = c;
+				  display ();
+				}
+			    }
+			  if (steps2 <= 1)
+			    break;
+			}
+		      if (steps2 <= 1)
+			break;
+		    }
+		  if (stepsc <= 1)
+		    break;
+		}
+	      if (stepsc <= 1)
+		break;
+	    }
+	  if (steps1 <= 1)
+	    break;
+	}
+#if 0
+      if (steps1 <= 1)
+	break;
+#endif
+    }
+  current = best;
+  display_scheduled = true;
+}
 
 /* Handle all the magic keys.  */
 static gint
@@ -175,6 +355,31 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       color_display = !color_display;
       display_scheduled = 1;
+    }
+  if (k == 'O')
+    {
+static int step;
+      if (step == 0)
+	{
+	  optimize (current.center_x,  current.center_y, 0, 1,  //center
+		    30, 0, 27, 100,  //x1
+		    0, 1);
+	  step++;
+	}
+      else if (step == 1)
+      {
+	  optimize (current.center_x,  current.center_y, (fabs (current.coordinate1_x)+fabs (current.coordinate1_y))/8,10,  //center
+		    current.coordinate1_x, current.coordinate1_y, 19.0*2/100, 10,  //x1
+		    0.003, 5);
+	  step++;
+	}
+      else if (step == 2)
+	{
+	  optimize (current.center_x,  current.center_y, 0, 1,  //center
+		    current.coordinate1_x, current.coordinate1_y, 2, 10,  //x1
+		    0.001, 10);
+	  step++;
+	}
     }
   if (k == 'x')
     {
@@ -194,6 +399,11 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'S')
     {
       rparams.precise = true;
+      display_scheduled = 1;
+    }
+  if (k == 'i')
+    {
+      std::swap (rparams.gray_min, rparams.gray_max);
       display_scheduled = 1;
     }
   if (k == 's')
@@ -259,6 +469,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
       if (minx < maxx && miny < maxy)
 	{
+	  bool inverted = rparams.gray_min > rparams.gray_max;
 	  rparams.gray_min = scan.maxval;
 	  rparams.gray_max = 0;
 	  for (int y = std::max ((int)(shift_y / scale_y), 0);
@@ -269,6 +480,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 		 rparams.gray_max = std::max ((int)scan.data[y][x], rparams.gray_max);
 	       }
 	  display_scheduled = 1;
+	  if (inverted)
+	    std::swap (rparams.gray_min, rparams.gray_max);
 	}
      }
 
@@ -341,6 +554,10 @@ initgtk (int *argc, char **argv)
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
   data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
   data.ydpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "ydpi"));
+  data.tilt_x_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_x"));
+  data.tilt_x_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_y"));
+  data.tilt_y_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_x"));
+  data.tilt_y_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_y"));
   /*data.about = GTK_WIDGET( gtk_builder_get_object( builder, "aboutdialog1" ) ); */
 
   /* Connect callbacks */
@@ -549,13 +766,18 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 
   cairo_surface_destroy (surface);
 }
+static void
+display_preview ()
+{
+  previewrender (&data.smallpixbuf);
+  gtk_image_set_from_pixbuf (data.smallimage, data.smallpixbuf);
+}
 
 static void
 display ()
 {
   gtk_image_viewer_redraw ((GtkImageViewer *)data.image_viewer, 1);
-  previewrender (&data.smallpixbuf);
-  gtk_image_set_from_pixbuf (data.smallimage, data.smallpixbuf);
+  display_preview ();
 }
 
 G_MODULE_EXPORT void
