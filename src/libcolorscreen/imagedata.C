@@ -62,20 +62,21 @@ image_data::allocate (bool rgb)
   return true;
 }
 
-static char emsg[1024];
-
 bool
 image_data::load_tiff (const char *name, const char **error)
 {
+  printf("TIFFopen\n");
   TIFF* tif = TIFFOpen(name, "r");
   if (!tif)
     {
       *error = "can not open file";
       return false;
     }
-  uint32_t imagelength, w, h, bitspersample, photometric, samples;
+  uint32_t w, h, bitspersample, photometric, samples;
+  printf("checking width/height\n");
   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+  printf("checking bits per sample\n");
   TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);
   if (bitspersample != 8 && bitspersample != 16)
     {
@@ -83,6 +84,7 @@ image_data::load_tiff (const char *name, const char **error)
       TIFFClose (tif);
       return false;
     }
+  printf("checking smaples per pixel\n");
   TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
   if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric))
     {
@@ -95,6 +97,7 @@ image_data::load_tiff (const char *name, const char **error)
 	  return false;
 	}
     }
+  printf("Getting scanlinel\n");
   tdata_t buf = _TIFFmalloc(TIFFScanlineSize(tif));
   if (!buf)
     {
@@ -104,6 +107,7 @@ image_data::load_tiff (const char *name, const char **error)
     }
   width = w;
   height = h;
+  printf("Allocating %ix%ii\n", w, h);
   if (!allocate (samples == 4))
     {
       *error = "out of memory allocating image";
@@ -116,9 +120,15 @@ image_data::load_tiff (const char *name, const char **error)
   else if (bitspersample == 16)
     maxval = 65535;
   else
-    abort ();
+    {
+      *error = "Only bith depths 8 and 16 are supported";
+      TIFFClose (tif);
+      _TIFFfree(buf);
+      return false;
+    }
   for (uint32_t row = 0; row < h; row++)
     {
+      printf("Decoding scanline %i\n", row);
       if (!TIFFReadScanline(tif, buf, row))
 	{
 	  *error = "scanline decoding failed";
@@ -128,13 +138,13 @@ image_data::load_tiff (const char *name, const char **error)
       if (bitspersample == 8 && samples == 1)
 	{
 	  uint8_t *buf2 = (uint8_t *)buf;
-	  for (int x = 0; x < w; x++)
+	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
       else if (bitspersample == 8 && samples == 4)
 	{
 	  uint8_t *buf2 = (uint8_t *)buf;
-	  for (int x = 0; x < w; x++)
+	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[4 * x+0];
 	      rgbdata[row][x].g = buf2[4 * x+1];
@@ -145,13 +155,13 @@ image_data::load_tiff (const char *name, const char **error)
       else if (bitspersample == 16 && samples == 1)
 	{
 	  uint16_t *buf2 = (uint16_t *)buf;
-	  for (int x = 0; x < w; x++)
+	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
       else if (bitspersample == 16 && samples == 4)
 	{
 	  uint16_t *buf2 = (uint16_t *)buf;
-	  for (int x = 0; x < w; x++)
+	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[4*x+0];
 	      rgbdata[row][x].g = buf2[4*x+1];
@@ -162,8 +172,10 @@ image_data::load_tiff (const char *name, const char **error)
       else
 	abort ();
     }
+  printf("closing\n");
   _TIFFfree(buf);
   TIFFClose (tif);
+  printf("done\n");
   return true;
 }
 bool
@@ -256,8 +268,8 @@ image_data::load_jpg (const char *name, const char **error)
       return false;
     }
   maxval = 255;
-  for (uint32_t y = 0; y < height; y++)
-    for (uint32_t x = 0; x < width; x++)
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
       data[y][x] = imgBuf[y * width + x];
   tjFree (imgBuf);
   return true;
