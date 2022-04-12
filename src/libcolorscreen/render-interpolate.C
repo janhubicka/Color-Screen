@@ -105,8 +105,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			to_diagonal_coordinates (scr_x + 0.5, scr_y, &xd, &yd);
 			xd = round (xd);
 			yd = round (yd);
-			unsigned int xx = ((int)xd + (int)yd) / 2;
-			unsigned int yy = -(int)xd + (int)yd;
+			int xx = ((int)xd + (int)yd) / 2;
+			int yy = -(int)xd + (int)yd;
 			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
 			  {
 #pragma omp atomic
@@ -121,8 +121,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
 			xd = round (xd);
 			yd = round (yd);
-			unsigned int xx = ((int)xd + (int)yd) / 2;
-			unsigned int yy = -(int)xd + (int)yd;
+			int xx = ((int)xd + (int)yd) / 2;
+			int yy = -(int)xd + (int)yd;
 			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
 			  {
 #pragma omp atomic

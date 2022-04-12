@@ -48,7 +48,7 @@ class render
 {
 public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_dst_maxval (dstmaxval), m_params (rparam)
+  : m_img (img), m_params (rparam), m_dst_maxval (dstmaxval)
   {
     m_scr_to_img.set_parameters (param);
   }
@@ -207,16 +207,17 @@ cap_color (luminosity_t val, luminosity_t weight, luminosity_t *diff, luminosity
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
-  luminosity_t diff = 0;
-  luminosity_t cnt_neg = 0;
-  luminosity_t cnt_pos = 0;
-  luminosity_t r1 =r, g1= g, b1 = b;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
-  luminosity_t r2 =r, g2= g, b2 = b;
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
+  /* Fancy capping seems to look weird.  */
 #if 0
+  luminosity_t r2 =r, g2= g, b2 = b;
+  luminosity_t r1 =r, g1= g, b1 = b;
+  luminosity_t diff = 0;
+  luminosity_t cnt_neg = 0;
+  luminosity_t cnt_pos = 0;
   r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
   g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
   b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
@@ -354,9 +355,6 @@ render::get_img_pixel (coord_t xp, coord_t yp)
 inline void
 render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
-  luminosity_t val;
-  //return fast_get_img_pixel (xp, yp);
-
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
   yp -= (coord_t)0.5;
