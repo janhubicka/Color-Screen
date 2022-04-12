@@ -424,7 +424,7 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
       int ymax = std::min ((int)ceil (std::max(std::max (std::max (yc - y1, yc + y1), yc - y2), yc + y2) + 0.5), m_img.height - 1);
       matrix2x2<coord_t> base (x1, x2,
 			      y1, y2);
-      matrix2x2 inv = base.invert ();
+      matrix2x2<coord_t> inv = base.invert ();
       for (int y = ymin; y <= ymax; y++)
 	{
 	  for (int x = xmin ; x <= xmax; x++)
