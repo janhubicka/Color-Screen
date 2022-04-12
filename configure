@@ -18016,6 +18016,8 @@ printf "%s\n" "$ac_cv_prog_cxx_openmp" >&6; }
   fi
 
 
+CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
+LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 LDFLAGS="-lm $LDFLAGS"
 
