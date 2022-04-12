@@ -2,7 +2,7 @@
 #include "include/render.h"
 #define HEADER "screen_alignment_version: 1\n"
 
-static const char * const scr_names[max_scr_type]
+static const char * const scr_names[max_scr_type] =
 {
   "Paget",
   "Thames",
@@ -10,7 +10,7 @@ static const char * const scr_names[max_scr_type]
   "Dufay"
 };
 
-static const char * const bool_names[2]
+static const char * const bool_names[2] =
 {
   "yes",
   "no"
