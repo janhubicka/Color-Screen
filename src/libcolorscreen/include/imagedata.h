@@ -22,7 +22,7 @@ public:
   /* Dimensions of image data.  */
   int width, height;
   /* Maximal value of the image data.  */
-  gray maxval;
+  int maxval;
 
   /* Load image data from TIFF file.  */
   bool load_tiff (const char *name, const char **error);

@@ -98,7 +98,7 @@ render::precompute_all ()
 
 render::~render ()
 {
-  if (lookup_table)
+  if (m_lookup_table)
     {
       lookup_table_uses --;
       out_lookup_table_uses --;

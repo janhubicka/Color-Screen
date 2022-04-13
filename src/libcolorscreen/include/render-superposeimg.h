@@ -70,7 +70,6 @@ private:
 flatten_attr inline void
 render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
-  luminosity_t gg, rr, bb;
   int ix, iy;
 
   ix = (unsigned long long) round (scr_x* screen::size) & (unsigned)(screen::size - 1);

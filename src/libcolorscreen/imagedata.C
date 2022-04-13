@@ -86,11 +86,18 @@ image_data::load_tiff (const char *name, const char **error)
     }
   printf("checking smaples per pixel\n");
   TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
-  if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric))
+  if (samples != 1 && samples != 4)
+    {
+      printf("Samples:%i\n", samples);
+      *error = "only 1 sample per pixel (grayscale) 4 samples per pixel (RGBa) are supported";
+      TIFFClose (tif);
+      return false;
+    }
+  if (TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric))
     {
       if (photometric == PHOTOMETRIC_MINISBLACK && samples == 1)
 	;
-      if (photometric != PHOTOMETRIC_RGB && samples == 4)
+      else if (photometric != PHOTOMETRIC_RGB && samples == 4)
 	{
 	  *error = "only RGBa or grayscale images are suppored";
 	  TIFFClose (tif);
@@ -170,7 +177,11 @@ image_data::load_tiff (const char *name, const char **error)
 	    }
 	}
       else
-	abort ();
+	{
+	  fprintf (stderr, "Wrong combinations of bitspersample %i and samples %i\n",
+		   bitspersample, samples);
+	  abort ();
+	}
     }
   printf("closing\n");
   _TIFFfree(buf);
