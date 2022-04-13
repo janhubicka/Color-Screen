@@ -65,18 +65,23 @@ image_data::allocate (bool rgb)
 bool
 image_data::load_tiff (const char *name, const char **error)
 {
-  printf("TIFFopen\n");
+const bool debug = false;
+  if (debug)
+    printf("TIFFopen\n");
   TIFF* tif = TIFFOpen(name, "r");
   if (!tif)
     {
       *error = "can not open file";
       return false;
     }
-  uint32_t w, h, bitspersample, photometric, samples;
-  printf("checking width/height\n");
+  uint32_t w, h;
+  uint16_t bitspersample, photometric, samples;
+  if (debug)
+    printf("checking width/height\n");
   TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
-  printf("checking bits per sample\n");
+  if (debug)
+    printf("checking bits per sample\n");
   TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);
   if (bitspersample != 8 && bitspersample != 16)
     {
@@ -84,12 +89,14 @@ image_data::load_tiff (const char *name, const char **error)
       TIFFClose (tif);
       return false;
     }
-  printf("checking smaples per pixel\n");
+  if (debug)
+    printf("checking smaples per pixel\n");
   TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
-  if (samples != 1 && samples != 4)
+  if (samples != 1 && samples != 3 && samples != 4)
     {
-      printf("Samples:%i\n", samples);
-      *error = "only 1 sample per pixel (grayscale) 4 samples per pixel (RGBa) are supported";
+      if (debug)
+	printf("Samples:%i\n", samples);
+      *error = "only 1 sample per pixel (grayscale), 3 samples per pixel (RGB) or 4 samples per pixel (RGBa) are supported";
       TIFFClose (tif);
       return false;
     }
@@ -97,14 +104,18 @@ image_data::load_tiff (const char *name, const char **error)
     {
       if (photometric == PHOTOMETRIC_MINISBLACK && samples == 1)
 	;
-      else if (photometric != PHOTOMETRIC_RGB && samples == 4)
+      else if (photometric == PHOTOMETRIC_RGB && (samples == 4 || samples == 3))
+        ;
+      else 
 	{
-	  *error = "only RGBa or grayscale images are suppored";
+	  printf("%i %i\n", photometric, samples);
+	  *error = "only RGB, RGBa or grayscale images are suppored";
 	  TIFFClose (tif);
 	  return false;
 	}
     }
-  printf("Getting scanlinel\n");
+  if (debug)
+    printf("Getting scanlinel\n");
   tdata_t buf = _TIFFmalloc(TIFFScanlineSize(tif));
   if (!buf)
     {
@@ -114,8 +125,9 @@ image_data::load_tiff (const char *name, const char **error)
     }
   width = w;
   height = h;
-  printf("Allocating %ix%ii\n", w, h);
-  if (!allocate (samples == 4))
+  if (debug)
+    printf("Allocating %ix%ii\n", w, h);
+  if (!allocate (samples == 4 || samples == 3))
     {
       *error = "out of memory allocating image";
       TIFFClose (tif);
@@ -135,7 +147,8 @@ image_data::load_tiff (const char *name, const char **error)
     }
   for (uint32_t row = 0; row < h; row++)
     {
-      printf("Decoding scanline %i\n", row);
+      if (debug)
+	printf("Decoding scanline %i\n", row);
       if (!TIFFReadScanline(tif, buf, row))
 	{
 	  *error = "scanline decoding failed";
@@ -147,6 +160,18 @@ image_data::load_tiff (const char *name, const char **error)
 	  uint8_t *buf2 = (uint8_t *)buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
+	}
+      else if (bitspersample == 8 && samples == 3)
+	{
+	  uint8_t *buf2 = (uint8_t *)buf;
+	  for (uint32_t x = 0; x < w; x++)
+	    {
+	      rgbdata[row][x].r = buf2[3 * x+0];
+	      rgbdata[row][x].g = buf2[3 * x+1];
+	      rgbdata[row][x].b = buf2[3 * x+2];
+	      /* Gray from green.  */
+	      data[row][x] = buf2[3 * x+1];
+	    }
 	}
       else if (bitspersample == 8 && samples == 4)
 	{
@@ -165,6 +190,18 @@ image_data::load_tiff (const char *name, const char **error)
 	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
+      else if (bitspersample == 8 && samples == 3)
+	{
+	  uint16_t *buf2 = (uint16_t *)buf;
+	  for (uint32_t x = 0; x < w; x++)
+	    {
+	      rgbdata[row][x].r = buf2[3 * x+0];
+	      rgbdata[row][x].g = buf2[3 * x+1];
+	      rgbdata[row][x].b = buf2[3 * x+2];
+	      /* Gray from green.  */
+	      data[row][x] = buf2[3 * x+1];
+	    }
+	}
       else if (bitspersample == 16 && samples == 4)
 	{
 	  uint16_t *buf2 = (uint16_t *)buf;
@@ -178,15 +215,18 @@ image_data::load_tiff (const char *name, const char **error)
 	}
       else
 	{
+	  /* We should have given up earlier.  */
 	  fprintf (stderr, "Wrong combinations of bitspersample %i and samples %i\n",
 		   bitspersample, samples);
 	  abort ();
 	}
     }
-  printf("closing\n");
+  if (debug)
+    printf("closing\n");
   _TIFFfree(buf);
   TIFFClose (tif);
-  printf("done\n");
+  if (debug)
+    printf("done\n");
   return true;
 }
 bool
