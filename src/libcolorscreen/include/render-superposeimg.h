@@ -27,7 +27,7 @@ public:
         static screen preview_screen;
 	static bool initialized;
 	static enum scr_type t;
-	if (!initialized != t != m_scr_to_img.get_type ())
+	if (!initialized || t != m_scr_to_img.get_type ())
 	  {
 	    preview_screen.initialize_preview (m_scr_to_img.get_type ());
 	    initialized = true;

@@ -130,7 +130,7 @@ main (int argc, char **argv)
 	}
       if (TIFFWriteScanline(out, outrow, y, 0) < 0)
 	{
-	  fprintf (stderr, "Write error on line %s\n", y);
+	  fprintf (stderr, "Write error on line %i\n", y);
 	  exit (1);
 	}
     }
