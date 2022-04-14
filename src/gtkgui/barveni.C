@@ -23,7 +23,7 @@ static struct scr_to_img_parameters current;
 static int undopos;
 
 static char *oname, *paroname;
-static void bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf);
+static void bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf);
 
 /* The graymap with original scan is stored here.  */
 static image_data scan;
@@ -608,7 +608,7 @@ previewrender (GdkPixbuf ** pixbuf)
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
-  double step = max_size / (double)PREVIEWSIZE;
+  coord_t step = max_size / (coord_t)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
   render.precompute_all ();
 
@@ -628,9 +628,9 @@ previewrender (GdkPixbuf ** pixbuf)
 }
 
 static void
-draw_circle (cairo_surface_t *surface, double bigscale,
+draw_circle (cairo_surface_t *surface, coord_t bigscale,
     	     int xoffset, int yoffset,
-    	     double x, double y, double r, double g, double b)
+    	     coord_t x, coord_t y, coord_t r, coord_t g, coord_t b)
 {
   cairo_t *cr = cairo_create (surface);
   cairo_translate (cr, -xoffset, -yoffset);
@@ -644,12 +644,13 @@ draw_circle (cairo_surface_t *surface, double bigscale,
 }
 
 static void
-bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
+bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 {
   int bigrowstride = gdk_pixbuf_get_rowstride (bigpixbuf);
   guint8 *bigpixels = gdk_pixbuf_get_pixels (bigpixbuf);
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
+  coord_t step = 1 / bigscale;
 
 
   if (display_type == 0)
@@ -659,14 +660,14 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
  
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
-	  double py = (y + yoffset) / bigscale;
+	  coord_t py = (y + yoffset) * step;
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -678,14 +679,14 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
 
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
-	  double py = (y + yoffset) / bigscale;
+	  coord_t py = (y + yoffset) * step;
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -697,14 +698,14 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
 	render.set_color_display ();
       render.precompute_all ();
 
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
-	  double py = (y + yoffset) / bigscale;
+	  coord_t py = (y + yoffset) * step;
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      render.render_pixel_img_antialias ((x + xoffset) / bigscale, py, 1 / bigscale, 8, &r, &g, &b);
+	      render.render_pixel_img_antialias ((x + xoffset) * step, py, 1 * step, 8, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -715,20 +716,19 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       rparams.screen_compensation = (display_type == 5);
       render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 255);
       screen screen;
-      render.precompute_img_range (xoffset / bigscale, yoffset / bigscale,
-	  			   (pxsize+xoffset) / bigscale, 
-				   (pysize+yoffset) / bigscale);
+      render.precompute_img_range (xoffset * step, yoffset * step,
+	  			   (pxsize+xoffset) * step, 
+				   (pysize+yoffset) * step);
 
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
-	  double py = (y + yoffset) / bigscale;
+	  coord_t py = (y + yoffset) * step;
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      bool sx, sy;
 	      
-	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -738,16 +738,15 @@ bigrender (int xoffset, int yoffset, double bigscale, GdkPixbuf * bigpixbuf)
       render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
       render.precompute_all ();
 
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,bigscale,yoffset,xoffset) 
+      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
       for (int y = 0; y < pysize; y++)
 	{
-	  double py = (y + yoffset) / bigscale;
+	  coord_t py = (y + yoffset) * step;
 	  for (int x = 0; x < pxsize; x++)
 	    {
 	      int r, g, b;
-	      bool sx, sy;
 
-	      render.render_pixel_img ((x + xoffset) / bigscale, py, &r, &g, &b);
+	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
 	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
 	    }
 	}
@@ -792,7 +791,6 @@ G_MODULE_EXPORT void
 cb_press_small (GtkImage * image, GdkEventButton * event, Data * data)
 {
   getvals ();
-  printf ("Press small %i %i\n", event->x, event->y);
   if (event->button == 1)
     {
       offsetx =

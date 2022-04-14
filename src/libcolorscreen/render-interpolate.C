@@ -85,12 +85,14 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  maxy = std::min (maxy, m_img.height);
 
 	  /* Collect luminosity of individual color patches.  */
-#pragma omp parallel for shared(w_blue, w_red, w_green, minx, miny, maxx, maxy)
+#pragma omp parallel shared(w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+	  {
+#pragma omp for 
 	      for (int y = miny ; y < maxy; y++)
 		for (int x = minx; x < maxx; x++)
 		  {
 		    coord_t scr_x, scr_y;
-		    m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
+		    m_scr_to_img.to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
 		    scr_x += m_prec_xshift;
 		    scr_y += m_prec_yshift;
 		    if (scr_x < 0 || scr_x >= m_prec_width - 1 || scr_y < 0 || scr_y > m_prec_height - 1)
@@ -99,10 +101,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		    luminosity_t l = fast_get_img_pixel (x, y);
 		    int ix = (unsigned long long) round (scr_x * screen::size) & (unsigned)(screen::size - 1);
 		    int iy = (unsigned long long) round (scr_y * screen::size) & (unsigned)(screen::size - 1);
-		    if (m_screen->mult[iy][ix][0] > 0.8)
+		    if (m_screen->mult[iy][ix][0] > m_params.collection_threshold)
 		      {
 			coord_t xd, yd;
-			to_diagonal_coordinates (scr_x + 0.5, scr_y, &xd, &yd);
+			to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
 			xd = round (xd);
 			yd = round (yd);
 			int xx = ((int)xd + (int)yd) / 2;
@@ -115,7 +117,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    w_red [yy * m_prec_width + xx] += m_screen->mult[iy][ix][0];
 			  }
 		      }
-		    if (m_screen->mult[iy][ix][1] > 0.8)
+		    if (m_screen->mult[iy][ix][1] > m_params.collection_threshold)
 		      {
 			coord_t xd, yd;
 			to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
@@ -133,34 +135,34 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		      }
 		    if (l < 0)
 		      l = 0;
-		    if (m_screen->mult[iy][ix][2] > 0.8)
+		    if (m_screen->mult[iy][ix][2] > m_params.collection_threshold)
 		      {
-			int xx = roundf (2*(scr_x-0.25));
-			int yy = roundf (2*(scr_y-0.25));
+			int xx = roundf (2*(scr_x-(coord_t)0.25));
+			int yy = roundf (2*(scr_y-(coord_t)0.25));
 #pragma omp atomic
 			prec_blue (xx, yy) += m_screen->mult[iy][ix][2] * l;
 #pragma omp atomic
 			w_blue [yy * m_prec_width * 2 + xx] += m_screen->mult[iy][ix][2];
 		      }
 		  }
-#pragma omp parallel
 	    {
-#pragma omp for 
+#pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		for (int x = 0; x < m_prec_width; x++)
 		  if (w_red [y * m_prec_width + x] != 0)
 		    prec_red (x,y) /= w_red [y * m_prec_width + x];
-#pragma omp for 
+#pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		for (int x = 0; x < m_prec_width; x++)
 		  if (w_green [y * m_prec_width + x] != 0)
 		    prec_green (x,y) /= w_green [y * m_prec_width + x];
-#pragma omp for 
+#pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		for (int x = 0; x < m_prec_width * 2; x++)
 		  if (w_blue [y * m_prec_width * 2 + x] != 0)
 		    prec_blue (x,y) /= w_blue [y * m_prec_width * 2 + x];
 	    }
+	  }
 	  free (w_red);
 	  free (w_green);
 	  free (w_blue);

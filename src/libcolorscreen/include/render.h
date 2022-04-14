@@ -10,7 +10,7 @@
 struct render_parameters
 {
   render_parameters()
-  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), screen_blur_radius (1.3),
+  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8), screen_blur_radius (1.3),
     color_model (3), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
@@ -23,6 +23,8 @@ struct render_parameters
   luminosity_t saturation;
   /* Brightness adjustments.  */
   luminosity_t brightness;
+  /* Threshold for collecting color information.  */
+  luminosity_t collection_threshold;
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
   /* If true apply color model of Finlay taking plate.  */
@@ -142,14 +144,23 @@ protected:
   int m_scr_width, m_scr_height;
 };
 
+typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
+
 /* Cubic interpolation helper.  */
 
 static inline luminosity_t
-cubic_interpolate (coord_t p0, coord_t p1, coord_t p2, coord_t p3, coord_t x)
+cubic_interpolate (luminosity_t p0, luminosity_t p1, luminosity_t p2, luminosity_t p3, coord_t x)
 {
-  return p1 + (coord_t)0.5 * x * (p2 - p0 +
-			 x * ((coord_t)2.0 * p0 - (coord_t)5.0 * p1 + (coord_t)4.0 * p2 - p3 +
-			      x * ((coord_t)3.0 * (p1 - p2) + p3 - p0)));
+  return p1 + (luminosity_t)0.5 * x * (p2 - p0 +
+			 x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
+			      x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
+}
+static inline vec_luminosity_t
+vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_t p2, vec_luminosity_t p3, coord_t x)
+{
+  return p1 + (luminosity_t)0.5 * x * (p2 - p0 +
+			 x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
+			      x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
 }
 
 /* Get image data in normalized range 0...1.  */
@@ -259,9 +270,9 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 	}
     }
 #endif
-  *rr = m_out_lookup_table [(int)(r * 65535.5)];
-  *gg = m_out_lookup_table [(int)(g * 65535.5)];
-  *bb = m_out_lookup_table [(int)(b * 65535.5)];
+  *rr = m_out_lookup_table [(int)(r * (luminosity_t)65535.5)];
+  *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
+  *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
 }
 
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval
@@ -289,9 +300,9 @@ render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, lu
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
 
-  *rr = m_out_lookup_table [(int)(r * 65535.5)];
-  *gg = m_out_lookup_table [(int)(g * 65535.5)];
-  *bb = m_out_lookup_table [(int)(b * 65535.5)];
+  *rr = m_out_lookup_table [(int)(r * (luminosity_t)65535.5)];
+  *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
+  *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
 }
 
 /* Determine grayscale value at a given position in the image.  */
@@ -339,13 +350,24 @@ render::get_img_pixel (coord_t xp, coord_t yp)
   coord_t rx = my_modf (xp, &sx);
   coord_t ry = my_modf (yp, &sy);
 
-  if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
-    return 0;
+  if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
+    {
+      vec_luminosity_t v1 = {get_data (sx-1, sy-1), get_data (sx, sy-1), get_data (sx+1, sy-1), get_data (sx+2, sy-1)};
+      vec_luminosity_t v2 = {get_data (sx-1, sy-0), get_data (sx, sy-0), get_data (sx+1, sy-0), get_data (sx+2, sy-0)};
+      vec_luminosity_t v3 = {get_data (sx-1, sy+1), get_data (sx, sy+1), get_data (sx+1, sy+1), get_data (sx+2, sy+1)};
+      vec_luminosity_t v4 = {get_data (sx-1, sy+2), get_data (sx, sy+2), get_data (sx+1, sy+2), get_data (sx+2, sy+2)};
+      vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
+      val = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
+#if 0
   val = cubic_interpolate (cubic_interpolate (get_data ( sx-1, sy-1), get_data (sx-1, sy), get_data (sx-1, sy+1), get_data (sx-1, sy+2), ry),
 			   cubic_interpolate (get_data ( sx-0, sy-1), get_data (sx-0, sy), get_data (sx-0, sy+1), get_data (sx-0, sy+2), ry),
 			   cubic_interpolate (get_data ( sx+1, sy-1), get_data (sx+1, sy), get_data (sx+1, sy+1), get_data (sx+1, sy+2), ry),
 			   cubic_interpolate (get_data ( sx+2, sy-1), get_data (sx+2, sy), get_data (sx+2, sy+1), get_data (sx+2, sy+2), ry),
 			   rx);
+#endif
+      return val;
+    }
+    return 0;
   return val;
 }
 
@@ -358,31 +380,35 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
   yp -= (coord_t)0.5;
-  int sx = xp, sy = yp;
+  int sx, sy;
+  coord_t rx = my_modf (xp, &sx);
+  coord_t ry = my_modf (yp, &sy);
 
-  if (sx < 1 || sx >= m_img.width - 2 || sy < 1 || sy >= m_img.height - 2)
+  if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
+    {
+      *r = cubic_interpolate (cubic_interpolate (get_data_red ( sx-1, sy-1), get_data_red (sx-1, sy), get_data_red (sx-1, sy+1), get_data_red (sx-1, sy+2), ry),
+			      cubic_interpolate (get_data_red ( sx-0, sy-1), get_data_red (sx-0, sy), get_data_red (sx-0, sy+1), get_data_red (sx-0, sy+2), ry),
+			      cubic_interpolate (get_data_red ( sx+1, sy-1), get_data_red (sx+1, sy), get_data_red (sx+1, sy+1), get_data_red (sx+1, sy+2), ry),
+			      cubic_interpolate (get_data_red ( sx+2, sy-1), get_data_red (sx+2, sy), get_data_red (sx+2, sy+1), get_data_red (sx+2, sy+2), ry),
+			      rx);
+      *g = cubic_interpolate (cubic_interpolate (get_data_green ( sx-1, sy-1), get_data_green (sx-1, sy), get_data_green (sx-1, sy+1), get_data_green (sx-1, sy+2), ry),
+			      cubic_interpolate (get_data_green ( sx-0, sy-1), get_data_green (sx-0, sy), get_data_green (sx-0, sy+1), get_data_green (sx-0, sy+2), ry),
+			      cubic_interpolate (get_data_green ( sx+1, sy-1), get_data_green (sx+1, sy), get_data_green (sx+1, sy+1), get_data_green (sx+1, sy+2), ry),
+			      cubic_interpolate (get_data_green ( sx+2, sy-1), get_data_green (sx+2, sy), get_data_green (sx+2, sy+1), get_data_green (sx+2, sy+2), ry),
+			      rx);
+      *b = cubic_interpolate (cubic_interpolate (get_data_blue ( sx-1, sy-1), get_data_blue (sx-1, sy), get_data_blue (sx-1, sy+1), get_data_blue (sx-1, sy+2), ry),
+			      cubic_interpolate (get_data_blue ( sx-0, sy-1), get_data_blue (sx-0, sy), get_data_blue (sx-0, sy+1), get_data_blue (sx-0, sy+2), ry),
+			      cubic_interpolate (get_data_blue ( sx+1, sy-1), get_data_blue (sx+1, sy), get_data_blue (sx+1, sy+1), get_data_blue (sx+1, sy+2), ry),
+			      cubic_interpolate (get_data_blue ( sx+2, sy-1), get_data_blue (sx+2, sy), get_data_blue (sx+2, sy+1), get_data_blue (sx+2, sy+2), ry),
+			      rx);
+    }
+  else
     {
       *r = 0;
       *g = 0;
       *b = 0;
       return;
     }
-  coord_t rx = xp - sx, ry = yp - sy;
-  *r = cubic_interpolate (cubic_interpolate (get_data_red ( sx-1, sy-1), get_data_red (sx-1, sy), get_data_red (sx-1, sy+1), get_data_red (sx-1, sy+2), ry),
-			  cubic_interpolate (get_data_red ( sx-0, sy-1), get_data_red (sx-0, sy), get_data_red (sx-0, sy+1), get_data_red (sx-0, sy+2), ry),
-			  cubic_interpolate (get_data_red ( sx+1, sy-1), get_data_red (sx+1, sy), get_data_red (sx+1, sy+1), get_data_red (sx+1, sy+2), ry),
-			  cubic_interpolate (get_data_red ( sx+2, sy-1), get_data_red (sx+2, sy), get_data_red (sx+2, sy+1), get_data_red (sx+2, sy+2), ry),
-			  rx);
-  *g = cubic_interpolate (cubic_interpolate (get_data_green ( sx-1, sy-1), get_data_green (sx-1, sy), get_data_green (sx-1, sy+1), get_data_green (sx-1, sy+2), ry),
-			  cubic_interpolate (get_data_green ( sx-0, sy-1), get_data_green (sx-0, sy), get_data_green (sx-0, sy+1), get_data_green (sx-0, sy+2), ry),
-			  cubic_interpolate (get_data_green ( sx+1, sy-1), get_data_green (sx+1, sy), get_data_green (sx+1, sy+1), get_data_green (sx+1, sy+2), ry),
-			  cubic_interpolate (get_data_green ( sx+2, sy-1), get_data_green (sx+2, sy), get_data_green (sx+2, sy+1), get_data_green (sx+2, sy+2), ry),
-			  rx);
-  *b = cubic_interpolate (cubic_interpolate (get_data_blue ( sx-1, sy-1), get_data_blue (sx-1, sy), get_data_blue (sx-1, sy+1), get_data_blue (sx-1, sy+2), ry),
-			  cubic_interpolate (get_data_blue ( sx-0, sy-1), get_data_blue (sx-0, sy), get_data_blue (sx-0, sy+1), get_data_blue (sx-0, sy+2), ry),
-			  cubic_interpolate (get_data_blue ( sx+1, sy-1), get_data_blue (sx+1, sy), get_data_blue (sx+1, sy+1), get_data_blue (sx+1, sy+2), ry),
-			  cubic_interpolate (get_data_blue ( sx+2, sy-1), get_data_blue (sx+2, sy), get_data_blue (sx+2, sy+1), get_data_blue (sx+2, sy+2), ry),
-			  rx);
 }
 
 /* Sample square patch with center xc and yc and x1/y1, x2/y2 determining a coordinates

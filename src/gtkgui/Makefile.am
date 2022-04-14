@@ -1,4 +1,4 @@
-bin_SCRIPTS=barveni barvenirgb
+bin_SCRIPTS=barveni
 CLEANFILES = $(bin_SCRIPTS)
 EXTRA_DIST = barveni.in barvenirgb.in
 do_subst = sed -e 's,[@]bindir[@],$(bindir),g'
