@@ -10,7 +10,6 @@ public:
    : render_to_scr (param, data, rparam, dst_maxval),
      m_color (false)
   { 
-    coord_t x,x2, y, y2;
     if (empty)
       {
         static screen empty_screen;
@@ -39,10 +38,7 @@ public:
         static screen blured_screen;
 	static coord_t r = -1;
 	static enum scr_type t;
-	coord_t radius = m_params.screen_blur_radius;
-	m_scr_to_img.to_scr (0, 0, &x, &y);
-	m_scr_to_img.to_scr (1, 0, &x2, &y2);
-	radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+	coord_t radius = m_params.screen_blur_radius * pixel_size ();
 
 	if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
 	  {

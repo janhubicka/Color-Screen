@@ -157,12 +157,6 @@ cb_image_annotate (GtkImageViewer * imgv,
 		   gint shift_y,
 		   gdouble scale_x, gdouble scale_y, gpointer user_data)
 {
-  int img_width = gdk_pixbuf_get_width (pixbuf);
-  int img_height = gdk_pixbuf_get_height (pixbuf);
-  int row_stride = gdk_pixbuf_get_rowstride (pixbuf);
-  guint8 *buf = gdk_pixbuf_get_pixels (pixbuf);
-  int col_idx, row_idx;
-
   assert (scale_x == scale_y);
   bigrender (shift_x, shift_y, scale_x, pixbuf);
 }
@@ -170,7 +164,6 @@ cb_image_annotate (GtkImageViewer * imgv,
 static bool setcenter;
 static bool freeze_x = false;
 static bool freeze_y = false;
-static bool preview;
 static void display ();
 
 static void
@@ -183,8 +176,8 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
   static const int outertiles = 8;
   static const int innertiles = 128;
   save_parameters ();
-  double xxc = 0;
-  double yyc = 0;
+  //double xxc = 0;
+  //double yyc = 0;
   rparams.saturation = 4;
   rparams.screen_blur_radius = 0;
   printf ("optimization %i %i %i\n", stepsc, steps1, steps2);
@@ -305,7 +298,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 			      }
 #endif
 			  }
-			  if (acc > max)
+			  if (found && acc > max)
 			    {
 //#pragma openmp critical
 			      if (acc > max)
@@ -498,7 +491,7 @@ initgtk (int *argc, char **argv)
 {
   GtkBuilder *builder;
   GtkWidget *window;
-  GtkWidget *image_viewer, *scrolled_win;
+  GtkWidget *image_viewer;
 
   gtk_init (argc, &argv);
 
@@ -612,7 +605,7 @@ previewrender (GdkPixbuf ** pixbuf)
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
   render.precompute_all ();
 
-  gdk_pixbuf_unref (*pixbuf);
+  g_object_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
@@ -715,7 +708,6 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
       rparams.adjust_luminosity = (display_type == 4);
       rparams.screen_compensation = (display_type == 5);
       render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 255);
-      screen screen;
       render.precompute_img_range (xoffset * step, yoffset * step,
 	  			   (pxsize+xoffset) * step, 
 				   (pysize+yoffset) * step);
@@ -922,9 +914,16 @@ G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
   FILE *out;
-  int scale = 4;
   out = fopen (paroname, "w");
-  save_csp (out, current, rparams);
+  if (!out)
+    {
+      perror (paroname);
+    }
+  if (!save_csp (out, current, rparams))
+    {
+      fprintf (stderr, "saving failed\n");
+      exit (1);
+    }
   fclose (out);
 }
 
@@ -933,7 +932,6 @@ int
 main (int argc, char **argv)
 {
   GtkWidget *window;
-  double num;
   if (argc != 4 && argc != 5)
     {
       fprintf (stderr, "Invocation: %s scan.pgm output.pnm scan.par [scan-rgb.pnm]\n\n"
@@ -972,7 +970,7 @@ main (int argc, char **argv)
   int pxsize = 1024/*gdk_pixbuf_get_width (data.image_viewer);*/;
   int pysize = 800/*gdk_pixbuf_get_height (data.image_viewer);*/;
   double scale1 = pxsize / (double) scan.width;
-  double scale2 = pxsize / (double) scan.height;
+  double scale2 = pysize / (double) scan.height;
   double scale =  std::max (std::min (scale1, scale2), 0.1);
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER ((GtkImageViewer *)data.image_viewer),
 					scale, scale, 0, 0);

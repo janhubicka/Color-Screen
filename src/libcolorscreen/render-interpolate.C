@@ -11,16 +11,12 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 {
   assert (!m_prec_red);
   render::precompute (xmin, ymin, xmax, ymax);
-  if (/*m_params.screen_compensation*/1)
+  if (m_params.screen_compensation || m_params.precise)
     {
       static screen blured_screen;
       static coord_t r = -1;
       static enum scr_type t;
-      coord_t x, y, x2, y2;
-      coord_t radius = m_params.screen_blur_radius;
-      m_scr_to_img.to_scr (0, 0, &x, &y);
-      m_scr_to_img.to_scr (1, 0, &x2, &y2);
-      radius *= sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+      coord_t radius = m_params.screen_blur_radius * pixel_size ();
 
       if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
 	{

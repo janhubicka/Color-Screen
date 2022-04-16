@@ -62,6 +62,7 @@ public:
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
   inline luminosity_t fast_get_img_pixel (int x, int y);
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
+  coord_t pixel_size ();
   void precompute_all ();
   void precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
   void precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
