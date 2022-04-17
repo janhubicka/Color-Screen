@@ -95,14 +95,14 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		      continue;
 
 		    luminosity_t l = fast_get_img_pixel (x, y);
-		    int ix = (unsigned long long) round (scr_x * screen::size) & (unsigned)(screen::size - 1);
-		    int iy = (unsigned long long) round (scr_y * screen::size) & (unsigned)(screen::size - 1);
+		    int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+		    int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 		    if (m_screen->mult[iy][ix][0] > m_params.collection_threshold)
 		      {
 			coord_t xd, yd;
 			to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
-			xd = round (xd);
-			yd = round (yd);
+			xd = nearest_int (xd);
+			yd = nearest_int (yd);
 			int xx = ((int)xd + (int)yd) / 2;
 			int yy = -(int)xd + (int)yd;
 			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
@@ -117,8 +117,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		      {
 			coord_t xd, yd;
 			to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
-			xd = round (xd);
-			yd = round (yd);
+			xd = nearest_int (xd);
+			yd = nearest_int (yd);
 			int xx = ((int)xd + (int)yd) / 2;
 			int yy = -(int)xd + (int)yd;
 			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
@@ -129,12 +129,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    w_green [yy * m_prec_width + xx] += m_screen->mult[iy][ix][1];
 			  }
 		      }
-		    if (l < 0)
-		      l = 0;
 		    if (m_screen->mult[iy][ix][2] > m_params.collection_threshold)
 		      {
-			int xx = roundf (2*(scr_x-(coord_t)0.25));
-			int yy = roundf (2*(scr_y-(coord_t)0.25));
+			int xx = nearest_int (2*(scr_x-(coord_t)0.25));
+			int yy = nearest_int (2*(scr_y-(coord_t)0.25));
 #pragma omp atomic
 			prec_blue (xx, yy) += m_screen->mult[iy][ix][2] * l;
 #pragma omp atomic
@@ -288,13 +286,13 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
   if (m_params.screen_compensation)
     {
       coord_t lum = get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift);
-      int ix = (long long) round ((x - m_prec_xshift) * screen::size) & (screen::size - 1);
-      int iy = (long long) round ((y - m_prec_yshift) * screen::size) & (screen::size - 1);
+      int ix = (long long) nearest_int ((x - m_prec_xshift) * screen::size) & (screen::size - 1);
+      int iy = (long long) nearest_int ((y - m_prec_yshift) * screen::size) & (screen::size - 1);
       luminosity_t sr = m_screen->mult[iy][ix][0];
       luminosity_t sg = m_screen->mult[iy][ix][1];
       luminosity_t sb = m_screen->mult[iy][ix][2];
       luminosity_t llum = red * sr + green * sg + blue * sb;
-      luminosity_t correction = std::max (std::min (lum / llum, (luminosity_t)5.0), (luminosity_t)0.0);
+      luminosity_t correction = llum ? std::max (std::min (lum / llum, (luminosity_t)5.0), (luminosity_t)0.0) : 5;
       set_color (red * correction, green * correction, blue * correction, r, g, b);
 #if 0
       red = std::min (1.0, std::max (0.0, red));

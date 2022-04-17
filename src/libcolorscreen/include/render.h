@@ -282,7 +282,10 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 inline void
 render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t l, int *rr, int *gg, int *bb)
 {
+  luminosity_t r1, g1, b1;
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  m_color_matrix.apply_to_rgb (l, l, l, &r1, &g1, &b1);
+  l = r1 * rwght + g1 * gwght + b1 * bwght;
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
@@ -332,6 +335,17 @@ my_modf (double x, int *ptr)
   float ret = x - f;
   *ptr = f;
   return ret;
+}
+
+static inline long long
+nearest_int (float x)
+{
+  return roundf (x);
+}
+static inline long long
+nearest_int (double x)
+{
+  return round (x);
 }
 
 /* Determine grayscale value at a given position in the image.

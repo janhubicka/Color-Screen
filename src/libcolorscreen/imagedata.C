@@ -190,7 +190,7 @@ const bool debug = false;
 	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
-      else if (bitspersample == 8 && samples == 3)
+      else if (bitspersample == 16 && samples == 3)
 	{
 	  uint16_t *buf2 = (uint16_t *)buf;
 	  for (uint32_t x = 0; x < w; x++)
