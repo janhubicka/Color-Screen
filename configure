@@ -666,6 +666,9 @@ gtkgui_FALSE
 gtkgui_TRUE
 BARVENI_BIN_LIBS
 BARVENI_BIN_CFLAGS
+JAVA_HOME_SET_FALSE
+JAVA_HOME_SET_TRUE
+JAVA_HOME
 OPENMP_CXXFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
@@ -18022,6 +18025,19 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="-lm $LDFLAGS"
 
 
+ if test ! -z "$JAVA_HOME"; then
+  JAVA_HOME_SET_TRUE=
+  JAVA_HOME_SET_FALSE='#'
+else
+  JAVA_HOME_SET_TRUE='#'
+  JAVA_HOME_SET_FALSE=
+fi
+
+if test ! -z "$JAVA_HOME"; then
+  CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
+fi
+
+
 # Check whether --with-libtiff was given.
 if test ${with_libtiff+y}
 then :
@@ -18450,6 +18466,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCC_TRUE}" && test -z "${am__fastdepCC_FALSE}"; then
   as_fn_error $? "conditional \"am__fastdepCC\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${JAVA_HOME_SET_TRUE}" && test -z "${JAVA_HOME_SET_FALSE}"; then
+  as_fn_error $? "conditional \"JAVA_HOME_SET\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then

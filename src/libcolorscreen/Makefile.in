@@ -90,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@gtkgui_TRUE@am__append_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
 noinst_PROGRAMS = matrix$(EXEEXT)
 subdir = src/libcolorscreen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -133,9 +134,14 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libcolorscreen_la_LIBADD =
+am__libcolorscreen_la_SOURCES_DIST = render.C render-fast.C \
+	render-interpolate.C screen.C scr-to-img.C imagedata.C \
+	loadsave.C \
+	cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
+@gtkgui_TRUE@am__objects_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo
 am_libcolorscreen_la_OBJECTS = render.lo render-fast.lo \
 	render-interpolate.lo screen.lo scr-to-img.lo imagedata.lo \
-	loadsave.lo
+	loadsave.lo $(am__objects_1)
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -163,11 +169,11 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/gtkgui
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/imagedata.Plo \
-	./$(DEPDIR)/loadsave.Plo ./$(DEPDIR)/matrix.Po \
-	./$(DEPDIR)/render-fast.Plo ./$(DEPDIR)/render-interpolate.Plo \
-	./$(DEPDIR)/render.Plo ./$(DEPDIR)/scr-to-img.Plo \
-	./$(DEPDIR)/screen.Plo
+am__depfiles_remade = ./$(DEPDIR)/cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.Plo \
+	./$(DEPDIR)/imagedata.Plo ./$(DEPDIR)/loadsave.Plo \
+	./$(DEPDIR)/matrix.Po ./$(DEPDIR)/render-fast.Plo \
+	./$(DEPDIR)/render-interpolate.Plo ./$(DEPDIR)/render.Plo \
+	./$(DEPDIR)/scr-to-img.Plo ./$(DEPDIR)/screen.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -188,7 +194,7 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libcolorscreen_la_SOURCES) $(matrix_SOURCES)
-DIST_SOURCES = $(libcolorscreen_la_SOURCES) $(matrix_SOURCES)
+DIST_SOURCES = $(am__libcolorscreen_la_SOURCES_DIST) $(matrix_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -254,6 +260,7 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+JAVA_HOME = @JAVA_HOME@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
@@ -344,11 +351,13 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-interpolate.h include/render-superposeimg.h include/screen.h include/scr-to-img.h
+include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-interpolate.h include/render-superposeimg.h include/screen.h include/scr-to-img.h 
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C
+libcolorscreen_la_SOURCES = render.C render-fast.C \
+	render-interpolate.C screen.C scr-to-img.C imagedata.C \
+	loadsave.C $(am__append_1)
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1
 matrix_SOURCES = matrix.C
 all: all-am
@@ -442,6 +451,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imagedata.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loadsave.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
@@ -632,7 +642,8 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/imagedata.Plo
+		-rm -f ./$(DEPDIR)/cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.Plo
+	-rm -f ./$(DEPDIR)/imagedata.Plo
 	-rm -f ./$(DEPDIR)/loadsave.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
@@ -685,7 +696,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/imagedata.Plo
+		-rm -f ./$(DEPDIR)/cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.Plo
+	-rm -f ./$(DEPDIR)/imagedata.Plo
 	-rm -f ./$(DEPDIR)/loadsave.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
@@ -731,6 +743,11 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
+
+cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.o: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
+
+cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h: ImageData.java
+	javac -cp . -h . $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
