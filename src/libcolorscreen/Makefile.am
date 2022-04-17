@@ -11,9 +11,7 @@ endif
 noinst_PROGRAMS=matrix
 matrix_SOURCES=matrix.C
 
-cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.o: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
-
-cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
+cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
 
 cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h: ImageData.java
 	javac -cp . -h . $<
