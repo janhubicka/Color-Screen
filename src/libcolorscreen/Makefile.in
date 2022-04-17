@@ -90,7 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@gtkgui_TRUE@am__append_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
+@JAVA_HOME_SET_TRUE@am__append_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
 noinst_PROGRAMS = matrix$(EXEEXT)
 subdir = src/libcolorscreen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -138,7 +138,7 @@ am__libcolorscreen_la_SOURCES_DIST = render.C render-fast.C \
 	render-interpolate.C screen.C scr-to-img.C imagedata.C \
 	loadsave.C \
 	cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
-@gtkgui_TRUE@am__objects_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo
+@JAVA_HOME_SET_TRUE@am__objects_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo
 am_libcolorscreen_la_OBJECTS = render.lo render-fast.lo \
 	render-interpolate.lo screen.lo scr-to-img.lo imagedata.lo \
 	loadsave.lo $(am__objects_1)
@@ -745,6 +745,8 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES
 
 
 cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.o: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
+
+cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
 
 cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h: ImageData.java
 	javac -cp . -h . $<
