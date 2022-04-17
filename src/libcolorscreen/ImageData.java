@@ -7,12 +7,12 @@ public class ImageData {
     int width;
     int height;
     /**
-     * Maximal value returned by getPixel (intrprted as white)
+     * Maximal value returned by getPixel (interpretted as white)
      */
     int maxval;
 
     /**
-     * Maximal value returned by getPixel (intrprted as white)
+     * Return grayscale value of a pixel at coordinates X and Y
      */
     final public int getPixel (int x, int y)
     {
