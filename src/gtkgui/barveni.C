@@ -635,7 +635,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   coord_t step = 1 / bigscale;
 
   render::render_tile ((enum render::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
-		       bigpixels, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
+		       bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
 
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (bigpixels,

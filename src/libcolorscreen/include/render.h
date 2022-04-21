@@ -79,7 +79,7 @@ public:
     render_type_fast
   };
   static void render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
-			   bool color, unsigned char *pixels, int rowstride, int width, int height,
+			   bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 			   double xoffset, double yoffset, double step);
 protected:
   inline luminosity_t get_data (int x, int y);

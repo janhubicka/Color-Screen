@@ -2,19 +2,20 @@
 #include "include/render-fast.h"
 
 static inline void
-putpixel (unsigned char *pixels, int rowstride, int x, int y,
+putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
        	  int r, int g, int b)
 {
-  *(pixels + y * rowstride + x * 4) = r;
-  *(pixels + y * rowstride + x * 4 + 1) = g;
-  *(pixels + y * rowstride + x * 4 + 2) = b;
+  *(pixels + y * rowstride + x * pixelbytes) = r;
+  *(pixels + y * rowstride + x * pixelbytes + 1) = g;
+  *(pixels + y * rowstride + x * pixelbytes + 2) = b;
+  *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
 }
 
 void
 render::render_tile (enum render_type_t render_type,
 		     scr_to_img_parameters &param, image_data &img,
 		     render_parameters &rparam, bool color,
-		     unsigned char *pixels, int rowstride,
+		     unsigned char *pixels, int pixelbytes, int rowstride,
 		     int width, int height,
 		     double xoffset, double yoffset,
 		     double step)
@@ -28,7 +29,7 @@ render::render_tile (enum render_type_t render_type,
 	  render.set_color_display ();
 	render.precompute_all ();
 
-#pragma omp parallel for default(none) shared(render,pixels,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
@@ -37,7 +38,7 @@ render::render_tile (enum render_type_t render_type,
 		int r, g, b;
 		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
 					 &b);
-		putpixel (pixels, rowstride, x, y, r, g, b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	      }
 	  }
       }
@@ -50,7 +51,7 @@ render::render_tile (enum render_type_t render_type,
 	  render.set_color_display ();
 	render.precompute_all ();
 
-#pragma omp parallel for default(none) shared(render,pixels,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
@@ -59,7 +60,7 @@ render::render_tile (enum render_type_t render_type,
 		int r, g, b;
 		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
 					 &b);
-		putpixel (pixels, rowstride, x, y, r, g, b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	      }
 	  }
       }
@@ -72,7 +73,7 @@ render::render_tile (enum render_type_t render_type,
 	  render.set_color_display ();
 	render.precompute_all ();
 
-#pragma omp parallel for default(none) shared(render,pixels,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
@@ -81,7 +82,7 @@ render::render_tile (enum render_type_t render_type,
 		int r, g, b;
 		render.render_pixel_img_antialias ((x + xoffset) * step, py,
 						   1 * step, 8, &r, &g, &b);
-		putpixel (pixels, rowstride, x, y, r, g, b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	      }
 	  }
       }
@@ -98,7 +99,7 @@ render::render_tile (enum render_type_t render_type,
 				     (width + xoffset) * step,
 				     (height + yoffset) * step);
 
-#pragma omp parallel for default(none) shared(render,pixels,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
@@ -108,7 +109,7 @@ render::render_tile (enum render_type_t render_type,
 
 		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
 					 &b);
-		putpixel (pixels, rowstride, x, y, r, g, b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	      }
 	  }
       }
@@ -118,7 +119,7 @@ render::render_tile (enum render_type_t render_type,
 	render_fast render (param, img, rparam, 255);
 	render.precompute_all ();
 
-#pragma omp parallel for default(none) shared(render,pixels,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
@@ -128,7 +129,7 @@ render::render_tile (enum render_type_t render_type,
 
 		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
 					 &b);
-		putpixel (pixels, rowstride, x, y, r, g, b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	      }
 	  }
       }
