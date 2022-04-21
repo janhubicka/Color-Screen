@@ -136,12 +136,12 @@ LTLIBRARIES = $(lib_LTLIBRARIES)
 libcolorscreen_la_LIBADD =
 am__libcolorscreen_la_SOURCES_DIST = render.C render-fast.C \
 	render-interpolate.C screen.C scr-to-img.C imagedata.C \
-	loadsave.C \
+	loadsave.C render-tile.C \
 	cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C
 @JAVA_HOME_SET_TRUE@am__objects_1 = cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.lo
 am_libcolorscreen_la_OBJECTS = render.lo render-fast.lo \
 	render-interpolate.lo screen.lo scr-to-img.lo imagedata.lo \
-	loadsave.lo $(am__objects_1)
+	loadsave.lo render-tile.lo $(am__objects_1)
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -172,8 +172,9 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.Plo \
 	./$(DEPDIR)/imagedata.Plo ./$(DEPDIR)/loadsave.Plo \
 	./$(DEPDIR)/matrix.Po ./$(DEPDIR)/render-fast.Plo \
-	./$(DEPDIR)/render-interpolate.Plo ./$(DEPDIR)/render.Plo \
-	./$(DEPDIR)/scr-to-img.Plo ./$(DEPDIR)/screen.Plo
+	./$(DEPDIR)/render-interpolate.Plo ./$(DEPDIR)/render-tile.Plo \
+	./$(DEPDIR)/render.Plo ./$(DEPDIR)/scr-to-img.Plo \
+	./$(DEPDIR)/screen.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -357,7 +358,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 lib_LTLIBRARIES = libcolorscreen.la
 libcolorscreen_la_SOURCES = render.C render-fast.C \
 	render-interpolate.C screen.C scr-to-img.C imagedata.C \
-	loadsave.C $(am__append_1)
+	loadsave.C render-tile.C $(am__append_1)
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1
 matrix_SOURCES = matrix.C
 all: all-am
@@ -457,6 +458,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render-fast.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render-interpolate.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render-tile.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/render.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/scr-to-img.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/screen.Plo@am__quote@ # am--include-marker
@@ -648,6 +650,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
 	-rm -f ./$(DEPDIR)/render-interpolate.Plo
+	-rm -f ./$(DEPDIR)/render-tile.Plo
 	-rm -f ./$(DEPDIR)/render.Plo
 	-rm -f ./$(DEPDIR)/scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/screen.Plo
@@ -702,6 +705,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f ./$(DEPDIR)/render-fast.Plo
 	-rm -f ./$(DEPDIR)/render-interpolate.Plo
+	-rm -f ./$(DEPDIR)/render-tile.Plo
 	-rm -f ./$(DEPDIR)/render.Plo
 	-rm -f ./$(DEPDIR)/scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/screen.Plo

@@ -572,17 +572,6 @@ init_transformation_data (scr_to_img *trans)
   trans->set_parameters (get_scr_to_img_parameters ());
 }
 
-/* Uused to draw into the previews.  Differs by data type.  */
-
-static inline void
-my_putpixel2 (guint8 * pixels, int rowstride, int x, int y, int r, int g,
-	      int b)
-{
-  *(pixels + y * rowstride + x * 4) = r;
-  *(pixels + y * rowstride + x * 4 + 1) = g;
-  *(pixels + y * rowstride + x * 4 + 2) = b;
-}
-
 static inline void
 my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
 	     int b)
@@ -645,104 +634,8 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
   coord_t step = 1 / bigscale;
 
-
-  if (display_type == 0)
-    {
-      render_img render (get_scr_to_img_parameters (), scan, rparams, 255);
-      if (color_display)
-	render.set_color_display ();
-      render.precompute_all ();
- 
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
-      for (int y = 0; y < pysize; y++)
-	{
-	  coord_t py = (y + yoffset) * step;
-	  for (int x = 0; x < pxsize; x++)
-	    {
-	      int r, g, b;
-	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
-	    }
-	}
-    }
-  else if (display_type == 1)
-    {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, false, true);
-      if (color_display)
-	render.set_color_display ();
-      render.precompute_all ();
-
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
-      for (int y = 0; y < pysize; y++)
-	{
-	  coord_t py = (y + yoffset) * step;
-	  for (int x = 0; x < pxsize; x++)
-	    {
-	      int r, g, b;
-	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
-	    }
-	}
-    }
-  else if (display_type == 2)
-    {
-      render_superpose_img render (get_scr_to_img_parameters (), scan, rparams, 255, false, false);
-      if (color_display)
-	render.set_color_display ();
-      render.precompute_all ();
-
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
-      for (int y = 0; y < pysize; y++)
-	{
-	  coord_t py = (y + yoffset) * step;
-	  for (int x = 0; x < pxsize; x++)
-	    {
-	      int r, g, b;
-	      render.render_pixel_img_antialias ((x + xoffset) * step, py, 1 * step, 8, &r, &g, &b);
-	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
-	    }
-	}
-    }
-  else if (display_type <= 5)
-    {
-      rparams.adjust_luminosity = (display_type == 4);
-      rparams.screen_compensation = (display_type == 5);
-      render_interpolate render (get_scr_to_img_parameters (), scan, rparams, 255);
-      render.precompute_img_range (xoffset * step, yoffset * step,
-	  			   (pxsize+xoffset) * step, 
-				   (pysize+yoffset) * step);
-
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
-      for (int y = 0; y < pysize; y++)
-	{
-	  coord_t py = (y + yoffset) * step;
-	  for (int x = 0; x < pxsize; x++)
-	    {
-	      int r, g, b;
-	      
-	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
-	    }
-	}
-    }
-  else
-    {
-      render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
-      render.precompute_all ();
-
-      #pragma omp parallel for default(none) shared(render,bigpixels,bigrowstride,pysize, pxsize,step,yoffset,xoffset) 
-      for (int y = 0; y < pysize; y++)
-	{
-	  coord_t py = (y + yoffset) * step;
-	  for (int x = 0; x < pxsize; x++)
-	    {
-	      int r, g, b;
-
-	      render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-	      my_putpixel2 (bigpixels, bigrowstride, x, y, r, g, b);
-	    }
-	}
-    }
+  render::render_tile ((enum render::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
+		       bigpixels, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
 
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (bigpixels,

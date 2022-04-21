@@ -68,6 +68,19 @@ public:
   void precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
     
   static const int num_color_models = 4;
+  enum render_type_t
+  {
+    render_type_original,
+    render_type_preview_grid,
+    render_type_realistic,
+    render_type_interpolated,
+    render_type_combined,
+    render_type_predictive,
+    render_type_fast
+  };
+  static void render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
+			   bool color, unsigned char *pixels, int rowstride, int width, int height,
+			   double xoffset, double yoffset, double step);
 protected:
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
