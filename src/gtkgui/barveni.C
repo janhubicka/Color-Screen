@@ -73,7 +73,7 @@ struct _Data
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
   GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *y2, *brightness, *ydpi,
-	       	*tilt_x_x, *tilt_x_y, *tilt_y_x, *tilt_y_y;
+	       	*tilt_x_x, *tilt_x_y, *tilt_y_x, *tilt_y_y, *mix_gamma, *mix_red, *mix_green, *mix_blue;
 };
 Data data;
 
@@ -129,6 +129,11 @@ getvals (void)
   current.tilt_x_y = gtk_spin_button_get_value (data.tilt_x_y);
   current.tilt_y_x = gtk_spin_button_get_value (data.tilt_y_x);
   current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
+  rparams.mix_gamma = gtk_spin_button_get_value (data.mix_gamma);
+  rparams.mix_red = gtk_spin_button_get_value (data.mix_red);
+  rparams.mix_green = gtk_spin_button_get_value (data.mix_green);
+  rparams.mix_blue = gtk_spin_button_get_value (data.mix_blue);
+  printf ("mix %f %f %f %f\n", rparams.mix_gamma, rparams.mix_red, rparams.mix_green, rparams.mix_blue);
 }
 
 /* Set values displayed by the UI.  */
@@ -146,6 +151,10 @@ setvals (void)
   gtk_spin_button_set_value (data.tilt_x_y, current.tilt_x_y);
   gtk_spin_button_set_value (data.tilt_y_x, current.tilt_y_x);
   gtk_spin_button_set_value (data.tilt_y_y, current.tilt_y_y);
+  gtk_spin_button_set_value (data.mix_gamma, rparams.mix_gamma);
+  gtk_spin_button_set_value (data.mix_red, rparams.mix_red);
+  gtk_spin_button_set_value (data.mix_green, rparams.mix_green);
+  gtk_spin_button_set_value (data.mix_blue, rparams.mix_blue);
   initialized = 1;
 }
 
@@ -550,6 +559,10 @@ initgtk (int *argc, char **argv)
   data.tilt_x_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_y"));
   data.tilt_y_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_x"));
   data.tilt_y_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_y"));
+  data.mix_gamma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_gamma"));
+  data.mix_red = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_red"));
+  data.mix_green = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_green"));
+  data.mix_blue = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_blue"));
   /*data.about = GTK_WIDGET( gtk_builder_get_object( builder, "aboutdialog1" ) ); */
 
   /* Connect callbacks */

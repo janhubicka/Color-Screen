@@ -10,7 +10,9 @@
 struct render_parameters
 {
   render_parameters()
-  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8), screen_blur_radius (1.3),
+  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
+    mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1),
+    screen_blur_radius (1.3),
     color_model (3), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
@@ -25,6 +27,10 @@ struct render_parameters
   luminosity_t brightness;
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold;
+  /* Parameters used to turn RGB data to grayscale:
+     mix_gamma should be gamma of the scan, mix_red,green and blue
+     are relative weights.  */
+  luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
   /* If true apply color model of Finlay taking plate.  */
@@ -50,7 +56,7 @@ class render
 {
 public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_dst_maxval (dstmaxval)
+  : m_img (img), m_params (rparam), m_data (img.data), m_dst_maxval (dstmaxval)
   {
     m_scr_to_img.set_parameters (param);
   }
@@ -95,6 +101,8 @@ protected:
   scr_to_img m_scr_to_img;
   /* Rendering parameters.  */
   render_parameters &m_params;
+  /* Grayscale we render from.  */
+  unsigned short **m_data;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
@@ -182,7 +190,7 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 inline luminosity_t
 render::get_data (int x, int y)
 {
-  return m_lookup_table [m_img.data[y][x]];
+  return m_lookup_table [m_data[y][x]];
 }
 
 /* Get same for rgb data.  */

@@ -1,8 +1,11 @@
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <tiffio.h>
 #include <turbojpeg.h>
 #include "include/imagedata.h"
+
+int last_imagedata_id;
 
 image_data::~image_data ()
 {
@@ -21,27 +24,31 @@ image_data::~image_data ()
 }
 
 bool
-image_data::allocate (bool rgb)
+image_data::allocate (bool grayscale, bool rgb)
 {
-  data = (gray **)malloc (sizeof (*data) * height);
-  if (!data)
-    return false;
-  data[0] = (gray *)calloc (width * height, sizeof (**data));
-  if (!data [0])
+  if (grayscale)
     {
-      free (data);
-      data = NULL;
-      return false;
+      data = (gray **)malloc (sizeof (*data) * height);
+      if (!data)
+	return false;
+      data[0] = (gray *)calloc (width * height, sizeof (**data));
+      if (!data [0])
+	{
+	  free (data);
+	  data = NULL;
+	  return false;
+	}
+      for (int i = 1; i < height; i++)
+	data[i] = data[0] + i * width;
     }
-  for (int i = 1; i < height; i++)
-    data[i] = data[0] + i * width;
   if (rgb)
     {
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
 	{
 	  free (*data);
-	  free (data);
+	  if (data)
+	    free (data);
 	  data = NULL;
 	  return false;
 	}
@@ -49,7 +56,8 @@ image_data::allocate (bool rgb)
       if (!rgbdata [0])
 	{
 	  free (*data);
-	  free (data);
+	  if (data)
+	    free (data);
 	  data = NULL;
 	  free (rgbdata);
 	  rgbdata = NULL;
@@ -127,7 +135,7 @@ const bool debug = false;
   height = h;
   if (debug)
     printf("Allocating %ix%ii\n", w, h);
-  if (!allocate (samples == 4 || samples == 3))
+  if (!allocate (samples == 4 || samples == 1, samples == 3))
     {
       *error = "out of memory allocating image";
       TIFFClose (tif);
@@ -169,8 +177,6 @@ const bool debug = false;
 	      rgbdata[row][x].r = buf2[3 * x+0];
 	      rgbdata[row][x].g = buf2[3 * x+1];
 	      rgbdata[row][x].b = buf2[3 * x+2];
-	      /* Gray from green.  */
-	      data[row][x] = buf2[3 * x+1];
 	    }
 	}
       else if (bitspersample == 8 && samples == 4)
@@ -198,8 +204,6 @@ const bool debug = false;
 	      rgbdata[row][x].r = buf2[3 * x+0];
 	      rgbdata[row][x].g = buf2[3 * x+1];
 	      rgbdata[row][x].b = buf2[3 * x+2];
-	      /* Gray from green.  */
-	      data[row][x] = buf2[3 * x+1];
 	    }
 	}
       else if (bitspersample == 16 && samples == 4)
@@ -283,7 +287,7 @@ image_data::load_jpg (const char *name, const char **error)
       tjFree(jpegBuf);
       return false;
     }
-  /* RGB is 0 and gray is 2.  */
+  /* RGB is 1 and gray is 2.  */
   if (inColorspace != 1 && inColorspace != 2)
     {
       *error = "only grayscale and rgb jpeg files are supported";
@@ -291,7 +295,8 @@ image_data::load_jpg (const char *name, const char **error)
       tjDestroy(tjInstance);
       return false;
     }
-  int pixelFormat = TJPF_GRAY;
+  bool rgb = inColorspace == 1;
+  int pixelFormat = rgb ? TJPF_RGB : TJPF_GRAY;
   unsigned char *imgBuf = (unsigned char *)tjAlloc(width * height *
                                            tjPixelSize[pixelFormat]);
   if (!imgBuf)
@@ -312,16 +317,25 @@ image_data::load_jpg (const char *name, const char **error)
     }
   free (jpegBuf);
   tjDestroy(tjInstance);
-  if (!allocate (false))
+  if (!allocate (!rgb, rgb))
     {
       *error = "out of memory allocating image";
       tjFree (imgBuf);
       return false;
     }
   maxval = 255;
-  for (int y = 0; y < height; y++)
-    for (int x = 0; x < width; x++)
-      data[y][x] = imgBuf[y * width + x];
+  if (!rgb)
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+	data[y][x] = imgBuf[y * width + x];
+  else
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+	{
+	  rgbdata[y][x].r = imgBuf[y * width *3 + x * 3 + 0];
+	  rgbdata[y][x].g = imgBuf[y * width *3 + x * 3 + 1];
+	  rgbdata[y][x].b = imgBuf[y * width *3 + x * 3 + 2];
+	}
   tjFree (imgBuf);
   return true;
 }
@@ -348,3 +362,4 @@ image_data::load (const char *name, const char **error)
       return false;
     }
 }
+
