@@ -36,7 +36,9 @@ save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam)
       || fprintf (f, "gray_range: %i %i\n", rparam.gray_min, rparam.gray_max) < 0
       || fprintf (f, "precise: %s\n", bool_names [(int)rparam.precise]) < 0
       || fprintf (f, "screen_compensation: %s\n", bool_names [(int)rparam.screen_compensation]) < 0
-      || fprintf (f, "adjust_luminosity: %s\n", bool_names [(int)rparam.adjust_luminosity]) < 0)
+      || fprintf (f, "adjust_luminosity: %s\n", bool_names [(int)rparam.adjust_luminosity]) < 0
+      || fprintf (f, "mix_gamma: %f\n", rparam.mix_gamma) < 0
+      || fprintf (f, "mix_weights: %f %f %f\n", rparam.mix_red, rparam.mix_green, rparam.mix_blue) < 0)
     return false;
   return true;
 }
@@ -129,6 +131,18 @@ read_vector (FILE *f, coord_t *xx, coord_t *yy)
     return false;
   *xx = x;
   *yy = y;
+  return true;
+}
+
+static bool
+read_rgb (FILE *f, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+{
+  double r, g, b;
+  if (fscanf (f, "%lf %lf %lf\n", &r, &g, &b) != 3)
+    return false;
+  *rr = r;
+  *gg = g;
+  *bb = b;
   return true;
 }
 
@@ -255,7 +269,23 @@ load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, cons
 	{
 	  if (!read_luminosity (f, &rparam.brightness))
 	    {
-	      *error = "error parsing saturation";
+	      *error = "error parsing brightness";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "mix_gamma"))
+	{
+	  if (!read_luminosity (f, &rparam.mix_gamma))
+	    {
+	      *error = "error parsing mix_gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "mix_weights"))
+	{
+	  if (!read_rgb (f, &rparam.mix_red, &rparam.mix_green, &rparam.mix_blue))
+	    {
+	      *error = "error parsing mix_weights";
 	      return false;
 	    }
 	}

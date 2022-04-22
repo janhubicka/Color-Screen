@@ -56,7 +56,7 @@ class render
 {
 public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_data (img.data), m_dst_maxval (dstmaxval)
+  : m_img (img), m_params (rparam), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval)
   {
     m_scr_to_img.set_parameters (param);
   }
@@ -103,10 +103,14 @@ protected:
   render_parameters &m_params;
   /* Grayscale we render from.  */
   unsigned short **m_data;
+  /* Maximal value in m_data.  */
+  int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
   luminosity_t *m_lookup_table;
+  /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
+  luminosity_t *m_rgb_lookup_table;
   /* Translates back to gamma 2.  */
   luminosity_t *m_out_lookup_table;
   /* Color matrix.  */
@@ -132,6 +136,10 @@ public:
     else
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);
+  }
+  int inline render_raw_pixel (int x, int y)
+  {
+    return m_data[y][x] * (long)m_img.maxval / m_maxval;
   }
 private:
   bool m_color;
@@ -198,19 +206,19 @@ render::get_data (int x, int y)
 inline luminosity_t
 render::get_data_red (int x, int y)
 {
-  return m_lookup_table [m_img.rgbdata[y][x].r];
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
 }
 
 inline luminosity_t
 render::get_data_green (int x, int y)
 {
-  return m_lookup_table [m_img.rgbdata[y][x].g];
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
 }
 
 inline luminosity_t
 render::get_data_blue (int x, int y)
 {
-  return m_lookup_table [m_img.rgbdata[y][x].b];
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
 }
 
 #if 0

@@ -473,12 +473,15 @@ static int step;
 	  bool inverted = rparams.gray_min > rparams.gray_max;
 	  rparams.gray_min = scan.maxval;
 	  rparams.gray_max = 0;
+	  render_img render (current, scan, rparams, 255);
+	  render.precompute_all ();
 	  for (int y = std::max ((int)(shift_y / scale_y), 0);
 	       y < std::min ((int)((shift_y + pysize) / scale_y), scan.height); y++)
 	     for (int x = minx; x < maxx; x++)
 	       {
-		 rparams.gray_min = std::min ((int)scan.data[y][x], rparams.gray_min);
-		 rparams.gray_max = std::max ((int)scan.data[y][x], rparams.gray_max);
+		 int pixel = render.render_raw_pixel (x, y);
+		 rparams.gray_min = std::min (pixel, rparams.gray_min);
+		 rparams.gray_max = std::max (pixel, rparams.gray_max);
 	       }
 	  display_scheduled = 1;
 	  if (inverted)

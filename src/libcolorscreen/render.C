@@ -3,10 +3,12 @@
 static int lookup_table_uses;
 static int out_lookup_table_uses;
 static int lookup_table_maxval;
+static int lookup_table_rgbmaxval;
 static int out_lookup_table_maxval;
 static int lookup_table_gray_min, lookup_table_gray_max;
 static luminosity_t lookup_table_gamma;
 static luminosity_t lookup_table[65536];
+static luminosity_t rgb_lookup_table[65536];
 static luminosity_t out_lookup_table[65536];
 
 static int cached_image_id = -1;
@@ -24,7 +26,7 @@ compute_grayscale (image_data &img,
     gamma = 0.001;
   if (gamma > 1000)
     gamma = 1000;
-  double sum = red + green + blue;
+  double sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
   if (!sum)
     {
       sum = 1;
@@ -76,26 +78,32 @@ compute_grayscale (image_data &img,
   luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
   luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
   luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  luminosity_t *out_table = (luminosity_t *)malloc (sizeof (luminosity_t) * 65536);
+  unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
 
   for (int i = 0; i <= img.maxval; i++)
-   {
-     luminosity_t l = pow (i / (luminosity_t)img.maxval, gamma);
-     if (l < 0 || l > 1)
-       abort ();
-     rtable[i] = l * red;
-     gtable[i] = l * green;
-     btable[i] = l * blue;
-   }
+    {
+      luminosity_t l = pow (i / (luminosity_t)img.maxval, gamma);
+      if (l < 0 || l > 1)
+	abort ();
+      rtable[i] = l * red;
+      gtable[i] = l * green;
+      btable[i] = l * blue;
+      //fprintf (stderr, "%f %f %f\n", rtable[i], gtable[i], btable[i]);
+    }
   for (int i = 0; i < 65536; i++)
-   out_table[i] = pow (i / 65535.0, 1 / gamma) * img.maxval;
+    {
+      out_table[i] = pow (i / 65535.0, 1 / gamma) * 65535;
+      //fprintf (stderr, "%i\n", out_table[i]);
+    }
 #pragma omp parallel shared(cached_data,rtable,gtable,btable,out_table,img) default(none)
   for (int y = 0; y < img.height; y++)
     for (int x = 0; x < img.width; x++)
      {
-       cached_data[y][x] = out_table[(int)((rtable[img.rgbdata[y][x].r]
-					    + gtable[img.rgbdata[y][x].g]
-					    + btable[img.rgbdata[y][x].b]) * 65535)];
+       luminosity_t val = rtable[img.rgbdata[y][x].r]
+			  + gtable[img.rgbdata[y][x].g]
+			  + btable[img.rgbdata[y][x].b];
+       val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+       cached_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
      }
 
   free (rtable);
@@ -108,29 +116,50 @@ compute_grayscale (image_data &img,
 void
 render::precompute_all ()
 {
+  bool recompute = false;
   if (!m_data)
     {
       compute_grayscale (m_img, m_params.mix_gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue);
       m_data = cached_data;
     }
+  luminosity_t gamma = std::min (std::max (m_params.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
+  luminosity_t min = pow (m_params.gray_min / (luminosity_t)m_img.maxval, gamma);
+  luminosity_t max = pow (m_params.gray_max / (luminosity_t)m_img.maxval, gamma);
+
   m_lookup_table = lookup_table;
   m_out_lookup_table = out_lookup_table;
-  if (lookup_table_maxval != m_img.maxval || lookup_table_gamma != m_params.gamma
-      || lookup_table_gray_min != m_params.gray_min || lookup_table_gray_max != m_params.gray_max)
+  if (lookup_table_maxval != m_maxval || lookup_table_gamma != gamma
+      || lookup_table_gray_min != min || lookup_table_gray_max != max)
     {
       assert (!lookup_table_uses);
-      assert (m_img.maxval < 65536);
+      assert (m_maxval < 65536);
       lookup_table_gamma = m_params.gamma; 
-      lookup_table_maxval = m_img.maxval;
-      lookup_table_gray_min = m_params.gray_min; 
-      lookup_table_gray_max = m_params.gray_max;
-      luminosity_t gamma = std::min (std::max (m_params.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
-      luminosity_t min = pow (m_params.gray_min / (luminosity_t)m_img.maxval, gamma);
-      luminosity_t max = pow (m_params.gray_max / (luminosity_t)m_img.maxval, gamma);
+      lookup_table_maxval = m_maxval;
+      lookup_table_gray_min = min; 
+      lookup_table_gray_max = max;
+      recompute = true;
+
       if (min == max)
 	max += 0.0001;
-      for (int i = 0; i <= m_img.maxval; i++)
-	lookup_table [i] = (pow (i / (luminosity_t)m_img.maxval, gamma) - min) * (1 / (max-min));
+      for (int i = 0; i <= m_maxval; i++)
+	lookup_table [i] = (pow (i / (luminosity_t)m_maxval, gamma) - min) * (1 / (max-min));
+    }
+  if (m_img.rgbdata)
+    {
+      m_rgb_lookup_table = rgb_lookup_table;
+      if (recompute || lookup_table_rgbmaxval != m_img.maxval)
+	{
+	  assert (m_img.maxval < 65536);
+	  if (min == max)
+	    max += 0.0001;
+	  for (int i = 0; i <= m_img.maxval; i++)
+	    rgb_lookup_table [i] = (pow (i / (luminosity_t)m_img.maxval, gamma) - min) * (1 / (max-min));
+	}
+    }
+  else
+    {
+      m_rgb_lookup_table = NULL;
+      lookup_table_rgbmaxval = -1;
     }
   if (m_dst_maxval != out_lookup_table_maxval)
     {
