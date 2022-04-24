@@ -135,7 +135,7 @@ const bool debug = false;
   height = h;
   if (debug)
     printf("Allocating %ix%ii\n", w, h);
-  if (!allocate (samples == 4 || samples == 1, samples == 3))
+  if (!allocate (samples == 4 || samples == 1, samples != 1))
     {
       *error = "out of memory allocating image";
       TIFFClose (tif);
