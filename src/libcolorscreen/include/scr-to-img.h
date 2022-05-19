@@ -1,5 +1,6 @@
 #ifndef SCR_TO_IMG_H
 #define SCR_TO_IMG_H
+#include "dllpublic.h"
 #include "matrix.h"
 
 typedef float coord_t;
@@ -20,7 +21,7 @@ enum scr_type
    the screen is periodic with period 1: that is all integer coordinates describes
    gren dots again.  */
 
-struct scr_to_img_parameters
+struct DLL_PUBLIC scr_to_img_parameters
 {
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),

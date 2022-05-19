@@ -1,5 +1,9 @@
+#include <stdlib.h>
+#include <sys/time.h>
 #include "include/colorscreen.h"
 #include "include/render-fast.h"
+
+static int stats = -1;
 
 static inline void
 putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
@@ -20,6 +24,11 @@ render::render_tile (enum render_type_t render_type,
 		     double xoffset, double yoffset,
 		     double step)
 {
+  if (stats == -1)
+    stats = getenv ("CSSTATS") != NULL;
+  struct timeval start_time;
+  if (stats)
+    gettimeofday (&start_time, NULL);
   switch (render_type)
     {
     case render_type_original:
@@ -133,5 +142,24 @@ render::render_tile (enum render_type_t render_type,
 	      }
 	  }
       }
+    }
+  if (stats)
+    {
+      struct timeval end_time;
+      static struct timeval prev_time;
+      static bool prev_time_set = true;
+
+      gettimeofday (&end_time, NULL);
+      double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
+      printf ("Render type:%i resolution:%ix%i time:%.3fs fps:%.3f", render_type, width, height, time, 1/time);
+      if (prev_time_set)
+	{
+	  double time2 = end_time.tv_sec + end_time.tv_usec/1000000.0 - prev_time.tv_sec - prev_time.tv_usec/1000000.0;
+          printf (" last run %.3f ago overall fps:%.3f\n", time2, 1/(time2+time));
+	}
+      else
+        printf ("\n");
+      prev_time = end_time;
+      prev_time_set = true;
     }
 }

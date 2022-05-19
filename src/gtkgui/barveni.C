@@ -37,6 +37,7 @@ static bool color_display = false;
 
 static int display_type = 0;
 static bool display_scheduled = true;
+static bool preview_display_scheduled = true;
 
 /* How much is the image scaled in the small view.  */
 #define SCALE 16
@@ -342,6 +343,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
     }
   current = best;
   display_scheduled = true;
+  preview_display_scheduled = true;
 }
 
 /* Handle all the magic keys.  */
@@ -355,7 +357,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'o')
     {
       color_display = !color_display;
-      display_scheduled = 1;
+      display_scheduled = true;
     }
   if (k == 'O')
     {
@@ -400,59 +402,66 @@ static int step;
   if (k == 'S')
     {
       rparams.precise = true;
-      display_scheduled = 1;
+      display_scheduled = true;
     }
   if (k == 'i')
     {
       std::swap (rparams.gray_min, rparams.gray_max);
-      display_scheduled = 1;
+      display_scheduled = true;
+      preview_display_scheduled = true;
     }
   if (k == 's')
     {
       rparams.precise = false;
-      display_scheduled = 1;
+      display_scheduled = true;
     }
   if (k == 'd' && current.type != Dufay)
   {
     save_parameters ();
     current.type = Dufay;
-    display_scheduled = 1;
+    display_scheduled = true;
+    preview_display_scheduled = true;
   }
   if (k == 'p' && current.type != Paget)
   {
     save_parameters ();
     current.type = Paget;
-    display_scheduled = 1;
+    display_scheduled = true;
+    preview_display_scheduled = true;
   }
   if (k == 'f' && current.type != Finlay)
   {
     save_parameters ();
     current.type = Finlay;
-    display_scheduled = 1;
+    display_scheduled = true;
+    preview_display_scheduled = true;
   }
   if (k >= '1' && k <='7')
     {
       display_type = k - '1';
-      display_scheduled = 1;
+      display_scheduled = true;
     }
   if (k == 'u')
     {
       undo_parameters ();	
       setvals ();
-      display_scheduled = 1;
+      display_scheduled = true;
+      preview_display_scheduled = true;
     }
   if (k == 'U')
     {
       redo_parameters ();
       setvals ();
-      display_scheduled = 1;
+      display_scheduled = true;
+      preview_display_scheduled = true;
     }
   if (k == 'm')
     {
       rparams.color_model++;
       if (rparams.color_model >= render::num_color_models)
 	rparams.color_model = 0;
-      display_scheduled = 1;
+      display_scheduled = true;
+      preview_display_scheduled = true;
     }
   if (k == ' ')
     {
@@ -483,7 +492,8 @@ static int step;
 		 rparams.gray_min = std::min (pixel, rparams.gray_min);
 		 rparams.gray_max = std::max (pixel, rparams.gray_max);
 	       }
-	  display_scheduled = 1;
+	  display_scheduled = true;
+          preview_display_scheduled = true;
 	  if (inverted)
 	    std::swap (rparams.gray_min, rparams.gray_max);
 	}
@@ -676,7 +686,6 @@ static void
 display ()
 {
   gtk_image_viewer_redraw ((GtkImageViewer *)data.image_viewer, 1);
-  display_preview ();
 }
 
 G_MODULE_EXPORT void
@@ -734,6 +743,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	  setcenter = false;
 	  setvals ();
 	  display_scheduled = true;
+          preview_display_scheduled = true;
 	}
     }
   press_parameters = current;
@@ -770,6 +780,7 @@ handle_drag (int x, int y, int button)
       current.center_y = press_parameters.center_y + yoffset;
       setvals ();
       display_scheduled = true;
+      preview_display_scheduled = true;
     }
   else if (button == 3)
     {
@@ -797,6 +808,7 @@ handle_drag (int x, int y, int button)
 	}
       setvals ();
       display_scheduled = true;
+      preview_display_scheduled = true;
     }
 }
 
@@ -891,6 +903,11 @@ main (int argc, char **argv)
 	{
 	  display ();
 	  display_scheduled = false;
+	}
+      if (preview_display_scheduled)
+	{
+	  display_preview ();
+	  preview_display_scheduled = false;
 	}
       gtk_main_iteration_do (true);
       while (gtk_events_pending ())

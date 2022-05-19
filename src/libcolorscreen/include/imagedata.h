@@ -1,11 +1,12 @@
 #ifndef IMAGEDATA_H
 #define IMAGEDATA_H
+#include "dllpublic.h"
 #include "color.h"
 
-extern int last_imagedata_id;
+extern DLL_PUBLIC int last_imagedata_id;
 
 /* Scanned image descriptor.  */
-class image_data
+class DLL_PUBLIC image_data
 {
 public:
   typedef unsigned short gray;

@@ -7,7 +7,7 @@
 #include "color.h"
 
 /* Parameters of rendering algorithms.  */
-struct render_parameters
+struct DLL_PUBLIC render_parameters
 {
   render_parameters()
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
@@ -84,9 +84,9 @@ public:
     render_type_predictive,
     render_type_fast
   };
-  static void render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
-			   bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
-			   double xoffset, double yoffset, double step);
+  DLL_PUBLIC static void render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
+				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
+				      double xoffset, double yoffset, double step);
 protected:
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
@@ -117,8 +117,8 @@ protected:
   color_matrix m_color_matrix;
 };
 
-bool save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam);
-bool load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, const char **error);
+DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam);
+DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, const char **error);
 
 /* Do no rendering of color screen.  */
 class render_img : public render
@@ -132,7 +132,7 @@ public:
   {
     luminosity_t gg, rr, bb;
     if (!m_color)
-      rr = gg = bb = get_img_pixel (x, y);
+      rr = gg = bb = fast_get_img_pixel (x, y);
     else
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);

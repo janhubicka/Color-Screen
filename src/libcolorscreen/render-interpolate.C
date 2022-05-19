@@ -291,8 +291,38 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       luminosity_t sr = m_screen->mult[iy][ix][0];
       luminosity_t sg = m_screen->mult[iy][ix][1];
       luminosity_t sb = m_screen->mult[iy][ix][2];
+
+      red = std::max (red, (luminosity_t)0);
+      green = std::max (green, (luminosity_t)0);
+      blue = std::max (blue, (luminosity_t)0);
+
       luminosity_t llum = red * sr + green * sg + blue * sb;
-      luminosity_t correction = llum ? std::max (std::min (lum / llum, (luminosity_t)5.0), (luminosity_t)0.0) : 5;
+      luminosity_t correction = llum ? lum / llum : lum * 100;
+
+#if 1
+      luminosity_t redmin = lum - (1 - sr);
+      luminosity_t redmax = lum + (1 - sr);
+      if (red * correction < redmin)
+	correction = redmin / red;
+      else if (red * correction > redmax)
+	correction = redmax / red;
+
+      luminosity_t greenmin = lum - (1 - sg);
+      luminosity_t greenmax = lum + (1 - sg);
+      if (green * correction < greenmin)
+	correction = greenmin / green;
+      else if (green * correction > greenmax)
+	correction = greenmax / green;
+
+      luminosity_t bluemin = lum - (1 - sb);
+      luminosity_t bluemax = lum + (1 - sb);
+      if (blue * correction < bluemin)
+	correction = bluemin / blue;
+      else if (blue * correction > bluemax)
+	correction = bluemax / blue;
+#endif
+      correction = std::max (std::min (correction, (luminosity_t)5.0), (luminosity_t)0.0);
+
       set_color (red * correction, green * correction, blue * correction, r, g, b);
 #if 0
       red = std::min (1.0, std::max (0.0, red));
