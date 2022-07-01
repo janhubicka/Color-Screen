@@ -5,6 +5,7 @@
 /* Supported output modes.  */
 enum output_mode
 {
+  none,
   realistic,
   interpolated,
   predictive,
@@ -92,7 +93,9 @@ print_help ()
 enum output_mode
 parse_mode (const char *mode)
 {
-  if (!strcmp (mode, "realistic"))
+  if (!strcmp (mode, "none"))
+    return none;
+  else if (!strcmp (mode, "realistic"))
     return realistic;
   else if (!strcmp (mode, "interpolated"))
     return interpolated;
@@ -193,6 +196,40 @@ main (int argc, char **argv)
 
   switch (mode)
     {
+    case none:
+      {
+	render_img render (param, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	double render_width = render.get_width ();
+	double render_height = render.get_height ();
+	double out_stepx, out_stepy;
+	int outwidth; 
+	int outheight;
+	uint16_t *outrow;
+
+	/* FIXME: it should be same as realistic.  */
+	outwidth = render_width * 4;
+	outheight = render_height * 4;
+	out_stepy = out_stepx = 0.25;
+
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < outheight; y++)
+	  {
+	    for (int x = 0; x < outwidth; x++)
+	      {
+		int rr, gg, bb;
+		render.render_pixel (x * out_stepx, y * out_stepy, &rr, &gg, &bb);
+		outrow[3 * x] = rr;
+		outrow[3 * x + 1] = gg;
+		outrow[3 * x + 2] = bb;
+	      }
+	    write_row (out, y, outrow);
+	  }
+	TIFFClose (out);
+      }
+      break;
     case interpolated:
     case predictive:
     case combined:

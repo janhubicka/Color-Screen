@@ -120,31 +120,6 @@ protected:
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam);
 DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, const char **error);
 
-/* Do no rendering of color screen.  */
-class render_img : public render
-{
-public:
-  render_img (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-    : render (param, img, rparam, dstmaxval), m_color (false)
-  { }
-  void set_color_display () { if (m_img.rgbdata) m_color = 1; }
-  void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    luminosity_t gg, rr, bb;
-    if (!m_color)
-      rr = gg = bb = fast_get_img_pixel (x, y);
-    else
-      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
-    set_color (rr, gg, bb, r, g, b);
-  }
-  int inline render_raw_pixel (int x, int y)
-  {
-    return m_data[y][x] * (long)m_img.maxval / m_maxval;
-  }
-private:
-  bool m_color;
-};
-
 /* Base class for renderes tha works in screen coordinates (so output image is
    geometrically corrected.  */
 class render_to_scr : public render
@@ -172,6 +147,37 @@ protected:
      start at position (-scr_xshift, -scr_yshift).  */
   int m_scr_xshift, m_scr_yshift;
   int m_scr_width, m_scr_height;
+};
+
+/* Do no rendering of color screen.  */
+class render_img : public render_to_scr
+{
+public:
+  render_img (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+    : render_to_scr (param, img, rparam, dstmaxval), m_color (false)
+  { }
+  void set_color_display () { if (m_img.rgbdata) m_color = 1; }
+  void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    luminosity_t gg, rr, bb;
+    if (!m_color)
+      rr = gg = bb = fast_get_img_pixel (x, y);
+    else
+      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
+    set_color (rr, gg, bb, r, g, b);
+  }
+  int inline render_raw_pixel (int x, int y)
+  {
+    return m_data[y][x] * (long)m_img.maxval / m_maxval;
+  }
+  void inline render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.to_img (x, y, &xx, &yy);
+    render_pixel_img (xx, yy, r, g, b);
+  }
+private:
+  bool m_color;
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
