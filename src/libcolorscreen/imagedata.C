@@ -5,7 +5,7 @@
 #include <turbojpeg.h>
 #include "include/imagedata.h"
 
-int last_imagedata_id;
+DLL_PUBLIC int image_data::last_imagedata_id;
 
 image_data::~image_data ()
 {
@@ -73,7 +73,7 @@ image_data::allocate (bool grayscale, bool rgb)
 bool
 image_data::load_tiff (const char *name, const char **error)
 {
-const bool debug = false;
+  const bool debug = false;
   if (debug)
     printf("TIFFopen\n");
   TIFF* tif = TIFFOpen(name, "r");
@@ -362,4 +362,3 @@ image_data::load (const char *name, const char **error)
       return false;
     }
 }
-

@@ -3,8 +3,6 @@
 #include "dllpublic.h"
 #include "color.h"
 
-extern DLL_PUBLIC int last_imagedata_id;
-
 /* Scanned image descriptor.  */
 class DLL_PUBLIC image_data
 {
@@ -44,5 +42,6 @@ public:
 private:
   /* True of the data is owned by the structure.  */
   bool own;
+  static DLL_PUBLIC int last_imagedata_id;
 };
 #endif
