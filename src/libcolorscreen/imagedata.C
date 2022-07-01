@@ -1,14 +1,77 @@
 #include <cstring>
+#include <assert.h>
 #include <cstdlib>
 #include <cmath>
 #include <tiffio.h>
 #include <turbojpeg.h>
 #include "include/imagedata.h"
 
+class image_data_loader
+{
+public:
+  virtual bool init_loader (const char *name, const char **error) = 0;
+  virtual bool load_part (int *permille, const char **error) = 0;
+  virtual ~image_data_loader ()
+  { }
+  bool grayscale;
+  bool rgb;
+};
+
+class jpg_image_data_loader: public image_data_loader
+{
+public:
+  jpg_image_data_loader (image_data *img)
+  : m_img (img), m_jpeg_buf (NULL), m_tj_instance (NULL), m_img_buf (NULL)
+  { }
+  virtual bool init_loader (const char *name, const char **error);
+  virtual bool load_part (int *permille, const char **error);
+  virtual ~jpg_image_data_loader ()
+  {
+    if (m_jpeg_buf)
+      tjFree (m_jpeg_buf);
+    if (m_img_buf)
+      tjFree (m_img_buf);
+    if (m_tj_instance)
+      tjDestroy(m_tj_instance);
+  }
+private:
+  image_data *m_img;
+  unsigned char *m_jpeg_buf;
+  tjhandle m_tj_instance;
+  unsigned char *m_img_buf;
+};
+
+class tiff_image_data_loader: public image_data_loader
+{
+public:
+  tiff_image_data_loader (image_data *img)
+  : m_tif (NULL), m_img (img), m_buf (NULL)
+  { }
+  virtual bool init_loader (const char *name, const char **error);
+  virtual bool load_part (int *permille, const char **error);
+  virtual ~tiff_image_data_loader ()
+  {
+    if (m_tif)
+      TIFFClose (m_tif);
+    if (m_buf)
+      _TIFFfree(m_buf);
+  }
+private:
+  static const bool debug = true;
+  TIFF *m_tif;
+  image_data *m_img;
+  tdata_t m_buf;
+  uint16_t m_bitspersample;
+  uint16_t m_samples;
+  uint32_t m_row;
+};
+
 DLL_PUBLIC int image_data::last_imagedata_id;
 
 image_data::~image_data ()
 {
+  if (loader)
+    delete loader;
   if (!own)
     return;
   if (data)
@@ -24,9 +87,23 @@ image_data::~image_data ()
 }
 
 bool
-image_data::allocate (bool grayscale, bool rgb)
+image_data::allocate_grayscale ()
 {
-  if (grayscale)
+  assert (loader != NULL);
+  return loader->grayscale;
+}
+
+bool
+image_data::allocate_rgb ()
+{
+  assert (loader != NULL);
+  return loader->rgb;
+}
+
+bool
+image_data::allocate ()
+{
+  if (allocate_grayscale ())
     {
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
@@ -41,7 +118,7 @@ image_data::allocate (bool grayscale, bool rgb)
       for (int i = 1; i < height; i++)
 	data[i] = data[0] + i * width;
     }
-  if (rgb)
+  if (allocate_rgb ())
     {
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
@@ -71,107 +148,103 @@ image_data::allocate (bool grayscale, bool rgb)
 }
 
 bool
-image_data::load_tiff (const char *name, const char **error)
+tiff_image_data_loader::init_loader (const char *name, const char **error)
 {
-  const bool debug = false;
   if (debug)
     printf("TIFFopen\n");
-  TIFF* tif = TIFFOpen(name, "r");
-  if (!tif)
+  m_tif = TIFFOpen(name, "r");
+  if (!m_tif)
     {
       *error = "can not open file";
       return false;
     }
   uint32_t w, h;
-  uint16_t bitspersample, photometric, samples;
+  uint16_t photometric;
   if (debug)
     printf("checking width/height\n");
-  TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
-  TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+  TIFFGetField(m_tif, TIFFTAG_IMAGEWIDTH, &w);
+  TIFFGetField(m_tif, TIFFTAG_IMAGELENGTH, &h);
   if (debug)
     printf("checking bits per sample\n");
-  TIFFGetFieldDefaulted(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);
-  if (bitspersample != 8 && bitspersample != 16)
+  TIFFGetFieldDefaulted(m_tif, TIFFTAG_BITSPERSAMPLE, &m_bitspersample);
+  if (m_bitspersample != 8 && m_bitspersample != 16)
     {
       *error = "bit depth should be 8 or 16";
-      TIFFClose (tif);
       return false;
     }
   if (debug)
     printf("checking smaples per pixel\n");
-  TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLESPERPIXEL, &samples);
-  if (samples != 1 && samples != 3 && samples != 4)
+  TIFFGetFieldDefaulted(m_tif, TIFFTAG_SAMPLESPERPIXEL, &m_samples);
+  if (m_samples != 1 && m_samples != 3 && m_samples != 4)
     {
       if (debug)
-	printf("Samples:%i\n", samples);
+	printf("Samples:%i\n", m_samples);
       *error = "only 1 sample per pixel (grayscale), 3 samples per pixel (RGB) or 4 samples per pixel (RGBa) are supported";
-      TIFFClose (tif);
       return false;
     }
-  if (TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric))
+  if (TIFFGetField(m_tif, TIFFTAG_PHOTOMETRIC, &photometric))
     {
-      if (photometric == PHOTOMETRIC_MINISBLACK && samples == 1)
+      if (photometric == PHOTOMETRIC_MINISBLACK && m_samples == 1)
 	;
-      else if (photometric == PHOTOMETRIC_RGB && (samples == 4 || samples == 3))
+      else if (photometric == PHOTOMETRIC_RGB && (m_samples == 4 || m_samples == 3))
         ;
       else 
 	{
-	  printf("%i %i\n", photometric, samples);
 	  *error = "only RGB, RGBa or grayscale images are suppored";
-	  TIFFClose (tif);
 	  return false;
 	}
     }
   if (debug)
     printf("Getting scanlinel\n");
-  tdata_t buf = _TIFFmalloc(TIFFScanlineSize(tif));
-  if (!buf)
+  m_buf = _TIFFmalloc(TIFFScanlineSize(m_tif));
+  if (!m_buf)
     {
       *error = "out of memory allocating tiff scanline";
-      TIFFClose (tif);
       return false;
     }
-  width = w;
-  height = h;
-  if (debug)
-    printf("Allocating %ix%ii\n", w, h);
-  if (!allocate (samples == 4 || samples == 1, samples != 1))
-    {
-      *error = "out of memory allocating image";
-      TIFFClose (tif);
-      _TIFFfree(buf);
-      return false;
-    }
-  if (bitspersample == 8)
-    maxval = 255;
-  else if (bitspersample == 16)
-    maxval = 65535;
+  m_img->width = w;
+  m_img->height = h;
+  grayscale = m_samples == 4 || m_samples == 1;
+  rgb = m_samples != 1;
+  if (m_bitspersample == 8)
+    m_img->maxval = 255;
+  else if (m_bitspersample == 16)
+    m_img->maxval = 65535;
   else
     {
       *error = "Only bith depths 8 and 16 are supported";
-      TIFFClose (tif);
-      _TIFFfree(buf);
       return false;
     }
-  for (uint32_t row = 0; row < h; row++)
+  m_row = 0;
+  return true;
+}
+
+bool
+tiff_image_data_loader::load_part (int *permille, const char **error)
+{
+  if ((int)m_row < m_img->height)
     {
+      uint32_t row = m_row;
+      uint32_t w = m_img->width;
+      image_data::gray **data = m_img->data;
+      image_data::pixel **rgbdata = m_img->rgbdata;
+
       if (debug)
 	printf("Decoding scanline %i\n", row);
-      if (!TIFFReadScanline(tif, buf, row))
+      if (!TIFFReadScanline(m_tif, m_buf, row))
 	{
 	  *error = "scanline decoding failed";
-	  TIFFClose (tif);
 	  return false;
 	}
-      if (bitspersample == 8 && samples == 1)
+      if (m_bitspersample == 8 && m_samples == 1)
 	{
-	  uint8_t *buf2 = (uint8_t *)buf;
+	  uint8_t *buf2 = (uint8_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
-      else if (bitspersample == 8 && samples == 3)
+      else if (m_bitspersample == 8 && m_samples == 3)
 	{
-	  uint8_t *buf2 = (uint8_t *)buf;
+	  uint8_t *buf2 = (uint8_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[3 * x+0];
@@ -179,9 +252,9 @@ image_data::load_tiff (const char *name, const char **error)
 	      rgbdata[row][x].b = buf2[3 * x+2];
 	    }
 	}
-      else if (bitspersample == 8 && samples == 4)
+      else if (m_bitspersample == 8 && m_samples == 4)
 	{
-	  uint8_t *buf2 = (uint8_t *)buf;
+	  uint8_t *buf2 = (uint8_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[4 * x+0];
@@ -190,15 +263,15 @@ image_data::load_tiff (const char *name, const char **error)
 	      data[row][x] = buf2[4 * x+3];
 	    }
 	}
-      else if (bitspersample == 16 && samples == 1)
+      else if (m_bitspersample == 16 && m_samples == 1)
 	{
-	  uint16_t *buf2 = (uint16_t *)buf;
+	  uint16_t *buf2 = (uint16_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    data[row][x] = buf2[x];
 	}
-      else if (bitspersample == 16 && samples == 3)
+      else if (m_bitspersample == 16 && m_samples == 3)
 	{
-	  uint16_t *buf2 = (uint16_t *)buf;
+	  uint16_t *buf2 = (uint16_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[3 * x+0];
@@ -206,9 +279,9 @@ image_data::load_tiff (const char *name, const char **error)
 	      rgbdata[row][x].b = buf2[3 * x+2];
 	    }
 	}
-      else if (bitspersample == 16 && samples == 4)
+      else if (m_bitspersample == 16 && m_samples == 4)
 	{
-	  uint16_t *buf2 = (uint16_t *)buf;
+	  uint16_t *buf2 = (uint16_t *)m_buf;
 	  for (uint32_t x = 0; x < w; x++)
 	    {
 	      rgbdata[row][x].r = buf2[4*x+0];
@@ -221,20 +294,23 @@ image_data::load_tiff (const char *name, const char **error)
 	{
 	  /* We should have given up earlier.  */
 	  fprintf (stderr, "Wrong combinations of bitspersample %i and samples %i\n",
-		   bitspersample, samples);
+		   m_bitspersample, m_samples);
 	  abort ();
 	}
+      *permille = 999999 * m_row / m_img->height;
+      m_row++;
     }
-  if (debug)
-    printf("closing\n");
-  _TIFFfree(buf);
-  TIFFClose (tif);
-  if (debug)
-    printf("done\n");
+  else
+    {
+      if (debug)
+	printf("done\n");
+      *permille = 1000000;
+    }
   return true;
 }
+
 bool
-image_data::load_jpg (const char *name, const char **error)
+jpg_image_data_loader::init_loader (const char *name, const char **error)
 {
   FILE *jpegFile;
   if ((jpegFile = fopen(name, "rb")) == NULL)
@@ -257,86 +333,82 @@ image_data::load_jpg (const char *name, const char **error)
       return false;
     }
   unsigned long jpegSize = (unsigned long)size;
-  unsigned char *jpegBuf = NULL;
-  if ((jpegBuf = (unsigned char *)tjAlloc(jpegSize)) == NULL)
+  if ((m_jpeg_buf = (unsigned char *)tjAlloc(jpegSize)) == NULL)
     {
       *error = "input file is empty";
       fclose (jpegFile);
       return false;
     }
-  if (fread(jpegBuf, jpegSize, 1, jpegFile) < 1)
+  if (fread(m_jpeg_buf, jpegSize, 1, jpegFile) < 1)
     {
       *error = "can not read file";
       fclose (jpegFile);
-      tjFree(jpegBuf);
       return false;
     }
   fclose(jpegFile);  
-  tjhandle tjInstance = tjInitDecompress();
-  if (!tjInstance)
+  m_tj_instance = tjInitDecompress ();
+  if (!m_tj_instance)
     {
       *error = "can not initialize jpeg decompressor";
-      tjFree(jpegBuf);
       return false;
     }
   int inSubsamp, inColorspace;
-  if (tjDecompressHeader3(tjInstance, jpegBuf, jpegSize, &width, &height,
+  if (tjDecompressHeader3(m_tj_instance, m_jpeg_buf, jpegSize, &m_img->width, &m_img->height,
 			  &inSubsamp, &inColorspace) < 0)
     {
       *error = "can not read header";
-      tjFree(jpegBuf);
       return false;
     }
   /* RGB is 1 and gray is 2.  */
   if (inColorspace != 1 && inColorspace != 2)
     {
       *error = "only grayscale and rgb jpeg files are supported";
-      tjFree(jpegBuf);
-      tjDestroy(tjInstance);
       return false;
     }
-  bool rgb = inColorspace == 1;
+  rgb = inColorspace == 1;
   int pixelFormat = rgb ? TJPF_RGB : TJPF_GRAY;
-  unsigned char *imgBuf = (unsigned char *)tjAlloc(width * height *
-                                           tjPixelSize[pixelFormat]);
-  if (!imgBuf)
+  m_img_buf = (unsigned char *)tjAlloc(m_img->width * m_img->height * tjPixelSize[pixelFormat]);
+  if (!m_img_buf)
     {
       *error = "can not allocate decompressed image buffer";
-      tjFree(jpegBuf);
-      tjDestroy(tjInstance);
       return false;
     }
-  if (tjDecompress2(tjInstance, jpegBuf, jpegSize, imgBuf, width, 0, height,
+  if (tjDecompress2(m_tj_instance, m_jpeg_buf, jpegSize, m_img_buf, m_img->width, 0, m_img->height,
 		    pixelFormat, TJFLAG_ACCURATEDCT) < 0)
     {
       *error = "can not allocate decompressed image buffer";
-      tjFree (jpegBuf);
-      tjFree (imgBuf);
-      tjDestroy(tjInstance);
       return false;
     }
-  free (jpegBuf);
-  tjDestroy(tjInstance);
-  if (!allocate (!rgb, rgb))
-    {
-      *error = "out of memory allocating image";
-      tjFree (imgBuf);
-      return false;
-    }
-  maxval = 255;
+  free (m_jpeg_buf);
+  m_jpeg_buf = NULL;
+  tjDestroy(m_tj_instance);
+  m_tj_instance = NULL;
+  grayscale = !rgb;
+  m_img->maxval = 255;
+  return true;
+}
+
+bool
+jpg_image_data_loader::load_part (int *permille, const char **error)
+{
+  int width = m_img->width;
+  int height = m_img->height;
+  image_data::gray **data = m_img->data;
+  image_data::pixel **rgbdata = m_img->rgbdata;
+
   if (!rgb)
     for (int y = 0; y < height; y++)
       for (int x = 0; x < width; x++)
-	data[y][x] = imgBuf[y * width + x];
+	data[y][x] = m_img_buf[y * width + x];
   else
     for (int y = 0; y < height; y++)
       for (int x = 0; x < width; x++)
 	{
-	  rgbdata[y][x].r = imgBuf[y * width *3 + x * 3 + 0];
-	  rgbdata[y][x].g = imgBuf[y * width *3 + x * 3 + 1];
-	  rgbdata[y][x].b = imgBuf[y * width *3 + x * 3 + 2];
+	  rgbdata[y][x].r = m_img_buf[y * width *3 + x * 3 + 0];
+	  rgbdata[y][x].g = m_img_buf[y * width *3 + x * 3 + 1];
+	  rgbdata[y][x].b = m_img_buf[y * width *3 + x * 3 + 2];
 	}
-  tjFree (imgBuf);
+  *permille = 1000000;
   return true;
 }
 
@@ -350,15 +422,54 @@ has_suffix (const char *name, const char *suffix)
 }
 
 bool
+image_data::init_loader (const char *name, const char **error)
+{
+  assert (!loader);
+  if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
+    loader = new tiff_image_data_loader (this);
+  else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
+    loader = new jpg_image_data_loader (this);
+  bool ret = loader->init_loader (name, error);
+  if (!ret)
+    {
+      delete loader;
+      loader = NULL;
+    }
+  return ret;
+}
+
+bool
+image_data::load_part (int *permille, const char **error)
+{
+  assert (loader);
+  bool ret = loader->load_part (permille, error);
+  if (!ret || *permille == 1000000)
+    {
+      delete loader;
+      loader = NULL;
+    }
+  return ret;
+}
+
+bool
 image_data::load (const char *name, const char **error)
 {
-  if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
-    return load_tiff (name, error);
-  else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
-    return load_jpg (name, error);
-  else
+  int permille;
+  if (!init_loader (name, error))
+    return false;
+
+  if (!allocate ())
     {
-      *error = "only files with extensions tif, tiff, jpg or jpeg are supported";
+      *error = "out of memory allocating image";
+      delete loader;
+      loader = NULL;
       return false;
     }
+
+  while (load_part (&permille, error))
+    {
+      if (permille == 1000000)
+	return true;
+    }
+  return false;
 }
