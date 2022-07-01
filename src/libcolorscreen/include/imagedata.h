@@ -50,7 +50,7 @@ public:
      (used after init_loader and before load_part).  */
   bool allocate_rgb ();
   /* Load part of image. Initialize PERMILLE to status.
-     If PERMILLE==1000000 loading is finished.
+     If PERMILLE==1000 loading is finished.
      If false is returned ERROR is initialized.  */
   bool load_part (int *permille, const char **error);
 

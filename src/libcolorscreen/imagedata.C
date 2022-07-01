@@ -57,7 +57,7 @@ public:
       _TIFFfree(m_buf);
   }
 private:
-  static const bool debug = true;
+  static const bool debug = false;
   TIFF *m_tif;
   image_data *m_img;
   tdata_t m_buf;
@@ -297,14 +297,14 @@ tiff_image_data_loader::load_part (int *permille, const char **error)
 		   m_bitspersample, m_samples);
 	  abort ();
 	}
-      *permille = 999999 * m_row / m_img->height;
+      *permille = (999 * m_row + m_img->height / 2) / m_img->height;
       m_row++;
     }
   else
     {
       if (debug)
 	printf("done\n");
-      *permille = 1000000;
+      *permille = 1000;
     }
   return true;
 }
@@ -408,7 +408,7 @@ jpg_image_data_loader::load_part (int *permille, const char **error)
 	  rgbdata[y][x].g = m_img_buf[y * width *3 + x * 3 + 1];
 	  rgbdata[y][x].b = m_img_buf[y * width *3 + x * 3 + 2];
 	}
-  *permille = 1000000;
+  *permille = 1000;
   return true;
 }
 
@@ -443,7 +443,7 @@ image_data::load_part (int *permille, const char **error)
 {
   assert (loader);
   bool ret = loader->load_part (permille, error);
-  if (!ret || *permille == 1000000)
+  if (!ret || *permille == 1000)
     {
       delete loader;
       loader = NULL;
@@ -468,7 +468,7 @@ image_data::load (const char *name, const char **error)
 
   while (load_part (&permille, error))
     {
-      if (permille == 1000000)
+      if (permille == 1000)
 	return true;
     }
   return false;
