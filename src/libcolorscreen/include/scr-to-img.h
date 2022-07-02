@@ -46,7 +46,7 @@ struct DLL_PUBLIC scr_to_img_parameters
 };
 
 /* Mapping between screen and image.  */
-class scr_to_img
+class DLL_PUBLIC scr_to_img
 {
 public:
   void set_parameters (scr_to_img_parameters param);
