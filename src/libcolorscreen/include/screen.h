@@ -4,7 +4,7 @@
 #include "scr-to-img.h"
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
-struct screen
+struct DLL_PUBLIC screen
 {
   /* Size of the arrays holding the screen.  Must be power of 2.  */
   static const int size=128;

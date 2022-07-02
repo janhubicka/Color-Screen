@@ -52,7 +52,7 @@ struct DLL_PUBLIC render_parameters
      - the scanned image data
      - the desired range of input and output values
    and provides way to get a pixel at given screen or image coordinates.  */
-class render
+class DLL_PUBLIC render
 {
 public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
