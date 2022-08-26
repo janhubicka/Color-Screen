@@ -88,6 +88,37 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
   coord_t maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
   coord_t maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
+  /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
+  if (m_param.k1)
+    {
+      const int steps = 16*1024;
+      for (int i = 1; i < steps; i++)
+	{
+	  coord_t xx,yy;
+	  to_scr (x1 + (x2 - x1) * i / steps, y1, &xx, &yy);
+	  minx = std::min (minx, xx);
+	  miny = std::min (miny, yy);
+	  maxx = std::max (maxx, xx);
+	  maxy = std::max (maxy, yy);
+	  to_scr (x1 + (x2 - x1) * i / steps, y2, &xx, &yy);
+	  minx = std::min (minx, xx);
+	  miny = std::min (miny, yy);
+	  maxx = std::max (maxx, xx);
+	  maxy = std::max (maxy, yy);
+	  to_scr (x1, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	  minx = std::min (minx, xx);
+	  miny = std::min (miny, yy);
+	  maxx = std::max (maxx, xx);
+	  maxy = std::max (maxy, yy);
+	  to_scr (x2, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	  minx = std::min (minx, xx);
+	  miny = std::min (miny, yy);
+	  maxx = std::max (maxx, xx);
+	  maxy = std::max (maxy, yy);
+	}
+    }
+
+
   /* Determine the coordinates.  */
   *scr_xshift = -minx - 1;
   *scr_yshift = -miny - 1;
