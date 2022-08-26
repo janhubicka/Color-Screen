@@ -73,7 +73,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *y2, *brightness, *ydpi,
+  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *y2, *brightness, *k1,
 	       	*tilt_x_x, *tilt_x_y, *tilt_y_x, *tilt_y_y, *mix_gamma, *mix_red, *mix_green, *mix_blue;
 };
 Data data;
@@ -121,6 +121,8 @@ openimage (int *argc, char **argv)
 static void
 getvals (void)
 {
+  render_parameters old = rparams;
+  scr_to_img_parameters old2 = current;
   rparams.gamma = gtk_spin_button_get_value (data.gamma);
   rparams.saturation = gtk_spin_button_get_value (data.saturation);
   rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
@@ -134,7 +136,12 @@ getvals (void)
   rparams.mix_red = gtk_spin_button_get_value (data.mix_red);
   rparams.mix_green = gtk_spin_button_get_value (data.mix_green);
   rparams.mix_blue = gtk_spin_button_get_value (data.mix_blue);
-  printf ("mix %f %f %f %f\n", rparams.mix_gamma, rparams.mix_red, rparams.mix_green, rparams.mix_blue);
+  current.k1 = gtk_spin_button_get_value (data.k1);
+  if (rparams != old || current != old2)
+    {
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
 }
 
 /* Set values displayed by the UI.  */
@@ -567,7 +574,7 @@ initgtk (int *argc, char **argv)
   data.presaturation = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "presaturation"));
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
   data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
-  data.ydpi = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "ydpi"));
+  data.k1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "k1"));
   data.tilt_x_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_x"));
   data.tilt_x_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_y"));
   data.tilt_y_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_x"));
@@ -595,7 +602,7 @@ get_scr_to_img_parameters ()
 static inline void
 init_transformation_data (scr_to_img *trans)
 {
-  trans->set_parameters (get_scr_to_img_parameters ());
+  trans->set_parameters (get_scr_to_img_parameters (), scan);
 }
 
 static inline void

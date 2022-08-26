@@ -26,7 +26,8 @@ save_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam)
       || fprintf (f, "coordinate_x: %f %f\n", param.coordinate1_x, param.coordinate1_y) < 0
       || fprintf (f, "coordinate_y: %f %f\n", param.coordinate2_x, param.coordinate2_y) < 0
       || fprintf (f, "tilt_x: %f %f\n", param.tilt_x_x, param.tilt_x_y) < 0
-      || fprintf (f, "tilt_y: %f %f\n", param.tilt_y_x, param.tilt_y_y) < 0)
+      || fprintf (f, "tilt_y: %f %f\n", param.tilt_y_x, param.tilt_y_y) < 0
+      || fprintf (f, "k1: %f\n", param.k1) < 0)
     return false;
   if (fprintf (f, "gamma: %f\n", rparam.gamma) < 0
       || fprintf (f, "presaturation: %f\n", rparam.presaturation) < 0
@@ -238,6 +239,14 @@ load_csp (FILE *f, scr_to_img_parameters &param, render_parameters &rparam, cons
 	  if (!read_vector (f, &param.tilt_y_x, &param.tilt_y_y))
 	    {
 	      *error = "error parsing tilt_y";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "k1"))
+	{
+	  if (!read_scalar (f, &param.k1))
+	    {
+	      *error = "error parsing k1";
 	      return false;
 	    }
 	}

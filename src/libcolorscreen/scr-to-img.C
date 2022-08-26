@@ -1,12 +1,19 @@
 #include <math.h>
 #include <algorithm>
 #include "include/scr-to-img.h"
+#include "include/imagedata.h"
 
 /* Initilalize the translation matrix to PARAM.  */
 void
-scr_to_img::set_parameters (scr_to_img_parameters param)
+scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 {
+  m_lens_center_x = img.width / (coord_t) 2;
+  m_lens_center_y = img.height / (coord_t) 2;
+  m_lens_radius = my_sqrt (m_lens_center_x * m_lens_center_x + m_lens_center_y * m_lens_center_y);
+  m_inverse_lens_radius = 1 / m_lens_radius;
   m_param = param;
+  apply_lens_correction (m_param.center_x, m_param.center_y,
+			 &m_corrected_center_x,	 &m_corrected_center_y);
   trans_matrix m;
 
   if (param.tilt_x_x!= 0)
@@ -31,6 +38,22 @@ scr_to_img::set_parameters (scr_to_img_parameters param)
     }
   coord_t c1x, c1y;
   coord_t c2x, c2y;
+  coord_t coordinate1_x, coordinate1_y;
+  coord_t coordinate2_x, coordinate2_y;
+
+  /* Base vector are in the scan coordinates; adjust for lens distortion.  */
+  apply_lens_correction (m_param.coordinate1_x + m_param.center_x,
+			 m_param.coordinate1_y + m_param.center_y,
+			 &coordinate1_x, &coordinate1_y);
+  coordinate1_x -= m_corrected_center_x;
+  coordinate1_y -= m_corrected_center_y;
+
+  apply_lens_correction (m_param.coordinate2_x + m_param.center_x,
+			 m_param.coordinate2_y + m_param.center_y,
+			 &coordinate2_x, &coordinate2_y);
+  coordinate2_x -= m_corrected_center_x;
+  coordinate2_y -= m_corrected_center_y;
+
   m.inverse_perspective_transform (param.coordinate1_x, param.coordinate1_y, c1x, c1y);
   m.inverse_perspective_transform (param.coordinate2_x, param.coordinate2_y, c2x, c2y);
 

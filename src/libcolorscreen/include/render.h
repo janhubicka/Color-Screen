@@ -45,6 +45,29 @@ struct DLL_PUBLIC render_parameters
   bool screen_compensation;
   /* If true use luminosity from scan.  */
   bool adjust_luminosity;
+
+  bool operator== (render_parameters &other) const
+  {
+    return gamma == other.gamma
+	   && presaturation == other.presaturation
+	   && saturation == other.saturation
+	   && brightness == other.brightness
+	   && collection_threshold == other.collection_threshold
+	   && mix_gamma == other.mix_gamma
+	   && mix_red == other.mix_red
+	   && mix_green == other.mix_green
+	   && mix_blue == other.mix_blue
+	   && color_model == other.color_model
+	   && gray_min == other.gray_min
+	   && gray_max == other.gray_max
+	   && precise == other.precise
+	   && screen_compensation == other.screen_compensation
+	   && adjust_luminosity == other.adjust_luminosity;
+  }
+  bool operator!= (render_parameters &other) const
+  {
+    return !(*this == other);
+  }
 };
 
 /* Base class for rendering routines.  It holds
@@ -58,7 +81,7 @@ public:
   render (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval)
   {
-    m_scr_to_img.set_parameters (param);
+    m_scr_to_img.set_parameters (param, img);
   }
   ~render ();
   inline luminosity_t get_img_pixel (coord_t x, coord_t y);
@@ -161,7 +184,7 @@ public:
   {
     luminosity_t gg, rr, bb;
     if (!m_color)
-      rr = gg = bb = fast_get_img_pixel (x, y);
+      rr = gg = bb = get_img_pixel (x, y);
     else
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);
