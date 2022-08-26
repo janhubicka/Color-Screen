@@ -163,6 +163,7 @@ setvals (void)
   gtk_spin_button_set_value (data.mix_red, rparams.mix_red);
   gtk_spin_button_set_value (data.mix_green, rparams.mix_green);
   gtk_spin_button_set_value (data.mix_blue, rparams.mix_blue);
+  gtk_spin_button_set_value (data.k1, current.k1);
   initialized = 1;
 }
 
