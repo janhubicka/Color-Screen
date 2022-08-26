@@ -112,11 +112,22 @@ public:
      }
    else
      {
-       coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
-       coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
-       coord_t powradius = (xd * xd + yd * yd);
+#if 1
+       coord_t xd = (x - m_lens_center_x);
+       coord_t yd = (y - m_lens_center_y);
+       coord_t powradius = (xd * xd + yd * yd) * m_inverse_lens_radius * m_inverse_lens_radius;
        *xr = x + xd * powradius * m_param.k1;
        *yr = y + yd * powradius * m_param.k1;
+#else
+       coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
+       coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
+       coord_t r = sqrt (xd*xd + yd*yd);
+       xd /= r;
+       yd /= r;
+       r += m_param.k1 * r * r *r;
+       *xr = m_lens_center_x + r * xd * m_lens_radius;
+       *yr = m_lens_center_y + r * yd * m_lens_radius;
+#endif
      }
   }
   /* Invert lens correction.  */
@@ -143,10 +154,9 @@ public:
 	 coord_t cbrt2 = 1.25992104989;
 	 coord_t coef = my_cbrt (9 * k1pow2 * r + sqrt3 * my_sqrt (27 * k1pow4 * rpow2 + 4 * k1pow3));
 	 coord_t radius = coef / (cbrt2 * (coord_t)2.08008382305 /* 3^(2/3) */ * k1) - (coord_t)0.87358046473629 /* cbrt(2/3) */ / coef;
-	 radius = r;
 
-	 *xr = xd * radius * m_lens_radius + m_lens_center_x;
-	 *yr = yd * radius * m_lens_radius + m_lens_center_y;
+	 *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
+	 *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
        }
   }
 
@@ -154,10 +164,10 @@ public:
   void
   to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
-    m_matrix.perspective_transform (x,y, *xp, *yp);
-    *xp += m_corrected_center_x;
-    *yp += m_corrected_center_y;
-    inverse_lens_correction (x, y, &x, &y);
+    m_matrix.perspective_transform (x,y, x, y);
+    x += m_corrected_center_x;
+    y += m_corrected_center_y;
+    inverse_lens_correction (x, y, xp, yp);
   }
   /* Map image coordinats to screen.  */
   void
