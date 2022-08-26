@@ -101,7 +101,6 @@ public:
   {
     return cbrt (x);
   }
-  /* Apply lens correction.  */
   void
   apply_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
@@ -110,54 +109,27 @@ public:
        *xr = x;
        *yr = y;
      }
+   /* Hack: Inverse correction works only for positive k1 otherwise
+      it ends up with square root of a negative number.  */
+   else if (m_param.k1 > 0)
+      apply_lens_correction_1 (x, y, xr, yr, m_param.k1);
    else
-     {
-#if 1
-       coord_t xd = (x - m_lens_center_x);
-       coord_t yd = (y - m_lens_center_y);
-       coord_t powradius = (xd * xd + yd * yd) * m_inverse_lens_radius * m_inverse_lens_radius;
-       *xr = x + xd * powradius * m_param.k1;
-       *yr = y + yd * powradius * m_param.k1;
-#else
-       coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
-       coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
-       coord_t r = sqrt (xd*xd + yd*yd);
-       xd /= r;
-       yd /= r;
-       r += m_param.k1 * r * r *r;
-       *xr = m_lens_center_x + r * xd * m_lens_radius;
-       *yr = m_lens_center_y + r * yd * m_lens_radius;
-#endif
-     }
+      inverse_lens_correction_1 (x, y, xr, yr, -m_param.k1);
   }
-  /* Invert lens correction.  */
   void
   inverse_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-     if (!m_param.k1)
-       {
-	 *xr = x;
-	 *yr = y;
-       }
-     else
-       {
-	 coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
-	 coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
-	 coord_t rpow2 = xd * xd + yd * yd;
-	 coord_t r = my_sqrt (rpow2);
-	 /* An inverse as given by https://www.wolframalpha.com/input?i=x%2Bk*x*x*x-r%3D0  */
-	 coord_t k1 = m_param.k1;
-	 coord_t k1pow2 = k1 * k1;
-	 coord_t k1pow3 = k1 * k1pow2;
-	 coord_t k1pow4 = k1pow2 * k1pow2;
-	 coord_t sqrt3 = 1.73205080757;
-	 coord_t cbrt2 = 1.25992104989;
-	 coord_t coef = my_cbrt (9 * k1pow2 * r + sqrt3 * my_sqrt (27 * k1pow4 * rpow2 + 4 * k1pow3));
-	 coord_t radius = coef / (cbrt2 * (coord_t)2.08008382305 /* 3^(2/3) */ * k1) - (coord_t)0.87358046473629 /* cbrt(2/3) */ / coef;
-
-	 *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
-	 *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
-       }
+   if (!m_param.k1)
+     {
+       *xr = x;
+       *yr = y;
+     }
+   /* Hack: Inverse correction works only for positive k1 otherwise
+      it ends up with square root of a negative number.  */
+   else if (m_param.k1 > 0)
+      inverse_lens_correction_1 (x, y, xr, yr, m_param.k1);
+   else
+      apply_lens_correction_1 (x, y, xr, yr, -m_param.k1);
   }
 
   /* Map screen coordinates to image coordinates.  */
@@ -193,6 +165,40 @@ private:
   /* Screen->image translation matrix.  */
   trans_matrix m_matrix;
   scr_to_img_parameters m_param;
+  /* Apply lens correction.  */
+  void
+  apply_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
+  {
+    coord_t xd = (x - m_lens_center_x);
+    coord_t yd = (y - m_lens_center_y);
+    coord_t powradius = (xd * xd + yd * yd) * m_inverse_lens_radius * m_inverse_lens_radius;
+    *xr = x + xd * powradius * k1;
+    *yr = y + yd * powradius * k1;
+  }
+  /* Invert lens correction.  */
+  void
+  inverse_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
+  {
+    coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
+    coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
+    coord_t rpow2 = xd * xd + yd * yd;
+    coord_t r = my_sqrt (rpow2);
+    /* An inverse as given by https://www.wolframalpha.com/input?i=x%2Bk*x*x*x-r%3D0  */
+    coord_t k1pow2 = k1 * k1;
+    coord_t k1pow3 = k1 * k1pow2;
+    coord_t k1pow4 = k1pow2 * k1pow2;
+    coord_t sqrt3 = 1.73205080757;
+    coord_t cbrt2 = 1.25992104989;
+    coord_t val = 27 * k1pow4 * rpow2 + 4 * k1pow3;
+    if (!(val >= 0))
+      val = 0;
+    coord_t coef = my_cbrt (9 * k1pow2 * r + sqrt3 * my_sqrt (val));
+    coord_t radius = coef / (cbrt2 * (coord_t)2.08008382305 /* 3^(2/3) */ * k1)
+		      - (coord_t)0.87358046473629 /* cbrt(2/3) */ / coef;
+
+    *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
+    *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
+  }
 };
 
 /* Translate center to given coordinates (x,y).  */
