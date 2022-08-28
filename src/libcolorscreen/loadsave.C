@@ -1,5 +1,5 @@
 #include <locale>
-#include "include/render.h"
+#include "include/render-to-scr.h"
 #define HEADER "screen_alignment_version: 1\n"
 
 static const char * const scr_names[max_scr_type] =

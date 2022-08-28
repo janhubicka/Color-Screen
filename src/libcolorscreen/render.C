@@ -114,7 +114,7 @@ compute_grayscale (image_data &img,
 }
 
 void
-render::precompute_all ()
+render::precompute_all (bool duffay)
 {
   bool recompute = false;
   if (!m_data)
@@ -179,7 +179,7 @@ render::precompute_all ()
     }
   if (m_params.color_model == 1 || m_params.color_model == 2)
     {
-      if (m_scr_to_img.get_type () != Dufay)
+      if (!duffay)
 	{
 	  finlay_matrix m;
 	  xyz_srgb_matrix m2;
@@ -202,7 +202,7 @@ render::precompute_all ()
     }
   if (m_params.color_model == 3)
     {
-      if (m_scr_to_img.get_type () != Dufay)
+      if (!duffay)
 	{
 	  adjusted_finlay_matrix m;
 	  xyz_srgb_matrix m2;
@@ -224,16 +224,6 @@ render::precompute_all ()
     }
   color = color * m_params.brightness;
   m_color_matrix = color;
-}
-
-/* Return approximate size of an scan pixel in screen corrdinates.  */
-coord_t
-render::pixel_size ()
-{
-  coord_t x,x2, y, y2;
-  m_scr_to_img.to_scr (0, 0, &x, &y);
-  m_scr_to_img.to_scr (1, 0, &x2, &y2);
-  return sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
 }
 
 render::~render ()

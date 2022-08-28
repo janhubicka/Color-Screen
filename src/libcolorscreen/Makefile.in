@@ -134,6 +134,7 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libcolorscreen_la_LIBADD =
 am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
+	libcolorscreen_la-render-to-scr.lo \
 	libcolorscreen_la-render-fast.lo \
 	libcolorscreen_la-render-interpolate.lo \
 	libcolorscreen_la-screen.lo libcolorscreen_la-scr-to-img.lo \
@@ -171,6 +172,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-fast.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-tile.Plo \
+	./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render.Plo \
 	./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo \
 	./$(DEPDIR)/libcolorscreen_la-screen.Plo ./$(DEPDIR)/matrix.Po
@@ -351,11 +353,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-interpolate.h include/render-superposeimg.h include/screen.h include/scr-to-img.h  include/dllpublic.h
+include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/render-interpolate.h include/render-superposeimg.h include/screen.h include/scr-to-img.h  include/dllpublic.h
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 matrix_SOURCES = matrix.C
@@ -455,6 +457,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-fast.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-tile.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-screen.Plo@am__quote@ # am--include-marker
@@ -493,6 +496,13 @@ libcolorscreen_la-render.lo: render.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='render.C' object='libcolorscreen_la-render.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-render.lo `test -f 'render.C' || echo '$(srcdir)/'`render.C
+
+libcolorscreen_la-render-to-scr.lo: render-to-scr.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-render-to-scr.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-render-to-scr.Tpo -c -o libcolorscreen_la-render-to-scr.lo `test -f 'render-to-scr.C' || echo '$(srcdir)/'`render-to-scr.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-render-to-scr.Tpo $(DEPDIR)/libcolorscreen_la-render-to-scr.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='render-to-scr.C' object='libcolorscreen_la-render-to-scr.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-render-to-scr.lo `test -f 'render-to-scr.C' || echo '$(srcdir)/'`render-to-scr.C
 
 libcolorscreen_la-render-fast.lo: render-fast.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-render-fast.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-render-fast.Tpo -c -o libcolorscreen_la-render-fast.lo `test -f 'render-fast.C' || echo '$(srcdir)/'`render-fast.C
@@ -702,6 +712,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-fast.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-tile.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
@@ -756,6 +767,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-fast.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-tile.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo

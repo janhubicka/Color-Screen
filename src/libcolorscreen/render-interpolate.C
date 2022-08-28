@@ -10,7 +10,7 @@ flatten_attr void
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax)
 {
   assert (!m_prec_red);
-  render::precompute (xmin, ymin, xmax, ymax);
+  render_to_scr::precompute (xmin, ymin, xmax, ymax);
   if (m_params.screen_compensation || m_params.precise)
     {
       static screen blured_screen;

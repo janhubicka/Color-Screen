@@ -16,13 +16,13 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 }
 
 void
-render::render_tile (enum render_type_t render_type,
-		     scr_to_img_parameters &param, image_data &img,
-		     render_parameters &rparam, bool color,
-		     unsigned char *pixels, int pixelbytes, int rowstride,
-		     int width, int height,
-		     double xoffset, double yoffset,
-		     double step)
+render_to_scr::render_tile (enum render_type_t render_type,
+			    scr_to_img_parameters &param, image_data &img,
+			    render_parameters &rparam, bool color,
+			    unsigned char *pixels, int pixelbytes, int rowstride,
+			    int width, int height,
+			    double xoffset, double yoffset,
+			    double step)
 {
   if (stats == -1)
     stats = getenv ("CSSTATS") != NULL;
