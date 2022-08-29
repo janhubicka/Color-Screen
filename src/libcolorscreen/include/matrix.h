@@ -224,5 +224,56 @@ public:
     for (int j = 0; j < 4; j++)
       B::m_elements[j][2] *= scale;
   }
+  /* Compute inversion.  */
+  inline matrix4x4
+  invert ()
+  {
+    T A2323 = B::m_elements[2][2] * B::m_elements[3][3] - B::m_elements[2][3] * B::m_elements[3][2];
+    T A1323 = B::m_elements[2][1] * B::m_elements[3][3] - B::m_elements[2][3] * B::m_elements[3][1];
+    T A1223 = B::m_elements[2][1] * B::m_elements[3][2] - B::m_elements[2][2] * B::m_elements[3][1];
+    T A0323 = B::m_elements[2][0] * B::m_elements[3][3] - B::m_elements[2][3] * B::m_elements[3][0];
+    T A0223 = B::m_elements[2][0] * B::m_elements[3][2] - B::m_elements[2][2] * B::m_elements[3][0];
+    T A0123 = B::m_elements[2][0] * B::m_elements[3][1] - B::m_elements[2][1] * B::m_elements[3][0];
+    T A2313 = B::m_elements[1][2] * B::m_elements[3][3] - B::m_elements[1][3] * B::m_elements[3][2];
+    T A1313 = B::m_elements[1][1] * B::m_elements[3][3] - B::m_elements[1][3] * B::m_elements[3][1];
+    T A1213 = B::m_elements[1][1] * B::m_elements[3][2] - B::m_elements[1][2] * B::m_elements[3][1];
+    T A2312 = B::m_elements[1][2] * B::m_elements[2][3] - B::m_elements[1][3] * B::m_elements[2][2];
+    T A1312 = B::m_elements[1][1] * B::m_elements[2][3] - B::m_elements[1][3] * B::m_elements[2][1];
+    T A1212 = B::m_elements[1][1] * B::m_elements[2][2] - B::m_elements[1][2] * B::m_elements[2][1];
+    T A0313 = B::m_elements[1][0] * B::m_elements[3][3] - B::m_elements[1][3] * B::m_elements[3][0];
+    T A0213 = B::m_elements[1][0] * B::m_elements[3][2] - B::m_elements[1][2] * B::m_elements[3][0];
+    T A0312 = B::m_elements[1][0] * B::m_elements[2][3] - B::m_elements[1][3] * B::m_elements[2][0];
+    T A0212 = B::m_elements[1][0] * B::m_elements[2][2] - B::m_elements[1][2] * B::m_elements[2][0];
+    T A0113 = B::m_elements[1][0] * B::m_elements[3][1] - B::m_elements[1][1] * B::m_elements[3][0];
+    T A0112 = B::m_elements[1][0] * B::m_elements[2][1] - B::m_elements[1][1] * B::m_elements[2][0];
+
+    T det = B::m_elements[0][0] * ( B::m_elements[1][1] * A2323 - B::m_elements[1][2] * A1323 + B::m_elements[1][3] * A1223)
+	    - B::m_elements[0][1] * ( B::m_elements[1][0] * A2323 - B::m_elements[1][2] * A0323 + B::m_elements[1][3] * A0223)
+	    + B::m_elements[0][2] * ( B::m_elements[1][0] * A1323 - B::m_elements[1][1] * A0323 + B::m_elements[1][3] * A0123)
+	    - B::m_elements[0][3] * ( B::m_elements[1][0] * A1223 - B::m_elements[1][1] * A0223 + B::m_elements[1][2] * A0123);
+    det = 1 / det;
+
+    matrix4x4 ret
+      (det *  (B::m_elements[1][1] * A2323 - B::m_elements[1][2] * A1323 + B::m_elements[1][3] * A1223), /*00*/
+       det * -(B::m_elements[1][0] * A2323 - B::m_elements[1][2] * A0323 + B::m_elements[1][3] * A0223), /*10*/
+       det *  (B::m_elements[1][0] * A1323 - B::m_elements[1][1] * A0323 + B::m_elements[1][3] * A0123), /*20*/
+       det * -(B::m_elements[1][0] * A1223 - B::m_elements[1][1] * A0223 + B::m_elements[1][2] * A0123), /*30*/
+
+       det * -(B::m_elements[0][1] * A2323 - B::m_elements[0][2] * A1323 + B::m_elements[0][3] * A1223), /*01*/
+       det *  (B::m_elements[0][0] * A2323 - B::m_elements[0][2] * A0323 + B::m_elements[0][3] * A0223), /*11*/
+       det * -(B::m_elements[0][0] * A1323 - B::m_elements[0][1] * A0323 + B::m_elements[0][3] * A0123), /*21*/
+       det *  (B::m_elements[0][0] * A1223 - B::m_elements[0][1] * A0223 + B::m_elements[0][2] * A0123), /*31*/
+
+       det *  (B::m_elements[0][1] * A2313 - B::m_elements[0][2] * A1313 + B::m_elements[0][3] * A1213), /*02*/
+       det *  (B::m_elements[0][0] * A2312 - B::m_elements[0][2] * A0312 + B::m_elements[0][3] * A0212), /*13*/
+       det *  (B::m_elements[0][0] * A1313 - B::m_elements[0][1] * A0313 + B::m_elements[0][3] * A0113), /*22*/
+       det * -(B::m_elements[0][0] * A1213 - B::m_elements[0][1] * A0213 + B::m_elements[0][2] * A0113), /*32*/
+
+       det * -(B::m_elements[0][1] * A2312 - B::m_elements[0][2] * A1312 + B::m_elements[0][3] * A1212), /*03*/
+       det * -(B::m_elements[0][0] * A2313 - B::m_elements[0][2] * A0313 + B::m_elements[0][3] * A0213), /*12*/
+       det * -(B::m_elements[0][0] * A1312 - B::m_elements[0][1] * A0312 + B::m_elements[0][3] * A0112), /*23*/
+       det *  (B::m_elements[0][0] * A1212 - B::m_elements[0][1] * A0212 + B::m_elements[0][2] * A0112));/*33*/
+   return ret;
+  }
 };
 #endif

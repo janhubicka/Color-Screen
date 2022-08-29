@@ -37,5 +37,23 @@ main()
 	  abort ();
 	}
     }
+
+  /*matrix4x4<double> mm1 (1,2,3,4,
+			 5,6,7,8,
+			 9,10,11,12,
+			 13,14,15,16);*/
+  matrix4x4<double> mm1 (2,0,0,1,
+			 0,2,5,0,
+			 2,0,2,0,
+			 0,0,0,2);
+  matrix4x4<double> mm2 = mm1.invert ();
+  matrix<double,4> mm3 = mm1 * mm2;
+  for (int i = 0; i <4; i++)
+    for (int j = 0; j < 4; j++)
+       if (fabs (mm3.m_elements[i][j]-(double)(i==j)) > 0.0001)
+	  {
+            mm3.print (stderr);
+	    abort ();
+	  }
   return 0;
 }
