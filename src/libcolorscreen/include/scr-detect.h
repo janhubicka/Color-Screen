@@ -6,7 +6,7 @@
 struct scr_detect_parameters
 {
   scr_detect_parameters ()
-  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.001), min_ratio (4)
+  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.001), min_ratio (1)
   { }
 
   color_t black, red, green, blue;

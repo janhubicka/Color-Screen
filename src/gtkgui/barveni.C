@@ -191,6 +191,7 @@ static bool setcenter;
 static bool freeze_x = false;
 static bool freeze_y = false;
 static void display ();
+static int setcolor;
 
 static void
 optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
@@ -401,13 +402,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'R' && !scr_detect && scan.rgbdata)
+  if (k == 'E' && !scr_detect && scan.rgbdata)
     {
       scr_detect = true;
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'r' && scr_detect)
+  if (k == 'e' && scr_detect)
     {
       scr_detect = false;
       display_scheduled = true;
@@ -536,6 +537,14 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
 	}
+      if (k == 'd')
+	setcolor = 1;
+      if (k == 'r')
+	setcolor = 2;
+      if (k == 'g')
+	setcolor = 3;
+      if (k == 'b')
+	setcolor = 4;
     }
 
   return FALSE;
@@ -775,40 +784,89 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 					&shift_y);
   if (!initialized)
     return;
-  if (event->button == 1 && setcenter)
+  if (scr_detect)
     {
-      double newcenter_x;
-      double newcenter_y;
-      newcenter_x = (event->x + shift_x) / scale_x;
-      newcenter_y = (event->y + shift_y) / scale_y;
-      if (newcenter_x != current.center_x || newcenter_y != current.center_y)
+      if (setcolor && event->button == 1)
 	{
-	  current.center_x = newcenter_x;
-	  current.center_y = newcenter_y;
-	  setcenter = false;
-	  setvals ();
-	  display_scheduled = true;
-          preview_display_scheduled = true;
+	    int px = (event->x + shift_x) / scale_x + 0.5;
+	    int py = (event->y + shift_y) / scale_y + 0.5;
+	    if (px < 0 || px >= scan.width || py < 0 || py >= scan.height)
+	      {
+		setcolor = 0;
+		return;
+	      }
+	    luminosity_t r = scan.rgbdata[py][px].r / (luminosity_t)scan.maxval;;
+	    luminosity_t g = scan.rgbdata[py][px].g / (luminosity_t)scan.maxval;;
+	    luminosity_t b = scan.rgbdata[py][px].b / (luminosity_t)scan.maxval;;
+	    if (setcolor == 1)
+	      {
+	        current_scr_detect.black.red = r;
+	        current_scr_detect.black.green = g;
+	        current_scr_detect.black.blue = b;
+	      }
+	    if (setcolor == 2)
+	      {
+	        current_scr_detect.red.red = r;
+	        current_scr_detect.red.green = g;
+	        current_scr_detect.red.blue = b;
+	      }
+	    if (setcolor == 3)
+	      {
+	        current_scr_detect.green.red = r;
+	        current_scr_detect.green.green = g;
+	        current_scr_detect.green.blue = b;
+	      }
+	    if (setcolor == 4)
+	      {
+	        current_scr_detect.blue.red = r;
+	        current_scr_detect.blue.green = g;
+	        current_scr_detect.blue.blue = b;
+	      }
+	    setvals ();
+	    display_scheduled = true;
+	    setcolor = 0;
+	    //preview_display_scheduled = true;
 	}
     }
-  press_parameters = current;
-  if (event->button == 1)
+  else
     {
-      xpress1 = event->x;
-      ypress1 = event->y;
-      button1_pressed = true;
-    }
-  else if (event->button == 3)
-    {
-      xpress = (event->x + shift_x) / scale_x;
-      ypress = (event->y + shift_y) / scale_y;
-      button3_pressed = true;
+      if (event->button == 1 && setcenter)
+	{
+	  double newcenter_x;
+	  double newcenter_y;
+	  newcenter_x = (event->x + shift_x) / scale_x;
+	  newcenter_y = (event->y + shift_y) / scale_y;
+	  if (newcenter_x != current.center_x || newcenter_y != current.center_y)
+	    {
+	      current.center_x = newcenter_x;
+	      current.center_y = newcenter_y;
+	      setcenter = false;
+	      setvals ();
+	      display_scheduled = true;
+	      preview_display_scheduled = true;
+	    }
+	}
+      press_parameters = current;
+      if (event->button == 1)
+	{
+	  xpress1 = event->x;
+	  ypress1 = event->y;
+	  button1_pressed = true;
+	}
+      else if (event->button == 3)
+	{
+	  xpress = (event->x + shift_x) / scale_x;
+	  ypress = (event->y + shift_y) / scale_y;
+	  button3_pressed = true;
+	}
     }
 }
 
 void
 handle_drag (int x, int y, int button)
 {
+  if (scr_detect)
+    return;
   gdouble scale_x, scale_y;
   gint shift_x, shift_y;
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER

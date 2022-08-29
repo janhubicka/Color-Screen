@@ -45,8 +45,8 @@ struct color_t
   normalize ()
   {
     /* TODO: Implement right sqrt variant.  */
-    luminosity_t dist = 1 / sqrt (red * red + blue * blue + green * green);
-    color_t ret (red * dist, blue * dist, green * dist);
+    luminosity_t coef = 1 / sqrt (red * red + blue * blue + green * green);
+    color_t ret (red * coef, green * coef, blue * coef);
     return ret;
   }
 

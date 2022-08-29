@@ -14,7 +14,9 @@ public:
   {
     if (x < 0 || x >= m_img.width || y < 0 || y > m_img.height)
       return scr_detect::unknown;
-    return m_scr_detect.classify_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b);
+    return m_scr_detect.classify_color (m_img.rgbdata[y][x].r / (luminosity_t)m_img.maxval,
+					m_img.rgbdata[y][x].g / (luminosity_t)m_img.maxval,
+				       	m_img.rgbdata[y][x].b / (luminosity_t)m_img.maxval);
   }
   enum render_scr_detect_type_t
   {
