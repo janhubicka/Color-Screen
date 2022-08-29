@@ -3,8 +3,7 @@
 #include "render.h"
 #include "scr-to-img.h"
 
-/* Base class for renderes tha works in screen coordinates (so output image is
-   geometrically corrected.  */
+/* Base class for renderes that use mapping between image and screen coordinates.  */
 class render_to_scr : public render
 {
 public:
@@ -14,8 +13,6 @@ public:
     m_scr_to_img.set_parameters (param, img);
     m_scr_to_img.get_range (m_img.width, m_img.height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
   }
-  inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
-  inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
   void precompute_all ();
@@ -35,6 +32,9 @@ public:
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step);
 protected:
+  inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
+  inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
+
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
   /* Rectangular section of the screen to which the whole image fits.

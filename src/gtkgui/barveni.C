@@ -20,7 +20,11 @@ extern "C" {
 /* Undo history and the state of UI.  */
 static struct scr_to_img_parameters undobuf[UNDOLEVELS];
 static struct scr_to_img_parameters current;
+static struct scr_detect_parameters undobuf_scr_detect[UNDOLEVELS];
+static struct scr_detect_parameters current_scr_detect;
 static int undopos;
+/* Are we in screen detection mode?  */
+bool scr_detect;
 
 static char *oname, *paroname;
 static void bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf);
@@ -36,6 +40,7 @@ static int bigscale = 4;
 static bool color_display = false;
 
 static int display_type = 0;
+static int scr_detect_display_type = 0;
 static bool display_scheduled = true;
 static bool preview_display_scheduled = true;
 
@@ -48,18 +53,21 @@ save_parameters (void)
 {
   undopos  = (undopos + 1) % UNDOLEVELS;
   undobuf[undopos] = current;
+  undobuf_scr_detect[undopos] = current_scr_detect;
 }
 void
 undo_parameters (void)
 {
   current = undobuf[undopos];
-  undopos  = (undopos + UNDOLEVELS - 1) % UNDOLEVELS;
+  current_scr_detect = undobuf_scr_detect[undopos];
+  undopos = (undopos + UNDOLEVELS - 1) % UNDOLEVELS;
 }
 void
 redo_parameters (void)
 {
   undopos  = (undopos + 1) % UNDOLEVELS;
   current = undobuf[undopos];
+  current_scr_detect = undobuf_scr_detect[undopos];
 }
 
 
@@ -360,56 +368,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 {
   gint k = event->keyval;
 
-  if (k == 'c')
-    setcenter = true;
   if (k == 'o')
     {
       color_display = !color_display;
-      display_scheduled = true;
-    }
-  if (k == 'O')
-    {
-static int step;
-      if (step == 0)
-	{
-	  optimize (current.center_x,  current.center_y, 0, 1,  //center
-		    30, 0, 27, 100,  //x1
-		    0, 1);
-	  step++;
-	}
-      else if (step == 1)
-      {
-	  optimize (current.center_x,  current.center_y, (fabs (current.coordinate1_x)+fabs (current.coordinate1_y))/8,10,  //center
-		    current.coordinate1_x, current.coordinate1_y, 19.0*2/100, 10,  //x1
-		    0.003, 5);
-	  step++;
-	}
-      else if (step == 2)
-	{
-	  optimize (current.center_x,  current.center_y, 0, 1,  //center
-		    current.coordinate1_x, current.coordinate1_y, 2, 10,  //x1
-		    0.001, 10);
-	  step++;
-	}
-    }
-  if (k == 'x')
-    {
-      freeze_x = false;
-      freeze_y = true;
-    }
-  if (k == 'y')
-    {
-      freeze_x = true;
-      freeze_y = false;
-    }
-  if (k == 'a')
-    {
-      freeze_x = false;
-      freeze_y = false;
-    }
-  if (k == 'S')
-    {
-      rparams.precise = true;
       display_scheduled = true;
     }
   if (k == 'i')
@@ -417,37 +378,6 @@ static int step;
       std::swap (rparams.gray_min, rparams.gray_max);
       display_scheduled = true;
       preview_display_scheduled = true;
-    }
-  if (k == 's')
-    {
-      rparams.precise = false;
-      display_scheduled = true;
-    }
-  if (k == 'd' && current.type != Dufay)
-  {
-    save_parameters ();
-    current.type = Dufay;
-    display_scheduled = true;
-    preview_display_scheduled = true;
-  }
-  if (k == 'p' && current.type != Paget)
-  {
-    save_parameters ();
-    current.type = Paget;
-    display_scheduled = true;
-    preview_display_scheduled = true;
-  }
-  if (k == 'f' && current.type != Finlay)
-  {
-    save_parameters ();
-    current.type = Finlay;
-    display_scheduled = true;
-    preview_display_scheduled = true;
-  }
-  if (k >= '1' && k <='7')
-    {
-      display_type = k - '1';
-      display_scheduled = true;
     }
   if (k == 'u')
     {
@@ -468,6 +398,18 @@ static int step;
       rparams.color_model++;
       if (rparams.color_model >= render::num_color_models)
 	rparams.color_model = 0;
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'R' && !scr_detect && scan.rgbdata)
+    {
+      scr_detect = true;
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'r' && scr_detect)
+    {
+      scr_detect = false;
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -506,6 +448,95 @@ static int step;
 	    std::swap (rparams.gray_min, rparams.gray_max);
 	}
      }
+  if (!scr_detect)
+    {
+      if (k == 'c')
+	setcenter = true;
+      if (k == 'O')
+	{
+    static int step;
+	  if (step == 0)
+	    {
+	      optimize (current.center_x,  current.center_y, 0, 1,  //center
+			30, 0, 27, 100,  //x1
+			0, 1);
+	      step++;
+	    }
+	  else if (step == 1)
+	  {
+	      optimize (current.center_x,  current.center_y, (fabs (current.coordinate1_x)+fabs (current.coordinate1_y))/8,10,  //center
+			current.coordinate1_x, current.coordinate1_y, 19.0*2/100, 10,  //x1
+			0.003, 5);
+	      step++;
+	    }
+	  else if (step == 2)
+	    {
+	      optimize (current.center_x,  current.center_y, 0, 1,  //center
+			current.coordinate1_x, current.coordinate1_y, 2, 10,  //x1
+			0.001, 10);
+	      step++;
+	    }
+	}
+      if (k == 'x')
+	{
+	  freeze_x = false;
+	  freeze_y = true;
+	}
+      if (k == 'y')
+	{
+	  freeze_x = true;
+	  freeze_y = false;
+	}
+      if (k == 'a')
+	{
+	  freeze_x = false;
+	  freeze_y = false;
+	}
+      if (k == 's')
+	{
+	  rparams.precise = false;
+	  display_scheduled = true;
+	}
+      if (k == 'S')
+	{
+	  rparams.precise = true;
+	  display_scheduled = true;
+	}
+      if (k == 'd' && current.type != Dufay)
+      {
+	save_parameters ();
+	current.type = Dufay;
+	display_scheduled = true;
+	preview_display_scheduled = true;
+      }
+      if (k == 'p' && current.type != Paget)
+      {
+	save_parameters ();
+	current.type = Paget;
+	display_scheduled = true;
+	preview_display_scheduled = true;
+      }
+      if (k == 'f' && current.type != Finlay)
+      {
+	save_parameters ();
+	current.type = Finlay;
+	display_scheduled = true;
+	preview_display_scheduled = true;
+      }
+      if (k >= '1' && k <='7')
+	{
+	  display_type = k - '1';
+	  display_scheduled = true;
+	}
+    }
+  else
+    {
+      if (k >= '1' && k <='2')
+	{
+	  scr_detect_display_type = k - '1';
+	  display_scheduled = true;
+	}
+    }
 
   return FALSE;
 }
@@ -668,8 +699,14 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
   coord_t step = 1 / bigscale;
 
-  render_to_scr::render_tile ((enum render::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
-			      bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
+  if (scr_detect)
+    {
+      render_scr_detect::render_tile ((enum render_scr_detect::render_scr_detect_type_t)scr_detect_display_type, current_scr_detect, scan, rparams, color_display,
+				  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
+    }
+  else
+    render_to_scr::render_tile ((enum render_to_scr::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
+				bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
 
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (bigpixels,

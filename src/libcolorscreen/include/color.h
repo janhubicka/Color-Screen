@@ -1,8 +1,56 @@
 #ifndef COLOR_H
 #define COLOR_H
+#include <cmath>
 #include "matrix.h"
 
 typedef float luminosity_t;
+struct color_t
+{
+  luminosity_t red, green, blue;
+  color_t ()
+  : red(0), green(0), blue(0)
+  { }
+  color_t (luminosity_t rr, luminosity_t gg, luminosity_t bb)
+  : red(rr), green(gg), blue(bb)
+  { }
+  bool operator== (color_t &other) const
+  {
+    return red == other.red
+	   && green == other.green
+	   && blue == other.blue;
+  }
+  bool operator!= (color_t &other) const
+  {
+    return !(*this == other);
+  }
+  inline color_t
+  operator+ (const color_t rhs) const
+  {
+    color_t ret;
+    ret.red = red + rhs.red;
+    ret.green = green + rhs.green;
+    ret.blue = blue + rhs.blue;
+    return ret;
+  }
+  inline color_t
+  operator- (const color_t rhs) const
+  {
+    color_t ret;
+    ret.red = red - rhs.red;
+    ret.green = green - rhs.green;
+    ret.blue = blue - rhs.blue;
+    return ret;
+  }
+  inline color_t
+  normalize ()
+  {
+    /* TODO: Implement right sqrt variant.  */
+    luminosity_t dist = 1 / sqrt (red * red + blue * blue + green * green);
+    color_t ret (red * dist, blue * dist, green * dist);
+    return ret;
+  }
+
+};
 typedef matrix4x4<luminosity_t> color_matrix;
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
