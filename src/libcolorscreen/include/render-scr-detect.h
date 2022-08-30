@@ -12,11 +12,24 @@ public:
   }
   scr_detect::color_class classify_pixel (int x, int y)
   {
-    if (x < 0 || x >= m_img.width || y < 0 || y > m_img.height)
+    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
       return scr_detect::unknown;
-    return m_scr_detect.classify_color (m_img.rgbdata[y][x].r / (luminosity_t)m_img.maxval,
-					m_img.rgbdata[y][x].g / (luminosity_t)m_img.maxval,
-				       	m_img.rgbdata[y][x].b / (luminosity_t)m_img.maxval);
+    scr_detect::color_class t = m_scr_detect.classify_color (m_img.rgbdata[y][x].r / (luminosity_t)m_img.maxval,
+							     m_img.rgbdata[y][x].g / (luminosity_t)m_img.maxval,
+							     m_img.rgbdata[y][x].b / (luminosity_t)m_img.maxval);
+    if (t == scr_detect::unknown)
+      return scr_detect::unknown;
+    for (int yy = std::max (y - 1, 0); yy < std::min (y + 1, m_img.height); yy++)
+      for (int xx = std::max (x - 1, 0); xx < std::min (x + 1, m_img.width); xx++)
+	if (xx != x || yy != y)
+	  {
+	    scr_detect::color_class q = m_scr_detect.classify_color (m_img.rgbdata[yy][xx].r / (luminosity_t)m_img.maxval,
+								     m_img.rgbdata[yy][xx].g / (luminosity_t)m_img.maxval,
+								     m_img.rgbdata[yy][xx].b / (luminosity_t)m_img.maxval);
+	    if (q != scr_detect::unknown && q != t)
+	      return scr_detect::unknown;
+	  }
+    return t;
   }
   inline 
   void get_screen_color (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
@@ -70,7 +83,7 @@ public:
   {
     int xx = x + 0.5;
     int yy = y + 0.5;
-    if (xx < 0 || xx >= m_img.width || y < 0 || y > m_img.height)
+    if (xx < 0 || xx >= m_img.width || y < 0 || y >= m_img.height)
       {
 	set_color (0, 0, 0, r,g,b);
 	return;
