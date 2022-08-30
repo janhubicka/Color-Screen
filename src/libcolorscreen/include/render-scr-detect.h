@@ -14,18 +14,14 @@ public:
   {
     if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
       return scr_detect::unknown;
-    scr_detect::color_class t = m_scr_detect.classify_color (m_img.rgbdata[y][x].r / (luminosity_t)m_img.maxval,
-							     m_img.rgbdata[y][x].g / (luminosity_t)m_img.maxval,
-							     m_img.rgbdata[y][x].b / (luminosity_t)m_img.maxval);
+    scr_detect::color_class t = m_color_class_map.get_class (x, y);
     if (t == scr_detect::unknown)
       return scr_detect::unknown;
     for (int yy = std::max (y - 1, 0); yy < std::min (y + 1, m_img.height); yy++)
       for (int xx = std::max (x - 1, 0); xx < std::min (x + 1, m_img.width); xx++)
 	if (xx != x || yy != y)
 	  {
-	    scr_detect::color_class q = m_scr_detect.classify_color (m_img.rgbdata[yy][xx].r / (luminosity_t)m_img.maxval,
-								     m_img.rgbdata[yy][xx].g / (luminosity_t)m_img.maxval,
-								     m_img.rgbdata[yy][xx].b / (luminosity_t)m_img.maxval);
+	    scr_detect::color_class q = m_color_class_map.get_class (xx, yy);
 	    if (q != scr_detect::unknown && q != t)
 	      return scr_detect::unknown;
 	  }

@@ -18,11 +18,13 @@ scr_detect::set_parameters (scr_detect_parameters param)
 		  0, 0, 0, 1);
   //printf ("basis\n");
   //m.print(stdout);
-  t = t * m;
+  t = m * t;
   //printf ("Forward color transform:\n");
   //t.print(stdout);
   //printf ("Backward color transform:\n");
   m_color_adjust = t.invert ();
   //printf ("Inverse:\n");
   //m_color_adjust.print(stdout);
+  //printf ("combined:\n");
+  //(t*m_color_adjust).print(stdout);
 }

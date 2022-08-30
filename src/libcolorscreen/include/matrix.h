@@ -265,12 +265,12 @@ public:
        det *  (B::m_elements[0][0] * A1223 - B::m_elements[0][1] * A0223 + B::m_elements[0][2] * A0123), /*31*/
 
        det *  (B::m_elements[0][1] * A2313 - B::m_elements[0][2] * A1313 + B::m_elements[0][3] * A1213), /*02*/
-       det *  (B::m_elements[0][0] * A2312 - B::m_elements[0][2] * A0312 + B::m_elements[0][3] * A0212), /*13*/
+       det * -(B::m_elements[0][0] * A2313 - B::m_elements[0][2] * A0313 + B::m_elements[0][3] * A0213), /*12*/
        det *  (B::m_elements[0][0] * A1313 - B::m_elements[0][1] * A0313 + B::m_elements[0][3] * A0113), /*22*/
        det * -(B::m_elements[0][0] * A1213 - B::m_elements[0][1] * A0213 + B::m_elements[0][2] * A0113), /*32*/
 
        det * -(B::m_elements[0][1] * A2312 - B::m_elements[0][2] * A1312 + B::m_elements[0][3] * A1212), /*03*/
-       det * -(B::m_elements[0][0] * A2313 - B::m_elements[0][2] * A0313 + B::m_elements[0][3] * A0213), /*12*/
+       det *  (B::m_elements[0][0] * A2312 - B::m_elements[0][2] * A0312 + B::m_elements[0][3] * A0212), /*13*/
        det * -(B::m_elements[0][0] * A1312 - B::m_elements[0][1] * A0312 + B::m_elements[0][3] * A0112), /*23*/
        det *  (B::m_elements[0][0] * A1212 - B::m_elements[0][1] * A0212 + B::m_elements[0][2] * A0112));/*33*/
    return ret;
