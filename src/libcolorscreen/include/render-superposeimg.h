@@ -136,7 +136,7 @@ render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t 
 flatten_attr inline void
 render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
-  double rw = 0, rr = 0, gw = 0, gg = 0, bw = 0, bb = 0;
+  luminosity_t rw = 0, rr = 0, gw = 0, gg = 0, bw = 0, bb = 0;
   for (int x = xs; x < xs + w; x+=stepx)
     for (int y = ys; y < ys + h; y+=stepy)
       {
@@ -146,21 +146,12 @@ render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int
 	m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
 	int ix = (unsigned long long) round (scr_x * screen::size) & (unsigned)(screen::size - 1);
  	int iy = (unsigned long long) round (scr_y * screen::size) & (unsigned)(screen::size - 1);
-	if (m_screen->mult[iy][ix][0] > 0.8)
-	  {
-	    rr += m_screen->mult[iy][ix][0] * l;
-	    rw += m_screen->mult[iy][ix][0];
-	  }
-	if (m_screen->mult[iy][ix][1] > 0.8)
-	  {
-	    gg += m_screen->mult[iy][ix][1] * l;
-	    gw += m_screen->mult[iy][ix][1];
-	  }
-	if (m_screen->mult[iy][ix][2] > 0.8)
-	  {
-	    bb += m_screen->mult[iy][ix][2] * l;
-	    bw += m_screen->mult[iy][ix][2];
-	  }
+	rr += m_screen->mult[iy][ix][0] * l;
+	rw += m_screen->mult[iy][ix][0];
+	gg += m_screen->mult[iy][ix][1] * l;
+	gw += m_screen->mult[iy][ix][1];
+	bb += m_screen->mult[iy][ix][2] * l;
+	bw += m_screen->mult[iy][ix][2];
       }
   if (rw)
     *r = rr / rw;

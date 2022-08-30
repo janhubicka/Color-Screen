@@ -62,6 +62,15 @@ public:
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);
   }
+  void inline fast_render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    luminosity_t gg, rr, bb;
+    if (!m_color)
+      rr = gg = bb = fast_get_img_pixel (x, y);
+    else
+      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
+    set_color (rr, gg, bb, r, g, b);
+  }
   int inline render_raw_pixel (int x, int y)
   {
     return m_data[y][x] * (long)m_img.maxval / m_maxval;

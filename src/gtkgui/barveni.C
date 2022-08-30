@@ -532,7 +532,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   else
     {
-      if (k >= '1' && k <='2')
+      if (k >= '1' && k <='5')
 	{
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
