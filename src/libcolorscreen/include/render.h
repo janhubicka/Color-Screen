@@ -100,6 +100,17 @@ public:
     render_type_predictive,
     render_type_fast
   };
+
+  struct rgbdata
+  {
+    luminosity_t red, green, blue;
+  };
+  void account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
+  {
+    data->red += lum.red * scale;
+    data->green += lum.green * scale;
+    data->blue += lum.blue * scale;
+  }
 protected:
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
@@ -108,6 +119,12 @@ protected:
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
   inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
   void precompute_all (bool duffay);
+  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+
+  template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+  __attribute__ ((__flatten__))
+  void downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 
   /* Scanned image.  */
   image_data &m_img;
@@ -127,6 +144,20 @@ protected:
   luminosity_t *m_out_lookup_table;
   /* Color matrix.  */
   color_matrix m_color_matrix;
+
+private:
+  void account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
+  {
+    *data += lum * scale;
+  }
+  inline rgbdata
+  get_rgb_pixel (int x, int y)
+  {
+    rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
+		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
+		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
+    return d;
+  }
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
@@ -475,5 +506,67 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
   if (weights)
     return acc / weights;
   return 0;
+}
+template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+void
+render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+{
+  int xstart = std::max (x, (coord_t)0);
+  int xend = std::min (ceil (x + width * pixelsize), (coord_t)m_img.width) - 1;
+  int ystart = std::max (y, (coord_t)0);
+  int yend = std::min (ceil (y + height * pixelsize), (coord_t)m_img.height) - 1;
+  luminosity_t scale = 1 / (pixelsize * pixelsize);
+  luminosity_t rev_pixelsize = 1 / pixelsize;
+  memset (data, 0, sizeof (T) * width * height);
+  for (int yy = ystart; yy <= yend; yy++)
+    {
+      coord_t iy = (yy - y) * rev_pixelsize;
+      int py = iy;
+      if (iy - py > 1 - rev_pixelsize)
+	{
+	  coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+	  for (int xx = xstart; xx <= xend; xx++)
+	    {
+	      coord_t ix = (xx - x) * rev_pixelsize;
+	      int px = ix;
+	      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+	      if (ix - px > 1 - rev_pixelsize)
+		{
+		  coord_t xweight = (ix - px - 1 + rev_pixelsize) * pixelsize;
+		  (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
+		  if (py + 1 < height)
+		    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+		  if (px + 1 < width)
+		    {
+		      (this->*account_pixel) (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
+		      if (py + 1 < height)
+		        (this->*account_pixel) (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
+		    }
+		}
+	      else
+		{
+		  (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight));
+		  if (py + 1 < height)
+		    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight);
+		}
+	    }
+	}
+      else
+	for (int xx = xstart; xx <= xend; xx++)
+	  {
+	    coord_t ix = (xx - x) * rev_pixelsize;
+	    int px = ix;
+	    T pixel = (((D *)this)->*get_pixel) (xx, yy);
+	    if (ix - px > 1 - rev_pixelsize)
+	      {
+		coord_t xweight = (ix - px - 1 + rev_pixelsize) * pixelsize;
+		(this->*account_pixel) (data + px + py * width, pixel, scale * (1 - xweight));
+		if (px + 1 < width)
+		  (this->*account_pixel) (data + px + 1 + py * width, pixel, scale * xweight);
+	      }
+	    else
+	      (this->*account_pixel) (data + px + py * width, pixel, scale);
+	  }
+    }
 }
 #endif

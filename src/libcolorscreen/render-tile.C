@@ -38,6 +38,41 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  render.set_color_display ();
 	render.precompute_all ();
 
+	if (!color && step > 1)
+	  {
+	    luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
+	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step);
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    for (int y = 0; y < height; y++)
+	      {
+		for (int x = 0; x < width; x++)
+		  {
+		    int r, g, b;
+		    render.set_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
+		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		  }
+	      }
+	    free (data);
+	    return;
+	  }
+	if (step > 1)
+	  {
+	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    for (int y = 0; y < height; y++)
+	      {
+		for (int x = 0; x < width; x++)
+		  {
+		    int r, g, b;
+		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		  }
+	      }
+	    free (data);
+	    return;
+	  }
+
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {

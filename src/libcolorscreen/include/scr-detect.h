@@ -102,7 +102,7 @@ public:
     static luminosity_t rgbtable[4][3] = {{1, 0, 0},
 					  {0, 1, 0},
 					  {0, 0, 1},
-					  {1, 1, 1}};
+					  {0, 0, 0}};
     scr_detect::color_class t = get_class (x, y);
     *r = rgbtable[(int)t][0];
     *g = rgbtable[(int)t][1];
@@ -112,19 +112,19 @@ public:
   get_color_red (int x, int y)
   {
     scr_detect::color_class t = get_class (x, y);
-    return t == scr_detect::red || t == scr_detect::unknown;
+    return t == scr_detect::red /*|| t == scr_detect::unknown*/;
   }
   luminosity_t
   get_color_green (int x, int y)
   {
     scr_detect::color_class t = get_class (x, y);
-    return t == scr_detect::green || t == scr_detect::unknown;
+    return t == scr_detect::green /*|| t == scr_detect::unknown*/;
   }
   luminosity_t
   get_color_blue (int x, int y)
   {
     scr_detect::color_class t = get_class (x, y);
-    return t == scr_detect::blue || t == scr_detect::unknown;
+    return t == scr_detect::blue /*|| t == scr_detect::unknown*/;
   }
   unsigned char *data;
   int width, height;

@@ -75,21 +75,27 @@ public:
     render_type_realistic_scr,
     render_type_scr_blur
   };
+  rgbdata fast_get_adjusted_pixel (int x, int y)
+  {
+    luminosity_t rr = m_img.rgbdata[y][x].r, gg = m_img.rgbdata[y][x].g, bb = m_img.rgbdata[y][x].b;
+    rgbdata d;
+    rr /= m_img.maxval;
+    gg /= m_img.maxval;
+    bb /= m_img.maxval;
+    m_scr_detect.adjust_color (rr, gg, bb, &d.red, &d.green, &d.blue);
+    return d;
+  }
   void inline render_adjusted_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     int xx = x + 0.5;
     int yy = y + 0.5;
-    if (xx < 0 || xx >= m_img.width || y < 0 || y >= m_img.height)
+    if (xx < 0 || xx >= m_img.width || yy < 0 || yy >= m_img.height)
       {
 	set_color (0, 0, 0, r,g,b);
 	return;
       }
-    luminosity_t rr = m_img.rgbdata[yy][xx].r, gg = m_img.rgbdata[yy][xx].g, bb = m_img.rgbdata[yy][xx].b;
-    rr /= m_img.maxval;
-    gg /= m_img.maxval;
-    bb /= m_img.maxval;
-    m_scr_detect.adjust_color (rr, gg, bb, &rr, &gg, &bb);
-    set_color (rr, gg, bb, r,g,b);
+    rgbdata d = fast_get_adjusted_pixel (xx, yy);
+    set_color (d.red,d.green,d.blue, r, g, b);
   }
   DLL_PUBLIC static void render_tile (enum render_scr_detect_type_t render_type, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
@@ -97,6 +103,7 @@ public:
 protected:
   scr_detect m_scr_detect;
   color_class_map m_color_class_map;
+  void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {
@@ -221,14 +228,14 @@ public:
 	      if (dist >= m_params.screen_blur_radius)
 		continue;
 	      luminosity_t weight = m_params.screen_blur_radius - dist;
-	      val[(int)t] += get_img_pixel (xx, yy) * weight;
+	      val[(int)t] += fast_get_img_pixel (xx, yy) * weight;
 	      w[(int)t] += weight;
 	    }
 	}
     if (!w[0] || !w[1] || !w[2])
       set_color (0,0,0,r,g,b);
     else
-      set_color (val[0]/w[0],val[1]/w[1],val[2]/w[2],r,g,b);
+      set_color (val[0]/w[0]*3.5,val[1]/w[1]*2.5,val[2]/w[2],r,g,b);
   }
 private:
 };
