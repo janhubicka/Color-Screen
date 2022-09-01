@@ -577,9 +577,9 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
       xx++;
       for (; xx < stop; xx++)
 	{
-	  T pixel = (((D *)this)->*get_pixel) (xx, yy);
 	  if (px >= width)
 	     return;
+	  T pixel = (((D *)this)->*get_pixel) (xx, yy);
 	  process_pixel<T,account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
 	}
       px++;
@@ -611,57 +611,53 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 
   memset (data, 0, sizeof (T) * width * height);
 
+#define ypixelpos(px) ((int)floor (y + pixelsize * py))
+#define weight(px) (1 - (y + pixelsize * py - ypixelpos (px)))
+
 #pragma omp parallel shared(data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
   {
-    luminosity_t rev_pixelsize = 1 / pixelsize;
     luminosity_t scale = 1 / (pixelsize * pixelsize);
+    int pystart = std::max (0, (int)(-y / pixelsize));
+    int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
     int tn = omp_get_thread_num ();
     int threads = omp_get_max_threads ();
-    int from = height * tn / threads;
-    int to = (height * (tn + 1) / threads);
-    int ystart = std::max (y + from * pixelsize, (coord_t)0);
-    int yend = std::min (floor (y + to * pixelsize), (coord_t)m_img.height);
-
-    if (ystart < yend)
+    int ystart = pystart + (pyend - pystart) * tn / threads;
+    int yend = pystart + (pyend - pystart) * (tn + 1) / threads;
+    int py = ystart;
+    int yy = ypixelpos(py);
+    int stop;
+    if (ystart > yend)
+      goto end;
+    if (py >= 0 && yy > 0)
+      process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight(py));
+    yy++;
+    stop = ypixelpos(px + 1);
+    for (; yy < stop; yy++)
       {
-	if (ystart > 0)
-	  {
-	    int yy = ystart;
-	    coord_t iy = (yy - y) * rev_pixelsize;
-	    int py = floor (iy);
-	    if (py < height)
-	      {
-		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, false, true, scale, yweight);
-	      }
-	  }
-	for (int yy = ystart + 1; yy < yend; yy++)
-	  {
-	    coord_t iy = (yy - y) * rev_pixelsize;
-	    int py = iy;
-	    if (py >= height - 1)
-	      break;
-	    if (iy - py > 1 - rev_pixelsize)
-	      {
-		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, true, scale, yweight);
-	      }
-	    else
-	     process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-	  }
-	if (yend < m_img.height)
-	  {
-	    int yy = yend;
-	    coord_t iy = (yy - y) * rev_pixelsize;
-	    int py = floor (iy);
-	    if (py < height)
-	      {
-		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, yweight);
-	      }
-	  }
+	if (py >= height)
+	  goto end;
+        process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
       }
+    py++;
+    while (py <= yend)
+      {
+        process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
+	stop = ypixelpos(px + 1);
+	yy++;
+	for (; yy < stop; yy++)
+	  {
+	    if (py >= height)
+	       goto end;
+	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, 0);
+	  }
+	py++;
+      }
+     process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
+     end:;
   }
+
+#undef ypixelpos
+#undef weight
   free (pixelpos);
   free (weights);
 }
