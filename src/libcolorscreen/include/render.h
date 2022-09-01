@@ -522,11 +522,13 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
     return acc / weights;
   return 0;
 }
+
 template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
-  assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width) && py >= (y0?0:-1) && py < (y1 ? height - 1: height));
+  assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
+  assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
   if (x0 && y0)
     (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
   if (x0 && y1)
@@ -618,7 +620,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     int from = height * tn / threads;
     int to = (height * (tn + 1) / threads);
     int ystart = std::max (y + from * pixelsize, (coord_t)0);
-    int yend = std::min (ceil (y + to * pixelsize), (coord_t)m_img.height) - 1;
+    int yend = std::min (floor (y + to * pixelsize), (coord_t)m_img.height);
 
     if (ystart < yend)
       {
@@ -627,13 +629,18 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 	    int yy = ystart;
 	    coord_t iy = (yy - y) * rev_pixelsize;
 	    int py = floor (iy);
-	    coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, false, true, scale, yweight);
+	    if (py < height)
+	      {
+		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, false, true, scale, yweight);
+	      }
 	  }
 	for (int yy = ystart + 1; yy < yend; yy++)
 	  {
 	    coord_t iy = (yy - y) * rev_pixelsize;
 	    int py = iy;
+	    if (py >= height - 1)
+	      break;
 	    if (iy - py > 1 - rev_pixelsize)
 	      {
 		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
@@ -647,8 +654,11 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 	    int yy = yend;
 	    coord_t iy = (yy - y) * rev_pixelsize;
 	    int py = floor (iy);
-	    coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, yweight);
+	    if (py < height)
+	      {
+		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, yweight);
+	      }
 	  }
       }
   }
