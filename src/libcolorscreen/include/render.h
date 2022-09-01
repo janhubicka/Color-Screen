@@ -1,7 +1,9 @@
 #ifndef RENDER_H
 #define RENDER_H
 #include <math.h>
+#include <assert.h>
 #include <algorithm>
+#include <omp.h>
 #include "imagedata.h"
 #include "color.h"
 
@@ -121,6 +123,19 @@ protected:
   void precompute_all (bool duffay);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+
+  template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+  void
+  process_line (T *data, int *pixelpos, luminosity_t *weights,
+		int xstart, int xend,
+		int width, int height,
+		int py, int yy,
+		bool y0, bool y1,
+		luminosity_t scale, luminosity_t yweight);
+
+  template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
+  void
+  process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T val, luminosity_t scale, luminosity_t xweight, luminosity_t yweight);
 
   template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
   __attribute__ ((__flatten__))
@@ -507,66 +522,137 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
     return acc / weights;
   return 0;
 }
+template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
+void
+render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
+{
+  assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width) && py >= (y0?0:-1) && py < (y1 ? height - 1: height));
+  if (x0 && y0)
+    (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
+  if (x0 && y1)
+    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+  if (x1)
+    {
+      if (y0)
+        (this->*account_pixel) (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
+      if (y1)
+	(this->*account_pixel) (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
+    }
+}
+
+template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+void
+render::process_line (T *data, int *pixelpos, luminosity_t *weights,
+		      int xstart, int xend,
+		      int width, int height,
+		      int py, int yy,
+		      bool y0, bool y1,
+		      luminosity_t scale, luminosity_t yweight)
+{
+  int px = xstart;
+  int xx = pixelpos[px];
+  int stop;
+  if (px >= 0 && xx > 0)
+    {
+      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      process_pixel<T,account_pixel> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
+    }
+  xx++;
+  stop = pixelpos[px + 1];
+  for (; xx < stop; xx++)
+    {
+      if (px >= width)
+	return;
+      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      process_pixel<T,account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
+    }
+  px++;
+  while (px <= xend)
+    {
+      T pixel = (((D *)this)->*get_pixel) (xx, yy);
+      process_pixel<T,account_pixel> (data, width, height, px - 1, py, true, true, y0, y1, pixel, scale, weights[px], yweight);
+      stop = pixelpos[px + 1];
+      xx++;
+      for (; xx < stop; xx++)
+	{
+	  T pixel = (((D *)this)->*get_pixel) (xx, yy);
+	  if (px >= width)
+	     return;
+	  process_pixel<T,account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
+	}
+      px++;
+    }
+   T pixel = (((D *)this)->*get_pixel) (xx, yy);
+   process_pixel<T,account_pixel> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
+}
+
 template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
 void
 render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 {
-  int xstart = std::max (x, (coord_t)0);
-  int xend = std::min (ceil (x + width * pixelsize), (coord_t)m_img.width) - 1;
-  int ystart = std::max (y, (coord_t)0);
-  int yend = std::min (ceil (y + height * pixelsize), (coord_t)m_img.height) - 1;
-  luminosity_t scale = 1 / (pixelsize * pixelsize);
-  luminosity_t rev_pixelsize = 1 / pixelsize;
-  memset (data, 0, sizeof (T) * width * height);
-  for (int yy = ystart; yy <= yend; yy++)
+  int pxstart = std::max (0, (int)(-x / pixelsize));
+  int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
+
+  if (pxstart > pxend)
+    return;
+
+  int *pixelpos = (int *)malloc (sizeof (int) * width + 1);
+  luminosity_t *weights = (luminosity_t *)malloc (sizeof (luminosity_t) * width + 1);
+
+  for (int px = pxstart; px <= pxend + 1; px++)
     {
-      coord_t iy = (yy - y) * rev_pixelsize;
-      int py = iy;
-      if (iy - py > 1 - rev_pixelsize)
-	{
-	  coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
-	  for (int xx = xstart; xx <= xend; xx++)
-	    {
-	      coord_t ix = (xx - x) * rev_pixelsize;
-	      int px = ix;
-	      T pixel = (((D *)this)->*get_pixel) (xx, yy);
-	      if (ix - px > 1 - rev_pixelsize)
-		{
-		  coord_t xweight = (ix - px - 1 + rev_pixelsize) * pixelsize;
-		  (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
-		  if (py + 1 < height)
-		    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
-		  if (px + 1 < width)
-		    {
-		      (this->*account_pixel) (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
-		      if (py + 1 < height)
-		        (this->*account_pixel) (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
-		    }
-		}
-	      else
-		{
-		  (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight));
-		  if (py + 1 < height)
-		    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight);
-		}
-	    }
-	}
-      else
-	for (int xx = xstart; xx <= xend; xx++)
+      coord_t ix = x + pixelsize * px;
+      int xx = floor (ix);
+      pixelpos[px] = xx;
+      weights[px] = 1 - (ix - xx);
+    }
+
+  memset (data, 0, sizeof (T) * width * height);
+
+#pragma omp parallel shared(data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
+  {
+    luminosity_t rev_pixelsize = 1 / pixelsize;
+    luminosity_t scale = 1 / (pixelsize * pixelsize);
+    int tn = omp_get_thread_num ();
+    int threads = omp_get_max_threads ();
+    int from = height * tn / threads;
+    int to = (height * (tn + 1) / threads);
+    int ystart = std::max (y + from * pixelsize, (coord_t)0);
+    int yend = std::min (ceil (y + to * pixelsize), (coord_t)m_img.height) - 1;
+
+    if (ystart < yend)
+      {
+	if (ystart > 0)
 	  {
-	    coord_t ix = (xx - x) * rev_pixelsize;
-	    int px = ix;
-	    T pixel = (((D *)this)->*get_pixel) (xx, yy);
-	    if (ix - px > 1 - rev_pixelsize)
+	    int yy = ystart;
+	    coord_t iy = (yy - y) * rev_pixelsize;
+	    int py = floor (iy);
+	    coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, false, true, scale, yweight);
+	  }
+	for (int yy = ystart + 1; yy < yend; yy++)
+	  {
+	    coord_t iy = (yy - y) * rev_pixelsize;
+	    int py = iy;
+	    if (iy - py > 1 - rev_pixelsize)
 	      {
-		coord_t xweight = (ix - px - 1 + rev_pixelsize) * pixelsize;
-		(this->*account_pixel) (data + px + py * width, pixel, scale * (1 - xweight));
-		if (px + 1 < width)
-		  (this->*account_pixel) (data + px + 1 + py * width, pixel, scale * xweight);
+		coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+		process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, true, scale, yweight);
 	      }
 	    else
-	      (this->*account_pixel) (data + px + py * width, pixel, scale);
+	     process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
 	  }
-    }
+	if (yend < m_img.height)
+	  {
+	    int yy = yend;
+	    coord_t iy = (yy - y) * rev_pixelsize;
+	    int py = floor (iy);
+	    coord_t yweight = (iy - py - 1 + rev_pixelsize) * pixelsize;
+	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, yweight);
+	  }
+      }
+  }
+  free (pixelpos);
+  free (weights);
 }
 #endif

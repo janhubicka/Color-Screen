@@ -172,6 +172,7 @@ render::precompute_all (bool duffay)
   out_lookup_table_uses ++;
 
   color_matrix color;
+  printf ("%i\n",m_params.color_model);
   if (m_params.presaturation != 1)
     {
       presaturation_matrix m (m_params.presaturation);
@@ -202,7 +203,7 @@ render::precompute_all (bool duffay)
     }
   if (m_params.color_model == 3)
     {
-      if (!duffay)
+      if (!duffay && 0)
 	{
 	  adjusted_finlay_matrix m;
 	  xyz_srgb_matrix m2;
@@ -213,7 +214,9 @@ render::precompute_all (bool duffay)
 	}
       else
         {
-          grading_matrix m;
+          //grading_matrix m;
+          autochrome_matrix m;
+	  m.normalize_grayscale ();
           color = m * color;
 	}
     }

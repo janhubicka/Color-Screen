@@ -53,7 +53,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		  }
 	      }
 	    free (data);
-	    return;
+	    break;
 	  }
 	if (step > 1)
 	  {
@@ -70,7 +70,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		  }
 	      }
 	    free (data);
-	    return;
+	    break;
 	  }
 
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)

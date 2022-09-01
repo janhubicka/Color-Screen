@@ -80,6 +80,23 @@ public:
 	       0,             0,              0,                  1)
   {}
 };
+
+/* Autocrhome dyes srgb based on Eversmart scan of Smirous singer
+   54.4 9.1 5.2
+   8.9 36.5 8.1
+   19.6 9.8 33.3
+ */
+class autochrome_matrix : public color_matrix
+{
+public:
+  inline
+  autochrome_matrix ()
+  : color_matrix (0.544,0.089,0.052, 0,
+	       0.089,0.365,0.081, 0,
+	       0.196,0.098,0.333, 0,
+	       0,             0,              0,                  1)
+  { }
+};
 /* Matrix profile of Finlay taking screen
    Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
 #if 1

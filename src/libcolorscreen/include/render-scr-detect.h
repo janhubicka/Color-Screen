@@ -235,7 +235,7 @@ public:
     if (!w[0] || !w[1] || !w[2])
       set_color (0,0,0,r,g,b);
     else
-      set_color (val[0]/w[0]*3.5,val[1]/w[1]*2.5,val[2]/w[2],r,g,b);
+      set_color (val[0]/w[0]*1.5,val[1]/w[1]*1.5,val[2]/w[2],r,g,b);
   }
 private:
 };
