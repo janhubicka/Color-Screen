@@ -240,7 +240,7 @@ render::~render ()
 void
 render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 {
-  downscale<render, luminosity_t, &render::fast_get_img_pixel, &render::account_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render, luminosity_t, &render::get_data, &render::account_pixel> (data, x, y, width, height, pixelsize);
 }
 void
 render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)

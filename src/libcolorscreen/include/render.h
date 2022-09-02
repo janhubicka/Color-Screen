@@ -3,7 +3,9 @@
 #include <math.h>
 #include <assert.h>
 #include <algorithm>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include "imagedata.h"
 #include "color.h"
 
@@ -527,8 +529,8 @@ template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
-  assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
-  assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
+  // assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
+  // assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
   if (x0 && y0)
     (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
   if (x0 && y1)
@@ -554,17 +556,20 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   int px = xstart;
   int xx = pixelpos[px];
   int stop;
+  if (yy < 0)
+    return;
+  assert (xx < m_img.width && yy < m_img.height);
   if (px >= 0 && xx >= 0)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
       process_pixel<T,account_pixel> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
     }
   xx++;
+  if (xx < 0)
+    xx = 0;
   stop = pixelpos[px + 1];
   for (; xx < stop; xx++)
     {
-      if (px >= width)
-	return;
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
       process_pixel<T,account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
     }
@@ -577,15 +582,16 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
       xx++;
       for (; xx < stop; xx++)
 	{
-	  if (px >= width)
-	     return;
 	  T pixel = (((D *)this)->*get_pixel) (xx, yy);
 	  process_pixel<T,account_pixel> (data, width, height, px, py, true, false, y0, y1, pixel, scale, 0, yweight);
 	}
       px++;
     }
-   T pixel = (((D *)this)->*get_pixel) (xx, yy);
-   process_pixel<T,account_pixel> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
+   if (xx < m_img.width)
+     {
+       T pixel = (((D *)this)->*get_pixel) (xx, yy);
+       process_pixel<T,account_pixel> (data, width, height, px - 1, py, true, false, y0, y1, pixel, scale, weights[px], yweight);
+     }
 }
 
 template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
@@ -605,7 +611,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     {
       coord_t ix = x + pixelsize * px;
       int xx = floor (ix);
-      pixelpos[px] = xx;
+      pixelpos[px] = std::min (xx, m_img.width);
       weights[px] = 1 - (ix - xx);
     }
 
@@ -619,8 +625,13 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     luminosity_t scale = 1 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
+#ifdef _OPENMP
     int tn = omp_get_thread_num ();
     int threads = omp_get_max_threads ();
+#else
+    int tn = 0;
+    int threads = 1;
+#endif
     int ystart = pystart + (pyend + 1 - pystart) * tn / threads;
     int yend = pystart + (pyend + 1 - pystart) * (tn + 1) / threads - 1;
 
@@ -633,28 +644,21 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     if (py >= 0 && yy >= 0)
       process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight(py));
     yy++;
-    stop = ypixelpos(py + 1);
+    stop = std::min (ypixelpos(py + 1), m_img.height);
     for (; yy < stop; yy++)
-      {
-	if (py >= height)
-	  goto end;
-        process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-      }
+      process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
     py++;
     while (py <= yend)
       {
         process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
-	stop = ypixelpos(py + 1);
+	stop = std::min (ypixelpos(py + 1), m_img.height);
 	yy++;
 	for (; yy < stop; yy++)
-	  {
-	    if (py >= height)
-	       goto end;
-	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-	  }
+	  process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
 	py++;
       }
-     process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
+     if (yy < m_img.height)
+       process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
      end:;
   }
 
