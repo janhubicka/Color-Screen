@@ -554,7 +554,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   int px = xstart;
   int xx = pixelpos[px];
   int stop;
-  if (px >= 0 && xx > 0)
+  if (px >= 0 && xx >= 0)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
       process_pixel<T,account_pixel> (data, width, height, px - 1, py, false, true, y0, y1, pixel, scale, weights[px], yweight);
@@ -611,8 +611,8 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 
   memset (data, 0, sizeof (T) * width * height);
 
-#define ypixelpos(px) ((int)floor (y + pixelsize * py))
-#define weight(px) (1 - (y + pixelsize * py - ypixelpos (px)))
+#define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
+#define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
 #pragma omp parallel shared(data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
   {
@@ -621,17 +621,19 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
     int tn = omp_get_thread_num ();
     int threads = omp_get_max_threads ();
-    int ystart = pystart + (pyend - pystart) * tn / threads;
-    int yend = pystart + (pyend - pystart) * (tn + 1) / threads;
+    int ystart = pystart + (pyend + 1 - pystart) * tn / threads;
+    int yend = pystart + (pyend + 1 - pystart) * (tn + 1) / threads - 1;
+
     int py = ystart;
     int yy = ypixelpos(py);
     int stop;
+
     if (ystart > yend)
       goto end;
-    if (py >= 0 && yy > 0)
+    if (py >= 0 && yy >= 0)
       process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, false, true, scale, weight(py));
     yy++;
-    stop = ypixelpos(px + 1);
+    stop = ypixelpos(py + 1);
     for (; yy < stop; yy++)
       {
 	if (py >= height)
@@ -642,13 +644,13 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     while (py <= yend)
       {
         process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
-	stop = ypixelpos(px + 1);
+	stop = ypixelpos(py + 1);
 	yy++;
 	for (; yy < stop; yy++)
 	  {
 	    if (py >= height)
 	       goto end;
-	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, 0);
+	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
 	  }
 	py++;
       }
