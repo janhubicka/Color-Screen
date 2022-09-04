@@ -10,6 +10,7 @@ enum output_mode
   interpolated,
   predictive,
   combined,
+  detect_blur
 };
 
 static bool verbose = false;
@@ -103,6 +104,8 @@ parse_mode (const char *mode)
     return predictive;
   else if (!strcmp (mode, "combined"))
     return combined;
+  else if (!strcmp (mode, "detect-blue"))
+    return detect_blur;
   else
     {
       fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
@@ -166,10 +169,16 @@ main (int argc, char **argv)
       printf (" (resolution %ix%i)", scan.width, scan.height);
       print_time ();
     }
+  if (mode == detect_blur && !scan.rgbdata)
+    {
+      fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
+      exit (1);
+    }
 
   /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
   render_parameters rparam;
+  scr_detect_parameters dparam;
   FILE *in = fopen (cspname, "rt");
   if (verbose)
     printf ("Loading color screen parameters: %s\n", cspname);
@@ -301,6 +310,34 @@ main (int argc, char **argv)
 						   y / (double) scale,
 						   1.0 / scale, 128, &rr, &gg,
 						   &bb);
+		outrow[3 * x] = rr;
+		outrow[3 * x + 1] = gg;
+		outrow[3 * x + 2] = bb;
+	      }
+	    write_row (out, y, outrow);
+	  }
+	TIFFClose (out);
+      }
+      break;
+    case detect_blur:
+      {
+	render_scr_blur render (dparam, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	int scale = 1;
+	int outwidth = scan.width;
+	int outheight = scan.height;
+	uint16_t *outrow;
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < scan.height * scale; y++)
+	  {
+	    for (int x = 0; x < scan.width * scale; x++)
+	      {
+		int rr, gg, bb;
+		render.render_pixel_img (x / (double) scale,
+					 y / (double) scale,
+					 &rr, &gg, &bb);
 		outrow[3 * x] = rr;
 		outrow[3 * x + 1] = gg;
 		outrow[3 * x + 2] = bb;
