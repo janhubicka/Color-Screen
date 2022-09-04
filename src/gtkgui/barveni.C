@@ -333,7 +333,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 				  max = acc;
 				  printf ("%f %f\n", (double)acc, (double)max);
 				  best = c;
-				  save_csp (stdout, c, rparams);
+				  save_csp (stdout, &c, NULL, NULL);
 				  current = c;
 				  display ();
 				}
@@ -943,7 +943,7 @@ cb_save (GtkButton * button, Data * data)
     {
       perror (paroname);
     }
-  if (!save_csp (out, current, rparams))
+  if (!save_csp (out, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams))
     {
       fprintf (stderr, "saving failed\n");
       exit (1);
@@ -973,7 +973,7 @@ main (int argc, char **argv)
 
   FILE *in = fopen (paroname, "rt");
   const char *error;
-  if (in && !load_csp (in, current, rparams, &error))
+  if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &error))
     fprintf (stderr, "%s\n", error);
   if (in)
     fclose (in);
@@ -982,7 +982,7 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
     }
-  save_csp (stdout, current, rparams);
+  save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams);
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;

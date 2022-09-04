@@ -178,7 +178,7 @@ main (int argc, char **argv)
       perror (cspname);
       exit (1);
     }
-  if (!load_csp (in, param, rparam, &error))
+  if (!load_csp (in, &param, NULL, &rparam, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);

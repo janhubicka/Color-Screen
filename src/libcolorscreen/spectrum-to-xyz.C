@@ -161,7 +161,7 @@ static spectrum red;
 static spectrum green;
 static spectrum blue;
 static luminosity_t rscale, gscale, bscale, xscale, yscale, zscale;
-
+#if 0
 // https://filmcolors.org/timeline-entry/1257/#/
 // absorbance charts with regular step from 400 to 720, 21 steps
 // taken from the last example.
@@ -236,6 +236,80 @@ const static luminosity_t real_duffay_blue[] =
 	/*688.8429752066115*/ 0.9333333333333333,
 	/*704.3388429752067*/ 0.729411764705882,
 	/*720.4545454545455*/ 0.5960784313725491
+};
+#endif
+const static luminosity_t real_duffay_red[] =
+{
+/*400.4297994269341*/ 1.7034013605442173,
+/*415.0429799426935*/ 1.7795918367346935,
+/*431.37535816618913*/ 2.019047619047619,
+/*448.56733524355303*/ 2.1224489795918364,
+/*464.89971346704874*/ 1.964625850340136,
+/*479.51289398280807*/ 1.8285714285714283,
+/*494.9856733524356*/ 1.82312925170068,
+/*511.7478510028654*/ 1.82312925170068,
+/*528.0802292263611*/ 1.9210884353741493,
+/*544.8424068767908*/ 2.002721088435374,
+/*559.8853868194843*/ 1.6816326530612242,
+/*576.21776504298*/ 0.9523809523809517,
+/*591.6905444126076*/ 0.6149659863945574,
+/*608.0229226361032*/ 0.5387755102040814,
+/*624.785100286533*/ 0.5278911564625846,
+/*640.2578796561605*/ 0.5170068027210881,
+/*655.7306590257881*/ 0.49523809523809526,
+/*672.0630372492838*/ 0.46258503401360507,
+/*688.8252148997135*/ 0.4299319727891149,
+/*704.7277936962753*/ 0.40272108843537424,
+/*720.2005730659026*/ 0.37006802721088405
+};
+const static luminosity_t real_duffay_green[] =
+{
+/*400*/ 1.6979591836734689,
+/*415.0429799426934*/ 1.8503401360544216,
+/*431.3753581661892*/ 2.1931972789115646,
+/*448.56733524355303*/ 2.312925170068027,
+/*464.89971346704874*/ 2.024489795918367,
+/*479.94269340974216*/ 1.3986394557823127,
+/*494.9856733524356*/ 0.8870748299319724,
+/*511.7478510028654*/ 0.6693877551020404,
+/*528.0802292263611*/ 0.6802721088435368,
+/*544.8424068767908*/ 0.7564625850340134,
+/*560.3151862464184*/ 0.8489795918367349,
+/*576.2177650429801*/ 1.0013605442176867,
+/*592.1203438395416*/ 1.2190476190476185,
+/*608.0229226361032*/ 1.4476190476190471,
+/*624.7851002865331*/ 1.5564625850340132,
+/*640.6876790830946*/ 1.6163265306122445,
+/*655.7306590257879*/ 1.610884353741496,
+/*672.0630372492838*/ 1.458503401360544,
+/*688.8252148997135*/ 1.159183673469387,
+/*704.7277936962751*/ 0.7782312925170065,
+/*720.2005730659025*/ 0.527891156462585
+};
+const static luminosity_t real_duffay_blue[] =
+{
+/*400*/ 1.044897959183673,
+/*415.0429799426934*/ 0.974149659863945,
+/*431.37535816618913*/ 1.0394557823129247,
+/*448.5673352435531*/ 1.1047619047619046,
+/*464.89971346704874*/ 1.0557823129251698,
+/*479.51289398280807*/ 0.9469387755102034,
+/*494.9856733524356*/ 0.8870748299319733,
+/*511.7478510028654*/ 0.9741496598639452,
+/*528.0802292263611*/ 1.229931972789115,
+/*544.842406876791*/ 1.5564625850340135,
+/*559.8853868194843*/ 1.7904761904761903,
+/*576.21776504298*/ 1.8666666666666665,
+/*592.1203438395416*/ 1.8013605442176868,
+/*608.0229226361032*/ 1.7523809523809517,
+/*624.785100286533*/ 1.7088435374149655,
+/*640.2578796561605*/ 1.6326530612244894,
+/*655.7306590257881*/ 1.4585034013605438,
+/*672.0630372492838*/ 1.1156462585034008,
+/*688.8252148997135*/ 0.8054421768707478,
+/*704.2979942693412*/ 0.5931972789115645,
+/*720.2005730659026*/ 0.4680272108843533
+
 };
 
 
@@ -583,7 +657,7 @@ daylight_il (spectrum spec, double ct)
 __attribute__((constructor))
      void init_duffay ()
 {
-  xyz rxyz, gxyz, bxyz;
+  xyz whitepoint, rxyz, gxyz, bxyz;
 #if 0
   /* Idealized dyes based on manual.  */
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -605,10 +679,11 @@ __attribute__((constructor))
 #endif
 
   //compute_spectrum (backlight, 320, 780, 93, old_daylight_data, false);
-  //compute_spectrum (backlight, 300, 830, 107, il_A, false);
-  daylight_il (backlight, 6500 /*sRGB temperature. */ );
+   //compute_spectrum (backlight, 300, 830, 107, il_A, false);
+  //daylight_il (backlight, 6500 /*sRGB temperature. */ );
+  daylight_il (backlight, 5500 /*sRGB temperature. */ );
 
-#if 0
+#if 1
   compute_spectrum (red, 400, 720, sizeof (real_duffay_red) / sizeof (luminosity_t), real_duffay_red, true);
   compute_spectrum (green, 400, 720, sizeof (real_duffay_green) / sizeof (luminosity_t), real_duffay_green, true);
   compute_spectrum (blue, 400, 720, sizeof (real_duffay_blue) / sizeof (luminosity_t), real_duffay_blue, true);
@@ -660,6 +735,11 @@ __attribute__((constructor))
 #endif
 
 
+  spectrum nofilter;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    nofilter[i]=1;
+  whitepoint = spectrum_to_xyz (nofilter);
+  printf ("Whitepoint XYZ:%f %f %f\n", whitepoint.x, whitepoint.y, whitepoint.z);
   rxyz = spectrum_to_xyz (red);
   gxyz = spectrum_to_xyz (green);
   bxyz = spectrum_to_xyz (blue);
@@ -675,33 +755,41 @@ __attribute__((constructor))
   color_matrix n = m.invert ();
   n.print (stdout);
 
-  luminosity_t wx, wy, wz;
   /* Normalize so 1,1,1 is sRGB white.  */
   luminosity_t wx, wy, wz;
-  srgb_to_xyz (0.9505, 1, 1.0888, &wx, &wy, &wz);
-  //srgb_to_xyz (1, 1, 1, &wx, &wy, &wz);
+  //srgb_to_xyz (0.9505, 1, 1.0888, &wx, &wy, &wz);
+  srgb_to_xyz (1, 1, 1, &wx, &wy, &wz);
   n.apply_to_rgb (wx, wy, wz, &rscale, &gscale, &bscale);
   //fprintf (stderr, "scales: %f %f %f\n",rscale,gscale, bscale);
 #else
   rscale = gscale = bscale = 1;
 #endif
 
-#if 0
+#if 1
   /* Adjust white balance  */
+
+  xscale = whitepoint.x / whitepoint.y / (rxyz.x + gxyz.x + bxyz.x);
+  yscale = 1 / (rxyz.y + gxyz.y + bxyz.y);
+  zscale = whitepoint.z / whitepoint.y / (rxyz.z + gxyz.z + bxyz.z);
+  /*
   xscale = 0.9505 / (rxyz.x + gxyz.x + bxyz.x);
   yscale = 1 / (rxyz.y + gxyz.y + bxyz.y);
   zscale = 1.0888 / (rxyz.z + gxyz.z + bxyz.z);
+  */
 #else
-  xscale = yscale = zscale = 
-    3 / (rxyz.x + rxyz.y + rxyz.x + gxyz.x + gxyz.y + gxyz.z + bxyz.x +
-	 bxyz.y + bxyz.z);
+  xscale = yscale = zscale = 1;
+  //xscale = yscale = zscale = 
+    //3 / (rxyz.x + rxyz.y + rxyz.x + gxyz.x + gxyz.y + gxyz.z + bxyz.x +
+	 //bxyz.y + bxyz.z);
 #endif
 
+#if 0
   /* Proportions of colors in dufaycolor.  */
 
-  //rscale = rscale * 0.4 * 3;
-  //gscale = gscale * 0.32 * 3;
-  //bscale = bscale * 0.28 * 3;
+  rscale = rscale * 0.4 * 3;
+  gscale = gscale * 0.32 * 3;
+  bscale = bscale * 0.28 * 3;
+#endif
 
   //rscale = 0.4 * 3;
   //gscale = 0.32 * 3;
@@ -712,11 +800,7 @@ __attribute__((constructor))
   //rscale = gscale = bscale = 1;
   //gscale = 0.9;
   //bscale = 0.7;
-  //
-  //rscale = scale;
-  //gscale = scale;
-  //bscale = scale;
-  //
+
   printf ("RGB scale:%f %f %f\n", rscale, gscale, bscale);
   printf ("XYZ scale:%f %f %f\n", xscale, yscale, zscale);
 
