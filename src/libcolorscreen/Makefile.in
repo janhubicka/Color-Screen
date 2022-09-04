@@ -141,7 +141,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-imagedata.lo libcolorscreen_la-loadsave.lo \
 	libcolorscreen_la-render-tile.lo \
 	libcolorscreen_la-scr-detect.lo \
-	libcolorscreen_la-render-scr-detect.lo
+	libcolorscreen_la-render-scr-detect.lo \
+	libcolorscreen_la-spectrum-to-xyz.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -179,7 +180,9 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render.Plo \
 	./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo \
 	./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo \
-	./$(DEPDIR)/libcolorscreen_la-screen.Plo ./$(DEPDIR)/matrix.Po
+	./$(DEPDIR)/libcolorscreen_la-screen.Plo \
+	./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo \
+	./$(DEPDIR)/matrix.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -361,7 +364,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 matrix_SOURCES = matrix.C
@@ -467,6 +470,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-screen.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -572,6 +576,13 @@ libcolorscreen_la-render-scr-detect.lo: render-scr-detect.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='render-scr-detect.C' object='libcolorscreen_la-render-scr-detect.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-render-scr-detect.lo `test -f 'render-scr-detect.C' || echo '$(srcdir)/'`render-scr-detect.C
+
+libcolorscreen_la-spectrum-to-xyz.lo: spectrum-to-xyz.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-spectrum-to-xyz.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Tpo -c -o libcolorscreen_la-spectrum-to-xyz.lo `test -f 'spectrum-to-xyz.C' || echo '$(srcdir)/'`spectrum-to-xyz.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Tpo $(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='spectrum-to-xyz.C' object='libcolorscreen_la-spectrum-to-xyz.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-spectrum-to-xyz.lo `test -f 'spectrum-to-xyz.C' || echo '$(srcdir)/'`spectrum-to-xyz.C
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -738,6 +749,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -795,6 +807,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

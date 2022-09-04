@@ -251,6 +251,20 @@ cap_color (luminosity_t val, luminosity_t weight, luminosity_t *diff, luminosity
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
+  /* Correct code.  */
+#if 1
+  if (m_params.color_model == 3)
+  {
+    struct xyz c = compute_xyz (r, g, b);
+    xyz_srgb_matrix m;
+    m.apply_to_rgb (c.x, c.y, c.z, &r, &g, &b);
+  }
+#if 0
+  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
+  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
+  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
+#endif
+#endif
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
@@ -531,10 +545,14 @@ render::process_pixel (T *data, int width, int height, int px, int py, bool x0, 
 {
   // assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
   // assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
-  if (x0 && y0)
-    (this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
-  if (x0 && y1)
-    (this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+  
+  if (x0)
+    {
+      if (y0)
+	(this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
+      if (y1)
+	(this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+    }
   if (x1)
     {
       if (y0)
@@ -556,9 +574,8 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
   int px = xstart;
   int xx = pixelpos[px];
   int stop;
-  if (yy < 0)
+  if (yy < 0 || yy >= m_img.height || xx >= m_img.width)
     return;
-  assert (xx < m_img.width && yy < m_img.height);
   if (px >= 0 && xx >= 0)
     {
       T pixel = (((D *)this)->*get_pixel) (xx, yy);
@@ -601,6 +618,8 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   int pxstart = std::max (0, (int)(-x / pixelsize));
   int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
 
+  memset (data, 0, sizeof (T) * width * height);
+
   if (pxstart > pxend)
     return;
 
@@ -614,8 +633,6 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
       pixelpos[px] = std::min (xx, m_img.width);
       weights[px] = 1 - (ix - xx);
     }
-
-  memset (data, 0, sizeof (T) * width * height);
 
 #define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))

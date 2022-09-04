@@ -203,7 +203,7 @@ render::precompute_all (bool duffay)
     }
   if (m_params.color_model == 3)
     {
-      if (!duffay && 0)
+      if (!duffay)
 	{
 	  adjusted_finlay_matrix m;
 	  xyz_srgb_matrix m2;
@@ -215,9 +215,9 @@ render::precompute_all (bool duffay)
       else
         {
           //grading_matrix m;
-          autochrome_matrix m;
-	  m.normalize_grayscale ();
-          color = m * color;
+          //autochrome_matrix m;
+	  //m.normalize_grayscale ();
+          //color = m * color;
 	}
     }
   if (m_params.saturation != 1)
@@ -227,6 +227,7 @@ render::precompute_all (bool duffay)
     }
   color = color * m_params.brightness;
   m_color_matrix = color;
+  color.print (stdout);
 }
 
 render::~render ()

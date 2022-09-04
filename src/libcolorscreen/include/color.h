@@ -4,6 +4,7 @@
 #include "matrix.h"
 
 typedef float luminosity_t;
+struct xyz {luminosity_t x, y, z;};
 struct color_t
 {
   luminosity_t red, green, blue;
@@ -246,4 +247,6 @@ srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, l
   b = srgb_to_linear (b);
   m.apply_to_rgb (r, g, b, x, y, z);
 }
+
+struct xyz compute_xyz (luminosity_t r, luminosity_t g, luminosity_t b);
 #endif

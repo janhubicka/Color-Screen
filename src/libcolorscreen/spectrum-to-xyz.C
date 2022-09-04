@@ -1,0 +1,748 @@
+#include "include/color.h"
+#include "include/scr-to-img.h"
+#include "include/render.h"
+
+namespace {
+
+#define SPECTRUM_START 380
+#define SPECTRUM_STEP  5
+#define SPECTRUM_END   780
+#define SPECTRUM_SIZE ((SPECTRUM_END - SPECTRUM_START) / SPECTRUM_STEP + 1)
+
+typedef luminosity_t spectrum[SPECTRUM_SIZE];
+
+/* from Argyll 107 bands from 300 to 830 nm in 5nm steps */
+/* CIE 15.2-1986 Table 1.1 */
+/* Part 1: CIE Standard Illuminant A relative spectral power distribution */
+/* This is a 2848K tungsten filament lamp (Acording to the old temperature scale) */
+/* and 2856 according to the newer temerature scale. */
+
+static const luminosity_t il_A[] =
+{
+	0.930483, 1.128210, 1.357690, 1.622190, 1.925080,
+	2.269800, 2.659810, 3.098610, 3.589680, 4.136480,
+	4.742380, 5.410700, 6.144620, 6.947200, 7.821350,
+	8.769800, 9.795100, 10.899600, 12.085300, 13.354300,
+	14.708000, 16.148000, 17.675300, 19.290700, 20.995000,
+	22.788300, 24.670900, 26.642500, 28.702700, 30.850800,
+	33.085900, 35.406800, 37.812100, 40.300200, 42.869300,
+	45.517400, 48.242300, 51.041800, 53.913200, 56.853900,
+	59.861100, 62.932000, 66.063500, 69.252500, 72.495900,
+	75.790300, 79.132600, 82.519300, 85.947000, 89.412400,
+	92.912000, 96.442300, 100.000000, 103.582000, 107.184000,
+	110.803000, 114.436000, 118.080000, 121.731000, 125.386000,
+	129.043000, 132.697000, 136.346000, 139.988000, 143.618000,
+	147.235000, 150.836000, 154.418000, 157.979000, 161.516000,
+	165.028000, 168.510000, 171.963000, 175.383000, 178.769000,
+	182.118000, 185.429000, 188.701000, 191.931000, 195.118000,
+	198.261000, 201.359000, 204.409000, 207.411000, 210.365000,
+	213.268000, 216.120000, 218.920000, 221.667000, 224.361000,
+	227.000000, 229.585000, 232.115000, 234.589000, 237.008000,
+	239.370000, 241.675000, 243.924000, 246.116000, 248.251000,
+	250.329000, 252.350000, 254.314000, 256.221000, 258.071000,
+	259.865000, 261.602000
+};
+
+/* From Argyll. 93 bands from 320.0 to 780.0 */
+/* CIE 15.2-1986 Table 1.1 */
+/* Part 1: CIE Standard Illuminant C relative spectral power distribution */
+/* This is a CIE Illuminant A combined with a filter to simulate daylight. */
+static const luminosity_t old_daylight_data[] = {
+	0.01,   0.20,   0.40,   1.55,   2.70,   4.85,   7.00,   9.95,   12.90,  17.20, 
+	21.40,  27.50,  33.00,  39.92,  47.40,  55.17,  63.30,  71.81,  80.60,  89.53,
+	98.10,  105.80, 112.40, 117.75, 121.50, 123.45, 124.00, 123.60, 123.10, 123.30,
+	123.80, 124.09, 123.90, 122.92, 120.70, 116.90, 112.10, 106.98, 102.30, 98.81,
+	96.90,  96.78,  98.00,  99.94,  102.10, 103.95, 105.20, 105.67, 105.30, 104.11,
+	102.30, 100.15, 97.80,  95.43,  93.20,  91.22,  89.70,  88.83,  88.40,  88.19,
+	88.10,  88.06,  88.00,  87.86,  87.80,  87.99,  88.20,  88.20,  87.90,  87.22,
+	86.30,  85.30,  84.00,  82.21,  80.20,  78.24,  76.30,  74.36,  72.40,  70.40,
+	68.30,  66.30,  64.40,  62.80,  61.50,  60.20,  59.20,  58.50,  58.10,  58.00,
+	58.20,  58.50,  59.10
+};
+static spectrum backlight;
+
+/* https://scipython.com/static/media/blog/colours/cie-cmf.txt
+   380 to 780 by 5  */
+const static spectrum cie_cmf_x = {
+	0.0014, 0.0022, 0.0042, 0.0076, 0.0143, 0.0232, 0.0435, 0.0776, 0.1344, 0.2148,
+	0.2839, 0.3285, 0.3483, 0.3481, 0.3362, 0.3187, 0.2908, 0.2511, 0.1954, 0.1421,
+	0.0956, 0.0580, 0.0320, 0.0147, 0.0049, 0.0024, 0.0093, 0.0291, 0.0633, 0.1096,
+	0.1655, 0.2257, 0.2904, 0.3597, 0.4334, 0.5121, 0.5945, 0.6784, 0.7621, 0.8425,
+	0.9163, 0.9786, 1.0263, 1.0567, 1.0622, 1.0456, 1.0026, 0.9384, 0.8544, 0.7514,
+	0.6424, 0.5419, 0.4479, 0.3608, 0.2835, 0.2187, 0.1649, 0.1212, 0.0874, 0.0636,
+	0.0468, 0.0329, 0.0227, 0.0158, 0.0114, 0.0081, 0.0058, 0.0041, 0.0029, 0.0020,
+	0.0014, 0.0010, 0.0007, 0.0005, 0.0003, 0.0002, 0.0002, 0.0001, 0.0001, 0.0001,
+	0.0000
+} ;
+const static spectrum cie_cmf_y = {
+	0.0000, 0.0001, 0.0001, 0.0002, 0.0004, 0.0006, 0.0012, 0.0022, 0.0040, 0.0073,
+	0.0116, 0.0168, 0.0230, 0.0298, 0.0380, 0.0480, 0.0600, 0.0739, 0.0910, 0.1126,
+	0.1390, 0.1693, 0.2080, 0.2586, 0.3230, 0.4073, 0.5030, 0.6082, 0.7100, 0.7932,
+	0.8620, 0.9149, 0.9540, 0.9803, 0.9950, 1.0000, 0.9950, 0.9786, 0.9520, 0.9154,
+	0.8700, 0.8163, 0.7570, 0.6949, 0.6310, 0.5668, 0.5030, 0.4412, 0.3810, 0.3210,
+	0.2650, 0.2170, 0.1750, 0.1382, 0.1070, 0.0816, 0.0610, 0.0446, 0.0320, 0.0232,
+	0.0170, 0.0119, 0.0082, 0.0057, 0.0041, 0.0029, 0.0021, 0.0015, 0.0010, 0.0007,
+	0.0005, 0.0004, 0.0002, 0.0002, 0.0001, 0.0001, 0.0001, 0.0000, 0.0000, 0.0000,
+	0.0000
+};
+const static spectrum cie_cmf_z = {
+	0.0065, 0.0105, 0.0201, 0.0362, 0.0679, 0.1102, 0.2074, 0.3713, 0.6456, 1.0391,
+	1.3856, 1.6230, 1.7471, 1.7826, 1.7721, 1.7441, 1.6692, 1.5281, 1.2876, 1.0419,
+	0.8130, 0.6162, 0.4652, 0.3533, 0.2720, 0.2123, 0.1582, 0.1117, 0.0782, 0.0573,
+	0.0422, 0.0298, 0.0203, 0.0134, 0.0087, 0.0057, 0.0039, 0.0027, 0.0021, 0.0018,
+	0.0017, 0.0014, 0.0011, 0.0010, 0.0008, 0.0006, 0.0003, 0.0002, 0.0002, 0.0001,
+	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+	0.0000
+};
+
+static luminosity_t
+transmitance_to_absorbance (luminosity_t t)
+{
+  return 2 - log10 (t);
+}
+
+static luminosity_t
+absorbance_to_transmitance (luminosity_t a)
+{
+  return pow (10, 2 - a);
+}
+
+
+/* Useful for debugging; can be plotted by gnuplot using:
+    set style line 1 \
+        linecolor rgb '#0060ad' \
+        linetype 1 linewidth 2 \
+        pointtype 7 pointsize 1.5
+
+    plot '<filename>' with linespoints linestyle 1
+ */
+
+static void
+print_transmitance_spectrum (FILE * out, const spectrum spec)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, spec[i]);
+}
+
+static void
+print_absorbance_spectrum (FILE * out, const spectrum spec)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START,
+	     transmitance_to_absorbance (spec[i]));
+}
+
+/* Compute XYZ values.  */
+static struct xyz
+spectrum_to_xyz (spectrum s)
+{
+  struct xyz ret = { 0, 0, 0 };
+  luminosity_t sum = 0;
+  /* TODO: CIE recommends going by 1nm bands and interpolate.
+     We can implement that easily if that makes difference.  */
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      ret.x += (cie_cmf_x[i] * s[i]) * backlight[i];
+      ret.y += (cie_cmf_y[i] * s[i]) * backlight[i];
+      ret.z += (cie_cmf_z[i] * s[i]) * backlight[i];
+      sum += cie_cmf_y[i] * backlight[i];
+    }
+  luminosity_t scale = 1 / sum;
+  ret.x *= scale;
+  ret.y *= scale;
+  ret.z *= scale;
+  /* Argyll scales by backlight.  */
+  return ret;
+}
+
+static spectrum red;
+static spectrum green;
+static spectrum blue;
+static luminosity_t rscale, gscale, bscale, xscale, yscale, zscale;
+
+// https://filmcolors.org/timeline-entry/1257/#/
+// absorbance charts with regular step from 400 to 720, 21 steps
+// taken from the last example.
+const static luminosity_t real_duffay_red[] =
+{
+	/*400*/ 1.7254901960784315,
+	/*414.8760330578512*/ 1.8117647058823527,
+	/*431.61157024793386*/ 1.9764705882352942,
+	/*448.9669421487603*/ 1.992156862745098,
+	/*465.08264462809916*/ 1.8745098039215686,
+	/*479.9586776859504*/ 1.7568627450980392,
+	/*494.8347107438017*/ 1.7333333333333334,
+	/*511.5702479338843*/ 1.7411764705882353,
+	/*528.3057851239669*/ 1.7960784313725489,
+	/*545.0413223140496*/ 1.8666666666666667,
+	/*559.9173553719008*/ 1.7960784313725489,
+	/*576.0330578512396*/ 1.215686274509804,
+	/*592.1487603305785*/ 0.8235294117647058,
+	/*608.2644628099174*/ 0.7372549019607844,
+	/*624.3801652892562*/ 0.7529411764705882,
+	/*640.4958677685951*/ 0.7607843137254904,
+	/*655.9917355371902*/ 0.6980392156862743,
+	/*672.1074380165289*/ 0.603921568627451,
+	/*688.8429752066115*/ 0.5411764705882356,
+	/*704.3388429752067*/ 0.5098039215686274,
+	/*720.4545454545455*/ 0.4705882352941173
+};
+const static luminosity_t real_duffay_green[] =
+{
+	/*400*/ 1.3647058823529412,
+	/*414.8760330578512*/ 1.4352941176470588,
+	/*431.61157024793386*/ 1.5607843137254902,
+	/*448.3471074380165*/ 1.5058823529411764,
+	/*465.08264462809916*/ 1.2627450980392156,
+	/*479.9586776859504*/ 0.9411764705882353,
+	/*494.8347107438017*/ 0.7686274509803921,
+	/*511.5702479338843*/ 0.7058823529411766,
+	/*528.3057851239669*/ 0.729411764705882,
+	/*545.0413223140496*/ 0.7843137254901962,
+	/*559.9173553719008*/ 0.8627450980392157,
+	/*576.0330578512396*/ 0.9882352941176471,
+	/*592.1487603305785*/ 1.1450980392156862,
+	/*608.2644628099174*/ 1.2862745098039217,
+	/*625*/ 1.4666666666666666,
+	/*639.8760330578513*/ 1.576470588235294,
+	/*655.3719008264463*/ 1.3960784313725492,
+	/*672.1074380165289*/ 0.980392156862745,
+	/*688.8429752066115*/ 0.6823529411764708,
+	/*704.9586776859504*/ 0.5411764705882356,
+	/*720.4545454545455*/ 0.4705882352941173
+};
+const static luminosity_t real_duffay_blue[] =
+{
+	/*400*/ 1.0588235294117647,
+	/*415.495867768595*/ 1.0901960784313725,
+	/*431.61157024793386*/ 1.192156862745098,
+	/*448.3471074380165*/ 1.2549019607843137,
+	/*465.08264462809916*/ 1.2392156862745098,
+	/*479.9586776859504*/ 1.1215686274509804,
+	/*494.8347107438017*/ 1.0666666666666667,
+	/*511.5702479338843*/ 1.1058823529411765,
+	/*528.3057851239669*/ 1.231372549019608,
+	/*544.4214876033058*/ 1.411764705882353,
+	/*559.9173553719008*/ 1.5843137254901962,
+	/*576.0330578512396*/ 1.7254901960784315,
+	/*592.1487603305785*/ 1.780392156862745,
+	/*608.2644628099174*/ 1.8117647058823527,
+	/*625*/ 1.8509803921568628,
+	/*640.4958677685951*/ 1.835294117647059,
+	/*655.3719008264463*/ 1.63921568627451,
+	/*672.1074380165289*/ 1.2549019607843137,
+	/*688.8429752066115*/ 0.9333333333333333,
+	/*704.3388429752067*/ 0.729411764705882,
+	/*720.4545454545455*/ 0.5960784313725491
+};
+
+
+
+struct spectra_entry {coord_t wavelength;
+	      coord_t transmitance;
+};
+// transmitance charts with iregular step
+const static spectra_entry autochrome_orrange[] =
+{
+	{393.1049250535332, 0.020000000000000018}, 
+	{404.66809421841543, 0.01333333333333342}, 
+	{417.7730192719486, 0.012500000000000067}, 
+	{430.4925053533191, 0.010833333333333361}, 
+	{441.67023554603855, 0.011666666666666603}, 
+	{458.6295503211992, 0.015000000000000013}, 
+	{469.0364025695931, 0.020000000000000018}, 
+	{482.14132762312636, 0.023333333333333428}, 
+	{497.17344753747324, 0.029166666666666674}, 
+	{512.2055674518201, 0.03166666666666662}, 
+	{526.4668094218415, 0.029166666666666674}, 
+	{540.3426124197002, 0.02750000000000008}, 
+	{553.0620985010706, 0.043333333333333335}, 
+	{567.323340471092, 0.15500000000000003}, 
+	{581.5845824411135, 0.3808333333333333}, 
+	{599.3147751605995, 0.5858333333333332}, 
+	{613.9614561027837, 0.6241666666666665}, 
+	{630.1498929336188, 0.6475}, 
+	{642.4839400428266, 0.6558333333333333}, 
+	{659.8286937901498, 0.6708333333333333}, 
+	{674.0899357601713, 0.6791666666666666}, 
+	{687.1948608137045, 0.695}, 
+	{702.6124197002141, 0.7183333333333333}, 
+	{718.0299785867237, 0.7283333333333333}, 
+	{729.2077087794432, 0.7283333333333333}
+};
+const static spectra_entry autochrome_green[] =
+{
+	{393.87580299785867, 0.01333333333333342},
+	{405.4389721627409, 0.010000000000000009},
+	{418.5438972162741, 0.010000000000000009},
+	{430.1070663811563, 0.010000000000000009},
+	{441.67023554603855, 0.011666666666666603},
+	{458.62955032119913, 0.015000000000000013},
+	{468.6509635974304, 0.020000000000000018},
+	{481.7558886509636, 0.043333333333333335},
+	{497.1734475374732, 0.11166666666666669},
+	{511.8201284796574, 0.20416666666666672},
+	{526.0813704496788, 0.22999999999999998},
+	{540.7280513918629, 0.19916666666666671},
+	{553.0620985010706, 0.15333333333333332},
+	{567.7087794432548, 0.09333333333333327},
+	{581.5845824411135, 0.060833333333333295},
+	{599.3147751605995, 0.04583333333333328},
+	{613.5760171306209, 0.043333333333333335},
+	{630.1498929336188, 0.04416666666666669},
+	{642.4839400428266, 0.04916666666666669},
+	{660.2141327623126, 0.06583333333333341},
+	{674.0899357601713, 0.12250000000000005},
+	{687.1948608137045, 0.23916666666666664},
+	{702.9978586723769, 0.3983333333333334},
+	{717.644539614561, 0.4833333333333333},
+	{729.2077087794432, 0.5133333333333333}
+};
+const static spectra_entry autochrome_violet[] =
+{
+	{393.4903640256959, 0.10083333333333333},
+	{405.4389721627409, 0.12416666666666665},
+	{418.1584582441114, 0.13416666666666666},
+	{430.1070663811563, 0.14583333333333337},
+	{441.67023554603855, 0.15416666666666667},
+	{458.2441113490364, 0.16833333333333333},
+	{469.0364025695931, 0.17416666666666658},
+	{482.14132762312636, 0.17333333333333334},
+	{497.17344753747324, 0.15249999999999997},
+	{511.8201284796574, 0.11083333333333334},
+	{526.4668094218415, 0.07250000000000001},
+	{540.3426124197002, 0.053333333333333344},
+	{553.0620985010706, 0.04250000000000009},
+	{567.7087794432548, 0.040000000000000036},
+	{581.5845824411135, 0.04583333333333328},
+	{613.5760171306209, 0.07999999999999996},
+	{629.7644539614562, 0.1266666666666666},
+	{642.4839400428266, 0.1791666666666667},
+	{659.8286937901498, 0.2766666666666666},
+	{674.0899357601713, 0.36166666666666664},
+	{687.1948608137045, 0.4258333333333332},
+	{702.6124197002141, 0.4766666666666667},
+	{717.644539614561, 0.4983333333333333},
+	{729.2077087794432, 0.505},
+	{598.1584582441113, 0.05833333333333335}
+};
+
+/* Process chart with regular step to a spectrum.
+   cubically interpolate for missing data.  */
+
+static void
+compute_spectrum (spectrum s, int start, int end, int size,
+		  const luminosity_t * data, bool absorbance)
+{
+  luminosity_t step = (end - start) / (luminosity_t) (size - 1);
+  fprintf (stderr, "step:%f\n", step);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      int p = SPECTRUM_START + i * SPECTRUM_STEP;
+      coord_t sp = (p - start) / (coord_t) step;
+      int ri;
+      coord_t rp = my_modf (sp, &ri);
+
+
+      /* If out of range continue interpolating linearly.
+       * ??? maybe this gets to too extreme values towards the end.  */
+      if (ri < 1)
+	{
+	  rp += ri - 1;
+	  ri = 1;
+	  s[i] = data[1] + rp * (data[1] - data[0]);
+#if 0
+	  /* Just clamp when data are missing.  */
+	  if (rp < 0)
+	    {
+	      s[i] = 0;
+	      continue;
+	    }
+#endif
+	}
+      else if (ri >= size - 2)
+	{
+	  rp += ri - size + 2;
+	  ri = size - 2;
+	  s[i] = data[size - 2] + rp * (data[size - 1] - data[size - 2]);
+#if 0
+	  if (ri > size - 1)
+	    {
+	      s[i] = 0;
+	      continue;
+	    }
+#endif
+	}
+      else
+	s[i] =
+	  cubic_interpolate (data[ri - 1], data[ri], data[ri + 1],
+			     data[ri + 2], rp);
+      if (absorbance)
+	s[i] = absorbance_to_transmitance (s[i]);
+    }
+}
+
+/* Process absorbance chart with regular step to a spectrum.
+   Since I am lazy use linear interpolation.  */
+
+void
+compute_spectrum (spectrum s, int size, const spectra_entry * data)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      int p = SPECTRUM_START + i * SPECTRUM_STEP;
+      int first;
+      if (data[0].wavelength > p)
+	{
+	  first = 0;
+	  //s[i]=0;continue;
+	}
+      else if (data[size - 1].wavelength < p)
+	{
+	  first = size - 2;
+	  //s[i]=0;continue;
+	}
+      else
+	for (first = 0; data[first + 1].wavelength < p; first++)
+	  ;
+      coord_t pos =
+	(p - data[first].wavelength) / (data[first + 1].wavelength -
+					data[first].wavelength);
+      s[i] =
+	data[first].transmitance + (data[first + 1].transmitance -
+				    data[first].transmitance) * pos;
+//printf ("%i:%f %i %f %f:%f %f:%f\n", p, s[i], first, pos, data[first].wavelength, data[first].transmitance, data[first+1].wavelength, data[first+1].transmitance);
+    }
+}
+
+/* Taken from Argyll
+   General temperature Daylight spectra from CIE 15.2004 Appendix C. */
+/* ## uses improved interpolation rather than CIE 15.2004 Section 3.1 ## */
+/* Assumong 1931 observer & 5 nm spacing. (Need Lagrange interpolated S0, S1 for 1nm) */
+/* i.e. 300 - 830nm at 5nm intervals. */
+/* Fill in the given xspect with the specified daylight illuminant */
+/* Return nz if temperature is out of range */
+static int
+daylight_il (spectrum spec, double ct)
+{
+  static double s0[107] = {
+    0.04000, -0.15625, 6.00000, 16.56625, 29.60000,
+    43.80000, 55.30000, 57.62500, 57.30000, 59.69375,
+    61.80000, 61.47500, 61.50000, 65.46875, 68.80000,
+    66.40625, 63.40000, 62.45000, 65.80000, 79.82500,
+    94.80000, 101.54375, 104.80000, 106.54375, 105.90000,
+    100.35000, 96.80000, 104.05000, 113.90000, 120.82500,
+    125.60000, 126.54375, 125.50000, 123.39375, 121.30000,
+    121.52500, 121.30000, 117.42500, 113.50000, 112.95625,
+    113.10000, 112.19375, 110.80000, 108.36250, 106.50000,
+    107.60000, 108.80000, 107.25000, 105.30000, 104.90625,
+    104.40000, 102.39375, 100.00000, 97.78125, 96.00000,
+    95.67500, 95.10000, 91.95625, 89.10000, 89.43750,
+    90.50000, 90.60625, 90.30000, 89.61250, 88.40000,
+    86.01250, 84.00000, 84.47500, 85.10000, 83.52500,
+    81.90000, 81.90625, 82.60000, 84.01875, 84.90000,
+    83.83125, 81.30000, 76.22500, 71.90000, 72.38125,
+    74.30000, 76.31875, 76.40000, 69.45625, 63.30000,
+    66.35000, 71.70000, 75.61250, 77.00000, 72.52500,
+    65.20000, 54.40625, 47.70000, 57.28125, 68.60000,
+    68.04375, 65.00000, 65.58750, 66.00000, 64.04375,
+    61.00000, 56.48750, 53.30000, 55.43125, 58.90000,
+    61.71875, 61.90000
+  };
+
+  static double s1[107] = {
+    0.02000, -0.15000, 4.50000, 12.50500, 22.40000,
+    33.40625, 42.00000, 42.46250, 40.60000, 41.23750,
+    41.60000, 39.58750, 38.00000, 40.21875, 42.40000,
+    40.94375, 38.50000, 35.98125, 35.00000, 38.80000,
+    43.40000, 45.52500, 46.30000, 45.70625, 43.90000,
+    40.37500, 37.10000, 36.52500, 36.70000, 36.48125,
+    35.90000, 34.49375, 32.60000, 30.26875, 27.90000,
+    26.06875, 24.30000, 22.21875, 20.10000, 18.07500,
+    16.20000, 14.74375, 13.20000, 10.86875, 8.60000,
+    7.18125, 6.10000, 5.13750, 4.20000, 3.05000,
+    1.90000, 0.90625, 0.00000, -0.80000, -1.60000,
+    -2.65000, -3.50000, -3.47500, -3.50000, -4.56250,
+    -5.80000, -6.55625, -7.20000, -7.93125, -8.60000,
+    -9.05000, -9.50000, -10.26875, -10.90000, -10.80625,
+    -10.70000, -11.21250, -12.00000, -13.10625, -14.00000,
+    -14.02500, -13.60000, -12.69375, -12.00000, -12.57500,
+    -13.30000, -13.32500, -12.90000, -11.66250, -10.60000,
+    -10.91875, -11.60000, -12.08750, -12.20000, -11.38750,
+    -10.20000, -8.66250, -7.80000, -9.40000, -11.20000,
+    -11.00000, -10.40000, -10.50625, -10.60000, -10.25000,
+    -9.70000, -8.88125, -8.30000, -8.68125, -9.30000,
+    -9.79375, -9.80000
+  };
+
+  static double s2[107] = {
+    0.00000, 1.15625, 2.00000, 2.84375, 4.00000,
+    6.41875, 8.50000, 8.50000, 7.80000, 7.29375,
+    6.70000, 5.88125, 5.30000, 5.80625, 6.10000,
+    4.71250, 3.00000, 2.05000, 1.20000, -0.10000,
+    -1.10000, -0.93125, -0.50000, -0.53125, -0.70000,
+    -0.87500, -1.20000, -1.91250, -2.60000, -2.84375,
+    -2.90000, -2.88125, -2.80000, -2.69375, -2.60000,
+    -2.63750, -2.60000, -2.21875, -1.80000, -1.61250,
+    -1.50000, -1.38750, -1.30000, -1.25000, -1.20000,
+    -1.12500, -1.00000, -0.75000, -0.50000, -0.38750,
+    -0.30000, -0.15000, 0.00000, 0.10000, 0.20000,
+    0.26250, 0.50000, 1.25000, 2.10000, 2.69375,
+    3.20000, 3.68125, 4.10000, 4.43125, 4.70000,
+    4.83750, 5.10000, 5.88750, 6.70000, 7.01875,
+    7.30000, 7.91250, 8.60000, 9.25625, 9.80000,
+    10.19375, 10.20000, 9.19375, 8.30000, 8.90000,
+    9.60000, 9.22500, 8.50000, 7.64375, 7.00000,
+    7.18125, 7.60000, 7.91875, 8.00000, 7.46875,
+    6.70000, 5.73125, 5.20000, 6.24375, 7.40000,
+    7.22500, 6.80000, 6.90000, 7.00000, 6.76875,
+    6.40000, 5.87500, 5.50000, 5.71875, 6.10000,
+    6.43125, 6.50000,
+  };
+
+  /* M values for [1nm,5nm][1931,1964][M1,M2][g, h, i, j, k, l] */
+  double ms[2][2][2][6] = {
+    {				/* 1nm */
+     {
+      {-1.77864, 5.90745, -1.34666, 0.25540, -0.73218, 0.02387},
+      {-31.44505, 30.06408, 0.03656, 0.25540, -0.73218, 0.02387}
+      },
+     {
+      {-1.57049, 5.56450, -1.31211, 0.21249, -0.71591, 0.04663},
+      {-30.15166, 31.07906, -0.73912, 0.21249, -0.71591, 0.04663}
+      }
+     },
+    {				/* 5nm */
+     {
+      {-1.77861, 5.90757, -1.34674, 0.25539, -0.73217, 0.02387},
+      {-31.44464, 30.06400, 0.03638, 0.25539, -0.73217, 0.02387}
+      },
+     {
+      {-1.57049, 5.56460, -1.31215, 0.21250, -0.71592, 0.04663},
+      {-30.15139, 31.07931, -0.73928, 0.21250, -0.71592, 0.04663}
+      }
+     }
+  };
+
+  int i;
+  double xd, yd;
+  int sint = 1;			/* 5nm */
+  int obs = 0;			/* 1931 */
+  double m1, m2;
+
+  if (ct < 2500.0 || ct > 25000.0)
+    {				/* Only accurate down to about 4000 */
+      abort ();
+      return 1;
+    }
+
+  /* Compute chromaticity coordinates */
+  if (ct < 7000.0)
+    {
+      xd =
+	-4.6070e9 / (ct * ct * ct) + 2.9678e6 / (ct * ct) + 0.09911e3 / ct +
+	0.244063;
+    }
+  else
+    {
+      xd =
+	-2.0064e9 / (ct * ct * ct) + 1.9018e6 / (ct * ct) + 0.24748e3 / ct +
+	0.237040;
+    }
+  yd = -3.000 * xd * xd + 2.870 * xd - 0.275;
+
+  /* Compute m factors */
+  m1 =
+    (ms[sint][obs][0][0] * xd + ms[sint][obs][0][1] * yd +
+     ms[sint][obs][0][2]) / (ms[sint][obs][0][3] * xd +
+			     ms[sint][obs][0][4] * yd + ms[sint][obs][0][5]);
+  m2 =
+    (ms[sint][obs][1][0] * xd + ms[sint][obs][1][1] * yd +
+     ms[sint][obs][1][2]) / (ms[sint][obs][1][3] * xd +
+			     ms[sint][obs][1][4] * yd + ms[sint][obs][1][5]);
+
+  /* Compute spectral values.
+     Argyll starts from 300,w hile we start from 380 thus offset is 80/5=16. */
+  for (i = 16; i < 16 + SPECTRUM_SIZE; i++)
+    {
+      spec[i - 16] = s0[i] + m1 * s1[i] + m2 * s2[i];
+    }
+
+#if 0
+  sp->spec_n = 107;		/* 5nm spacing */
+  sp->spec_wl_short = 300.0;
+  sp->spec_wl_long = 830;
+  sp->norm = 100.0;		/* Arbitrary */
+#endif
+
+  return 0;
+}
+
+__attribute__((constructor))
+     void init_duffay ()
+{
+  xyz rxyz, gxyz, bxyz;
+#if 0
+  /* Idealized dyes based on manual.  */
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      int s = SPECTRUM_START + i * SPECTRUM_STEP;
+      blue[i] =
+	1 - std::min ((luminosity_t) 1,
+		      scr_to_img::my_sqrt ((luminosity_t) (475 - s) *
+					   (475 - s)) / 75);
+      green[i] =
+	1 - std::min ((luminosity_t) 1,
+		      scr_to_img::my_sqrt ((luminosity_t) (550 - s) *
+					   (550 - s)) / 75);
+      red[i] =
+	1 - std::min ((luminosity_t) 1,
+		      scr_to_img::my_sqrt ((luminosity_t) (625 - s) *
+					   (625 - s)) / 75);
+    }
+#endif
+
+  //compute_spectrum (backlight, 320, 780, 93, old_daylight_data, false);
+  //compute_spectrum (backlight, 300, 830, 107, il_A, false);
+  daylight_il (backlight, 6500 /*sRGB temperature. */ );
+
+#if 0
+  compute_spectrum (red, 400, 720, sizeof (real_duffay_red) / sizeof (luminosity_t), real_duffay_red, true);
+  compute_spectrum (green, 400, 720, sizeof (real_duffay_green) / sizeof (luminosity_t), real_duffay_green, true);
+  compute_spectrum (blue, 400, 720, sizeof (real_duffay_blue) / sizeof (luminosity_t), real_duffay_blue, true);
+#else
+  compute_spectrum (red,
+		    sizeof (autochrome_orrange) / sizeof (spectra_entry),
+		    autochrome_orrange);
+  compute_spectrum (green,
+		    sizeof (autochrome_green) / sizeof (spectra_entry),
+		    autochrome_green);
+  compute_spectrum (blue,
+		    sizeof (autochrome_violet) / sizeof (spectra_entry),
+		    autochrome_violet);
+#endif
+
+  /* These can be plotted by GNUplot.  */
+#define DEBUG
+#ifdef DEBUG
+  FILE *f = fopen ("/tmp/red.dat", "w");
+  print_absorbance_spectrum (f, red);
+  fclose (f);
+  f = fopen ("/tmp/green.dat", "w");
+  print_absorbance_spectrum (f, green);
+  fclose (f);
+  f = fopen ("/tmp/blue.dat", "w");
+  print_absorbance_spectrum (f, blue);
+  fclose (f);
+  f = fopen ("/tmp/red-trans.dat", "w");
+  print_transmitance_spectrum (f, red);
+  fclose (f);
+  f = fopen ("/tmp/green-trans.dat", "w");
+  print_transmitance_spectrum (f, green);
+  fclose (f);
+  f = fopen ("/tmp/blue-trans.dat", "w");
+  print_transmitance_spectrum (f, blue);
+  fclose (f);
+  f = fopen ("/tmp/backlight.dat", "w");
+  print_transmitance_spectrum (f, backlight);
+  fclose (f);
+  f = fopen ("/tmp/x.dat", "w");
+  print_transmitance_spectrum (f, cie_cmf_x);
+  fclose (f);
+  f = fopen ("/tmp/y.dat", "w");
+  print_transmitance_spectrum (f, cie_cmf_y);
+  fclose (f);
+  f = fopen ("/tmp/z.dat", "w");
+  print_transmitance_spectrum (f, cie_cmf_z);
+  fclose (f);
+#endif
+
+
+  rxyz = spectrum_to_xyz (red);
+  gxyz = spectrum_to_xyz (green);
+  bxyz = spectrum_to_xyz (blue);
+
+  /* Autochrome screen was made by mixing dyes to be gray.  Simulate same thing: find
+     rscale, gscale and wscale so together they produce sRGB white.
+     This does not seem to work well in practice.  */
+#if 0
+  color_matrix m (rxyz.x, gxyz.x, bxyz.x, 0,
+		  rxyz.y, gxyz.y, bxyz.y, 0,
+		  rxyz.z, gxyz.z, bxyz.z, 0, 0, 0, 0, 1);
+  m.print (stdout);
+  color_matrix n = m.invert ();
+  n.print (stdout);
+
+  luminosity_t wx, wy, wz;
+  /* Normalize so 1,1,1 is sRGB white.  */
+  luminosity_t wx, wy, wz;
+  srgb_to_xyz (0.9505, 1, 1.0888, &wx, &wy, &wz);
+  //srgb_to_xyz (1, 1, 1, &wx, &wy, &wz);
+  n.apply_to_rgb (wx, wy, wz, &rscale, &gscale, &bscale);
+  //fprintf (stderr, "scales: %f %f %f\n",rscale,gscale, bscale);
+#else
+  rscale = gscale = bscale = 1;
+#endif
+
+#if 0
+  /* Adjust white balance  */
+  xscale = 0.9505 / (rxyz.x + gxyz.x + bxyz.x);
+  yscale = 1 / (rxyz.y + gxyz.y + bxyz.y);
+  zscale = 1.0888 / (rxyz.z + gxyz.z + bxyz.z);
+#else
+  xscale = yscale = zscale = 
+    3 / (rxyz.x + rxyz.y + rxyz.x + gxyz.x + gxyz.y + gxyz.z + bxyz.x +
+	 bxyz.y + bxyz.z);
+#endif
+
+  /* Proportions of colors in dufaycolor.  */
+
+  //rscale = rscale * 0.4 * 3;
+  //gscale = gscale * 0.32 * 3;
+  //bscale = bscale * 0.28 * 3;
+
+  //rscale = 0.4 * 3;
+  //gscale = 0.32 * 3;
+  //bscale = 0.28 * 3;
+
+
+  /* Pokus o grading.  */
+  //rscale = gscale = bscale = 1;
+  //gscale = 0.9;
+  //bscale = 0.7;
+  //
+  //rscale = scale;
+  //gscale = scale;
+  //bscale = scale;
+  //
+  printf ("RGB scale:%f %f %f\n", rscale, gscale, bscale);
+  printf ("XYZ scale:%f %f %f\n", xscale, yscale, zscale);
+
+}
+}
+
+struct xyz
+compute_xyz (luminosity_t r, luminosity_t g, luminosity_t b)
+{
+  spectrum s;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      s[i] = red [i] * r * rscale + green [i] * g * gscale + blue [i] * b * bscale;
+      //s[i] = (duffay_red [i] * r + duffay_green [i] * g + duffay_blue [i] * b) * scale;
+      //s[i] = (duffay_red [i] * r + duffay_green [i] * g + duffay_blue [i] * b) * scale;
+    }
+  struct xyz ret = spectrum_to_xyz (s);
+  ret.x *= xscale;
+  ret.y *= yscale;
+  ret.z *= zscale;
+  //luminosity_t sum = ret.x + ret.y + ret.z;
+  //if (sum)
+    //{
+      //luminosity_t ssum = (r + g + b) / sum;
+      //ret.x *= ssum, ret.y *= ssum, ret.z *= ssum;
+    //}
+  //ret.x *= scale, ret.y *= scale, ret.z *= scale;
+  return ret;
+}
