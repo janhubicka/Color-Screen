@@ -25,8 +25,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   /* Save param.  */
   if (param)
     {
-      if (fprintf (f, HEADER) < 0
-	  || fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
+      if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
 	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
@@ -37,8 +36,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   if (dparam)
     {
-      if (fprintf (f, HEADER) < 0
-	  || fprintf (f, "scr_detect_gamma: %f\n", dparam->gamma) < 0
+      if (fprintf (f, "scr_detect_gamma: %f\n", dparam->gamma) < 0
 	  || fprintf (f, "scr_detect_red: %f %f %f\n", dparam->red.red, dparam->red.green, dparam->red.blue) < 0
 	  || fprintf (f, "scr_detect_green: %f %f %f\n", dparam->green.red, dparam->green.green, dparam->green.blue) < 0
 	  || fprintf (f, "scr_detect_blue: %f %f %f\n", dparam->blue.red, dparam->blue.green, dparam->blue.blue) < 0
@@ -415,6 +413,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_color (f, dparam_check (black)))
 	    {
 	      *error = "error parsing scr_detect_black";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scr_detect_min_luminosity"))
+	{
+	  if (!read_luminosity (f, dparam_check (min_luminosity)))
+	    {
+	      *error = "error parsing scr_detect_min_luminosity";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scr_detect_min_ratio"))
+	{
+	  if (!read_luminosity (f, dparam_check (min_ratio)))
+	    {
+	      *error = "error parsing scr_detect_min_ratio";
 	      return false;
 	    }
 	}
