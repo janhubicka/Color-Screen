@@ -1,5 +1,14 @@
 #include <cassert>
 #include "include/render.h"
+
+const char * render_parameters::color_model_names [] = {
+  "none",
+  "paget",
+  "duffay1",
+  "duffay2",
+  "autochrome"
+};
+
 static int lookup_table_uses;
 static int out_lookup_table_uses;
 static int lookup_table_maxval;
@@ -172,12 +181,72 @@ render::precompute_all (bool duffay)
   out_lookup_table_uses ++;
 
   color_matrix color;
-  printf ("%i\n",m_params.color_model);
   if (m_params.presaturation != 1)
     {
       presaturation_matrix m (m_params.presaturation);
       color = m * color;
     }
+  switch (m_params.color_model)
+    {
+      /* No color adjustemnts: dyes are translated to sRGB.  */
+      case render_parameters::color_model_none:
+	break;
+      /* Colors found to be working for Finlays and Pagets pretty well.  */
+      case render_parameters::color_model_paget:
+	{
+	  adjusted_finlay_matrix m;
+	  xyz_srgb_matrix m2;
+	  color_matrix mm;
+	  mm = m2 * m;
+	  mm.normalize_grayscale ();
+	  color = mm * color;
+	}
+	break;
+      case render_parameters::color_model_autochrome:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
+	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
+	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
+	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
+
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+	}
+	break;
+      case render_parameters::color_model_duffay1:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (0);
+	  //m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
+	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
+	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
+	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
+
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+	}
+	break;
+      case render_parameters::color_model_duffay2:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (1);
+	  //m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
+	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
+	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
+	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
+
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+	}
+	break;
+      case render_parameters::color_model_max:
+	abort ();
+    }
+#if 0
   if (m_params.color_model == 1 || m_params.color_model == 2)
     {
       if (!duffay)
@@ -214,12 +283,13 @@ render::precompute_all (bool duffay)
 	}
       else
         {
-          //grading_matrix m;
-          //autochrome_matrix m;
-	  //m.normalize_grayscale ();
-          //color = m * color;
+          grading_matrix m;
+          autochrome_matrix m;
+	  m.normalize_grayscale ();
+          color = m * color;
 	}
     }
+#endif
   if (m_params.saturation != 1)
     {
       saturation_matrix m (m_params.saturation);
@@ -227,7 +297,6 @@ render::precompute_all (bool duffay)
     }
   color = color * m_params.brightness;
   m_color_matrix = color;
-  color.print (stdout);
 }
 
 render::~render ()
@@ -237,6 +306,8 @@ render::~render ()
       lookup_table_uses --;
       out_lookup_table_uses --;
     }
+  if (m_spectrum_dyes_to_xyz)
+    delete m_spectrum_dyes_to_xyz;
 }
 void
 render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)

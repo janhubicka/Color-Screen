@@ -396,9 +396,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (k == 'm')
     {
-      rparams.color_model++;
-      if (rparams.color_model >= render::num_color_models)
-	rparams.color_model = 0;
+      rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model + 1);
+      if ((int)rparams.color_model >= render::num_color_models)
+	rparams.color_model = (render_parameters::color_model_t)0;
+      printf ("Color model: %s\n", render_parameters::color_model_names[(int)rparams.color_model]);
       display_scheduled = true;
       preview_display_scheduled = true;
     }

@@ -8,6 +8,7 @@
 #endif
 #include "imagedata.h"
 #include "color.h"
+#include "spectrum-to-xyz.h"
 
 typedef float coord_t;
 
@@ -18,7 +19,7 @@ struct DLL_PUBLIC render_parameters
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
     mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1),
     screen_blur_radius (1.3),
-    color_model (3), gray_min (0), gray_max (255), precise (true),
+    color_model (color_model_none), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
@@ -38,8 +39,18 @@ struct DLL_PUBLIC render_parameters
   luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
+  enum color_model_t
+    {
+      color_model_none,
+      color_model_paget,
+      color_model_duffay1,
+      color_model_duffay2,
+      color_model_autochrome,
+      color_model_max
+    };
+  static const char *color_model_names [(int)color_model_max];
   /* If true apply color model of Finlay taking plate.  */
-  int color_model;
+  enum color_model_t color_model;
   /* Gray range to boot to full contrast.  */
   int gray_min, gray_max;
 
@@ -84,7 +95,7 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval)
+  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval)
   {
   }
   ~render ();
@@ -93,7 +104,7 @@ public:
   inline luminosity_t sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2);
   inline luminosity_t fast_get_img_pixel (int x, int y);
     
-  static const int num_color_models = 4;
+  static const int num_color_models = render_parameters::color_model_max;
   enum render_type_t
   {
     render_type_original,
@@ -147,6 +158,8 @@ protected:
   image_data &m_img;
   /* Rendering parameters.  */
   render_parameters &m_params;
+  /* If non-NULL used to turn spectrum dyes to XYZ.  */
+  spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz;
   /* Grayscale we render from.  */
   unsigned short **m_data;
   /* Maximal value in m_data.  */
@@ -251,20 +264,20 @@ cap_color (luminosity_t val, luminosity_t weight, luminosity_t *diff, luminosity
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
-  /* Correct code.  */
-#if 1
-  if (m_params.color_model == 3)
-  {
-    struct xyz c = compute_xyz (r, g, b);
-    xyz_srgb_matrix m;
-    m.apply_to_rgb (c.x, c.y, c.z, &r, &g, &b);
-  }
+  if (m_spectrum_dyes_to_xyz)
+    {
+      struct xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
+      r = c.x;
+      g = c.y;
+      b = c.z;
 #if 0
-  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
-  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
-  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
+      xyz_to_srgb (c.x, c.y, c.z, &r, &g, &b);
+      *rr = r*255;
+      *gg = g*255;
+      *bb = b*255;
+      return;
 #endif
-#endif
+    }
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));

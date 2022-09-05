@@ -247,6 +247,4 @@ srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, l
   b = srgb_to_linear (b);
   m.apply_to_rgb (r, g, b, x, y, z);
 }
-
-struct xyz compute_xyz (luminosity_t r, luminosity_t g, luminosity_t b);
 #endif
