@@ -2,18 +2,17 @@
 #define RENDER_SCR_DETECT_H
 #include "render.h"
 #include "scr-detect.h"
+#include "patches.h"
 class render_scr_detect : public render
 {
 public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-    : render (img, rparam, dstmaxval), visited (NULL)
+    : render (img, rparam, dstmaxval)
   {
     m_scr_detect.set_parameters (param);
   }
   ~render_scr_detect ()
   {
-    if (visited)
-      free (visited);
   }
   scr_detect::color_class classify_pixel (int x, int y)
   {
@@ -78,7 +77,8 @@ public:
     render_type_adjusted_color,
     render_type_pixel_colors,
     render_type_realistic_scr,
-    render_type_scr_blur
+    render_type_scr_nearest,
+    render_type_scr_nearest_scaled
   };
   rgbdata fast_get_adjusted_pixel (int x, int y)
   {
@@ -158,7 +158,6 @@ protected:
   scr_detect m_scr_detect;
   color_class_map m_color_class_map;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
-  char *visited;
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {
@@ -221,44 +220,16 @@ public:
 };
 
 extern class distance_list distance_list;
-class render_scr_blur : public render_scr_detect
+class render_scr_nearest : public render_scr_detect
 {
 public:
-  inline render_scr_blur (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
+  inline render_scr_nearest (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
    : render_scr_detect (param, data, rparam, dst_maxval)
   { 
   }
-  flatten_attr void
+  void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-#if 0
-    int xmin = std::max ((int)(x - 0.5 - m_params.screen_blur_radius), 0);
-    int ymin = std::max ((int)(y - 0.5 - m_params.screen_blur_radius), 0);
-    /* TODO*/
-    int xmax = std::min ((int)ceil (x - 0.5 + m_params.screen_blur_radius), m_img.width - 1);
-    int ymax = std::min ((int)ceil (y - 0.5 + m_params.screen_blur_radius), m_img.height - 1);
-    luminosity_t val[3] = {0, 0, 0};
-    luminosity_t w[3] = {0, 0, 0};
-    for (int yy = ymin; yy <= ymax; yy++)
-      for (int xx = xmin; xx <= xmax; xx++)
-	{
-	  scr_detect::color_class t = classify_pixel (xx, yy);
-	  if (t != scr_detect::unknown)
-	    {
-	      luminosity_t dist = scr_to_img::my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
-	      if (dist >= m_params.screen_blur_radius)
-		continue;
-	      luminosity_t weight = m_params.screen_blur_radius - dist;
-	      val[(int)t] += get_data (xx, yy) * weight;
-	      w[(int)t] += weight;
-	    }
-	}
-    if (!w[0] || !w[1] || !w[2])
-      set_color (0,0,0,r,g,b);
-    else
-      set_color (val[0]/w[0]/**1.5*/,val[1]/w[1]/**1.5*/,val[2]/w[2],r,g,b);
-#endif
-
      /* Search for nearest pixels of each known color.  */
      const coord_t inf = distance_list::max_distance + 1;
      int rx[3], ry[3];
@@ -291,5 +262,58 @@ public:
       set_color (get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue), r, g, b);
   }
 private:
+};
+
+extern class distance_list distance_list;
+class render_scr_nearest_scaled : public render_scr_detect
+{
+public:
+  inline render_scr_nearest_scaled (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
+   : render_scr_detect (param, data, rparam, dst_maxval), m_patches (NULL)
+  { 
+  }
+  inline ~render_scr_nearest_scaled ()
+  {
+    delete m_patches;
+  }
+  void precompute_all ()
+  {
+    render_scr_detect::precompute_all ();
+    m_patches = new patches (m_img, *this, m_color_class_map, 16);
+  }
+  void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    int rx[3], ry[3];
+    patches::patch_index_t ri[3];
+    if (m_patches->nearest_patches (x,y, rx, ry, ri))
+      {
+#if 1
+	patches::patch p = m_patches->get_patch (ri[0]);
+	luminosity_t rr = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	p = m_patches->get_patch (ri[1]);
+	luminosity_t gg = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	p = m_patches->get_patch (ri[2]);
+	luminosity_t bb = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+        set_color (rr,gg,bb,r,g,b);
+#else
+	luminosity_t rr;
+	rr = ((ri[0] & 15) + 1) / 17.0;
+        set_color (rr,rr,rr,r,g,b);
+#endif
+#if 0
+	luminosity_t rr;
+	if (!m_patches->get_patch_color (x,y))
+	  rr = ((ri[0] & 15) + 1) / 17.0;
+	else
+	  rr = 0;
+        set_color (rr,rr,rr,r,g,b);
+#endif
+      }
+    else
+      set_color (0,0,0,r,g,b);
+  }
+private:
+  patches *m_patches;
 };
 #endif

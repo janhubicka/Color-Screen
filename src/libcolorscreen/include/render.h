@@ -281,17 +281,15 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 {
   if (m_spectrum_dyes_to_xyz)
     {
+      if (m_params.presaturation != 1)
+	{
+          presaturation_matrix m (m_params.presaturation);
+	  m.apply_to_rgb (r, g, b, &r, &g, &b);
+	}
       struct xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
       r = c.x;
       g = c.y;
       b = c.z;
-#if 0
-      xyz_to_srgb (c.x, c.y, c.z, &r, &g, &b);
-      *rr = r*255;
-      *gg = g*255;
-      *bb = b*255;
-      return;
-#endif
     }
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));

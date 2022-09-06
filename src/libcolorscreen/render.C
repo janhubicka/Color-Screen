@@ -186,7 +186,12 @@ render::precompute_all (bool duffay)
   out_lookup_table_uses ++;
 
   color_matrix color;
-  if (m_params.presaturation != 1)
+  /* We can combine presaturation to the matrix for simple matrix
+     transformations.  For non-linear transformations it needs to be done
+     separately.  */
+  if (m_params.presaturation != 1
+      && (m_params.color_model == render_parameters::color_model_none
+	  || m_params.color_model == render_parameters::color_model_paget))
     {
       presaturation_matrix m (m_params.presaturation);
       color = m * color;

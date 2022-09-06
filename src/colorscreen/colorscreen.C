@@ -10,7 +10,7 @@ enum output_mode
   interpolated,
   predictive,
   combined,
-  detect_blur
+  detect_nearest,
 };
 
 static bool verbose = false;
@@ -105,7 +105,7 @@ parse_mode (const char *mode)
   else if (!strcmp (mode, "combined"))
     return combined;
   else if (!strcmp (mode, "detect-nearest"))
-    return detect_blur;
+    return detect_nearest;
   else
     {
       fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
@@ -190,7 +190,7 @@ main (int argc, char **argv)
       printf (" (resolution %ix%i)", scan.width, scan.height);
       print_time ();
     }
-  if (mode == detect_blur && !scan.rgbdata)
+  if (mode == detect_nearest && !scan.rgbdata)
     {
       fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
       exit (1);
@@ -343,9 +343,9 @@ main (int argc, char **argv)
 	TIFFClose (out);
       }
       break;
-    case detect_blur:
+    case detect_nearest:
       {
-	render_scr_blur render (dparam, scan, rparam, 65535);
+	render_scr_nearest render (dparam, scan, rparam, 65535);
 	render.precompute_all ();
 	if (verbose)
 	  print_time ();

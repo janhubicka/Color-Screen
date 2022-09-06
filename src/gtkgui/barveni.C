@@ -545,7 +545,7 @@ static int step;
     }
   else
     {
-      if (k >= '1' && k <='5')
+      if (k >= '1' && k <='6')
 	{
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
