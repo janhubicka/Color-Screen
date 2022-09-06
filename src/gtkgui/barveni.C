@@ -450,13 +450,25 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    std::swap (rparams.gray_min, rparams.gray_max);
 	}
      }
+  if (k == 'b')
+    {
+      rparams.backlight_temperature = std::max (rparams.backlight_temperature - 100 , (luminosity_t)render_parameters::temperature_min);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'B')
+    {
+      rparams.backlight_temperature = std::min (rparams.backlight_temperature + 100 , (luminosity_t)render_parameters::temperature_max);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
   if (!scr_detect)
     {
       if (k == 'c')
 	setcenter = true;
-      if (k == 'O')
+      if (k == 'O' && 0)
 	{
-    static int step;
+static int step;
 	  if (step == 0)
 	    {
 	      optimize (current.center_x,  current.center_y, 0, 1,  //center

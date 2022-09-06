@@ -52,6 +52,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
 	  || fprintf (f, "scren_blur_radius: %f\n", rparam->screen_blur_radius) < 0
+	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
+	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
+	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
 	  || fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "screen_compensation: %s\n", bool_names [(int)rparam->screen_compensation]) < 0
@@ -341,6 +344,44 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_scalar (f, rparam_check (screen_blur_radius)))
 	    {
 	      *error = "error parsing screen_blur_radius";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "color_model"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < render_parameters::color_model_max; j++)
+	    if (!strcmp (buf2, render_parameters::color_model_names[j]))
+	      break;
+	  if (j == render_parameters::color_model_max)
+	    {
+	      *error = "unknown color model";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->color_model = (enum render_parameters::color_model_t) j;
+	}
+      else if (!strcmp (buf, "dye_balance"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < render_parameters::dye_balance_max; j++)
+	    if (!strcmp (buf2, render_parameters::dye_balance_names[j]))
+	      break;
+	  if (j == render_parameters::dye_balance_max)
+	    {
+	      *error = "unknown color model";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->dye_balance = (enum render_parameters::dye_balance_t) j;
+	}
+      else if (!strcmp (buf, "backlight_temperature"))
+	{
+	  if (!read_luminosity (f, rparam_check (backlight_temperature)))
+	    {
+	      *error = "error parsing backlight temperature";
 	      return false;
 	    }
 	}

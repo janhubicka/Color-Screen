@@ -17,7 +17,8 @@ struct DLL_PUBLIC render_parameters
 {
   render_parameters()
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
-    mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1),
+    mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
+    dye_balance (dye_balance_neutral),
     screen_blur_radius (1.3),
     color_model (color_model_none), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
@@ -37,6 +38,20 @@ struct DLL_PUBLIC render_parameters
      mix_gamma should be gamma of the scan, mix_red,green and blue
      are relative weights.  */
   luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
+  /* Temperature in K of backlight.  */
+  luminosity_t backlight_temperature;
+  static const int temperature_min = 2500;
+  static const int temperature_max = 25000;
+  enum dye_balance_t
+  {
+    dye_balance_none,
+    dye_balance_neutral,
+    dye_balance_whitepoint,
+    dye_balance_max
+  };
+  static const char *dye_balance_names [(int)dye_balance_max];
+  /* How to balance dye colors.  */
+  enum dye_balance_t dye_balance;
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
   enum color_model_t

@@ -8,6 +8,11 @@ const char * render_parameters::color_model_names [] = {
   "duffay2",
   "autochrome"
 };
+const char * render_parameters::dye_balance_names [] = {
+  "none",
+  "neutral",
+  "whitepoint"
+};
 
 static int lookup_table_uses;
 static int out_lookup_table_uses;
@@ -200,51 +205,49 @@ render::precompute_all (bool duffay)
 	  mm = m2 * m;
 	  mm.normalize_grayscale ();
 	  color = mm * color;
+	  break;
 	}
-	break;
       case render_parameters::color_model_autochrome:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
 	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
-	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
-	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
-	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
-
-	  xyz_srgb_matrix m2;
-	  color = m2 * color;
+	  break;
 	}
-	break;
       case render_parameters::color_model_duffay1:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
 	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (0);
-	  //m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
-	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
-	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
-	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
-
-	  xyz_srgb_matrix m2;
-	  color = m2 * color;
+	  break;
 	}
-	break;
       case render_parameters::color_model_duffay2:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_daylight_backlight (6500);
 	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (1);
-	  //m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
-	  //m_spectrum_dyes_to_xyz->normalize_dyes (6500);
-	  //m_spectrum_dyes_to_xyz->normalize_brightness ();
-	  m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
-
-	  xyz_srgb_matrix m2;
-	  color = m2 * color;
+	  break;
 	}
-	break;
       case render_parameters::color_model_max:
 	abort ();
+    }
+  if (m_spectrum_dyes_to_xyz)
+    {
+      xyz_srgb_matrix m2;
+
+      color = m2 * color;
+      m_spectrum_dyes_to_xyz->set_daylight_backlight (m_params.backlight_temperature);
+      switch (m_params.dye_balance)
+	{
+	  case render_parameters::dye_balance_none:
+	    m_spectrum_dyes_to_xyz->normalize_brightness ();
+	    break;
+	  case render_parameters::dye_balance_neutral:
+	    m_spectrum_dyes_to_xyz->normalize_dyes (6500);
+	    break;
+	  case render_parameters::dye_balance_whitepoint:
+	    m_spectrum_dyes_to_xyz->normalize_xyz_to_backlight_whitepoint ();
+	    break;
+	  default:
+	    abort ();
+	}
     }
 #if 0
   if (m_params.color_model == 1 || m_params.color_model == 2)

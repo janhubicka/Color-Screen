@@ -104,7 +104,7 @@ parse_mode (const char *mode)
     return predictive;
   else if (!strcmp (mode, "combined"))
     return combined;
-  else if (!strcmp (mode, "detect-blue"))
+  else if (!strcmp (mode, "detect-nearest"))
     return detect_blur;
   else
     {
@@ -114,11 +114,25 @@ parse_mode (const char *mode)
     }
 }
 
+/* Parse color model.  */
+enum render_parameters::color_model_t
+parse_color_model (const char *model)
+{
+  int j;
+  for (j = 0; j < render_parameters::color_model_max; j++)
+    if (!strcmp (model, render_parameters::color_model_names[j]))
+      return (render_parameters::color_model_t)j;
+  fprintf (stderr, "Unkonwn color model:%s\n", model);
+  print_help ();
+  return render_parameters::color_model_max;
+}
+
 int
 main (int argc, char **argv)
 {
   const char *infname = NULL, *outfname = NULL, *cspname = NULL, *error = NULL;
   enum output_mode mode = interpolated;
+  render_parameters::color_model_t color_model = render_parameters::color_model_max;
 
   binname = argv[0];
 
@@ -136,6 +150,13 @@ main (int argc, char **argv)
 	    print_help ();
 	  i++;
 	  mode = parse_mode (argv[i]);
+	}
+      else if (!strcmp (argv[i], "--color-model"))
+	{
+	  if (i == argc - 1)
+	    print_help ();
+	  i++;
+	  color_model = parse_color_model (argv[i]);
 	}
       else if (!strncmp (argv[i], "--mode=", 7))
 	mode = parse_mode (argv[i]+7);
@@ -187,12 +208,15 @@ main (int argc, char **argv)
       perror (cspname);
       exit (1);
     }
-  if (!load_csp (in, &param, NULL, &rparam, &error))
+  if (!load_csp (in, &param, &dparam, &rparam, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);
     }
   fclose (in);
+
+  if (color_model != render_parameters::color_model_max)
+    rparam.color_model = color_model;
 
   if (verbose)
     {
@@ -325,9 +349,9 @@ main (int argc, char **argv)
 	render.precompute_all ();
 	if (verbose)
 	  print_time ();
-	int scale = 1;
-	int outwidth = scan.width;
-	int outheight = scan.height;
+	double scale = 0.2;
+	int outwidth = scan.width * scale;
+	int outheight = scan.height * scale;
 	uint16_t *outrow;
 	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
 	for (int y = 0; y < scan.height * scale; y++)
