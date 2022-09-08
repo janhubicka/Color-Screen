@@ -76,7 +76,7 @@ public:
       return get_xyz (nofilter);
     }
   private:
-    const bool debug = false;
+    static const bool debug = false;
     /* Compute XYZ values.  */
     inline struct xyz
     get_xyz (spectrum s)
