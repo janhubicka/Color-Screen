@@ -1,5 +1,6 @@
 #ifndef SPECTRUM_TO_XYZ_H
 #define SPECTRUM_TO_XYZ_H
+#include "dllpublic.h"
 #include "color.h"
 
 #define SPECTRUM_START 380
@@ -8,11 +9,11 @@
 #define SPECTRUM_SIZE ((SPECTRUM_END - SPECTRUM_START) / SPECTRUM_STEP + 1)
 
 typedef luminosity_t spectrum[SPECTRUM_SIZE];
-extern const spectrum cie_cmf_x;
-extern const spectrum cie_cmf_y;
-extern const spectrum cie_cmf_z;
+extern const DLL_PUBLIC spectrum cie_cmf_x;
+extern const DLL_PUBLIC spectrum cie_cmf_y;
+extern const DLL_PUBLIC spectrum cie_cmf_z;
 
-class spectrum_dyes_to_xyz
+class DLL_PUBLIC spectrum_dyes_to_xyz
 {
 public:
   spectrum_dyes_to_xyz ()
