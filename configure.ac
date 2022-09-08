@@ -9,7 +9,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-CXXFLAGS="$CXXFLAGS -Wall -Ofast -march=native -fno-exceptions"
+CXXFLAGS="$CXXFLAGS -Wall -Ofast -march=native -fno-exceptions -std=c++11"
 AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
