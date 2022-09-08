@@ -101,6 +101,24 @@ struct DLL_PUBLIC render_parameters
   }
 };
 
+struct rgbdata
+{
+  luminosity_t red, green, blue;
+};
+
+inline void
+account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
+{
+  data->red += lum.red * scale;
+  data->green += lum.green * scale;
+  data->blue += lum.blue * scale;
+}
+inline void
+account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
+{
+  *data += lum * scale;
+}
+
 /* Base class for rendering routines.  It holds
      - scr-to-img transformation info
      - the scanned image data
@@ -131,16 +149,6 @@ public:
     render_type_fast
   };
 
-  struct rgbdata
-  {
-    luminosity_t red, green, blue;
-  };
-  static void account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
-  {
-    data->red += lum.red * scale;
-    data->green += lum.green * scale;
-    data->blue += lum.blue * scale;
-  }
 protected:
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
@@ -191,10 +199,6 @@ protected:
   color_matrix m_color_matrix;
 
 private:
-  static void account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
-  {
-    *data += lum * scale;
-  }
   inline rgbdata
   get_rgb_pixel (int x, int y)
   {

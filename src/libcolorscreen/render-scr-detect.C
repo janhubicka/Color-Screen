@@ -18,7 +18,7 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 void
 render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 { 
-  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &render::account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
 }
 
 void
@@ -72,7 +72,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 
 	if (step > 1)
 	  {
-	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	    render.get_adjusted_data (data, xoffset * step, yoffset * step, width, height, step);
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
@@ -126,7 +126,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	render.precompute_all ();
 	if (step > 1)
 	  {
-	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)

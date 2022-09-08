@@ -65,7 +65,7 @@ private:
   bool m_color;
 };
 
-flatten_attr inline render::rgbdata
+flatten_attr inline rgbdata
 render_superpose_img::fast_sample_pixel_img (int x, int y)
 {
   coord_t scr_x, scr_y;
@@ -145,7 +145,7 @@ render_superpose_img::fast_sample_pixel_img (int x, int y)
 inline void
 render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 { 
-  downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &render::account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
 }
 
 flatten_attr inline void

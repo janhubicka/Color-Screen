@@ -57,7 +57,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	if (step > 1)
 	  {
-	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
@@ -96,7 +96,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	render.precompute_all ();
 	if (step > 1)
 	  {
-	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
@@ -135,7 +135,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	render.precompute_all ();
 	if (step > 1)
 	  {
-	    render::rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
