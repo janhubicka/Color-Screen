@@ -135,7 +135,7 @@ public:
   {
     luminosity_t red, green, blue;
   };
-  void account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
+  static void account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
   {
     data->red += lum.red * scale;
     data->green += lum.green * scale;
@@ -152,7 +152,7 @@ protected:
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 
-  template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+  template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   void
   process_line (T *data, int *pixelpos, luminosity_t *weights,
 		int xstart, int xend,
@@ -161,11 +161,11 @@ protected:
 		bool y0, bool y1,
 		luminosity_t scale, luminosity_t yweight);
 
-  template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
+  template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
   void
   process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T val, luminosity_t scale, luminosity_t xweight, luminosity_t yweight);
 
-  template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+  template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   __attribute__ ((__flatten__))
   void downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 
@@ -191,7 +191,7 @@ protected:
   color_matrix m_color_matrix;
 
 private:
-  void account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
+  static void account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
   {
     *data += lum * scale;
   }
@@ -565,7 +565,7 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
   return 0;
 }
 
-template<typename T, void (render::*account_pixel) (T *, T, luminosity_t)>
+template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
@@ -575,20 +575,20 @@ render::process_pixel (T *data, int width, int height, int px, int py, bool x0, 
   if (x0)
     {
       if (y0)
-	(this->*account_pixel) (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
+	account_pixel (data + px + py * width, pixel, scale * (1 - yweight) * (1 - xweight));
       if (y1)
-	(this->*account_pixel) (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
+	account_pixel (data + px + (py + 1) * width, pixel, scale * yweight * (1 - xweight));
     }
   if (x1)
     {
       if (y0)
-        (this->*account_pixel) (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
+        account_pixel (data + px + (py * width) + 1, pixel, scale * (1 - yweight) * xweight);
       if (y1)
-	(this->*account_pixel) (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
+	account_pixel (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
     }
 }
 
-template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_line (T *data, int *pixelpos, luminosity_t *weights,
 		      int xstart, int xend,
@@ -637,7 +637,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
      }
 }
 
-template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (render::*account_pixel) (T *, T, luminosity_t)>
+template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 {
