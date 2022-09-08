@@ -128,7 +128,8 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval)
+  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+    m_lookup_table (NULL), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
   }
   ~render ();
