@@ -119,7 +119,7 @@ render_to_scr::get_img_pixel_scr (coord_t x, coord_t y)
   return get_img_pixel (xp, yp);
 }
 
-class scr_detect_parameters;
+struct scr_detect_parameters;
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam);
 DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, const char **error);
 

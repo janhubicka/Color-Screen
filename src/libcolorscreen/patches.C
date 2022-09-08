@@ -15,7 +15,7 @@ patches::patches (image_data &img, render &render, color_class_map &color_map, i
 	scr_detect::color_class t = color_map.get_class (x, y);
 	if (t == scr_detect::unknown || get_patch_index (x, y))
 	  continue;
-	struct patch p = {(unsigned short)x, (unsigned short)y, 1, 0, (scr_detect::color_class)t, 0};
+	struct patch p = {(unsigned short)x, (unsigned short)y, 1, 0, static_cast<unsigned short>(t), 0};
 	int start = 0, end = 1;
 	int id = m_vec.size () + 1;
 	queue[0].x = x;
