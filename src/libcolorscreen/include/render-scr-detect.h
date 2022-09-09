@@ -9,23 +9,21 @@ public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
     : render (img, rparam, dstmaxval)
   {
-    m_scr_detect.set_parameters (param);
+    m_scr_detect.set_parameters (param, m_img.maxval);
   }
-  ~render_scr_detect ()
-  {
-  }
+  ~render_scr_detect ();
   scr_detect::color_class classify_pixel (int x, int y)
   {
     if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
       return scr_detect::unknown;
-    scr_detect::color_class t = m_color_class_map.get_class (x, y);
+    scr_detect::color_class t = m_color_class_map->get_class (x, y);
     if (t == scr_detect::unknown)
       return scr_detect::unknown;
     for (int yy = std::max (y - 1, 0); yy < std::min (y + 1, m_img.height); yy++)
       for (int xx = std::max (x - 1, 0); xx < std::min (x + 1, m_img.width); xx++)
 	if (xx != x || yy != y)
 	  {
-	    scr_detect::color_class q = m_color_class_map.get_class (xx, yy);
+	    scr_detect::color_class q = m_color_class_map->get_class (xx, yy);
 	    if (q != scr_detect::unknown && q != t)
 	      return scr_detect::unknown;
 	  }
@@ -43,20 +41,20 @@ public:
 
     if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
       {
-	*r = cubic_interpolate (cubic_interpolate (m_color_class_map.get_color_red ( sx-1, sy-1), m_color_class_map.get_color_red (sx-1, sy), m_color_class_map.get_color_red (sx-1, sy+1), m_color_class_map.get_color_red (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_red ( sx-0, sy-1), m_color_class_map.get_color_red (sx-0, sy), m_color_class_map.get_color_red (sx-0, sy+1), m_color_class_map.get_color_red (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_red ( sx+1, sy-1), m_color_class_map.get_color_red (sx+1, sy), m_color_class_map.get_color_red (sx+1, sy+1), m_color_class_map.get_color_red (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_red ( sx+2, sy-1), m_color_class_map.get_color_red (sx+2, sy), m_color_class_map.get_color_red (sx+2, sy+1), m_color_class_map.get_color_red (sx+2, sy+2), ry),
+	*r = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_red ( sx-1, sy-1), m_color_class_map->get_color_red (sx-1, sy), m_color_class_map->get_color_red (sx-1, sy+1), m_color_class_map->get_color_red (sx-1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_red ( sx-0, sy-1), m_color_class_map->get_color_red (sx-0, sy), m_color_class_map->get_color_red (sx-0, sy+1), m_color_class_map->get_color_red (sx-0, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_red ( sx+1, sy-1), m_color_class_map->get_color_red (sx+1, sy), m_color_class_map->get_color_red (sx+1, sy+1), m_color_class_map->get_color_red (sx+1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_red ( sx+2, sy-1), m_color_class_map->get_color_red (sx+2, sy), m_color_class_map->get_color_red (sx+2, sy+1), m_color_class_map->get_color_red (sx+2, sy+2), ry),
 				rx);
-	*g = cubic_interpolate (cubic_interpolate (m_color_class_map.get_color_green ( sx-1, sy-1), m_color_class_map.get_color_green (sx-1, sy), m_color_class_map.get_color_green (sx-1, sy+1), m_color_class_map.get_color_green (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_green ( sx-0, sy-1), m_color_class_map.get_color_green (sx-0, sy), m_color_class_map.get_color_green (sx-0, sy+1), m_color_class_map.get_color_green (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_green ( sx+1, sy-1), m_color_class_map.get_color_green (sx+1, sy), m_color_class_map.get_color_green (sx+1, sy+1), m_color_class_map.get_color_green (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_green ( sx+2, sy-1), m_color_class_map.get_color_green (sx+2, sy), m_color_class_map.get_color_green (sx+2, sy+1), m_color_class_map.get_color_green (sx+2, sy+2), ry),
+	*g = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_green ( sx-1, sy-1), m_color_class_map->get_color_green (sx-1, sy), m_color_class_map->get_color_green (sx-1, sy+1), m_color_class_map->get_color_green (sx-1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_green ( sx-0, sy-1), m_color_class_map->get_color_green (sx-0, sy), m_color_class_map->get_color_green (sx-0, sy+1), m_color_class_map->get_color_green (sx-0, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_green ( sx+1, sy-1), m_color_class_map->get_color_green (sx+1, sy), m_color_class_map->get_color_green (sx+1, sy+1), m_color_class_map->get_color_green (sx+1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_green ( sx+2, sy-1), m_color_class_map->get_color_green (sx+2, sy), m_color_class_map->get_color_green (sx+2, sy+1), m_color_class_map->get_color_green (sx+2, sy+2), ry),
 				rx);
-	*b = cubic_interpolate (cubic_interpolate (m_color_class_map.get_color_blue ( sx-1, sy-1), m_color_class_map.get_color_blue (sx-1, sy), m_color_class_map.get_color_blue (sx-1, sy+1), m_color_class_map.get_color_blue (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_blue ( sx-0, sy-1), m_color_class_map.get_color_blue (sx-0, sy), m_color_class_map.get_color_blue (sx-0, sy+1), m_color_class_map.get_color_blue (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_blue ( sx+1, sy-1), m_color_class_map.get_color_blue (sx+1, sy), m_color_class_map.get_color_blue (sx+1, sy+1), m_color_class_map.get_color_blue (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map.get_color_blue ( sx+2, sy-1), m_color_class_map.get_color_blue (sx+2, sy), m_color_class_map.get_color_blue (sx+2, sy+1), m_color_class_map.get_color_blue (sx+2, sy+2), ry),
+	*b = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_blue ( sx-1, sy-1), m_color_class_map->get_color_blue (sx-1, sy), m_color_class_map->get_color_blue (sx-1, sy+1), m_color_class_map->get_color_blue (sx-1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_blue ( sx-0, sy-1), m_color_class_map->get_color_blue (sx-0, sy), m_color_class_map->get_color_blue (sx-0, sy+1), m_color_class_map->get_color_blue (sx-0, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_blue ( sx+1, sy-1), m_color_class_map->get_color_blue (sx+1, sy), m_color_class_map->get_color_blue (sx+1, sy+1), m_color_class_map->get_color_blue (sx+1, sy+2), ry),
+				cubic_interpolate (m_color_class_map->get_color_blue ( sx+2, sy-1), m_color_class_map->get_color_blue (sx+2, sy), m_color_class_map->get_color_blue (sx+2, sy+1), m_color_class_map->get_color_blue (sx+2, sy+2), ry),
 				rx);
 	 *r = std::min (std::max (*r, (luminosity_t)0), (luminosity_t)1);
 	 *g = std::min (std::max (*g, (luminosity_t)0), (luminosity_t)1);
@@ -82,12 +80,8 @@ public:
   };
   rgbdata fast_get_adjusted_pixel (int x, int y)
   {
-    luminosity_t rr = m_img.rgbdata[y][x].r, gg = m_img.rgbdata[y][x].g, bb = m_img.rgbdata[y][x].b;
     rgbdata d;
-    rr /= m_img.maxval;
-    gg /= m_img.maxval;
-    bb /= m_img.maxval;
-    m_scr_detect.adjust_color (rr, gg, bb, &d.red, &d.green, &d.blue);
+    m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return d;
   }
   void inline render_adjusted_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
@@ -105,7 +99,6 @@ public:
   luminosity_t
   get_patch_density (int x, int y, scr_detect::color_class c)
   {
-    //return get_data (x, y);
     const int max_patch_size = 16;
     struct queue {int x, y;} queue [max_patch_size];
     int start = 0, end = 1;
@@ -121,7 +114,7 @@ public:
 	int cy = queue[start].y;
 	for (int yy = std::max (cy - 1, 0); yy < std::min (cy + 2, m_img.height); yy++)
 	  for (int xx = std::max (cx - 1, 0); xx < std::min (cx + 2, m_img.width); xx++)
-	    if ((xx != cx || yy != cy) /*&& !visited[yy * m_img.width + xx]*/ && m_color_class_map.get_class (xx, yy) == c)
+	    if ((xx != cx || yy != cy) /*&& !visited[yy * m_img.width + xx]*/ && m_color_class_map->get_class (xx, yy) == c)
 	      {
 		int i;
 		for (i = 0; i < end; i++)
@@ -156,7 +149,7 @@ done:
 				      double xoffset, double yoffset, double step);
 protected:
   scr_detect m_scr_detect;
-  color_class_map m_color_class_map;
+  color_class_map *m_color_class_map;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
@@ -241,7 +234,7 @@ public:
 	 int yy = (int)y + distance_list.list[i].y;
 	 if (xx < 0 || yy < 0 || xx >= m_img.width || yy >= m_img.height)
 	   continue;
-	 scr_detect::color_class t = m_color_class_map.get_class (xx, yy);
+	 scr_detect::color_class t = m_color_class_map->get_class (xx, yy);
 	 if (t == scr_detect::unknown)
 	   continue;
          //assert (t>=0 && t < 3);
@@ -279,7 +272,7 @@ public:
   void precompute_all ()
   {
     render_scr_detect::precompute_all ();
-    m_patches = new patches (m_img, *this, m_color_class_map, 16);
+    m_patches = new patches (m_img, *this, *m_color_class_map, 16);
   }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)

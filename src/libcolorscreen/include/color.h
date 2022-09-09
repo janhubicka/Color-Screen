@@ -50,6 +50,12 @@ struct color_t
     color_t ret (red * coef, green * coef, blue * coef);
     return ret;
   }
+  inline color_t
+  gamma (luminosity_t g)
+  {
+    color_t ret (pow (red, g), pow (green, g), pow (blue, g));
+    return ret;
+  }
 
 };
 typedef matrix4x4<luminosity_t> color_matrix;

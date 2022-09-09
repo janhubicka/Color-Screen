@@ -2,8 +2,43 @@
 #include <sys/time.h>
 #include "include/render-scr-detect.h"
 #include "include/render-to-scr.h"
-class distance_list distance_list;
+#include "lru-cache.h"
+namespace
+{
 static int stats = -1;
+/* Lookup table translates raw input data into linear values.  */
+struct color_class_params
+{
+  int image_id;
+  image_data *img;
+  scr_detect_parameters p;
+  scr_detect *d;
+
+  bool
+  operator==(color_class_params &o)
+  {
+    return image_id == o.image_id
+	   && p == o.p;
+  }
+};
+color_class_map *get_color_class_map(color_class_params &p)
+{
+  image_data &img = *p.img;
+  color_class_map *map = new color_class_map;
+  map->allocate (img.width, img.height);
+  printf ("New color map\n");
+#pragma omp parallel for default(none) shared(img,map,p)
+  for (int y = 0; y < img.height; y++)
+    for (int x = 0; x < img.width; x++)
+      map->set_class (x, y,
+		      p.d->classify_color (img.rgbdata[y][x].r,
+					   img.rgbdata[y][x].g,
+					   img.rgbdata[y][x].b));
+  return map;
+}
+static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache;
+}
+class distance_list distance_list;
 
 static inline void
 putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
@@ -195,15 +230,15 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 void
 render_scr_detect::precompute_all ()
 {
-  m_color_class_map.allocate (m_img.width, m_img.height);
-#pragma omp parallel for default(none) 
-  for (int y = 0; y < m_img.height; y++)
-    for (int x = 0; x < m_img.width; x++)
-      m_color_class_map.set_class (x, y,
-				   m_scr_detect.classify_color (m_img.rgbdata[y][x].r / (luminosity_t)m_img.maxval,
-								m_img.rgbdata[y][x].g / (luminosity_t)m_img.maxval,
-								m_img.rgbdata[y][x].b / (luminosity_t)m_img.maxval));
+  color_class_params p = {m_img.id, &m_img, m_scr_detect.m_param, &m_scr_detect};
+  m_color_class_map = color_class_cache.get (p);
   render::precompute_all (false);
+}
+
+
+render_scr_detect::~render_scr_detect ()
+{
+  color_class_cache.release (m_color_class_map);
 }
 
 int cmp_entry(const void *p1, const void *p2)
@@ -233,6 +268,4 @@ distance_list::distance_list ()
 	num++;
       }
   qsort (list, num, sizeof (struct entry), cmp_entry);
-  //for (int i = 0; i < num; i++)
-   //fprintf (stderr, "%i %i %f\n",list[i].x, list[i].y, list[i].fdist);
 }

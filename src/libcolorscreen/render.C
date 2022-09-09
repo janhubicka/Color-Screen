@@ -17,11 +17,19 @@ const char * render_parameters::dye_balance_names [] = {
 
 namespace
 {
+
+/* Lookup table translates raw input data into linear values.  */
 struct lookup_table_params
 {
+  /* image_data are in range 0...img_maxval.  */
   int img_maxval;
+  /* precomputed gray data (created from mixing r,g,b channles of image_data)
+     have range 0...maxval.  */
   int maxval;
+  /* Input data are assumed to have gamma.  Inverse of gamma is applied to
+     get linear data.  */
   luminosity_t gamma;
+  /* gray_min becomes 0, while gray_max becomes 1.  */
   int gray_min, gray_max;
 
   bool
@@ -32,16 +40,6 @@ struct lookup_table_params
 	   && gamma == o.gamma
 	   && gray_min == o.gray_min
 	   && gray_max == o.gray_max;
-  }
-};
-
-struct out_lookup_table_params
-{
-  int maxval;
-  bool
-  operator==(out_lookup_table_params &o)
-  {
-    return maxval == o.maxval;
   }
 };
 
@@ -62,6 +60,19 @@ get_new_lookup_table (struct lookup_table_params &p)
   return lookup_table;
 }
 
+
+/* Output lookup table takes linear r,g,b values in range 0...65536
+   and outputs r,g,b values in sRGB gamma curve in range 0...maxval.  */
+struct out_lookup_table_params
+{
+  int maxval;
+  bool
+  operator==(out_lookup_table_params &o)
+  {
+    return maxval == o.maxval;
+  }
+};
+
 luminosity_t *
 get_new_out_lookup_table (struct out_lookup_table_params &p)
 {
@@ -72,8 +83,109 @@ get_new_out_lookup_table (struct out_lookup_table_params &p)
   return lookup_table;
 }
 
+/* To improve interactive response we cache conversion tables.  */
 static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lookup_table_cache;
 static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache;
+
+
+#if 0
+struct graydata_params
+{
+  /* Pointers in image_data may become stale if image is freed. Use ID
+     to check cache entries.  */
+  int image_id;
+  image_data img;
+  luminosity_t gamma, red, blue, green;
+};
+static char *
+get_new_graydata (struct graydata_params &p)
+{
+  if (p.img.data)
+    return false;
+
+  double red = p.red;
+  double green = p.green;
+  double blue = p.blue;
+
+  /* TODO move out.  */
+  if (p.gamma < 0.001)
+    p.gamma = 0.001;
+  if (p.gamma > 1000)
+    p.gamma = 1000;
+
+  double sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
+  if (!sum)
+    {
+      sum = 1;
+      green = 1;
+      blue = red = 0;
+    }
+  red /= sum;
+  green /= sum;
+  blue /= sum;
+
+
+  cached_data = (unsigned short **)malloc (sizeof (*cached_data) * img.height);
+  if (!cached_data)
+    {
+      cached_data = NULL;
+      fprintf (stderr, "Out of memory\n");
+      abort ();
+    }
+  cached_data[0] = (unsigned short *)malloc (img.width * img.height * sizeof (**cached_data));
+  if (!cached_data [0])
+    {
+      free (cached_data);
+      cached_data = NULL;
+      fprintf (stderr, "Out of memory\n");
+      abort ();
+    }
+  for (int i = 1; i < img.height; i++)
+    cached_data[i] = cached_data[0] + i * img.width;
+
+  cached_red = red;
+  cached_green = green;
+  cached_blue = blue;
+  cached_gamma = gamma;
+
+  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
+  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
+  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
+  unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
+
+  for (int i = 0; i <= img.maxval; i++)
+    {
+      luminosity_t l = pow (i / (luminosity_t)img.maxval, gamma);
+      if (l < 0 || l > 1)
+	abort ();
+      rtable[i] = l * red;
+      gtable[i] = l * green;
+      btable[i] = l * blue;
+      //fprintf (stderr, "%f %f %f\n", rtable[i], gtable[i], btable[i]);
+    }
+  for (int i = 0; i < 65536; i++)
+    {
+      out_table[i] = pow (i / 65535.0, 1 / gamma) * 65535;
+      //fprintf (stderr, "%i\n", out_table[i]);
+    }
+#pragma omp parallel shared(cached_data,rtable,gtable,btable,out_table,img) default(none)
+  for (int y = 0; y < img.height; y++)
+    for (int x = 0; x < img.width; x++)
+     {
+       luminosity_t val = rtable[img.rgbdata[y][x].r]
+			  + gtable[img.rgbdata[y][x].g]
+			  + btable[img.rgbdata[y][x].b];
+       val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+       cached_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
+     }
+
+  free (rtable);
+  free (gtable);
+  free (btable);
+  free (out_table);
+  return true;
+}
+#endif
 
 /* TODO: turn this also into cache.  */
 static int cached_image_id = -1;
@@ -338,11 +450,30 @@ render::~render ()
   if (m_spectrum_dyes_to_xyz)
     delete m_spectrum_dyes_to_xyz;
 }
+
+/* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
+luminosity_t *
+render::get_lookup_table (luminosity_t gamma, int maxval)
+{
+  lookup_table_params par = {maxval, maxval, gamma, 0, maxval};
+  return lookup_table_cache.get (par);
+}
+
+/* Release lookup table.  */
+void
+render::release_lookup_table (luminosity_t *table)
+{
+  out_lookup_table_cache.release (table);
+}
+
+/* Compute graydata of downscaled image.  */
 void
 render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 {
   downscale<render, luminosity_t, &render::get_data, &account_pixel> (data, x, y, width, height, pixelsize);
 }
+
+/* Compute RGB data of downscaled image.  */
 void
 render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 {

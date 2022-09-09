@@ -3,7 +3,7 @@
 #include "include/render.h"
 
 /* https://scipython.com/static/media/blog/colours/cie-cmf.txt
-   380 to 780 by 5  */
+   bands from 380 to 780 by 5nm steps.  */
 const spectrum cie_cmf_x = {
 	0.0014, 0.0022, 0.0042, 0.0076, 0.0143, 0.0232, 0.0435, 0.0776, 0.1344, 0.2148,
 	0.2839, 0.3285, 0.3483, 0.3481, 0.3362, 0.3187, 0.2908, 0.2511, 0.1954, 0.1421,

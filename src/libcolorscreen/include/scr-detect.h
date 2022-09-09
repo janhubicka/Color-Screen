@@ -36,7 +36,7 @@ struct scr_detect_parameters
 class scr_detect
 {
 public:
-  void set_parameters (scr_detect_parameters param);
+  void set_parameters (scr_detect_parameters param, int maxval);
   enum color_class
   {
     red,
@@ -44,14 +44,16 @@ public:
     blue,
     unknown
   };
-  void adjust_color (luminosity_t r, luminosity_t g, luminosity_t b,
+  void adjust_color (int r, int g, int b,
 		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
   {
-    m_color_adjust.apply_to_rgb (r, g, b, rr, gg, bb);
+    m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
   }
-  enum color_class classify_color (luminosity_t r, luminosity_t g, luminosity_t b)
+  enum color_class classify_color (int ir, int ig, int ib)
   {
-    m_color_adjust.apply_to_rgb (r, g, b, &r, &g, &b);
+    luminosity_t r, g, b;
+
+    m_color_adjust.apply_to_rgb (lookup_table[ir], lookup_table[ig], lookup_table[ib], &r, &g, &b);
     if (r * r + b * b + g * g < m_param.min_luminosity * m_param.min_luminosity)
       return unknown;
     if (r > (fabs (g) + fabs(b)) * m_param.min_ratio)
@@ -62,9 +64,10 @@ public:
       return blue;
     return unknown;
   }
-private:
   scr_detect_parameters m_param;
+private:
   color_matrix m_color_adjust;
+  luminosity_t *lookup_table;
 };
 
 class color_class_map
@@ -79,7 +82,7 @@ public:
   {
     if (data)
       abort ();
-    data = (unsigned char *)calloc (x * y, 1);
+    data = (unsigned char *)calloc (x * y + 3 / 4, 1);
     width = x;
     height = y;
     if (!data)
@@ -93,14 +96,19 @@ public:
   void
   set_class (int x, int y, scr_detect::color_class c)
   {
-    data[x + y * width] = c;
+    unsigned int pos = x + y * width;
+    unsigned char cc = ((unsigned char)c) << ((pos % 4u) * 2);
+    unsigned char cm = ~(((unsigned char)3) << ((pos % 4u) * 2));
+    data[pos / 4u] &= cm;
+    data[pos / 4u] |= cc;
   }
   scr_detect::color_class
   get_class (int x, int y)
   {
     if (x < 0 || y < 0 || x >= width || y>= height)
       return scr_detect::unknown;
-    return (scr_detect::color_class)data[x + y * width];
+    unsigned int pos = x + y * width;
+    return (scr_detect::color_class)((data[pos / 4u] >> ((pos % 4u) * 2)) & 3);
   }
   void
   get_color (int x, int y, luminosity_t *r, luminosity_t *g, luminosity_t *b)

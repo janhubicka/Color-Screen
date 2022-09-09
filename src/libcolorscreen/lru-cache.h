@@ -2,6 +2,10 @@
 #define LRU_CACHE
 #include <pthread.h>
 
+/* LRU cache used keep various data between invocations of renderers.
+   P represents parameters which are used to produce T.
+   get_new is a function computing T based on P.  It is expected to
+   allocate memory via new and lru_cache will eventually delete it.  */
 template<typename P, typename T, T *get_new (P &), int cache_size>
 class lru_cache
 {
@@ -20,6 +24,7 @@ public:
   : entries (NULL), time (0)
   {
   }
+
   ~lru_cache()
   {
     struct cache_entry *e, *next;
@@ -30,6 +35,8 @@ public:
 	delete e;
       }
   }
+
+  /* Get T for parameters P; do caching.  */
   T *get(P &p)
   {
     int size = 0;
@@ -62,6 +69,8 @@ public:
     pthread_mutex_unlock (&lock);
     return e->val;
   }
+
+  /* Release T but keep it possibly in the cache.  */
   void release(T *val)
   {
     pthread_mutex_lock (&lock);

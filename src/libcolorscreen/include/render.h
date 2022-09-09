@@ -149,6 +149,8 @@ public:
     render_type_predictive,
     render_type_fast
   };
+  static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
+  static void release_lookup_table (luminosity_t *);
 
 protected:
   inline luminosity_t get_data (int x, int y);
@@ -160,6 +162,7 @@ protected:
   void precompute_all (bool duffay);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+
 
   template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   void

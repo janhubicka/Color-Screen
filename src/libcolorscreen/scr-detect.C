@@ -1,16 +1,18 @@
 #include <cassert>
 #include "include/scr-detect.h"
+#include "include/render.h"
 
 void
-scr_detect::set_parameters (scr_detect_parameters param)
+scr_detect::set_parameters (scr_detect_parameters param, int maxval)
 {
   m_param = param;
-  color_t red = (m_param.red - m_param.black).normalize ();
-  color_t green = (m_param.green - m_param.black).normalize ();
-  color_t blue = (m_param.blue - m_param.black).normalize ();
-  color_matrix t (1, 0, 0, m_param.black.red,
-		  0, 1, 0, m_param.black.green,
-		  0, 0, 1, m_param.black.blue,
+  lookup_table = render::get_lookup_table (param.gamma, maxval);
+  color_t red = (m_param.red.gamma (1 / param.gamma) - m_param.black.gamma (1 / param.gamma)).normalize ();
+  color_t green = (m_param.green.gamma (1 / param.gamma) - m_param.black.gamma (1 / param.gamma)).normalize ();
+  color_t blue = (m_param.blue.gamma (1 / param.gamma) - m_param.black.gamma (1 / param.gamma)).normalize ();
+  color_matrix t (1, 0, 0, m_param.black.gamma (1 / param.gamma).red,
+		  0, 1, 0, m_param.black.gamma (1 / param.gamma).green,
+		  0, 0, 1, m_param.black.gamma (1 / param.gamma).blue,
 		  0, 0, 0, 1);
   color_matrix m (red.red,   green.red,   blue.red,   0,
 		  red.green, green.green, blue.green, 0,
