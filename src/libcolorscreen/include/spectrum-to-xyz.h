@@ -55,6 +55,9 @@ public:
   /* Set dyes to given measured spectras.  */
   void set_dyes_to_duffay (int measurement);
   void set_dyes_to_autochrome ();
+  void set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
+			        luminosity_t green_patent, luminosity_t green_tartrazine,
+			        luminosity_t violet_crystal, luminosity_t violet_flexo, luminosity_t age);
 
   struct xyz
   dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b)

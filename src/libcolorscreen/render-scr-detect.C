@@ -37,6 +37,27 @@ color_class_map *get_color_class_map(color_class_params &p)
   return map;
 }
 static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache;
+
+/* Lookup table translates raw input data into linear values.  */
+struct patches_cache_params
+{
+  int scr_map_id;
+  color_class_map *map;
+  image_data *img;
+  render *r;
+
+  /* TODO: render parameters affects luminosity.  */
+  bool
+  operator==(patches_cache_params &o)
+  {
+    return scr_map_id == o.scr_map_id;
+  }
+};
+patches *get_patches(patches_cache_params &p)
+{
+  return new patches (*p.img, *p.r, *p.map, 16);
+}
+static lru_cache <patches_cache_params, patches, get_patches, 1> patches_cache;
 }
 class distance_list distance_list;
 
@@ -54,6 +75,12 @@ void
 render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
 { 
   downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+}
+
+void
+render_scr_detect::get_screen_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+{ 
+  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_screen_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
 }
 
 void
@@ -141,6 +168,17 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       {
 	render_scr_detect render (param, img, rparam, 255);
 	render.precompute_all ();
+	if (step > 1)
+	  {
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    render.get_screen_data (data, xoffset * step, yoffset * step, width, height, step);
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    for (int y = 0; y < height; y++)
+	      for (int x = 0; x < width; x++)
+		putpixel (pixels, pixelbytes, rowstride, x, y, data[x + width * y].red * 255 + 0.5, data[x + width * y].green * 255 + 0.5, data[x + width * y].blue * 255 + 0.5);
+	    free (data);
+	    break;
+	  }
 #pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
@@ -268,4 +306,17 @@ distance_list::distance_list ()
 	num++;
       }
   qsort (list, num, sizeof (struct entry), cmp_entry);
+}
+
+render_scr_nearest_scaled::~render_scr_nearest_scaled ()
+{
+  patches_cache.release (m_patches);
+}
+
+void 
+render_scr_nearest_scaled::precompute_all ()
+{
+  render_scr_detect::precompute_all ();
+  patches_cache_params p = {m_color_class_map->id, m_color_class_map, &m_img, this};
+  m_patches =  patches_cache.get (p);
 }

@@ -18,6 +18,7 @@ struct DLL_PUBLIC render_parameters
   render_parameters()
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
     mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
+    age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (1.3),
     color_model (color_model_none), gray_min (0), gray_max (255), precise (true),
@@ -40,6 +41,8 @@ struct DLL_PUBLIC render_parameters
   luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
   /* Temperature in K of backlight.  */
   luminosity_t backlight_temperature;
+  /* Aging simulation (0 new dyes, 1 aged dyes).  */
+  luminosity_t age;
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
   enum dye_balance_t
@@ -61,6 +64,7 @@ struct DLL_PUBLIC render_parameters
       color_model_duffay1,
       color_model_duffay2,
       color_model_autochrome,
+      color_model_autochrome2,
       color_model_max
     };
   static const char *color_model_names [(int)color_model_max];
@@ -89,6 +93,8 @@ struct DLL_PUBLIC render_parameters
 	   && mix_green == other.mix_green
 	   && mix_blue == other.mix_blue
 	   && color_model == other.color_model
+	   && age == other.age
+	   && backlight_temperature == backlight_temperature
 	   && gray_min == other.gray_min
 	   && gray_max == other.gray_max
 	   && precise == other.precise

@@ -7,7 +7,8 @@ const char * render_parameters::color_model_names [] = {
   "paget",
   "duffay1",
   "duffay2",
-  "autochrome"
+  "autochrome-film",
+  "autochrome-Casella-Tsukada",
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
@@ -348,6 +349,14 @@ render::precompute_all (bool duffay)
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
+	  break;
+	}
+      case render_parameters::color_model_autochrome2:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome2 (1, 1, 19.7 / (20.35),
+							   1, 21 / (20.35),
+							   1,1,m_params.age);
 	  break;
 	}
       case render_parameters::color_model_duffay1:

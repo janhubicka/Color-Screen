@@ -1,6 +1,7 @@
 #include <cassert>
 #include "include/scr-detect.h"
 #include "include/render.h"
+int color_class_map::last_id;
 
 void
 scr_detect::set_parameters (scr_detect_parameters param, int maxval)

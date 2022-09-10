@@ -95,7 +95,7 @@ get_keyword (FILE *f, char *buf)
 	  return;
 	}
       int c = getc (f);
-      if (c == EOF || !isalnum (c))
+      if (c == EOF || (!isalnum (c) && c != '-'))
 	{
 	  buf[l] = 0;
 	  return;

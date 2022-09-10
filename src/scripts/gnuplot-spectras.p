@@ -4,15 +4,33 @@ set output "spectras.pdf"
 set style line 1 \
     linecolor rgb '#ff0000' \
     linetype 1 linewidth 2 \
-    pointtype 7 pointsize 0.5
+    pointtype 7 pointsize 0.2
 set style line 2 \
     linecolor rgb '#00ff00' \
     linetype 1 linewidth 2 \
-    pointtype 7 pointsize 0.5
+    pointtype 7 pointsize 0.2
 set style line 3 \
     linecolor rgb '#0000ff' \
     linetype 1 linewidth 2 \
-    pointtype 7 pointsize 0.5
+    pointtype 7 pointsize 0.2
+
+
+set style line 4 \
+    linecolor rgb '#afaf00' \
+    linetype 1 linewidth 2 \
+    pointtype 7 pointsize 0.2
+set style line 5 \
+    linecolor rgb '#af1f00' \
+    linetype 1 linewidth 2 \
+    pointtype 7 pointsize 0.2
+set style line 6 \
+    linecolor rgb '#ff00ff' \
+    linetype 1 linewidth 2 \
+    pointtype 7 pointsize 0.2
+set style line 7 \
+    linecolor rgb '#ff004f' \
+    linetype 1 linewidth 2 \
+    pointtype 7 pointsize 0.2
 
 set title "spectras of dyes"
 set xlabel "Wavelength"
@@ -33,3 +51,17 @@ set title "XYZ"
 plot '/tmp/x.dat' with linespoints linestyle 1, \
      '/tmp/y.dat' with linespoints linestyle 2, \
      '/tmp/z.dat' with linespoints linestyle 3
+set title "autochrome dyes"
+plot '/tmp/tartrazine-trans.dat' with linespoints linestyle 4, \
+     '/tmp/patent-trans.dat' with linespoints linestyle 5, \
+     '/tmp/erythrosine-trans.dat' with linespoints linestyle 1, \
+     '/tmp/rose-trans.dat' with linespoints linestyle 6, \
+     '/tmp/flexo-trans.dat' with linespoints linestyle 3, \
+     '/tmp/crystal-trans.dat' with linespoints linestyle 7, 
+set title "o2 autochrome dyes"
+plot '/tmp/tartrazine-trans.dat' with linespoints linestyle 4, \
+     '/tmp/o2_patent-trans.dat' with linespoints linestyle 5, \
+     '/tmp/o2_erythrosine-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_rose-trans.dat' with linespoints linestyle 6, \
+     '/tmp/o2_flexo-trans.dat' with linespoints linestyle 3, \
+     '/tmp/o2_crystal-trans.dat' with linespoints linestyle 7, \

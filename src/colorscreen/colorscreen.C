@@ -11,6 +11,7 @@ enum output_mode
   predictive,
   combined,
   detect_nearest,
+  detect_nearest_scaled,
 };
 
 static bool verbose = false;
@@ -106,6 +107,8 @@ parse_mode (const char *mode)
     return combined;
   else if (!strcmp (mode, "detect-nearest"))
     return detect_nearest;
+  else if (!strcmp (mode, "detect-nearest-scaled"))
+    return detect_nearest_scaled;
   else
     {
       fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
@@ -349,24 +352,69 @@ main (int argc, char **argv)
 	render.precompute_all ();
 	if (verbose)
 	  print_time ();
-	double scale = 0.2;
-	int outwidth = scan.width * scale;
-	int outheight = scan.height * scale;
+	int downscale = 5;
+	int outwidth = scan.width / downscale;
+	int outheight = scan.height / downscale;
 	uint16_t *outrow;
 	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
-	for (int y = 0; y < scan.height * scale; y++)
+	for (int y = 0; y < scan.height / downscale; y++)
 	  {
-	    for (int x = 0; x < scan.width * scale; x++)
+	    for (int x = 0; x < scan.width / downscale; x++)
 	      {
+		int srr = 0, sgg = 0, sbb = 0;
 		int rr, gg, bb;
-		render.render_pixel_img (x / (double) scale,
-					 y / (double) scale,
-					 &rr, &gg, &bb);
-		outrow[3 * x] = rr;
-		outrow[3 * x + 1] = gg;
-		outrow[3 * x + 2] = bb;
+		for (int yy = 0; yy < downscale; yy++)
+		  for (int xx = 0; xx < downscale; xx++)
+		    {
+			render.render_pixel_img (x * downscale + xx,
+						 y * downscale + yy,
+						 &rr, &gg, &bb);
+			srr += rr;
+			sgg += gg;
+			sbb += bb;
+		    }
+		outrow[3 * x] = srr / downscale / downscale;
+		outrow[3 * x + 1] = sgg / downscale / downscale;
+		outrow[3 * x + 2] = sbb / downscale / downscale;
 	      }
 	    write_row (out, y, outrow);
+	  }
+	TIFFClose (out);
+      }
+      break;
+    case detect_nearest_scaled:
+      {
+	render_scr_nearest_scaled render (dparam, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	int downscale = 5;
+	int outwidth = scan.width / downscale;
+	int outheight = scan.height / downscale;
+	uint16_t *outrow;
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < scan.height / downscale; y++)
+	  {
+	    for (int x = 0; x < scan.width / downscale; x++)
+	      {
+		int srr = 0, sgg = 0, sbb = 0;
+		int rr, gg, bb;
+		for (int yy = 0; yy < downscale; yy++)
+		  for (int xx = 0; xx < downscale; xx++)
+		    {
+			render.render_pixel_img (x * downscale + xx,
+						 y * downscale + yy,
+						 &rr, &gg, &bb);
+			srr += rr / downscale / downscale;
+			sgg += gg / downscale / downscale;
+			sbb += bb / downscale / downscale;
+		    }
+		outrow[3 * x] = srr / downscale / downscale;
+		outrow[3 * x + 1] = sgg / downscale / downscale;
+		outrow[3 * x + 2] = sbb / downscale / downscale;
+	      }
+	    write_row (out, y, outrow);
+	    printf ("%i\n",y);
 	  }
 	TIFFClose (out);
       }

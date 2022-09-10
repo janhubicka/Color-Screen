@@ -42,7 +42,7 @@ patches::patches (image_data &img, render &render, color_class_map &color_map, i
 	    start++;
 	  }
 done:
-	if (end > 4)
+	if (end > 4||1)
 	  {
 	    //p.overall_pixels = p.pixels;
 	    m_vec.push_back (p);

@@ -84,6 +84,12 @@ public:
     m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return d;
   }
+  rgbdata fast_get_screen_pixel (int x, int y)
+  {
+    rgbdata d;
+    get_screen_color (x, y, &d.red, &d.green, &d.blue);
+    return d;
+  }
   void inline render_adjusted_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     int xx = x;
@@ -151,6 +157,7 @@ protected:
   scr_detect m_scr_detect;
   color_class_map *m_color_class_map;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {
@@ -265,15 +272,8 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval), m_patches (NULL)
   { 
   }
-  inline ~render_scr_nearest_scaled ()
-  {
-    delete m_patches;
-  }
-  void precompute_all ()
-  {
-    render_scr_detect::precompute_all ();
-    m_patches = new patches (m_img, *this, *m_color_class_map, 16);
-  }
+  ~render_scr_nearest_scaled ();
+  void precompute_all ();
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {

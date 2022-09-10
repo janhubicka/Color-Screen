@@ -74,7 +74,7 @@ class color_class_map
 {
 public:
   color_class_map ()
-  : data (NULL)
+  : data (NULL), width (0), height (0), id(last_id++)
   {
   }
   void
@@ -142,6 +142,9 @@ public:
   }
   unsigned char *data;
   int width, height;
+  int id;
+private:
+  static int last_id;
 };
 
 #endif
