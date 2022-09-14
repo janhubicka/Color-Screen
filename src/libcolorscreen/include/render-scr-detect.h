@@ -168,8 +168,8 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
-private:
   rgbdata fast_sample_pixel_img (int x, int y);
+private:
   void inline sample_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
 };
 flatten_attr inline rgbdata
@@ -275,7 +275,7 @@ public:
   ~render_scr_nearest_scaled ();
   void precompute_all ();
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  render_raw_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
     int rx[3], ry[3];
     patches::patch_index_t ri[3];
@@ -283,12 +283,11 @@ public:
       {
 #if 1
 	patches::patch p = m_patches->get_patch (ri[0]);
-	luminosity_t rr = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	*r = p.luminosity_sum / (luminosity_t) p.overall_pixels;
 	p = m_patches->get_patch (ri[1]);
-	luminosity_t gg = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	*g = p.luminosity_sum / (luminosity_t) p.overall_pixels;
 	p = m_patches->get_patch (ri[2]);
-	luminosity_t bb = p.luminosity_sum / (luminosity_t) p.overall_pixels;
-        set_color (rr,gg,bb,r,g,b);
+	*b = p.luminosity_sum / (luminosity_t) p.overall_pixels;
 #else
 	luminosity_t rr;
 	rr = ((ri[0] & 15) + 1) / 17.0;
@@ -304,7 +303,18 @@ public:
 #endif
       }
     else
-      set_color (0,0,0,r,g,b);
+    {
+      *r = 0;
+      *g = 0;
+      *b = 0;
+    }
+  }
+  void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    luminosity_t rr, gg, bb;
+    render_raw_pixel_img (x, y, &rr, &gg, &bb);
+    set_color (rr,gg,bb,r,g,b);
   }
 private:
   patches *m_patches;

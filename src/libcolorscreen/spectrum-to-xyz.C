@@ -955,7 +955,7 @@ compute_spectrum (spectrum s, int start, int end, int size,
 		  const luminosity_t * data, bool absorbance)
 {
   luminosity_t step = (end - start) / (luminosity_t) (size - 1);
-  printf ("start %i end %i step %f %i size\n",start,end,step,size);
+  //printf ("start %i end %i step %f %i size\n",start,end,step,size);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
       int p = SPECTRUM_START + i * SPECTRUM_STEP;
