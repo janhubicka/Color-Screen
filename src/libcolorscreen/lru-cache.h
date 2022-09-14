@@ -23,6 +23,8 @@ public:
   lru_cache()
   : entries (NULL), time (0)
   {
+    if (pthread_mutex_init(&lock, NULL) != 0)
+      abort ();
   }
 
   ~lru_cache()
@@ -44,30 +46,38 @@ public:
     pthread_mutex_lock (&lock);
     time++;
     for (e = entries; e; e = e->next)
-    {
-      if (p == e->params)
-        {
-	  e->last_used = time;
-	  e->nuses++;
-	  pthread_mutex_unlock (&lock);
-	  return e->val;
-	}
-      if (!e->nuses
-	  && (!longest_unused || longest_unused->last_used < e->last_used))
-	longest_unused = e;
-      if (!e->nuses)
-        size++;
-    }
+      {
+	if (p == e->params)
+	  {
+	    e->last_used = time;
+	    e->nuses++;
+	    T *ret = e->val;
+	    pthread_mutex_unlock (&lock);
+	    return ret;
+	  }
+	if (!e->nuses
+	    && (!longest_unused || longest_unused->last_used < e->last_used))
+	  longest_unused = e;
+	if (!e->nuses)
+	  size++;
+      }
     if (size >= cache_size)
-      e = longest_unused;
-    e = new cache_entry;
-    e->next = entries;
-    entries = e;
+      {
+        e = longest_unused;
+	delete e->val;
+      }
+    else
+      {
+	e = new cache_entry;
+	e->next = entries;
+	entries = e;
+      }
     e->params = p;
     e->val = get_new (e->params);
     e->nuses = 1;
+    T *ret = e->val;
     pthread_mutex_unlock (&lock);
-    return e->val;
+    return ret;
   }
 
   /* Release T but keep it possibly in the cache.  */
@@ -78,6 +88,7 @@ public:
       if (e->val == val)
 	{
 	  e->nuses--;
+	  assert (e->nuses >= 0);
 	  pthread_mutex_unlock (&lock);
 	  return;
 	}
