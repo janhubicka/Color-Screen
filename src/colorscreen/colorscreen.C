@@ -10,6 +10,8 @@ enum output_mode
   interpolated,
   predictive,
   combined,
+  detect_adjusted,
+  detect_realistic,
   detect_nearest,
   detect_nearest_scaled,
 };
@@ -66,11 +68,25 @@ open_output_file (const char *outfname, int outwidth, int outheight, uint16_t **
     }
   if (verbose)
     {
-      printf ("Rendering %s in resolution %ix%i:", outfname, outwidth, outheight);
+      printf ("Rendering %s in resolution %ix%i: 00%%", outfname, outwidth, outheight);
       fflush (stdout);
       record_time ();
     }
   return out;
+}
+
+static void
+print_progress (int p, int max)
+{
+  if (!verbose)
+    return;
+  int percent = (p * 100 + max / 2) / max;
+  int pastpercent = ((p - 1) * 100 + max / 2) / max;
+  if (pastpercent != percent)
+    {
+      printf ("[3D%2i%%", percent);
+      fflush (stdout);
+    }
 }
 
 /* Write one row.  */
@@ -79,7 +95,7 @@ write_row (TIFF *out, int y, uint16_t *outrow)
 {
   if (TIFFWriteScanline(out, outrow, y, 0) < 0)
     {
-      fprintf (stderr, "Write error on line %i\n", y);
+      fprintf (stderr, "Write error on line %i\\n", y);
       exit (1);
     }
 }
@@ -105,6 +121,8 @@ parse_mode (const char *mode)
     return predictive;
   else if (!strcmp (mode, "combined"))
     return combined;
+  else if (!strcmp (mode, "detect-realistic"))
+    return detect_realistic;
   else if (!strcmp (mode, "detect-nearest"))
     return detect_nearest;
   else if (!strcmp (mode, "detect-nearest-scaled"))
@@ -135,6 +153,7 @@ main (int argc, char **argv)
 {
   const char *infname = NULL, *outfname = NULL, *cspname = NULL, *error = NULL;
   enum output_mode mode = interpolated;
+  float age = -100;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
 
   binname = argv[0];
@@ -153,6 +172,14 @@ main (int argc, char **argv)
 	    print_help ();
 	  i++;
 	  mode = parse_mode (argv[i]);
+	}
+      else if (!strcmp (argv[i], "--age"))
+	{
+	  if (i == argc - 1)
+	    print_help ();
+	  i++;
+	  if (!sscanf (argv[i], "%f",&age))
+	    print_help ();
 	}
       else if (!strcmp (argv[i], "--color-model"))
 	{
@@ -217,6 +244,8 @@ main (int argc, char **argv)
       exit (1);
     }
   fclose (in);
+  if (age != -100)
+    rparam.age = age;
 
   if (color_model != render_parameters::color_model_max)
     rparam.color_model = color_model;
@@ -346,6 +375,84 @@ main (int argc, char **argv)
 	TIFFClose (out);
       }
       break;
+    case detect_realistic:
+      {
+	render_scr_detect_superpose_img render (dparam, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	int downscale = 5;
+	int outwidth = scan.width / downscale;
+	int outheight = scan.height / downscale;
+	uint16_t *outrow;
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < scan.height / downscale; y++)
+	  {
+	    for (int x = 0; x < scan.width / downscale; x++)
+	      {
+		luminosity_t srr = 0, sgg = 0, sbb = 0;
+		for (int yy = 0; yy < downscale; yy++)
+		  for (int xx = 0; xx < downscale; xx++)
+		    {
+			rgbdata rgb = render.fast_sample_pixel_img (x * downscale + xx,
+								    y * downscale + yy);
+			srr += rgb.red;
+			sgg += rgb.green;
+			sbb += rgb.blue;
+		    }
+		int r, g, b;
+		render.set_color (srr / (downscale * downscale),
+			       	  sgg / (downscale * downscale),
+				  sbb / (downscale * downscale), &r, &g, &b);
+		outrow[3 * x] = r;
+		outrow[3 * x + 1] = g;
+		outrow[3 * x + 2] = b;
+	      }
+	    write_row (out, y, outrow);
+	    print_progress (y, scan.height / downscale);
+	  }
+	TIFFClose (out);
+	break;
+      }
+    case detect_adjusted:
+      {
+	render_scr_detect render (dparam, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	int downscale = 5;
+	int outwidth = scan.width / downscale;
+	int outheight = scan.height / downscale;
+	uint16_t *outrow;
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < scan.height / downscale; y++)
+	  {
+	    for (int x = 0; x < scan.width / downscale; x++)
+	      {
+		luminosity_t srr = 0, sgg = 0, sbb = 0;
+		for (int yy = 0; yy < downscale; yy++)
+		  for (int xx = 0; xx < downscale; xx++)
+		    {
+			rgbdata rgb = render.fast_get_adjusted_pixel (x * downscale + xx,
+								      y * downscale + yy);
+			srr += rgb.red;
+			sgg += rgb.green;
+			sbb += rgb.blue;
+		    }
+		int r, g, b;
+		render.set_color (srr / (downscale * downscale),
+			       	  sgg / (downscale * downscale),
+				  sbb / (downscale * downscale), &r, &g, &b);
+		outrow[3 * x] = r;
+		outrow[3 * x + 1] = g;
+		outrow[3 * x + 2] = b;
+	      }
+	    write_row (out, y, outrow);
+	    print_progress (y, scan.height / downscale);
+	  }
+	TIFFClose (out);
+	break;
+      }
     case detect_nearest:
       {
 	render_scr_nearest render (dparam, scan, rparam, 65535);
@@ -373,11 +480,12 @@ main (int argc, char **argv)
 			sgg += gg;
 			sbb += bb;
 		    }
-		outrow[3 * x] = srr / downscale / downscale;
-		outrow[3 * x + 1] = sgg / downscale / downscale;
-		outrow[3 * x + 2] = sbb / downscale / downscale;
+		outrow[3 * x] = srr / (downscale * downscale);
+		outrow[3 * x + 1] = sgg / (downscale * downscale);
+		outrow[3 * x + 2] = sbb / (downscale * downscale);
 	      }
 	    write_row (out, y, outrow);
+	    print_progress (y, scan.height / downscale);
 	  }
 	TIFFClose (out);
       }
@@ -397,24 +505,26 @@ main (int argc, char **argv)
 	  {
 	    for (int x = 0; x < scan.width / downscale; x++)
 	      {
-		int srr = 0, sgg = 0, sbb = 0;
-		int rr, gg, bb;
+		luminosity_t srr = 0, sgg = 0, sbb = 0;
 		for (int yy = 0; yy < downscale; yy++)
 		  for (int xx = 0; xx < downscale; xx++)
 		    {
-			render.render_pixel_img (x * downscale + xx,
-						 y * downscale + yy,
-						 &rr, &gg, &bb);
-			srr += rr / downscale / downscale;
-			sgg += gg / downscale / downscale;
-			sbb += bb / downscale / downscale;
+			luminosity_t rr, gg, bb;
+			render.render_raw_pixel_img (x * downscale + xx,
+						     y * downscale + yy,
+						     &rr, &gg, &bb);
+			srr += rr;
+			sgg += gg;
+			sbb += bb;
 		    }
-		outrow[3 * x] = srr / downscale / downscale;
-		outrow[3 * x + 1] = sgg / downscale / downscale;
-		outrow[3 * x + 2] = sbb / downscale / downscale;
+		int r, g, b;
+		render.set_color (srr / (downscale * downscale), sgg / (downscale * downscale), sbb / (downscale * downscale), &r, &g, &b);
+		outrow[3 * x] = r;
+		outrow[3 * x + 1] = g;
+		outrow[3 * x + 2] = b;
 	      }
 	    write_row (out, y, outrow);
-	    printf ("%i\n",y);
+	    print_progress (y, scan.height / downscale);
 	  }
 	TIFFClose (out);
       }
