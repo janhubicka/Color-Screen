@@ -194,6 +194,13 @@ static luminosity_t cached_gamma, cached_red, cached_blue, cached_green;
 static unsigned short **cached_data;
 static pthread_mutex_t lock;
 
+__attribute__ ((constructor))
+void
+render_init ()
+{
+    if (pthread_mutex_init(&lock, NULL) != 0)
+      abort ();
+}
 
 static bool
 compute_grayscale (image_data &img,
