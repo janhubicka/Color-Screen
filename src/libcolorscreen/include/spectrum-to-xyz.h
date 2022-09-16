@@ -48,11 +48,11 @@ public:
   /* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
      in sRGB white  */
   void normalize_xyz_to_backlight_whitepoint ();
-  /* Write spectras to tmp directory so they can be printed by gnuplot script.  */
-  void debug_write_spectras ();
+  /* Write spectra to tmp directory so they can be printed by gnuplot script.  */
+  void debug_write_spectra ();
 
 
-  /* Set dyes to given measured spectras.  */
+  /* Set dyes to given measured spectra.  */
   void set_dyes_to_duffay (int measurement);
   void set_dyes_to_autochrome ();
   void set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
