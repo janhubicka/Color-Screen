@@ -64,4 +64,16 @@ plot '/tmp/tartrazine-trans.dat' with linespoints linestyle 4, \
      '/tmp/o2_erythrosine-trans.dat' with linespoints linestyle 1, \
      '/tmp/o2_rose-trans.dat' with linespoints linestyle 6, \
      '/tmp/o2_flexo-trans.dat' with linespoints linestyle 3, \
-     '/tmp/o2_crystal-trans.dat' with linespoints linestyle 7, \
+     '/tmp/o2_crystal-trans.dat' with linespoints linestyle 7, 
+
+set title "o2 autochrome dyes"
+plot '/tmp/patent-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_patent-trans.dat' with linespoints linestyle 2, 
+plot '/tmp/erythrosine-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_erythrosine-trans.dat' with linespoints linestyle 2, 
+plot '/tmp/rose-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_rose-trans.dat' with linespoints linestyle 2, 
+plot '/tmp/flexo-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_flexo-trans.dat' with linespoints linestyle 2, 
+plot '/tmp/crystal-trans.dat' with linespoints linestyle 1, \
+     '/tmp/o2_crystal-trans.dat' with linespoints linestyle 2, 

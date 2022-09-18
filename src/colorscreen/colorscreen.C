@@ -518,7 +518,9 @@ main (int argc, char **argv)
 			sbb += bb;
 		    }
 		int r, g, b;
-		render.set_color (srr / (downscale * downscale), sgg / (downscale * downscale), sbb / (downscale * downscale), &r, &g, &b);
+		render.set_color (srr / (downscale * downscale),
+			       	  sgg / (downscale * downscale),
+				  sbb / (downscale * downscale), &r, &g, &b);
 		outrow[3 * x] = r;
 		outrow[3 * x + 1] = g;
 		outrow[3 * x + 2] = b;

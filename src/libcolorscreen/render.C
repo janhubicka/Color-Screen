@@ -7,6 +7,9 @@ const char * render_parameters::color_model_names [] = {
   "paget",
   "duffay1",
   "duffay2",
+  "duffay3",
+  "duffay4",
+  "duffay5",
   "autochrome-film",
   "autochrome-Casella-Tsukada",
 };
@@ -367,15 +370,13 @@ render::precompute_all (bool duffay)
 	  break;
 	}
       case render_parameters::color_model_duffay1:
-	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (0);
-	  break;
-	}
       case render_parameters::color_model_duffay2:
+      case render_parameters::color_model_duffay3:
+      case render_parameters::color_model_duffay4:
+      case render_parameters::color_model_duffay5:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay (1);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay ((int)m_params.color_model - (int)render_parameters::color_model_duffay1);
 	  break;
 	}
       case render_parameters::color_model_max:

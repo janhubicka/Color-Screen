@@ -63,6 +63,9 @@ struct DLL_PUBLIC render_parameters
       color_model_paget,
       color_model_duffay1,
       color_model_duffay2,
+      color_model_duffay3,
+      color_model_duffay4,
+      color_model_duffay5,
       color_model_autochrome,
       color_model_autochrome2,
       color_model_max
