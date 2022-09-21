@@ -4,8 +4,11 @@
 
 const char * render_parameters::color_model_names [] = {
   "none",
+  "red",
+  "green",
+  "blue",
   "paget",
-  "duffay1",
+  "dufaycolor_NSMM_Bradford_11948",
   "duffay2",
   "duffay3",
   "duffay4",
@@ -55,7 +58,7 @@ get_new_lookup_table (struct lookup_table_params &p)
   luminosity_t min = pow (p.gray_min / (luminosity_t)p.img_maxval, gamma);
   luminosity_t max = pow (p.gray_max / (luminosity_t)p.img_maxval, gamma);
 
-  printf ("Lookup table for %i %i %f %i %i\n", p.img_maxval,p.maxval,p.gamma,p.gray_min,p.gray_max);
+  //printf ("Lookup table for %i %i %f %i %i\n", p.img_maxval,p.maxval,p.gamma,p.gray_min,p.gray_max);
 
   if (min == max)
     max += 0.0001;
@@ -201,8 +204,8 @@ __attribute__ ((constructor))
 void
 render_init ()
 {
-    if (pthread_mutex_init(&lock, NULL) != 0)
-      abort ();
+  if (pthread_mutex_init(&lock, NULL) != 0)
+    abort ();
 }
 
 static bool
@@ -343,6 +346,34 @@ render::precompute_all (bool duffay)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */
       case render_parameters::color_model_none:
+	break;
+      case render_parameters::color_model_red:
+	{
+	  color_matrix m (1, 0, 0, 0,
+			  0.5, 0, 0, 0,
+			  0.5, 0, 0, 0,
+			  0, 0, 0, 1);
+	  color = m * color;
+	}
+	break;
+      case render_parameters::color_model_green:
+	{
+	  color_matrix m (0, 0.5,  0, 0,
+			  0, 1,0, 0,
+			  0, 0.5,0, 0,
+			  0, 0, 0,1);
+	  color = m * color;
+	}
+	break;
+      case render_parameters::color_model_blue:
+	{
+	  color_matrix m (0, 0, 0.5,  0,
+			  0, 0, 0.5,0,
+			  0, 0, 1,0,
+			  0, 0, 0, 1);
+	  color = m * color;
+	}
+	break;
 	break;
       /* Colors found to be working for Finlays and Pagets pretty well.  */
       case render_parameters::color_model_paget:

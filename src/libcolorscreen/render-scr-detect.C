@@ -263,6 +263,24 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	      }
 	  }
       }
+    case render_type_scr_relax:
+      {
+	render_scr_relax render (param, img, rparam, 255);
+	render.precompute_all ();
+
+#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	for (int y = 0; y < height; y++)
+	  {
+	    coord_t py = (y + yoffset) * step;
+	    for (int x = 0; x < width; x++)
+	      {
+		int r, g, b;
+		render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
+		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	      }
+	  }
+      }
+      break;
     }
 }
 void
@@ -319,4 +337,86 @@ render_scr_nearest_scaled::precompute_all ()
   render_scr_detect::precompute_all ();
   patches_cache_params p = {m_color_class_map->id, m_color_class_map, &m_img, this};
   m_patches =  patches_cache.get (p);
+}
+
+void
+render_scr_relax::precompute_all ()
+{
+  const int max_patch_size = 8;
+  const int min_patch_size = 4;
+  render_scr_detect::precompute_all ();
+  for (int color = 0; color < 3; color++)
+    cdata[color] = (luminosity_t *)calloc (m_img.width * m_img.height, sizeof (luminosity_t));
+  luminosity_t *tmp = (luminosity_t *)malloc (m_img.width * m_img.height * sizeof (luminosity_t));
+#pragma omp parallel for default(none) 
+  for (int y = 0; y < m_img.height; y++)
+    for (int x = 0; x < m_img.width; x++)
+      {
+	scr_detect::color_class t = m_color_class_map->get_class (x, y);
+	if (t == scr_detect::unknown)
+	  continue;
+	struct queue {int x, y;} queue [max_patch_size];
+	luminosity_t sum = get_data (x, y);
+	int start = 0, end = 1;
+	queue[0].x = x;
+	queue[0].y = y;
+	while (start < end)
+	  {
+	    int cx = queue[start].x;
+	    int cy = queue[start].y;
+	    for (int yy = std::max (cy - 1, 0); yy < std::min (cy + 2, m_img.height); yy++)
+	      for (int xx = std::max (cx - 1, 0); xx < std::min (cx + 2, m_img.width); xx++)
+		if ((xx != cx || yy != cy) /*&& !visited[yy * m_img.width + xx]*/ && m_color_class_map->get_class (xx, yy) == t)
+		  {
+		    int i;
+		    for (i = 0; i < end; i++)
+		      if (queue[i].x == xx && queue[i].y == yy)
+			break;
+		    if (i != end)
+		      continue;
+		    sum += get_data (xx,yy);
+		    queue[end].x = xx;
+		    queue[end].y = yy;
+		    //visited[yy * m_img.width + xx] = 1;
+		    end++;
+		    if (end == max_patch_size)
+		      goto done;
+		  }
+	    start++;
+	  }
+#if 0
+	if (end < min_patch_size)
+	  continue;
+#endif
+	done:
+	cdata[(int)t][y * m_img.width + x] = sum / end;
+      }
+  for (int color = 0; color < 3; color++)
+    {
+      for (int iteration = 0; iteration < 100; iteration ++)
+	{
+#pragma omp parallel for default(none) shared(color,tmp)
+	  for (int y = 1; y < m_img.height - 1; y++)
+	    for (int x = 1; x < m_img.width - 1; x++)
+	      {
+		if (m_color_class_map->get_class (x, y) == color)
+		  {
+		    tmp[y * m_img.width + x] = get_luminosity (color, x, y);
+		    continue;
+		  }
+		luminosity_t lum = get_luminosity (color, x - 1, y) + get_luminosity (color, x + 1, y) + get_luminosity (color, x, y - 1) + get_luminosity (color, x, y + 1)
+		  		   + (get_luminosity (color, x - 1, y - 1) + get_luminosity (color, x + 1, y - 1) + get_luminosity (color, x - 1, y + 1) + get_luminosity (color, x + 1, y + 1))
+				   + get_luminosity (color, x, y);
+		tmp[y * m_img.width + x] = lum * ((luminosity_t)1 / 9);
+	      }
+	  std::swap (tmp, cdata[color]);
+	}
+    }
+  free (tmp);
+}
+render_scr_relax::~render_scr_relax()
+{
+  free (cdata[0]);
+  free (cdata[1]);
+  free (cdata[2]);
 }

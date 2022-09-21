@@ -230,5 +230,6 @@ render_to_scr::render_tile (enum render_type_t render_type,
         printf ("\n");
       prev_time = end_time;
       prev_time_set = true;
+      fflush (stdout);
     }
 }

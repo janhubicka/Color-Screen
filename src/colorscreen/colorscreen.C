@@ -14,6 +14,7 @@ enum output_mode
   detect_realistic,
   detect_nearest,
   detect_nearest_scaled,
+  detect_relax,
 };
 
 static bool verbose = false;
@@ -127,6 +128,8 @@ parse_mode (const char *mode)
     return detect_nearest;
   else if (!strcmp (mode, "detect-nearest-scaled"))
     return detect_nearest_scaled;
+  else if (!strcmp (mode, "detect-relaxation"))
+    return detect_relax;
   else
     {
       fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
@@ -493,6 +496,47 @@ main (int argc, char **argv)
     case detect_nearest_scaled:
       {
 	render_scr_nearest_scaled render (dparam, scan, rparam, 65535);
+	render.precompute_all ();
+	if (verbose)
+	  print_time ();
+	int downscale = 5;
+	int outwidth = scan.width / downscale;
+	int outheight = scan.height / downscale;
+	uint16_t *outrow;
+	TIFF *out = open_output_file (outfname, outwidth, outheight, &outrow);
+	for (int y = 0; y < scan.height / downscale; y++)
+	  {
+	    for (int x = 0; x < scan.width / downscale; x++)
+	      {
+		luminosity_t srr = 0, sgg = 0, sbb = 0;
+		for (int yy = 0; yy < downscale; yy++)
+		  for (int xx = 0; xx < downscale; xx++)
+		    {
+			luminosity_t rr, gg, bb;
+			render.render_raw_pixel_img (x * downscale + xx,
+						     y * downscale + yy,
+						     &rr, &gg, &bb);
+			srr += rr;
+			sgg += gg;
+			sbb += bb;
+		    }
+		int r, g, b;
+		render.set_color (srr / (downscale * downscale),
+			       	  sgg / (downscale * downscale),
+				  sbb / (downscale * downscale), &r, &g, &b);
+		outrow[3 * x] = r;
+		outrow[3 * x + 1] = g;
+		outrow[3 * x + 2] = b;
+	      }
+	    write_row (out, y, outrow);
+	    print_progress (y, scan.height / downscale);
+	  }
+	TIFFClose (out);
+      }
+      break;
+    case detect_relax:
+      {
+	render_scr_relax render (dparam, scan, rparam, 65535);
 	render.precompute_all ();
 	if (verbose)
 	  print_time ();

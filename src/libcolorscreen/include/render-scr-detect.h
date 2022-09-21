@@ -76,7 +76,8 @@ public:
     render_type_pixel_colors,
     render_type_realistic_scr,
     render_type_scr_nearest,
-    render_type_scr_nearest_scaled
+    render_type_scr_nearest_scaled,
+    render_type_scr_relax
   };
   rgbdata fast_get_adjusted_pixel (int x, int y)
   {
@@ -220,6 +221,45 @@ public:
 };
 
 extern class distance_list distance_list;
+class render_scr_relax : public render_scr_detect
+{
+public:
+  inline render_scr_relax (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
+   : render_scr_detect (param, data, rparam, dst_maxval)
+  { 
+  }
+  void precompute_all ();
+  void
+  render_raw_pixel_img (coord_t xx, coord_t yy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    int x = xx + 0.5;
+    int y = yy + 0.5;
+    if (x < 0 || x > m_img.width || y < 0 || y > m_img.height)
+    {
+      *r = *g = *b = 0;
+    }
+    else
+    {
+    *r = get_luminosity (0, x, y);
+    *g = get_luminosity (1, x, y);
+    *b = get_luminosity (2, x, y);
+    }
+  }
+  void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    luminosity_t rr, gg, bb;
+    render_raw_pixel_img (x, y, &rr, &gg, &bb);
+    set_color (rr,gg,bb,r,g,b);
+  }
+  ~render_scr_relax();
+private:
+  luminosity_t *cdata[3];
+  luminosity_t get_luminosity (int color, int x, int y)
+    {
+      return cdata[color][y * m_img.width + x];
+    }
+};
 class render_scr_nearest : public render_scr_detect
 {
 public:

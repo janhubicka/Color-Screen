@@ -45,25 +45,17 @@ class patches
       return m_vec.size ();
     }
     /* Find coordinates of nearest patch in each color.  Set to -1 if patch is not found.  */
-    bool
-    nearest_patches (coord_t x, coord_t y, int *rx, int *ry, patch_index_t *rp);
-    bool
-    fast_nearest_patches (int x, int y, int *rx, int *ry, patch_index_t *rp);
+    bool nearest_patches (coord_t x, coord_t y, int *rx, int *ry, patch_index_t *rp);
+    bool fast_nearest_patches (int x, int y, int *rx, int *ry, patch_index_t *rp);
 private:
     int m_width, m_height;
     void
     set_patch_index (int x, int y, patch_index_t index, int color)
     {
       m_map[y * m_width + x] = (index << 2) + color;
-#if 0
-      if (get_patch_color (x,y) != color)
-	abort ();
-      if (get_patch_index (x,y) != index)
-	abort ();
-#endif
     }
     std::vector<patch> m_vec;
     patch_index_t *m_map;
-    static const bool debug = false;
+    static const bool debug = true;
 };
 #endif
