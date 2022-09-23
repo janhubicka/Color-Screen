@@ -9,11 +9,11 @@ const char * render_parameters::color_model_names [] = {
   "blue",
   "paget",
   "dufaycolor_NSMM_Bradford_11948",
-  "duffay2",
-  "duffay3",
-  "duffay4",
-  "duffay5",
-  "autochrome-film",
+  "dufaycolor_NSMM_Bradford_11951",
+  "dufaycolor_NSMM_Bradford_11960",
+  "dufaycolor_NSMM_Bradford_11967",
+  "spicer_dufay_NSMM_Bradford_12075",
+  "cinecolor_koshofer",
   "autochrome-Casella-Tsukada",
 };
 const char * render_parameters::dye_balance_names [] = {
@@ -84,7 +84,7 @@ luminosity_t *
 get_new_out_lookup_table (struct out_lookup_table_params &p)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
-  printf ("Output table for %i\n", p.maxval);
+  //printf ("Output table for %i\n", p.maxval);
   for (int i = 0; i < 65536; i++)
     lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * p.maxval;
   return lookup_table;

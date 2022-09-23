@@ -151,6 +151,18 @@ parse_color_model (const char *model)
   return render_parameters::color_model_max;
 }
 
+enum render_parameters::dye_balance_t
+parse_dye_balance (const char *model)
+{
+  int j;
+  for (j = 0; j < render_parameters::dye_balance_max; j++)
+    if (!strcmp (model, render_parameters::dye_balance_names[j]))
+      return (render_parameters::dye_balance_t)j;
+  fprintf (stderr, "Unkonwn dye balancel:%s\n", model);
+  print_help ();
+  return render_parameters::dye_balance_max;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -158,6 +170,7 @@ main (int argc, char **argv)
   enum output_mode mode = interpolated;
   float age = -100;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
+  render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
 
   binname = argv[0];
 
@@ -190,6 +203,13 @@ main (int argc, char **argv)
 	    print_help ();
 	  i++;
 	  color_model = parse_color_model (argv[i]);
+	}
+      else if (!strcmp (argv[i], "--dye-balance"))
+	{
+	  if (i == argc - 1)
+	    print_help ();
+	  i++;
+	  dye_balance = parse_dye_balance (argv[i]);
 	}
       else if (!strncmp (argv[i], "--mode=", 7))
 	mode = parse_mode (argv[i]+7);
@@ -252,6 +272,8 @@ main (int argc, char **argv)
 
   if (color_model != render_parameters::color_model_max)
     rparam.color_model = color_model;
+  if (dye_balance != render_parameters::dye_balance_max)
+    rparam.dye_balance = dye_balance;
 
   if (verbose)
     {

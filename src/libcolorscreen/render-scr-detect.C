@@ -26,7 +26,7 @@ color_class_map *get_color_class_map(color_class_params &p)
   image_data &img = *p.img;
   color_class_map *map = new color_class_map;
   map->allocate (img.width, img.height);
-  printf ("New color map\n");
+  //printf ("New color map\n");
 #pragma omp parallel for default(none) shared(img,map,p)
   for (int y = 0; y < img.height; y++)
     for (int x = 0; x < img.width; x++)
