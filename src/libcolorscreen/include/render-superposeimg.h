@@ -164,7 +164,7 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
   iy = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
   if (!m_color)
     {
-      luminosity_t graydata = fast_get_img_pixel (x, y);
+      luminosity_t graydata = get_img_pixel (x, y);
       *r = graydata * m_screen->mult[iy][ix][0] + m_screen->add[iy][ix][0];
       *g = graydata * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1];
       *b = graydata * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2];
