@@ -68,7 +68,8 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
   *(pixels + y * rowstride + x * pixelbytes) = r;
   *(pixels + y * rowstride + x * pixelbytes + 1) = g;
   *(pixels + y * rowstride + x * pixelbytes + 2) = b;
-  *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
+  if (pixelbytes > 3)
+    *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
 }
 
 void
@@ -92,6 +93,8 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 			        double xoffset, double yoffset,
 			        double step)
 {
+  if (width <= 0 || height <= 0)
+    return;
   if (stats == -1)
     stats = getenv ("CSSTATS") != NULL;
   struct timeval start_time;
