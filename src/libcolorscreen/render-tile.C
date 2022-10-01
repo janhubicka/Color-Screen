@@ -16,22 +16,25 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
     *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
 }
 
-void
+bool
 render_to_scr::render_tile (enum render_type_t render_type,
 			    scr_to_img_parameters &param, image_data &img,
 			    render_parameters &rparam, bool color,
 			    unsigned char *pixels, int pixelbytes, int rowstride,
 			    int width, int height,
 			    double xoffset, double yoffset,
-			    double step)
+			    double step,
+			    progress_info *progress)
 {
   if (width <= 0 || height <= 0)
-    return;
+    return true;
   if (stats == -1)
     stats = getenv ("CSSTATS") != NULL;
   struct timeval start_time;
   if (stats)
     gettimeofday (&start_time, NULL);
+  if (progress)
+    progress->set_task ("precomputing", 1);
   switch (render_type)
     {
     case render_type_original:
@@ -39,21 +42,27 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	render_img render (param, img, rparam, 255);
 	if (color)
 	  render.set_color_display ();
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
 	if (!color && step > 1)
 	  {
 	    luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
-	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+	        if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		if (progress)
+		  progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
@@ -61,32 +70,42 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+	        if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		if (progress)
+		  progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
 	  }
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					 &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+					   &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
 	  }
       }
       break;
@@ -96,36 +115,47 @@ render_to_scr::render_tile (enum render_type_t render_type,
 				     rparam, 255, false, true);
 	if (color)
 	  render.set_color_display ();
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+		if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		 if (progress)
+		   progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
 	  }
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	 if (progress)
+	   progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					 &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+					   &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
 	  }
       }
       break;
@@ -135,36 +165,47 @@ render_to_scr::render_tile (enum render_type_t render_type,
 				     rparam, 255, false, false);
 	if (color)
 	  render.set_color_display ();
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+		if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		 if (progress)
+		   progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
 	  }
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	 if (progress)
+	   progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img_antialias ((x + xoffset) * step, py,
-						   1 * step, 8, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img_antialias ((x + xoffset) * step, py,
+						     1 * step, 8, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
 	  }
       }
       break;
@@ -176,42 +217,54 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	rparam.screen_compensation = (render_type == render_type_predictive);
 	render_interpolate render (param, img,
 				   rparam, 255);
-	render.precompute_img_range (xoffset * step, yoffset * step,
-				     (width + xoffset) * step,
-				     (height + yoffset) * step);
+	if (!render.precompute_img_range (xoffset * step, yoffset * step,
+				          (width + xoffset) * step,
+				          (height + yoffset) * step, progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
 
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					 &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+					   &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
 	  }
       }
       break;
     case render_type_fast:
       {
 	render_fast render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
 
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					 &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+					   &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
 	  }
       }
     }
@@ -223,7 +276,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 
       gettimeofday (&end_time, NULL);
       double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
-      printf ("Render type:%i resolution:%ix%i time:%.3fs fps:%.3f", render_type, width, height, time, 1/time);
+      printf ("\nRender type:%i resolution:%ix%i time:%.3fs fps:%.3f", render_type, width, height, time, 1/time);
       if (prev_time_set)
 	{
 	  double time2 = end_time.tv_sec + end_time.tv_usec/1000000.0 - prev_time.tv_sec - prev_time.tv_usec/1000000.0;
@@ -235,4 +288,5 @@ render_to_scr::render_tile (enum render_type_t render_type,
       prev_time_set = true;
       fflush (stdout);
     }
+  return !progress || !progress->cancelled ();
 }

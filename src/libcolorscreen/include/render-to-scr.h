@@ -1,5 +1,6 @@
 #ifndef RENDER_TO_SCR_H
 #define RENDER_TO_SCR_H
+#include "progress-info.h"
 #include "render.h"
 #include "scr-to-img.h"
 
@@ -15,9 +16,9 @@ public:
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
-  DLL_PUBLIC void precompute_all ();
-  DLL_PUBLIC void precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
-  DLL_PUBLIC void precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t) {precompute_all ();}
+  DLL_PUBLIC bool precompute_all (progress_info *progress);
+  DLL_PUBLIC bool precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress) {return precompute_all (progress);}
+  DLL_PUBLIC bool precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress) {return precompute_all (progress);}
   /* This returns screen coordinate width of rendered output.  */
   int get_width ()
   {
@@ -28,9 +29,9 @@ public:
   {
     return m_scr_height;
   }
-  DLL_PUBLIC static void render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
+  DLL_PUBLIC static bool render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
-				      double xoffset, double yoffset, double step);
+				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
 protected:
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);

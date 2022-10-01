@@ -6,11 +6,12 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data
 {
 }
 
-flatten_attr void
-render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax)
+flatten_attr bool
+render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   assert (!m_prec_red);
-  render_to_scr::precompute (xmin, ymin, xmax, ymax);
+  if (!render_to_scr::precompute (xmin, ymin, xmax, ymax, progress))
+    return false;
   if (m_params.screen_compensation || m_params.precise)
     {
       static screen blured_screen;
@@ -34,6 +35,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   m_prec_yshift = -(ymin - 4);
   m_prec_width = xmax - xmin + 8;
   m_prec_height = ymax - ymin + 8;
+  /* TODO: progress.  */
   if (m_scr_to_img.get_type () != Dufay)
     {
       /* Thames, Finlay and Paget screen are organized as follows:
@@ -205,6 +207,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  }
 #undef pixel
     }
+  return true;
 }
 
 flatten_attr void

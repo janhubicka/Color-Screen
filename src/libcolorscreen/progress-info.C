@@ -44,7 +44,7 @@ file_progress_info::~file_progress_info ()
   if (m_displayed)
     {
       const char *task = m_last_task;
-      fprintf (m_file, "%s: %2.2f%%\n", task, 100.0);
+      fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
       fflush (m_file);
       free ((void *)task);
     }
@@ -73,7 +73,7 @@ file_progress_info::display_progress ()
         fprintf (m_file, "\r%s: %2.2f%%", task, status);
       if (!m_last_task)
 	m_last_task = strdup (task);
-      else if (!strcmp (m_last_task, task))
+      else if (strcmp (m_last_task, task))
 	{
 	  const char *t = m_last_task;
 	  m_last_task = NULL;

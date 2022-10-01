@@ -2,6 +2,7 @@
 #define LRU_CACHE
 #include <pthread.h>
 #include <atomic>
+#include <include/progress-info.h>
 class lru_caches
 {
 public:
@@ -21,7 +22,7 @@ extern class lru_caches lru_caches;
    P represents parameters which are used to produce T.
    get_new is a function computing T based on P.  It is expected to
    allocate memory via new and lru_cache will eventually delete it.  */
-template<typename P, typename T, T *get_new (P &), int cache_size>
+template<typename P, typename T, T *get_new (P &, progress_info *progress), int cache_size>
 class lru_cache
 {
 public:
@@ -55,7 +56,7 @@ public:
 
   /* Get T for parameters P; do caching.
      If ID is non-NULL initialize it to the unique identifier of the cached data.  */
-  T *get(P &p, unsigned long *id = NULL)
+  T *get(P &p, progress_info *progress, unsigned long *id = NULL)
   {
     int size = 0;
     unsigned long time = lru_caches::get ();
@@ -88,17 +89,32 @@ public:
     else
       {
 	e = new cache_entry;
+	if (!e)
+	  {
+	    pthread_mutex_unlock (&lock);
+	    return NULL;
+	  }
 	e->next = entries;
 	entries = e;
       }
     e->params = p;
-    e->val = get_new (e->params);
+    e->val = get_new (e->params, progress);
     e->nuses = 1;
     e->id = time;
     e->last_used = time;
     T *ret = e->val;
     if (id)
       *id = e->id;
+    if (!ret)
+      {
+	for (cache_entry **e2 = &entries; ; e2 = &(*e2)->next)
+	  if (*e2 == e)
+	    {
+	      *e2 = e->next;
+	      delete e;
+	      break;
+	    }
+      }
     pthread_mutex_unlock (&lock);
     return ret;
   }

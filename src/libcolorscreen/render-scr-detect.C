@@ -46,19 +46,32 @@ struct color_class_params
 	   && p == o.p;
   }
 };
-color_class_map *get_color_class_map(color_class_params &p)
+
+color_class_map *get_color_class_map(color_class_params &p, progress_info *progress)
 {
   image_data &img = *p.img;
   color_class_map *map = new color_class_map;
   map->allocate (img.width, img.height);
   //printf ("New color map\n");
-#pragma omp parallel for default(none) shared(img,map,p)
+  if (progress)
+    progress->set_task ("computing screen", p.img->height);
+#pragma omp parallel for default(none) shared(progress,img,map,p)
   for (int y = 0; y < img.height; y++)
-    for (int x = 0; x < img.width; x++)
-      map->set_class (x, y,
-		      p.d->classify_color (img.rgbdata[y][x].r,
-					   img.rgbdata[y][x].g,
-					   img.rgbdata[y][x].b));
+    {
+      if (!progress || !progress->cancel ())
+	for (int x = 0; x < img.width; x++)
+	  map->set_class (x, y,
+			  p.d->classify_color (img.rgbdata[y][x].r,
+					       img.rgbdata[y][x].g,
+					       img.rgbdata[y][x].b));
+       if (progress)
+	 progress->inc_progress ();
+    }
+  if (progress && progress->cancelled ())
+    {
+      delete map;
+      return NULL;
+    }
   return map;
 }
 static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache;
@@ -80,9 +93,16 @@ struct patches_cache_params
 	   && gray_data_id == o.gray_data_id;
   }
 };
-patches *get_patches(patches_cache_params &p)
+/* TODO: progress info  */
+patches *get_patches(patches_cache_params &p, progress_info *progress)
 {
-  return new patches (*p.img, *p.r, *p.map, 16);
+  patches *pat = new patches (*p.img, *p.r, *p.map, 16, progress);
+  if (progress && progress->cancelled ())
+    {
+      delete pat;
+      return NULL;
+    }
+  return pat;
 }
 static lru_cache <patches_cache_params, patches, get_patches, 1> patches_cache;
 
@@ -104,9 +124,9 @@ struct color_data_params
   }
 };
 
-/* Do relaxation and demosaik color data.  */
+/* Do relaxation and demosaik color data.  TODO:progress  */
 static color_data *
-get_new_color_data (struct color_data_params &p)
+get_new_color_data (struct color_data_params &p, progress_info *progress)
 {
   color_data *data = new color_data (p.img->width, p.img->height);
   if (!data || !data->m_data[0] || !data->m_data[1] || !data->m_data[2])
@@ -117,7 +137,8 @@ get_new_color_data (struct color_data_params &p)
     }
   const int max_patch_size = 8;
   const int min_patch_size = 1;
-  luminosity_t *tmp = (luminosity_t *)malloc (p.img->width * p.img->height * sizeof (luminosity_t));
+  if (progress)
+    progress->set_task ("determining colors", p.img->height);
 #pragma omp parallel for default(none) shared(p,data)
   for (int y = 0; y < p.img->height; y++)
     for (int x = 0; x < p.img->width; x++)
@@ -159,28 +180,50 @@ get_new_color_data (struct color_data_params &p)
 	done:
 	data->m_data[(int)t][y * p.img->width + x] = sum / end;
       }
+  if (progress && progress->cancelled ())
+    {
+      delete data;
+      return NULL;
+    }
+  luminosity_t *tmp = (luminosity_t *)malloc (p.img->width * p.img->height * sizeof (luminosity_t));
+  if (progress)
+    progress->set_task ("demosaiking", p.img->height * 100 * 3);
   for (int color = 0; color < 3; color++)
     {
       for (int iteration = 0; iteration < 100; iteration ++)
 	{
-#pragma omp parallel for default(none) shared(color,tmp,data,p)
+#pragma omp parallel for default(none) shared(progress,color,tmp,data,p)
 	  for (int y = 1; y < p.img->height - 1; y++)
-	    for (int x = 1; x < p.img->width - 1; x++)
-	      {
-		if (p.map->get_class (x, y) == color)
+	    {
+	      if (!progress || !progress->cancel ())
+		for (int x = 1; x < p.img->width - 1; x++)
 		  {
-		    tmp[y * p.img->width + x] = data->get_luminosity (color, x, y);
-		    continue;
+		    if (p.map->get_class (x, y) == color)
+		      {
+			tmp[y * p.img->width + x] = data->get_luminosity (color, x, y);
+			continue;
+		      }
+		    luminosity_t lum = data->get_luminosity (color, x - 1, y) + data->get_luminosity (color, x + 1, y) + data->get_luminosity (color, x, y - 1) + data->get_luminosity (color, x, y + 1)
+				       + (data->get_luminosity (color, x - 1, y - 1) + data->get_luminosity (color, x + 1, y - 1) + data->get_luminosity (color, x - 1, y + 1) + data->get_luminosity (color, x + 1, y + 1))
+				       + data->get_luminosity (color, x, y);
+		    tmp[y * p.img->width + x] = lum * ((luminosity_t)1 / 9);
 		  }
-		luminosity_t lum = data->get_luminosity (color, x - 1, y) + data->get_luminosity (color, x + 1, y) + data->get_luminosity (color, x, y - 1) + data->get_luminosity (color, x, y + 1)
-		  		   + (data->get_luminosity (color, x - 1, y - 1) + data->get_luminosity (color, x + 1, y - 1) + data->get_luminosity (color, x - 1, y + 1) + data->get_luminosity (color, x + 1, y + 1))
-				   + data->get_luminosity (color, x, y);
-		tmp[y * p.img->width + x] = lum * ((luminosity_t)1 / 9);
-	      }
+	      if (progress)
+		progress->inc_progress ();
+	    }
 	  std::swap (tmp, data->m_data[color]);
+	  if (progress && progress->cancel ())
+	    break;
 	}
+      if (progress && progress->cancel ())
+	break;
     }
   free (tmp);
+  if (progress && progress->cancelled ())
+    {
+      delete data;
+      return NULL;
+    }
   return data;
 }
 static lru_cache <color_data_params, color_data, get_new_color_data, 1> color_data_cache;
@@ -199,33 +242,36 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 }
 
 void
-render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 void
-render_scr_detect::get_screen_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render_scr_detect::get_screen_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_screen_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_screen_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
-void
+bool
 render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 			        scr_detect_parameters &param, image_data &img,
 			        render_parameters &rparam, bool color,
 			        unsigned char *pixels, int pixelbytes, int rowstride,
 			        int width, int height,
 			        double xoffset, double yoffset,
-			        double step)
+			        double step,
+				progress_info *progress)
 {
   if (width <= 0 || height <= 0)
-    return;
+    return true;
   if (stats == -1)
     stats = getenv ("CSSTATS") != NULL;
   struct timeval start_time;
   if (stats)
     gettimeofday (&start_time, NULL);
+  if (progress)
+    progress->set_task ("precomputing", 1);
   switch (render_type)
     {
     case render_type_original:
@@ -233,191 +279,250 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	if (render_type == render_type_original && step > 1)
 	  {
 	    scr_to_img_parameters dummy;
-	    render_to_scr::render_tile (render::render_type_original, dummy, img, rparam, color, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
-	    return;
+	    return render_to_scr::render_tile (render::render_type_original, dummy, img, rparam, color, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
 	  }
 	scr_to_img_parameters dummy;
 	render_img render (dummy, img, rparam, 255);
 	if (color)
 	  render.set_color_display ();
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.fast_render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					      &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.fast_render_pixel_img ((x + xoffset) * step, py, &r, &g,
+						&b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
       break;
     case render_type_adjusted_color:
       {
 	render_scr_detect render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_adjusted_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_adjusted_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+		if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		if (progress)
+		  progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
 	  }
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_adjusted_pixel_img ((x + xoffset) * step, py, &r, &g,
-					      &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_adjusted_pixel_img ((x + xoffset) * step, py, &r, &g,
+						&b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
       break;
     case render_type_pixel_colors:
       {
 	render_scr_detect render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_screen_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_screen_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
-	      for (int x = 0; x < width; x++)
-		putpixel (pixels, pixelbytes, rowstride, x, y, data[x + width * y].red * 255 + 0.5, data[x + width * y].green * 255 + 0.5, data[x + width * y].blue * 255 + 0.5);
+	      {
+		if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    putpixel (pixels, pixelbytes, rowstride, x, y, data[x + width * y].red * 255 + 0.5, data[x + width * y].green * 255 + 0.5, data[x + width * y].blue * 255 + 0.5);
+		if (progress)
+		  progress->inc_progress ();
+	      }
 	    free (data);
 	    break;
 	  }
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		coord_t px = (x + xoffset) * step;
-		luminosity_t r, g, b;
-		render.get_screen_color (px, py, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r * 255 + 0.5, g * 255 + 0.5, b * 255 + 0.5);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  coord_t px = (x + xoffset) * step;
+		  luminosity_t r, g, b;
+		  render.get_screen_color (px, py, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r * 255 + 0.5, g * 255 + 0.5, b * 255 + 0.5);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	   }
       }
       break;
     case render_type_realistic_scr:
       {
 	render_scr_detect_superpose_img render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 	if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step);
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		for (int x = 0; x < width; x++)
-		  {
-		    int r, g, b;
-		    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		  }
+		if (!progress || !progress->cancel ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		if (progress)
+		  progress->inc_progress ();
 	      }
 	    free (data);
 	    break;
 	  }
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
       break;
     case render_type_scr_nearest:
       {
 	render_scr_nearest render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
       break;
     case render_type_scr_nearest_scaled:
       {
 	render_scr_nearest_scaled render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
     case render_type_scr_relax:
       {
 	render_scr_relax render (param, img, rparam, 255);
-	render.precompute_all ();
+	if (!render.precompute_all (progress))
+	  return false;
 
-#pragma omp parallel for default(none) shared(pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    for (int x = 0; x < width; x++)
-	      {
-		int r, g, b;
-		render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-	      }
+	    if (!progress || !progress->cancel ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
 	  }
       }
       break;
     }
+  return !progress || !progress->cancelled ();
 }
-void
-render_scr_detect::precompute_all ()
+bool
+render_scr_detect::precompute_all (progress_info *progress)
 {
   color_class_params p = {m_img.id, &m_img, m_scr_detect.m_param, &m_scr_detect};
-  m_color_class_map = color_class_cache.get (p, &m_color_class_map_id);
-  render::precompute_all (false);
+  m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
+  return render::precompute_all (false, progress);
 }
 
 
@@ -460,22 +565,28 @@ render_scr_nearest_scaled::~render_scr_nearest_scaled ()
   patches_cache.release (m_patches);
 }
 
-void 
-render_scr_nearest_scaled::precompute_all ()
+bool
+render_scr_nearest_scaled::precompute_all (progress_info *progress)
 {
-  render_scr_detect::precompute_all ();
+  if (!render_scr_detect::precompute_all (progress))
+    return false;
   patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map, &m_img, this};
-  m_patches = patches_cache.get (p);
+  m_patches = patches_cache.get (p, progress);
+  return m_patches;
 }
 
-void
-render_scr_relax::precompute_all ()
+bool
+render_scr_relax::precompute_all (progress_info *progress)
 {
-  render_scr_detect::precompute_all ();
+  if (!render_scr_detect::precompute_all (progress))
+    return false;
   color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map, this};
-  m_color_data_handle = color_data_cache.get (p);
+  m_color_data_handle = color_data_cache.get (p, progress);
+  if (!m_color_data_handle)
+    return false;
   for (int color = 0; color < 3; color++)
     cdata[color] = m_color_data_handle->m_data[color];
+  return true;
 }
 render_scr_relax::~render_scr_relax()
 {

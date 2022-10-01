@@ -7,7 +7,7 @@ class render_interpolate : public render_to_scr
 public:
   render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
   ~render_interpolate ();
-  void precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax);
+  bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
   void render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     render_pixel_scr (x - m_scr_xshift, y - m_scr_yshift, r, g, b);
@@ -18,15 +18,15 @@ public:
     m_scr_to_img.to_scr (x, y, &xx, &yy);
     render_pixel_scr (xx, yy, r, g, b);
   }
-  void precompute_all ()
+  bool precompute_all (progress_info *progress)
   {
-    precompute (-m_scr_xshift, -m_scr_yshift, -m_scr_xshift + m_img.width, -m_scr_yshift + m_scr_height);
+    return precompute (-m_scr_xshift, -m_scr_yshift, -m_scr_xshift + m_img.width, -m_scr_yshift + m_scr_height, progress);
   }
-  void precompute_img_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2)
+  bool precompute_img_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, progress_info *progress)
   {
     int xshift, yshift, width, height;
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
-    precompute (-xshift, -yshift, -xshift + width, -yshift + height);
+    return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;

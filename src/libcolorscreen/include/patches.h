@@ -2,6 +2,7 @@
 #define PATCHES_H
 #include <vector>
 #include "render.h"
+#include "progress-info.h"
 #include "scr-detect.h"
 #include "imagedata.h"
 
@@ -9,7 +10,7 @@ class patches
 {
   public:
     typedef int patch_index_t;
-    patches (image_data &, render &, color_class_map &map, int max_patch_size);
+    patches (image_data &, render &, color_class_map &map, int max_patch_size, progress_info *progress);
     ~patches ();
     struct patch
       {

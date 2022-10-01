@@ -91,7 +91,7 @@ struct lookup_table_params
 };
 
 luminosity_t *
-get_new_lookup_table (struct lookup_table_params &p)
+get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[p.maxval];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
@@ -121,7 +121,7 @@ struct out_lookup_table_params
 };
 
 luminosity_t *
-get_new_out_lookup_table (struct out_lookup_table_params &p)
+get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
   //printf ("Output table for %i\n", p.maxval);
@@ -155,7 +155,7 @@ struct graydata_params
 
 /* Mix RGB channels into grayscale.  */
 static gray_data *
-get_new_graydata (struct graydata_params &p)
+get_new_graydata (struct graydata_params &p, progress_info *progress)
 {
   double red = p.red;
   double green = p.green;
@@ -172,6 +172,8 @@ get_new_graydata (struct graydata_params &p)
   green /= sum;
   blue /= sum;
 
+  if (progress)
+    progress->set_task ("computing grayscale", p.img->height);
 
   gray_data *data = new gray_data (p.img->width, p.img->height);
   if (!data || !data->m_gray_data)
@@ -180,6 +182,7 @@ get_new_graydata (struct graydata_params &p)
 	delete data;
       return NULL;
     }
+
 
   luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
   luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
@@ -199,16 +202,20 @@ get_new_graydata (struct graydata_params &p)
     {
       out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
     }
-#pragma omp parallel shared(data,rtable,gtable,btable,out_table,p) default(none)
+#pragma omp parallel shared(data,rtable,gtable,btable,out_table,p,progress) default(none)
   for (int y = 0; y < p.img->height; y++)
-    for (int x = 0; x < p.img->width; x++)
-     {
-       luminosity_t val = rtable[p.img->rgbdata[y][x].r]
-			  + gtable[p.img->rgbdata[y][x].g]
-			  + btable[p.img->rgbdata[y][x].b];
-       val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
-       data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
-     }
+    {
+      for (int x = 0; x < p.img->width; x++)
+       {
+	 luminosity_t val = rtable[p.img->rgbdata[y][x].r]
+			    + gtable[p.img->rgbdata[y][x].g]
+			    + btable[p.img->rgbdata[y][x].b];
+	 val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+	 data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
+       }
+       if (progress)
+	 progress->inc_progress ();
+    }
 
   free (rtable);
   free (gtable);
@@ -219,18 +226,18 @@ get_new_graydata (struct graydata_params &p)
 static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache;
 }
 
-void
-render::precompute_all (bool duffay)
+bool
+render::precompute_all (bool duffay, progress_info *progress)
 {
   lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max};
-  m_lookup_table = lookup_table_cache.get (par);
+  m_lookup_table = lookup_table_cache.get (par, progress);
   if (m_img.rgbdata)
     {
       lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max};
-      m_rgb_lookup_table = lookup_table_cache.get (rgb_par);
+      m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
     }
   out_lookup_table_params out_par = {m_dst_maxval};
-  m_out_lookup_table = out_lookup_table_cache.get (out_par);
+  m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   if (!m_gray_data)
     {
@@ -239,7 +246,7 @@ render::precompute_all (bool duffay)
 	p.gamma = 0.001;
       if (p.gamma > 1000)
 	p.gamma = 1000;
-      m_gray_data_holder = gray_data_cache.get (p, &m_gray_data_id);
+      m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
       m_gray_data = m_gray_data_holder->m_gray_data;
     }
 
@@ -352,6 +359,7 @@ render::precompute_all (bool duffay)
     }
   color = color * m_params.brightness;
   m_color_matrix = color;
+  return true;
 }
 
 render::~render ()
@@ -373,7 +381,7 @@ luminosity_t *
 render::get_lookup_table (luminosity_t gamma, int maxval)
 {
   lookup_table_params par = {maxval, maxval, gamma, 0, maxval};
-  return lookup_table_cache.get (par);
+  return lookup_table_cache.get (par, NULL);
 }
 
 /* Release lookup table.  */
@@ -385,14 +393,14 @@ render::release_lookup_table (luminosity_t *table)
 
 /* Compute graydata of downscaled image.  */
 void
-render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render::get_gray_data (luminosity_t *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, luminosity_t, &render::get_data, &account_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render, luminosity_t, &render::get_data, &account_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 /* Compute RGB data of downscaled image.  */
 void
-render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 {
-  downscale<render, rgbdata, &render::get_rgb_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render, rgbdata, &render::get_rgb_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }

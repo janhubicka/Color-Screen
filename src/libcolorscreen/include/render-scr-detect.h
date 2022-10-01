@@ -1,6 +1,7 @@
 #ifndef RENDER_SCR_DETECT_H
 #define RENDER_SCR_DETECT_H
 #include "render.h"
+#include "progress-info.h"
 #include "scr-detect.h"
 #include "patches.h"
 class render_scr_detect : public render
@@ -68,7 +69,7 @@ public:
 	return;
       }
   }
-  void precompute_all ();
+  bool precompute_all (progress_info *);
   enum render_scr_detect_type_t
   {
     render_type_original,
@@ -151,15 +152,15 @@ done:
       }
      return val / end;
   }
-  DLL_PUBLIC static void render_tile (enum render_scr_detect_type_t render_type, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
+  DLL_PUBLIC static bool render_tile (enum render_scr_detect_type_t render_type, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
-				      double xoffset, double yoffset, double step);
+				      double xoffset, double yoffset, double step, progress_info *p = NULL);
 protected:
   scr_detect m_scr_detect;
   color_class_map *m_color_class_map;
   unsigned long m_color_class_map_id;
-  void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
-  void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {
@@ -169,7 +170,7 @@ public:
   { 
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
   rgbdata fast_sample_pixel_img (int x, int y);
 private:
   void inline sample_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
@@ -202,9 +203,9 @@ render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r,
 }
 
 inline void
-render_scr_detect_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render_scr_detect_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_scr_detect_superpose_img, rgbdata, &render_scr_detect_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_scr_detect_superpose_img, rgbdata, &render_scr_detect_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 class distance_list
@@ -229,7 +230,7 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval), m_color_data_handle (NULL)
   { 
   }
-  void precompute_all ();
+  bool precompute_all (progress_info *);
   void
   render_raw_pixel_img (coord_t xx, coord_t yy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
@@ -315,7 +316,7 @@ public:
   { 
   }
   ~render_scr_nearest_scaled ();
-  void precompute_all ();
+  bool precompute_all (progress_info *);
   void
   render_raw_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {

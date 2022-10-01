@@ -57,7 +57,7 @@ public:
   void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
-  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 private:
   void inline sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline rgbdata fast_sample_pixel_img (int x, int y);
@@ -143,9 +143,9 @@ render_superpose_img::fast_sample_pixel_img (int x, int y)
 }
 
 inline void
-render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
-  downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize);
+  downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 flatten_attr inline void

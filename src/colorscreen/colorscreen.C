@@ -289,7 +289,11 @@ main (int argc, char **argv)
     case none:
       {
 	render_img render (param, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	double render_width = render.get_width ();
@@ -329,7 +333,11 @@ main (int argc, char **argv)
         rparam.adjust_luminosity = mode == combined;
 
 	render_interpolate render (param, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	double render_width = render.get_width ();
@@ -374,7 +382,11 @@ main (int argc, char **argv)
       {
 	render_superpose_img render (param, scan, rparam, 65535, false,
 				     false);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int scale = 1;
@@ -403,7 +415,11 @@ main (int argc, char **argv)
     case detect_realistic:
       {
 	render_scr_detect_superpose_img render (dparam, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int downscale = 5;
@@ -442,7 +458,11 @@ main (int argc, char **argv)
     case detect_adjusted:
       {
 	render_scr_detect render (dparam, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int downscale = 5;
@@ -481,7 +501,11 @@ main (int argc, char **argv)
     case detect_nearest:
       {
 	render_scr_nearest render (dparam, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int downscale = 5;
@@ -518,7 +542,11 @@ main (int argc, char **argv)
     case detect_nearest_scaled:
       {
 	render_scr_nearest_scaled render (dparam, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int downscale = 5;
@@ -559,7 +587,11 @@ main (int argc, char **argv)
     case detect_relax:
       {
 	render_scr_relax render (dparam, scan, rparam, 65535);
-	render.precompute_all ();
+	if (!render.precompute_all (NULL))
+	  {
+	    fprintf (stderr, "Precomputation failed (out of memory)\n");
+	    exit (1);
+	  }
 	if (verbose)
 	  print_time ();
 	int downscale = 5;

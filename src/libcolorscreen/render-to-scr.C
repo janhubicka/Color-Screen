@@ -11,8 +11,8 @@ render_to_scr::pixel_size ()
   return sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
 }
 
-void
-render_to_scr::precompute_all()
+bool
+render_to_scr::precompute_all(progress_info *progress)
 {
-  render::precompute_all (m_scr_to_img.get_type () != Dufay);
+  return render::precompute_all (m_scr_to_img.get_type () != Dufay, progress);
 }

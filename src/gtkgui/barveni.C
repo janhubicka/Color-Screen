@@ -243,7 +243,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 			    double scr_xsize =
 			      render.get_width (), scr_ysize =
 			      render.get_height ();
-				render.precompute_all ();
+				render.precompute_all (NULL);
 			    if ((scr_xsize > 600 || scr_ysize > 600) && scr_xsize < 20000)
 			    {
 			      found = true;
@@ -251,7 +251,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 			    int tileheight = scan.height / outertiles;
 			    int stepwidth = tilewidth / innertiles;
 			    int stepheight = tileheight / innertiles;
-			    render.precompute_all ();
+			    render.precompute_all (NULL);
 			    for (int x = 0; x < outertiles; x++)
 			      for (int y = 0; y < outertiles; y++)
 				{
@@ -440,7 +440,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  rparams.gray_min = scan.maxval;
 	  rparams.gray_max = 0;
 	  render_img render (current, scan, rparams, 255);
-	  render.precompute_all ();
+	  render.precompute_all (NULL);
 	  for (int y = std::max ((int)(shift_y / scale_y), 0);
 	       y < std::min ((int)((shift_y + pysize) / scale_y), scan.height); y++)
 	     for (int x = minx; x < maxx; x++)
@@ -700,7 +700,8 @@ previewrender (GdkPixbuf ** pixbuf)
   int max_size = std::max (scr_xsize, scr_ysize);
   coord_t step = max_size / (coord_t)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
-  render.precompute_all ();
+  if (!render.precompute_all (NULL))
+    return;
 
   g_object_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
@@ -741,15 +742,19 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   int pxsize = gdk_pixbuf_get_width (bigpixbuf);
   int pysize = gdk_pixbuf_get_height (bigpixbuf);
   coord_t step = 1 / bigscale;
+  bool ret;
 
-  if (scr_detect)
-    {
-      render_scr_detect::render_tile ((enum render_scr_detect::render_scr_detect_type_t)scr_detect_display_type, current_scr_detect, scan, rparams, color_display,
-				  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
-    }
-  else
-    render_to_scr::render_tile ((enum render_to_scr::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
-				bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step);
+  {
+    file_progress_info progress (stdout);
+    if (scr_detect)
+      {
+	ret = render_scr_detect::render_tile ((enum render_scr_detect::render_scr_detect_type_t)scr_detect_display_type, current_scr_detect, scan, rparams, color_display,
+				    bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
+      }
+    else
+      ret = render_to_scr::render_tile ((enum render_to_scr::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
+				  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
+  }
 
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (bigpixels,

@@ -172,9 +172,9 @@ public:
 
 protected:
   inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
-  void precompute_all (bool duffay);
-  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
-  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  bool precompute_all (bool duffay, progress_info *progress);
+  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
 
   template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
@@ -192,7 +192,7 @@ protected:
 
   template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   __attribute__ ((__flatten__))
-  void downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
+  void downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 
   /* Scanned image.  */
   image_data &m_img;
@@ -593,7 +593,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
 
 template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
 void
-render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize)
+render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 {
   int pxstart = std::max (0, (int)(-x / pixelsize));
   int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
@@ -602,6 +602,13 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 
   if (pxstart > pxend)
     return;
+
+  if (progress)
+    {
+      int pystart = std::max (0, (int)(-y / pixelsize));
+      int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
+      progress->set_task ("downscaling", pyend - pystart);
+    }
 
   int *pixelpos = (int *)malloc (sizeof (int) * width + 1);
   luminosity_t *weights = (luminosity_t *)malloc (sizeof (luminosity_t) * width + 1);
@@ -617,7 +624,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 #define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
-#pragma omp parallel shared(data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
+#pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
   {
     luminosity_t scale = 1 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
@@ -643,15 +650,25 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     yy++;
     stop = std::min (ypixelpos(py + 1), m_img.height);
     for (; yy < stop; yy++)
-      process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+      {
+	process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	if (progress)
+	  progress->inc_progress ();
+      }
     py++;
-    while (py <= yend)
+    while (py <= yend && (!progress || !progress->cancel ()))
       {
         process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
 	stop = std::min (ypixelpos(py + 1), m_img.height);
 	yy++;
+	if (progress)
+	  progress->inc_progress ();
 	for (; yy < stop; yy++)
-	  process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	  {
+	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
+	    if (progress)
+	      progress->inc_progress ();
+	  }
 	py++;
       }
      if (yy < m_img.height)
