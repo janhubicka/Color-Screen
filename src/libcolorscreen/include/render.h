@@ -652,24 +652,22 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     for (; yy < stop; yy++)
       {
 	process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-	if (progress)
-	  progress->inc_progress ();
       }
     py++;
+    if (progress)
+      progress->inc_progress ();
     while (py <= yend && (!progress || !progress->cancel ()))
       {
         process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
 	stop = std::min (ypixelpos(py + 1), m_img.height);
 	yy++;
-	if (progress)
-	  progress->inc_progress ();
 	for (; yy < stop; yy++)
 	  {
 	    process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py, yy, true, false, scale, 0);
-	    if (progress)
-	      progress->inc_progress ();
 	  }
 	py++;
+	if (progress)
+	  progress->inc_progress ();
       }
      if (yy < m_img.height)
        process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, false, scale, weight (py));
