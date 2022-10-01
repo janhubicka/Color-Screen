@@ -456,12 +456,16 @@ image_data::load_part (int *permille, const char **error)
 }
 
 bool
-image_data::load (const char *name, const char **error)
+image_data::load (const char *name, const char **error, progress_info *progress)
 {
   int permille;
+  if (progress)
+    progress->set_task ("loading image header",1);
   if (!init_loader (name, error))
     return false;
 
+  if (progress)
+    progress->set_task ("allocating memory",1);
   if (!allocate ())
     {
       *error = "out of memory allocating image";
@@ -470,10 +474,16 @@ image_data::load (const char *name, const char **error)
       return false;
     }
 
+  if (progress)
+    progress->set_task ("loading",1000);
   while (load_part (&permille, error))
     {
       if (permille == 1000)
 	return true;
+      if (progress)
+	progress->set_progress (permille);
+      if (progress && progress->cancel ())
+	return false;
     }
   return false;
 }

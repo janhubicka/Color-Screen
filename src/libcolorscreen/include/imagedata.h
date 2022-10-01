@@ -2,6 +2,7 @@
 #define IMAGEDATA_H
 #include "dllpublic.h"
 #include "color.h"
+#include "progress-info.h"
 
 class image_data_loader;
 
@@ -46,7 +47,7 @@ public:
   /* Allocate memory.  */
   bool allocate ();
   /* Load image data from file with auto-detection.  */
-  bool load (const char *name, const char **error);
+  bool load (const char *name, const char **error, progress_info *progress = NULL);
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */

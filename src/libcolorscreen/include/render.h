@@ -9,6 +9,7 @@
 #include "imagedata.h"
 #include "color.h"
 #include "spectrum-to-xyz.h"
+#include "progress-info.h"
 
 typedef float coord_t;
 

@@ -115,7 +115,12 @@ static void
 openimage (int *argc, char **argv)
 {
   const char *error;
-  if (!scan.load (argv[1], &error))
+  bool ret;
+  {
+    file_progress_info p (stdout, true);
+    ret = scan.load (argv[1], &error, &p);
+  }
+  if (!ret)
     {
       fprintf (stderr, "%s\n", error);
       exit (1);
