@@ -1,6 +1,21 @@
 #ifndef LRU_CACHE
 #define LRU_CACHE
 #include <pthread.h>
+#include <atomic>
+class lru_caches
+{
+public:
+   constexpr lru_caches ()
+   {
+   }
+   static unsigned long get ()
+   {
+      return std::atomic_fetch_add(&time, 1);
+   }
+private:
+   static std::atomic_ulong time;
+};
+extern class lru_caches lru_caches;
 
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
@@ -15,13 +30,13 @@ public:
     P params;
     T *val;
     cache_entry *next;
-    int last_used;
+    unsigned long id;
+    unsigned long last_used;
     int nuses;
   } *entries;
-  int time;
 
   lru_cache()
-  : entries (NULL), time (0)
+  : entries (NULL)
   {
     if (pthread_mutex_init(&lock, NULL) != 0)
       abort ();
@@ -38,10 +53,12 @@ public:
       }
   }
 
-  /* Get T for parameters P; do caching.  */
-  T *get(P &p)
+  /* Get T for parameters P; do caching.
+     If ID is non-NULL initialize it to the unique identifier of the cached data.  */
+  T *get(P &p, unsigned long *id = NULL)
   {
     int size = 0;
+    unsigned long time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
     pthread_mutex_lock (&lock);
     time++;
@@ -53,6 +70,8 @@ public:
 	    e->nuses++;
 	    T *ret = e->val;
 	    pthread_mutex_unlock (&lock);
+	    if (id)
+	      *id = e->id;
 	    return ret;
 	  }
 	if (!e->nuses
@@ -75,7 +94,11 @@ public:
     e->params = p;
     e->val = get_new (e->params);
     e->nuses = 1;
+    e->id = time;
+    e->last_used = time;
     T *ret = e->val;
+    if (id)
+      *id = e->id;
     pthread_mutex_unlock (&lock);
     return ret;
   }

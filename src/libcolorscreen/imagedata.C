@@ -4,6 +4,7 @@
 #include <cmath>
 #include <tiffio.h>
 #include <turbojpeg.h>
+#include "lru-cache.h"
 #include "include/imagedata.h"
 
 class image_data_loader
@@ -66,7 +67,10 @@ private:
   uint32_t m_row;
 };
 
-DLL_PUBLIC int image_data::last_imagedata_id;
+image_data::image_data ()
+: data (NULL), rgbdata (NULL), width (0), height (0), maxval (0), id (lru_caches::get ()), loader (NULL), own (false)
+{ 
+}
 
 image_data::~image_data ()
 {

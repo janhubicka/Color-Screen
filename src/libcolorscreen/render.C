@@ -2,6 +2,9 @@
 #include "include/render.h"
 #include "lru-cache.h"
 
+class lru_caches lru_caches;
+std::atomic_ulong lru_caches::time;
+
 const char * render_parameters::color_model_names [] = {
   "none",
   "red",
@@ -21,6 +24,43 @@ const char * render_parameters::dye_balance_names [] = {
   "neutral",
   "whitepoint"
 };
+
+/* A wrapper class around m_gray_data which handles allocation and dealocation.
+   This is needed for the cache.  */
+class gray_data
+{
+public:
+  unsigned short **m_gray_data;
+  gray_data (int width, int height);
+  ~gray_data();
+};
+
+gray_data::gray_data (int width, int height)
+{
+  m_gray_data = (unsigned short **)malloc (sizeof (*m_gray_data) * height);
+  if (!m_gray_data)
+    {
+      m_gray_data = NULL;
+      return;
+    }
+  m_gray_data[0] = (unsigned short *)malloc (width * height * sizeof (**m_gray_data));
+  if (!m_gray_data [0])
+    {
+      free (m_gray_data);
+      m_gray_data = NULL;
+      return;
+    }
+  for (int i = 1; i < height; i++)
+    m_gray_data[i] = m_gray_data[0] + i * width;
+}
+gray_data::~gray_data()
+{
+  if (m_gray_data)
+    {
+      free (m_gray_data[0]);
+      free (m_gray_data);
+    }
+}
 
 namespace
 {
@@ -95,32 +135,33 @@ static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lo
 static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache;
 
 
-#if 0
 struct graydata_params
 {
   /* Pointers in image_data may become stale if image is freed. Use ID
      to check cache entries.  */
-  int image_id;
-  image_data img;
+  unsigned long image_id;
+  image_data *img;
   luminosity_t gamma, red, blue, green;
+  bool
+  operator==(graydata_params &o)
+  {
+    return image_id == o.image_id
+	   && gamma == o.gamma
+	   && red == o.red
+	   && green == o.green
+	   && blue == o.blue;
+  }
 };
-static char *
+
+/* Mix RGB channels into grayscale.  */
+static gray_data *
 get_new_graydata (struct graydata_params &p)
 {
-  if (p.img.data)
-    return false;
-
   double red = p.red;
   double green = p.green;
   double blue = p.blue;
-
-  /* TODO move out.  */
-  if (p.gamma < 0.001)
-    p.gamma = 0.001;
-  if (p.gamma > 1000)
-    p.gamma = 1000;
-
   double sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
+
   if (!sum)
     {
       sum = 1;
@@ -132,183 +173,50 @@ get_new_graydata (struct graydata_params &p)
   blue /= sum;
 
 
-  cached_data = (unsigned short **)malloc (sizeof (*cached_data) * img.height);
-  if (!cached_data)
+  gray_data *data = new gray_data (p.img->width, p.img->height);
+  if (!data || !data->m_gray_data)
     {
-      cached_data = NULL;
-      fprintf (stderr, "Out of memory\n");
-      abort ();
+      if (data)
+	delete data;
+      return NULL;
     }
-  cached_data[0] = (unsigned short *)malloc (img.width * img.height * sizeof (**cached_data));
-  if (!cached_data [0])
-    {
-      free (cached_data);
-      cached_data = NULL;
-      fprintf (stderr, "Out of memory\n");
-      abort ();
-    }
-  for (int i = 1; i < img.height; i++)
-    cached_data[i] = cached_data[0] + i * img.width;
 
-  cached_red = red;
-  cached_green = green;
-  cached_blue = blue;
-  cached_gamma = gamma;
-
-  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
+  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
+  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
+  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
   unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
 
-  for (int i = 0; i <= img.maxval; i++)
+  for (int i = 0; i <= p.img->maxval; i++)
     {
-      luminosity_t l = pow (i / (luminosity_t)img.maxval, gamma);
+      luminosity_t l = pow (i / (double)p.img->maxval, p.gamma);
       if (l < 0 || l > 1)
 	abort ();
       rtable[i] = l * red;
       gtable[i] = l * green;
       btable[i] = l * blue;
-      //fprintf (stderr, "%f %f %f\n", rtable[i], gtable[i], btable[i]);
     }
   for (int i = 0; i < 65536; i++)
     {
-      out_table[i] = pow (i / 65535.0, 1 / gamma) * 65535;
-      //fprintf (stderr, "%i\n", out_table[i]);
+      out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
     }
-#pragma omp parallel shared(cached_data,rtable,gtable,btable,out_table,img) default(none)
-  for (int y = 0; y < img.height; y++)
-    for (int x = 0; x < img.width; x++)
+#pragma omp parallel shared(data,rtable,gtable,btable,out_table,p) default(none)
+  for (int y = 0; y < p.img->height; y++)
+    for (int x = 0; x < p.img->width; x++)
      {
-       luminosity_t val = rtable[img.rgbdata[y][x].r]
-			  + gtable[img.rgbdata[y][x].g]
-			  + btable[img.rgbdata[y][x].b];
+       luminosity_t val = rtable[p.img->rgbdata[y][x].r]
+			  + gtable[p.img->rgbdata[y][x].g]
+			  + btable[p.img->rgbdata[y][x].b];
        val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
-       cached_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
+       data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
      }
 
   free (rtable);
   free (gtable);
   free (btable);
   free (out_table);
-  return true;
+  return data;
 }
-#endif
-
-/* TODO: turn this also into cache.  */
-static int cached_image_id = -1;
-static luminosity_t cached_gamma, cached_red, cached_blue, cached_green;
-static unsigned short **cached_data;
-static pthread_mutex_t lock;
-
-__attribute__ ((constructor))
-void
-render_init ()
-{
-  if (pthread_mutex_init(&lock, NULL) != 0)
-    abort ();
-}
-
-static bool
-compute_grayscale (image_data &img,
-		   luminosity_t gamma, luminosity_t red, luminosity_t green, luminosity_t blue)
-{
-  pthread_mutex_lock (&lock);
-  if (img.data)
-    return false;
-  if (gamma < 0.001)
-    gamma = 0.001;
-  if (gamma > 1000)
-    gamma = 1000;
-  double sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
-  if (!sum)
-    {
-      sum = 1;
-      green = 1;
-      blue = red = 0;
-    }
-  red /= sum;
-  green /= sum;
-  blue /= sum;
-  if (cached_gamma == gamma && cached_red == red && cached_blue == blue && cached_green == green
-      && cached_image_id == img.id)
-  {
-    pthread_mutex_unlock (&lock);
-    return false;
-  }
-
-  cached_gamma = gamma;
-  cached_red = red;
-  cached_green = green;
-  cached_blue = blue;
-  cached_image_id = img.id;
-
-  if (cached_data)
-    {
-      free (*cached_data);
-      free (cached_data);
-    }
-
-  cached_data = (unsigned short **)malloc (sizeof (*cached_data) * img.height);
-  if (!cached_data)
-    {
-      cached_data = NULL;
-      fprintf (stderr, "Out of memory\n");
-      abort ();
-    }
-  cached_data[0] = (unsigned short *)malloc (img.width * img.height * sizeof (**cached_data));
-  if (!cached_data [0])
-    {
-      free (cached_data);
-      cached_data = NULL;
-      fprintf (stderr, "Out of memory\n");
-      abort ();
-    }
-  for (int i = 1; i < img.height; i++)
-    cached_data[i] = cached_data[0] + i * img.width;
-
-  cached_red = red;
-  cached_green = green;
-  cached_blue = blue;
-  cached_gamma = gamma;
-
-  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * img.maxval);
-  unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
-
-  for (int i = 0; i <= img.maxval; i++)
-    {
-      luminosity_t l = pow (i / (luminosity_t)img.maxval, gamma);
-      if (l < 0 || l > 1)
-	abort ();
-      rtable[i] = l * red;
-      gtable[i] = l * green;
-      btable[i] = l * blue;
-      //fprintf (stderr, "%f %f %f\n", rtable[i], gtable[i], btable[i]);
-    }
-  for (int i = 0; i < 65536; i++)
-    {
-      out_table[i] = pow (i / 65535.0, 1 / gamma) * 65535;
-      //fprintf (stderr, "%i\n", out_table[i]);
-    }
-#pragma omp parallel shared(cached_data,rtable,gtable,btable,out_table,img) default(none)
-  for (int y = 0; y < img.height; y++)
-    for (int x = 0; x < img.width; x++)
-     {
-       luminosity_t val = rtable[img.rgbdata[y][x].r]
-			  + gtable[img.rgbdata[y][x].g]
-			  + btable[img.rgbdata[y][x].b];
-       val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
-       cached_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
-     }
-
-  free (rtable);
-  free (gtable);
-  free (btable);
-  free (out_table);
-  pthread_mutex_unlock (&lock);
-  return true;
-}
+static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache;
 }
 
 void
@@ -324,11 +232,15 @@ render::precompute_all (bool duffay)
   out_lookup_table_params out_par = {m_dst_maxval};
   m_out_lookup_table = out_lookup_table_cache.get (out_par);
 
-
-  if (!m_data)
+  if (!m_gray_data)
     {
-      compute_grayscale (m_img, m_params.mix_gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue);
-      m_data = cached_data;
+      graydata_params p = {m_img.id, &m_img, m_params.mix_gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
+      if (p.gamma < 0.001)
+	p.gamma = 0.001;
+      if (p.gamma > 1000)
+	p.gamma = 1000;
+      m_gray_data_holder = gray_data_cache.get (p, &m_gray_data_id);
+      m_gray_data = m_gray_data_holder->m_gray_data;
     }
 
   color_matrix color;
@@ -373,7 +285,6 @@ render::precompute_all (bool duffay)
 			  0, 0, 0, 1);
 	  color = m * color;
 	}
-	break;
 	break;
       /* Colors found to be working for Finlays and Pagets pretty well.  */
       case render_parameters::color_model_paget:
@@ -434,50 +345,6 @@ render::precompute_all (bool duffay)
 	    abort ();
 	}
     }
-#if 0
-  if (m_params.color_model == 1 || m_params.color_model == 2)
-    {
-      if (!duffay)
-	{
-	  finlay_matrix m;
-	  xyz_srgb_matrix m2;
-	  color_matrix mm;
-	  mm = m2 * m;
-	  if (m_params.color_model != 2)
-	    mm.normalize_grayscale ();
-	  color = mm * color;
-	}
-      else
-	{
-	  dufay_matrix m;
-	  xyz_srgb_matrix m2;
-	  color_matrix mm;
-	  mm = m2 * m;
-	  if (m_params.color_model != 2)
-	    mm.normalize_grayscale (1.02, 1.05, 1);
-	  color = mm * color;
-	}
-    }
-  if (m_params.color_model == 3)
-    {
-      if (!duffay)
-	{
-	  adjusted_finlay_matrix m;
-	  xyz_srgb_matrix m2;
-	  color_matrix mm;
-	  mm = m2 * m;
-	  mm.normalize_grayscale ();
-	  color = mm * color;
-	}
-      else
-        {
-          grading_matrix m;
-          autochrome_matrix m;
-	  m.normalize_grayscale ();
-          color = m * color;
-	}
-    }
-#endif
   if (m_params.saturation != 1)
     {
       saturation_matrix m (m_params.saturation);
@@ -497,6 +364,8 @@ render::~render ()
     lookup_table_cache.release (m_rgb_lookup_table);
   if (m_spectrum_dyes_to_xyz)
     delete m_spectrum_dyes_to_xyz;
+  if (m_gray_data_holder)
+    gray_data_cache.release (m_gray_data_holder);
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */

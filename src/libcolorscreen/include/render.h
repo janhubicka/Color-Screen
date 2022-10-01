@@ -140,7 +140,7 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_data (img.data), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
   }
@@ -200,7 +200,11 @@ protected:
   /* If non-NULL used to turn spectrum dyes to XYZ.  */
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz;
   /* Grayscale we render from.  */
-  unsigned short **m_data;
+  unsigned short **m_gray_data;
+  /* ID of graydata computed.  */
+  unsigned long m_gray_data_id;
+  /* Wrapping class to cause proper destruction.  */
+  class gray_data *m_gray_data_holder;
   /* Maximal value in m_data.  */
   int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
@@ -249,7 +253,7 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 inline luminosity_t
 render::get_data (int x, int y)
 {
-  return m_lookup_table [m_data[y][x]];
+  return m_lookup_table [m_gray_data[y][x]];
 }
 
 /* Get same for rgb data.  */
@@ -272,30 +276,7 @@ render::get_data_blue (int x, int y)
   return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
 }
 
-#if 0
-static inline luminosity_t
-cap_color (luminosity_t val, luminosity_t weight, luminosity_t *diff, luminosity_t *cnt_neg, luminosity_t *cnt_pos)
-{
-  if (isnan (val))
-    return 1;
-  if (val < 0)
-    {
-      *cnt_neg += weight;
-      *diff += val * weight;
-      val = 0;
-    }
-  if (val > 1)
-    {
-      *cnt_pos += weight;
-      *diff += (val - 1) * weight;
-      val = 1;
-    }
-  return val;
-}
-#endif
-
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
-
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
@@ -315,54 +296,6 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
-  /* Fancy capping seems to look weird.  */
-#if 0
-  luminosity_t r2 =r, g2= g, b2 = b;
-  luminosity_t r1 =r, g1= g, b1 = b;
-  luminosity_t diff = 0;
-  luminosity_t cnt_neg = 0;
-  luminosity_t cnt_pos = 0;
-  r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
-  g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
-  b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
-  if (fabs (diff) > 0.0001)
-    {
-      luminosity_t lum = r * rwght + g * gwght + b * bwght;
-      if (lum + diff < 0.00001)
-	r = g = b = 0;
-      else if (lum + diff > 0.99999)
-	r = g = b = 1;
-      else while (fabs (diff) > 0.0001)
-	{
-	  if (diff > 0)
-	    {
-	      luminosity_t add = diff / (3 - cnt_pos);
-	      if (r < 1)
-		r += add;
-	      if (g < 1)
-		g += add;
-	      if (b < 1)
-		b += add;
-	    }
-	  if (diff < 0)
-	    {
-	      luminosity_t add = diff / (3 - cnt_neg);
-	      if (r > 0)
-		r += add;
-	      if (g > 0)
-		g += add;
-	      if (b > 0)
-		b += add;
-	    }
-	  diff = 0;
-	  cnt_neg = 0;
-	  cnt_pos = 0;
-	  r = cap_color (r, rwght, &diff, &cnt_neg, &cnt_pos);
-	  g = cap_color (g, gwght, &diff, &cnt_neg, &cnt_pos);
-	  b = cap_color (b, bwght, &diff, &cnt_neg, &cnt_pos);
-	}
-    }
-#endif
   *rr = m_out_lookup_table [(int)(r * (luminosity_t)65535.5)];
   *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
   *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];

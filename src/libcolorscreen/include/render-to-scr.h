@@ -73,7 +73,7 @@ public:
   }
   int inline render_raw_pixel (int x, int y)
   {
-    return m_data[y][x] * (long)m_img.maxval / m_maxval;
+    return m_gray_data[y][x] * (long)m_img.maxval / m_maxval;
   }
   void inline render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
   {

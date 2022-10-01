@@ -9,7 +9,7 @@ static int stats = -1;
 /* Lookup table translates raw input data into linear values.  */
 struct color_class_params
 {
-  int image_id;
+  unsigned long image_id;
   image_data *img;
   scr_detect_parameters p;
   scr_detect *d;
@@ -346,7 +346,7 @@ void
 render_scr_relax::precompute_all ()
 {
   const int max_patch_size = 8;
-  const int min_patch_size = 4;
+  const int min_patch_size = 1;
   render_scr_detect::precompute_all ();
   for (int color = 0; color < 3; color++)
     cdata[color] = (luminosity_t *)calloc (m_img.width * m_img.height, sizeof (luminosity_t));
@@ -387,10 +387,8 @@ render_scr_relax::precompute_all ()
 		  }
 	    start++;
 	  }
-#if 0
 	if (end < min_patch_size)
 	  continue;
-#endif
 	done:
 	cdata[(int)t][y * m_img.width + x] = sum / end;
       }
