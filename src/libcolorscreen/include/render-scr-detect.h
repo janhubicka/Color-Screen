@@ -157,6 +157,7 @@ done:
 protected:
   scr_detect m_scr_detect;
   color_class_map *m_color_class_map;
+  unsigned long m_color_class_map_id;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
 };
@@ -225,7 +226,7 @@ class render_scr_relax : public render_scr_detect
 {
 public:
   inline render_scr_relax (scr_detect_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
-   : render_scr_detect (param, data, rparam, dst_maxval)
+   : render_scr_detect (param, data, rparam, dst_maxval), m_color_data_handle (NULL)
   { 
   }
   void precompute_all ();
@@ -259,6 +260,7 @@ private:
     {
       return cdata[color][y * m_img.width + x];
     }
+  struct color_data *m_color_data_handle;
 };
 class render_scr_nearest : public render_scr_detect
 {

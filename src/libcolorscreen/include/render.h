@@ -164,12 +164,12 @@ public:
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
-
-protected:
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
   inline luminosity_t get_data_green (int x, int y);
   inline luminosity_t get_data_blue (int x, int y);
+
+protected:
   inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
   void precompute_all (bool duffay);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize);
