@@ -239,7 +239,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 			  double acc = 0;
 			  bool found = true;
 			  {
-			    render_superpose_img render (c, scan, rparams, 255, false, false);
+			    render_superpose_img render (c, scan, rparams, 255, false);
 			    double scr_xsize =
 			      render.get_width (), scr_ysize =
 			      render.get_height ();

@@ -14,20 +14,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
     return false;
   if (m_params.screen_compensation || m_params.precise)
     {
-      static screen blured_screen;
-      static coord_t r = -1;
-      static enum scr_type t;
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
-
-      if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
-	{
-	  screen *s = new screen;
-	  s->initialize (m_scr_to_img.get_type ());
-	  blured_screen.initialize_with_blur (*s, radius);
-	  t = m_scr_to_img.get_type ();
-	  r = radius;
-	}
-      m_screen = &blured_screen;
+      m_screen = get_screen (m_scr_to_img.get_type (), false, radius, progress);
+      if (!m_screen)
+	return false;
     }
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
@@ -98,7 +88,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  maxy = std::min (maxy, m_img.height);
 
 	  if (progress)
-	    progress->set_task ("determining colors", maxy - miny);
+	    progress->set_task ("determining colors", maxy - miny + m_prec_height * 2 * 3);
 
 	  /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress,w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
@@ -164,8 +154,6 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		  if (progress)
 		    progress->inc_progress ();
 		}
-	  if (progress)
-	    progress->set_task ("normalizing colors", m_prec_height * 2 * 3);
 	  if (!progress || !progress->cancel ())
 	    {
 #pragma omp for nowait
@@ -412,4 +400,6 @@ render_interpolate::~render_interpolate ()
     free (m_prec_green);
   if (m_prec_blue)
     free (m_prec_blue);
+  if (m_screen)
+    release_screen (m_screen);
 }

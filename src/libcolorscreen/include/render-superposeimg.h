@@ -6,51 +6,17 @@
 class render_superpose_img : public render_to_scr
 {
 public:
-  inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval, bool empty, bool preview)
+  inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval, bool preview)
    : render_to_scr (param, data, rparam, dst_maxval),
-     m_color (false)
+     m_screen (NULL), m_color (false)
   { 
-    if (empty)
-      {
-        static screen empty_screen;
-	static bool initialized;
-	if (!initialized)
-	  {
-	    empty_screen.empty ();
-	    initialized = true;
-	  }
-	m_screen = &empty_screen;
-      }
-    else if (preview)
-      {
-        static screen preview_screen;
-	static bool initialized;
-	static enum scr_type t;
-	if (!initialized || t != m_scr_to_img.get_type ())
-	  {
-	    preview_screen.initialize_preview (m_scr_to_img.get_type ());
-	    initialized = true;
-	  }
-	m_screen = &preview_screen;
-      }
-    else if (!preview && !empty)
-      {
-        static screen blured_screen;
-	static coord_t r = -1;
-	static enum scr_type t;
-	coord_t radius = m_params.screen_blur_radius * pixel_size ();
-
-	if (t != m_scr_to_img.get_type () || fabs (r - radius) > 0.01)
-	  {
-	    screen *s = new screen;
-	    s->initialize (m_scr_to_img.get_type ());
-	    blured_screen.initialize_with_blur (*s, radius);
-	    t = m_scr_to_img.get_type ();
-	    r = radius;
-	  }
-	m_screen = &blured_screen;
-      }
-
+    coord_t radius = preview ? 0 : m_params.screen_blur_radius * pixel_size ();
+    m_screen = get_screen (m_scr_to_img.get_type (), preview, radius, NULL);
+  }
+  inline ~render_superpose_img ()
+  {
+    if (m_screen)
+      release_screen (m_screen);
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);

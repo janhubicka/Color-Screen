@@ -2,6 +2,7 @@
 #define PROGRESS_INFO_H
 #include <stdio.h>
 #include <pthread.h>
+#include <cstdlib>
 #include <atomic>
 #include "dllpublic.h"
 
@@ -15,7 +16,15 @@ public:
   }
   ~progress_info ()
   {
+    if (debug && m_task)
+      {
+	const char *t = m_task;
+	unsigned long current = m_current;
+	printf ("\nlast task %s: finished with %lu steps\n", t, current);
+      }
   }
+
+  /* API used to monitor and control computatoin.  */
 
   void
   get_status (const char **t, float *s)
@@ -26,23 +35,7 @@ public:
     else
       *s = 0;
   }
-  void
-  set_task (const char *name, unsigned long max)
-  {
-    m_current = 0;
-    m_max = max;
-    m_task = name;
-  }
-  void
-  inc_progress ()
-  {
-    m_current++;
-  }
-  void
-  set_progress (unsigned long p)
-  {
-    m_current = p;
-  }
+
   bool
   cancel ()
   {
@@ -53,12 +46,47 @@ public:
       }
     return false;
   }
+
+  /* API used by the workers to inform about status and check if task
+     should be cancelled.  */
+
+  void
+  set_task (const char *name, unsigned long max)
+  {
+    if (debug && m_task)
+      {
+	const char *t = m_task;
+	unsigned long current = m_current;
+	printf ("\ntask %s: finished with %lu steps\n", t, current);
+      }
+    m_current = 0;
+    m_max = max;
+    m_task = name;
+    if (debug)
+      printf ("\ntask %s: %lu steps\n", name, max);
+  }
+
+  void
+  inc_progress ()
+  {
+    m_current++;
+    if (debug && m_current > m_max)
+      abort ();
+  }
+
+  void
+  set_progress (unsigned long p)
+  {
+    m_current = p;
+  }
+
   bool
   cancelled ()
   {
     return m_cancelled;
   }
 private:
+  const static int debug = false;
   std::atomic<const char *>m_task;
   std::atomic_ulong m_max, m_current;
   std::atomic_bool m_cancel;

@@ -380,7 +380,7 @@ main (int argc, char **argv)
       break;
     case realistic:
       {
-	render_superpose_img render (param, scan, rparam, 65535, false,
+	render_superpose_img render (param, scan, rparam, 65535,
 				     false);
 	if (!render.precompute_all (NULL))
 	  {

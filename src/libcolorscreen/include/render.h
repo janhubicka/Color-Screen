@@ -607,7 +607,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     {
       int pystart = std::max (0, (int)(-y / pixelsize));
       int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
-      progress->set_task ("downscaling", pyend - pystart);
+      progress->set_task ("downscaling", pyend - pystart + 1);
     }
 
   int *pixelpos = (int *)malloc (sizeof (int) * width + 1);

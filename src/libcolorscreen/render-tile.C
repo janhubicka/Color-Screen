@@ -112,7 +112,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
     case render_type_preview_grid:
       {
 	render_superpose_img render (param, img,
-				     rparam, 255, false, true);
+				     rparam, 255, true);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
@@ -162,7 +162,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
     case render_type_realistic:
       {
 	render_superpose_img render (param, img,
-				     rparam, 255, false, false);
+				     rparam, 255, false);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
