@@ -22,6 +22,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 {
   if (fprintf (f, HEADER) < 0)
     return false;
+  /* TODO: hack.  */
   setlocale(LC_NUMERIC, "C");
   /* Save param.  */
   if (param)
@@ -198,6 +199,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       *error = "first line should be " HEADER;
       return false;
     }
+  /* TODO: hack.  */
   setlocale(LC_NUMERIC, "C");
   while (!feof (f))
     {

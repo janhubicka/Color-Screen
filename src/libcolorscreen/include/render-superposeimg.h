@@ -38,7 +38,6 @@ render_superpose_img::fast_sample_pixel_img (int x, int y)
   luminosity_t rs, gs, bs;
   luminosity_t ra, ga, ba;
 
-#if 1
   unsigned long ix, iy;
   m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
 
@@ -50,50 +49,14 @@ render_superpose_img::fast_sample_pixel_img (int x, int y)
   ra = m_screen->add[iy][ix][0];
   ga = m_screen->add[iy][ix][1];
   ba = m_screen->add[iy][ix][2];
-#else
-  m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
-  unsigned long ix1, iy1;
-  unsigned long ix2, iy2;
-
-  ix1 = (unsigned long long) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
-  iy1 = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
-  m_scr_to_img.to_scr (x+1, y+1, &scr_x, &scr_y);
-  ix2 = (unsigned long long) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
-  iy2 = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
-  int n=0;
-  rs = gs = bs = ra = ga = ba = 0;
-  for (int xx = ix1 ; xx <= ix2; xx++)
-    for (int yy = iy1 ; yy <= iy2; yy++)
-      {
-	rs += m_screen->mult[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][0];
-	gs += m_screen->mult[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][1];
-	bs += m_screen->mult[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][2];
-	ra += m_screen->add[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][0];
-	ga += m_screen->add[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][1];
-	ba += m_screen->add[yy & (unsigned)(screen::size - 1)][xx & (unsigned)(screen::size - 1)][2];
-	n++;
-      }
-  rs /= n;
-  gs /= n;
-  bs /= n;
-  ra /= n;
-  ga /= n;
-  ba /= n;
-#endif
 
   rgbdata ret;
   if (!m_color)
     {
       luminosity_t graydata = get_img_pixel (x+0.5, y+0.5);
-#if 0
-      ret.red = graydata * (luminosity_t)m_screen->mult[iy][ix][0] + (luminosity_t)m_screen->add[iy][ix][0];
-      ret.blue = graydata * (luminosity_t)m_screen->mult[iy][ix][1] + (luminosity_t)m_screen->add[iy][ix][1];
-      ret.green = graydata * (luminosity_t)m_screen->mult[iy][ix][2] + (luminosity_t)m_screen->add[iy][ix][2];
-#else
       ret.red = graydata * rs + ra;
       ret.green = graydata * gs + ga;
       ret.blue = graydata * bs + ba;
-#endif
     }
   else
     {
@@ -119,13 +82,6 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
 {
   int ix, iy;
 
-  //rgbdata ret = fast_sample_pixel_img (x,y);
-  //*r = ret.red;
-  //*g = ret.green;
-  //*b = ret.blue;
-  //return;
-
-
   ix = (unsigned long long) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
   iy = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
   if (!m_color)
@@ -143,9 +99,6 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
       *g = gg * m_screen->mult[iy][ix][1] + m_screen->add[iy][ix][1];
       *b = bb * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2];
     }
-  //*r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, *r));
-  //*g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, *g));
-  //*b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, *b));
 }
 flatten_attr void
 render_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)

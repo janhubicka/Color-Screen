@@ -433,6 +433,11 @@ image_data::init_loader (const char *name, const char **error)
     loader = new tiff_image_data_loader (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
     loader = new jpg_image_data_loader (this);
+  if (!loader)
+    {
+      *error = "Unknown file extension";
+      return false;
+    }
   bool ret = loader->init_loader (name, error);
   if (!ret)
     {
