@@ -51,9 +51,24 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  m_prec_red = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
 	  m_prec_green = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
 	  m_prec_blue = (luminosity_t *)calloc (m_prec_width * m_prec_height * 4, sizeof (luminosity_t));
+	  if (!m_prec_red || !m_prec_green || !m_prec_blue)
+	    return false;
 	  luminosity_t *w_red = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
+	  if (!w_red)
+	    return false;
 	  luminosity_t *w_green = (luminosity_t *)calloc (m_prec_width * m_prec_height * 2, sizeof (luminosity_t));
+	  if (!w_green)
+	    {
+	      free (w_red);
+	      return false;
+	    }
 	  luminosity_t *w_blue = (luminosity_t *)calloc (m_prec_width * m_prec_height * 4, sizeof (luminosity_t));
+	  if (!w_blue)
+	    {
+	      free (w_red);
+	      free (w_green);
+	      return false;
+	    }
 
 	  /* Determine region is image that is covered by screen.  */
 	  int minx, maxx, miny, maxy;
@@ -82,81 +97,107 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  maxx = std::min (maxx, m_img.width);
 	  maxy = std::min (maxy, m_img.height);
 
+	  if (progress)
+	    progress->set_task ("determining colors", maxy - miny);
+
 	  /* Collect luminosity of individual color patches.  */
-#pragma omp parallel shared(w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+#pragma omp parallel shared(progress,w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
 	  {
 #pragma omp for 
 	      for (int y = miny ; y < maxy; y++)
-		for (int x = minx; x < maxx; x++)
-		  {
-		    coord_t scr_x, scr_y;
-		    m_scr_to_img.to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
-		    scr_x += m_prec_xshift;
-		    scr_y += m_prec_yshift;
-		    if (scr_x < 0 || scr_x >= m_prec_width - 1 || scr_y < 0 || scr_y > m_prec_height - 1)
-		      continue;
+		{
+		  if (!progress || !progress->cancel ())
+		    for (int x = minx; x < maxx; x++)
+		      {
+			coord_t scr_x, scr_y;
+			m_scr_to_img.to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+			scr_x += m_prec_xshift;
+			scr_y += m_prec_yshift;
+			if (scr_x < 0 || scr_x >= m_prec_width - 1 || scr_y < 0 || scr_y > m_prec_height - 1)
+			  continue;
 
-		    luminosity_t l = fast_get_img_pixel (x, y);
-		    int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
-		    int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
-		    if (m_screen->mult[iy][ix][0] > m_params.collection_threshold)
-		      {
-			coord_t xd, yd;
-			to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
-			xd = nearest_int (xd);
-			yd = nearest_int (yd);
-			int xx = ((int)xd + (int)yd) / 2;
-			int yy = -(int)xd + (int)yd;
-			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
+			luminosity_t l = fast_get_img_pixel (x, y);
+			int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+			int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+			if (m_screen->mult[iy][ix][0] > m_params.collection_threshold)
 			  {
+			    coord_t xd, yd;
+			    to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
+			    xd = nearest_int (xd);
+			    yd = nearest_int (yd);
+			    int xx = ((int)xd + (int)yd) / 2;
+			    int yy = -(int)xd + (int)yd;
+			    if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
+			      {
 #pragma omp atomic
-			    prec_red (xx, yy) += m_screen->mult[iy][ix][0] * l;
+				prec_red (xx, yy) += m_screen->mult[iy][ix][0] * l;
 #pragma omp atomic
-			    w_red [yy * m_prec_width + xx] += m_screen->mult[iy][ix][0];
+				w_red [yy * m_prec_width + xx] += m_screen->mult[iy][ix][0];
+			      }
+			  }
+			if (m_screen->mult[iy][ix][1] > m_params.collection_threshold)
+			  {
+			    coord_t xd, yd;
+			    to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
+			    xd = nearest_int (xd);
+			    yd = nearest_int (yd);
+			    int xx = ((int)xd + (int)yd) / 2;
+			    int yy = -(int)xd + (int)yd;
+			    if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
+			      {
+#pragma omp atomic
+				prec_green (xx, yy) += m_screen->mult[iy][ix][1] * l;
+#pragma omp atomic
+				w_green [yy * m_prec_width + xx] += m_screen->mult[iy][ix][1];
+			      }
+			  }
+			if (m_screen->mult[iy][ix][2] > m_params.collection_threshold)
+			  {
+			    int xx = nearest_int (2*(scr_x-(coord_t)0.25));
+			    int yy = nearest_int (2*(scr_y-(coord_t)0.25));
+#pragma omp atomic
+			    prec_blue (xx, yy) += m_screen->mult[iy][ix][2] * l;
+#pragma omp atomic
+			    w_blue [yy * m_prec_width * 2 + xx] += m_screen->mult[iy][ix][2];
 			  }
 		      }
-		    if (m_screen->mult[iy][ix][1] > m_params.collection_threshold)
-		      {
-			coord_t xd, yd;
-			to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
-			xd = nearest_int (xd);
-			yd = nearest_int (yd);
-			int xx = ((int)xd + (int)yd) / 2;
-			int yy = -(int)xd + (int)yd;
-			if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
-			  {
-#pragma omp atomic
-			    prec_green (xx, yy) += m_screen->mult[iy][ix][1] * l;
-#pragma omp atomic
-			    w_green [yy * m_prec_width + xx] += m_screen->mult[iy][ix][1];
-			  }
-		      }
-		    if (m_screen->mult[iy][ix][2] > m_params.collection_threshold)
-		      {
-			int xx = nearest_int (2*(scr_x-(coord_t)0.25));
-			int yy = nearest_int (2*(scr_y-(coord_t)0.25));
-#pragma omp atomic
-			prec_blue (xx, yy) += m_screen->mult[iy][ix][2] * l;
-#pragma omp atomic
-			w_blue [yy * m_prec_width * 2 + xx] += m_screen->mult[iy][ix][2];
-		      }
-		  }
+		  if (progress)
+		    progress->inc_progress ();
+		}
+	  if (progress)
+	    progress->set_task ("normalizing colors", m_prec_height * 2 * 3);
+	  if (!progress || !progress->cancel ())
 	    {
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
-		for (int x = 0; x < m_prec_width; x++)
-		  if (w_red [y * m_prec_width + x] != 0)
-		    prec_red (x,y) /= w_red [y * m_prec_width + x];
+		{
+		  if (!progress || !progress->cancel ())
+		    for (int x = 0; x < m_prec_width; x++)
+		      if (w_red [y * m_prec_width + x] != 0)
+			prec_red (x,y) /= w_red [y * m_prec_width + x];
+		  if (progress)
+		    progress->inc_progress ();
+		}
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
-		for (int x = 0; x < m_prec_width; x++)
-		  if (w_green [y * m_prec_width + x] != 0)
-		    prec_green (x,y) /= w_green [y * m_prec_width + x];
+		{
+		  if (!progress || !progress->cancel ())
+		    for (int x = 0; x < m_prec_width; x++)
+		      if (w_green [y * m_prec_width + x] != 0)
+			prec_green (x,y) /= w_green [y * m_prec_width + x];
+		  if (progress)
+		    progress->inc_progress ();
+		}
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
-		for (int x = 0; x < m_prec_width * 2; x++)
-		  if (w_blue [y * m_prec_width * 2 + x] != 0)
-		    prec_blue (x,y) /= w_blue [y * m_prec_width * 2 + x];
+		{
+		  if (!progress || !progress->cancel ())
+		    for (int x = 0; x < m_prec_width * 2; x++)
+		      if (w_blue [y * m_prec_width * 2 + x] != 0)
+			prec_blue (x,y) /= w_blue [y * m_prec_width * 2 + x];
+		  if (progress)
+		    progress->inc_progress ();
+		}
 	    }
 	  }
 	  free (w_red);
@@ -168,21 +209,28 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
 	  m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
 	  m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * 4 * sizeof (luminosity_t));
+	  if (progress)
+	    progress->set_task ("determining colors", m_prec_height);
 #define pixel(xo,yo,diag) m_params.precise && 0 ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-#pragma omp parallel for default (none)
+#pragma omp parallel for default (none) shared (progress)
 	  for (int x = 0; x < m_prec_width; x++)
-	    for (int y = 0 ; y < m_prec_height; y++)
-	      {
-		prec_red (x, 2 * y) = pixel (-0.5, 0, 0.5);
-		prec_red (x, 2 * y + 1) = pixel (0, 0.5, 0.5);
-		prec_green (x, 2 * y) = pixel (0.0, 0, 0.5);
-		prec_green (x, 2 * y + 1) = pixel (0.5, 0.5, 0.5);
-		prec_blue (2 * x, 2 * y) = pixel (0.25, 0.25, 0.3);
-		prec_blue (2 * x + 1, 2 * y) = pixel (0.75, 0.25, 0.3);
-		prec_blue (2 * x, 2 * y + 1) = pixel (0.25, 0.75, 0.3);
-		prec_blue (2 * x + 1, 2 * y + 1) = pixel (0.75, 0.75, 0.3);
-	      }
+	    {
+	      if (!progress || !progress->cancel ())
+		for (int y = 0 ; y < m_prec_height; y++)
+		  {
+		    prec_red (x, 2 * y) = pixel (-0.5, 0, 0.5);
+		    prec_red (x, 2 * y + 1) = pixel (0, 0.5, 0.5);
+		    prec_green (x, 2 * y) = pixel (0.0, 0, 0.5);
+		    prec_green (x, 2 * y + 1) = pixel (0.5, 0.5, 0.5);
+		    prec_blue (2 * x, 2 * y) = pixel (0.25, 0.25, 0.3);
+		    prec_blue (2 * x + 1, 2 * y) = pixel (0.75, 0.25, 0.3);
+		    prec_blue (2 * x, 2 * y + 1) = pixel (0.25, 0.75, 0.3);
+		    prec_blue (2 * x + 1, 2 * y + 1) = pixel (0.75, 0.75, 0.3);
+		  }
+	      if (progress)
+		progress->inc_progress ();
+	    }
 #undef pixel
 	}
     }
@@ -194,20 +242,29 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 2);
       m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
       m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
+      if (!m_prec_red || !m_prec_green || !m_prec_blue)
+	return false;
+      if (progress)
+	progress->set_task ("determining colors", m_prec_height);
 #define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
 			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-#pragma omp parallel for default (none)
+#pragma omp parallel for default (none) shared (progress)
       for (int x = 0; x < m_prec_width; x++)
-	for (int y = 0 ; y < m_prec_height; y++)
-	  {
-	    dufay_prec_red (2 * x, y) = pixel (0, 0.5,0.5, 0.3333);
-	    dufay_prec_red (2 * x + 1, y) = pixel (0.5, 0.5, 0.5, 0.3333);
-	    dufay_prec_green (x, y) = pixel (0, 0, 0.5, 1 - 0.333);
-	    dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 1 - 0.333);
-	  }
+	{
+	  if (!progress || !progress->cancel ())
+	    for (int y = 0 ; y < m_prec_height; y++)
+	      {
+		dufay_prec_red (2 * x, y) = pixel (0, 0.5,0.5, 0.3333);
+		dufay_prec_red (2 * x + 1, y) = pixel (0.5, 0.5, 0.5, 0.3333);
+		dufay_prec_green (x, y) = pixel (0, 0, 0.5, 1 - 0.333);
+		dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 1 - 0.333);
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
 #undef pixel
     }
-  return true;
+  return !progress || !progress->cancelled ();
 }
 
 flatten_attr void
@@ -350,9 +407,9 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 render_interpolate::~render_interpolate ()
 {
   if (m_prec_red)
-    {
-      free (m_prec_red);
-      free (m_prec_green);
-      free (m_prec_blue);
-    }
+    free (m_prec_red);
+  if (m_prec_green)
+    free (m_prec_green);
+  if (m_prec_blue)
+    free (m_prec_blue);
 }
