@@ -22,8 +22,7 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (1.3),
-    color_model (color_model_none), gray_min (0), gray_max (255), precise (true),
-    screen_compensation (true), adjust_luminosity (false)
+    color_model (color_model_none), gray_min (0), gray_max (255), precise (true)
   {}
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
@@ -44,10 +43,10 @@ struct DLL_PUBLIC render_parameters
   luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
   /* Temperature in K of backlight.  */
   luminosity_t backlight_temperature;
-  /* Aging simulation (0 new dyes, 1 aged dyes).  */
-  luminosity_t age;
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
+  /* Aging simulation (0 new dyes, 1 aged dyes).  */
+  luminosity_t age;
   enum dye_balance_t
   {
     dye_balance_none,
@@ -85,10 +84,6 @@ struct DLL_PUBLIC render_parameters
   /* The following is used by interpolated rendering only.  */
   /* If true use precise data collection.  */
   bool precise;
-  /* If true try to compensate for screen.  */
-  bool screen_compensation;
-  /* If true use luminosity from scan.  */
-  bool adjust_luminosity;
 
   bool operator== (render_parameters &other) const
   {
@@ -106,9 +101,7 @@ struct DLL_PUBLIC render_parameters
 	   && backlight_temperature == backlight_temperature
 	   && gray_min == other.gray_min
 	   && gray_max == other.gray_max
-	   && precise == other.precise
-	   && screen_compensation == other.screen_compensation
-	   && adjust_luminosity == other.adjust_luminosity;
+	   && precise == other.precise;
   }
   bool operator!= (render_parameters &other) const
   {

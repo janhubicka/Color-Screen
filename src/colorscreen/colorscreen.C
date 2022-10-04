@@ -329,10 +329,10 @@ main (int argc, char **argv)
     case combined:
       {
         rparam.precise = true;
-        rparam.screen_compensation = mode == predictive;
-        rparam.adjust_luminosity = mode == combined;
+        bool screen_compensation = mode == predictive;
+        bool adjust_luminosity = mode == combined;
 
-	render_interpolate render (param, scan, rparam, 65535);
+	render_interpolate render (param, scan, rparam, 65535, screen_compensation, adjust_luminosity);
 	if (!render.precompute_all (NULL))
 	  {
 	    fprintf (stderr, "Precomputation failed (out of memory)\n");

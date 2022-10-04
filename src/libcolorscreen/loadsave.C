@@ -59,8 +59,6 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
 	  || fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
-	  || fprintf (f, "screen_compensation: %s\n", bool_names [(int)rparam->screen_compensation]) < 0
-	  || fprintf (f, "adjust_luminosity: %s\n", bool_names [(int)rparam->adjust_luminosity]) < 0
 	  || fprintf (f, "mix_gamma: %f\n", rparam->mix_gamma) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
 	return false;
@@ -405,22 +403,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "screen_compensation"))
-	{
-	  if (!parse_bool (f, rparam_check (screen_compensation)))
-	    {
-	      *error = "error parsing screen_compensation";
-	      return false;
-	    }
-	}
-      else if (!strcmp (buf, "adjust_luminosity"))
-	{
-	  if (!parse_bool (f, rparam_check (adjust_luminosity)))
-	    {
-	      *error = "error parsing adjust_luminosity";
-	      return false;
-	    }
-	}
       else if (!strcmp (buf, "scr_detect_gamma"))
 	{
 	  if (!read_luminosity (f, dparam_check (gamma)))
@@ -474,6 +456,25 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, dparam_check (min_ratio)))
 	    {
 	      *error = "error parsing scr_detect_min_ratio";
+	      return false;
+	    }
+	}
+
+
+      /* Silently ignore; we used to save these but we no longer need them.  */
+      else if (!strcmp (buf, "screen_compensation"))
+	{
+	  if (!parse_bool (f, NULL))
+	    {
+	      *error = "error parsing screen_compensation";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "adjust_luminosity"))
+	{
+	  if (!parse_bool (f, NULL))
+	    {
+	      *error = "error parsing adjust_luminosity";
 	      return false;
 	    }
 	}

@@ -1,8 +1,8 @@
 #include <assert.h>
 #include "include/render-interpolate.h"
 
-render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
-   : render_to_scr (param, img, rparam, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_screen (NULL)
+render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity)
+   : render_to_scr (param, img, rparam, dst_maxval), m_prec_red (0), m_prec_green (0), m_prec_blue (0), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity)
 {
 }
 
@@ -12,7 +12,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   assert (!m_prec_red);
   if (!render_to_scr::precompute (xmin, ymin, xmax, ymax, progress))
     return false;
-  if (m_params.screen_compensation || m_params.precise)
+  if (m_screen_compensation || m_params.precise)
     {
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
       m_screen = get_screen (m_scr_to_img.get_type (), false, radius, progress);
@@ -331,7 +331,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
     }
-  if (m_params.screen_compensation)
+  if (m_screen_compensation)
     {
       coord_t lum = get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift);
       int ix = (long long) nearest_int ((x - m_prec_xshift) * screen::size) & (screen::size - 1);
@@ -386,7 +386,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       //set_color_luminosity (red, green, blue, lum / llum * (red + green + blue)*0.333, r, g, b);
 #endif
     }
-  else if (m_params.adjust_luminosity)
+  else if (m_adjust_luminosity)
     set_color_luminosity (red, green, blue, get_img_pixel_scr (x - m_prec_xshift, y - m_prec_yshift), r, g, b);
   else
     set_color (red, green, blue, r, g, b);

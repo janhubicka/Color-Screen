@@ -89,7 +89,9 @@ public:
   rgbdata fast_get_screen_pixel (int x, int y)
   {
     rgbdata d;
-    get_screen_color (x, y, &d.red, &d.green, &d.blue);
+    d.red = m_color_class_map->get_color_red (x, y);
+    d.green = m_color_class_map->get_color_green (x, y);
+    d.blue = m_color_class_map->get_color_blue (x, y);
     return d;
   }
   void inline render_adjusted_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)

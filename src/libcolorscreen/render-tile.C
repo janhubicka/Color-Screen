@@ -213,10 +213,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
     case render_type_combined:
     case render_type_predictive:
       {
-	rparam.adjust_luminosity = (render_type == render_type_combined);
-	rparam.screen_compensation = (render_type == render_type_predictive);
+	bool adjust_luminosity = (render_type == render_type_combined);
+	bool screen_compensation = (render_type == render_type_predictive);
 	render_interpolate render (param, img,
-				   rparam, 255);
+				   rparam, 255, screen_compensation, adjust_luminosity);
 	if (!render.precompute_img_range (xoffset * step, yoffset * step,
 				          (width + xoffset) * step,
 				          (height + yoffset) * step, progress))

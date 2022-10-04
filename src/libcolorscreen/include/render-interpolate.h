@@ -5,7 +5,7 @@
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
+  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity);
   ~render_interpolate ();
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
   void render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
@@ -34,6 +34,8 @@ private:
   luminosity_t *m_prec_green;
   luminosity_t *m_prec_blue;
   screen *m_screen;
+  bool m_screen_compensation;
+  bool m_adjust_luminosity;
 
   luminosity_t &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
   luminosity_t &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}
