@@ -25,10 +25,12 @@ struct DLL_PUBLIC render_parameters
     color_model (color_model_none), gray_min (0), gray_max (255), precise (true),
     screen_compensation (true), adjust_luminosity (false)
   {}
-  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).  */
+  /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
+     Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
   /* Pre-saturation increase (this works on data collected from the scan before
-     color model is applied and is intended to compensate for loss of sharpness.  */
+     color model is applied and is intended to compensate for loss of sharpness).
+     Only positive values makes sense; meaningful range is approx 0.1 to 10.  */
   luminosity_t presaturation;
   /* Saturation increase.  */
   luminosity_t saturation;
