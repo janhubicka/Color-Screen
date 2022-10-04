@@ -109,11 +109,14 @@ struct DLL_PUBLIC render_parameters
   }
 };
 
+/* Datastructure used to store information about dye luminosities.  */
 struct rgbdata
 {
   luminosity_t red, green, blue;
 };
 
+/* Helper for downscaling template for color rendering
+   data += lum * scale.  */
 inline void
 account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
 {
@@ -121,6 +124,9 @@ account_rgb_pixel (rgbdata *data, rgbdata lum, luminosity_t scale)
   data->green += lum.green * scale;
   data->blue += lum.blue * scale;
 }
+
+/* Helper for downscaling template for grayscale rendering
+   data += lum * scale.  */
 inline void
 account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
 {
@@ -173,17 +179,15 @@ protected:
 
 
   template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
-  void
-  process_line (T *data, int *pixelpos, luminosity_t *weights,
-		int xstart, int xend,
-		int width, int height,
-		int py, int yy,
-		bool y0, bool y1,
-		luminosity_t scale, luminosity_t yweight);
+  void process_line (T *data, int *pixelpos, luminosity_t *weights,
+		     int xstart, int xend,
+		     int width, int height,
+		     int py, int yy,
+		     bool y0, bool y1,
+		     luminosity_t scale, luminosity_t yweight);
 
   template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
-  void
-  process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T val, luminosity_t scale, luminosity_t xweight, luminosity_t yweight);
+  void process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T val, luminosity_t scale, luminosity_t xweight, luminosity_t yweight);
 
   template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   __attribute__ ((__flatten__))
@@ -449,6 +453,7 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
 
 /* Sample square patch with center xc and yc and x1/y1, x2/y2 determining a coordinates
    of top left and top right corner.  */
+
 luminosity_t
 render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2)
 {
@@ -514,6 +519,17 @@ render::sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord
   return 0;
 }
 
+/* Helper for downscaling template.
+   PIXEL is a pixel obtained from source image.  Account PIXEL*SCALE
+   to DATA at coordinates (px,py), (px,py+1), (py+1, px) and (px+1,py+1)
+   and distribute its value according to XWEIGHT and YWEIHT (here 0,0 means
+   that pixel is accounted only to px,py.
+
+   x0,x1,y0,y1 is used to disable updating for certain rows and columns to void
+   accessing out of range data. 
+  
+   WIDTH and HEIGHT are dimension of DATA pixmap.  */
+
 template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
@@ -536,6 +552,13 @@ render::process_pixel (T *data, int width, int height, int px, int py, bool x0, 
 	account_pixel (data + px + (py + 1) * width + 1, pixel, scale * yweight * xweight);
     }
 }
+
+/* Helper for downscaling template.  Process line (in range XSTART..XEND) if input image with
+   coordinate YY and account it (scaled by SCALE) to line of DATA with coordinate PY and PY+1.
+   PY gets 1-yweight of the data, while py+1 get yweight of data. 
+   PIXELPOS and WEIGHTS are precoputed scaling data for for x coordinate.
+
+   WIDTH and HEIGHT are dimension of DATA pixmap.  */
 
 template<typename T, typename D, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
 void
@@ -586,6 +609,14 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
      }
 }
 
+/* Template for paralelized downscaling of image.
+   GET_PIXEL is used to access input image which is of type T and ACCOUNT_PIXEL is used to account
+   pixels to given position of DATA.
+ 
+   DATA is an output pixmap with dimensions WIDTH*HEIGHT.
+   pixelsize if size of output pixel inside of input image.
+   X,Y are coordinates of the top left corner of the output image in the input image.  */
+
 template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
@@ -605,6 +636,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
       progress->set_task ("downscaling", pyend - pystart + 1);
     }
 
+  /* Precompute to which column of output image given colon of input image shold be accounted to.  */
   int *pixelpos = (int *)malloc (sizeof (int) * width + 1);
   luminosity_t *weights = (luminosity_t *)malloc (sizeof (luminosity_t) * width + 1);
 
