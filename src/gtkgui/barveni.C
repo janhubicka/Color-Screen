@@ -198,6 +198,7 @@ static bool freeze_y = false;
 static void display ();
 static int setcolor;
 
+#if 0
 static void
 optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 	  double r1, int steps1, double r2, int steps2)
@@ -367,6 +368,7 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
   display_scheduled = true;
   preview_display_scheduled = true;
 }
+#endif
 
 /* Handle all the magic keys.  */
 static gint
@@ -487,6 +489,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       if (k == 'c')
 	setcenter = true;
+#if 0
       if (k == 'O' && 0)
 	{
 static int step;
@@ -512,6 +515,7 @@ static int step;
 	      step++;
 	    }
 	}
+#endif
       if (k == 'x')
 	{
 	  freeze_x = false;

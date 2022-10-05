@@ -2,6 +2,8 @@
 #include <sys/time.h>
 #include "include/colorscreen.h"
 #include "include/render-fast.h"
+#include "include/render-interpolate.h"
+#include "include/render-superposeimg.h"
 
 static int stats = -1;
 
