@@ -666,6 +666,7 @@ gtkgui_FALSE
 gtkgui_TRUE
 BARVENI_BIN_LIBS
 BARVENI_BIN_CFLAGS
+RDYNAMIC
 JAVA_HOME_SET_FALSE
 JAVA_HOME_SET_TRUE
 JAVA_HOME
@@ -18020,7 +18021,7 @@ printf "%s\n" "$ac_cv_prog_cxx_openmp" >&6; }
 
 
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
-LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS -Wl,-no-undefined"
+LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 LDFLAGS="-lm $LDFLAGS"
 
@@ -18184,6 +18185,58 @@ else $as_nop
 fi
 
 fi
+
+# Needed only for gtkgui
+
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for compiler -rdynamic option" >&5
+printf %s "checking for compiler -rdynamic option... " >&6; }
+if test ${RDYNAMIC+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+   ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+  oldcflags="$CFLAGS"
+  CFLAGS="$CFLAGS -Wl,-export-dynamic"
+  CFLAGS="$CFLAGS -rdynamic"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  RDYNAMIC="-rdynamic"
+else $as_nop
+  RDYNAMIC=""
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+  CFLAGS="$oldcflags"
+  ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RDYNAMIC" >&5
+printf "%s\n" "$RDYNAMIC" >&6; }
+
+
 
 do_gtkgui=no
 # Check whether --enable-gtkgui was given.

@@ -12,7 +12,7 @@ PKG_PROG_PKG_CONFIG
 CXXFLAGS="$CXXFLAGS -Wall -Ofast -march=native -fno-exceptions -std=c++11 -DLIBCOLORSCREEN"
 AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
-LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS -Wl,-no-undefined"
+LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 LDFLAGS="-lm $LDFLAGS"
 
@@ -45,6 +45,25 @@ if test "$with_libjpeg" != "no"; then
 AC_SEARCH_LIBS(tjInitDecompress,[turbojpeg],[check_libjpeg_h="turbojpeg.h"],
  [ echo " * * * try option --with-libjpeg=PATH"])
 fi
+
+# Needed only for gtkgui
+AC_DEFUN([AC_LINK_EXPORT_DYNAMIC],
+[AC_CACHE_CHECK([for compiler -rdynamic option],
+                [RDYNAMIC],
+[ AC_LANG_PUSH([C])
+  oldcflags="$CFLAGS"
+  CFLAGS="$CFLAGS -Wl,-export-dynamic"
+  CFLAGS="$CFLAGS -rdynamic"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[]],[[]])],
+    [RDYNAMIC="-rdynamic"],[RDYNAMIC=""])
+  CFLAGS="$oldcflags"
+  AC_LANG_POP([C])
+])
+])
+AC_SUBST([RDYNAMIC])
+
+AC_LINK_EXPORT_DYNAMIC
+
 
 do_gtkgui=no
 AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
