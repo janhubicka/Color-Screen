@@ -20,8 +20,8 @@ public:
   /* Optional color scan.  */
   pixel **rgbdata;
 
-  image_data ();
-  ~image_data ();
+  DLL_PUBLIC image_data ();
+  DLL_PUBLIC ~image_data ();
   /* Dimensions of image data.  */
   int width, height;
   /* Maximal value of the image data.  */
@@ -32,22 +32,22 @@ public:
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
      message.  */
-  bool init_loader (const char *name, const char **error);
+  DLL_PUBLIC bool init_loader (const char *name, const char **error);
   /* True if grayscale allocation is needed
      (used after init_loader and before load_part).  */
-  bool allocate_grayscale ();
+  DLL_PUBLIC bool allocate_grayscale ();
   /* True if rgballocation is needed
      (used after init_loader and before load_part).  */
-  bool allocate_rgb ();
+  DLL_PUBLIC bool allocate_rgb ();
   /* Load part of image. Initialize PERMILLE to status.
      If PERMILLE==1000 loading is finished.
      If false is returned ERROR is initialized.  */
-  bool load_part (int *permille, const char **error);
+  DLL_PUBLIC bool load_part (int *permille, const char **error);
 
   /* Allocate memory.  */
-  bool allocate ();
+  DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
-  bool load (const char *name, const char **error, progress_info *progress = NULL);
+  DLL_PUBLIC bool load (const char *name, const char **error, progress_info *progress = NULL);
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */
