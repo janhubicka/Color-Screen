@@ -1,5 +1,5 @@
 include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h
-CXXFLAGS += -DLIBCOLORSCREEN
+AM_CXXFLAGS = -DLIBCOLORSCREEN
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la

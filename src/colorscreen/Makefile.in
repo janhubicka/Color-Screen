@@ -302,6 +302,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_LDFLAGS = -static
+AM_CXXFLAGS = -DLIBCOLORSCREEN
 LDADD = ../libcolorscreen/libcolorscreen.la 
 colorscreen_SOURCES = colorscreen.C
 all: all-am
