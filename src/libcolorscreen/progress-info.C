@@ -41,6 +41,7 @@ file_progress_info::~file_progress_info ()
   if (!m_initialized)
     return;
   pthread_cancel (m_thread);
+  pthread_join (m_thread, NULL);
   if (m_displayed)
     {
       const char *task = m_last_task;
