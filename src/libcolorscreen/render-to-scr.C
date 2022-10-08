@@ -57,6 +57,16 @@ render_to_scr::precompute_all(progress_info *progress)
 {
   return render::precompute_all (m_scr_to_img.get_type () != Dufay, progress);
 }
+bool
+render_to_scr::precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress)
+{
+  return precompute_all (progress);
+}
+bool
+render_to_scr::precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress)
+{
+  return precompute_all (progress);
+}
 
 screen *
 render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress)

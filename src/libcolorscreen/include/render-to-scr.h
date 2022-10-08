@@ -17,8 +17,8 @@ public:
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
   DLL_PUBLIC bool precompute_all (progress_info *progress);
-  DLL_PUBLIC bool precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress) {return precompute_all (progress);}
-  DLL_PUBLIC bool precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress) {return precompute_all (progress);}
+  DLL_PUBLIC bool precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
+  DLL_PUBLIC bool precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
   /* This returns screen coordinate width of rendered output.  */
   int get_width ()
   {

@@ -534,8 +534,11 @@ template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
-  //assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
-  //assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
+  if (0)
+    {
+      assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
+      assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
+    }
   
   if (x0)
     {
