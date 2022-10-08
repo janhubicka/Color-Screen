@@ -54,7 +54,7 @@ struct DLL_PUBLIC render_parameters
     dye_balance_whitepoint,
     dye_balance_max
   };
-  static const char *dye_balance_names [(int)dye_balance_max];
+  DLL_PUBLIC static const char *dye_balance_names [(int)dye_balance_max];
   /* How to balance dye colors.  */
   enum dye_balance_t dye_balance;
   /* Radius (in image pixels) the screen should be blured.  */
@@ -75,7 +75,7 @@ struct DLL_PUBLIC render_parameters
       color_model_autochrome2,
       color_model_max
     };
-  static const char *color_model_names [(int)color_model_max];
+  DLL_PUBLIC static const char *color_model_names [(int)color_model_max];
   /* If true apply color model of Finlay taking plate.  */
   enum color_model_t color_model;
   /* Gray range to boot to full contrast.  */
