@@ -5,7 +5,7 @@
 class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
 
-const char * render_parameters::color_model_names [] = {
+DLL_PUBLIC const char * render_parameters::color_model_names [] = {
   "none",
   "red",
   "green",
@@ -19,7 +19,7 @@ const char * render_parameters::color_model_names [] = {
   "cinecolor_koshofer",
   "autochrome-Casella-Tsukada",
 };
-const char * render_parameters::dye_balance_names [] = {
+DLL_PUBLIC const char * render_parameters::dye_balance_names [] = {
   "none",
   "neutral",
   "whitepoint"

@@ -490,6 +490,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	      progress->inc_progress ();
 	  }
       }
+      break;
     case render_type_scr_relax:
       {
 	render_scr_relax render (param, img, rparam, 255);
