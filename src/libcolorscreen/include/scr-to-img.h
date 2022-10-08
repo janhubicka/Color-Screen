@@ -3,6 +3,12 @@
 #include "dllpublic.h"
 #include "matrix.h"
 
+/* Windows does not seem to define this by default.  */
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+
+
 typedef float coord_t;
 typedef matrix4x4<coord_t> trans_matrix;
 
