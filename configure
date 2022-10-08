@@ -17941,7 +17941,7 @@ printf "%s\n" "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
-CXXFLAGS="$CXXFLAGS -Wall -Ofast -march=native -fno-exceptions -std=c++11"
+CXXFLAGS="$CXXFLAGS -Wall -Ofast -march=native -fno-exceptions -std=c++11 -DLIBCOLORSCREEN"
 if test -e penmp || test -e mp; then
   as_fn_error $? "AC_OPENMP clobbers files named 'mp' and 'penmp'. Aborting configure because one of these files already exists." "$LINENO" 5
 fi
