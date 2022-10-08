@@ -17,6 +17,10 @@ thread_start (void *arg)
 file_progress_info::file_progress_info (FILE *f, bool display)
 {
   pthread_attr_t attr;
+  // TODO: For some reason Windows pthread API will not cancel the thread.
+#ifdef _WIN32
+  display = false;
+#endif
   m_initialized = false;
   m_file = f;
   m_displayed = 0;
