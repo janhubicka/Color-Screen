@@ -8,8 +8,7 @@
     #endif
   #else
     #ifdef LIBCOLORSCREEN
-      #define DLL_PUBLIC __attribute__ ((dllimport))
-      #define DLL_PUBLIC __declspec(dllimport) // Note: actually gcc seems to also supports this syntax.
+      #define DLL_PUBLIC 
     #else
       #ifdef __GNUC__
         #define DLL_PUBLIC __attribute__ ((dllimport))
