@@ -15,8 +15,10 @@ The tool can be built with recent GCC or Clang compilers.  To obtain a good
 performance the compilers should support OpenMP (note that default XCode
 Clang compiler does not, however it is possible to install OpenMP).  To build
 the main library and command line utility the following libraries are needed
+
  - [libtiff](http://www.libtiff.org/)
  - [libjpeg-turbo](https://libjpeg-turbo.org/)
+
 To build a GTK2 based gui, GTK2 and Glade libraries are needed. Note that the
 GTK2 gui is deprecated and new Java based [Color-Screen GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
 by Linda Kimrová
