@@ -26,7 +26,7 @@ static int undopos;
 /* Are we in screen detection mode?  */
 bool scr_detect;
 
-static char *oname, *paroname;
+static char *paroname;
 static void bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf);
 
 /* The graymap with original scan is stored here.  */
@@ -112,13 +112,13 @@ cb_show_about (GtkButton * button, Data * data)
 /* Load the input file. */
 
 static void
-openimage (int *argc, char **argv)
+openimage (const char *name)
 {
   const char *error;
   bool ret;
   {
     file_progress_info p (stdout, true);
-    ret = scan.load (argv[1], &error, &p);
+    ret = scan.load (name, &error, &p);
   }
   if (!ret)
     {
@@ -606,7 +606,7 @@ initgtk (int *argc, char **argv)
   /* Create builder and load interface */
   builder = gtk_builder_new ();
   if (!gtk_builder_add_from_file (builder,
-      DATADIR "/colorscreen/barveni.glade", NULL))
+      DATADIR "/colorscreen/gtkgui.glade", NULL))
     {
       fprintf (stderr, "Can not open " DATADIR "/colorscreen/barveni.glade\n");
       exit (1);
@@ -999,20 +999,35 @@ int
 main (int argc, char **argv)
 {
   GtkWidget *window;
-  if (argc != 4 && argc != 5)
+  if (argc != 2 && argc != 3)
     {
-      fprintf (stderr, "Invocation: %s scan.pgm output.pnm scan.par [scan-rgb.pnm]\n\n"
-	       "scan.pgm is the scan as a greyscale.\n"
-	       "output.pnm is a filename where resulting image will be stored.\n"
-	       "If scan.par exists then its parametrs will be read.\n"
-	       "Parameters will be saved to scan.par after pressing save button.\n"
-	       "scan-rgb.pnm is an optional RGB scan of the same original.\n",
+      fprintf (stderr, "Invocation: %s <scan> <csp (optional)>]\n\n"
+	       "scan must be either tiff of jpg file.\n"
+	       "csp is where parameters should be load/stored.\n",
 	       argv[0]);
       exit (1);
     }
-  openimage (&argc, argv);
-  oname = argv[2];
-  paroname = argv[3];
+  openimage (argv[1]);
+  if (argc == 3)
+    paroname = argv[2];
+  else
+    {
+      paroname = strdup (argv[1]);
+      int len = strlen (paroname), i;
+      for (i = len - 1;i >= 0; i--)
+	if (paroname[i]=='.')
+	  break;
+      if (i < 0 || len - i < 4)
+	{
+	  fprintf (stderr, "Can not find suffix\n");
+	  exit (1);
+	}
+      paroname[i+1]='p';
+      paroname[i+2]='a';
+      paroname[i+3]='r';
+      paroname[i+4]=0;
+      printf ("Out file: %s\n", paroname);
+    }
 
   FILE *in = fopen (paroname, "rt");
   const char *error;

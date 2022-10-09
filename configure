@@ -664,8 +664,8 @@ LTLIBOBJS
 LIBOBJS
 gtkgui_FALSE
 gtkgui_TRUE
-BARVENI_BIN_LIBS
-BARVENI_BIN_CFLAGS
+GTKGUI_BIN_LIBS
+GTKGUI_BIN_CFLAGS
 RDYNAMIC
 JAVA_HOME_SET_FALSE
 JAVA_HOME_SET_TRUE
@@ -832,8 +832,8 @@ CXXCPP
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
-BARVENI_BIN_CFLAGS
-BARVENI_BIN_LIBS'
+GTKGUI_BIN_CFLAGS
+GTKGUI_BIN_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1507,10 +1507,10 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
-  BARVENI_BIN_CFLAGS
-              C compiler flags for BARVENI_BIN, overriding pkg-config
-  BARVENI_BIN_LIBS
-              linker flags for BARVENI_BIN, overriding pkg-config
+  GTKGUI_BIN_CFLAGS
+              C compiler flags for GTKGUI_BIN, overriding pkg-config
+  GTKGUI_BIN_LIBS
+              linker flags for GTKGUI_BIN, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -18252,11 +18252,11 @@ if test "$do_gtkgui" != "no"; then
 
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for BARVENI_BIN" >&5
-printf %s "checking for BARVENI_BIN... " >&6; }
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GTKGUI_BIN" >&5
+printf %s "checking for GTKGUI_BIN... " >&6; }
 
-if test -n "$BARVENI_BIN_CFLAGS"; then
-    pkg_cv_BARVENI_BIN_CFLAGS="$BARVENI_BIN_CFLAGS"
+if test -n "$GTKGUI_BIN_CFLAGS"; then
+    pkg_cv_GTKGUI_BIN_CFLAGS="$GTKGUI_BIN_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
     { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
@@ -18270,7 +18270,7 @@ if test -n "$BARVENI_BIN_CFLAGS"; then
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_BARVENI_BIN_CFLAGS=`$PKG_CONFIG --cflags "
+  pkg_cv_GTKGUI_BIN_CFLAGS=`$PKG_CONFIG --cflags "
     glib-2.0
     gtk+-2.0
   " 2>/dev/null`
@@ -18281,8 +18281,8 @@ fi
  else
     pkg_failed=untried
 fi
-if test -n "$BARVENI_BIN_LIBS"; then
-    pkg_cv_BARVENI_BIN_LIBS="$BARVENI_BIN_LIBS"
+if test -n "$GTKGUI_BIN_LIBS"; then
+    pkg_cv_GTKGUI_BIN_LIBS="$GTKGUI_BIN_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
     { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
@@ -18296,7 +18296,7 @@ if test -n "$BARVENI_BIN_LIBS"; then
   ac_status=$?
   printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
-  pkg_cv_BARVENI_BIN_LIBS=`$PKG_CONFIG --libs "
+  pkg_cv_GTKGUI_BIN_LIBS=`$PKG_CONFIG --libs "
     glib-2.0
     gtk+-2.0
   " 2>/dev/null`
@@ -18320,31 +18320,31 @@ else
         _pkg_short_errors_supported=no
 fi
         if test $_pkg_short_errors_supported = yes; then
-	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "
+	        GTKGUI_BIN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "
     glib-2.0
     gtk+-2.0
   " 2>&1`
         else
-	        BARVENI_BIN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "
+	        GTKGUI_BIN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "
     glib-2.0
     gtk+-2.0
   " 2>&1`
         fi
 	# Put the nasty error message in config.log where it belongs
-	echo "$BARVENI_BIN_PKG_ERRORS" >&5
+	echo "$GTKGUI_BIN_PKG_ERRORS" >&5
 
 	as_fn_error $? "Package requirements (
     glib-2.0
     gtk+-2.0
   ) were not met:
 
-$BARVENI_BIN_PKG_ERRORS
+$GTKGUI_BIN_PKG_ERRORS
 
 Consider adjusting the PKG_CONFIG_PATH environment variable if you
 installed software in a non-standard prefix.
 
-Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
-and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
+Alternatively, you may set the environment variables GTKGUI_BIN_CFLAGS
+and GTKGUI_BIN_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details." "$LINENO" 5
 elif test $pkg_failed = untried; then
      	{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
@@ -18355,15 +18355,15 @@ as_fn_error $? "The pkg-config script could not be found or is too old.  Make su
 is in your PATH or set the PKG_CONFIG environment variable to the full
 path to pkg-config.
 
-Alternatively, you may set the environment variables BARVENI_BIN_CFLAGS
-and BARVENI_BIN_LIBS to avoid the need to call pkg-config.
+Alternatively, you may set the environment variables GTKGUI_BIN_CFLAGS
+and GTKGUI_BIN_LIBS to avoid the need to call pkg-config.
 See the pkg-config man page for more details.
 
 To get pkg-config, see <http://pkg-config.freedesktop.org/>.
 See \`config.log' for more details" "$LINENO" 5; }
 else
-	BARVENI_BIN_CFLAGS=$pkg_cv_BARVENI_BIN_CFLAGS
-	BARVENI_BIN_LIBS=$pkg_cv_BARVENI_BIN_LIBS
+	GTKGUI_BIN_CFLAGS=$pkg_cv_GTKGUI_BIN_CFLAGS
+	GTKGUI_BIN_LIBS=$pkg_cv_GTKGUI_BIN_LIBS
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
 

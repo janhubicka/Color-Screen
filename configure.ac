@@ -69,7 +69,7 @@ do_gtkgui=no
 AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
 if test "$do_gtkgui" != "no"; then
   AC_CONFIG_HEADERS([src/gtkgui/config.h])
-  PKG_CHECK_MODULES([BARVENI_BIN], [
+  PKG_CHECK_MODULES([GTKGUI_BIN], [
     glib-2.0
     gtk+-2.0
   ])

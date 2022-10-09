@@ -1,18 +1,8 @@
-bin_SCRIPTS=barveni
-CLEANFILES = $(bin_SCRIPTS)
-EXTRA_DIST = barveni.in barvenirgb.in
-do_subst = sed -e 's,[@]bindir[@],$(bindir),g'
-barveni: barveni.in Makefile
-	$(do_subst) < $(srcdir)/barveni.in > barveni
-	chmod +x barveni
-barvenirgb: barvenirgb.in Makefile
-	$(do_subst) < $(srcdir)/barvenirgb.in > barvenirgb
-	chmod +x barvenirgb
-dist_pkgdata_DATA = barveni.glade
+dist_pkgdata_DATA = gtkgui.glade
 
-AM_CFLAGS = $(BARVENI_BIN_CFLAGS) -Wno-implicit-function-declaration
-AM_CXXFLAGS = $(BARVENI_BIN_CFLAGS)  -D DATADIR='"$(datadir)"' $(RDYNAMIC)
-bin_PROGRAMS=barveni-bin
+AM_CFLAGS = $(GTKGUI_BIN_CFLAGS) -Wno-implicit-function-declaration
+AM_CXXFLAGS = $(GTKGUI_BIN_CFLAGS)  -D DATADIR='"$(datadir)"' $(RDYNAMIC)
+bin_PROGRAMS=colorscreen-gtk
 AM_LDFLAGS = -static
-LDADD = ../libcolorscreen/libcolorscreen.la $(BARVENI_BIN_LIBS)
-barveni_bin_SOURCES=barveni.C gtk-image-viewer.c
+LDADD = ../libcolorscreen/libcolorscreen.la $(GTKGUI_BIN_LIBS)
+colorscreen_gtk_SOURCES=gtkgui.C gtk-image-viewer.c
