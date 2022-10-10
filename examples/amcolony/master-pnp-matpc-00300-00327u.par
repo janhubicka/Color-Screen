@@ -1,0 +1,20 @@
+screen_alignment_version: 1
+screen_type: Finlay
+screen_shift: 493.824921 303.692444
+coordinate_x: 8.748391 -0.022185
+coordinate_y: 0.020227 8.769378
+tilt_x: -0.000008 -0.000008
+tilt_y: -0.000008 -0.000008
+k1: 0.000000
+gamma: 2.200000
+presaturation: 1.000000
+saturation: 1.500000
+brightness: 1.000000
+scren_blur_radius: 1.300000
+color_model: none
+backlight_temperature: 6500.000000
+dye_balance: neutral
+gray_range: 0 255
+precise: no
+mix_gamma: 2.200000
+mix_weights: 0.300000 0.100000 1.000000
