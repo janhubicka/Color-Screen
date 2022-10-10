@@ -239,6 +239,7 @@ ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
+AS = @AS@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -372,7 +373,8 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
 libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C
-libcolorscreen_la_LDFLAGS = -version-info 1:1:1  -no-undefined
+# -no-undefined is needed in order to build DLL on Windows.
+libcolorscreen_la_LDFLAGS = -version-info 1:1:1  #-no-undefined
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 matrix_SOURCES = matrix.C
 all: all-am

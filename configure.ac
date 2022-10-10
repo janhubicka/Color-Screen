@@ -1,7 +1,7 @@
 AC_PREREQ([2.61])
 AC_INIT([colorscreen], [0.1], [hubicka@ucw.cz])
 AM_INIT_AUTOMAKE
-LT_INIT
+LT_INIT(win32-dll)
 
 AC_PROG_MAKE_SET
 AC_PROG_CXX
