@@ -4,7 +4,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 lib_LTLIBRARIES = libcolorscreen.la
 libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C
 # -no-undefined is needed in order to build DLL on Windows.
-libcolorscreen_la_LDFLAGS = -version-info 1:1:1  #-no-undefined
+libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 #if JAVA_HOME_SET
 #  libcolorscreen_la_SOURCES += cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C

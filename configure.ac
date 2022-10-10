@@ -46,6 +46,25 @@ AC_SEARCH_LIBS(tjInitDecompress,[turbojpeg],[check_libjpeg_h="turbojpeg.h"],
  [ echo " * * * try option --with-libjpeg=PATH"])
 fi
 
+# Windows DLL require -no-undefined libtool argument.  Using it on other
+# systems makes using of libcolorscreen more complicated since -lcolorscreen
+# must then be done together with libraries colorscreen depends on (libtiff and
+# jpeg-turbo).  Use -no-undefined on Windows only.
+AC_MSG_CHECKING([for Win32])
+case "$host" in
+     *-*-mingw*)
+       WIN_NO_UNDEFINED="-no-undefined"
+       ;;
+     *-*-cygwin*)
+       WIN_NO_UNDEFINED="-no-undefined"
+       ;;
+     *)
+       WIN_NO_UNDEFINED=""
+       ;;
+esac
+AC_SUBST([WIN_NO_UNDEFINED])
+
+
 # Needed only for gtkgui
 AC_DEFUN([AC_LINK_EXPORT_DYNAMIC],
 [AC_CACHE_CHECK([for compiler -rdynamic option],

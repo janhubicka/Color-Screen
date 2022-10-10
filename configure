@@ -667,6 +667,7 @@ gtkgui_TRUE
 GTKGUI_BIN_LIBS
 GTKGUI_BIN_CFLAGS
 RDYNAMIC
+WIN_NO_UNDEFINED
 JAVA_HOME_SET_FALSE
 JAVA_HOME_SET_TRUE
 JAVA_HOME
@@ -18508,6 +18509,26 @@ else $as_nop
 fi
 
 fi
+
+# Windows DLL require -no-undefined libtool argument.  Using it on other
+# systems makes using of libcolorscreen more complicated since -lcolorscreen
+# must then be done together with libraries colorscreen depends on (libtiff and
+# jpeg-turbo).  Use -no-undefined on Windows only.
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for Win32" >&5
+printf %s "checking for Win32... " >&6; }
+case "$host" in
+     *-*-mingw*)
+       WIN_NO_UNDEFINED="-no-undefined"
+       ;;
+     *-*-cygwin*)
+       WIN_NO_UNDEFINED="-no-undefined"
+       ;;
+     *)
+       WIN_NO_UNDEFINED=""
+       ;;
+esac
+
+
 
 # Needed only for gtkgui
 
