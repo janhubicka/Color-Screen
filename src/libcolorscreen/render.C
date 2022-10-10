@@ -253,7 +253,7 @@ render::precompute_all (bool duffay, progress_info *progress)
   color_matrix color;
   /* We can combine presaturation to the matrix for simple matrix
      transformations.  For non-linear transformations it needs to be done
-     separately.  */
+     separately since we apply the matrix only after the dye to XYZ conversion.  */
   if (m_params.presaturation != 1
       && (m_params.color_model == render_parameters::color_model_none
 	  || m_params.color_model == render_parameters::color_model_paget))
@@ -333,9 +333,7 @@ render::precompute_all (bool duffay, progress_info *progress)
     }
   if (m_spectrum_dyes_to_xyz)
     {
-      xyz_srgb_matrix m2;
 
-      color = m2 * color;
       m_spectrum_dyes_to_xyz->set_daylight_backlight (m_params.backlight_temperature);
       switch (m_params.dye_balance)
 	{
@@ -350,6 +348,29 @@ render::precompute_all (bool duffay, progress_info *progress)
 	    break;
 	  default:
 	    abort ();
+	}
+      /* At the moment all conversion we do are linear conversions.  In that case
+         we can build XYZ matrix and proceed with that.  */
+      if (debug && !m_spectrum_dyes_to_xyz->is_linear ())
+	{
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+	  /* There is disabled code in render.h to optimize codegen.  */
+	  abort ();
+	}
+      else
+	{
+	  if (m_params.presaturation != 1)
+	    {
+	      presaturation_matrix m (m_params.presaturation);
+	      color = m * color;
+	    }
+	  color_matrix mm, m = m_spectrum_dyes_to_xyz->xyz_matrix ();
+	  xyz_srgb_matrix m2;
+	  mm = m2 * m;
+	  color = mm * color;
+	  delete (m_spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz = NULL;
 	}
     }
   if (m_params.saturation != 1)

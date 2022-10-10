@@ -1741,3 +1741,41 @@ spectrum_dyes_to_xyz::debug_write_spectra ()
   print_transmitance_spectrum (f, cie_cmf_z);
   fclose (f);
 }
+
+color_matrix
+spectrum_dyes_to_xyz::xyz_matrix ()
+{
+	xyz r, g, b;
+	r = dyes_rgb_to_xyz (1, 0, 0);
+	g = dyes_rgb_to_xyz (0, 1, 0);
+	b = dyes_rgb_to_xyz (0, 0, 1);
+	color_matrix m (r.x, g.x, b.x, 0,
+			r.y, g.y, b.y, 0,
+			r.z, g.z, b.z, 0,
+			0  , 0  , 0  , 1);
+	return m;
+}
+
+bool
+spectrum_dyes_to_xyz::is_linear ()
+{
+  const int steps = 16;
+  const luminosity_t max_error = (0.5 / 65546);
+  color_matrix m = xyz_matrix ();
+  for (int r = 0; r < steps; r++)
+    for (int g = 0; g < steps; g++)
+      for (int b = 0; b < steps; b++)
+        {
+	  luminosity_t rr = r / (luminosity_t) steps;
+	  luminosity_t gg = g / (luminosity_t) steps;
+	  luminosity_t bb = b / (luminosity_t) steps;
+	  xyz v1, v2;
+	  v1 = dyes_rgb_to_xyz (rr, gg, bb);
+	  m.apply_to_rgb (rr, gg, bb, &v2.x, &v2.y, &v2.z);
+	  if (fabs (v1.x - v2.x) > max_error
+	      || fabs (v1.y - v2.y) > max_error
+	      || fabs (v1.z - v2.z) > max_error)
+	    return false;
+        }
+  return true;
+}

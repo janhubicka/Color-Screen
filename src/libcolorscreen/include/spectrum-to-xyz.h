@@ -71,6 +71,7 @@ public:
       ret.z *= zscale;
       return ret;
     }
+  /* Return XYZ of white color seen through the dyes.  */
   xyz whitepoint_xyz ()
     {
       spectrum nofilter;
@@ -78,6 +79,10 @@ public:
 	nofilter[i]=1;
       return get_xyz (nofilter);
     }
+  /* Return true if dyes_rgb_to_xyz behaves linearly.  */
+  bool is_linear ();
+  color_matrix xyz_matrix ();
+
   private:
     static const bool debug = false;
     /* Compute XYZ values.  */

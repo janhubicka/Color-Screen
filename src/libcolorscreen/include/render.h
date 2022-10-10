@@ -219,6 +219,7 @@ protected:
   color_matrix m_color_matrix;
 
 private:
+  const bool debug = false;
   inline rgbdata
   get_rgb_pixel (int x, int y)
   {
@@ -282,15 +283,22 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 {
   if (m_spectrum_dyes_to_xyz)
     {
-      if (m_params.presaturation != 1)
+      /* At the moment all conversions are linear.
+         Simplify the codegen here.  */
+      if (1)
+	abort ();
+      else
 	{
-          presaturation_matrix m (m_params.presaturation);
-	  m.apply_to_rgb (r, g, b, &r, &g, &b);
+	  if (m_params.presaturation != 1)
+	    {
+	      presaturation_matrix m (m_params.presaturation);
+	      m.apply_to_rgb (r, g, b, &r, &g, &b);
+	    }
+	  struct xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
+	  r = c.x;
+	  g = c.y;
+	  b = c.z;
 	}
-      struct xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
-      r = c.x;
-      g = c.y;
-      b = c.z;
     }
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
