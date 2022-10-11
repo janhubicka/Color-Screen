@@ -10,7 +10,7 @@ gamma: 2.800000
 presaturation: 2.000000
 saturation: 1.500000
 brightness: 1.000000
-scren_blur_radius: 1.300000
+scren_blur_radius: 0.300000
 color_model: none
 backlight_temperature: 6500.000000
 dye_balance: neutral
