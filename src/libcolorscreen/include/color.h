@@ -253,4 +253,11 @@ srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, l
   b = srgb_to_linear (b);
   m.apply_to_rgb (r, g, b, x, y, z);
 }
+
+inline xyz
+xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
+{
+  xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
+  return ret;
+}
 #endif

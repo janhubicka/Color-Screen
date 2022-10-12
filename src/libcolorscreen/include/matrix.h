@@ -214,6 +214,17 @@ public:
   inline void
   normalize_grayscale (T r = 1, T g = 1, T b = 1)
   {
+    matrix4x4 inv = invert ();
+    T ivec[4] = {r, g, b, 1};
+    T vec[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; i++)
+      for (int j = 0; j < 4; j++)
+	vec[i] += ivec[j] * inv.m_elements[j][i];
+    //fprintf (stderr, "%f %f %f %f\n", vec[i],
+    for (int i = 0; i < 4; i++)
+      for (int j = 0; j < 4; j++)
+	B::m_elements[i][j] *= vec[i];
+#if 0
     T scale =  r / (B::m_elements[0][0] + B::m_elements[1][0] + B::m_elements[2][0] + B::m_elements[3][0]);
     for (int j = 0; j < 4; j++)
       B::m_elements[j][0] *= scale;
@@ -223,6 +234,7 @@ public:
     scale =  b / (B::m_elements[0][2] + B::m_elements[1][2] + B::m_elements[2][2] + B::m_elements[3][2]);
     for (int j = 0; j < 4; j++)
       B::m_elements[j][2] *= scale;
+#endif
   }
   /* Compute inversion.  */
   inline matrix4x4

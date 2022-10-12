@@ -11,13 +11,15 @@ const char * render_parameters::color_model_names [] = {
   "green",
   "blue",
   "paget",
+  "Miethe_Goerz_reconstructed_by_Wagner",
+  "Miethe_Goerz_mesured_by_Wagner",
   "dufaycolor_NSMM_Bradford_11948",
   "dufaycolor_NSMM_Bradford_11951",
   "dufaycolor_NSMM_Bradford_11960",
   "dufaycolor_NSMM_Bradford_11967",
   "spicer_dufay_NSMM_Bradford_12075",
   "cinecolor_koshofer",
-  "autochrome-Casella-Tsukada",
+  "autochrome_Casella_Tsukada",
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
@@ -141,7 +143,7 @@ struct graydata_params
      to check cache entries.  */
   unsigned long image_id;
   image_data *img;
-  luminosity_t gamma, red, blue, green;
+  luminosity_t gamma, red, green, blue;
   bool
   operator==(graydata_params &o)
   {
@@ -206,14 +208,14 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
   for (int y = 0; y < p.img->height; y++)
     {
       for (int x = 0; x < p.img->width; x++)
-       {
-	 luminosity_t val = rtable[p.img->rgbdata[y][x].r]
-			    + gtable[p.img->rgbdata[y][x].g]
-			    + btable[p.img->rgbdata[y][x].b];
-	 val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
-	 data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
-       }
-       if (progress)
+	{
+	  luminosity_t val = rtable[p.img->rgbdata[y][x].r]
+			     + gtable[p.img->rgbdata[y][x].g]
+			     + btable[p.img->rgbdata[y][x].b];
+	  val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+	  data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
+	}
+      if (progress)
 	 progress->inc_progress ();
     }
 
@@ -256,7 +258,9 @@ render::precompute_all (bool duffay, progress_info *progress)
      separately since we apply the matrix only after the dye to XYZ conversion.  */
   if (m_params.presaturation != 1
       && (m_params.color_model == render_parameters::color_model_none
-	  || m_params.color_model == render_parameters::color_model_paget))
+	  || m_params.color_model == render_parameters::color_model_paget
+	  || m_params.color_model == render_parameters::color_model_miethe_goerz_reconstructed_wager
+	  || m_params.color_model == render_parameters::color_model_miethe_goerz_original_wager))
     {
       presaturation_matrix m (m_params.presaturation);
       color = m * color;
@@ -301,6 +305,44 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  color_matrix mm;
 	  mm = m2 * m;
 	  mm.normalize_grayscale ();
+	  color = mm * color;
+	  break;
+	}
+      /* Colors derived from reconstructed filters for Miethe-Goerz projector by Jens Wagner.  */
+      case render_parameters::color_model_miethe_goerz_reconstructed_wager:
+	{
+	  xyz r = xyY_to_xyz (0.674, 0.325, 1);
+	  xyz g = xyY_to_xyz (0.182, 0.747, 1);
+	  xyz b = xyY_to_xyz (0.151, 0.041, 1);
+	  color_matrix m (r.x, g.x, b.x, 0,
+			  r.y, g.y, b.y, 0,
+			  r.z, g.z, b.z, 0,
+			  0,   0,   0,   1), mm;
+	  xyz white;
+	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	  m.normalize_grayscale (white.x, white.y, white.z);
+	  xyz_srgb_matrix m2;
+	  mm = m2 * m;
+	  //mm.normalize_grayscale ();
+	  color = mm * color;
+	  break;
+	}
+      /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
+      case render_parameters::color_model_miethe_goerz_original_wager:
+	{
+	  xyz r = xyY_to_xyz (0.620, 0.315, 1);
+	  xyz g = xyY_to_xyz (0.304, 0.541, 1);
+	  xyz b = xyY_to_xyz (0.182, 0.135, 1);
+	  color_matrix m (r.x, g.x, b.x, 0,
+			  r.y, g.y, b.y, 0,
+			  r.z, g.z, b.z, 0,
+			  0,   0,   0,   1), mm;
+	  xyz white;
+	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	  m.normalize_grayscale (white.x, white.y, white.z);
+	  xyz_srgb_matrix m2;
+	  mm = m2 * m;
+	  //mm.normalize_grayscale ();
 	  color = mm * color;
 	  break;
 	}

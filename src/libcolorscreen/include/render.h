@@ -66,6 +66,8 @@ struct DLL_PUBLIC render_parameters
       color_model_green,
       color_model_blue,
       color_model_paget,
+      color_model_miethe_goerz_reconstructed_wager,
+      color_model_miethe_goerz_original_wager,
       color_model_duffay1,
       color_model_duffay2,
       color_model_duffay3,
