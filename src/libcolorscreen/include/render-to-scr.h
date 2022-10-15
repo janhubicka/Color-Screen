@@ -81,7 +81,7 @@ public:
   void inline render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
-    m_scr_to_img.to_img (x, y, &xx, &yy);
+    m_scr_to_img.to_img (x - m_scr_xshift, y - m_scr_yshift, &xx, &yy);
     render_pixel_img (xx, yy, r, g, b);
   }
 private:
