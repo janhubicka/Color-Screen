@@ -62,12 +62,12 @@ open_output_file (const char *outfname, int outwidth, int outheight,
     }
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
-      || TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
-      || TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
-      || TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
-      || TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
-      || TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
+      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
+      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
     {
       *error = "write error";
       return NULL;
