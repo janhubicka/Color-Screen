@@ -7,6 +7,7 @@ AC_PROG_MAKE_SET
 AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_RANLIB
+AM_MAINTAINER_MODE([disable])
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
 CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -fno-exceptions -std=c++11 -DLIBCOLORSCREEN"
@@ -14,7 +15,7 @@ AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
-LDFLAGS="-lm $LDFLAGS"
+AC_SEARCH_LIBS([sqrt], [m])
 
 # The following may be useful if we put javaglue to the library.
 # TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
