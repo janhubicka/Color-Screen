@@ -668,9 +668,6 @@ GTKGUI_BIN_LIBS
 GTKGUI_BIN_CFLAGS
 RDYNAMIC
 WIN_NO_UNDEFINED
-JAVA_HOME_SET_FALSE
-JAVA_HOME_SET_TRUE
-JAVA_HOME
 OPENMP_CXXFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
@@ -18349,18 +18346,13 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 LDFLAGS="-lm $LDFLAGS"
 
+# The following may be useful if we put javaglue to the library.
 
- if test ! -z "$JAVA_HOME"; then
-  JAVA_HOME_SET_TRUE=
-  JAVA_HOME_SET_FALSE='#'
-else
-  JAVA_HOME_SET_TRUE='#'
-  JAVA_HOME_SET_FALSE=
-fi
-
-if test ! -z "$JAVA_HOME"; then
-  CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
-fi
+#AC_SUBST([JAVA_HOME])
+#AM_CONDITIONAL([JAVA_HOME_SET], [test ! -z "$JAVA_HOME"])
+#if test ! -z "$JAVA_HOME"; then
+  #CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
+#fi
 
 
 # Check whether --with-libtiff was given.
@@ -18863,10 +18855,6 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${am__fastdepCC_TRUE}" && test -z "${am__fastdepCC_FALSE}"; then
   as_fn_error $? "conditional \"am__fastdepCC\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5
-fi
-if test -z "${JAVA_HOME_SET_TRUE}" && test -z "${JAVA_HOME_SET_FALSE}"; then
-  as_fn_error $? "conditional \"JAVA_HOME_SET\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then

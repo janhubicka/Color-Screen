@@ -8,11 +8,9 @@
 struct scr_detect_parameters
 {
   scr_detect_parameters ()
-  : gamma (2.2), black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.000), min_ratio (1)
+  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.000), min_ratio (1)
   { }
 
-  /* Gamma applied to image data before screen detection.  */
-  luminosity_t gamma;
   /* Typical valus of red, green and blue dyes scaled to range (0,1) in the scan's gamma.  */
   color_t black, red, green, blue;
   /* Minimal luminosity for detection to be performed.  */
@@ -21,8 +19,7 @@ struct scr_detect_parameters
   luminosity_t min_ratio;
   bool operator== (scr_detect_parameters &other) const
   {
-    return gamma == gamma
-	   && black == other.black
+    return black == other.black
 	   && red == other.red
 	   && green == other.green
 	   && blue == other.blue;
@@ -36,7 +33,7 @@ struct scr_detect_parameters
 class scr_detect
 {
 public:
-  void set_parameters (scr_detect_parameters param, int maxval);
+  void set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval);
   enum color_class
   {
     red,

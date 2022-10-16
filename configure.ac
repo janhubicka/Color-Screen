@@ -16,11 +16,14 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 LDFLAGS="-lm $LDFLAGS"
 
-AC_SUBST([JAVA_HOME])
-AM_CONDITIONAL([JAVA_HOME_SET], [test ! -z "$JAVA_HOME"])
-if test ! -z "$JAVA_HOME"; then
-  CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
-fi
+# The following may be useful if we put javaglue to the library.
+# TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
+
+#AC_SUBST([JAVA_HOME])
+#AM_CONDITIONAL([JAVA_HOME_SET], [test ! -z "$JAVA_HOME"])
+#if test ! -z "$JAVA_HOME"; then
+  #CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
+#fi
 
 AC_ARG_WITH(libtiff,
  [  --with-libtiff=PATH      enter the PATH to libtiff package],

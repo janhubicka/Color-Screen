@@ -145,7 +145,7 @@ getvals (void)
   current.tilt_x_y = gtk_spin_button_get_value (data.tilt_x_y);
   current.tilt_y_x = gtk_spin_button_get_value (data.tilt_y_x);
   current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
-  rparams.mix_gamma = gtk_spin_button_get_value (data.mix_gamma);
+  //rparams.mix_gamma = gtk_spin_button_get_value (data.mix_gamma);
   rparams.mix_red = gtk_spin_button_get_value (data.mix_red);
   rparams.mix_green = gtk_spin_button_get_value (data.mix_green);
   rparams.mix_blue = gtk_spin_button_get_value (data.mix_blue);
@@ -172,7 +172,7 @@ setvals (void)
   gtk_spin_button_set_value (data.tilt_x_y, current.tilt_x_y);
   gtk_spin_button_set_value (data.tilt_y_x, current.tilt_y_x);
   gtk_spin_button_set_value (data.tilt_y_y, current.tilt_y_y);
-  gtk_spin_button_set_value (data.mix_gamma, rparams.mix_gamma);
+  //gtk_spin_button_set_value (data.mix_gamma, rparams.mix_gamma);
   gtk_spin_button_set_value (data.mix_red, rparams.mix_red);
   gtk_spin_button_set_value (data.mix_green, rparams.mix_green);
   gtk_spin_button_set_value (data.mix_blue, rparams.mix_blue);

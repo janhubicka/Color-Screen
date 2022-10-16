@@ -10,7 +10,7 @@ public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
     : render (img, rparam, dstmaxval)
   {
-    m_scr_detect.set_parameters (param, m_img.maxval);
+    m_scr_detect.set_parameters (param, rparam.gamma, m_img.maxval);
   }
   ~render_scr_detect ();
   scr_detect::color_class classify_pixel (int x, int y)

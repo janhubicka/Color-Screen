@@ -38,8 +38,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   if (dparam)
     {
-      if (fprintf (f, "scr_detect_gamma: %f\n", dparam->gamma) < 0
-	  || fprintf (f, "scr_detect_red: %f %f %f\n", dparam->red.red, dparam->red.green, dparam->red.blue) < 0
+      if (fprintf (f, "scr_detect_red: %f %f %f\n", dparam->red.red, dparam->red.green, dparam->red.blue) < 0
 	  || fprintf (f, "scr_detect_green: %f %f %f\n", dparam->green.red, dparam->green.green, dparam->green.blue) < 0
 	  || fprintf (f, "scr_detect_blue: %f %f %f\n", dparam->blue.red, dparam->blue.green, dparam->blue.blue) < 0
 	  || fprintf (f, "scr_detect_black: %f %f %f\n", dparam->black.red, dparam->black.green, dparam->black.blue) < 0
@@ -59,7 +58,6 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
 	  || fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
-	  || fprintf (f, "mix_gamma: %f\n", rparam->mix_gamma) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
 	return false;
     }
@@ -325,14 +323,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "mix_gamma"))
-	{
-	  if (!read_luminosity (f, rparam_check (mix_gamma)))
-	    {
-	      *error = "error parsing mix_gamma";
-	      return false;
-	    }
-	}
       else if (!strcmp (buf, "mix_weights"))
 	{
 	  if (!read_rgb (f, rparam_check (mix_red), rparam_check (mix_green), rparam_check (mix_blue)))
@@ -403,14 +393,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "scr_detect_gamma"))
-	{
-	  if (!read_luminosity (f, dparam_check (gamma)))
-	    {
-	      *error = "error parsing scr_detect_gamma";
-	      return false;
-	    }
-	}
       else if (!strcmp (buf, "scr_detect_red"))
 	{
 	  if (!read_color (f, dparam_check (red)))
@@ -475,6 +457,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!parse_bool (f, NULL))
 	    {
 	      *error = "error parsing adjust_luminosity";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "mix_gamma"))
+	{
+	  if (!read_luminosity (f, NULL))
+	    {
+	      *error = "error parsing mix_gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scr_detect_gamma"))
+	{
+	  if (!read_luminosity (f, NULL))
+	    {
+	      *error = "error parsing scr_detect_gamma";
 	      return false;
 	    }
 	}

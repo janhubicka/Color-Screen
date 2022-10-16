@@ -243,7 +243,7 @@ render::precompute_all (bool duffay, progress_info *progress)
 
   if (!m_gray_data)
     {
-      graydata_params p = {m_img.id, &m_img, m_params.mix_gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
+      graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
       if (p.gamma < 0.001)
 	p.gamma = 0.001;
       if (p.gamma > 1000)

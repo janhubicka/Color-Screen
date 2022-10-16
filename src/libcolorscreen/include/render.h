@@ -18,7 +18,7 @@ struct DLL_PUBLIC render_parameters
 {
   render_parameters()
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
-    mix_gamma (2.2), mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (1.3),
@@ -38,9 +38,8 @@ struct DLL_PUBLIC render_parameters
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold;
   /* Parameters used to turn RGB data to grayscale:
-     mix_gamma should be gamma of the scan, mix_red,green and blue
-     are relative weights.  */
-  luminosity_t mix_gamma, mix_red, mix_green, mix_blue;
+     mix_red,green and blue are relative weights.  */
+  luminosity_t mix_red, mix_green, mix_blue;
   /* Temperature in K of backlight.  */
   luminosity_t backlight_temperature;
   static const int temperature_min = 2500;
@@ -94,7 +93,6 @@ struct DLL_PUBLIC render_parameters
 	   && saturation == other.saturation
 	   && brightness == other.brightness
 	   && collection_threshold == other.collection_threshold
-	   && mix_gamma == other.mix_gamma
 	   && mix_red == other.mix_red
 	   && mix_green == other.mix_green
 	   && mix_blue == other.mix_blue
