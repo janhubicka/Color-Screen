@@ -56,9 +56,11 @@ struct color_t
     color_t ret (pow (red, g), pow (green, g), pow (blue, g));
     return ret;
   }
-
 };
 typedef matrix4x4<luminosity_t> color_matrix;
+color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
+			       luminosity_t gx, luminosity_t gy,
+			       luminosity_t bx, luminosity_t by);
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 

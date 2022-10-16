@@ -145,7 +145,7 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-spectrum-to-xyz.lo \
 	libcolorscreen_la-patches.lo \
 	libcolorscreen_la-progress-info.lo \
-	libcolorscreen_la-render-to-file.lo
+	libcolorscreen_la-render-to-file.lo libcolorscreen_la-color.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -173,7 +173,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/gtkgui
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
+am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-color.Plo \
+	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-loadsave.Plo \
 	./$(DEPDIR)/libcolorscreen_la-patches.Plo \
 	./$(DEPDIR)/libcolorscreen_la-progress-info.Plo \
@@ -373,7 +374,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -469,6 +470,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-color.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-loadsave.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-patches.Plo@am__quote@ # am--include-marker
@@ -617,6 +619,13 @@ libcolorscreen_la-render-to-file.lo: render-to-file.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='render-to-file.C' object='libcolorscreen_la-render-to-file.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-render-to-file.lo `test -f 'render-to-file.C' || echo '$(srcdir)/'`render-to-file.C
+
+libcolorscreen_la-color.lo: color.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-color.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-color.Tpo -c -o libcolorscreen_la-color.lo `test -f 'color.C' || echo '$(srcdir)/'`color.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-color.Tpo $(DEPDIR)/libcolorscreen_la-color.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='color.C' object='libcolorscreen_la-color.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-color.lo `test -f 'color.C' || echo '$(srcdir)/'`color.C
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -772,7 +781,8 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
+		-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-patches.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-progress-info.Plo
@@ -833,7 +843,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
+		-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-patches.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-progress-info.Plo

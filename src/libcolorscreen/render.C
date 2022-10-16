@@ -311,6 +311,10 @@ render::precompute_all (bool duffay, progress_info *progress)
       /* Colors derived from reconstructed filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_reconstructed_wager:
 	{
+	  color_matrix m = matrix_by_dye_xy (0.674, 0.325,
+					     0.182, 0.747,
+					     0.151, 0.041), mm;
+#if 0
 	  xyz r = xyY_to_xyz (0.674, 0.325, 1);
 	  xyz g = xyY_to_xyz (0.182, 0.747, 1);
 	  xyz b = xyY_to_xyz (0.151, 0.041, 1);
@@ -321,6 +325,7 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  xyz white;
 	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
 	  m.normalize_grayscale (white.x, white.y, white.z);
+#endif
 	  xyz_srgb_matrix m2;
 	  mm = m2 * m;
 	  //mm.normalize_grayscale ();
@@ -330,6 +335,7 @@ render::precompute_all (bool duffay, progress_info *progress)
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
 	{
+#if 0
 	  xyz r = xyY_to_xyz (0.620, 0.315, 1);
 	  xyz g = xyY_to_xyz (0.304, 0.541, 1);
 	  xyz b = xyY_to_xyz (0.182, 0.135, 1);
@@ -340,6 +346,10 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  xyz white;
 	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
 	  m.normalize_grayscale (white.x, white.y, white.z);
+#endif
+	  color_matrix m = matrix_by_dye_xy (0.620, 0.315,
+					     0.304, 0.541,
+					     0.182, 0.135), mm;
 	  xyz_srgb_matrix m2;
 	  mm = m2 * m;
 	  //mm.normalize_grayscale ();
