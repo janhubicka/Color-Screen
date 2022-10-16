@@ -18347,6 +18347,7 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="-lm $LDFLAGS"
 
 # The following may be useful if we put javaglue to the library.
+# TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
 
 #AC_SUBST([JAVA_HOME])
 #AM_CONDITIONAL([JAVA_HOME_SET], [test ! -z "$JAVA_HOME"])
