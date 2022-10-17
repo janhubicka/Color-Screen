@@ -1779,3 +1779,12 @@ spectrum_dyes_to_xyz::is_linear ()
         }
   return true;
 }
+
+/* Return XYZ of a daylight with given TEMPERATURE.  */
+xyz
+spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
+{
+  spectrum_dyes_to_xyz dyes;
+  dyes.set_daylight_backlight (temperature);
+  return dyes.whitepoint_xyz ();
+}

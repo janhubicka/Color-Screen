@@ -79,6 +79,7 @@ public:
 	nofilter[i]=1;
       return get_xyz (nofilter);
     }
+  static xyz temperature_xyz (luminosity_t temperature);
   /* Return true if dyes_rgb_to_xyz behaves linearly.  */
   bool is_linear ();
   color_matrix xyz_matrix ();
