@@ -108,16 +108,16 @@ public:
 };
 /* Matrix profile of Finlay taking screen
    Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
-#if 1
+#if 0
 class finlay_matrix : public color_matrix
 {
 public:
   inline
   finlay_matrix ()
   : color_matrix (0.116325,0.148173,0.060772, 0,
-	       0.059402,0.201094,0.028883, 0,
-	       0.005753,0.030250,0.136011, 0,
-	       0,             0,              0,                  1)
+	          0.059402,0.201094,0.028883, 0,
+	          0.005753,0.030250,0.136011, 0,
+	          0,             0,              0,                  1)
   { }
 };
 #else

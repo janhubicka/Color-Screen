@@ -1,6 +1,7 @@
 #include <cassert>
 #include "include/render.h"
 #include "lru-cache.h"
+#include "include/sensitivity.h"
 
 class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
@@ -80,6 +81,10 @@ struct lookup_table_params
   luminosity_t gamma;
   /* gray_min becomes 0, while gray_max becomes 1.  */
   int gray_min, gray_max;
+  /* Characcteristic curve.  */
+  hd_curve *film_characteristic_curve;
+
+  bool restore_original_luminosity;
 
   bool
   operator==(lookup_table_params &o)
@@ -88,7 +93,11 @@ struct lookup_table_params
 	   && maxval == o.maxval
 	   && gamma == o.gamma
 	   && gray_min == o.gray_min
-	   && gray_max == o.gray_max;
+	   && gray_max == o.gray_max
+	   /* TODO: Invent IDs!
+	      Pointer compare may not be safe if curve is released.  */
+	   && film_characteristic_curve == o.film_characteristic_curve
+	   && restore_original_luminosity == o.restore_original_luminosity;
   }
 };
 
@@ -97,15 +106,37 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[p.maxval];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
-  luminosity_t min = pow (p.gray_min / (luminosity_t)p.img_maxval, gamma);
-  luminosity_t max = pow (p.gray_max / (luminosity_t)p.img_maxval, gamma);
-
-  //printf ("Lookup table for %i %i %f %i %i\n", p.img_maxval,p.maxval,p.gamma,p.gray_min,p.gray_max);
+  bool invert = p.gray_min > p.gray_max;
+  luminosity_t min = pow ((p.gray_min + 0.5) / (luminosity_t)p.img_maxval, gamma);
+  luminosity_t max = pow ((p.gray_max + 0.5) / (luminosity_t)p.img_maxval, gamma);
 
   if (min == max)
     max += 0.0001;
-  for (int i = 0; i <= p.maxval; i++)
-    lookup_table[i] = (pow (i / (luminosity_t)p.maxval, gamma) - min) * (1 / (max-min));
+  if (!invert)
+    {
+      for (int i = 0; i <= p.maxval; i++)
+	lookup_table[i] = (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma) - min) * (1 / (max-min));
+    }
+  else if (p.restore_original_luminosity)
+    {
+      film_sensitivity s (p.film_characteristic_curve);
+      s.precompute ();
+      min = s.unapply (min);
+      max = s.unapply (max);
+
+      for (int i = 0; i <= p.maxval; i++)
+	lookup_table[i] = (s.unapply (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma)) - min) * (1 / (max-min));
+    }
+  else
+    {
+      film_sensitivity s (p.film_characteristic_curve);
+      s.precompute ();
+      min = s.apply (min);
+      max = s.apply (max);
+
+      for (int i = 0; i <= p.maxval; i++)
+	lookup_table[i] = (s.apply (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma)) - min) * (1 / (max-min));
+    }
   return lookup_table;
 }
 
@@ -231,7 +262,7 @@ static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cac
 bool
 render::precompute_all (bool duffay, progress_info *progress)
 {
-  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max};
+  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
   m_lookup_table = lookup_table_cache.get (par, progress);
   if (m_img.rgbdata)
     {
@@ -253,22 +284,14 @@ render::precompute_all (bool duffay, progress_info *progress)
     }
 
   color_matrix color;
-  /* We can combine presaturation to the matrix for simple matrix
-     transformations.  For non-linear transformations it needs to be done
-     separately since we apply the matrix only after the dye to XYZ conversion.  */
-  if (m_params.presaturation != 1
-      && (m_params.color_model == render_parameters::color_model_none
-	  || m_params.color_model == render_parameters::color_model_paget
-	  || m_params.color_model == render_parameters::color_model_miethe_goerz_reconstructed_wager
-	  || m_params.color_model == render_parameters::color_model_miethe_goerz_original_wager))
-    {
-      presaturation_matrix m (m_params.presaturation);
-      color = m * color;
-    }
+  /* Matrix converting dyes either to XYZ (default) or sRGB.  */
+  color_matrix dyes;
+  bool is_srgb = false;
   switch (m_params.color_model)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */
       case render_parameters::color_model_none:
+	is_srgb = true;
 	break;
       case render_parameters::color_model_red:
 	{
@@ -276,7 +299,8 @@ render::precompute_all (bool duffay, progress_info *progress)
 			  0.5, 0, 0, 0,
 			  0.5, 0, 0, 0,
 			  0, 0, 0, 1);
-	  color = m * color;
+	  dyes = m;
+	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_green:
@@ -285,7 +309,8 @@ render::precompute_all (bool duffay, progress_info *progress)
 			  0, 1,0, 0,
 			  0, 0.5,0, 0,
 			  0, 0, 0,1);
-	  color = m * color;
+	  dyes = m;
+	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_blue:
@@ -294,66 +319,50 @@ render::precompute_all (bool duffay, progress_info *progress)
 			  0, 0, 0.5,0,
 			  0, 0, 1,0,
 			  0, 0, 0, 1);
-	  color = m * color;
+	  dyes = m;
+	  is_srgb = true;
 	}
 	break;
       /* Colors found to be working for Finlays and Pagets pretty well.  */
       case render_parameters::color_model_paget:
 	{
+#if 0
+	  dyes = matrix_by_dye_xy (0.7319933,0.2680067,  /*670nm */
+				   0.059325533,0.829425776, /*518nm */
+				   0.143960396, 0.02970297 /*460nm */);
+#else
+	  dyes = matrix_by_dye_xy (0.674, 0.325, 
+				   0.059325533,0.829425776, /*518nm */
+				   0.143960396, 0.02970297 /*460nm */);
+#endif
+	  break;
+#if 0
 	  adjusted_finlay_matrix m;
 	  xyz_srgb_matrix m2;
 	  color_matrix mm;
+	  xyz white;
+	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	  m.normalize_grayscale (white.x, white.y, white.z);
 	  mm = m2 * m;
-	  mm.normalize_grayscale ();
+	  //mm.normalize_grayscale ();
 	  color = mm * color;
 	  break;
+#endif
 	}
       /* Colors derived from reconstructed filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_reconstructed_wager:
 	{
-	  color_matrix m = matrix_by_dye_xy (0.674, 0.325,
-					     0.182, 0.747,
-					     0.151, 0.041), mm;
-#if 0
-	  xyz r = xyY_to_xyz (0.674, 0.325, 1);
-	  xyz g = xyY_to_xyz (0.182, 0.747, 1);
-	  xyz b = xyY_to_xyz (0.151, 0.041, 1);
-	  color_matrix m (r.x, g.x, b.x, 0,
-			  r.y, g.y, b.y, 0,
-			  r.z, g.z, b.z, 0,
-			  0,   0,   0,   1), mm;
-	  xyz white;
-	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
-	  m.normalize_grayscale (white.x, white.y, white.z);
-#endif
-	  xyz_srgb_matrix m2;
-	  mm = m2 * m;
-	  //mm.normalize_grayscale ();
-	  color = mm * color;
+	  dyes = matrix_by_dye_xy (0.674, 0.325,
+				   0.182, 0.747,
+				   0.151, 0.041);
 	  break;
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
 	{
-#if 0
-	  xyz r = xyY_to_xyz (0.620, 0.315, 1);
-	  xyz g = xyY_to_xyz (0.304, 0.541, 1);
-	  xyz b = xyY_to_xyz (0.182, 0.135, 1);
-	  color_matrix m (r.x, g.x, b.x, 0,
-			  r.y, g.y, b.y, 0,
-			  r.z, g.z, b.z, 0,
-			  0,   0,   0,   1), mm;
-	  xyz white;
-	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
-	  m.normalize_grayscale (white.x, white.y, white.z);
-#endif
-	  color_matrix m = matrix_by_dye_xy (0.620, 0.315,
-					     0.304, 0.541,
-					     0.182, 0.135), mm;
-	  xyz_srgb_matrix m2;
-	  mm = m2 * m;
-	  //mm.normalize_grayscale ();
-	  color = mm * color;
+	  dyes = matrix_by_dye_xy (0.620, 0.315,
+				   0.304, 0.541,
+				   0.182, 0.135);
 	  break;
 	}
       case render_parameters::color_model_autochrome:
@@ -385,7 +394,6 @@ render::precompute_all (bool duffay, progress_info *progress)
     }
   if (m_spectrum_dyes_to_xyz)
     {
-
       m_spectrum_dyes_to_xyz->set_daylight_backlight (m_params.backlight_temperature);
       switch (m_params.dye_balance)
 	{
@@ -424,6 +432,38 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  delete (m_spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz = NULL;
 	}
+    }
+  else if (is_srgb)
+    {
+      if (m_params.presaturation != 1)
+	{
+	  presaturation_matrix m (m_params.presaturation);
+	  color = m * color;
+	}
+      color = dyes * color;
+    }
+  else
+    {
+      if (m_params.presaturation != 1)
+	{
+	  presaturation_matrix m (m_params.presaturation);
+	  color = m * color;
+	}
+      color = dyes * color;
+      if (m_params.backlight_temperature != 6500)
+	{
+	  xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
+	  xyz white;
+	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	  for (int i = 0; i < 4; i++)
+	    {
+	      color.m_elements[0][i] *= whitepoint.x / white.x;
+	      color.m_elements[1][i] *= whitepoint.y / white.y;
+	      color.m_elements[2][i] *= whitepoint.z / white.z;
+	    }
+	}
+      xyz_srgb_matrix m2;
+      color = m2 * color;
     }
   if (m_params.saturation != 1)
     {

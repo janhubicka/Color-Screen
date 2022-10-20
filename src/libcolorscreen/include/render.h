@@ -10,6 +10,7 @@
 #include "color.h"
 #include "spectrum-to-xyz.h"
 #include "progress-info.h"
+#include "sensitivity.h"
 
 typedef float coord_t;
 
@@ -22,7 +23,9 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (1.3),
-    color_model (color_model_none), gray_min (0), gray_max (255), precise (true)
+    color_model (color_model_none), gray_min (0), gray_max (255),
+    film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
+    restore_original_luminosity (true), precise (true)
   {}
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
@@ -82,6 +85,13 @@ struct DLL_PUBLIC render_parameters
   /* Gray range to boot to full contrast.  */
   int gray_min, gray_max;
 
+
+  hd_curve *film_characteristics_curve;
+  hd_curve *output_curve;
+
+  /* Use characteristics curves to resotre original luminosity.  */
+  bool restore_original_luminosity;
+
   /* The following is used by interpolated rendering only.  */
   /* If true use precise data collection.  */
   bool precise;
@@ -101,7 +111,9 @@ struct DLL_PUBLIC render_parameters
 	   && backlight_temperature == backlight_temperature
 	   && gray_min == other.gray_min
 	   && gray_max == other.gray_max
-	   && precise == other.precise;
+	   && precise == other.precise
+ 	   && film_characteristics_curve == other.film_characteristics_curve
+ 	   && output_curve == other.output_curve;
   }
   bool operator!= (render_parameters &other) const
   {
@@ -301,6 +313,38 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 	}
     }
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  if (m_params.output_curve)
+    {
+      luminosity_t lum = r * rwght + g * gwght + b * bwght;
+      luminosity_t lum2;
+      lum2 = m_params.output_curve->apply (lum);
+      if (lum != lum2)
+	{
+	  r *= lum2 / lum;
+	  g *= lum2 / lum;
+	  b *= lum2 / lum;
+	}
+    }
+#if 0
+  static synthetic_hd_curve c (10, output_curve);
+#if 1
+  luminosity_t lum = r * 0.3086 + g * 0.6094 + b * 0.0820;
+  luminosity_t lum2;
+  lum2 = c.apply (lum) /*0.2*/;
+  if (lum != lum2)
+    {
+      //fprintf (stderr, "%f %f\n", lum, lum2);
+      r *= lum2 / lum;
+      g *= lum2 / lum;
+      b *= lum2 / lum;
+    }
+#else
+  r = c.apply (r);
+  g = c.apply (g);
+  b = c.apply (b);
+#endif
+#endif
+
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
