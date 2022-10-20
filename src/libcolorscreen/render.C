@@ -326,7 +326,7 @@ render::precompute_all (bool duffay, progress_info *progress)
       /* Colors found to be working for Finlays and Pagets pretty well.  */
       case render_parameters::color_model_paget:
 	{
-#if 0
+#if 1
 	  dyes = matrix_by_dye_xy (0.7319933,0.2680067,  /*670nm */
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);

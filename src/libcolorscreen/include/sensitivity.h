@@ -1,5 +1,6 @@
 #ifndef SENSITIVITY_H
 #define SENSITIVITY_H
+#include "dllpublic.h"
 #include "color.h"
 /* Hurter–Driffield characteristic curve based on data points
    with simple linear interpolation.  */
@@ -146,7 +147,7 @@ public:
   }
   static struct hd_curve ilfrod_galerie_FB1;
   static struct hd_curve fujicolor_crystal_archive_digital_pearl_paper;
-  static struct hd_curve linear_sensitivity;
+  DLL_PUBLIC static struct hd_curve linear_sensitivity;
 
   void
   precompute ()

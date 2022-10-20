@@ -283,7 +283,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 5;
+	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
 	out =
@@ -331,7 +331,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 5;
+	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
 	out =
@@ -379,7 +379,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 5;
+	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
 	out =
@@ -424,7 +424,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 5;
+	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
 	out =
@@ -473,7 +473,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 5;
+	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
 	out =
