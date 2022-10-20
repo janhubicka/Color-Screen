@@ -1710,34 +1710,34 @@ spectrum_dyes_to_xyz::set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, 
 void
 spectrum_dyes_to_xyz::debug_write_spectra ()
 {
-  FILE *f = fopen ("/tmp/red.dat", "w");
+  FILE *f = fopen ("/tmp/red.dat", "wt");
   print_absorbance_spectrum (f, red);
   fclose (f);
-  f = fopen ("/tmp/green.dat", "w");
+  f = fopen ("/tmp/green.dat", "wt");
   print_absorbance_spectrum (f, green);
   fclose (f);
-  f = fopen ("/tmp/blue.dat", "w");
+  f = fopen ("/tmp/blue.dat", "wt");
   print_absorbance_spectrum (f, blue);
   fclose (f);
-  f = fopen ("/tmp/red-trans.dat", "w");
+  f = fopen ("/tmp/red-trans.dat", "wt");
   print_transmitance_spectrum (f, red);
   fclose (f);
-  f = fopen ("/tmp/green-trans.dat", "w");
+  f = fopen ("/tmp/green-trans.dat", "wt");
   print_transmitance_spectrum (f, green);
   fclose (f);
-  f = fopen ("/tmp/blue-trans.dat", "w");
+  f = fopen ("/tmp/blue-trans.dat", "wt");
   print_transmitance_spectrum (f, blue);
   fclose (f);
-  f = fopen ("/tmp/backlight.dat", "w");
+  f = fopen ("/tmp/backlight.dat", "wt");
   print_transmitance_spectrum (f, backlight);
   fclose (f);
-  f = fopen ("/tmp/x.dat", "w");
+  f = fopen ("/tmp/x.dat", "wt");
   print_transmitance_spectrum (f, cie_cmf_x);
   fclose (f);
-  f = fopen ("/tmp/y.dat", "w");
+  f = fopen ("/tmp/y.dat", "wt");
   print_transmitance_spectrum (f, cie_cmf_y);
   fclose (f);
-  f = fopen ("/tmp/z.dat", "w");
+  f = fopen ("/tmp/z.dat", "wt");
   print_transmitance_spectrum (f, cie_cmf_z);
   fclose (f);
 }
