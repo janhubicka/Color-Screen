@@ -49,6 +49,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   if (rparam)
     {
       if (fprintf (f, "gamma: %f\n", rparam->gamma) < 0
+	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
 	  || fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
@@ -296,6 +297,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, rparam_check (gamma)))
 	    {
 	      *error = "error parsing gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "white_balance"))
+	{
+	  if (!read_color (f, rparam_check (white_balance)))
+	    {
+	      *error = "error parsing scr_detect_green";
 	      return false;
 	    }
 	}

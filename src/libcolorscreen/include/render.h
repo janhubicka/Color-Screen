@@ -19,6 +19,7 @@ struct DLL_PUBLIC render_parameters
 {
   render_parameters()
   : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
+    white_balance (1, 1, 1),
     mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
     age(0),
     dye_balance (dye_balance_neutral),
@@ -40,6 +41,8 @@ struct DLL_PUBLIC render_parameters
   luminosity_t brightness;
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold;
+  /* White balance adjustment in dye coordinates.  */
+  color_t white_balance;
   /* Parameters used to turn RGB data to grayscale:
      mix_red,green and blue are relative weights.  */
   luminosity_t mix_red, mix_green, mix_blue;
@@ -67,6 +70,7 @@ struct DLL_PUBLIC render_parameters
       color_model_red,
       color_model_green,
       color_model_blue,
+      color_model_max_separation,
       color_model_paget,
       color_model_miethe_goerz_reconstructed_wager,
       color_model_miethe_goerz_original_wager,
@@ -293,6 +297,9 @@ render::get_data_blue (int x, int y)
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
+  r *= m_params.white_balance.red;
+  g *= m_params.white_balance.green;
+  b *= m_params.white_balance.blue;
   if (m_spectrum_dyes_to_xyz)
     {
       /* At the moment all conversions are linear.

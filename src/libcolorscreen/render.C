@@ -11,6 +11,7 @@ const char * render_parameters::color_model_names [] = {
   "red",
   "green",
   "blue",
+  "Wall_max_separation",
   "paget",
   "Miethe_Goerz_reconstructed_by_Wagner",
   "Miethe_Goerz_mesured_by_Wagner",
@@ -323,18 +324,21 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  is_srgb = true;
 	}
 	break;
-      /* Colors found to be working for Finlays and Pagets pretty well.  */
-      case render_parameters::color_model_paget:
+      /* Color based on frequencies determined in Wall's Practical Color Photography
+         as triggering best individual stimulus of an eye.  */
+      case render_parameters::color_model_max_separation:
 	{
-#if 1
 	  dyes = matrix_by_dye_xy (0.7319933,0.2680067,  /*670nm */
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);
-#else
+	  break;
+	}
+      /* Colors found to be working for Finlays and Pagets pretty well.  */
+      case render_parameters::color_model_paget:
+	{
 	  dyes = matrix_by_dye_xy (0.674, 0.325, 
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);
-#endif
 	  break;
 #if 0
 	  adjusted_finlay_matrix m;
@@ -457,9 +461,12 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
 	  for (int i = 0; i < 4; i++)
 	    {
-	      color.m_elements[0][i] *= whitepoint.x / white.x;
-	      color.m_elements[1][i] *= whitepoint.y / white.y;
-	      color.m_elements[2][i] *= whitepoint.z / white.z;
+	      //color.m_elements[0][i] *= whitepoint.x / white.x;
+	      //color.m_elements[1][i] *= whitepoint.y / white.y;
+	      //color.m_elements[2][i] *= whitepoint.z / white.z;
+	      color.m_elements[0][i] *= white.x / whitepoint.x;
+	      color.m_elements[1][i] *= white.y / whitepoint.y;
+	      color.m_elements[2][i] *= white.z / whitepoint.z;
 	    }
 	}
       xyz_srgb_matrix m2;
