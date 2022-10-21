@@ -461,12 +461,9 @@ render::precompute_all (bool duffay, progress_info *progress)
 	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
 	  for (int i = 0; i < 4; i++)
 	    {
-	      //color.m_elements[0][i] *= whitepoint.x / white.x;
-	      //color.m_elements[1][i] *= whitepoint.y / white.y;
-	      //color.m_elements[2][i] *= whitepoint.z / white.z;
-	      color.m_elements[0][i] *= white.x / whitepoint.x;
-	      color.m_elements[1][i] *= white.y / whitepoint.y;
-	      color.m_elements[2][i] *= white.z / whitepoint.z;
+	      color.m_elements[0][i] *= whitepoint.x / white.x;
+	      color.m_elements[1][i] *= whitepoint.y / white.y;
+	      color.m_elements[2][i] *= whitepoint.z / white.z;
 	    }
 	}
       xyz_srgb_matrix m2;
