@@ -27,7 +27,8 @@ struct DLL_PUBLIC render_parameters
     color_model (color_model_none), gray_min (0), gray_max (255),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     restore_original_luminosity (true), precise (true)
-  {}
+  {
+  }
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
@@ -161,6 +162,13 @@ public:
   : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
+    if (m_params.gray_min > m_params.gray_max)
+      {
+	static synthetic_hd_curve c (10, safe_output_curve);
+	m_params.output_curve = &c;
+      }
+    else
+      m_params.output_curve = NULL;
   }
   ~render ();
   inline luminosity_t get_img_pixel (coord_t x, coord_t y);

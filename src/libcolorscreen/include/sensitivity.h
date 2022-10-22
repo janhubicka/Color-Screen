@@ -93,7 +93,7 @@ struct synthetic_hd_curve_parameters
 };
 
 /* Densitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
-extern struct synthetic_hd_curve_parameters output_curve, input_curve;
+extern struct synthetic_hd_curve_parameters safe_output_curve, input_curve;
 
 /* Produce a synthetic HD curve.  */
 class synthetic_hd_curve : public hd_curve
@@ -125,9 +125,11 @@ public:
 		    p.maxy, p.maxx, p.maxy,
 		    i / (luminosity_t)(n - 1));
 	}
+#if 0
 	  FILE *f = fopen("/tmp/shd.dat", "wt");
 	  print (f);
 	  fclose (f);
+#endif
     }
   ~synthetic_hd_curve()
     {

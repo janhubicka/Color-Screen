@@ -34,7 +34,7 @@ struct synthetic_hd_curve_parameters input_curve = {-3, 0.3,
 						    3, 4,
 						    3, 4};
 
-struct synthetic_hd_curve_parameters output_curve = {0, 0,
+struct synthetic_hd_curve_parameters safe_output_curve = {0, 0,
 						     0, 0,
 						     0.7, 0.7,
 						     3, 1};
