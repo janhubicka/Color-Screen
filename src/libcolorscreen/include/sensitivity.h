@@ -222,6 +222,6 @@ private:
   bool m_clip;
 
   luminosity_t Dfog, Dmax, mid;
-  static const bool dump = true;
+  static const bool dump = false;
 };
 #endif
