@@ -1,5 +1,6 @@
 #include <math.h>
 #include "include/screen.h"
+#include "gaussian-blur.h"
 
 /* Produce empty screen.  */
 void
@@ -287,9 +288,46 @@ screen::initialize_with_blur (screen &scr, coord_t blur_radius)
       memcpy (add, scr.add, sizeof (add));
       return;
     }
+  if (blur_radius >= 10)
+    blur_radius = 10;
+
+  luminosity_t *cmatrix;
+  int clen = fir_blur::gen_convolve_matrix (blur_radius * size, &cmatrix);
+  luminosity_t *hblur = (luminosity_t *)malloc (size * size * sizeof (luminosity_t));
+  for (int c = 0; c < 3; c++)
+    {
+      for (int y = 0; y < size; y++)
+	for (int x = 0; x < size; x++)
+	  {
+	    luminosity_t sum = 0;
+	    for (int d = - clen / 2; d < clen / 2 ; d++)
+	      sum += cmatrix[d + clen / 2] * scr.mult[y][(x + d) & (size - 1)][c];
+	    hblur[x + y * size] = sum;
+	  }
+      for (int y = 0; y < size; y++)
+	for (int x = 0; x < size; x++)
+	  {
+	    luminosity_t sum = 0;
+	    for (int d = - clen / 2; d < clen / 2 ; d++)
+	      sum += cmatrix[d + clen / 2] * hblur[x+ ((y + d) & (size - 1)) * size];
+	    mult[y][x][c] = sum;
+	  }
+    }
+
+  for (int y = 0; y < size; y++)
+    for (int x = 0; x < size; x++)
+      {
+	add[y][x][0] = scr.add[y][x][0];
+	add[y][x][1] = scr.add[y][x][1];
+	add[y][x][2] = scr.add[y][x][2];
+      }
+
+  free (hblur);
+  free (cmatrix);
+
+#if 0
   if (blur_radius >= 1)
     blur_radius = 1;
-
   int radius = blur_radius * size;
   if (radius >= size)
     radius = size - 1;
@@ -329,4 +367,5 @@ screen::initialize_with_blur (screen &scr, coord_t blur_radius)
 	add[y][x][1] = scr.add[y][x][1];
 	add[y][x][2] = scr.add[y][x][2];
       }
+#endif
 }

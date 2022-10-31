@@ -1,7 +1,7 @@
 #include <locale>
 #include "include/render-to-scr.h"
 #include "include/scr-detect.h"
-#define HEADER "screen_alignment_version: 1\n"
+#define HEADER "screen_alignment_version: 1"
 
 static const char * const scr_names[max_scr_type] =
 {
@@ -50,6 +50,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     {
       if (fprintf (f, "gamma: %f\n", rparam->gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
+	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen_radius) < 0
+	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen_amount) < 0
 	  || fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
@@ -305,6 +307,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_color (f, rparam_check (white_balance)))
 	    {
 	      *error = "error parsing scr_detect_green";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "sharpen_radius"))
+	{
+	  if (!read_luminosity (f, rparam_check (sharpen_radius)))
+	    {
+	      *error = "error parsing sharpen_radius";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "sharpen_amount"))
+	{
+	  if (!read_luminosity (f, rparam_check (sharpen_amount)))
+	    {
+	      *error = "error parsing sharpen_amount";
 	      return false;
 	    }
 	}

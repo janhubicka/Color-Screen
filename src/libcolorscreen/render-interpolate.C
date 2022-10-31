@@ -120,9 +120,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
 			      {
 #pragma omp atomic
-				prec_red (xx, yy) += m_screen->mult[iy][ix][0] * l;
+				prec_red (xx, yy) += (m_screen->mult[iy][ix][0] - m_params.collection_threshold) * l;
 #pragma omp atomic
-				w_red [yy * m_prec_width + xx] += m_screen->mult[iy][ix][0];
+				w_red [yy * m_prec_width + xx] += m_screen->mult[iy][ix][0] - m_params.collection_threshold;
 			      }
 			  }
 			if (m_screen->mult[iy][ix][1] > m_params.collection_threshold)
@@ -136,9 +136,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    if (xx >= 0 && xx < m_prec_width && yy >= 0 && yy < m_prec_height * 2)
 			      {
 #pragma omp atomic
-				prec_green (xx, yy) += m_screen->mult[iy][ix][1] * l;
+				prec_green (xx, yy) += (m_screen->mult[iy][ix][1] - m_params.collection_threshold) * l;
 #pragma omp atomic
-				w_green [yy * m_prec_width + xx] += m_screen->mult[iy][ix][1];
+				w_green [yy * m_prec_width + xx] += (m_screen->mult[iy][ix][1] - m_params.collection_threshold);
 			      }
 			  }
 			if (m_screen->mult[iy][ix][2] > m_params.collection_threshold)
@@ -146,9 +146,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    int xx = nearest_int (2*(scr_x-(coord_t)0.25));
 			    int yy = nearest_int (2*(scr_y-(coord_t)0.25));
 #pragma omp atomic
-			    prec_blue (xx, yy) += m_screen->mult[iy][ix][2] * l;
+			    prec_blue (xx, yy) += (m_screen->mult[iy][ix][2] - m_params.collection_threshold) * l;
 #pragma omp atomic
-			    w_blue [yy * m_prec_width * 2 + xx] += m_screen->mult[iy][ix][2];
+			    w_blue [yy * m_prec_width * 2 + xx] += (m_screen->mult[iy][ix][2] - m_params.collection_threshold);
 			  }
 		      }
 		  if (progress)

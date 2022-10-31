@@ -2,6 +2,7 @@
 #include "include/render.h"
 #include "lru-cache.h"
 #include "include/sensitivity.h"
+#include "gaussian-blur.h"
 
 class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
@@ -258,6 +259,102 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
   return data;
 }
 static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache;
+
+struct sharpen_params
+{
+  luminosity_t radius;
+  luminosity_t amount;
+  unsigned long gray_data_id;
+
+  unsigned short **gray_data;
+  luminosity_t *lookup_table;
+  unsigned long lookup_table_id;
+  int width;
+  int height;
+  bool
+  operator==(sharpen_params &o)
+  {
+    return radius == o.radius
+	   && amount == o.amount
+	   && gray_data_id == o.gray_data_id;
+  }
+};
+
+void
+blur_horisontal (luminosity_t *out, luminosity_t *lookup_table, unsigned short *data, int width, int clen, luminosity_t *cmatrix)
+{
+  for (int x = 0; x < width; x++)
+    {
+      luminosity_t sum = 0;
+      for (int d = - clen / 2; d < clen / 2; d++)
+	if (d + x >= 0 && d < width)
+	  sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
+      out[x] = sum;
+    }
+}
+
+luminosity_t *
+get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
+{
+  luminosity_t *cmatrix;
+  int clen = fir_blur::gen_convolve_matrix (p.radius, &cmatrix);
+  if (!clen)
+    return NULL;
+  if (progress)
+    progress->set_task ("sharpening", p.height);
+  luminosity_t *out = (luminosity_t *)calloc (p.width * p.height, sizeof (luminosity_t));
+#pragma omp parallel shared(progress,out,clen,cmatrix,p) default(none)
+    {
+      luminosity_t *hblur = (luminosity_t *)calloc (p.width * clen, sizeof (luminosity_t));
+      luminosity_t *rotated_cmatrix = (luminosity_t *)malloc (clen * sizeof (luminosity_t));
+#ifdef _OPENMP
+      int tn = omp_get_thread_num ();
+      int threads = omp_get_max_threads ();
+#else
+      int tn = 0;
+      int threads = 1;
+#endif
+      int ystart = tn * p.height / threads;
+      int yend = (tn + 1) * p.height / threads - 1;
+
+      for (int d = -clen/2; d < clen/2 - 1; d++)
+	{
+	  int yp = ystart + d;
+	  int tp = (yp + clen) % clen;
+	  if (yp < 0 || yp > p.height)
+	    memset (hblur + tp * p.width, 0, sizeof (luminosity_t) * p.width);
+	  else
+	    blur_horisontal (hblur + tp * p.width, p.lookup_table, p.gray_data[yp], p.width, clen, cmatrix);
+	}
+      for (int y = ystart; y <= yend; y++)
+	{
+	  if (y + clen / 2 - 1 < p.height)
+	    blur_horisontal (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, p.lookup_table, p.gray_data[y + clen / 2 - 1], p.width, clen, cmatrix);
+	  else
+	    memset (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, 0, sizeof (luminosity_t) * p.width);
+	  for (int d = 0; d < clen; d++)
+	    rotated_cmatrix[(y + d - clen / 2 + clen) % clen] = cmatrix[d];
+	  for (int x = 0; x < p.width; x++)
+	    {
+	      luminosity_t sum = 0;
+	      for (int d = 0; d < clen; d++)
+		sum += rotated_cmatrix[d] * hblur[d * p.width + x];
+	      luminosity_t orig = p.lookup_table [p.gray_data[y][x]];
+	      out[y * p.width + x] = orig + (orig - sum) * p.amount;
+	    }
+	  if (progress)
+	     progress->inc_progress ();
+	}
+      free (rotated_cmatrix);
+      free (hblur);
+    }
+
+  free (cmatrix);
+  return out;
+}
+static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache;
+
+
 }
 
 bool
@@ -282,6 +379,11 @@ render::precompute_all (bool duffay, progress_info *progress)
 	p.gamma = 1000;
       m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
       m_gray_data = m_gray_data_holder->m_gray_data;
+    }
+  if (m_params.sharpen_radius && m_params.sharpen_amount)
+    {
+      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, /* TODO: m_lookup_table_id*/ 0, m_img.width, m_img.height};
+      m_sharpened_data = sharpened_data_cache.get (p, progress);
     }
 
   color_matrix color;
@@ -491,6 +593,8 @@ render::~render ()
     delete m_spectrum_dyes_to_xyz;
   if (m_gray_data_holder)
     gray_data_cache.release (m_gray_data_holder);
+  if (m_sharpened_data)
+    sharpened_data_cache.release (m_sharpened_data);
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */

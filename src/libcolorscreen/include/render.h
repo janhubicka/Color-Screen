@@ -18,8 +18,8 @@ typedef float coord_t;
 struct DLL_PUBLIC render_parameters
 {
   render_parameters()
-  : gamma (2.2), presaturation (1), saturation (1.5), brightness (1), collection_threshold (0.8),
-    white_balance (1, 1, 1),
+  : gamma (2.2), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1.5),
+    brightness (1), collection_threshold (0.8), white_balance (1, 1, 1),
     mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
     age(0),
     dye_balance (dye_balance_neutral),
@@ -32,6 +32,8 @@ struct DLL_PUBLIC render_parameters
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
+  /* Radious (in pixels) and amount for unsharp-mask filter.  */
+  luminosity_t sharpen_radius, sharpen_amount;
   /* Pre-saturation increase (this works on data collected from the scan before
      color model is applied and is intended to compensate for loss of sharpness).
      Only positive values makes sense; meaningful range is approx 0.1 to 10.  */
@@ -159,7 +161,7 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
     if (m_params.gray_min > m_params.gray_max)
@@ -229,6 +231,8 @@ protected:
   unsigned long m_gray_data_id;
   /* Wrapping class to cause proper destruction.  */
   class gray_data *m_gray_data_holder;
+  /* Sharpened data we render from.  */
+  luminosity_t *m_sharpened_data;
   /* Maximal value in m_data.  */
   int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
@@ -278,6 +282,8 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 inline luminosity_t
 render::get_data (int x, int y)
 {
+  if (m_sharpened_data)
+    return m_sharpened_data [y * m_img.width + x];
   return m_lookup_table [m_gray_data[y][x]];
 }
 
