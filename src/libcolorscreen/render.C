@@ -276,7 +276,8 @@ struct sharpen_params
   {
     return radius == o.radius
 	   && amount == o.amount
-	   && gray_data_id == o.gray_data_id;
+	   && gray_data_id == o.gray_data_id
+	   && lookup_table_id == o.lookup_table_id;
   }
 };
 
@@ -361,7 +362,7 @@ bool
 render::precompute_all (bool duffay, progress_info *progress)
 {
   lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
-  m_lookup_table = lookup_table_cache.get (par, progress);
+  m_lookup_table = lookup_table_cache.get (par, progress, &m_lookup_table_id);
   if (m_img.rgbdata)
     {
       lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
@@ -382,7 +383,7 @@ render::precompute_all (bool duffay, progress_info *progress)
     }
   if (m_params.sharpen_radius && m_params.sharpen_amount)
     {
-      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, /* TODO: m_lookup_table_id*/ 0, m_img.width, m_img.height};
+      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
       m_sharpened_data = sharpened_data_cache.get (p, progress);
     }
 

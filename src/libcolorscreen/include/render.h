@@ -162,7 +162,7 @@ class DLL_PUBLIC render
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_lookup_table (NULL), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
+    m_lookup_table (NULL), m_lookup_table_id (0), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
     if (m_params.gray_min > m_params.gray_max)
       {
@@ -239,6 +239,8 @@ protected:
   int m_dst_maxval;
   /* Translates input gray values into normalized range 0...1 gamma 1.  */
   luminosity_t *m_lookup_table;
+  /* Cached ID of the table.  */
+  unsigned long m_lookup_table_id;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
   luminosity_t *m_rgb_lookup_table;
   /* Translates back to gamma 2.  */
