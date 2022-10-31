@@ -364,7 +364,7 @@ render::precompute_all (bool duffay, progress_info *progress)
   m_lookup_table = lookup_table_cache.get (par, progress);
   if (m_img.rgbdata)
     {
-      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max};
+      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
     }
   out_lookup_table_params out_par = {m_dst_maxval};
