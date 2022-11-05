@@ -58,7 +58,7 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
 #pragma omp parallel for default(none) shared(progress,img,map,p)
   for (int y = 0; y < img.height; y++)
     {
-      if (!progress || !progress->cancel ())
+      if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < img.width; x++)
 	  map->set_class (x, y,
 			  p.d->classify_color (img.rgbdata[y][x].r,
@@ -195,7 +195,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
 #pragma omp parallel for default(none) shared(progress,color,tmp,data,p)
 	  for (int y = 1; y < p.img->height - 1; y++)
 	    {
-	      if (!progress || !progress->cancel ())
+	      if (!progress || !progress->cancel_requested ())
 		for (int x = 1; x < p.img->width - 1; x++)
 		  {
 		    if (p.map->get_class (x, y) == color)
@@ -212,10 +212,10 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
 		progress->inc_progress ();
 	    }
 	  std::swap (tmp, data->m_data[color]);
-	  if (progress && progress->cancel ())
+	  if (progress && progress->cancel_requested ())
 	    break;
 	}
-      if (progress && progress->cancel ())
+      if (progress && progress->cancel_requested ())
 	break;
     }
   free (tmp);
@@ -294,7 +294,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -322,7 +322,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		if (!progress || !progress->cancel ())
+		if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -342,7 +342,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -369,7 +369,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		if (!progress || !progress->cancel ())
+		if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    putpixel (pixels, pixelbytes, rowstride, x, y, data[x + width * y].red * 255 + 0.5, data[x + width * y].green * 255 + 0.5, data[x + width * y].blue * 255 + 0.5);
 		if (progress)
@@ -384,7 +384,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  coord_t px = (x + xoffset) * step;
@@ -411,7 +411,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		if (!progress || !progress->cancel ())
+		if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -431,7 +431,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -455,7 +455,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -479,7 +479,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -503,7 +503,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;

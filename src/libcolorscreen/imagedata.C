@@ -487,8 +487,11 @@ image_data::load (const char *name, const char **error, progress_info *progress)
 	return true;
       if (progress)
 	progress->set_progress (permille);
-      if (progress && progress->cancel ())
-	return false;
+      if (progress && progress->cancel_requested ())
+	{
+	  *error = "cancelled";
+	  return false;
+	}
     }
   return false;
 }

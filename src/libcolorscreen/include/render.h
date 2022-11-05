@@ -217,7 +217,7 @@ protected:
 
   template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
   __attribute__ ((__flatten__))
-  void downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
+  bool downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 
   /* Scanned image.  */
   image_data &m_img;
@@ -696,7 +696,7 @@ render::process_line (T *data, int *pixelpos, luminosity_t *weights,
    X,Y are coordinates of the top left corner of the output image in the input image.  */
 
 template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
-void
+bool
 render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 {
   int pxstart = std::max (0, (int)(-x / pixelsize));
@@ -705,7 +705,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   memset (data, 0, sizeof (T) * width * height);
 
   if (pxstart > pxend)
-    return;
+    return true;
 
   if (progress)
     {
@@ -761,7 +761,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     py++;
     if (progress)
       progress->inc_progress ();
-    while (py <= yend && (!progress || !progress->cancel ()))
+    while (py <= yend && (!progress || !progress->cancel_requested ()))
       {
         process_line<T, D, get_pixel, account_pixel> (data, pixelpos, weights, pxstart, pxend, width, height, py - 1, yy, true, true, scale, weight (py));
 	stop = std::min (ypixelpos(py + 1), m_img.height);
@@ -783,5 +783,6 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 #undef weight
   free (pixelpos);
   free (weights);
+  return !progress || !progress->cancelled ();
 }
 #endif

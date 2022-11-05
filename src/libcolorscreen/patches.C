@@ -13,7 +13,7 @@ patches::patches (image_data &img, render &render, color_class_map &color_map, i
     progress->set_task ("analyzing patches", m_height);
   for (int y = 0; y < m_height; y++)
     {
-      if (!progress || !progress->cancel ())
+      if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < m_width; x++)
 	  {
 	    scr_detect::color_class t = color_map.get_class (x, y);
@@ -69,7 +69,7 @@ done:
 #pragma omp parallel for default(none) shared(progress,num_overall_pixels)
   for (int y = 0; y < m_height; y++)
     {
-      if (!progress || !progress->cancel ())
+      if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < m_width; x++)
 	  {
 	    int rx[3], ry[3];

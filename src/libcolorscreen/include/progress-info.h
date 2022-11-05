@@ -24,7 +24,7 @@ public:
       }
   }
 
-  /* API used to monitor and control computatoin.  */
+  /* API used to monitor and control computation.  */
 
   void
   get_status (const char **t, float *s)
@@ -36,8 +36,23 @@ public:
       *s = 0;
   }
 
-  bool
+  void
   cancel ()
+  {
+    m_cancel = true;
+  }
+
+  bool
+  cancelled ()
+  {
+    return m_cancelled;
+  }
+
+  /* API used by the workers to inform about status and check if task
+     should be cancelled.  */
+
+  bool
+  cancel_requested ()
   {
     if (m_cancel)
       {
@@ -46,9 +61,6 @@ public:
       }
     return false;
   }
-
-  /* API used by the workers to inform about status and check if task
-     should be cancelled.  */
 
   void
   set_task (const char *name, unsigned long max)
@@ -78,12 +90,6 @@ public:
   set_progress (unsigned long p)
   {
     m_current = p;
-  }
-
-  bool
-  cancelled ()
-  {
-    return m_cancelled;
   }
 private:
   const static int debug = false;

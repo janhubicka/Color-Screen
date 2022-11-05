@@ -96,7 +96,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 #pragma omp for 
 	      for (int y = miny ; y < maxy; y++)
 		{
-		  if (!progress || !progress->cancel ())
+		  if (!progress || !progress->cancel_requested ())
 		    for (int x = minx; x < maxx; x++)
 		      {
 			coord_t scr_x, scr_y;
@@ -154,12 +154,12 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		  if (progress)
 		    progress->inc_progress ();
 		}
-	  if (!progress || !progress->cancel ())
+	  if (!progress || !progress->cancel_requested ())
 	    {
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		{
-		  if (!progress || !progress->cancel ())
+		  if (!progress || !progress->cancel_requested ())
 		    for (int x = 0; x < m_prec_width; x++)
 		      if (w_red [y * m_prec_width + x] != 0)
 			prec_red (x,y) /= w_red [y * m_prec_width + x];
@@ -169,7 +169,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		{
-		  if (!progress || !progress->cancel ())
+		  if (!progress || !progress->cancel_requested ())
 		    for (int x = 0; x < m_prec_width; x++)
 		      if (w_green [y * m_prec_width + x] != 0)
 			prec_green (x,y) /= w_green [y * m_prec_width + x];
@@ -179,7 +179,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 #pragma omp for nowait
 	      for (int y = 0; y < m_prec_height * 2; y++)
 		{
-		  if (!progress || !progress->cancel ())
+		  if (!progress || !progress->cancel_requested ())
 		    for (int x = 0; x < m_prec_width * 2; x++)
 		      if (w_blue [y * m_prec_width * 2 + x] != 0)
 			prec_blue (x,y) /= w_blue [y * m_prec_width * 2 + x];
@@ -204,7 +204,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 #pragma omp parallel for default (none) shared (progress)
 	  for (int x = 0; x < m_prec_width; x++)
 	    {
-	      if (!progress || !progress->cancel ())
+	      if (!progress || !progress->cancel_requested ())
 		for (int y = 0 ; y < m_prec_height; y++)
 		  {
 		    prec_red (x, 2 * y) = pixel (-0.5, 0, 0.5);
@@ -239,7 +239,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 #pragma omp parallel for default (none) shared (progress)
       for (int x = 0; x < m_prec_width; x++)
 	{
-	  if (!progress || !progress->cancel ())
+	  if (!progress || !progress->cancel_requested ())
 	    for (int y = 0 ; y < m_prec_height; y++)
 	      {
 		dufay_prec_red (2 * x, y) = pixel (0, 0.5,0.5, 0.3333);

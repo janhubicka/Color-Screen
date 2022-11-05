@@ -96,7 +96,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
 static bool
 write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
 {
-  if (progress && progress->cancelled ())
+  if (progress && progress->cancel_requested ())
     {
       free (outrow);
       TIFFClose (out);

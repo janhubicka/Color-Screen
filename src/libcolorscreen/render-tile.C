@@ -56,7 +56,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-	        if (!progress || !progress->cancel ())
+	        if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -78,7 +78,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-	        if (!progress || !progress->cancel ())
+	        if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -98,7 +98,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -128,7 +128,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		if (!progress || !progress->cancel ())
+		if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -148,7 +148,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -178,7 +178,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
 	    for (int y = 0; y < height; y++)
 	      {
-		if (!progress || !progress->cancel ())
+		if (!progress || !progress->cancel_requested ())
 		  for (int x = 0; x < width; x++)
 		    {
 		      int r, g, b;
@@ -198,7 +198,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -230,7 +230,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
@@ -256,7 +256,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	for (int y = 0; y < height; y++)
 	  {
 	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel ())
+	    if (!progress || !progress->cancel_requested ())
 	      for (int x = 0; x < width; x++)
 		{
 		  int r, g, b;
