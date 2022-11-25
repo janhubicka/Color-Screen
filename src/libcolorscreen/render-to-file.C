@@ -238,8 +238,12 @@ render_to_file (enum output_mode mode, const char *outfname,
       }
       break;
     case realistic:
+    case preview_grid:
+    case color_preview_grid:
       {
-	render_superpose_img render (param, scan, rparam, 65535, false);
+	render_superpose_img render (param, scan, rparam, 65535, mode != realistic);
+	if (mode == color_preview_grid && scan.rgbdata)
+	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";

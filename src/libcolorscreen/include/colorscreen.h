@@ -8,6 +8,8 @@ enum output_mode
 {
   none,
   realistic,
+  preview_grid,
+  color_preview_grid,
   interpolated,
   predictive,
   combined,

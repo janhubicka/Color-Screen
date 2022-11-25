@@ -41,6 +41,10 @@ parse_mode (const char *mode)
     return none;
   else if (!strcmp (mode, "realistic"))
     return realistic;
+  else if (!strcmp (mode, "preview-grid"))
+    return preview_grid;
+  else if (!strcmp (mode, "color-preview-grid"))
+    return color_preview_grid;
   else if (!strcmp (mode, "interpolated"))
     return interpolated;
   else if (!strcmp (mode, "predictive"))
