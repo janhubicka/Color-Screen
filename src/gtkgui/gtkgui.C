@@ -1050,22 +1050,25 @@ handle_drag (int x, int y, int button)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER
 					(data.image_viewer), &scale_x,
 					&scale_y, &shift_x, &shift_y);
-  if (motor_correction && current_motor_correction >= 0 && button == 1)
+  if (motor_correction)
     {
-      double xoffset = (x - xpress1) / scale_x;
-      double yoffset = (y - ypress1) / scale_y;
-      if (current.scanner_type == lens_move_horisontally)
-	current.motor_correction_x[current_motor_correction] = current_motor_correction_val + xoffset;
-      else
-	current.motor_correction_x[current_motor_correction] = current_motor_correction_val + yoffset;
-      setvals ();
-      display_scheduled = true;
-      preview_display_scheduled = true;
-      for (int i = 0; i < current.n_motor_corrections; i++)
+      if (current_motor_correction >= 0 && button == 1)
 	{
-	  printf (" %f:%f", current.motor_correction_x[i], current.motor_correction_y[i]);
+	  double xoffset = (x - xpress1) / scale_x;
+	  double yoffset = (y - ypress1) / scale_y;
+	  if (current.scanner_type == lens_move_horisontally)
+	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + xoffset;
+	  else
+	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + yoffset;
+	  setvals ();
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+	  for (int i = 0; i < current.n_motor_corrections; i++)
+	    {
+	      printf (" %f:%f", current.motor_correction_x[i], current.motor_correction_y[i]);
+	    }
+	  printf ("\n");
 	}
-      printf ("\n");
       return;
     }
   if (button == 1)

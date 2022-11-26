@@ -35,7 +35,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   if (param)
     {
       if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
-	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type])
+	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type]) < 0
 	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0

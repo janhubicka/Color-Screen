@@ -84,15 +84,19 @@ template<typename T> class precomputed_function
 	T ap = apply (xx);
 	if (fabs (ap - y) < epsilon /*|| max - min < epsilon*/)
 	  return xx;
-	if ((ap > y) ^ increasing)
+	if ((ap < y) ^ increasing)
 	  {
 	    if (max == xx)
 	      {
+#if 1
 		T ap1 = apply (xx + 1);
 		if (ap1 == xx)
 		  return xx;
 		else
 		  return xx + (y - ap) / (ap1 - ap);
+#else
+		return xx;
+#endif
 	      }
 	    max = xx;
 	  }
@@ -100,11 +104,15 @@ template<typename T> class precomputed_function
 	  {
 	    if (min == xx)
 	      {
+#if 1
 		T ap1 = apply (xx - 1);
 		if (ap1 == xx)
 		  return xx;
 		else
 		  return xx + (ap - y) / (ap1 - ap);
+#else
+		return xx;
+#endif
 	      }
 	    min = xx;
 	  }
@@ -139,7 +147,6 @@ private:
       }
     increasing = y[0] < y[len - 1];
   }
-
 };
 
 
