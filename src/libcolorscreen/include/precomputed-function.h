@@ -14,6 +14,7 @@ template<typename T> class precomputed_function
     {
       init_by_y_values (y, len);
     }
+  /* Construct linear interpolation between known X and Y values.  */
   precomputed_function<T> (T min_x, T max_x, int len, T *x, T *y, int npoints)
   : m_min_x (min_x), m_max_x (max_x)
   {
@@ -122,6 +123,8 @@ private:
   void
   init_by_y_values (T *y, int len)
   {
+    if (len < 2)
+      abort ();
     m_entries = len - 1;
     m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
     if (!m_entries)
@@ -134,7 +137,7 @@ private:
 	m_entry[i].slope = (y[i+1] - y[i]) * m_step_inv;
 	m_entry[i].add = y[i] - xleft * m_entry[i].slope;
       }
-    increasing = y[0] < y[len];
+    increasing = y[0] < y[len - 1];
   }
 
 };
