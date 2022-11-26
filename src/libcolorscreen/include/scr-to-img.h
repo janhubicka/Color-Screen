@@ -112,10 +112,13 @@ struct DLL_PUBLIC scr_to_img_parameters
     center_y = from.center_y;
     coordinate1_x = from.coordinate1_x;
     coordinate1_y = from.coordinate1_y;
+    coordinate2_x = from.coordinate2_x;
+    coordinate2_y = from.coordinate2_y;
     tilt_x_x = from.tilt_x_x;
     tilt_x_y = from.tilt_x_y;
     tilt_y_x = from.tilt_y_x;
     tilt_y_y = from.tilt_y_y;
+    k1 = from.k1;
     type = from.type;
     scanner_type = from.scanner_type;
     if (n_motor_corrections)
@@ -281,10 +284,19 @@ public:
   void
   to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
-    apply_early_correction (x, y, &x, &y);
-    x -= m_corrected_center_x;
-    y -= m_corrected_center_y;
-    m_matrix.inverse_perspective_transform (x,y, *xp, *yp);
+    coord_t xx = x, yy = y;
+    apply_early_correction (xx, yy, &xx, &yy);
+    xx -= m_corrected_center_x;
+    yy -= m_corrected_center_y;
+    m_matrix.inverse_perspective_transform (xx,yy, *xp, *yp);
+
+    /* Verify that inverse is working.  */
+    if (debug)
+      {
+        to_img (*xp, *yp, &xx, &yy);
+	if (fabs (xx - x) + fabs (yy - y) > 1)
+	  abort ();
+      }
   }
   enum scr_type
   get_type ()
@@ -362,6 +374,7 @@ private:
     *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
     *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
   }
+  const bool debug = true;
 };
 
 /* Translate center to given coordinates (x,y).  */
