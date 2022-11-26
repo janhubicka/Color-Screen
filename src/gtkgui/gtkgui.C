@@ -381,6 +381,8 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 }
 #endif
 
+static bool motor_correction;
+
 /* Handle all the magic keys.  */
 static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
@@ -578,6 +580,22 @@ static int step;
 	  display_type = k - '1';
 	  display_scheduled = true;
 	}
+      if (k == 't')
+	{
+	  save_parameters ();
+	  current.scanner_type = (scanner_type)((int)current.scanner_type + 1);
+	  if (current.scanner_type == max_scanner_type)
+	    current.scanner_type = fixed_lens;
+	  printf ("scanner type: %s\n", scanner_type_names [(int)current.scanner_type]);
+	}
+      if (k == 'r')
+	{
+	  motor_correction = false;
+	}
+      if (k == 'R')
+	{
+	  motor_correction = true;
+	}
     }
   else
     {
@@ -755,6 +773,23 @@ draw_circle (cairo_surface_t *surface, coord_t bigscale,
 }
 
 static void
+draw_line (cairo_surface_t *surface, coord_t bigscale,
+	   int xoffset, int yoffset,
+	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b)
+{
+  cairo_t *cr = cairo_create (surface);
+  cairo_translate (cr, -xoffset, -yoffset);
+  cairo_scale (cr, bigscale, bigscale);
+
+  cairo_set_source_rgba (cr, r, g, b, 0.5);
+  cairo_move_to (cr, x1, y1);
+  cairo_line_to (cr, x2, y2);
+
+  cairo_stroke (cr);
+  cairo_destroy (cr);
+}
+
+static void
 bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 {
   int bigrowstride = gdk_pixbuf_get_rowstride (bigpixbuf);
@@ -785,6 +820,20 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   draw_circle (surface, bigscale, xoffset, yoffset, current.center_x, current.center_y, 0, 0, 1);
   draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
   draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
+
+  for (int i = 0; i < current.n_motor_corrections; i++)
+    {
+      if (current.scanner_type == lens_move_horisontally)
+	{
+	  draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_x[i], 0, current.motor_correction_x[i], scan.height, 1, 1, 0);
+	  draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_y[i], 0, current.motor_correction_y[i], scan.height, 0, 1, 1);
+	}
+      else if (current.scanner_type == lens_move_vertically)
+	{
+	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_x[i], scan.width, current.motor_correction_x[i], 1, 1, 0);
+	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
+	}
+    }
 
   cairo_surface_destroy (surface);
 }
@@ -832,6 +881,8 @@ static double xpress1, ypress1;
 static bool button1_pressed;
 static bool button3_pressed;
 static struct scr_to_img_parameters press_parameters;
+static int current_motor_correction = -1;
+static double current_motor_correction_val;
 
 G_MODULE_EXPORT void
 cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
@@ -887,14 +938,32 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    //preview_display_scheduled = true;
 	}
     }
+  else if (motor_correction && current.scanner_type != fixed_lens)
+    {
+      double x = (event->x + shift_x) / scale_x;
+      double y = (event->y + shift_y) / scale_y;
+      save_parameters ();
+      if (current.scanner_type == lens_move_horisontally)
+      {
+        current_motor_correction = current.add_motor_correction_point (x, x);
+	current_motor_correction_val = x;
+      }
+      else
+      {
+        current_motor_correction = current.add_motor_correction_point (y, y);
+	current_motor_correction_val = y;
+      }
+      display_scheduled = true;
+      xpress1 = event->x;
+      ypress1 = event->y;
+      button1_pressed = true;
+    }
   else
     {
       if (event->button == 1 && setcenter)
 	{
-	  double newcenter_x;
-	  double newcenter_y;
-	  newcenter_x = (event->x + shift_x) / scale_x;
-	  newcenter_y = (event->y + shift_y) / scale_y;
+	  double newcenter_x = (event->x + shift_x) / scale_x;
+	  double newcenter_y = (event->y + shift_y) / scale_y;
 	  if (newcenter_x != current.center_x || newcenter_y != current.center_y)
 	    {
 	      current.center_x = newcenter_x;
@@ -931,6 +1000,24 @@ handle_drag (int x, int y, int button)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER
 					(data.image_viewer), &scale_x,
 					&scale_y, &shift_x, &shift_y);
+  if (motor_correction && current_motor_correction > 0 && button == 1)
+    {
+      double xoffset = (x - xpress1) / scale_x;
+      double yoffset = (y - ypress1) / scale_y;
+      if (current.scanner_type == lens_move_horisontally)
+	current.motor_correction_x[current_motor_correction] = current_motor_correction_val + xoffset;
+      else
+	current.motor_correction_x[current_motor_correction] = current_motor_correction_val + yoffset;
+      setvals ();
+      display_scheduled = true;
+      preview_display_scheduled = true;
+      for (int i = 0; i < current.n_motor_corrections; i++)
+	{
+	  printf (" %f:%f", current.motor_correction_x[i], current.motor_correction_y[i]);
+	}
+      printf ("\n");
+      return;
+    }
   if (button == 1)
     {
       double xoffset = (x - xpress1) / scale_x;
@@ -1056,6 +1143,10 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
     }
+  current.scanner_type = lens_move_horisontally;
+
+
+
   save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams);
   window = initgtk (&argc, argv);
   setvals ();

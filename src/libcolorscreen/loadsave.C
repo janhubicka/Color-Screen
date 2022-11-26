@@ -259,7 +259,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (param)
 	    param->type = (enum scr_type) j;
 	}
-      if (!strcmp (buf, "scanner_type"))
+      else if (!strcmp (buf, "scanner_type"))
 	{
 	  get_keyword (f, buf2);
 	  int j;

@@ -131,7 +131,7 @@ struct DLL_PUBLIC scr_to_img_parameters
   {
     return !(*this == other);
   }
-  void
+  int
   add_motor_correction_point (coord_t x, coord_t y)
   {
     int p = 0;
@@ -148,6 +148,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     motor_correction_x[p] = x;
     motor_correction_y[p] = y;
     n_motor_corrections++;
+    return p;
   }
 };
 
