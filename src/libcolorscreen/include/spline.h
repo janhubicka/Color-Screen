@@ -1,5 +1,7 @@
 #ifndef SPLINE_H
 #define SPLINE_H
+#include <stdlib.h>
+#include <stdio.h>
 #include "precomputed-function.h"
 
 /* Cubic spline implementation.  Based on numerical recipes in C. */
@@ -17,8 +19,11 @@ public:
     const T yp1 = 3e30 * alpha;
     const T ypn = 3e30 * alpha;
 
+    if (n < 2)
+      abort ();
+
     u = (T *) malloc ((unsigned) (n - 1) * sizeof (T));
-    m_y2 = (T *) malloc ((unsigned) (n - 1) * sizeof (T));
+    m_y2 = (T *) malloc ((unsigned) (n) * sizeof (T));
 
     //printf ("Spline %i\n",n);
     //for (int i = 0; i < n; i++)
@@ -55,6 +60,8 @@ public:
     m_y2[n - 1] = (un - qn * u[n - 2]) / (qn * m_y2[n - 2] + (T)1.0);
     for (int k = n - 2; k >= 0; k--)
       m_y2[k] = m_y2[k] * m_y2[k + 1] + u[k];
+    //for (int k = 0; k < n; k++)
+      //printf ("%f:%f %f\n",x[k],y[k], apply(x[k]));
     free (u);
   }
 

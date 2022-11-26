@@ -1,13 +1,13 @@
 #ifndef PRECOMPUTED_FUNCTION_H
 #define PRECOMPUTED_FUNCTION_H
-#include <memory.h>
+#include <stdlib.h>
+#include <algorithm>
 
 /* Lookup table defined 1d function.  */
 
 template<typename T> class precomputed_function
 {
   public:
-
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */
   precomputed_function<T> (T min_x, T max_x, T *y, int len)
   : m_min_x (min_x), m_max_x (max_x), m_step_inv ((T)len / ((max_x - min_x))), m_entries (len - 1)
@@ -15,15 +15,38 @@ template<typename T> class precomputed_function
       m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
       if (!m_entries)
 	return;
-      T step = (max_x - min_x) / (T)len;
-      for (int i = 0; i < len - 1; i++)
-	{
-	  T xleft = min_x + i * step;
-	  m_entry[i].slope = (y[i+1] - y[i]) * m_step_inv;
-	  m_entry[i].add = y[i] - xleft * m_entry[i].slope;
-	}
-      increasing = y[0] < y[len];
+      init_by_y_values (y, len);
     }
+  precomputed_function<T> (T min_x, T max_x, int len, T *x, T *y, int npoints)
+  : m_min_x (min_x), m_max_x (max_x), m_step_inv ((T)len / ((max_x - min_x))), m_entries (len - 1)
+  {
+    m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
+    if (!m_entries)
+      return;
+    T *yy = (T *)malloc (sizeof (entry) * len);
+    T step = (m_max_x - m_min_x) / (T)len;
+
+    if (!npoints)
+      {
+	for (int i = 0; i < len; i++)
+	  yy[i] = min_x + i * step;
+      }
+    else if (npoints == 1)
+      {
+	for (int i = 0; i < len; i++)
+	  yy[i] = min_x + i * step + y[0] - x[0];
+      }
+    else
+      for (int i = 0, p = 0; i < len; i++)
+	{
+	  T xx = min_x + i * step;
+	  while (p < npoints - 1 && x[p+1] < xx)
+	    p++;
+	  yy[i] = y[p] + (y[p+1]-y[p]) * (xx - x[p]) / (x[p+1]-x[p]);
+	}
+    init_by_y_values (yy, len);
+    free (yy);
+  }
 
   ~precomputed_function<T> ()
     {
@@ -78,6 +101,20 @@ private:
     T slope, add;
   } *m_entry;
   bool increasing;
+
+  void
+  init_by_y_values (T *y, int len)
+  {
+    T step = (m_max_x - m_min_x) / (T)len;
+    for (int i = 0; i < len - 1; i++)
+      {
+	T xleft = m_min_x + i * step;
+	m_entry[i].slope = (y[i+1] - y[i]) * m_step_inv;
+	m_entry[i].add = y[i] - xleft * m_entry[i].slope;
+      }
+    increasing = y[0] < y[len];
+  }
+
 };
 
 
