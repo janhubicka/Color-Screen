@@ -108,6 +108,10 @@ public:
     T *yvals = (T *) malloc (steps * sizeof (T));
     if (!yvals)
       return NULL;
+    if (min < m_x[0])
+      min = m_x[0];
+    if (max > m_x[m_n])
+      max = m_x[m_n];
     for (int i = 0; i < steps; i++)
     {
       yvals[i] = apply (min + ((max - min) / steps) * i);
