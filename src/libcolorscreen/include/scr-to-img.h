@@ -142,13 +142,23 @@ struct DLL_PUBLIC scr_to_img_parameters
       ;
     for (int p2 = n_motor_corrections; p2 > p; p2 --)
       {
- 	motor_correction_x[p2] = motor_correction_x[p2 - 1];
- 	motor_correction_y[p2] = motor_correction_y[p2 - 1];
+	motor_correction_x[p2] = motor_correction_x[p2 - 1];
+	motor_correction_y[p2] = motor_correction_y[p2 - 1];
       }
     motor_correction_x[p] = x;
     motor_correction_y[p] = y;
     n_motor_corrections++;
     return p;
+  }
+  void
+  remove_motor_correction_point (int i)
+  {
+    for (; i < n_motor_corrections; i++)
+    {
+	motor_correction_x[i] = motor_correction_x[i + 1];
+	motor_correction_y[i] = motor_correction_y[i + 1];
+    }
+    n_motor_corrections--;
   }
 };
 

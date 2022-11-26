@@ -584,18 +584,16 @@ static int step;
 	{
 	  save_parameters ();
 	  current.scanner_type = (scanner_type)((int)current.scanner_type + 1);
+	  preview_display_scheduled = true;
+	  display_scheduled = true;
 	  if (current.scanner_type == max_scanner_type)
 	    current.scanner_type = fixed_lens;
 	  printf ("scanner type: %s\n", scanner_type_names [(int)current.scanner_type]);
 	}
       if (k == 'r')
-	{
-	  motor_correction = false;
-	}
+	motor_correction = false;
       if (k == 'R')
-	{
-	  motor_correction = true;
-	}
+	motor_correction = true;
     }
   else
     {
@@ -938,25 +936,65 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    //preview_display_scheduled = true;
 	}
     }
-  else if (motor_correction && current.scanner_type != fixed_lens)
+  else if (motor_correction)
     {
       double x = (event->x + shift_x) / scale_x;
       double y = (event->y + shift_y) / scale_y;
-      save_parameters ();
+      double click;
+      double scale;
       if (current.scanner_type == lens_move_horisontally)
-      {
-        current_motor_correction = current.add_motor_correction_point (x, x);
-	current_motor_correction_val = x;
-      }
+	{
+	  click = x;
+	  scale = scale_x;
+	}
       else
-      {
-        current_motor_correction = current.add_motor_correction_point (y, y);
-	current_motor_correction_val = y;
-      }
-      display_scheduled = true;
-      xpress1 = event->x;
-      ypress1 = event->y;
-      button1_pressed = true;
+	{
+	  click = y;
+	  scale = scale_y;
+	}
+
+      if (current.scanner_type != fixed_lens && event->button == 1)
+	{
+	  int i;
+
+	  save_parameters ();
+
+	  for (i = 0; i < current.n_motor_corrections; i++)
+	    {
+	      double dist = fabs (click - current.motor_correction_x[i]);
+	      if (dist < 5 / scale_x)
+		{
+		  current_motor_correction = i;
+		  current_motor_correction_val = current.motor_correction_x[i];
+		  printf ("Found %i\n", i);
+		  break;
+		}
+	    }
+	  if (i == current.n_motor_corrections)
+	    {
+	      current_motor_correction = current.add_motor_correction_point (click, click);
+	      current_motor_correction_val = click;
+	    }
+	  display_scheduled = true;
+	  xpress1 = event->x;
+	  ypress1 = event->y;
+	  button1_pressed = true;
+	}
+      if (current.scanner_type != fixed_lens && event->button == 3)
+	{
+	  for (int i = 0; i < current.n_motor_corrections; i++)
+	    {
+	      double dist = fabs (click - current.motor_correction_x[i]);
+	      if (dist < 5 / scale_x)
+		{
+		  save_parameters ();
+		  display_scheduled = true;
+		  preview_display_scheduled = true;
+		  current.remove_motor_correction_point (i);
+		  break;
+		}
+	    }
+	}
     }
   else
     {
