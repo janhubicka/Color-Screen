@@ -2,6 +2,7 @@
 #define SCR_TO_IMG_H
 #include "dllpublic.h"
 #include "matrix.h"
+#include "precomputed-function.h"
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
@@ -22,6 +23,17 @@ enum scr_type
    max_scr_type
 };
 
+/* Type of a scanner used.  */
+enum scanner_type {
+	fixed_lens,
+	lens_move_horisontally,
+	lens_move_vertically,
+	max_scanner_type
+};
+
+
+extern const char * const scanner_type_names[max_scanner_type];
+
 /* This implements to translate image coordiantes to coordinates of the viewing screen.
    In the viewing screen the coordinats (0,0) describe a green dot and
    the screen is periodic with period 1: that is all integer coordinates describes
@@ -29,10 +41,6 @@ enum scr_type
 
 struct DLL_PUBLIC scr_to_img_parameters
 {
-  scr_to_img_parameters ()
-  : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), k1(0), type (Finlay)
-  { }
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
   coord_t center_x, center_y;
   /* First coordinate vector:
@@ -43,6 +51,9 @@ struct DLL_PUBLIC scr_to_img_parameters
      image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
      a green dot just below (center_x, center_y).  */
   coord_t coordinate2_x, coordinate2_y;
+
+  /* Center of lens within scan image (in scan coordinates.  */
+  coord_t lens_center_x, lens_center_y;
   /* Perspective tilt in x and y coordinate in degrees which results in perspective
      error in x coordinate.  */
   coord_t tilt_x_x, tilt_x_y;
@@ -50,8 +61,58 @@ struct DLL_PUBLIC scr_to_img_parameters
   coord_t tilt_y_x, tilt_y_y;
   /* 1st radial distortion coefficient for Brown–Conrady lens distortion model.  */
   coord_t k1;
-  enum scr_type type;
 
+  /* Stepping motor correction is described by a spline.  */
+  coord_t *motor_correction_x, *motor_correction_y;
+  int n_motor_corrections;
+
+  enum scr_type type;
+  enum scanner_type scanner_type;
+
+  scr_to_img_parameters ()
+  : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
+    tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), k1(0),
+    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0),
+    type (Finlay), scanner_type (fixed_lens)
+  { }
+  scr_to_img_parameters (const scr_to_img_parameters &from)
+  : center_x (from.center_x), center_y (from.center_y),
+    coordinate1_x(from.coordinate1_x), coordinate1_y (from.coordinate1_y),
+    coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
+    tilt_x_x (from.tilt_x_x), tilt_x_y(from.tilt_x_y), tilt_y_x (from.tilt_y_x), tilt_y_y (from.tilt_y_y), k1(from.k1),
+    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (from.n_motor_corrections),
+    type (from.type), scanner_type (from.scanner_type)
+  {
+    if (n_motor_corrections)
+      {
+        motor_correction_x = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+        motor_correction_y = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+	memcpy (motor_correction_x, from.motor_correction_x, n_motor_corrections * sizeof (coord_t));
+	memcpy (motor_correction_y, from.motor_correction_y, n_motor_corrections * sizeof (coord_t));
+      }
+  }
+  /* Copy everything except for motor corrections.  */
+  void
+  copy_from_cheap (const scr_to_img_parameters &from)
+  {
+    center_x = from.center_x;
+    center_y = from.center_y;
+    coordinate1_x = from.coordinate1_x;
+    coordinate1_y = from.coordinate1_y;
+    tilt_x_x = from.tilt_x_x;
+    tilt_x_y = from.tilt_x_y;
+    tilt_y_x = from.tilt_y_x;
+    tilt_y_y = from.tilt_y_y;
+    type = from.type;
+    scanner_type = from.scanner_type;
+    if (n_motor_corrections)
+      abort ();
+  }
+  ~scr_to_img_parameters ()
+  {
+    free (motor_correction_x);
+    free (motor_correction_y);
+  }
   bool operator== (scr_to_img_parameters &other) const
   {
     return center_x == other.center_x
@@ -60,6 +121,7 @@ struct DLL_PUBLIC scr_to_img_parameters
 	   && coordinate1_y == other.coordinate1_y
 	   && coordinate2_x == other.coordinate2_x
 	   && coordinate2_y == other.coordinate2_y
+	   // TODO: motor correction scanner type
 	   && tilt_x_x == other.tilt_x_x
 	   && tilt_x_y == other.tilt_x_y
 	   && tilt_y_x == other.tilt_y_x
@@ -68,6 +130,24 @@ struct DLL_PUBLIC scr_to_img_parameters
   bool operator!= (scr_to_img_parameters &other) const
   {
     return !(*this == other);
+  }
+  void
+  add_motor_correction_point (coord_t x, coord_t y)
+  {
+    int p = 0;
+
+    motor_correction_x = (coord_t *)realloc ((void *)motor_correction_x, (n_motor_corrections + 1) * sizeof (coord_t));
+    motor_correction_y = (coord_t *)realloc ((void *)motor_correction_y, (n_motor_corrections + 1) * sizeof (coord_t));
+    for (p = n_motor_corrections; p > 0 && motor_correction_x[p-1] > x; p--)
+      ;
+    for (int p2 = n_motor_corrections; p2 > p; p2 --)
+      {
+ 	motor_correction_x[p2] = motor_correction_x[p2 - 1];
+ 	motor_correction_y[p2] = motor_correction_y[p2 - 1];
+      }
+    motor_correction_x[p] = x;
+    motor_correction_y[p] = y;
+    n_motor_corrections++;
   }
 };
 
@@ -85,6 +165,16 @@ public:
       		  coord_t x2, coord_t y2,
 		  int *scr_xshift, int *scr_yshift,
 		  int *scr_width, int *scr_height);
+
+  scr_to_img ()
+  : m_motor_correction (NULL)
+  {
+  }
+  ~scr_to_img ()
+  {
+    if (m_motor_correction)
+      delete m_motor_correction;
+  }
 
   /* Prevent conversion to wrong data type when doing math.  */
   static inline float
@@ -107,6 +197,22 @@ public:
   {
     return cbrt (x);
   }
+
+  /* Apply corrections that fix scanner optics that does not fit into the linear
+     transformation matrix.  */
+  void
+  apply_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  {
+    apply_motor_correction (x, y, xr, yr);
+    apply_lens_correction (*xr, *yr, xr, yr);
+  }
+  void
+  inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  {
+    inverse_lens_correction (*xr, *yr, xr, yr);
+    inverse_motor_correction (x, y, xr, yr);
+  }
+
   void
   apply_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
@@ -145,13 +251,13 @@ public:
     m_matrix.perspective_transform (x,y, x, y);
     x += m_corrected_center_x;
     y += m_corrected_center_y;
-    inverse_lens_correction (x, y, xp, yp);
+    inverse_early_correction (x, y, xp, yp);
   }
   /* Map image coordinats to screen.  */
   void
   to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
-    apply_lens_correction (x, y, &x, &y);
+    apply_early_correction (x, y, &x, &y);
     x -= m_corrected_center_x;
     y -= m_corrected_center_y;
     m_matrix.inverse_perspective_transform (x,y, *xp, *yp);
@@ -162,6 +268,7 @@ public:
     return m_param.type;
   }
 private:
+  precomputed_function<coord_t> *m_motor_correction;
   /* Center of lenses: the middle of the scan.  */
   coord_t m_lens_center_x, m_lens_center_y;
   /* Center of the coordinate system in corrected coordinates.  */
@@ -171,6 +278,32 @@ private:
   /* Screen->image translation matrix.  */
   trans_matrix m_matrix;
   scr_to_img_parameters m_param;
+
+  /* Apply spline defining motor correction.  */
+  void
+  apply_motor_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  {
+    *xr = x;
+    *yr = y;
+    if (!m_motor_correction)
+      return;
+    if (m_param.scanner_type == lens_move_horisontally)
+      *xr = m_motor_correction->apply (x);
+    else
+      *yr = m_motor_correction->apply (y);
+  }
+  void
+  inverse_motor_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  {
+    *xr = x;
+    *yr = y;
+    if (!m_motor_correction)
+      return;
+    if (m_param.scanner_type == lens_move_horisontally)
+      *xr = m_motor_correction->invert (x);
+    else
+      *yr = m_motor_correction->invert (y);
+  }
   /* Apply lens correction.  */
   void
   apply_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)

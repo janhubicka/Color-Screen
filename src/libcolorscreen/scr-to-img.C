@@ -2,17 +2,27 @@
 #include <algorithm>
 #include "include/scr-to-img.h"
 #include "include/imagedata.h"
+#include "include/spline.h"
 
 /* Initilalize the translation matrix to PARAM.  */
 void
 scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 {
+  m_motor_correction = NULL;
+  if (param.n_motor_corrections && param.scanner_type != fixed_lens)
+    {
+      int len = param.scanner_type == lens_move_horisontally ? img.width : img.height;
+      spline<coord_t> spline (param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
+      m_motor_correction = spline.precompute (0, len, len);
+    }
   m_lens_center_x = img.width / (coord_t) 2;
   m_lens_center_y = img.height / (coord_t) 2;
+  apply_motor_correction (m_lens_center_x, m_lens_center_y, &m_lens_center_x, &m_lens_center_y);
   m_lens_radius = my_sqrt (m_lens_center_x * m_lens_center_x + m_lens_center_y * m_lens_center_y);
   m_inverse_lens_radius = 1 / m_lens_radius;
-  m_param = param;
-  apply_lens_correction (m_param.center_x, m_param.center_y,
+  /* We do not need to copy motor corrections since we already constructed the function.  */
+  m_param.copy_from_cheap (param);
+  apply_early_correction (m_param.center_x, m_param.center_y,
 			 &m_corrected_center_x,	 &m_corrected_center_y);
   trans_matrix m;
 
@@ -42,13 +52,13 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   coord_t coordinate2_x, coordinate2_y;
 
   /* Base vector are in the scan coordinates; adjust for lens distortion.  */
-  apply_lens_correction (m_param.coordinate1_x + m_param.center_x,
+  apply_early_correction (m_param.coordinate1_x + m_param.center_x,
 			 m_param.coordinate1_y + m_param.center_y,
 			 &coordinate1_x, &coordinate1_y);
   coordinate1_x -= m_corrected_center_x;
   coordinate1_y -= m_corrected_center_y;
 
-  apply_lens_correction (m_param.coordinate2_x + m_param.center_x,
+  apply_early_correction (m_param.coordinate2_x + m_param.center_x,
 			 m_param.coordinate2_y + m_param.center_y,
 			 &coordinate2_x, &coordinate2_y);
   coordinate2_x -= m_corrected_center_x;

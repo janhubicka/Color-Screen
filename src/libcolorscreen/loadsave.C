@@ -11,6 +11,13 @@ static const char * const scr_names[max_scr_type] =
   "Dufay"
 };
 
+const char * const scanner_type_names[max_scanner_type] =
+{
+  "fixed-lens",
+  "horisontally-moving-lens",
+  "vertically-moving-lens"
+};
+
 static const char * const bool_names[2] =
 {
   "yes",
@@ -28,6 +35,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   if (param)
     {
       if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
+	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type])
 	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
@@ -35,6 +43,11 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "tilt_y: %f %f\n", param->tilt_y_x, param->tilt_y_y) < 0
 	  || fprintf (f, "k1: %f\n", param->k1) < 0)
 	return false;
+      for (int i = 0; i < param->n_motor_corrections; i++)
+	{
+	  if (fprintf (f, "motor_correction: %f %f\n", param->motor_correction_x[i], param->motor_correction_y[i]) < 0)
+	    return false;
+	}
     }
   if (dparam)
     {
@@ -246,6 +259,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (param)
 	    param->type = (enum scr_type) j;
 	}
+      if (!strcmp (buf, "scanner_type"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < max_scanner_type; j++)
+	    if (!strcmp (buf2, scanner_type_names[j]))
+	      break;
+	  if (j == max_scanner_type)
+	    {
+	      *error = "unknown scanner type";
+	      return false;
+	    }
+	  if (param)
+	    param->type = (enum scr_type) j;
+	}
       else if (!strcmp (buf, "screen_shift"))
 	{
 	  if (!read_vector (f, param_check (center_x), param_check (center_y)))
@@ -277,6 +305,17 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing tilt_x";
 	      return false;
 	    }
+	}
+      else if (!strcmp (buf, "motor_correction"))
+	{
+	  coord_t x, y;
+	  if (!read_vector (f, &x, &y))
+	    {
+	      *error = "error parsing motor_correction";
+	      return false;
+	    }
+          if (param)
+	    param->add_motor_correction_point (x, y);
 	}
       else if (!strcmp (buf, "tilt_y"))
 	{
