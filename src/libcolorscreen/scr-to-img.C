@@ -12,7 +12,7 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   if (param.n_motor_corrections && param.scanner_type != fixed_lens)
     {
       int len = param.scanner_type == lens_move_horisontally ? img.width : img.height;
-      if (param.n_motor_corrections > 2)
+      if (param.n_motor_corrections > 2 && 0)
 	{
 	  spline<coord_t> spline (param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
 	  m_motor_correction = spline.precompute (0, len, len);

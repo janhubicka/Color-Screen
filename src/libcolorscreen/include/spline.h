@@ -110,13 +110,13 @@ public:
       return NULL;
     if (min < m_x[0])
       min = m_x[0];
-    if (max > m_x[m_n])
-      max = m_x[m_n];
+    if (max > m_x[m_n - 1])
+      max = m_x[m_n - 1];
     for (int i = 0; i < steps; i++)
-    {
-      yvals[i] = apply (min + ((max - min) / steps) * i);
-      //printf ("%f %f\n", min + ((max - min) / steps) * i, yvals[i]);
-    }
+      {
+	yvals[i] = apply (min + ((max - min) / (steps - 1)) * i);
+	//printf ("%f %f\n", min + ((max - min) / steps) * i, yvals[i]);
+      }
     precomputed_function<T> *fn = new precomputed_function<T>(min, max, yvals, steps);
     free (yvals);
     return fn;

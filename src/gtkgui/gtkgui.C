@@ -956,21 +956,27 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       if (current.scanner_type != fixed_lens && event->button == 1)
 	{
 	  int i;
+	  int best_i = -1;
+	  double min_dist = 5 / scale_x;
 
 	  save_parameters ();
 
 	  for (i = 0; i < current.n_motor_corrections; i++)
 	    {
 	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < 5 / scale_x)
+	      if (dist < min_dist)
 		{
-		  current_motor_correction = i;
-		  current_motor_correction_val = current.motor_correction_x[i];
-		  printf ("Found %i\n", i);
-		  break;
+		  best_i = i;
+		  min_dist = dist;
 		}
 	    }
-	  if (i == current.n_motor_corrections)
+	  if (best_i >= 0)
+	    {
+	      current_motor_correction = best_i;
+	      current_motor_correction_val = current.motor_correction_x[best_i];
+	      printf ("Found %i\n", best_i);
+	    }
+	  else
 	    {
 	      current_motor_correction = current.add_motor_correction_point (click, click);
 	      current_motor_correction_val = click;
@@ -982,17 +988,23 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	}
       if (current.scanner_type != fixed_lens && event->button == 3)
 	{
+	  double min_dist = 5 / scale_x;
+	  int best_i = -1;
 	  for (int i = 0; i < current.n_motor_corrections; i++)
 	    {
 	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < 5 / scale_x)
+	      if (dist < min_dist)
 		{
-		  save_parameters ();
-		  display_scheduled = true;
-		  preview_display_scheduled = true;
-		  current.remove_motor_correction_point (i);
-		  break;
+		  best_i = i;
+		  min_dist = dist;
 		}
+	    }
+	  if (best_i >= 0)
+	    {
+	       save_parameters ();
+	       display_scheduled = true;
+	       preview_display_scheduled = true;
+	       current.remove_motor_correction_point (best_i);
 	    }
 	}
     }
@@ -1038,7 +1050,7 @@ handle_drag (int x, int y, int button)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER
 					(data.image_viewer), &scale_x,
 					&scale_y, &shift_x, &shift_y);
-  if (motor_correction && current_motor_correction > 0 && button == 1)
+  if (motor_correction && current_motor_correction >= 0 && button == 1)
     {
       double xoffset = (x - xpress1) / scale_x;
       double yoffset = (y - ypress1) / scale_y;

@@ -10,36 +10,44 @@ template<typename T> class precomputed_function
   public:
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */
   precomputed_function<T> (T min_x, T max_x, T *y, int len)
-  : m_min_x (min_x), m_max_x (max_x), m_step_inv ((T)len / ((max_x - min_x))), m_entries (len - 1)
+  : m_min_x (min_x), m_max_x (max_x)
     {
-      m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
-      if (!m_entries)
-	return;
       init_by_y_values (y, len);
     }
   precomputed_function<T> (T min_x, T max_x, int len, T *x, T *y, int npoints)
-  : m_min_x (min_x), m_max_x (max_x), m_step_inv ((T)len / ((max_x - min_x))), m_entries (len - 1)
+  : m_min_x (min_x), m_max_x (max_x)
   {
-    m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
-    if (!m_entries)
-      return;
+    /* Sanitize input. */
+    if (m_min_x < x[0])
+      m_min_x = x[0];
+    if (m_max_x > x[npoints - 1])
+      m_max_x = x[npoints - 1];
+    if (m_min_x >= m_max_x)
+      m_max_x = m_min_x + 1;
+    if (npoints <= 2)
+      {
+	m_entries = 1;
+	len = 2;
+      }
     T *yy = (T *)malloc (sizeof (entry) * len);
-    T step = (m_max_x - m_min_x) / (T)len;
+    T step = (m_max_x - m_min_x) / (T)(len - 1);
 
+    /* If there is no control point just define function as f(x)=x.  */
     if (!npoints)
       {
 	for (int i = 0; i < len; i++)
-	  yy[i] = min_x + i * step;
+	  yy[i] = m_min_x + i * step;
       }
+    /* If there is one control point, use f(x) = x + c.  */
     else if (npoints == 1)
       {
 	for (int i = 0; i < len; i++)
-	  yy[i] = min_x + i * step + y[0] - x[0];
+	  yy[i] = m_min_x + i * step + y[0] - x[0];
       }
     else
       for (int i = 0, p = 0; i < len; i++)
 	{
-	  T xx = min_x + i * step;
+	  T xx = m_min_x + i * step;
 	  while (p < npoints - 1 && x[p+1] < xx)
 	    p++;
 	  yy[i] = y[p] + (y[p+1]-y[p]) * (xx - x[p]) / (x[p+1]-x[p]);
@@ -74,20 +82,29 @@ template<typename T> class precomputed_function
 	T xx = (min + max) * (T)0.5;
 	T ap = apply (xx);
 	if (fabs (ap - y) < epsilon /*|| max - min < epsilon*/)
-	  {
-	    //printf ("%f %f %f %i\n", y, ap, xx, increasing);
-	    return xx;
-	  }
+	  return xx;
 	if ((ap > y) ^ increasing)
 	  {
 	    if (max == xx)
-	      return xx;
+	      {
+		T ap1 = apply (xx + 1);
+		if (ap1 == xx)
+		  return xx;
+		else
+		  return xx + (y - ap) / (ap1 - ap);
+	      }
 	    max = xx;
 	  }
 	else
 	  {
 	    if (min == xx)
-	      return xx;
+	      {
+		T ap1 = apply (xx - 1);
+		if (ap1 == xx)
+		  return xx;
+		else
+		  return xx + (ap - y) / (ap1 - ap);
+	      }
 	    min = xx;
 	  }
       }
@@ -105,7 +122,12 @@ private:
   void
   init_by_y_values (T *y, int len)
   {
-    T step = (m_max_x - m_min_x) / (T)len;
+    m_entries = len - 1;
+    m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
+    if (!m_entries)
+      return;
+    T step = (m_max_x - m_min_x) / (T)(len - 1);
+    m_step_inv = 1 / step;
     for (int i = 0; i < len - 1; i++)
       {
 	T xleft = m_min_x + i * step;

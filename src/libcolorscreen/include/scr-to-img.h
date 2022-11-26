@@ -214,13 +214,13 @@ public:
   void
   apply_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-    apply_motor_correction (x, y, xr, yr);
-    apply_lens_correction (*xr, *yr, xr, yr);
+    apply_motor_correction (x, y, &x, &y);
+    apply_lens_correction (x, y, xr, yr);
   }
   void
   inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-    inverse_lens_correction (*xr, *yr, xr, yr);
+    inverse_lens_correction (x, y, &x, &y);
     inverse_motor_correction (x, y, xr, yr);
   }
 
