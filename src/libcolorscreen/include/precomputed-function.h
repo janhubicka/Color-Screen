@@ -145,7 +145,7 @@ private:
       }
     increasing = y[0] < y[len - 1];
   }
-  const bool debug = true;
+  const bool debug = false;
 };
 
 

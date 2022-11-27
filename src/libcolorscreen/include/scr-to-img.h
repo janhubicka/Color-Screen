@@ -374,7 +374,7 @@ private:
     *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
     *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
   }
-  const bool debug = true;
+  const bool debug = false;
 };
 
 /* Translate center to given coordinates (x,y).  */
