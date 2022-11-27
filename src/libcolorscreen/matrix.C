@@ -55,5 +55,17 @@ main()
             mm3.print (stderr);
 	    abort ();
 	  }
+  matrix3x3<double> mm4 (2,0,0,
+			 0,2,5,
+			 2,0,2);
+  matrix3x3<double> mm5 = mm4.invert ();
+  matrix<double,3> mm6 = mm4 * mm5;
+  for (int i = 0; i <3; i++)
+    for (int j = 0; j < 3; j++)
+       if (fabs (mm6.m_elements[i][j]-(double)(i==j)) > 0.0001)
+	  {
+            mm6.print (stderr);
+	    abort ();
+	  }
   return 0;
 }

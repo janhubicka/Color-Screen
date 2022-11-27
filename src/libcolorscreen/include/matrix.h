@@ -149,6 +149,55 @@ public:
     return ret;
   }
 };
+
+/* 3x3 matrix with inverse operation.  */
+template<typename T>
+class matrix3x3 : public matrix<T, 3>
+{
+  typedef matrix<T, 3> B;
+public:
+  matrix3x3<T> () { }
+
+  inline
+  matrix3x3<T> (T e00, T e10, T e20,
+	        T e01, T e11, T e21,
+	        T e02, T e12, T e22)
+  {
+    B::m_elements[0][0]=e00; B::m_elements[1][0]=e10; B::m_elements[2][0]=e20;
+    B::m_elements[0][1]=e01; B::m_elements[1][1]=e11; B::m_elements[2][1]=e21;
+    B::m_elements[0][2]=e02; B::m_elements[1][2]=e12; B::m_elements[2][2]=e22;
+  }
+
+  inline
+  matrix3x3<T>& operator=(const matrix<T, 3>rhs)
+  {
+    memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
+    return *this;
+  }
+
+  /* Apply matrix to vector (x,y,1) and return its two elements.  */
+  inline void
+  apply (T x, T y, T *xx, T *yy)
+  {
+    *xx = x * B::m_elements[0][0] + y * B::m_elements[1][0] + B::m_elements[2][0];
+    *yy = x * B::m_elements[0][1] + y * B::m_elements[1][1] + B::m_elements[2][1];
+  }
+
+  /* Compute inversion.  */
+  inline matrix3x3
+  invert ()
+  {
+    T determinant = 0;
+    matrix3x3 ret;
+    for(int i=0;i<3;i++)
+      determinant = determinant + (B::m_elements[0][i]*(B::m_elements[1][(i+1)%3]*B::m_elements[2][(i+2)%3] - B::m_elements[1][(i+2)%3]*B::m_elements[2][(i+1)%3]));
+    for(int i=0;i<3;i++)
+      for(int j=0;j<3;j++)
+	ret.m_elements[j][i] = ((B::m_elements[(i+1)%3][(j+1)%3] * B::m_elements[(i+2)%3][(j+2)%3]) - (B::m_elements[(i+1)%3][(j+2)%3]*B::m_elements[(i+2)%3][(j+1)%3]))/ determinant;
+    return ret;
+  }
+};
+
 /* 4x4 matrix with perspective projection and its inverse.  */
 template<typename T>
 class matrix4x4 : public matrix<T, 4>
