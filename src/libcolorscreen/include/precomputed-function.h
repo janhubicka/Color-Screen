@@ -3,6 +3,17 @@
 #include <stdlib.h>
 #include <algorithm>
 
+static inline double
+my_floor (double x)
+{
+  return floor (x);
+}
+static inline float
+my_floor (float x)
+{
+  return floorf (x);
+}
+
 /* Lookup table defined 1d function.  */
 
 template<typename T> class precomputed_function
@@ -25,6 +36,7 @@ template<typename T> class precomputed_function
       m_max_x = x[npoints - 1];
     if (m_min_x >= m_max_x)
       m_max_x = m_min_x + 1;
+    /* If there are only 2 npoints we represent linear function.  */
     if (npoints <= 2)
       {
 	m_entries = 1;
@@ -67,8 +79,9 @@ template<typename T> class precomputed_function
   T
   apply (T x)
     {
-      int index = (x - m_min_x) * m_step_inv;
+      int index = my_floor ((x - m_min_x) * m_step_inv);
       index = std::max (std::min (index, m_entries - 1), 0);
+      //printf ("x:%f index:%i add %f slope %f\n", x, index, m_entry[index].add, m_entry[index].slope);
       return m_entry[index].add + m_entry[index].slope * x;
     }
 
@@ -76,52 +89,37 @@ template<typename T> class precomputed_function
   T
   invert (T y)
   {
-    T min = m_min_x;
-    T max = m_max_x;
-    while (true)
+    unsigned int min = 0;
+    unsigned int max = m_entries;
+    while (max != min)
       {
-	T xx = (min + max) * (T)0.5;
-	T ap = apply (xx);
-	if (fabs (ap - y) < epsilon /*|| max - min < epsilon*/)
-	  return xx;
-	if ((ap < y) ^ increasing)
-	  {
-	    if (max == xx)
-	      {
-#if 1
-		T ap1 = apply (xx + 1);
-		if (ap1 == xx)
-		  return xx;
-		else
-		  return xx + (y - ap) / (ap1 - ap);
-#else
-		return xx;
-#endif
-	      }
-	    max = xx;
-	  }
+	unsigned int ix = (min + max) / 2;
+	T xx = m_min_x + ix * m_step;
+	T val = m_entry[ix].add + m_entry[ix].slope * xx;
+	T val2 = val + m_entry[ix].slope * m_step;
+	if (!increasing)
+	  std::swap (val, val2);
+	if (val <= y && y <= val2)
+	  min = max = ix;
+	else if ((val < y) ^ increasing)
+	  max = ix;
+	else if (min != ix)
+	  min = ix;
 	else
-	  {
-	    if (min == xx)
-	      {
-#if 1
-		T ap1 = apply (xx - 1);
-		if (ap1 == xx)
-		  return xx;
-		else
-		  return xx + (ap - y) / (ap1 - ap);
-#else
-		return xx;
-#endif
-	      }
-	    min = xx;
-	  }
+	  break;
       }
+    double ret = m_entry[min].slope ? (y - m_entry[min].add) / m_entry[min].slope : m_min_x + min * m_step;
+    if (debug && fabs (apply (ret) - y) > epsilon)
+      {
+	printf ("%i %i:%f...%i:%f min:%i (%f..%f) ret:%f %f should be %f\n", increasing, 0,m_min_x, m_entries - 1, m_max_x, min, m_min_x + min * m_step, m_min_x + (min+1) * m_step, ret, apply (ret), y);
+	abort ();
+      }
+    return ret;
   }
 
 private:
-  const T epsilon = 0.000001;
-  T m_min_x, m_max_x, m_step_inv;
+  const T epsilon = 0.001;
+  T m_min_x, m_max_x, m_step, m_step_inv;
   int m_entries;
   struct entry {
     T slope, add;
@@ -137,16 +135,17 @@ private:
     m_entry = (struct entry *)malloc (sizeof (entry) * m_entries);
     if (!m_entries)
       return;
-    T step = (m_max_x - m_min_x) / (T)(len - 1);
-    m_step_inv = 1 / step;
+    m_step = (m_max_x - m_min_x) / (T)(len - 1);
+    m_step_inv = 1 / m_step;
     for (int i = 0; i < len - 1; i++)
       {
-	T xleft = m_min_x + i * step;
+	T xleft = m_min_x + i * m_step;
 	m_entry[i].slope = (y[i+1] - y[i]) * m_step_inv;
 	m_entry[i].add = y[i] - xleft * m_entry[i].slope;
       }
     increasing = y[0] < y[len - 1];
   }
+  const bool debug = true;
 };
 
 

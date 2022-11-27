@@ -291,10 +291,10 @@ public:
     m_matrix.inverse_perspective_transform (xx,yy, *xp, *yp);
 
     /* Verify that inverse is working.  */
-    if (debug)
+    if (debug && 1)
       {
         to_img (*xp, *yp, &xx, &yy);
-	if (fabs (xx - x) + fabs (yy - y) > 1)
+	if (fabs (xx - x) + fabs (yy - y) > 0.1)
 	  abort ();
       }
   }

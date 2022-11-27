@@ -431,7 +431,7 @@ my_modf (float x, int *ptr)
 static inline double
 my_modf (double x, int *ptr)
 {
-  float f = floorf (x);
+  float f = floor (x);
   float ret = x - f;
   *ptr = f;
   return ret;
