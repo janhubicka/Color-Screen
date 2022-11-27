@@ -11,7 +11,8 @@
 
 
 typedef float coord_t;
-typedef matrix4x4<coord_t> trans_matrix;
+typedef matrix4x4<coord_t> trans_4d_matrix;
+typedef matrix3x3<coord_t> trans_3d_matrix;
 
 /* Types of supported screens.  */
 enum scr_type
@@ -37,7 +38,17 @@ extern const char * const scanner_type_names[max_scanner_type];
 /* This implements to translate image coordiantes to coordinates of the viewing screen.
    In the viewing screen the coordinats (0,0) describe a green dot and
    the screen is periodic with period 1: that is all integer coordinates describes
-   gren dots again.  */
+   gren dots again.
+ 
+   In order to turn scan coordinates to screen the following transformations
+   are performed
+     1) motor correction
+     2) translation to meve lens_center to (0,0)
+     3) lens correction
+     4) perspective correction (with tilt applied)
+     5) translation to move center to (0,0)
+     6) change of basis so center+coordinate1 becomes (1.0) and center+coordinate2 becomes (0,1)
+*/
 
 struct DLL_PUBLIC scr_to_img_parameters
 {
@@ -234,12 +245,16 @@ public:
   apply_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
     apply_motor_correction (x, y, &x, &y);
+    x -= m_corrected_lens_center_x;
+    y -= m_corrected_lens_center_y;
     apply_lens_correction (x, y, xr, yr);
   }
   void
   inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
     inverse_lens_correction (x, y, &x, &y);
+    x += m_corrected_lens_center_x;
+    y += m_corrected_lens_center_y;
     inverse_motor_correction (x, y, xr, yr);
   }
 
@@ -278,9 +293,8 @@ public:
   void
   to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
-    m_matrix.perspective_transform (x,y, x, y);
-    x += m_corrected_center_x;
-    y += m_corrected_center_y;
+    m_matrix.apply (x,y, &x, &y);
+    m_perspective_matrix.perspective_transform (x,y, x, y);
     inverse_early_correction (x, y, xp, yp);
   }
   /* Map image coordinats to screen.  */
@@ -289,9 +303,8 @@ public:
   {
     coord_t xx = x, yy = y;
     apply_early_correction (xx, yy, &xx, &yy);
-    xx -= m_corrected_center_x;
-    yy -= m_corrected_center_y;
-    m_matrix.inverse_perspective_transform (xx,yy, *xp, *yp);
+    m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
+    m_inverse_matrix.apply (xx,yy, xp, yp);
 
     /* Verify that inverse is working.  */
     if (debug && 1)
@@ -308,14 +321,17 @@ public:
   }
 private:
   precomputed_function<coord_t> *m_motor_correction;
-  /* Center of lenses: the middle of the scan.  */
-  coord_t m_lens_center_x, m_lens_center_y;
-  /* Center of the coordinate system in corrected coordinates.  */
-  coord_t m_corrected_center_x, m_corrected_center_y;
+  /* Center of lenses after the motor corrections.  */
+  coord_t m_corrected_lens_center_x, m_corrected_lens_center_y;
   /* Radius in pixels of the lens circle and its inverse.  */
   coord_t m_lens_radius, m_inverse_lens_radius;
-  /* Screen->image translation matrix.  */
-  trans_matrix m_matrix;
+  /* Perspective correction matrix.  */
+  trans_4d_matrix m_perspective_matrix;
+  /* final matrix producing screen coordinates.  */
+  trans_3d_matrix m_matrix;
+  /* Invertedd matrix.  */
+  trans_3d_matrix m_inverse_matrix;
+
   scr_to_img_parameters m_param;
 
   /* Apply spline defining motor correction.  */
@@ -347,18 +363,16 @@ private:
   void
   apply_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
   {
-    coord_t xd = (x - m_lens_center_x);
-    coord_t yd = (y - m_lens_center_y);
-    coord_t powradius = (xd * xd + yd * yd) * m_inverse_lens_radius * m_inverse_lens_radius;
-    *xr = x + xd * powradius * k1;
-    *yr = y + yd * powradius * k1;
+    coord_t powradius = (x * x + y * y) * m_inverse_lens_radius * m_inverse_lens_radius;
+    *xr = x + x * powradius * k1;
+    *yr = y + y * powradius * k1;
   }
   /* Invert lens correction.  */
   void
   inverse_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
   {
-    coord_t xd = (x - m_lens_center_x) * m_inverse_lens_radius;
-    coord_t yd = (y - m_lens_center_y) * m_inverse_lens_radius;
+    coord_t xd = x * m_inverse_lens_radius;
+    coord_t yd = y * m_inverse_lens_radius;
     coord_t rpow2 = xd * xd + yd * yd;
     coord_t r = my_sqrt (rpow2);
     /* An inverse as given by https://www.wolframalpha.com/input?i=x%2Bk*x*x*x-r%3D0  */
@@ -374,32 +388,32 @@ private:
     coord_t radius = coef / (cbrt2 * (coord_t)2.08008382305 /* 3^(2/3) */ * k1)
 		      - (coord_t)0.87358046473629 /* cbrt(2/3) */ / coef;
 
-    *xr = xd / r * radius * m_lens_radius + m_lens_center_x;
-    *yr = yd / r * radius * m_lens_radius + m_lens_center_y;
+    *xr = xd / r * radius * m_lens_radius;
+    *yr = yd / r * radius * m_lens_radius;
   }
   const bool debug = false;
 };
 
 /* Translate center to given coordinates (x,y).  */
-class translation_matrix: public matrix4x4<coord_t>
+class translation_3x3matrix: public matrix3x3<coord_t>
 {
 public:
-  translation_matrix (coord_t center_x, coord_t center_y)
+  translation_3x3matrix (coord_t center_x, coord_t center_y)
   {
-    m_elements[0][2] = center_x;
-    m_elements[1][2] = center_y;
+    m_elements[2][0] = center_x;
+    m_elements[2][1] = center_y;
   }
 };
 
 /* Change basis to a given coordinate vectors.  */
-class change_of_basis_matrix: public matrix4x4<coord_t>
+class change_of_basis_3x3matrix: public matrix3x3<coord_t>
 {
 public:
-  change_of_basis_matrix (coord_t c1_x, coord_t c1_y,
-			  coord_t c2_x, coord_t c2_y)
+  change_of_basis_3x3matrix (coord_t c1_x, coord_t c1_y,
+			     coord_t c2_x, coord_t c2_y)
   {
-    m_elements[0][0] = c1_x; m_elements[1][0] = c1_y;
-    m_elements[0][1] = c2_x; m_elements[1][1] = c2_y;
+    m_elements[0][0] = c1_x; m_elements[1][0] = c2_x;
+    m_elements[0][1] = c1_y; m_elements[1][1] = c2_y;
   }
 };
 

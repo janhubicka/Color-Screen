@@ -8,6 +8,10 @@
 void
 scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 {
+  /* We do not need to copy motor corrections since we already constructed the function.  */
+  m_param.copy_from_cheap (param);
+
+  /* Initialize motor correction.  */
   m_motor_correction = NULL;
   if (param.n_motor_corrections && param.scanner_type != fixed_lens)
     {
@@ -20,16 +24,15 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
       else
 	m_motor_correction = new precomputed_function<coord_t> (0, len, len, param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
     }
-  m_lens_center_x = param.lens_center_x;
-  m_lens_center_y = param.lens_center_y;
-  apply_motor_correction (m_lens_center_x, m_lens_center_y, &m_lens_center_x, &m_lens_center_y);
-  m_lens_radius = my_sqrt (m_lens_center_x * m_lens_center_x + m_lens_center_y * m_lens_center_y);
+
+  /* Next initialize lens correction.
+     Lens center is specified in scan coordinates, so apply previous corrections.  */
+  apply_motor_correction (param.lens_center_x, param.lens_center_y, &m_corrected_lens_center_x, &m_corrected_lens_center_y);
+  m_lens_radius = my_sqrt ((coord_t)(img.width * img.width + img.height * img.height));
   m_inverse_lens_radius = 1 / m_lens_radius;
-  /* We do not need to copy motor corrections since we already constructed the function.  */
-  m_param.copy_from_cheap (param);
-  apply_early_correction (m_param.center_x, m_param.center_y,
-			 &m_corrected_center_x,	 &m_corrected_center_y);
-  trans_matrix m;
+
+  /* Now set up the projection matrix that combines remaining transformations.  */
+  trans_4d_matrix m;
 
   if (param.tilt_x_x!= 0)
     {
@@ -51,30 +54,39 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
       rotation_matrix rotation (param.tilt_y_y, 1, 3);
       m = rotation * m;
     }
+  m_perspective_matrix = m;
   coord_t c1x, c1y;
   coord_t c2x, c2y;
-  coord_t coordinate1_x, coordinate1_y;
-  coord_t coordinate2_x, coordinate2_y;
-
-  /* Base vector are in the scan coordinates; adjust for lens distortion.  */
+  coord_t corrected_center_x;
+  coord_t corrected_center_y;
+  /* Center and base vectors are in the scan coordinates.  */
+  apply_early_correction (m_param.center_x, m_param.center_y,
+			  &corrected_center_x,	 &corrected_center_y);
   apply_early_correction (m_param.coordinate1_x + m_param.center_x,
-			 m_param.coordinate1_y + m_param.center_y,
-			 &coordinate1_x, &coordinate1_y);
-  coordinate1_x -= m_corrected_center_x;
-  coordinate1_y -= m_corrected_center_y;
+			  m_param.coordinate1_y + m_param.center_y,
+			  &c1x, &c1y);
 
   apply_early_correction (m_param.coordinate2_x + m_param.center_x,
-			 m_param.coordinate2_y + m_param.center_y,
-			 &coordinate2_x, &coordinate2_y);
-  coordinate2_x -= m_corrected_center_x;
-  coordinate2_y -= m_corrected_center_y;
+			  m_param.coordinate2_y + m_param.center_y,
+			  &c2x, &c2y);
 
-  m.inverse_perspective_transform (param.coordinate1_x, param.coordinate1_y, c1x, c1y);
-  m.inverse_perspective_transform (param.coordinate2_x, param.coordinate2_y, c2x, c2y);
+  m.inverse_perspective_transform (corrected_center_x, corrected_center_y, corrected_center_x, corrected_center_y);
+  m.inverse_perspective_transform (c1x, c1y, c1x, c1y);
+  m.inverse_perspective_transform (c2x, c2y, c2x, c2y);
+  c1x -= corrected_center_x;
+  c1y -= corrected_center_y;
+  c2x -= corrected_center_x;
+  c2y -= corrected_center_y;
 
   /* Change-of-basis matrix.  */
-  change_of_basis_matrix basis (c1x, c1y, c2x, c2y);
-  m_matrix = basis * m;
+  trans_3d_matrix mm;
+  change_of_basis_3x3matrix basis (c1x, c1y, c2x, c2y);
+  translation_3x3matrix trans (corrected_center_x, corrected_center_y);
+  mm = basis * mm;
+  mm = trans * mm;
+
+  m_matrix = mm;
+  m_inverse_matrix = m_matrix.invert ();
 }
 
 /* Determine rectangular section of the screen to which the whole image
