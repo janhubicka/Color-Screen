@@ -71,7 +71,7 @@ struct DLL_PUBLIC scr_to_img_parameters
 
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), k1(0),
+    lens_center_x (0), lens_center_y (0), tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), k1(0),
     motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0),
     type (Finlay), scanner_type (fixed_lens)
   { }
@@ -79,6 +79,7 @@ struct DLL_PUBLIC scr_to_img_parameters
   : center_x (from.center_x), center_y (from.center_y),
     coordinate1_x(from.coordinate1_x), coordinate1_y (from.coordinate1_y),
     coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
+    lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
     tilt_x_x (from.tilt_x_x), tilt_x_y(from.tilt_x_y), tilt_y_x (from.tilt_y_x), tilt_y_y (from.tilt_y_y), k1(from.k1),
     motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (from.n_motor_corrections),
     type (from.type), scanner_type (from.scanner_type)
@@ -114,6 +115,8 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate1_y = from.coordinate1_y;
     coordinate2_x = from.coordinate2_x;
     coordinate2_y = from.coordinate2_y;
+    lens_center_x = from.lens_center_x;
+    lens_center_y = from.lens_center_y;
     tilt_x_x = from.tilt_x_x;
     tilt_x_y = from.tilt_x_y;
     tilt_y_x = from.tilt_y_x;

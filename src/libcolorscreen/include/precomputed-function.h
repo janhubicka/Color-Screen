@@ -109,6 +109,8 @@ template<typename T> class precomputed_function
 	  break;
       }
     double ret = m_entry[min].slope ? (y - m_entry[min].add) / m_entry[min].slope : m_min_x + min * m_step;
+
+    /* Verify that inverse works.  This also crashes if the function is not monotone.  */
     if (debug && fabs (apply (ret) - y) > epsilon)
       {
 	printf ("%i %i:%f...%i:%f min:%i (%f..%f) ret:%f %f should be %f\n", increasing, 0,m_min_x, m_entries - 1, m_max_x, min, m_min_x + min * m_step, m_min_x + (min+1) * m_step, ret, apply (ret), y);

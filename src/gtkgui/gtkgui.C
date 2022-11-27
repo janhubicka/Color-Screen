@@ -128,6 +128,8 @@ openimage (const char *name)
     }
   rparams.gray_min = 0;
   rparams.gray_max = scan.maxval;
+  current.lens_center_x = scan.width * 0.5;
+  current.lens_center_y = scan.height * 0.5;
 }
 
 /* Get values displayed in the UI.  */
@@ -204,6 +206,7 @@ cb_image_annotate (GtkImageViewer * imgv,
 }
 
 static bool setcenter;
+static bool set_lens_center;
 static bool freeze_x = false;
 static bool freeze_y = false;
 static void display ();
@@ -502,6 +505,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       if (k == 'c')
 	setcenter = true;
+      if (k == 'C')
+	set_lens_center = true;
 #if 0
       if (k == 'O' && 0)
 	{
@@ -819,6 +824,8 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
   draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
 
+  draw_circle (surface, bigscale, xoffset, yoffset, current.lens_center_x, current.lens_center_y, 1, 0, 1);
+
   for (int i = 0; i < current.n_motor_corrections; i++)
     {
       if (current.scanner_type == lens_move_horisontally)
@@ -1014,11 +1021,25 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	{
 	  double newcenter_x = (event->x + shift_x) / scale_x;
 	  double newcenter_y = (event->y + shift_y) / scale_y;
+          setcenter = false;
 	  if (newcenter_x != current.center_x || newcenter_y != current.center_y)
 	    {
 	      current.center_x = newcenter_x;
 	      current.center_y = newcenter_y;
-	      setcenter = false;
+	      setvals ();
+	      display_scheduled = true;
+	      preview_display_scheduled = true;
+	    }
+	}
+      if (event->button == 1 && set_lens_center)
+	{
+	  double newcenter_x = (event->x + shift_x) / scale_x;
+	  double newcenter_y = (event->y + shift_y) / scale_y;
+          set_lens_center = false;
+	  if (newcenter_x != current.lens_center_x || newcenter_y != current.lens_center_y)
+	    {
+	      current.lens_center_x = newcenter_x;
+	      current.lens_center_y = newcenter_y;
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;
@@ -1196,7 +1217,6 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
     }
-  current.scanner_type = lens_move_horisontally;
 
 
 
