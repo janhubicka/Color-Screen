@@ -40,8 +40,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
-	  || fprintf (f, "tilt_x: %f %f\n", param->tilt_x_x, param->tilt_x_y) < 0
-	  || fprintf (f, "tilt_y: %f %f\n", param->tilt_y_x, param->tilt_y_y) < 0
+	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
+	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
 	  || fprintf (f, "k1: %f\n", param->k1) < 0)
 	return false;
       for (int i = 0; i < param->n_motor_corrections; i++)
@@ -273,7 +273,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	  if (param)
-	    param->type = (enum scr_type) j;
+	    param->scanner_type = (enum scanner_type) j;
 	}
       else if (!strcmp (buf, "lens_center"))
 	{
@@ -307,14 +307,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "tilt_x"))
-	{
-	  if (!read_vector (f, param_check (tilt_x_x), param_check (tilt_x_y)))
-	    {
-	      *error = "error parsing tilt_x";
-	      return false;
-	    }
-	}
       else if (!strcmp (buf, "motor_correction"))
 	{
 	  coord_t x, y;
@@ -326,11 +318,19 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
           if (param)
 	    param->add_motor_correction_point (x, y);
 	}
-      else if (!strcmp (buf, "tilt_y"))
+      else if (!strcmp (buf, "projection_distance"))
 	{
-	  if (!read_vector (f, param_check (tilt_y_x), param_check (tilt_y_y)))
+	  if (!read_scalar (f, param_check (projection_distance)))
 	    {
-	      *error = "error parsing tilt_y";
+	      *error = "error parsing projection_distance";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "tilt"))
+	{
+	  if (!read_vector (f, param_check (tilt_x), param_check (tilt_y)))
+	    {
+	      *error = "error parsing tilt";
 	      return false;
 	    }
 	}
@@ -548,6 +548,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, NULL))
 	    {
 	      *error = "error parsing scr_detect_gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "tilt_x"))
+	{
+	  if (!read_vector (f, NULL, NULL))
+	    {
+	      *error = "error parsing tilt_x";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "tilt_y"))
+	{
+	  if (!read_vector (f, NULL, NULL))
+	    {
+	      *error = "error parsing tilt_y";
 	      return false;
 	    }
 	}

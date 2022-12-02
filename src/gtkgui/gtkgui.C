@@ -82,7 +82,7 @@ struct _Data
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
   GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *k1,
-	       	*tilt_x_x, *tilt_x_y, *tilt_y_x, *tilt_y_y, *collection_threshold, *mix_red, *mix_green, *mix_blue,
+	       	*tilt_x, *tilt_y, *projection_distance, *tilt_y_y, *collection_threshold, *mix_red, *mix_green, *mix_blue,
 	       	*balance_red, *balance_green, *balance_blue;
 };
 Data data;
@@ -146,10 +146,10 @@ getvals (void)
   rparams.sharpen_amount = gtk_spin_button_get_value (data.sharpen_amount);
   rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
-  current.tilt_x_x = gtk_spin_button_get_value (data.tilt_x_x);
-  current.tilt_x_y = gtk_spin_button_get_value (data.tilt_x_y);
-  current.tilt_y_x = gtk_spin_button_get_value (data.tilt_y_x);
-  current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
+  current.tilt_x = gtk_spin_button_get_value (data.tilt_x);
+  current.tilt_y = gtk_spin_button_get_value (data.tilt_y);
+  current.projection_distance = gtk_spin_button_get_value (data.projection_distance);
+  //current.tilt_y_y = gtk_spin_button_get_value (data.tilt_y_y);
   rparams.collection_threshold = gtk_spin_button_get_value (data.collection_threshold);
   rparams.mix_red = gtk_spin_button_get_value (data.mix_red);
   rparams.mix_green = gtk_spin_button_get_value (data.mix_green);
@@ -178,10 +178,10 @@ setvals (void)
   gtk_spin_button_set_value (data.sharpen_amount, rparams.sharpen_amount);
   gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
-  gtk_spin_button_set_value (data.tilt_x_x, current.tilt_x_x);
-  gtk_spin_button_set_value (data.tilt_x_y, current.tilt_x_y);
-  gtk_spin_button_set_value (data.tilt_y_x, current.tilt_y_x);
-  gtk_spin_button_set_value (data.tilt_y_y, current.tilt_y_y);
+  gtk_spin_button_set_value (data.tilt_x, current.tilt_x);
+  gtk_spin_button_set_value (data.tilt_y, current.tilt_y);
+  gtk_spin_button_set_value (data.projection_distance, current.projection_distance);
+  //gtk_spin_button_set_value (data.tilt_y_y, current.tilt_y_y);
   gtk_spin_button_set_value (data.collection_threshold, rparams.collection_threshold);
   gtk_spin_button_set_value (data.mix_red, rparams.mix_red);
   gtk_spin_button_set_value (data.mix_green, rparams.mix_green);
@@ -688,10 +688,10 @@ initgtk (int *argc, char **argv)
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
   data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
   data.k1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "k1"));
-  data.tilt_x_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_x"));
-  data.tilt_x_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x_y"));
-  data.tilt_y_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_x"));
-  data.tilt_y_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_y"));
+  data.tilt_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x"));
+  data.tilt_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y"));
+  data.projection_distance = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "projection_distance"));
+  //data.tilt_y_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y_y"));
   data.collection_threshold = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "collection_threshold"));
   data.mix_red = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_red"));
   data.mix_green = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mix_green"));

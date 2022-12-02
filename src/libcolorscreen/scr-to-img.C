@@ -4,12 +4,69 @@
 #include "include/imagedata.h"
 #include "include/spline.h"
 
+namespace {
+
+class rotation_distance_matrix: public matrix4x4<coord_t>
+{
+  public:
+  rotation_distance_matrix (double distance, double tiltx, double tilty, enum scanner_type type)
+  {
+    double radx = (double)tiltx * M_PI / 180;
+    double rady = (double)tilty * M_PI / 180;
+    double sy = sin (radx); /*s*/
+    double cy = cos (radx); /*c*/
+    double sx = sin (rady); /*t*/
+    double cx = cos (rady); /*d*/
+    /* Rotation matrix is the following:
+       cy sy*sx  cx*sy
+       0  cx    -sx
+      -sy cy*sx  cy*cx
+       We want to rotate plane with center in 0 and stretch the rest.  */
+    m_elements[0][0] =  cy; m_elements[1][0] = sy * sx; m_elements[2][0] = 0;        m_elements[3][0] = 0;
+    m_elements[0][1] =  0 ; m_elements[1][1] = cx     ; m_elements[2][1] = 0;        m_elements[3][1] = 0;
+    m_elements[0][2] = -sy; m_elements[1][2] = cy * sx; m_elements[2][2] = distance; m_elements[3][2] = 0;
+    m_elements[0][3] = -sy; m_elements[1][3] = cy * sx; m_elements[2][3] = 0;        m_elements[3][3] = distance;
+    /* Disable perspective corrections along the lens movement axis.  */
+    if (type == lens_move_horisontally)
+      m_elements[0][2] = 0, m_elements[1][2] = 0, m_elements[2][2]=1;
+    if (type == lens_move_vertically)
+      m_elements[0][3] = 0, m_elements[1][3] = 0, m_elements[3][3]=1;
+  }
+};
+
+/* Translate center to given coordinates (x,y).  */
+class translation_3x3matrix: public matrix3x3<coord_t>
+{
+public:
+  translation_3x3matrix (coord_t center_x, coord_t center_y)
+  {
+    m_elements[2][0] = center_x;
+    m_elements[2][1] = center_y;
+  }
+};
+
+/* Change basis to a given coordinate vectors.  */
+class change_of_basis_3x3matrix: public matrix3x3<coord_t>
+{
+public:
+  change_of_basis_3x3matrix (coord_t c1_x, coord_t c1_y,
+			     coord_t c2_x, coord_t c2_y)
+  {
+    m_elements[0][0] = c1_x; m_elements[1][0] = c2_x;
+    m_elements[0][1] = c1_y; m_elements[1][1] = c2_y;
+  }
+};
+
+}
+
 /* Initilalize the translation matrix to PARAM.  */
 void
 scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 {
   /* We do not need to copy motor corrections since we already constructed the function.  */
   m_param.copy_from_cheap (param);
+  m_inverted_projection_distance = 1 / param.projection_distance;
+  m_nwarnings = 0;
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;
@@ -34,26 +91,11 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   /* Now set up the projection matrix that combines remaining transformations.  */
   trans_4d_matrix m;
 
-  if (param.tilt_x_x!= 0)
-    {
-      rotation_matrix rotation (param.tilt_x_x, 0, 2);
-      m = rotation * m;
-    }
-  if (param.tilt_x_y!= 0)
-    {
-      rotation_matrix rotation (param.tilt_x_y, 1, 2);
-      m = rotation * m;
-    }
-  if (param.tilt_y_x!= 0)
-    {
-      rotation_matrix rotation (param.tilt_y_x, 0, 3);
-      m = rotation * m;
-    }
-  if (param.tilt_y_y!= 0)
-    {
-      rotation_matrix rotation (param.tilt_y_y, 1, 3);
-      m = rotation * m;
-    }
+  rotation_distance_matrix rd (m_param.projection_distance, param.tilt_x, param.tilt_y, param.scanner_type);
+  m = rd * m;
+  //m.print(stdout);
+  // HACK
+  m.transpose ();
   m_perspective_matrix = m;
   coord_t c1x, c1y;
   coord_t c2x, c2y;
@@ -77,6 +119,15 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   c1y -= corrected_center_y;
   c2x -= corrected_center_x;
   c2y -= corrected_center_y;
+#if 0
+  /* This makes the grid fixed which is sometimes useful to debug various bugs concerning
+     earlier corrections.  */
+  corrected_center_x = corrected_center_y = 0;
+  c1x=800;
+  c1y=0;
+  c2x=0;
+  c2y=800;
+#endif
 
   /* Change-of-basis matrix.  */
   trans_3d_matrix mm;

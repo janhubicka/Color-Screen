@@ -225,7 +225,8 @@ public:
     return *this;
   }
 
-  /* Apply matrix to 2 dimensional coordinates and do perspective projetion.  */
+  /* Apply matrix to 2 dimensional coordinates and do perspective projetion.
+     TODO: function is transposed  */
   inline void
   perspective_transform (T x, T y, T &xr, T &yr)
   {
@@ -249,6 +250,13 @@ public:
 
     xr = m2.m_elements[0][0] * xx + m2.m_elements[0][1] * yy;
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;
+
+#if 0
+    T ix, iy;
+    perspective_transform (xr,yr, ix, iy);
+    if (fabs (ix-x) + fabs (iy-y) > 1)
+	    printf ("Inverse broken\n");
+#endif
   }
 
   /* Matrix-vector multiplication used for RGB values.  */
@@ -269,21 +277,9 @@ public:
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++)
 	vec[i] += ivec[j] * inv.m_elements[j][i];
-    //fprintf (stderr, "%f %f %f %f\n", vec[i],
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++)
 	B::m_elements[i][j] *= vec[i];
-#if 0
-    T scale =  r / (B::m_elements[0][0] + B::m_elements[1][0] + B::m_elements[2][0] + B::m_elements[3][0]);
-    for (int j = 0; j < 4; j++)
-      B::m_elements[j][0] *= scale;
-    scale =  g / (B::m_elements[0][1] + B::m_elements[1][1] + B::m_elements[2][1] + B::m_elements[3][1]);
-    for (int j = 0; j < 4; j++)
-      B::m_elements[j][1] *= scale;
-    scale =  b / (B::m_elements[0][2] + B::m_elements[1][2] + B::m_elements[2][2] + B::m_elements[3][2]);
-    for (int j = 0; j < 4; j++)
-      B::m_elements[j][2] *= scale;
-#endif
   }
   /* Compute inversion.  */
   inline matrix4x4

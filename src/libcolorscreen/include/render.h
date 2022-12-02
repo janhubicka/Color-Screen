@@ -12,7 +12,7 @@
 #include "progress-info.h"
 #include "sensitivity.h"
 
-typedef float coord_t;
+typedef double coord_t;
 
 /* Parameters of rendering algorithms.  */
 struct DLL_PUBLIC render_parameters
@@ -267,16 +267,16 @@ typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec
 static inline luminosity_t
 cubic_interpolate (luminosity_t p0, luminosity_t p1, luminosity_t p2, luminosity_t p3, coord_t x)
 {
-  return p1 + (luminosity_t)0.5 * x * (p2 - p0 +
-			 x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
-			      x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
+  return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +
+			 (luminosity_t)x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
+			      (luminosity_t)x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
 }
 static inline vec_luminosity_t
 vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_t p2, vec_luminosity_t p3, coord_t x)
 {
-  return p1 + (luminosity_t)0.5 * x * (p2 - p0 +
-			 x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
-			      x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
+  return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +
+			 (luminosity_t)x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
+			      (luminosity_t)x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
 }
 
 /* Get image data in normalized range 0...1.  */
@@ -715,8 +715,8 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     }
 
   /* Precompute to which column of output image given colon of input image shold be accounted to.  */
-  int *pixelpos = (int *)malloc (sizeof (int) * width + 1);
-  luminosity_t *weights = (luminosity_t *)malloc (sizeof (luminosity_t) * width + 1);
+  int *pixelpos = (int *)malloc (sizeof (int) * (width + 1));
+  luminosity_t *weights = (luminosity_t *)malloc (sizeof (luminosity_t) * (width + 1));
 
   for (int px = pxstart; px <= pxend + 1; px++)
     {

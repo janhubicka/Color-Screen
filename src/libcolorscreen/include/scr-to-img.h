@@ -1,5 +1,6 @@
 #ifndef SCR_TO_IMG_H
 #define SCR_TO_IMG_H
+#include <atomic>
 #include "dllpublic.h"
 #include "matrix.h"
 #include "precomputed-function.h"
@@ -10,7 +11,7 @@
 #endif
 
 
-typedef float coord_t;
+typedef double coord_t;
 typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
 
@@ -43,7 +44,7 @@ extern const char * const scanner_type_names[max_scanner_type];
    In order to turn scan coordinates to screen the following transformations
    are performed
      1) motor correction
-     2) translation to meve lens_center to (0,0)
+     2) translation to move lens_center to (0,0)
      3) lens correction
      4) perspective correction (with tilt applied)
      5) translation to move center to (0,0)
@@ -65,12 +66,10 @@ struct DLL_PUBLIC scr_to_img_parameters
 
   /* Center of lens within scan image (in scan coordinates.  */
   coord_t lens_center_x, lens_center_y;
-  /* Perspective tilt in x and y coordinate in degrees which results in perspective
-     error in x coordinate.  */
-  coord_t tilt_x_x, tilt_x_y;
-  /* Same for perspective errors in y coordinate. */
-  coord_t tilt_y_x, tilt_y_y;
-  /* 1st radial distortion coefficient for Brown–Conrady lens distortion model.  */
+  /* Distance of the perspective pane from the camera coordinate.  */
+  coord_t projection_distance;
+  /* Perspective tilt in x and y coordinate in degrees.  */
+  coord_t tilt_x, tilt_y;
   coord_t k1;
 
   /* Stepping motor correction is described by a spline.  */
@@ -82,7 +81,7 @@ struct DLL_PUBLIC scr_to_img_parameters
 
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    lens_center_x (0), lens_center_y (0), tilt_x_x (0), tilt_x_y(0), tilt_y_x (0), tilt_y_y (0), k1(0),
+    lens_center_x (0), lens_center_y (0), projection_distance (1), tilt_x (0), tilt_y(0), k1(0),
     motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0),
     type (Finlay), scanner_type (fixed_lens)
   { }
@@ -91,7 +90,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate1_x(from.coordinate1_x), coordinate1_y (from.coordinate1_y),
     coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
     lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
-    tilt_x_x (from.tilt_x_x), tilt_x_y(from.tilt_x_y), tilt_y_x (from.tilt_y_x), tilt_y_y (from.tilt_y_y), k1(from.k1),
+    projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y) , k1(from.k1),
     motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (from.n_motor_corrections),
     type (from.type), scanner_type (from.scanner_type)
   {
@@ -128,10 +127,9 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate2_y = from.coordinate2_y;
     lens_center_x = from.lens_center_x;
     lens_center_y = from.lens_center_y;
-    tilt_x_x = from.tilt_x_x;
-    tilt_x_y = from.tilt_x_y;
-    tilt_y_x = from.tilt_y_x;
-    tilt_y_y = from.tilt_y_y;
+    projection_distance = from.projection_distance;
+    tilt_x = from.tilt_x;
+    tilt_y = from.tilt_y;
     k1 = from.k1;
     type = from.type;
     scanner_type = from.scanner_type;
@@ -145,17 +143,27 @@ struct DLL_PUBLIC scr_to_img_parameters
   }
   bool operator== (scr_to_img_parameters &other) const
   {
+    if (n_motor_corrections != other.n_motor_corrections)
+      return false;
+    for (int i = 0; i < n_motor_corrections; i++)
+      if (motor_correction_x[i] != other.motor_correction_x[i]
+	  || motor_correction_y[i] != other.motor_correction_y[i])
+	return false;
     return center_x == other.center_x
 	   && center_y == other.center_y
 	   && coordinate1_x == other.coordinate1_x
 	   && coordinate1_y == other.coordinate1_y
 	   && coordinate2_x == other.coordinate2_x
 	   && coordinate2_y == other.coordinate2_y
+	   && lens_center_x == other.lens_center_x
+	   && lens_center_y == other.lens_center_y
 	   // TODO: motor correction scanner type
-	   && tilt_x_x == other.tilt_x_x
-	   && tilt_x_y == other.tilt_x_y
-	   && tilt_y_x == other.tilt_y_x
-	   && tilt_y_y == other.tilt_y_y;
+	   && projection_distance == other.projection_distance
+	   && k1 == other.k1
+	   && tilt_x == other.tilt_x
+	   && tilt_y == other.tilt_y
+	   && type == other.type
+	   && scanner_type == other.scanner_type;
   }
   bool operator!= (scr_to_img_parameters &other) const
   {
@@ -247,12 +255,16 @@ public:
     apply_motor_correction (x, y, &x, &y);
     x -= m_corrected_lens_center_x;
     y -= m_corrected_lens_center_y;
+    x *= m_inverted_projection_distance;
+    y *= m_inverted_projection_distance;
     apply_lens_correction (x, y, xr, yr);
   }
   void
   inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
     inverse_lens_correction (x, y, &x, &y);
+    x *= m_param.projection_distance;
+    y *= m_param.projection_distance;
     x += m_corrected_lens_center_x;
     y += m_corrected_lens_center_y;
     inverse_motor_correction (x, y, xr, yr);
@@ -307,11 +319,15 @@ public:
     m_inverse_matrix.apply (xx,yy, xp, yp);
 
     /* Verify that inverse is working.  */
-    if (debug && 1)
+    if (debug)
       {
         to_img (*xp, *yp, &xx, &yy);
-	if (fabs (xx - x) + fabs (yy - y) > 0.1)
-	  abort ();
+	if (fabs (xx - x) + fabs (yy - y) > 0.1 && m_nwarnings < 10)
+	  {
+	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", x, y, xx, yy);
+	    m_nwarnings++;
+	    //abort ();
+	  }
       }
   }
   enum scr_type
@@ -325,12 +341,15 @@ private:
   coord_t m_corrected_lens_center_x, m_corrected_lens_center_y;
   /* Radius in pixels of the lens circle and its inverse.  */
   coord_t m_lens_radius, m_inverse_lens_radius;
+  /* Inversed m_params.projection_distance.  */
+  coord_t m_inverted_projection_distance;
   /* Perspective correction matrix.  */
   trans_4d_matrix m_perspective_matrix;
   /* final matrix producing screen coordinates.  */
   trans_3d_matrix m_matrix;
   /* Invertedd matrix.  */
   trans_3d_matrix m_inverse_matrix;
+  std::atomic_ulong m_nwarnings;
 
   scr_to_img_parameters m_param;
 
@@ -391,42 +410,6 @@ private:
     *xr = xd / r * radius * m_lens_radius;
     *yr = yd / r * radius * m_lens_radius;
   }
-  const bool debug = false;
-};
-
-/* Translate center to given coordinates (x,y).  */
-class translation_3x3matrix: public matrix3x3<coord_t>
-{
-public:
-  translation_3x3matrix (coord_t center_x, coord_t center_y)
-  {
-    m_elements[2][0] = center_x;
-    m_elements[2][1] = center_y;
-  }
-};
-
-/* Change basis to a given coordinate vectors.  */
-class change_of_basis_3x3matrix: public matrix3x3<coord_t>
-{
-public:
-  change_of_basis_3x3matrix (coord_t c1_x, coord_t c1_y,
-			     coord_t c2_x, coord_t c2_y)
-  {
-    m_elements[0][0] = c1_x; m_elements[1][0] = c2_x;
-    m_elements[0][1] = c1_y; m_elements[1][1] = c2_y;
-  }
-};
-
-/* Rotation matrix by given angle (in degrees) which is applied to
-   given coordinates (used to produce tilt).  */
-class rotation_matrix: public matrix4x4<coord_t>
-{
-public:
-  rotation_matrix (double angle, int coord1, int coord2)
-  {
-    double rad = (double)angle * M_PI / 180;
-    m_elements[coord1][coord1] = cos (rad);  m_elements[coord2][coord1] = sin (rad);
-    m_elements[coord1][coord2] = -sin (rad); m_elements[coord2][coord2] = cos (rad);
-  }
+  const bool debug = true;
 };
 #endif

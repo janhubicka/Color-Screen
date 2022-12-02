@@ -106,7 +106,7 @@ struct lookup_table_params
 luminosity_t *
 get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
-  luminosity_t *lookup_table = new luminosity_t[p.maxval];
+  luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
   bool invert = p.gray_min > p.gray_max;
   luminosity_t min = pow ((p.gray_min + 0.5) / (luminosity_t)p.img_maxval, gamma);
@@ -284,12 +284,38 @@ struct sharpen_params
 void
 blur_horisontal (luminosity_t *out, luminosity_t *lookup_table, unsigned short *data, int width, int clen, luminosity_t *cmatrix)
 {
-  for (int x = 0; x < width; x++)
+  if (width < clen)
+  {
+    for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
+    {
+      luminosity_t sum = 0;
+      for (int d = std::max (- clen / 2, -x); d < std::min (clen / 2, width - x); d++)
+	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
+      out[x] = sum;
+    }
+    return;
+  }
+      
+   
+  for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
+    {
+      luminosity_t sum = 0;
+      for (int d = -x; d < clen / 2; d++)
+	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
+      out[x] = sum;
+    }
+  for (int x = clen / 2; x < width - clen / 2; x++)
     {
       luminosity_t sum = 0;
       for (int d = - clen / 2; d < clen / 2; d++)
-	if (d + x >= 0 && d < width)
-	  sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
+	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
+      out[x] = sum;
+    }
+  for (int x = width - clen / 2; x < width; x++)
+    {
+      luminosity_t sum = 0;
+      for (int d = - clen / 2; d < width - x; d++)
+	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
       out[x] = sum;
     }
 }
