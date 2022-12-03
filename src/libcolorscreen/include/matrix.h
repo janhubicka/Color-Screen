@@ -230,23 +230,23 @@ public:
   inline void
   perspective_transform (T x, T y, T &xr, T &yr)
   {
-    xr = (x * B::m_elements[0][0] + y * B::m_elements[0][1] + B::m_elements[0][2] + B::m_elements[0][3])
-	 / (x * B::m_elements[2][0] + y * B::m_elements[2][1] + B::m_elements[2][2] + B::m_elements[2][3]);
-    yr = (x * B::m_elements[1][0] + y * B::m_elements[1][1] + B::m_elements[1][2] + B::m_elements[1][3])
-	 / (x * B::m_elements[3][0] + y * B::m_elements[3][1] + B::m_elements[3][2] + B::m_elements[3][3]);
+    xr =   (x * B::m_elements[0][0] + y * B::m_elements[1][0] + B::m_elements[2][0] + B::m_elements[3][0])
+	 / (x * B::m_elements[0][2] + y * B::m_elements[1][2] + B::m_elements[2][2] + B::m_elements[3][2]);
+    yr =   (x * B::m_elements[0][1] + y * B::m_elements[1][1] + B::m_elements[2][1] + B::m_elements[3][1])
+	 / (x * B::m_elements[0][3] + y * B::m_elements[1][3] + B::m_elements[2][3] + B::m_elements[3][3]);
   }
 
   /* Inverse transform for the operation above.  */
   inline void
   inverse_perspective_transform (T x, T y, T &xr, T &yr)
   {
-    matrix2x2<T> m (B::m_elements[0][0] - B::m_elements[2][0] * x,
-	            B::m_elements[0][1] - B::m_elements[2][1] * x,
-	            B::m_elements[1][0] - B::m_elements[3][0] * y,
-	            B::m_elements[1][1] - B::m_elements[3][1] * y);
+    matrix2x2<T> m (B::m_elements[0][0] - B::m_elements[0][2] * x,
+	            B::m_elements[1][0] - B::m_elements[1][2] * x,
+	            B::m_elements[0][1] - B::m_elements[0][3] * y,
+	            B::m_elements[1][1] - B::m_elements[1][3] * y);
     matrix2x2<T> m2 = m.invert ();
-    T xx = (B::m_elements[2][2]+B::m_elements[2][3])*x - B::m_elements[0][2] - B::m_elements[0][3];
-    T yy = (B::m_elements[3][2]+B::m_elements[3][3])*y - B::m_elements[1][2] - B::m_elements[1][3];
+    T xx = (B::m_elements[2][2]+B::m_elements[3][2])*x - B::m_elements[2][0] - B::m_elements[3][0];
+    T yy = (B::m_elements[2][3]+B::m_elements[3][3])*y - B::m_elements[2][1] - B::m_elements[3][1];
 
     xr = m2.m_elements[0][0] * xx + m2.m_elements[0][1] * yy;
     yr = m2.m_elements[1][0] * xx + m2.m_elements[1][1] * yy;

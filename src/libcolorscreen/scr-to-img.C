@@ -88,15 +88,9 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   m_lens_radius = my_sqrt ((coord_t)(img.width * img.width + img.height * img.height));
   m_inverse_lens_radius = 1 / m_lens_radius;
 
-  /* Now set up the projection matrix that combines remaining transformations.  */
-  trans_4d_matrix m;
-
+  /* Now set up the projection matrix that combines tilts and shifting to a given distance.  */
   rotation_distance_matrix rd (m_param.projection_distance, param.tilt_x, param.tilt_y, param.scanner_type);
-  m = rd * m;
-  //m.print(stdout);
-  // HACK
-  m.transpose ();
-  m_perspective_matrix = m;
+  m_perspective_matrix = rd;
   coord_t c1x, c1y;
   coord_t c2x, c2y;
   coord_t corrected_center_x;
@@ -112,9 +106,9 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 			  m_param.coordinate2_y + m_param.center_y,
 			  &c2x, &c2y);
 
-  m.inverse_perspective_transform (corrected_center_x, corrected_center_y, corrected_center_x, corrected_center_y);
-  m.inverse_perspective_transform (c1x, c1y, c1x, c1y);
-  m.inverse_perspective_transform (c2x, c2y, c2x, c2y);
+  m_perspective_matrix.inverse_perspective_transform (corrected_center_x, corrected_center_y, corrected_center_x, corrected_center_y);
+  m_perspective_matrix.inverse_perspective_transform (c1x, c1y, c1x, c1y);
+  m_perspective_matrix.inverse_perspective_transform (c2x, c2y, c2x, c2y);
   c1x -= corrected_center_x;
   c1y -= corrected_center_y;
   c2x -= corrected_center_x;
