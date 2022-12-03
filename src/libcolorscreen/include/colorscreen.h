@@ -2,6 +2,7 @@
 #define COLORSCREEN_H
 #include "render-fast.h"
 #include "render-scr-detect.h"
+#include "solver.h"
 
 /* Supported output modes.  */
 enum output_mode

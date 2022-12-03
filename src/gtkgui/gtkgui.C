@@ -21,8 +21,13 @@ enum ui_mode
 {
   screen_editing,
   screen_detection,
-  motor_correction_editing
+  motor_correction_editing,
+  solver_editing
 } ui_mode;
+
+#define MAX_SOVER_POINTS 10000
+static struct solver_point solver_point[MAX_SOVER_POINTS];
+static int n_solver_points = 0;
 
 
 /* Undo history and the state of UI.  */
@@ -442,6 +447,21 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
+  if (k == 'W' && ui_mode == screen_editing)
+    {
+      printf ("Solver editing mode entered\n");
+      ui_mode = solver_editing;
+    }
+  if (k == 'w' && ui_mode == solver_editing)
+    {
+      ui_mode = screen_editing;
+    }
+  if (k == 'e' && ui_mode == screen_detection)
+    {
+      ui_mode = screen_editing;
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
   if (k == ' ')
     {
       gdouble scale_x, scale_y;
@@ -505,7 +525,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (ui_mode == screen_editing || ui_mode == motor_correction_editing)
+  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
     {
       if (k == 'c')
 	setcenter = true;
@@ -843,6 +863,18 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
 	}
     }
+  if (n_solver_points)
+    {
+      scr_to_img map;
+      map.set_parameters (current, scan);
+      for (int i = 0; i <n_solver_points; i++)
+	{
+	  draw_circle (surface, bigscale, xoffset, yoffset, solver_point[i].img_x, solver_point[i].img_y, 1, 0, 1);
+	  coord_t sx, sy;
+	  map.to_img (solver_point[i].screen_x, solver_point[i].screen_y, &sx, &sy);
+	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 0, 1, 1);
+	}
+    }
 
   cairo_surface_destroy (surface);
 }
@@ -1019,6 +1051,125 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    }
 	}
     }
+  else if (ui_mode == solver_editing)
+    {
+      coord_t x = (event->x + shift_x) / scale_x;
+      coord_t y = (event->y + shift_y) / scale_y;
+      coord_t screenx, screeny;
+      coord_t rscreenx, rscreeny;
+      scr_to_img map;
+      map.set_parameters (current, scan);
+      map.to_scr (x, y, &screenx, &screeny);
+      rscreenx = lround (screenx);
+      rscreeny = lround (screeny);
+
+      if (event->button == 1)
+	{
+	  int n;
+	  for (n = 0; n < n_solver_points; n++)
+	    if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
+	      break;
+	  if (n == n_solver_points)
+	    n_solver_points++;
+	  solver_point[n].screen_x = rscreenx;
+	  solver_point[n].screen_y = rscreeny;
+	  solver_point[n].img_x = x;
+	  solver_point[n].img_y = y;
+	  for (int i =0; i < n_solver_points; i++)
+	    {
+	      printf ("point %i img %f %f maps to scr %f %f\n", i, solver_point[i].img_x, solver_point[i].img_y, solver_point[i].screen_x, solver_point[i].screen_y);
+	    }
+	  display_scheduled = true;
+	  if (n_solver_points >= 3)
+	    {
+	      save_parameters ();
+	      solver (&current, scan, n_solver_points, solver_point);
+	    }
+	}
+      else if (event->button == 3)
+	{
+	  int n;
+	  for (n = 0; n < n_solver_points; n++)
+	    if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
+	      break;
+	  if (n < n_solver_points)
+	    {
+	      for (; n < n_solver_points - 1; n++)
+		solver_point[n] = solver_point[n+1];
+	      n_solver_points--;
+	      display_scheduled = true;
+	    }
+	}
+#if 0
+      double click;
+      double scale;
+      if (current.scanner_type == lens_move_horisontally)
+	{
+	  click = x;
+	  scale = scale_x;
+	}
+      else
+	{
+	  click = y;
+	  scale = scale_y;
+	}
+
+      if (current.scanner_type != fixed_lens && event->button == 1)
+	{
+	  int i;
+	  int best_i = -1;
+	  double min_dist = 5 / scale_x;
+
+	  save_parameters ();
+
+	  for (i = 0; i < current.n_motor_corrections; i++)
+	    {
+	      double dist = fabs (click - current.motor_correction_x[i]);
+	      if (dist < min_dist)
+		{
+		  best_i = i;
+		  min_dist = dist;
+		}
+	    }
+	  if (best_i >= 0)
+	    {
+	      current_motor_correction = best_i;
+	      current_motor_correction_val = current.motor_correction_x[best_i];
+	      printf ("Found %i\n", best_i);
+	    }
+	  else
+	    {
+	      current_motor_correction = current.add_motor_correction_point (click, click);
+	      current_motor_correction_val = click;
+	    }
+	  display_scheduled = true;
+	  xpress1 = event->x;
+	  ypress1 = event->y;
+	  button1_pressed = true;
+	}
+      if (current.scanner_type != fixed_lens && event->button == 3)
+	{
+	  double min_dist = 5 / scale_x;
+	  int best_i = -1;
+	  for (int i = 0; i < current.n_motor_corrections; i++)
+	    {
+	      double dist = fabs (click - current.motor_correction_x[i]);
+	      if (dist < min_dist)
+		{
+		  best_i = i;
+		  min_dist = dist;
+		}
+	    }
+	  if (best_i >= 0)
+	    {
+	       save_parameters ();
+	       display_scheduled = true;
+	       preview_display_scheduled = true;
+	       current.remove_motor_correction_point (best_i);
+	    }
+	}
+#endif
+    }
   else
     {
       if (event->button == 1 && setcenter)
@@ -1094,6 +1245,10 @@ handle_drag (int x, int y, int button)
 	    }
 	  printf ("\n");
 	}
+      return;
+    }
+  else if (ui_mode == solver_editing)
+    {
       return;
     }
   if (button == 1)

@@ -18433,6 +18433,133 @@ then :
 
 fi
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for cos in -lm" >&5
+printf %s "checking for cos in -lm... " >&6; }
+if test ${ac_cv_lib_m_cos+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lm  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int cos ();
+}
+int
+main (void)
+{
+return conftest::cos ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_lib_m_cos=yes
+else $as_nop
+  ac_cv_lib_m_cos=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_m_cos" >&5
+printf "%s\n" "$ac_cv_lib_m_cos" >&6; }
+if test "x$ac_cv_lib_m_cos" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBM 1" >>confdefs.h
+
+  LIBS="-lm $LIBS"
+
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for cblas_dgemm in -lgslcblas" >&5
+printf %s "checking for cblas_dgemm in -lgslcblas... " >&6; }
+if test ${ac_cv_lib_gslcblas_cblas_dgemm+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lgslcblas  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int cblas_dgemm ();
+}
+int
+main (void)
+{
+return conftest::cblas_dgemm ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_lib_gslcblas_cblas_dgemm=yes
+else $as_nop
+  ac_cv_lib_gslcblas_cblas_dgemm=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gslcblas_cblas_dgemm" >&5
+printf "%s\n" "$ac_cv_lib_gslcblas_cblas_dgemm" >&6; }
+if test "x$ac_cv_lib_gslcblas_cblas_dgemm" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBGSLCBLAS 1" >>confdefs.h
+
+  LIBS="-lgslcblas $LIBS"
+
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gsl_blas_dgemm in -lgsl" >&5
+printf %s "checking for gsl_blas_dgemm in -lgsl... " >&6; }
+if test ${ac_cv_lib_gsl_gsl_blas_dgemm+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lgsl  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int gsl_blas_dgemm ();
+}
+int
+main (void)
+{
+return conftest::gsl_blas_dgemm ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_lib_gsl_gsl_blas_dgemm=yes
+else $as_nop
+  ac_cv_lib_gsl_gsl_blas_dgemm=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_gsl_gsl_blas_dgemm" >&5
+printf "%s\n" "$ac_cv_lib_gsl_gsl_blas_dgemm" >&6; }
+if test "x$ac_cv_lib_gsl_gsl_blas_dgemm" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBGSL 1" >>confdefs.h
+
+  LIBS="-lgsl $LIBS"
+
+fi
+
+
 
 # The following may be useful if we put javaglue to the library.
 # TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines

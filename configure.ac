@@ -16,6 +16,10 @@ CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 AC_SEARCH_LIBS([sqrt], [m])
+AC_CHECK_LIB([m],[cos])
+AC_CHECK_LIB([gslcblas],[cblas_dgemm])
+AC_CHECK_LIB([gsl],[gsl_blas_dgemm])
+
 
 # The following may be useful if we put javaglue to the library.
 # TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
