@@ -194,9 +194,22 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	}
       else
 	{
-	  m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
-	  m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * 2 * sizeof (luminosity_t));
-	  m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * 4 * sizeof (luminosity_t));
+	  m_prec_red = (luminosity_t *)malloc (m_prec_width * (size_t)m_prec_height * 2 * sizeof (luminosity_t));
+	  if (!m_prec_red)
+	    return false;
+	  m_prec_green = (luminosity_t *)malloc (m_prec_width * (size_t)m_prec_height * 2 * sizeof (luminosity_t));
+	  if (!m_prec_green)
+	  {
+	    free (m_prec_red);
+	    return false;
+	  }
+	  m_prec_blue = (luminosity_t *)malloc (m_prec_width * (size_t)m_prec_height * 4 * sizeof (luminosity_t));
+	  if (!m_prec_green)
+	  {
+	    free (m_prec_red);
+	    free (m_prec_green);
+	    return false;
+	  }
 	  if (progress)
 	    progress->set_task ("determining colors", m_prec_height);
 #define pixel(xo,yo,diag) m_params.precise && 0 ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\

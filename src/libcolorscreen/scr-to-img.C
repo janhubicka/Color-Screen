@@ -161,7 +161,7 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
   coord_t maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
   /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
-  if (m_param.k1)
+  if (m_param.k1 || m_param.tilt_x || m_param.tilt_y)
     {
       const int steps = 16*1024;
       for (int i = 1; i < steps; i++)
