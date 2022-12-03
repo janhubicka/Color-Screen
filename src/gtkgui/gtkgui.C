@@ -17,14 +17,20 @@
 
 extern "C" {
 
+enum ui_mode
+{
+  screen_editing,
+  screen_detection,
+  motor_correction_editing
+} ui_mode;
+
+
 /* Undo history and the state of UI.  */
 static struct scr_to_img_parameters undobuf[UNDOLEVELS];
 static struct scr_to_img_parameters current;
 static struct scr_detect_parameters undobuf_scr_detect[UNDOLEVELS];
 static struct scr_detect_parameters current_scr_detect;
 static int undopos;
-/* Are we in screen detection mode?  */
-bool scr_detect;
 
 static char *paroname;
 static void bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf);
@@ -384,8 +390,6 @@ optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
 }
 #endif
 
-static bool motor_correction;
-
 /* Handle all the magic keys.  */
 static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
@@ -426,15 +430,15 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'E' && !scr_detect && scan.rgbdata)
+  if (k == 'E' && ui_mode != screen_detection && scan.rgbdata)
     {
-      scr_detect = true;
+      ui_mode = screen_detection;
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'e' && scr_detect)
+  if (k == 'e' && ui_mode == screen_detection)
     {
-      scr_detect = false;
+      ui_mode = screen_editing;
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -501,7 +505,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (!scr_detect)
+  if (ui_mode == screen_editing || ui_mode == motor_correction_editing)
     {
       if (k == 'c')
 	setcenter = true;
@@ -595,10 +599,10 @@ static int step;
 	    current.scanner_type = fixed_lens;
 	  printf ("scanner type: %s\n", scanner_type_names [(int)current.scanner_type]);
 	}
-      if (k == 'r')
-	motor_correction = false;
-      if (k == 'R')
-	motor_correction = true;
+      if (k == 'r' && ui_mode == motor_correction_editing)
+	ui_mode = screen_editing;
+      if (k == 'R' && ui_mode == screen_editing)
+	ui_mode = motor_correction_editing;
     }
   else
     {
@@ -804,7 +808,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 
   {
     file_progress_info progress (stdout);
-    if (scr_detect)
+    if (ui_mode == screen_detection)
       {
 	ret = render_scr_detect::render_tile ((enum render_scr_detect::render_scr_detect_type_t)scr_detect_display_type, current_scr_detect, scan, rparams, color_display,
 				    bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
@@ -899,7 +903,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 					&shift_y);
   if (!initialized)
     return;
-  if (scr_detect)
+  if (ui_mode == screen_detection)
     {
       if (setcolor && event->button == 1)
 	{
@@ -943,7 +947,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    //preview_display_scheduled = true;
 	}
     }
-  else if (motor_correction)
+  else if (ui_mode == motor_correction_editing)
     {
       double x = (event->x + shift_x) / scale_x;
       double y = (event->y + shift_y) / scale_y;
@@ -1064,14 +1068,14 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 void
 handle_drag (int x, int y, int button)
 {
-  if (scr_detect)
+  if (ui_mode == screen_detection)
     return;
   gdouble scale_x, scale_y;
   gint shift_x, shift_y;
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER
 					(data.image_viewer), &scale_x,
 					&scale_y, &shift_x, &shift_y);
-  if (motor_correction)
+  if (ui_mode == motor_correction_editing)
     {
       if (current_motor_correction >= 0 && button == 1)
 	{
