@@ -1056,12 +1056,38 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       coord_t x = (event->x + shift_x) / scale_x;
       coord_t y = (event->y + shift_y) / scale_y;
       coord_t screenx, screeny;
+      coord_t pscreenx, pscreeny;
       coord_t rscreenx, rscreeny;
       scr_to_img map;
       map.set_parameters (current, scan);
       map.to_scr (x, y, &screenx, &screeny);
-      rscreenx = lround (screenx);
-      rscreeny = lround (screeny);
+#if 0
+      rscreenx = round (screenx);
+      rscreeny = round (screeny);
+#else
+      pscreenx = floor (screenx);
+      pscreeny = floor (screeny);
+      rscreenx = pscreenx;
+      rscreeny = pscreenx;
+      struct coord {coord_t x, y;};
+      struct coord points[]={
+	      /* Green.  */
+	      {0,0},{1,0},{0,1},{1,1},{0.5,0.5},
+	      /* Red  */
+	      {0,0.5},{0.5,0},{1,0.5},{0.5,1}};
+      int npoints = sizeof (points)/sizeof (coord);
+      for (int i = 0; i < npoints; i++)
+	{
+	  coord_t qscreenx = pscreenx + points[i].x;
+	  coord_t qscreeny = pscreeny + points[i].y;
+	  if ((screenx - rscreenx) * (screenx - rscreenx) + (screeny - rscreeny) * (screeny - rscreeny)
+	      >(screenx - qscreenx) * (screenx - qscreenx) + (screeny - qscreeny) * (screeny - qscreeny))
+	    {
+		rscreenx = qscreenx;
+		rscreeny = qscreeny;
+	    }
+	}
+#endif
 
       if (event->button == 1)
 	{
@@ -1084,6 +1110,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    {
 	      save_parameters ();
 	      solver (&current, scan, n_solver_points, solver_point);
+	      preview_display_scheduled = true;
 	    }
 	}
       else if (event->button == 3)
@@ -1098,77 +1125,9 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 		solver_point[n] = solver_point[n+1];
 	      n_solver_points--;
 	      display_scheduled = true;
+	      preview_display_scheduled = true;
 	    }
 	}
-#if 0
-      double click;
-      double scale;
-      if (current.scanner_type == lens_move_horisontally)
-	{
-	  click = x;
-	  scale = scale_x;
-	}
-      else
-	{
-	  click = y;
-	  scale = scale_y;
-	}
-
-      if (current.scanner_type != fixed_lens && event->button == 1)
-	{
-	  int i;
-	  int best_i = -1;
-	  double min_dist = 5 / scale_x;
-
-	  save_parameters ();
-
-	  for (i = 0; i < current.n_motor_corrections; i++)
-	    {
-	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < min_dist)
-		{
-		  best_i = i;
-		  min_dist = dist;
-		}
-	    }
-	  if (best_i >= 0)
-	    {
-	      current_motor_correction = best_i;
-	      current_motor_correction_val = current.motor_correction_x[best_i];
-	      printf ("Found %i\n", best_i);
-	    }
-	  else
-	    {
-	      current_motor_correction = current.add_motor_correction_point (click, click);
-	      current_motor_correction_val = click;
-	    }
-	  display_scheduled = true;
-	  xpress1 = event->x;
-	  ypress1 = event->y;
-	  button1_pressed = true;
-	}
-      if (current.scanner_type != fixed_lens && event->button == 3)
-	{
-	  double min_dist = 5 / scale_x;
-	  int best_i = -1;
-	  for (int i = 0; i < current.n_motor_corrections; i++)
-	    {
-	      double dist = fabs (click - current.motor_correction_x[i]);
-	      if (dist < min_dist)
-		{
-		  best_i = i;
-		  min_dist = dist;
-		}
-	    }
-	  if (best_i >= 0)
-	    {
-	       save_parameters ();
-	       display_scheduled = true;
-	       preview_display_scheduled = true;
-	       current.remove_motor_correction_point (best_i);
-	    }
-	}
-#endif
     }
   else
     {

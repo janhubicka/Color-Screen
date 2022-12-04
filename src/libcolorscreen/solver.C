@@ -81,9 +81,15 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_point 
   /* Write resulting map.  */
   coord_t center_x = C(0);
   coord_t center_y = C(1);
+#if 0
   coord_t coordinate1_x = center_x + C(2);
   coord_t coordinate1_y = center_y + C(4);
   coord_t coordinate2_x = center_x + C(3);
+  coord_t coordinate2_y = center_y + C(5);
+#endif
+  coord_t coordinate1_x = center_x + C(2);
+  coord_t coordinate1_y = center_y + C(3);
+  coord_t coordinate2_x = center_x + C(4);
   coord_t coordinate2_y = center_y + C(5);
   map.to_img (center_x, center_y, &center_x, &center_y);
   map.to_img (coordinate1_x, coordinate1_y, &coordinate1_x, &coordinate1_y);
@@ -100,6 +106,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_point 
   {
     scr_to_img map2;
     map2.set_parameters (*param, img_data);
+    //map2.m_matrix.print (stdout);
     for (int i = 0; i < n; i++)
       {
 	coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
