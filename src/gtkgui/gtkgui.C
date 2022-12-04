@@ -26,8 +26,8 @@ enum ui_mode
 } ui_mode;
 
 #define MAX_SOVER_POINTS 10000
-static struct solver_point solver_point[MAX_SOVER_POINTS];
-static int n_solver_points = 0;
+static struct solver_parameters current_solver;
+static void setvals (void);
 
 
 /* Undo history and the state of UI.  */
@@ -79,6 +79,17 @@ redo_parameters (void)
   undopos  = (undopos + 1) % UNDOLEVELS;
   current = undobuf[undopos];
   current_scr_detect = undobuf_scr_detect[undopos];
+}
+void
+maybe_solve ()
+{
+  if (current_solver.npoints >= 3)
+    {
+      save_parameters ();
+      solver (&current, scan, current_solver);
+      preview_display_scheduled = true;
+    }
+  setvals ();
 }
 
 
@@ -171,6 +182,7 @@ getvals (void)
   current.k1 = gtk_spin_button_get_value (data.k1);
   if (rparams != old || current != old2)
     {
+      maybe_solve ();
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -618,6 +630,7 @@ static int step;
 	  if (current.scanner_type == max_scanner_type)
 	    current.scanner_type = fixed_lens;
 	  printf ("scanner type: %s\n", scanner_type_names [(int)current.scanner_type]);
+	  maybe_solve ();
 	}
       if (k == 'r' && ui_mode == motor_correction_editing)
 	ui_mode = screen_editing;
@@ -781,6 +794,27 @@ previewrender (GdkPixbuf ** pixbuf)
 	render.render_pixel (x * step, y * step, &red, &green, &blue);
 	my_putpixel (pixels, rowstride, x, y, red, green, blue);
       }
+  cairo_surface_t *surface
+    = cairo_image_surface_create_for_data (pixels,
+					   CAIRO_FORMAT_RGB24,
+					   my_xsize,
+					   my_ysize,
+					   rowstride);
+#if 0
+  if (current_solver.npoints)
+    {
+      scr_to_img map;
+      map.set_parameters (current, scan);
+      for (int i = 0; i <current_solver.npoints; i++)
+	{
+	  draw_circle (surface, bigscale, xoffset, yoffset, current_solver.point[i].img_x, current_solver.point[i].img_y, 1, 0, 1);
+	  coord_t sx, sy;
+	  map.to_img (current_solver.point[i].screen_x, current_solver.point[i].screen_y, &sx, &sy);
+	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 0, 1, 1);
+	}
+    }
+#endif
+  cairo_surface_destroy (surface);
 }
 
 static void
@@ -863,15 +897,15 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
 	}
     }
-  if (n_solver_points)
+  if (current_solver.npoints)
     {
       scr_to_img map;
       map.set_parameters (current, scan);
-      for (int i = 0; i <n_solver_points; i++)
+      for (int i = 0; i <current_solver.npoints; i++)
 	{
-	  draw_circle (surface, bigscale, xoffset, yoffset, solver_point[i].img_x, solver_point[i].img_y, 1, 0, 1);
+	  draw_circle (surface, bigscale, xoffset, yoffset, current_solver.point[i].img_x, current_solver.point[i].img_y, 1, 0, 1);
 	  coord_t sx, sy;
-	  map.to_img (solver_point[i].screen_x, solver_point[i].screen_y, &sx, &sy);
+	  map.to_img (current_solver.point[i].screen_x, current_solver.point[i].screen_y, &sx, &sy);
 	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 0, 1, 1);
 	}
     }
@@ -1069,12 +1103,14 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       pscreeny = floor (screeny);
       rscreenx = pscreenx;
       rscreeny = pscreenx;
-      struct coord {coord_t x, y;};
+      struct coord {coord_t x, y;
+      		    solver_parameters::point_color color;};
+      enum solver_parameters::point_color color = solver_parameters::green;
       struct coord points[]={
 	      /* Green.  */
-	      {0,0},{1,0},{0,1},{1,1},{0.5,0.5},
+	      {0,0, solver_parameters::green},{1,0, solver_parameters::green},{0,1, solver_parameters::green},{1,1, solver_parameters::green},{0.5,0.5, solver_parameters::green},
 	      /* Red  */
-	      {0,0.5},{0.5,0},{1,0.5},{0.5,1}};
+	      {0,0.5, solver_parameters::blue},{0.5,0, solver_parameters::blue},{1,0.5, solver_parameters::blue},{0.5,1, solver_parameters::blue}};
       int npoints = sizeof (points)/sizeof (coord);
       for (int i = 0; i < npoints; i++)
 	{
@@ -1091,6 +1127,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 
       if (event->button == 1)
 	{
+	  current_solver.add_point (x, y, rscreenx, rscreeny, color);
+#if 0
 	  int n;
 	  for (n = 0; n < n_solver_points; n++)
 	    if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
@@ -1105,28 +1143,21 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    {
 	      printf ("point %i img %f %f maps to scr %f %f\n", i, solver_point[i].img_x, solver_point[i].img_y, solver_point[i].screen_x, solver_point[i].screen_y);
 	    }
+#endif
 	  display_scheduled = true;
-	  if (n_solver_points >= 3)
-	    {
-	      save_parameters ();
-	      solver (&current, scan, n_solver_points, solver_point);
-	      preview_display_scheduled = true;
-	    }
+	  maybe_solve ();
 	}
       else if (event->button == 3)
 	{
 	  int n;
-	  for (n = 0; n < n_solver_points; n++)
-	    if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
-	      break;
-	  if (n < n_solver_points)
-	    {
-	      for (; n < n_solver_points - 1; n++)
-		solver_point[n] = solver_point[n+1];
-	      n_solver_points--;
-	      display_scheduled = true;
-	      preview_display_scheduled = true;
-	    }
+	  for (n = 0; n < current_solver.npoints; n++)
+	    if (current_solver.point[n].screen_x == rscreenx && current_solver.point[n].screen_y == rscreeny)
+	      {
+		current_solver.remove_point (n);
+		maybe_solve ();
+		display_scheduled = true;
+		break;
+	      }
 	}
     }
   else
@@ -1281,7 +1312,7 @@ cb_save (GtkButton * button, Data * data)
     {
       perror (paroname);
     }
-  if (!save_csp (out, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams))
+  if (!save_csp (out, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver))
     {
       fprintf (stderr, "saving failed\n");
       exit (1);
@@ -1326,7 +1357,7 @@ main (int argc, char **argv)
 
   FILE *in = fopen (paroname, "rt");
   const char *error;
-  if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &error))
+  if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &current_solver, &error))
     fprintf (stderr, "%s\n", error);
   if (in)
     fclose (in);
@@ -1338,7 +1369,7 @@ main (int argc, char **argv)
 
 
 
-  save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams);
+  save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver);
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;

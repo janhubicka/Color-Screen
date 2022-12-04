@@ -190,7 +190,7 @@ main (int argc, char **argv)
       perror (cspname);
       exit (1);
     }
-  if (!load_csp (in, &param, &dparam, &rparam, &error))
+  if (!load_csp (in, &param, &dparam, &rparam, NULL, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);

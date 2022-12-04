@@ -1,6 +1,7 @@
 #include <locale>
 #include "include/render-to-scr.h"
 #include "include/scr-detect.h"
+#include "include/solver.h"
 #define HEADER "screen_alignment_version: 1"
 
 static const char * const scr_names[max_scr_type] =
@@ -25,7 +26,7 @@ static const char * const bool_names[2] =
 };
 
 bool
-save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam)
+save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam)
 {
   if (fprintf (f, HEADER) < 0)
     return false;
@@ -77,6 +78,18 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
 	return false;
+    }
+  if (sparam)
+    {
+      for (int i = 0; i < sparam->npoints; i++)
+	{
+	  fprintf (f, "solver_point: %f %f %f %f %s\n",
+	           sparam->point[i].img_x,
+	           sparam->point[i].img_y,
+	           sparam->point[i].screen_x,
+	           sparam->point[i].screen_y,
+		   solver_parameters::point_color_names [(int)sparam->point[i].color]);
+	}
     }
   return true;
 }
@@ -203,7 +216,7 @@ read_color (FILE *f, color_t *c)
 #define dparam_check(name) dparam ? &dparam->name : NULL
 
 bool
-load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, const char **error)
+load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error)
 {
   char buf[256];
   if (fread (buf, 1, strlen (HEADER), f) < 0
@@ -516,8 +529,30 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-
-
+      else if (!strcmp (buf, "solver_point"))
+	{
+	  double screen_x, screen_y, img_x, img_y;
+	  if (fscanf (f, "%lf %lf %lf %lf", &img_x, &img_y, &screen_x, &screen_y) == 4)
+	    {
+	      get_keyword (f, buf2);
+	      int j;
+	      for (j = 0; j < solver_parameters::max_point_color; j++)
+		if (!strcmp (buf2, solver_parameters::point_color_names[j]))
+		  break;
+	      if (j == solver_parameters::max_point_color)
+		{
+		  *error = "error parsing color in solver_point";
+		  return false;
+		}
+	      if (sparam)
+		sparam->add_point (img_x, img_y, screen_x, screen_y, (solver_parameters::point_color)j);
+	    }
+	  else
+	    {
+	      *error = "error parsing solver_point";
+	      return false;
+	    }
+	}
       /* Silently ignore; we used to save these but we no longer need them.  */
       else if (!strcmp (buf, "screen_compensation"))
 	{
