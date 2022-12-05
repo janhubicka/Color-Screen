@@ -1,6 +1,7 @@
 #ifndef SOLVER_H
 #define SOLVER_H
 #include "scr-to-img.h"
+#include "color.h"
 struct solver_parameters
 {
   solver_parameters ()
@@ -18,6 +19,15 @@ struct solver_parameters
     coord_t img_x, img_y;
     coord_t screen_x, screen_y;
     enum point_color color;
+
+    void
+    get_rgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
+    {
+      const luminosity_t colors [][3]={{1,0,0},{0,1,0},{0,0,1}};
+      *r = colors[(int)color][0];
+      *g = colors[(int)color][1];
+      *b = colors[(int)color][2];
+    }
   };
   int npoints;
   struct point_t *point;

@@ -54,6 +54,7 @@ static int display_type = 0;
 static int scr_detect_display_type = 0;
 static bool display_scheduled = true;
 static bool preview_display_scheduled = true;
+static bool autosolving = false;
 
 /* How much is the image scaled in the small view.  */
 #define SCALE 16
@@ -83,7 +84,7 @@ redo_parameters (void)
 void
 maybe_solve ()
 {
-  if (current_solver.npoints >= 3)
+  if (autosolving && current_solver.npoints >= 3)
     {
       save_parameters ();
       solver (&current, scan, current_solver);
@@ -450,12 +451,14 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'E' && ui_mode != screen_detection && scan.rgbdata)
     {
       ui_mode = screen_detection;
+      printf ("Screen detection mode\n");
       display_scheduled = true;
       preview_display_scheduled = true;
     }
   if (k == 'e' && ui_mode == screen_detection)
     {
       ui_mode = screen_editing;
+      printf ("Screen editing mode\n");
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -466,6 +469,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (k == 'w' && ui_mode == solver_editing)
     {
+      printf ("Screen editing mode\n");
       ui_mode = screen_editing;
     }
   if (k == 'e' && ui_mode == screen_detection)
@@ -537,7 +541,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
+  if (ui_mode == screen_editing)
     {
       if (k == 'c')
 	setcenter = true;
@@ -595,6 +599,19 @@ static int step;
 	  rparams.precise = true;
 	  display_scheduled = true;
 	}
+    }
+  if (ui_mode == solver_editing)
+    {
+      if (k == 'a')
+	autosolving = false;
+      if (k == 'A')
+      {
+	autosolving = true;
+	maybe_solve ();
+      }
+    }
+  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
+    {
       if (k == 'd' && current.type != Dufay)
       {
 	save_parameters ();
@@ -633,9 +650,15 @@ static int step;
 	  maybe_solve ();
 	}
       if (k == 'r' && ui_mode == motor_correction_editing)
+      {
+	  printf ("Motor correction mode\n");
 	ui_mode = screen_editing;
-      if (k == 'R' && ui_mode == screen_editing)
-	ui_mode = motor_correction_editing;
+      }
+      if (k == 'R' && (ui_mode == screen_editing || ui_mode == solver_editing))
+	{
+	  printf ("Screen editing mode\n");
+	  ui_mode = motor_correction_editing;
+	}
     }
   else
     {
@@ -836,12 +859,13 @@ draw_circle (cairo_surface_t *surface, coord_t bigscale,
 static void
 draw_line (cairo_surface_t *surface, coord_t bigscale,
 	   int xoffset, int yoffset,
-	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b)
+	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b, coord_t width = 1)
 {
   cairo_t *cr = cairo_create (surface);
   cairo_translate (cr, -xoffset, -yoffset);
   cairo_scale (cr, bigscale, bigscale);
 
+  cairo_set_line_width (cr, std::max (width/bigscale, (coord_t)1));
   cairo_set_source_rgba (cr, r, g, b, 0.5);
   cairo_move_to (cr, x1, y1);
   cairo_line_to (cr, x2, y2);
@@ -903,10 +927,31 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
       map.set_parameters (current, scan);
       for (int i = 0; i <current_solver.npoints; i++)
 	{
-	  draw_circle (surface, bigscale, xoffset, yoffset, current_solver.point[i].img_x, current_solver.point[i].img_y, 1, 0, 1);
+	  luminosity_t r,g,b;
+	  coord_t xi = current_solver.point[i].img_x;
+	  coord_t yi = current_solver.point[i].img_y;
+	  current_solver.point[i].get_rgb (&r,&g,&b);
 	  coord_t sx, sy;
 	  map.to_img (current_solver.point[i].screen_x, current_solver.point[i].screen_y, &sx, &sy);
-	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 0, 1, 1);
+
+	  draw_circle (surface, bigscale, xoffset, yoffset, xi, yi, b, g, r);
+	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 3*b/4, 3*g/4, 3*r/4);
+
+	  coord_t patch_diam = sqrt (current.coordinate1_x * current.coordinate1_x + current.coordinate1_y * current.coordinate1_y) / 2;
+	  double scale = 200 / patch_diam / bigscale;
+	  coord_t xd = sx - xi;
+	  coord_t yd = sy - yi;
+	  bool bad = sqrt (xd*xd + yd*yd) > patch_diam / 4;
+
+	  xd *= scale;
+	  yd *= scale;
+
+	  if (bad)
+	    draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, 0, 0, 1, 16);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, b,g,r, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 + yd * 0.2, yi + yd * 0.7 - xd * 0.2, b, g, r, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 - yd * 0.2, yi + yd * 0.7 + xd * 0.2, b, g, r, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, 1, 1, 1, 3);
 	}
     }
 
@@ -1105,12 +1150,12 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       rscreeny = pscreenx;
       struct coord {coord_t x, y;
       		    solver_parameters::point_color color;};
-      enum solver_parameters::point_color color = solver_parameters::green;
+      enum solver_parameters::point_color rcolor = solver_parameters::green;
       struct coord points[]={
 	      /* Green.  */
 	      {0,0, solver_parameters::green},{1,0, solver_parameters::green},{0,1, solver_parameters::green},{1,1, solver_parameters::green},{0.5,0.5, solver_parameters::green},
 	      /* Red  */
-	      {0,0.5, solver_parameters::blue},{0.5,0, solver_parameters::blue},{1,0.5, solver_parameters::blue},{0.5,1, solver_parameters::blue}};
+	      {0,0.5, solver_parameters::red},{0.5,0, solver_parameters::red},{1,0.5, solver_parameters::red},{0.5,1, solver_parameters::red}};
       int npoints = sizeof (points)/sizeof (coord);
       for (int i = 0; i < npoints; i++)
 	{
@@ -1121,13 +1166,14 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	    {
 		rscreenx = qscreenx;
 		rscreeny = qscreeny;
+		rcolor = points[i].color;
 	    }
 	}
 #endif
 
       if (event->button == 1)
 	{
-	  current_solver.add_point (x, y, rscreenx, rscreeny, color);
+	  current_solver.add_point (x, y, rscreenx, rscreeny, rcolor);
 #if 0
 	  int n;
 	  for (n = 0; n < n_solver_points; n++)
@@ -1188,6 +1234,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;
+	      maybe_solve ();
 	    }
 	}
       press_parameters = current;
