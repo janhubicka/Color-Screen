@@ -12,7 +12,7 @@
 #include "progress-info.h"
 #include "sensitivity.h"
 
-typedef float coord_t;
+typedef double coord_t;
 
 /* Parameters of rendering algorithms.  */
 struct DLL_PUBLIC render_parameters

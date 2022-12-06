@@ -11,7 +11,7 @@
 #endif
 
 
-typedef float coord_t;
+typedef double coord_t;
 typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
 

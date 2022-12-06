@@ -70,9 +70,9 @@ save_parameters (void)
 void
 undo_parameters (void)
 {
+  undopos = (undopos + UNDOLEVELS - 1) % UNDOLEVELS;
   current = undobuf[undopos];
   current_scr_detect = undobuf_scr_detect[undopos];
-  undopos = (undopos + UNDOLEVELS - 1) % UNDOLEVELS;
 }
 void
 redo_parameters (void)
@@ -87,8 +87,10 @@ maybe_solve ()
   if (autosolving && current_solver.npoints >= 3)
     {
       save_parameters ();
-      solver (&current, scan, current_solver);
+      coord_t sq = solver (&current, scan, current_solver);
+      printf ("Solver %f\n", sq);
       preview_display_scheduled = true;
+      display_scheduled = true;
     }
   setvals ();
 }
@@ -732,7 +734,7 @@ initgtk (int *argc, char **argv)
   // Set the scroll region and zoom range
   gtk_image_viewer_set_scroll_region (GTK_IMAGE_VIEWER (image_viewer),
 				      20, 20, scan.width - 20, scan.height - 20);
-  gtk_image_viewer_set_zoom_range (GTK_IMAGE_VIEWER (image_viewer), 0.1, 64);
+  gtk_image_viewer_set_zoom_range (GTK_IMAGE_VIEWER (image_viewer), 0.01, 64);
   gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (image_viewer), 4.0,
 					4.0, 64, 64);
 
@@ -1413,6 +1415,7 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
     }
+  save_parameters ();
 
 
 

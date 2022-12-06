@@ -28,9 +28,9 @@ class rotation_distance_matrix: public matrix4x4<coord_t>
     m_elements[0][3] = -sy; m_elements[1][3] = cy * sx; m_elements[2][3] = 0;        m_elements[3][3] = distance;
     /* Disable perspective corrections along the lens movement axis.  */
     if (type == lens_move_horisontally)
-      m_elements[0][2] = 0, m_elements[1][2] = 0, m_elements[2][2]=1;
+      m_elements[0][2] = 0, m_elements[1][2] = 0/*, m_elements[2][2]=1*/;
     if (type == lens_move_vertically)
-      m_elements[0][3] = 0, m_elements[1][3] = 0, m_elements[3][3]=1;
+      m_elements[0][3] = 0, m_elements[1][3] = 0/*, m_elements[3][3]=1*/;
   }
 };
 
