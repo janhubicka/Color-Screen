@@ -14,6 +14,11 @@ struct solver_parameters
   }
   enum point_color {red,green,blue,max_point_color};
   static const char *point_color_names[(int)max_point_color];
+  struct point_location
+  {
+    coord_t x, y;
+    solver_parameters::point_color color;
+  };
   struct point_t
   {
     coord_t img_x, img_y;
@@ -29,8 +34,12 @@ struct solver_parameters
       *b = colors[(int)color][2];
     }
   };
+
   int npoints;
   struct point_t *point;
+  bool weighted;
+  coord_t center_x, center_y;
+
   int
   add_point (coord_t img_x, coord_t img_y, coord_t screen_x, coord_t screen_y, enum point_color color)
   {
@@ -59,6 +68,9 @@ struct solver_parameters
 	fprintf (out, "point %i img %f %f maps to scr %f %f\n", i, point[i].img_x, point[i].img_y, point[i].screen_x, point[i].screen_y);
       }
   }
+  static point_location *get_point_locations (enum scr_type type, int *n);
 };
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam);
+mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam);
+
 #endif

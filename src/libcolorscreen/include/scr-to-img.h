@@ -1,9 +1,11 @@
 #ifndef SCR_TO_IMG_H
 #define SCR_TO_IMG_H
 #include <atomic>
+#include "base.h"
 #include "dllpublic.h"
 #include "matrix.h"
 #include "precomputed-function.h"
+#include "mesh.h"
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
@@ -11,7 +13,6 @@
 #endif
 
 
-typedef double coord_t;
 typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
 
@@ -76,13 +77,15 @@ struct DLL_PUBLIC scr_to_img_parameters
   coord_t *motor_correction_x, *motor_correction_y;
   int n_motor_corrections;
 
+  mesh *mesh_trans;
+
   enum scr_type type;
   enum scanner_type scanner_type;
 
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
     lens_center_x (0), lens_center_y (0), projection_distance (1), tilt_x (0), tilt_y(0), k1(0),
-    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0),
+    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0), mesh_trans (NULL),
     type (Finlay), scanner_type (fixed_lens)
   { }
   scr_to_img_parameters (const scr_to_img_parameters &from)
@@ -92,7 +95,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
     projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y) , k1(from.k1),
     motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (from.n_motor_corrections),
-    type (from.type), scanner_type (from.scanner_type)
+    mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type)
   {
     if (n_motor_corrections)
       {
@@ -133,6 +136,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     k1 = from.k1;
     type = from.type;
     scanner_type = from.scanner_type;
+    mesh_trans = from.mesh_trans;
     if (n_motor_corrections)
       abort ();
   }
@@ -305,6 +309,11 @@ public:
   void
   to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
+    if (m_param.mesh_trans)
+      {
+ 	m_param.mesh_trans->apply (x, y, xp, yp);
+	return;
+      }
     m_matrix.apply (x,y, &x, &y);
     m_perspective_matrix.perspective_transform (x,y, x, y);
     inverse_early_correction (x, y, xp, yp);
@@ -314,9 +323,19 @@ public:
   to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
   {
     coord_t xx = x, yy = y;
-    apply_early_correction (xx, yy, &xx, &yy);
-    m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
-    m_inverse_matrix.apply (xx,yy, xp, yp);
+    if (m_param.mesh_trans)
+      {
+	m_param.mesh_trans->invert (x, y, xp, yp);
+	/* (-1,-1) is used to sgnalize that inverse is not computed.  */
+	if (debug && *xp == -1 && *yp == -1)
+	  return;
+      }
+    else
+      {
+	apply_early_correction (xx, yy, &xx, &yy);
+	m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
+	m_inverse_matrix.apply (xx,yy, xp, yp);
+      }
 
     /* Verify that inverse is working.  */
     if (debug)
@@ -410,6 +429,6 @@ private:
     *xr = xd / r * radius * m_lens_radius;
     *yr = yd / r * radius * m_lens_radius;
   }
-  const bool debug = true;
+  const bool debug = false;
 };
 #endif

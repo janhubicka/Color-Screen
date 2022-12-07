@@ -9,7 +9,9 @@ bool debug_output = false;
 bool debug = true;
 
 coord_t
-solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points, bool final = false)
+solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points,
+	bool weights, bool scrweights, coord_t wcenter_x, coord_t wcenter_y,
+      	bool final = false)
 {
   if (debug_output && final)
     {
@@ -63,9 +65,28 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       gsl_matrix_set (X, i * 2+1, 5, ys);
 
       gsl_vector_set (y, i * 2, xt);
-      gsl_vector_set (w, i * 2, /*1.0/(ei*ei)*/ 10000.0);
       gsl_vector_set (y, i * 2 + 1, yt);
-      gsl_vector_set (w, i * 2 + 1, /*1.0/(ei*ei)*/ 10000.0);
+
+      /* Weight should be 1 / (error^2).  */
+      if (!weights && !scrweights)
+	{
+	  gsl_vector_set (w, i * 2, 1.0);
+	  gsl_vector_set (w, i * 2 + 1, 1.0);
+	}
+      else if (weights)
+	{
+	  coord_t dist = sqrt ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y));
+	  double weight = 1 / (dist + 0.5);
+	  gsl_vector_set (w, i * 2, weight);
+	  gsl_vector_set (w, i * 2 + 1, weight);
+	}
+      else if (scrweights)
+	{
+	  coord_t dist = sqrt ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
+	  double weight = 1 / (dist + 0.5);
+	  gsl_vector_set (w, i * 2, weight);
+	  gsl_vector_set (w, i * 2 + 1, weight);
+	}
     }
 
   {
@@ -169,7 +190,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 
 
   coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
-  coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.npoints <= 10);
+  coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, sparam.npoints <= 10);
   if (sparam.npoints > 10)
     {
       for (int i = 0; i < 10; i++)
@@ -181,7 +202,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	      {
 		param->tilt_x = tilt_x_min + txstep * tx;
 		param->tilt_y = tilt_y_min + tystep * ty;
-		coord_t chi = solver (param, img_data, sparam.npoints, sparam.point);
+		coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y);
 		if (chi < chimin)
 		  {
 		    chimin = chi;
@@ -198,8 +219,74 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	  tilt_y_max = best_tilty + tystep;
 	}
       printf ("Found %i\n", nbest);
-      return solver (param, img_data, sparam.npoints, sparam.point, true);
+      return solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, true);
     }
   else
     return chimin;
+}
+mesh *
+solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam)
+{
+  if (sparam.npoints < 10)
+    return NULL;
+  int xshift, yshift, width, height;
+  int step = 1;
+  if (param->mesh_trans)
+    abort ();
+  scr_to_img map;
+  map.set_parameters (*param, img_data);
+  map.get_range (img_data.width, img_data.height, &xshift, &yshift, &width, &height);
+  width = (width + step - 1) / step;
+  height = (height + step - 1) / step;
+  mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
+  scr_to_img_parameters lparam = *param;
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+	coord_t xx, yy;
+	solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
+	scr_to_img map2;
+        map2.set_parameters (lparam, img_data);
+	map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	mesh_trans->set_point (x,y, xx, yy);
+      }
+  mesh_trans->print (stdout);
+  mesh_trans->precompute_inverse ();
+  return mesh_trans;
+}
+solver_parameters::point_location *
+solver_parameters::get_point_locations (enum scr_type type, int *n)
+{
+  static struct point_location paget_points[] =
+    {
+      /* Green.  */
+      {0, 0, solver_parameters::green}, {1, 0, solver_parameters::green}, {0, 1, solver_parameters::green},
+      {1, 1, solver_parameters::green}, {0.5, 0.5, solver_parameters::green},
+      /* Red  */
+      {0,  0.5, solver_parameters::red},  {0.5, 0, solver_parameters::red},
+      {1, 0.5, solver_parameters::red}, {0.5, 1, solver_parameters::red}
+    };
+  static struct point_location dufay_points[] =
+    {
+      /* Green.  */
+      {0, 0, solver_parameters::green},
+      {0.5, 0, solver_parameters::blue},
+      {1, 0, solver_parameters::green},
+      {0, 1, solver_parameters::green},
+      {0.5, 1, solver_parameters::blue},
+      {1, 1, solver_parameters::green},
+    };
+
+  switch (type)
+    {
+      case Paget:
+      case Thames:
+      case Finlay:
+	*n = sizeof (paget_points)/sizeof (point_location);
+	return paget_points;
+      case Dufay:
+	*n = sizeof (dufay_points)/sizeof (point_location);
+	return dufay_points;
+      default: abort ();
+    }
 }

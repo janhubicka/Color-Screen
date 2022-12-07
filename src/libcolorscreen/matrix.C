@@ -3,6 +3,7 @@
 #include "include/matrix.h"
 #include <assert.h>
 #include "include/color.h"
+#include "include/mesh.h"
 /* Simple unit test that inversion works. */
 int
 main()
@@ -67,5 +68,50 @@ main()
             mm6.print (stderr);
 	    abort ();
 	  }
+
+  {
+#if 1
+    mesh_point z = {5, 5};
+    mesh_point x = {11,6};
+    mesh_point y = {20, 20};
+    mesh_point a = {0.6, 0.3};
+#else
+    mesh_point z = {0, 0};
+    mesh_point x = {1,0};
+    mesh_point y = {1, 1};
+    mesh_point a = {0.6, 0.3};
+#endif
+    //mesh_point a = {0.5, 0};
+    mesh_point imga = triangle_interpolate (z, x, y, a);
+    mesh_point invimga = inverse_triangle_interpolate (z, x, y, imga);
+    if (fabs (invimga.x - a.x) > 0.0001 || fabs (invimga.y - a.y) > 0.0001)
+      {
+	printf ("Wrong inverse. Point %f %f maps to %f %f inversed %f %f\n",
+	        a.x, a.y, imga.x, imga.y, invimga.x, invimga.y);
+        abort ();
+      }
+  }
+  {
+    mesh_point tl = {1,1};
+    mesh_point tr = {2,2};
+    mesh_point bl = {1,2};
+    mesh_point br = {3,5};
+    for (int y = 0; y < 5; y++)
+    {
+      for (int x = 0; x < 5; x++)
+      {
+	mesh_point p = {x / 4.0, y / 4.0};
+	mesh_point p2 = mesh_interpolate (tl, tr, bl, br, p);
+	//printf (" (%2.2f, %2.2f)->(%2.2f, %2.2f)",p.x,p.y, p2.x, p2.y);
+	mesh_point pinv = mesh_inverse_interpolate (tl, tr, bl, br, p2);
+	if (fabs (p.x - pinv.x) > 0.0001 || fabs (p.y - pinv.y) > 0.0001)
+	  {
+	     printf ("\n Inverts to %f %f\n",pinv.x, pinv.y);
+	     abort ();
+	  }
+      }
+      //printf ("\n");
+    }
+  }
   return 0;
 }

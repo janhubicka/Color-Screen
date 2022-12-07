@@ -233,6 +233,7 @@ cb_image_annotate (GtkImageViewer * imgv,
 
 static bool setcenter;
 static bool set_lens_center;
+static bool set_solver_center;
 static bool freeze_x = false;
 static bool freeze_y = false;
 static void display ();
@@ -610,6 +611,15 @@ static int step;
       {
 	autosolving = true;
 	maybe_solve ();
+      }
+      if (k == 'L')
+	set_solver_center = true;
+      if (k == 'l')
+      {
+	current_solver.weighted = false;
+	solver (&current, scan, current_solver);
+	preview_display_scheduled = true;
+	display_scheduled = true;
       }
     }
   if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
@@ -1153,12 +1163,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       struct coord {coord_t x, y;
       		    solver_parameters::point_color color;};
       enum solver_parameters::point_color rcolor = solver_parameters::green;
-      struct coord points[]={
-	      /* Green.  */
-	      {0,0, solver_parameters::green},{1,0, solver_parameters::green},{0,1, solver_parameters::green},{1,1, solver_parameters::green},{0.5,0.5, solver_parameters::green},
-	      /* Red  */
-	      {0,0.5, solver_parameters::red},{0.5,0, solver_parameters::red},{1,0.5, solver_parameters::red},{0.5,1, solver_parameters::red}};
-      int npoints = sizeof (points)/sizeof (coord);
+      int npoints;
+      struct solver_parameters::point_location *points = solver_parameters::get_point_locations (current.type, &npoints);
       for (int i = 0; i < npoints; i++)
 	{
 	  coord_t qscreenx = pscreenx + points[i].x;
@@ -1175,6 +1181,20 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 
       if (event->button == 1)
 	{
+	  if (set_solver_center)
+	    {
+	      double newcenter_x = (event->x + shift_x) / scale_x;
+	      double newcenter_y = (event->y + shift_y) / scale_y;
+	      set_solver_center = false;
+	      current_solver.weighted = true;
+	      current_solver.center_x = newcenter_x;
+	      current_solver.center_y = newcenter_y;
+	      printf ("Solver center: %f %f\n", newcenter_x, newcenter_y);
+	      solver (&current, scan, current_solver);
+	      preview_display_scheduled = true;
+	      display_scheduled = true;
+	      return;
+	    }
 	  current_solver.add_point (x, y, rscreenx, rscreeny, rcolor);
 #if 0
 	  int n;
@@ -1416,6 +1436,14 @@ main (int argc, char **argv)
       perror ("");
     }
   save_parameters ();
+  //current.mesh_trans = solver_mesh (&current, scan, current_solver);
+#if 0
+    new mesh (0, 0, 1, 1, 2, 2);
+  current.mesh_trans->set_point (0,0, 0, 0);
+  current.mesh_trans->set_point (0,1, 0, 100);
+  current.mesh_trans->set_point (1,0, 100, 0);
+  current.mesh_trans->set_point (1,1, 100, 100);
+#endif
 
 
 

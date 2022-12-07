@@ -6,13 +6,13 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "base.h"
 #include "imagedata.h"
 #include "color.h"
 #include "spectrum-to-xyz.h"
 #include "progress-info.h"
 #include "sensitivity.h"
 
-typedef double coord_t;
 
 /* Parameters of rendering algorithms.  */
 struct DLL_PUBLIC render_parameters
@@ -417,35 +417,6 @@ render::fast_get_img_pixel (int x, int y)
   if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
     return 0;
   return render::get_data (x, y);
-}
-
-/* Like modf but always round down.  */
-static inline float
-my_modf (float x, int *ptr)
-{
-  float f = floorf (x);
-  float ret = x - f;
-  *ptr = f;
-  return ret;
-}
-static inline double
-my_modf (double x, int *ptr)
-{
-  float f = floor (x);
-  float ret = x - f;
-  *ptr = f;
-  return ret;
-}
-
-static inline long long
-nearest_int (float x)
-{
-  return roundf (x);
-}
-static inline long long
-nearest_int (double x)
-{
-  return round (x);
 }
 
 /* Determine grayscale value at a given position in the image.
