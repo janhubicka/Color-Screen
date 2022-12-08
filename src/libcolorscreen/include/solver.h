@@ -2,6 +2,7 @@
 #define SOLVER_H
 #include "scr-to-img.h"
 #include "color.h"
+#include "progress-info.h"
 struct solver_parameters
 {
   solver_parameters ()
@@ -70,7 +71,7 @@ struct solver_parameters
   }
   static point_location *get_point_locations (enum scr_type type, int *n);
 };
-coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam);
-mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam);
+coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
+mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 
 #endif

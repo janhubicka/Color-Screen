@@ -66,18 +66,17 @@ mesh::precompute_inverse()
 	maxy = std::max (m_data[(y + 1) * m_width + x + 1].y, maxy);
 
 	int iminx = floor ((minx + m_invxshift) * m_invxstepinv);
-	int imaxx = ceil ((maxx + m_invxshift) * m_invxstepinv);
+	int imaxx = floor ((maxx + m_invxshift) * m_invxstepinv);
 	int iminy = floor ((miny + m_invyshift) * m_invystepinv);
-	int imaxy = ceil ((maxy + m_invyshift) * m_invystepinv);
-	//printf ("%i %i %i %i\n", iminx, imaxx, iminy, imaxy);
-	if (iminx < 0 || iminx >= m_invwidth)
-	  abort();
-	if (imaxx < 0 || imaxx >= m_invwidth)
-	  abort();
-	if (iminy < 0 || iminy >= m_invheight)
-	  abort();
-	if (imaxy < 0 || imaxy >= m_invheight)
-	  abort();
+	int imaxy = floor ((maxy + m_invyshift) * m_invystepinv);
+	if (iminx < 0 || iminx >= m_invwidth
+	    || imaxx < 0 || imaxx >= m_invwidth
+	    || iminy < 0 || iminy >= m_invheight
+	    || imaxy < 0 || imaxy >= m_invheight)
+	  {
+	    printf ("%i %i %i %i\n", iminx, imaxx, iminy, imaxy);
+	    abort();
+	  }
 	for (int yy = iminy; yy <= imaxy; yy++)
 	  for (int xx = iminx; xx <= imaxx; xx++)
 	    {
@@ -87,10 +86,39 @@ mesh::precompute_inverse()
 	      m_invdata[yy * m_invwidth + xx].maxy = std::max ((int)m_invdata[yy * m_invwidth + xx].maxy, y);
 	    }
       }
+#if 0
   for (int y = 0; y < m_invheight; y++)
     {
       for (int x = 0; x < m_invwidth; x++)
 	printf (" %i-%i,%i-%i", m_invdata[y * m_invwidth + x].minx, m_invdata[y * m_invwidth + x].maxx, m_invdata[y * m_invwidth + x].miny, m_invdata[y * m_invwidth + x].maxy);
       printf ("\n");
     }
+#endif
+}
+void
+mesh::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax)
+{
+  int ixmin = m_width;
+  int ixmax = 0;
+  int iymin = m_height;
+  int iymax = 0;
+  for (int y = 0; y < m_height; y++)
+    for (int x = 0; x < m_width; x++)
+      {
+        coord_t xx = m_data [y * m_width + x].x;
+        coord_t yy = m_data [y * m_width + x].y;
+	if (xx > x1 && xx < x2 && yy > y1 && yy < y2)
+	  {
+	    ixmin = std::min (ixmin, std::max (x - 1, 0));
+	    ixmax = std::max (ixmax, std::min (x + 1, m_width - 1));
+	    iymin = std::min (iymin, std::max (y - 1, 0));
+	    iymax = std::max (iymax, std::min (y + 1, m_height - 1));
+	  }
+      }
+  if (ixmin > ixmax)
+    ixmin = ixmax = iymin = iymax = 0; 
+  *xmin = floor (ixmin * m_xstep - m_xshift);
+  *xmax = ceil (ixmax * m_xstep - m_xshift);
+  *ymin = floor (iymin * m_ystep - m_yshift);
+  *ymax = ceil (iymax * m_ystep - m_yshift);
 }

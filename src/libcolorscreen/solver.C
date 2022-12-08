@@ -178,7 +178,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 } 
 
 coord_t
-solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam)
+solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
   if (sparam.npoints < 3)
     return 0;
@@ -218,19 +218,19 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	  tilt_y_min = best_tilty - tystep;
 	  tilt_y_max = best_tilty + tystep;
 	}
-      printf ("Found %i\n", nbest);
+      //printf ("Found %i\n", nbest);
       return solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, true);
     }
   else
     return chimin;
 }
 mesh *
-solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam)
+solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
   if (sparam.npoints < 10)
     return NULL;
   int xshift, yshift, width, height;
-  int step = 1;
+  int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
@@ -238,19 +238,35 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   map.get_range (img_data.width, img_data.height, &xshift, &yshift, &width, &height);
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
+  if (progress)
+    progress->set_task ("computing mesh", height);
   mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
-  scr_to_img_parameters lparam = *param;
+#pragma omp parallel for default(none) shared(progress, xshift, yshift, step, width, height, sparam, img_data, mesh_trans, param)
   for (int y = 0; y < height; y++)
-    for (int x = 0; x < width; x++)
-      {
-	coord_t xx, yy;
-	solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
-	scr_to_img map2;
-        map2.set_parameters (lparam, img_data);
-	map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
-	mesh_trans->set_point (x,y, xx, yy);
-      }
-  mesh_trans->print (stdout);
+    {
+      // TODO: copying motor corrections is unnecesary and expensive.
+      scr_to_img_parameters lparam = *param;
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < width; x++)
+	  {
+	    coord_t xx, yy;
+	    solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
+	    scr_to_img map2;
+	    map2.set_parameters (lparam, img_data);
+	    map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	    mesh_trans->set_point (x,y, xx, yy);
+	  }
+      if (progress)
+	progress->inc_progress ();
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      delete mesh_trans;
+      return NULL;
+    }
+  //mesh_trans->print (stdout);
+  if (progress)
+    progress->set_task ("inverting mesh", 1);
   mesh_trans->precompute_inverse ();
   return mesh_trans;
 }

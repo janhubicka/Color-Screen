@@ -145,50 +145,56 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
 		       int *scr_xshift, int *scr_yshift,
 		       int *scr_width, int *scr_height)
 {
-  /* Compute all the corners.  */
-  coord_t xul,xur,xdl,xdr;
-  coord_t yul,yur,ydl,ydr;
-
-  to_scr (x1, y1, &xul, &yul);
-  to_scr (x2, y1, &xur, &yur);
-  to_scr (x1, y2, &xdl, &ydl);
-  to_scr (x2, y2, &xdr, &ydr);
-
-  /* Find extremas.  */
-  coord_t minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
-  coord_t miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
-  coord_t maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
-  coord_t maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
-
-  /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
-  if (m_param.k1 || m_param.tilt_x || m_param.tilt_y)
+  coord_t minx, miny, maxx, maxy;
+  if (!m_param.mesh_trans || 1)
     {
-      const int steps = 16*1024;
-      for (int i = 1; i < steps; i++)
+      /* Compute all the corners.  */
+      coord_t xul,xur,xdl,xdr;
+      coord_t yul,yur,ydl,ydr;
+
+      to_scr (x1, y1, &xul, &yul);
+      to_scr (x2, y1, &xur, &yur);
+      to_scr (x1, y2, &xdl, &ydl);
+      to_scr (x2, y2, &xdr, &ydr);
+
+      /* Find extremas.  */
+      minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
+      miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
+      maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
+      maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
+
+      /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
+      if (m_param.k1 || m_param.tilt_x || m_param.tilt_y)
 	{
-	  coord_t xx,yy;
-	  to_scr (x1 + (x2 - x1) * i / steps, y1, &xx, &yy);
-	  minx = std::min (minx, xx);
-	  miny = std::min (miny, yy);
-	  maxx = std::max (maxx, xx);
-	  maxy = std::max (maxy, yy);
-	  to_scr (x1 + (x2 - x1) * i / steps, y2, &xx, &yy);
-	  minx = std::min (minx, xx);
-	  miny = std::min (miny, yy);
-	  maxx = std::max (maxx, xx);
-	  maxy = std::max (maxy, yy);
-	  to_scr (x1, y1 + (y2 - y1) * i / steps, &xx, &yy);
-	  minx = std::min (minx, xx);
-	  miny = std::min (miny, yy);
-	  maxx = std::max (maxx, xx);
-	  maxy = std::max (maxy, yy);
-	  to_scr (x2, y1 + (y2 - y1) * i / steps, &xx, &yy);
-	  minx = std::min (minx, xx);
-	  miny = std::min (miny, yy);
-	  maxx = std::max (maxx, xx);
-	  maxy = std::max (maxy, yy);
+	  const int steps = 16*1024;
+	  for (int i = 1; i < steps; i++)
+	    {
+	      coord_t xx,yy;
+	      to_scr (x1 + (x2 - x1) * i / steps, y1, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      to_scr (x1 + (x2 - x1) * i / steps, y2, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      to_scr (x1, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      to_scr (x2, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	    }
 	}
     }
+  else
+    m_param.mesh_trans->get_range (x1, y1, x2, y2, &minx, &maxx, &miny, &maxy);
 
 
   /* Determine the coordinates.  */

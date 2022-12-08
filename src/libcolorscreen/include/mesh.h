@@ -211,6 +211,7 @@ public:
     else
       *yy = -m_yshift + m_ystep * m_height;
   }
+  void get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax);
   void
   print (FILE *f);
   void precompute_inverse();

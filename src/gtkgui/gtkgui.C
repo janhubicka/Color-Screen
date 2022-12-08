@@ -28,6 +28,7 @@ enum ui_mode
 #define MAX_SOVER_POINTS 10000
 static struct solver_parameters current_solver;
 static void setvals (void);
+static mesh *current_mesh = NULL;
 
 
 /* Undo history and the state of UI.  */
@@ -82,17 +83,27 @@ redo_parameters (void)
   current_scr_detect = undobuf_scr_detect[undopos];
 }
 void
+solve ()
+{
+  save_parameters ();
+  file_progress_info progress (stdout);
+  coord_t sq = solver (&current, scan, current_solver, &progress);
+  printf ("Solver %f\n", sq);
+  if (current_mesh)
+    {
+      delete current_mesh;
+      current.mesh_trans = NULL;
+      current_mesh = solver_mesh (&current, scan, current_solver, &progress);
+    }
+  setvals ();
+  preview_display_scheduled = true;
+  display_scheduled = true;
+}
+void
 maybe_solve ()
 {
   if (autosolving && current_solver.npoints >= 3)
-    {
-      save_parameters ();
-      coord_t sq = solver (&current, scan, current_solver);
-      printf ("Solver %f\n", sq);
-      preview_display_scheduled = true;
-      display_scheduled = true;
-    }
-  setvals ();
+    solve ();
 }
 
 
@@ -617,7 +628,8 @@ static int step;
       if (k == 'l')
       {
 	current_solver.weighted = false;
-	solver (&current, scan, current_solver);
+	file_progress_info progress (stdout);
+	solver (&current, scan, current_solver, &progress);
 	preview_display_scheduled = true;
 	display_scheduled = true;
       }
@@ -644,6 +656,28 @@ static int step;
 	current.type = Finlay;
 	display_scheduled = true;
 	preview_display_scheduled = true;
+      }
+      if (k == 'N')
+      {
+	printf ("Mesh\n");
+	if (current_mesh)
+	  delete current_mesh;
+	current.mesh_trans = NULL;
+	file_progress_info progress (stdout);
+	current_mesh = solver_mesh (&current, scan, current_solver, &progress);
+	display_scheduled = true;
+	preview_display_scheduled = true;
+      }
+      if (k == 'n')
+      {
+	if (current_mesh)
+	  {
+	    delete current_mesh;
+	    current.mesh_trans = NULL;
+	    current_mesh = NULL;
+	    display_scheduled = true;
+	    preview_display_scheduled = true;
+	  }
       }
       if (k >= '1' && k <='7')
 	{
@@ -784,6 +818,7 @@ initgtk (int *argc, char **argv)
 static struct scr_to_img_parameters &
 get_scr_to_img_parameters ()
 {
+  current.mesh_trans = current_mesh;
   return current;
 }
 
@@ -1190,7 +1225,8 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	      current_solver.center_x = newcenter_x;
 	      current_solver.center_y = newcenter_y;
 	      printf ("Solver center: %f %f\n", newcenter_x, newcenter_y);
-	      solver (&current, scan, current_solver);
+	      file_progress_info progress (stdout);
+	      solver (&current, scan, current_solver, &progress);
 	      preview_display_scheduled = true;
 	      display_scheduled = true;
 	      return;

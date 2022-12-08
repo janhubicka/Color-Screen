@@ -37,12 +37,43 @@ private:
   bool m_screen_compensation;
   bool m_adjust_luminosity;
 
-  luminosity_t &prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width * 2 + x];}
-  luminosity_t &prec_red (int x, int y) { return m_prec_red [y * m_prec_width + x];}
-  luminosity_t &prec_green (int x, int y) { return m_prec_green [y * m_prec_width + x];}
-  luminosity_t &dufay_prec_blue (int x, int y) { return m_prec_blue [y * m_prec_width + x];}
-  luminosity_t &dufay_prec_red (int x, int y) { return m_prec_red [y * m_prec_width * 2 + x];}
-  luminosity_t &dufay_prec_green (int x, int y) { return m_prec_green [y * m_prec_width + x];}
+  luminosity_t &prec_blue (int x, int y)
+    {
+      x = std::min (std::max (x, 0), m_prec_width * 2);
+      y = std::min (std::max (y, 0), m_prec_height * 2);
+      return m_prec_blue [y * m_prec_width * 2 + x];
+    }
+  luminosity_t &prec_red (int x, int y)
+    { 
+      x = std::min (std::max (x, 0), m_prec_width);
+      y = std::min (std::max (y, 0), m_prec_height * 2);
+      return m_prec_red [y * m_prec_width + x];
+    }
+  luminosity_t &prec_green (int x, int y) 
+    {
+      x = std::min (std::max (x, 0), m_prec_width);
+      y = std::min (std::max (y, 0), m_prec_height * 2);
+      return m_prec_green [y * m_prec_width + x];
+    }
+  luminosity_t &dufay_prec_blue (int x, int y)
+    {
+      x = std::min (std::max (x, 0), m_prec_width);
+      y = std::min (std::max (y, 0), m_prec_height);
+      return m_prec_blue [y * m_prec_width + x];
+    }
+  luminosity_t &dufay_prec_red (int x, int y)
+    {
+      x = std::min (std::max (x, 0), 2 * m_prec_width);
+      y = std::min (std::max (y, 0), m_prec_height);
+      return m_prec_red [y * m_prec_width * 2 + x];
+    }
+
+  luminosity_t &dufay_prec_green (int x, int y)
+    {
+      x = std::min (std::max (x, 0), m_prec_width);
+      y = std::min (std::max (y, 0), m_prec_height);
+      return m_prec_green [y * m_prec_width + x];
+    }
   void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b);
 
   /* Diagonal cooredinates have coordiate vectors (0.5,0.5) and (-0.5,0.5)  */
