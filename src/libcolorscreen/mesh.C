@@ -102,18 +102,37 @@ mesh::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, 
   int ixmax = 0;
   int iymin = m_height;
   int iymax = 0;
-  for (int y = 0; y < m_height; y++)
-    for (int x = 0; x < m_width; x++)
+  for (int y = 0; y < m_height - 1; y++)
+    for (int x = 0; x < m_width - 1; x++)
       {
-        coord_t xx = m_data [y * m_width + x].x;
-        coord_t yy = m_data [y * m_width + x].y;
-	if (xx > x1 && xx < x2 && yy > y1 && yy < y2)
-	  {
-	    ixmin = std::min (ixmin, std::max (x - 1, 0));
-	    ixmax = std::max (ixmax, std::min (x + 1, m_width - 1));
-	    iymin = std::min (iymin, std::max (y - 1, 0));
-	    iymax = std::max (iymax, std::min (y + 1, m_height - 1));
-	  }
+        coord_t mminx = m_data [y * m_width + x].x;
+        coord_t mminy = m_data [y * m_width + x].y;
+	coord_t mmaxx = mminx;
+	coord_t mmaxy = mminy;
+
+	mminx = std::min (m_data [y * m_width + x + 1].x, mminx);
+	mmaxx = std::max (m_data [y * m_width + x + 1].x, mmaxx);
+	mminy = std::min (m_data [y * m_width + x + 1].y, mminy);
+	mmaxy = std::max (m_data [y * m_width + x + 1].y, mmaxy);
+
+	mminx = std::min (m_data [(y + 1) * m_width + x].x, mminx);
+	mmaxx = std::max (m_data [(y + 1) * m_width + x].x, mmaxx);
+	mminy = std::min (m_data [(y + 1) * m_width + x].y, mminy);
+	mmaxy = std::max (m_data [(y + 1) * m_width + x].y, mmaxy);
+
+	mminx = std::min (m_data [(y + 1) * m_width + x + 1].x, mminx);
+	mmaxx = std::max (m_data [(y + 1) * m_width + x + 1].x, mmaxx);
+	mminy = std::min (m_data [(y + 1) * m_width + x + 1].y, mminy);
+	mmaxy = std::max (m_data [(y + 1) * m_width + x + 1].y, mmaxy);
+
+	if (x1 > mmaxx || y1 > mmaxy)
+	  continue;
+	if (x2 < mminx || y2 < mminy)
+	  continue;
+	ixmin = std::min (ixmin, x);
+	ixmax = std::max (ixmax, std::min (x + 1, m_width - 1));
+	iymin = std::min (iymin, y);
+	iymax = std::max (iymax, std::min (y + 1, m_height - 1));
       }
   if (ixmin > ixmax)
     ixmin = ixmax = iymin = iymax = 0; 

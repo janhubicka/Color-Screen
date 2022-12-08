@@ -39,39 +39,39 @@ private:
 
   luminosity_t &prec_blue (int x, int y)
     {
-      x = std::min (std::max (x, 0), m_prec_width * 2);
-      y = std::min (std::max (y, 0), m_prec_height * 2);
+      x = std::min (std::max (x, 0), m_prec_width * 2 - 1);
+      y = std::min (std::max (y, 0), m_prec_height * 2 - 1);
       return m_prec_blue [y * m_prec_width * 2 + x];
     }
   luminosity_t &prec_red (int x, int y)
     { 
-      x = std::min (std::max (x, 0), m_prec_width);
-      y = std::min (std::max (y, 0), m_prec_height * 2);
+      x = std::min (std::max (x, 0), m_prec_width - 1);
+      y = std::min (std::max (y, 0), m_prec_height * 2 - 1);
       return m_prec_red [y * m_prec_width + x];
     }
   luminosity_t &prec_green (int x, int y) 
     {
-      x = std::min (std::max (x, 0), m_prec_width);
-      y = std::min (std::max (y, 0), m_prec_height * 2);
+      x = std::min (std::max (x, 0), m_prec_width - 1);
+      y = std::min (std::max (y, 0), m_prec_height * 2 - 1);
       return m_prec_green [y * m_prec_width + x];
     }
   luminosity_t &dufay_prec_blue (int x, int y)
     {
-      x = std::min (std::max (x, 0), m_prec_width);
-      y = std::min (std::max (y, 0), m_prec_height);
+      x = std::min (std::max (x, 0), m_prec_width - 1);
+      y = std::min (std::max (y, 0), m_prec_height - 1);
       return m_prec_blue [y * m_prec_width + x];
     }
   luminosity_t &dufay_prec_red (int x, int y)
     {
-      x = std::min (std::max (x, 0), 2 * m_prec_width);
-      y = std::min (std::max (y, 0), m_prec_height);
+      x = std::min (std::max (x, 0), 2 * m_prec_width - 1);
+      y = std::min (std::max (y, 0), m_prec_height - 1);
       return m_prec_red [y * m_prec_width * 2 + x];
     }
 
   luminosity_t &dufay_prec_green (int x, int y)
     {
-      x = std::min (std::max (x, 0), m_prec_width);
-      y = std::min (std::max (y, 0), m_prec_height);
+      x = std::min (std::max (x, 0), m_prec_width - 1);
+      y = std::min (std::max (y, 0), m_prec_height - 1);
       return m_prec_green [y * m_prec_width + x];
     }
   void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b);

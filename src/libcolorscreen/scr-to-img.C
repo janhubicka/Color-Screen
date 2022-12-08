@@ -146,7 +146,7 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
 		       int *scr_width, int *scr_height)
 {
   coord_t minx, miny, maxx, maxy;
-  if (!m_param.mesh_trans || 1)
+  if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
       coord_t xul,xur,xdl,xdr;
