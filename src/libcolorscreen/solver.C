@@ -6,7 +6,7 @@ const char *solver_parameters::point_color_names[(int)max_point_color] = {"red",
 namespace
 {
 bool debug_output = false;
-bool debug = true;
+bool debug = false;
 
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points,
@@ -82,7 +82,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	}
       else if (scrweights)
 	{
-	  coord_t dist = sqrt ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
+	  coord_t dist = /*sqrt*/ ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
 	  double weight = 1 / (dist + 0.5);
 	  gsl_vector_set (w, i * 2, weight);
 	  gsl_vector_set (w, i * 2 + 1, weight);
@@ -187,30 +187,40 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
   coord_t tilt_y_min=-1, tilt_y_max=1;
   int tilt_y_steps = 21;
   int nbest = 0;
+  int iterations = 10;
+
+  if (param->mesh_trans)
+    abort ();
 
 
   coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
   coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, sparam.npoints <= 10);
   if (sparam.npoints > 10)
     {
+      if (progress)
+	progress->set_task ("optimizing", tilt_x_steps * tilt_y_steps * iterations);
       for (int i = 0; i < 10; i++)
 	{
 	  coord_t txstep = (tilt_x_max - tilt_x_min) / (tilt_x_steps - 1);
 	  coord_t tystep = (tilt_y_max - tilt_y_min) / (tilt_y_steps - 1);
-	  for (int tx = 0; tx < tilt_x_steps; tx++)
-	    for (int ty = 0; ty < tilt_y_steps; ty++)
-	      {
-		param->tilt_x = tilt_x_min + txstep * tx;
-		param->tilt_y = tilt_y_min + tystep * ty;
-		coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y);
-		if (chi < chimin)
+	  if (!progress || !progress->cancel_requested ())
+	    for (int tx = 0; tx < tilt_x_steps; tx++)
+	      if (!progress || !progress->cancel_requested ())
+		for (int ty = 0; ty < tilt_y_steps; ty++)
 		  {
-		    chimin = chi;
-		    best_tiltx = param->tilt_x;
-		    best_tilty = param->tilt_y;
-		    nbest++;
+		    param->tilt_x = tilt_x_min + txstep * tx;
+		    param->tilt_y = tilt_y_min + tystep * ty;
+		    coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y);
+		    if (chi < chimin)
+		      {
+			chimin = chi;
+			best_tiltx = param->tilt_x;
+			best_tilty = param->tilt_y;
+			nbest++;
+		      }
+		    if (progress)
+		      progress->inc_progress ();
 		  }
-	      }
 	  param->tilt_x = best_tiltx;
 	  param->tilt_y = best_tilty;
 	  tilt_x_min = best_tiltx - txstep;
@@ -270,6 +280,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   mesh_trans->precompute_inverse ();
   return mesh_trans;
 }
+
 solver_parameters::point_location *
 solver_parameters::get_point_locations (enum scr_type type, int *n)
 {

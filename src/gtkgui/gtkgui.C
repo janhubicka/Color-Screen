@@ -85,14 +85,19 @@ redo_parameters (void)
 void
 solve ()
 {
+  bool mesh = false;
   save_parameters ();
   file_progress_info progress (stdout);
-  coord_t sq = solver (&current, scan, current_solver, &progress);
-  printf ("Solver %f\n", sq);
   if (current_mesh)
-    {
+  {
       delete current_mesh;
       current.mesh_trans = NULL;
+      mesh = true;
+  }
+  coord_t sq = solver (&current, scan, current_solver, &progress);
+  printf ("Solver %f\n", sq);
+  if (mesh)
+    {
       current_mesh = solver_mesh (&current, scan, current_solver, &progress);
     }
   setvals ();
@@ -479,11 +484,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'W' && ui_mode == screen_editing)
     {
       printf ("Solver editing mode entered\n");
+      display_scheduled = true;
       ui_mode = solver_editing;
     }
   if (k == 'w' && ui_mode == solver_editing)
     {
       printf ("Screen editing mode\n");
+      display_scheduled = true;
       ui_mode = screen_editing;
     }
   if (k == 'e' && ui_mode == screen_detection)
@@ -659,7 +666,6 @@ static int step;
       }
       if (k == 'N')
       {
-	printf ("Mesh\n");
 	if (current_mesh)
 	  delete current_mesh;
 	current.mesh_trans = NULL;
@@ -955,20 +961,21 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 
   draw_circle (surface, bigscale, xoffset, yoffset, current.lens_center_x, current.lens_center_y, 1, 0, 1);
 
-  for (int i = 0; i < current.n_motor_corrections; i++)
-    {
-      if (current.scanner_type == lens_move_horisontally)
-	{
-	  draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_x[i], 0, current.motor_correction_x[i], scan.height, 1, 1, 0);
-	  draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_y[i], 0, current.motor_correction_y[i], scan.height, 0, 1, 1);
-	}
-      else if (current.scanner_type == lens_move_vertically)
-	{
-	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_x[i], scan.width, current.motor_correction_x[i], 1, 1, 0);
-	  draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
-	}
-    }
-  if (current_solver.npoints)
+  if (current.n_motor_corrections && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
+    for (int i = 0; i < current.n_motor_corrections; i++)
+      {
+	if (current.scanner_type == lens_move_horisontally)
+	  {
+	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_x[i], 0, current.motor_correction_x[i], scan.height, 1, 1, 0);
+	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_y[i], 0, current.motor_correction_y[i], scan.height, 0, 1, 1);
+	  }
+	else if (current.scanner_type == lens_move_vertically)
+	  {
+	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_x[i], scan.width, current.motor_correction_x[i], 1, 1, 0);
+	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
+	  }
+      }
+  if (current_solver.npoints && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
     {
       scr_to_img map;
       map.set_parameters (current, scan);
@@ -1051,6 +1058,11 @@ static struct scr_to_img_parameters press_parameters;
 static int current_motor_correction = -1;
 static double current_motor_correction_val;
 
+static gdouble saved_scale_x, saved_scale_y;
+static gint saved_shift_x, saved_shift_y;
+static int saved_display_type;
+bool zoom_saved = false;
+
 G_MODULE_EXPORT void
 cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 {
@@ -1059,6 +1071,13 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
 					&scale_x, &scale_y, &shift_x,
 					&shift_y);
+  if (zoom_saved)
+    {
+      gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+					    saved_scale_x, saved_scale_y, saved_shift_x, saved_shift_y);
+      zoom_saved = false;
+      display_type = saved_display_type;
+    }
   if (!initialized)
     return;
   if (ui_mode == screen_detection)
@@ -1157,7 +1176,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	}
       if (current.scanner_type != fixed_lens && event->button == 3)
 	{
-	  double min_dist = 5 / scale_x;
+	  double min_dist = 5 / scale;
 	  int best_i = -1;
 	  for (int i = 0; i < current.n_motor_corrections; i++)
 	    {
@@ -1181,6 +1200,19 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       coord_t x = (event->x + shift_x) / scale_x;
       coord_t y = (event->y + shift_y) / scale_y;
+      const int desired_zoom = 16;
+      if (scale_x < desired_zoom && event->button == 1)
+	{
+	  zoom_saved = true;
+	  saved_display_type = display_type;
+	  display_type = 0;
+	  gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+						&saved_scale_x, &saved_scale_y, &saved_shift_x,
+						&saved_shift_y);
+	  gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+						desired_zoom, desired_zoom, desired_zoom * x - event->x, desired_zoom * y - event->y);
+	  return;
+	}
       coord_t screenx, screeny;
       coord_t pscreenx, pscreeny;
       coord_t rscreenx, rscreeny;
@@ -1254,14 +1286,24 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       else if (event->button == 3)
 	{
 	  int n;
+	  int best_n = -1;
+	  double best_dist = INT_MAX;
 	  for (n = 0; n < current_solver.npoints; n++)
-	    if (current_solver.point[n].screen_x == rscreenx && current_solver.point[n].screen_y == rscreeny)
-	      {
-		current_solver.remove_point (n);
-		maybe_solve ();
-		display_scheduled = true;
-		break;
-	      }
+	    {
+	      double dist = sqrt ((current_solver.point[n].img_x - x) * (current_solver.point[n].img_x - x) + (current_solver.point[n].img_y - y) * (current_solver.point[n].img_y - y));
+	      if (dist < 5 * std::min (scale_x, (gdouble)1) && dist < best_dist)
+		{
+		  best_n = n;
+		  best_dist = dist;
+		}
+	    }
+
+	  if (best_n > 0)
+	    {
+	      current_solver.remove_point (best_n);
+	      maybe_solve ();
+	      display_scheduled = true;
+	    }
 	}
     }
   else

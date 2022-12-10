@@ -53,12 +53,18 @@ struct solver_parameters
     point[npoints - 1].color = color;
     return npoints;
   }
+
   void
   remove_point (int n)
   {
+    /* Just for fun keep the order as points were added.  */
+    for (;n < npoints - 1; n++)
+      point[n] = point[n+1];
+#if 0
     if (n < 0 || n >= npoints)
       abort ();
     point[n] = point[npoints - 1];
+#endif
     npoints--;
   }
   void

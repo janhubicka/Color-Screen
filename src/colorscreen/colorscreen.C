@@ -100,6 +100,7 @@ main (int argc, char **argv)
   float age = -100;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
+  struct solver_parameters solver_param;
 
   binname = argv[0];
 
@@ -190,12 +191,24 @@ main (int argc, char **argv)
       perror (cspname);
       exit (1);
     }
-  if (!load_csp (in, &param, &dparam, &rparam, NULL, &error))
+  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
     {
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);
     }
   fclose (in);
+
+  if (solver_param.npoints)
+    {
+      if (verbose)
+	{
+	  printf ("Computing mesh");
+	  record_time ();
+	}
+      param.mesh_trans = solver_mesh (&param, scan, solver_param);
+      if (verbose)
+	print_time ();
+    }
 
   /* Apply command line parameters.  */
   if (age != -100)
