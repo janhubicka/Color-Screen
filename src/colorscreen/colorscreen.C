@@ -101,6 +101,7 @@ main (int argc, char **argv)
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
   struct solver_parameters solver_param;
+  bool force_precise = false;
 
   binname = argv[0];
 
@@ -134,6 +135,8 @@ main (int argc, char **argv)
 	  i++;
 	  color_model = parse_color_model (argv[i]);
 	}
+      else if (!strcmp (argv[i], "--precise"))
+	force_precise = true;
       else if (!strcmp (argv[i], "--dye-balance"))
 	{
 	  if (i == argc - 1)
@@ -197,6 +200,8 @@ main (int argc, char **argv)
       exit (1);
     }
   fclose (in);
+  if (force_precise)
+    rparam.precise = true;
 
   if (solver_param.npoints)
     {

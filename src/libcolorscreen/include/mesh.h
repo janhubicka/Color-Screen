@@ -73,6 +73,7 @@ public:
     point p = {x, y};
     int ix = (x + m_invxshift) * m_invxstepinv;
     int iy = (y + m_invyshift) * m_invystepinv;
+    int n = 0;
     if (ix >= 0 && iy >= 0 && ix < m_width - 1 && iy < m_height - 1)
       {
 	int pp = iy * m_invwidth + ix;
