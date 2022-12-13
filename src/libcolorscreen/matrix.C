@@ -69,49 +69,5 @@ main()
 	    abort ();
 	  }
 
-  {
-#if 1
-    mesh::point z = {5, 5};
-    mesh::point x = {11,6};
-    mesh::point y = {20, 20};
-    mesh::point a = {0.6, 0.3};
-#else
-    point z = {0, 0};
-    point x = {1,0};
-    point y = {1, 1};
-    point a = {0.6, 0.3};
-#endif
-    //point a = {0.5, 0};
-    mesh::point imga = mesh::triangle_interpolate (z, x, y, a);
-    mesh::point invimga = mesh::inverse_triangle_interpolate (z, x, y, imga);
-    if (fabs (invimga.x - a.x) > 0.0001 || fabs (invimga.y - a.y) > 0.0001)
-      {
-	printf ("Wrong inverse. Point %f %f maps to %f %f inversed %f %f\n",
-	        a.x, a.y, imga.x, imga.y, invimga.x, invimga.y);
-        abort ();
-      }
-  }
-  {
-    mesh::point tl = {1,1};
-    mesh::point tr = {2,2};
-    mesh::point bl = {1,2};
-    mesh::point br = {3,5};
-    for (int y = 0; y < 5; y++)
-    {
-      for (int x = 0; x < 5; x++)
-      {
-	mesh::point p = {x / 4.0, y / 4.0};
-	mesh::point p2 = mesh::interpolate (tl, tr, bl, br, p);
-	//printf (" (%2.2f, %2.2f)->(%2.2f, %2.2f)",p.x,p.y, p2.x, p2.y);
-	mesh::point pinv = mesh::inverse_interpolate (tl, tr, bl, br, p2);
-	if (fabs (p.x - pinv.x) > 0.0001 || fabs (p.y - pinv.y) > 0.0001)
-	  {
-	     printf ("\n Inverts to %f %f\n",pinv.x, pinv.y);
-	     abort ();
-	  }
-      }
-      //printf ("\n");
-    }
-  }
   return 0;
 }

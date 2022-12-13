@@ -7,6 +7,9 @@
 class mesh
 {
 public:
+  /* Conserve memory; we do not need to be that precise here since we interpolate across small regions.  */
+  typedef float mesh_coord_t;
+
   mesh(coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep, int width, int height)
   : m_data (NULL), m_invdata (NULL), m_xshift (xshift), m_yshift (yshift), m_xstep (xstep), m_ystep (ystep), m_xstepinv (1/xstep), m_ystepinv (1/ystep), m_width (width), m_height (height)
   {
@@ -18,7 +21,7 @@ public:
     free (m_invdata);
   }
   struct point {
-    coord_t x,y;
+    mesh_coord_t x,y;
   };
   void
   set_point (int x, int y, coord_t xx, coord_t yy)
@@ -62,7 +65,7 @@ public:
 	y = 1;
 	iy = m_height - 2;
       }
-    point p = {x, y};
+    point p = {(mesh_coord_t) x, (mesh_coord_t) y};
     p = interpolate (m_data[iy * m_width + ix], m_data[iy * m_width + ix + 1], m_data[(iy + 1) * m_width + ix], m_data[(iy + 1) * m_width + ix + 1], p);
     *xx = p.x;
     *yy = p.y;
@@ -70,29 +73,51 @@ public:
   void
   invert (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
   {
-    point p = {x, y};
+    point p = {(mesh_coord_t) x, (mesh_coord_t) y};
     int ix = (x + m_invxshift) * m_invxstepinv;
     int iy = (y + m_invyshift) * m_invystepinv;
-    int n = 0;
     if (ix >= 0 && iy >= 0 && ix < m_width - 1 && iy < m_height - 1)
       {
 	int pp = iy * m_invwidth + ix;
 	for (int y = m_invdata[pp].miny; y <= (int)m_invdata[pp].maxy; y++)
 	  for (int x = m_invdata[pp].minx; x <= (int)m_invdata[pp].maxx; x++)
 	    {
-	      point q = inverse_interpolate (m_data[y * m_width + x], m_data[y * m_width + x + 1], m_data[(y + 1) * m_width + x], m_data[(y + 1) * m_width + x + 1], p);
-#if 0
-	      if ((!x || q.x >= 0)
-		  && (!y || q.y >= 0)
-		  && (x == m_width - 2 || q.x <= 1)
-		  && (y == m_height - 2 || q.y <= 1))
-#endif
-	      if (q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1)
+	      point p1 = m_data[y * m_width + x];
+	      point p2 = m_data[y * m_width + x + 1];
+	      point p3 = m_data[(y + 1) * m_width + x];
+	      point p4 = m_data[(y + 1) * m_width + x + 1];
+
+	      mesh_coord_t sgn1 = sign (p, p1, p4);
+	      if (sgn1 > 0)
 		{
-		  *xx = (q.x + x) * m_xstep - m_xshift;
-		  *yy = (q.y + y) * m_ystep - m_yshift;
-		  return;
+		  if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
+		    continue;
+		  mesh_coord_t rx, ry;
+		  intersect_vectors (p1.x, p1.y,
+				     p.x - p1.x, p.y - p1.y,
+				     p3.x, p3.y,
+				     p4.x - p3.x, p4.y - p3.y,
+				     &rx, &ry);
+		  rx = 1 / rx;
+		  *xx = (ry * rx + x) * m_xstep - m_xshift;
+		  *yy = (rx + y) * m_ystep - m_yshift;
 		}
+	      else
+		{
+		  if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
+		    continue;
+		  mesh_coord_t rx, ry;
+		  intersect_vectors (p1.x, p1.y,
+				     p.x - p1.x, p.y - p1.y,
+				     p2.x, p2.y,
+				     p4.x - p2.x, p4.y - p2.y,
+				     &rx, &ry);
+		  rx = 1 / rx;
+		  *xx = (rx + x) * m_xstep - m_xshift;
+		  *yy = (ry * rx + y) * m_ystep - m_yshift;
+		}
+
+	      return;
 	    }
       }
     if (ix < m_invwidth / 2)
@@ -117,9 +142,9 @@ public:
     point ret;
     if (p.x != 0)
       {
-	coord_t yp = p.y / p.x;
-	coord_t x1 = x.x * (1 - yp) + y.x * yp;
-	coord_t y1 = x.y * (1 - yp) + y.y * yp;
+	mesh_coord_t yp = p.y / p.x;
+	mesh_coord_t x1 = x.x * (1 - yp) + y.x * yp;
+	mesh_coord_t y1 = x.y * (1 - yp) + y.y * yp;
 	ret.x = z.x * (1 - p.x) + x1 * p.x;
 	ret.y = z.y * (1 - p.x) + y1 * p.x;
       }
@@ -131,70 +156,21 @@ public:
     return ret;
   }
 
-  /* Inverse of triangle_intrepolate.  */
-
-  static point
-  inverse_triangle_interpolate (point z, point x, point y, point p)
-  {
-    point ret;
-    if (p.x != z.x || p.y != z.y)
-      {
-	/* Simplify so things z is (0.0).  */
-	x.x -= z.x;
-	x.y -= z.y;
-	y.x -= z.x;
-	y.y -= z.y;
-	p.x -= z.x;
-	p.y -= z.y;
-	intersect_vectors (0, 0, p.x, p.y, x.x, x.y, y.x - x.x, y.y - x.y, &ret.x, &ret.y);
-	ret.x = 1 / ret.x;
-	ret.y *= ret.x;
-      }
-    else
-      {
-	ret.x = 0;
-	ret.y = 0;
-      }
-    return ret;
-  }
   /* tl is a top left point, tr is top right, bl is bottom left and br is bottom right point
      of a square cell.  Interpolate point p accordingly.  */
   static point
   interpolate (point tl, point tr, point bl, point br, point p)
   {
     bool swap = (p.x < p.y);
-    //printf ("s:%i",swap);
     if (swap)
       {
 	std::swap (p.x, p.y);
 	std::swap (tr, bl);
       }
     p = triangle_interpolate (tl, tr, br, p);
-    //if (swap)
-      //std::swap (p.x, p.y);
     return p;
   }
 
-  static point
-  inverse_interpolate (point tl, point tr, point bl, point br, point p)
-  {
-    if (p.x == tl.x && p.y == tl.y)
-      {
-	point ret = {0, 0};
-	return ret;
-      }
-    bool swap = (p.x - tl.x) > 0 ? (((p.y - tl.y) * (br.x - tl.x)) > (br.y - tl.y) * (p.x - tl.x)) : (p.y - tl.y) > 0;
-    //printf ("t:%i",swap);
-    if (swap)
-      {
-	//std::swap (p.x, p.y);
-	std::swap (tr, bl);
-      }
-    point ret = inverse_triangle_interpolate (tl, tr, br, p);
-    if (swap)
-      std::swap (ret.x, ret.y);
-    return ret;
-  }
 private:
   struct mesh_inverse
     {
@@ -202,19 +178,25 @@ private:
     };
   point *m_data;
   mesh_inverse *m_invdata;
-  coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
+  mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
   int m_width, m_height;
-  coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv, m_invystepinv;
+  mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv, m_invystepinv;
   int m_invwidth, m_invheight;
+
+  static mesh_coord_t
+  sign (point p1, point p2, point p3)
+  {
+    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+  }
   /* Compute a, b such that
      x1 + dx1 * a = x2 + dx2 * b
      y1 + dy1 * a = y2 + dy2 * b  */
   static void
-  intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
-		     coord_t x2, coord_t y2, coord_t dx2, coord_t dy2,
-		     coord_t *a, coord_t *b)
+  intersect_vectors (mesh_coord_t x1, mesh_coord_t y1, mesh_coord_t dx1, mesh_coord_t dy1,
+		     mesh_coord_t x2, mesh_coord_t y2, mesh_coord_t dx2, mesh_coord_t dy2,
+		     mesh_coord_t *a, mesh_coord_t *b)
   {
-    matrix2x2<coord_t> m (dx1, dy1,
+    matrix2x2<mesh_coord_t> m (dx1, dy1,
 			  -dx2, -dy2);
     m = m.invert ();
     m.apply_to_vector (x2 - x1, y2 - y1, a, b);
