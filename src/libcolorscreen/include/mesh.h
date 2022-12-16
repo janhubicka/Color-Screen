@@ -82,14 +82,17 @@ public:
 	for (int y = m_invdata[pp].miny; y <= (int)m_invdata[pp].maxy; y++)
 	  for (int x = m_invdata[pp].minx; x <= (int)m_invdata[pp].maxx; x++)
 	    {
+	      /* Determine cell corners.  */
 	      point p1 = m_data[y * m_width + x];
 	      point p2 = m_data[y * m_width + x + 1];
 	      point p3 = m_data[(y + 1) * m_width + x];
 	      point p4 = m_data[(y + 1) * m_width + x + 1];
 
+	      /* Check if point is above or bellow diagonal.  */
 	      mesh_coord_t sgn1 = sign (p, p1, p4);
 	      if (sgn1 > 0)
 		{
+		  /* Check if point is inside of the triangle.  */
 		  if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
 		    continue;
 		  mesh_coord_t rx, ry;
@@ -104,6 +107,7 @@ public:
 		}
 	      else
 		{
+		  /* Check if point is inside of the triangle.  */
 		  if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
 		    continue;
 		  mesh_coord_t rx, ry;
@@ -133,6 +137,41 @@ public:
   void
   print (FILE *f);
   void precompute_inverse();
+private:
+  struct mesh_inverse
+    {
+      unsigned int minx, miny, maxx, maxy;
+    };
+  point *m_data;
+  mesh_inverse *m_invdata;
+  mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
+  int m_width, m_height;
+  mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv, m_invystepinv;
+  int m_invwidth, m_invheight;
+
+  static mesh_coord_t
+  sign (point p1, point p2, point p3)
+  {
+    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+  }
+  /* Compute a, b such that
+     x1 + dx1 * a = x2 + dx2 * b
+     y1 + dy1 * a = y2 + dy2 * b  */
+  static void
+  intersect_vectors (mesh_coord_t x1, mesh_coord_t y1, mesh_coord_t dx1, mesh_coord_t dy1,
+		     mesh_coord_t x2, mesh_coord_t y2, mesh_coord_t dx2, mesh_coord_t dy2,
+		     mesh_coord_t *a, mesh_coord_t *b)
+  {
+    matrix2x2<mesh_coord_t> m (dx1, dy1,
+			  -dx2, -dy2);
+    m = m.invert ();
+    m.apply_to_vector (x2 - x1, y2 - y1, a, b);
+#if 0
+    m.print (stderr);
+    printf ("%f %f\n", x1 + dx1 * *a, x2 + dx2 * *b);
+    printf ("%f %f\n", y1 + dy1 * *a, y2 + dy2 * *b);
+#endif
+  }
 
   /* Smoothly map triangle (0,0), (1,0), (1,1) to trangle z, x, y */
 
@@ -169,42 +208,6 @@ public:
       }
     p = triangle_interpolate (tl, tr, br, p);
     return p;
-  }
-
-private:
-  struct mesh_inverse
-    {
-      unsigned int minx, miny, maxx, maxy;
-    };
-  point *m_data;
-  mesh_inverse *m_invdata;
-  mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
-  int m_width, m_height;
-  mesh_coord_t m_invxshift, m_invyshift, m_invxstep, m_invystep, m_invxstepinv, m_invystepinv;
-  int m_invwidth, m_invheight;
-
-  static mesh_coord_t
-  sign (point p1, point p2, point p3)
-  {
-    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-  }
-  /* Compute a, b such that
-     x1 + dx1 * a = x2 + dx2 * b
-     y1 + dy1 * a = y2 + dy2 * b  */
-  static void
-  intersect_vectors (mesh_coord_t x1, mesh_coord_t y1, mesh_coord_t dx1, mesh_coord_t dy1,
-		     mesh_coord_t x2, mesh_coord_t y2, mesh_coord_t dx2, mesh_coord_t dy2,
-		     mesh_coord_t *a, mesh_coord_t *b)
-  {
-    matrix2x2<mesh_coord_t> m (dx1, dy1,
-			  -dx2, -dy2);
-    m = m.invert ();
-    m.apply_to_vector (x2 - x1, y2 - y1, a, b);
-#if 0
-    m.print (stderr);
-    printf ("%f %f\n", x1 + dx1 * *a, x2 + dx2 * *b);
-    printf ("%f %f\n", y1 + dy1 * *a, y2 + dy2 * *b);
-#endif
   }
 
 };

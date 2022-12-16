@@ -237,7 +237,7 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
     {
       out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
     }
-#pragma omp parallel shared(data,rtable,gtable,btable,out_table,p,progress) default(none)
+#pragma omp parallel for shared(data,rtable,gtable,btable,out_table,p,progress) default(none)
   for (int y = 0; y < p.img->height; y++)
     {
       for (int x = 0; x < p.img->width; x++)
@@ -251,6 +251,8 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
       if (progress)
 	 progress->inc_progress ();
     }
+  if (progress)
+    progress->set_task ("done", 1);
 
   free (rtable);
   free (gtable);
