@@ -254,8 +254,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  if (!progress || !progress->cancel_requested ())
 	    for (int y = 0 ; y < m_prec_height; y++)
 	      {
-		dufay_prec_red (2 * x, y) = pixel (0, 0.5,0.5, 0.3333);
-		dufay_prec_red (2 * x + 1, y) = pixel (0.5, 0.5, 0.5, 0.3333);
+		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5,0.5, 0.3333);
+		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5, 0.5, 0.3333);
 		dufay_prec_green (x, y) = pixel (0, 0, 0.5, 1 - 0.333);
 		dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 1 - 0.333);
 	      }
@@ -311,7 +311,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
     }
   else
     {
-      coord_t xx = 2*(x);
+      coord_t xx = 2*(x - 0.25);
       coord_t yy = y-0.5;
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);

@@ -12,7 +12,6 @@ public:
     : render (img, rparam, dstmaxval)
   {
     m_scr_to_img.set_parameters (param, img);
-    m_scr_to_img.get_range (m_img.width, m_img.height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
     m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift, &m_final_yshift, &m_final_width, &m_final_height);
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
@@ -20,16 +19,6 @@ public:
   DLL_PUBLIC bool precompute_all (progress_info *progress);
   DLL_PUBLIC bool precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
   DLL_PUBLIC bool precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
-  /* This returns screen coordinate width of rendered output.  */
-  int get_width ()
-  {
-    return m_scr_width;
-  }
-  /* This returns screen coordinate height of rendered output.  */
-  int get_height ()
-  {
-    return m_scr_height;
-  }
   /* This returns screen coordinate width of rendered output.  */
   int get_final_width ()
   {
@@ -51,12 +40,6 @@ protected:
 
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
-  /* Rectangular section of the screen to which the whole image fits.
-
-     The section is having dimensions scr_width x scr_height and will
-     start at position (-scr_xshift, -scr_yshift).  */
-  int m_scr_xshift, m_scr_yshift;
-  int m_scr_width, m_scr_height;
 
   int m_final_xshift, m_final_yshift;
   int m_final_width, m_final_height;
@@ -95,14 +78,14 @@ public:
   void inline render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
-    m_scr_to_img.to_img (x - m_scr_xshift, y - m_scr_yshift, &xx, &yy);
+    m_scr_to_img.to_img (x, y, &xx, &yy);
     render_pixel_img (xx, yy, r, g, b);
   }
   void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel (xx + m_scr_xshift, yy + m_scr_yshift, r, g, b);
+    render_pixel (xx, yy, r, g, b);
   }
 private:
   bool m_color;

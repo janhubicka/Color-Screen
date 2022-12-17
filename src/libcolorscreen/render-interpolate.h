@@ -8,10 +8,6 @@ public:
   render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity);
   ~render_interpolate ();
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
-  void render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    render_pixel_scr (x - m_scr_xshift, y - m_scr_yshift, r, g, b);
-  }
   void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
@@ -26,7 +22,9 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return precompute (-m_scr_xshift, -m_scr_yshift, -m_scr_xshift + m_img.width, -m_scr_yshift + m_scr_height, progress);
+    int xshift, yshift, width, height;
+    m_scr_to_img.get_range (0, 0, m_img.width, m_img.height, &xshift, &yshift, &width, &height);
+    return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
   bool precompute_img_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, progress_info *progress)
   {
