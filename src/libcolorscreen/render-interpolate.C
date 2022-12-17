@@ -212,8 +212,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  }
 	  if (progress)
 	    progress->set_task ("determining colors", m_prec_height);
-#define pixel(xo,yo,diag) m_params.precise && 0 ? sample_scr_diag_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, diag)\
-			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
+#define pixel(xo,yo,diag) get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
 #pragma omp parallel for default (none) shared (progress)
 	  for (int x = 0; x < m_prec_width; x++)
 	    {
