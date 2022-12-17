@@ -15,6 +15,7 @@
 
 typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
+typedef matrix2x2<coord_t> trans_2d_matrix;
 
 /* Types of supported screens.  */
 enum scr_type
@@ -73,6 +74,9 @@ struct DLL_PUBLIC scr_to_img_parameters
   coord_t tilt_x, tilt_y;
   coord_t k1;
 
+  /* Rotation from screen coordinates to final coordinates.  */
+  coord_t final_rotation;
+
   /* Stepping motor correction is described by a spline.  */
   coord_t *motor_correction_x, *motor_correction_y;
   int n_motor_corrections;
@@ -85,8 +89,8 @@ struct DLL_PUBLIC scr_to_img_parameters
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
     lens_center_x (0), lens_center_y (0), projection_distance (1), tilt_x (0), tilt_y(0), k1(0),
-    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (0), mesh_trans (NULL),
-    type (Finlay), scanner_type (fixed_lens)
+    final_rotation (0), motor_correction_x (NULL), motor_correction_y (NULL),
+    n_motor_corrections (0), mesh_trans (NULL), type (Finlay), scanner_type (fixed_lens)
   { }
   scr_to_img_parameters (const scr_to_img_parameters &from)
   : center_x (from.center_x), center_y (from.center_y),
@@ -94,7 +98,8 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
     lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
     projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y) , k1(from.k1),
-    motor_correction_x (NULL), motor_correction_y (NULL), n_motor_corrections (from.n_motor_corrections),
+    final_rotation (0), motor_correction_x (NULL), motor_correction_y (NULL),
+    n_motor_corrections (from.n_motor_corrections),
     mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type)
   {
     if (n_motor_corrections)
@@ -134,6 +139,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     tilt_x = from.tilt_x;
     tilt_y = from.tilt_y;
     k1 = from.k1;
+    final_rotation = from.final_rotation;
     type = from.type;
     scanner_type = from.scanner_type;
     mesh_trans = from.mesh_trans;
@@ -161,9 +167,9 @@ struct DLL_PUBLIC scr_to_img_parameters
 	   && coordinate2_y == other.coordinate2_y
 	   && lens_center_x == other.lens_center_x
 	   && lens_center_y == other.lens_center_y
-	   // TODO: motor correction scanner type
 	   && projection_distance == other.projection_distance
 	   && k1 == other.k1
+	   && final_rotation == other.final_rotation
 	   && tilt_x == other.tilt_x
 	   && tilt_y == other.tilt_y
 	   && type == other.type
@@ -218,6 +224,13 @@ public:
       		  coord_t x2, coord_t y2,
 		  int *scr_xshift, int *scr_yshift,
 		  int *scr_width, int *scr_height);
+  void get_final_range (int img_width, int img_height,
+			int *final_xshift, int *final_yshift,
+			int *final_width, int *final_height);
+  void get_final_range (coord_t x1, coord_t y1,
+			coord_t x2, coord_t y2,
+			int *final_xshift, int *final_yshift,
+			int *final_width, int *final_height);
 
   scr_to_img ()
   : m_motor_correction (NULL)
@@ -349,6 +362,28 @@ public:
 	  }
       }
   }
+  void
+  scr_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  {
+    m_scr_to_final_matrix.apply_to_vector (x, y, xp, yp);
+  }
+  void
+  final_to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  {
+    m_final_to_scr_matrix.apply_to_vector (x, y, xp, yp);
+  }
+  void
+  img_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  {
+    to_scr (x, y, &x, &y);
+    scr_to_final (x, y, xp, yp);
+  }
+  void
+  final_to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  {
+    final_to_scr (x, y, &x, &y);
+    to_img (x, y, xp, yp);
+  }
   enum scr_type
   get_type ()
   {
@@ -369,6 +404,10 @@ private:
   /* Invertedd matrix.  */
   trans_3d_matrix m_inverse_matrix;
   std::atomic_ulong m_nwarnings;
+
+  /* Matrix transforming final cordinates to screen coordinates.  */
+  trans_2d_matrix m_final_to_scr_matrix;
+  trans_2d_matrix m_scr_to_final_matrix;
 
   scr_to_img_parameters m_param;
 

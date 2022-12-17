@@ -14,6 +14,8 @@ main()
 			7,8);
   matrix<double, 2> mm = m1 * m2;
   assert (mm.m_elements[0][0]==19 && mm.m_elements[1][0]==22 && mm.m_elements[0][1]==43 && mm.m_elements[1][1]==50);
+  mm = m1 * m1.invert ();
+  assert (mm.m_elements[0][0]==1 && mm.m_elements[1][0]==0 && mm.m_elements[0][1]==0 && mm.m_elements[1][1]==1);
   matrix4x4<double> m;
   double xr, yr;
   luminosity_t x,y,z;

@@ -255,178 +255,6 @@ static bool freeze_y = false;
 static void display ();
 static int setcolor;
 
-#if 0
-static void
-optimize (double xc, double yc, double cr, int stepsc, double x1, double y1,
-	  double r1, int steps1, double r2, int steps2)
-{
-  scr_to_img_parameters best;
-  scr_to_img_parameters c = current;
-  double max = -1;
-  static const int outertiles = 8;
-  static const int innertiles = 128;
-  save_parameters ();
-  //double xxc = 0;
-  //double yyc = 0;
-  rparams.saturation = 4;
-  rparams.screen_blur_radius = 0;
-  printf ("optimization %i %i %i\n", stepsc, steps1, steps2);
-//#pragma openmp parallel for
-  for (double xx1 = x1 - r1; xx1 <= x1 + r1; xx1 += 2 * r1 / steps1)
-    {
-      for (double yy1 = y1 - r1; yy1 <= y1 + r1; yy1 += 2 * r1 / steps1)
-	{
-	  if (fabs (xx1) >= 3 * fabs (yy1))
-	  for (double xxc = xc - cr; xxc <= xc + cr; xxc += 2 * cr / stepsc)
-	    {
-	      for (double yyc = yc - cr; yyc <= yc + cr;
-		   yyc += 2 * cr / stepsc)
-		{
-		  for (double xx2 = 1 - r2; xx2 <= 1 + r2;
-		       xx2 += 2 * r2 / steps2)
-		    {
-		      for (double yy2 = 1 - r2; yy2 <= 1 + r2;
-			   yy2 += 2 * r2 / steps2)
-			{
-			  c.center_x = xxc;
-			  c.center_y = yyc;
-			  c.coordinate1_x = xx1;
-			  c.coordinate1_y = yy1;
-			  c.coordinate2_x = -yy1 * xx2;
-			  c.coordinate2_y = xx1 * yy2;
-			  double acc = 0;
-			  bool found = true;
-			  {
-			    render_superpose_img render (c, scan, rparams, 255, false);
-			    double scr_xsize =
-			      render.get_width (), scr_ysize =
-			      render.get_height ();
-				render.precompute_all (NULL);
-			    if ((scr_xsize > 600 || scr_ysize > 600) && scr_xsize < 20000)
-			    {
-			      found = true;
-			    int tilewidth = scan.width / outertiles;
-			    int tileheight = scan.height / outertiles;
-			    int stepwidth = tilewidth / innertiles;
-			    int stepheight = tileheight / innertiles;
-			    render.precompute_all (NULL);
-			    for (int x = 0; x < outertiles; x++)
-			      for (int y = 0; y < outertiles; y++)
-				{
-				  luminosity_t red = 0, green = 0, blue = 0;
-				  render.analyze_tile (x * tilewidth, y * tileheight,
-						       tilewidth, tileheight,
-						       stepwidth, stepheight,
-						       &red, &green, &blue);
-				  double sum = (red + green + blue);
-				  if (sum)
-				  {
-				    sum = 1/sum;
-				    acc +=
-				      fabs (1 - red * sum) + fabs (1 - green * sum) +
-				      fabs (1 - blue * sum);
-				  }
-				}
-			    }
-
-#if 0
-			    render_fast render (c, scan, rparams, 65536);
-			    double scr_xsize =
-			      render.get_width (), scr_ysize =
-			      render.get_height ();
-				render.precompute_all ();
-			    if ((scr_xsize > 600 || scr_ysize > 600) && scr_xsize < 20000)
-			      {
-				found = true;
-				int gg=0,bb=0,rr=0;
-				for (int x = 0; x < outertiles; x++)
-				  for (int y = 0; y < outertiles; y++)
-				    {
-				      int red = 0, green = 0, blue = 0;
-				      for (int sx = 0; sx < innertiles; sx++)
-					for (int sy = 0; sy < innertiles;
-					     sy++)
-					  {
-					    int r, g, b;
-					    render.
-					      render_pixel ((x * innertiles +
-							     sx) * scr_xsize /
-							    (innertiles *
-							     outertiles),
-							    (y * innertiles +
-							     sy) * scr_ysize /
-							    (innertiles *
-							     outertiles), &r,
-							    &g, &b);
-					    red += r;
-					    green += g;
-					    blue += b;
-					    if (r > g && r > b)
-					      rr++;
-					    else if (b > r && b > g)
-					      bb++;
-					    else if (g > r && g > b)
-					      gg++;
-					  }
-#if 0
-				      //acc += std::max (rr, std::max (gg, bb));
-				      if (rr / 3 > innertiles * innertiles / 2)
-					acc++;
-				      if (gg / 3 > innertiles * innertiles / 2)
-					acc++;
-				      if (bb / 3 > innertiles * innertiles / 2)
-					acc++;
-#endif
-#if 1
-				      int avg = (red + green + blue) / 3;
-				      acc +=
-					abs (avg - red) + abs (avg - green) +
-					abs (avg - blue);
-				      //(avg - red) * (avg - red) + (avg - green) * (avg -green) + (avg - blue) * (avg-blue);
-#endif
-				    }
-			      }
-#endif
-			  }
-			  if (found && acc > max)
-			    {
-//#pragma openmp critical
-			      if (acc > max)
-				{
-				  max = acc;
-				  printf ("%f %f\n", (double)acc, (double)max);
-				  best = c;
-				  save_csp (stdout, &c, NULL, NULL);
-				  current = c;
-				  display ();
-				}
-			    }
-			  if (steps2 <= 1)
-			    break;
-			}
-		      if (steps2 <= 1)
-			break;
-		    }
-		  if (stepsc <= 1)
-		    break;
-		}
-	      if (stepsc <= 1)
-		break;
-	    }
-	  if (steps1 <= 1)
-	    break;
-	}
-#if 0
-      if (steps1 <= 1)
-	break;
-#endif
-    }
-  current = best;
-  display_scheduled = true;
-  preview_display_scheduled = true;
-}
-#endif
-
 /* Handle all the magic keys.  */
 static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
@@ -568,33 +396,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	setcenter = true;
       if (k == 'C')
 	set_lens_center = true;
-#if 0
-      if (k == 'O' && 0)
-	{
-static int step;
-	  if (step == 0)
-	    {
-	      optimize (current.center_x,  current.center_y, 0, 1,  //center
-			30, 0, 27, 100,  //x1
-			0, 1);
-	      step++;
-	    }
-	  else if (step == 1)
-	  {
-	      optimize (current.center_x,  current.center_y, (fabs (current.coordinate1_x)+fabs (current.coordinate1_y))/8,10,  //center
-			current.coordinate1_x, current.coordinate1_y, 19.0*2/100, 10,  //x1
-			0.003, 5);
-	      step++;
-	    }
-	  else if (step == 2)
-	    {
-	      optimize (current.center_x,  current.center_y, 0, 1,  //center
-			current.coordinate1_x, current.coordinate1_y, 2, 10,  //x1
-			0.001, 10);
-	      step++;
-	    }
-	}
-#endif
       if (k == 'x')
 	{
 	  freeze_x = false;
@@ -850,7 +651,7 @@ previewrender (GdkPixbuf ** pixbuf)
 {
   guint8 *pixels;
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
-  int scr_xsize = render.get_width (), scr_ysize = render.get_height (), rowstride;
+  int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
   coord_t step = max_size / (coord_t)PREVIEWSIZE;
   int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
@@ -867,7 +668,7 @@ previewrender (GdkPixbuf ** pixbuf)
     for (int x = 0; x < my_xsize; x ++)
       {
 	int red, green, blue;
-	render.render_pixel (x * step, y * step, &red, &green, &blue);
+	render.render_pixel_final (x * step, y * step, &red, &green, &blue);
 	my_putpixel (pixels, rowstride, x, y, red, green, blue);
       }
   cairo_surface_t *surface

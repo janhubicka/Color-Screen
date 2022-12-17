@@ -133,7 +133,7 @@ public:
     else
       *yy = -m_yshift + m_ystep * m_height;
   }
-  void get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax);
+  void get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax);
   void
   print (FILE *f);
   void precompute_inverse();
@@ -162,8 +162,8 @@ private:
 		     mesh_coord_t x2, mesh_coord_t y2, mesh_coord_t dx2, mesh_coord_t dy2,
 		     mesh_coord_t *a, mesh_coord_t *b)
   {
-    matrix2x2<mesh_coord_t> m (dx1, dy1,
-			  -dx2, -dy2);
+    matrix2x2<mesh_coord_t> m (dx1, -dx2,
+			       dy1, -dy2);
     m = m.invert ();
     m.apply_to_vector (x2 - x1, y2 - y1, a, b);
 #if 0

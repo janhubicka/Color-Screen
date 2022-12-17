@@ -57,6 +57,19 @@ public:
   }
 };
 
+class rotation_2x2matrix: public matrix2x2<coord_t>
+{
+  public:
+  rotation_2x2matrix (double rotation)
+  {
+    rotation *= M_PI / 180;
+    double s = sin (rotation);
+    double c = cos (rotation);
+    m_elements[0][0] = c; m_elements[1][0] = -s;
+    m_elements[0][1] = s; m_elements[1][1] =  c;
+  }
+};
+
 }
 
 /* Initilalize the translation matrix to PARAM.  */
@@ -132,6 +145,10 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 
   m_matrix = mm;
   m_inverse_matrix = m_matrix.invert ();
+
+  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 : 0);
+  m_scr_to_final_matrix = rotation_2x2matrix (rotate);
+  m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }
 
 /* Determine rectangular section of the screen to which the whole image
@@ -194,7 +211,10 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
 	}
     }
   else
-    m_param.mesh_trans->get_range (x1, y1, x2, y2, &minx, &maxx, &miny, &maxy);
+  {
+    matrix2x2<coord_t> identity;
+    m_param.mesh_trans->get_range (identity, x1, y1, x2, y2, &minx, &maxx, &miny, &maxy);
+  }
 
 
   /* Determine the coordinates.  */
@@ -216,4 +236,88 @@ scr_to_img::get_range (int img_width, int img_height,
   get_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height,
 	     scr_xshift, scr_yshift,
 	     scr_width, scr_height);
+}
+/* Determine rectangular section of the screen to which the whole image
+   with dimension img_width x img_height fits.
+
+   The section is having dimensions scr_width x scr_height and will
+   start at position (-scr_xshift, -scr_yshift).  */
+void
+scr_to_img::get_final_range (coord_t x1, coord_t y1,
+			     coord_t x2, coord_t y2,
+			     int *final_xshift, int *final_yshift,
+			     int *final_width, int *final_height)
+{
+  coord_t minx, miny, maxx, maxy;
+  if (!m_param.mesh_trans)
+    {
+      /* Compute all the corners.  */
+      coord_t xul,xur,xdl,xdr;
+      coord_t yul,yur,ydl,ydr;
+
+      img_to_final (x1, y1, &xul, &yul);
+      img_to_final (x2, y1, &xur, &yur);
+      img_to_final (x1, y2, &xdl, &ydl);
+      img_to_final (x2, y2, &xdr, &ydr);
+
+      /* Find extremas.  */
+      minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
+      miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
+      maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
+      maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
+
+      /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
+      if ((m_param.k1 || m_param.tilt_x || m_param.tilt_y) && 0)
+	{
+	  const int steps = 16*1024;
+	  for (int i = 1; i < steps; i++)
+	    {
+	      coord_t xx,yy;
+	      img_to_final (x1 + (x2 - x1) * i / steps, y1, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      img_to_final (x1 + (x2 - x1) * i / steps, y2, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      img_to_final (x1, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	      img_to_final (x2, y1 + (y2 - y1) * i / steps, &xx, &yy);
+	      minx = std::min (minx, xx);
+	      miny = std::min (miny, yy);
+	      maxx = std::max (maxx, xx);
+	      maxy = std::max (maxy, yy);
+	    }
+	}
+    }
+  else
+    m_param.mesh_trans->get_range (m_scr_to_final_matrix, x1, y1, x2, y2, &minx, &maxx, &miny, &maxy);
+
+
+  /* Determine the coordinates.  */
+  *final_xshift = -minx - 1;
+  *final_yshift = -miny - 1;
+  *final_width = maxx-minx + 2;
+  *final_height = maxy-miny + 2;
+}
+
+/* Determine rectangular section of the final coordiantes to which the whole image
+   with dimension img_width x img_height fits.
+
+   The section is having dimensions scr_width x scr_height and will
+   start at position (-scr_xshift, -scr_yshift).  */
+void
+scr_to_img::get_final_range (int img_width, int img_height,
+			     int *final_xshift, int *final_yshift,
+			     int *final_width, int *final_height)
+{
+  get_final_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height,
+		   final_xshift, final_yshift,
+		   final_width, final_height);
 }

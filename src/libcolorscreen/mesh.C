@@ -95,49 +95,116 @@ mesh::precompute_inverse()
     }
 #endif
 }
+
+/* Get rectangular range of source coordinates which covers range given by x1,y1,x2,y2 transformed by trans in image coordinates.  */
 void
-mesh::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax)
+mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax)
 {
+#if 0
   int ixmin = m_width;
   int ixmax = 0;
   int iymin = m_height;
   int iymax = 0;
+#endif
+  coord_t ixmin = 0;
+  coord_t ixmax = 0;
+  coord_t iymin = 0;
+  coord_t iymax = 0;
+  bool found = false;
   for (int y = 0; y < m_height - 1; y++)
     for (int x = 0; x < m_width - 1; x++)
       {
-        mesh_coord_t mminx = m_data [y * m_width + x].x;
-        mesh_coord_t mminy = m_data [y * m_width + x].y;
-	mesh_coord_t mmaxx = mminx;
-	mesh_coord_t mmaxy = mminy;
+	//matrix2x2 <mesh_coord_t> identity;
+	mesh_coord_t xx, yy;
+	//trans.apply_to_vector (m_data [y * m_width + x].x, m_data [y * m_width + x].y, &xx, &yy);
+	xx = m_data [y * m_width + x].x;
+	yy = m_data [y * m_width + x].y;
+        mesh_coord_t mminx = xx;
+        mesh_coord_t mminy = yy;
+	mesh_coord_t mmaxx = xx;
+	mesh_coord_t mmaxy = yy;
 
-	mminx = std::min (m_data [y * m_width + x + 1].x, mminx);
-	mmaxx = std::max (m_data [y * m_width + x + 1].x, mmaxx);
-	mminy = std::min (m_data [y * m_width + x + 1].y, mminy);
-	mmaxy = std::max (m_data [y * m_width + x + 1].y, mmaxy);
+	//trans.apply_to_vector (m_data [y * m_width + x + 1].x, m_data [y * m_width + x + 1].y, &xx, &yy);
+	xx = m_data [y * m_width + x + 1].x;
+	yy = m_data [y * m_width + x + 1].y;
+	mminx = std::min ((mesh_coord_t)xx, mminx);
+	mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
+	mminy = std::min ((mesh_coord_t)yy, mminy);
+	mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
 
-	mminx = std::min (m_data [(y + 1) * m_width + x].x, mminx);
-	mmaxx = std::max (m_data [(y + 1) * m_width + x].x, mmaxx);
-	mminy = std::min (m_data [(y + 1) * m_width + x].y, mminy);
-	mmaxy = std::max (m_data [(y + 1) * m_width + x].y, mmaxy);
+	//trans.apply_to_vector (m_data [(y + 1) * m_width + x].x, m_data [(y + 1) * m_width + x].y, &xx, &yy);
+	xx = m_data [(y + 1) * m_width + x].x;
+	yy = m_data [(y + 1) * m_width + x].y;
+	mminx = std::min ((mesh_coord_t)xx, mminx);
+	mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
+	mminy = std::min ((mesh_coord_t)yy, mminy);
+	mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
 
-	mminx = std::min (m_data [(y + 1) * m_width + x + 1].x, mminx);
-	mmaxx = std::max (m_data [(y + 1) * m_width + x + 1].x, mmaxx);
-	mminy = std::min (m_data [(y + 1) * m_width + x + 1].y, mminy);
-	mmaxy = std::max (m_data [(y + 1) * m_width + x + 1].y, mmaxy);
+	//trans.apply_to_vector (m_data [(y + 1) * m_width + x + 1].x, m_data [(y + 1) * m_width + x + 1].y, &xx, &yy);
+	xx = m_data [(y + 1) * m_width + x + 1].x;
+	yy = m_data [(y + 1) * m_width + x + 1].y;
+	mminx = std::min ((mesh_coord_t)xx, mminx);
+	mmaxx = std::max ((mesh_coord_t)xx, mmaxx);
+	mminy = std::min ((mesh_coord_t)yy, mminy);
+	mmaxy = std::max ((mesh_coord_t)yy, mmaxy);
 
 	if (x1 > mmaxx || y1 > mmaxy)
 	  continue;
 	if (x2 < mminx || y2 < mminy)
 	  continue;
+	coord_t px, py;
+	trans.apply_to_vector (x * m_xstep - m_xshift, y * m_ystep - m_yshift, &px, &py);
+	coord_t pxmin = px;
+	coord_t pxmax = px;
+	coord_t pymin = py;
+	coord_t pymax = py;
+	trans.apply_to_vector ((x + 1) * m_xstep - m_xshift, y * m_ystep - m_yshift, &px, &py);
+	pxmin = std::min (pxmin, px);
+	pxmax = std::max (pxmax, px);
+	pymin = std::min (pymin, py);
+	pymax = std::max (pymax, py);
+	trans.apply_to_vector (x * m_xstep - m_xshift, (y + 1) * m_ystep - m_yshift, &px, &py);
+	pxmin = std::min (pxmin, px);
+	pxmax = std::max (pxmax, px);
+	pymin = std::min (pymin, py);
+	pymax = std::max (pymax, py);
+	trans.apply_to_vector ((x + 1) * m_xstep - m_xshift, (y + 1) * m_ystep - m_yshift, &px, &py);
+	pxmin = std::min (pxmin, px);
+	pxmax = std::max (pxmax, px);
+	pymin = std::min (pymin, py);
+	pymax = std::max (pymax, py);
+	if (!found)
+	  {
+	    ixmin = pxmin;
+	    ixmax = pxmax;
+	    iymin = pymin;
+	    iymin = pymax;
+	    found = true;
+	  }
+	else
+	  {
+	     ixmin = std::min (ixmin, pxmin);
+	     ixmax = std::max (ixmax, pxmax);
+	     iymin = std::min (iymin, pymin);
+	     iymax = std::max (iymax, pymax);
+	  }
+#if 0
 	ixmin = std::min (ixmin, x);
 	ixmax = std::max (ixmax, std::min (x + 1, m_width - 1));
 	iymin = std::min (iymin, y);
 	iymax = std::max (iymax, std::min (y + 1, m_height - 1));
+#endif
       }
+#if 0
   if (ixmin > ixmax)
     ixmin = ixmax = iymin = iymax = 0; 
   *xmin = floor (ixmin * m_xstep - m_xshift);
   *xmax = ceil (ixmax * m_xstep - m_xshift);
   *ymin = floor (iymin * m_ystep - m_yshift);
   *ymax = ceil (iymax * m_ystep - m_yshift);
+#endif
+  *xmin = ixmin;
+  *xmax = ixmax;
+  *ymin = iymin;
+  *ymax = iymax;
 }

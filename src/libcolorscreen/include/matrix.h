@@ -141,8 +141,8 @@ public:
   invert ()
   {
     T a = B::m_elements[0][0];
-    T b = B::m_elements[0][1];
-    T c = B::m_elements[1][0];
+    T b = B::m_elements[1][0];
+    T c = B::m_elements[0][1];
     T d = B::m_elements[1][1];
     T det_rec = 1 / (a * d - b * c);
     matrix2x2 ret (d * det_rec, -b * det_rec, -c * det_rec, a * det_rec);
@@ -241,8 +241,8 @@ public:
   inverse_perspective_transform (T x, T y, T &xr, T &yr)
   {
     matrix2x2<T> m (B::m_elements[0][0] - B::m_elements[0][2] * x,
-	            B::m_elements[1][0] - B::m_elements[1][2] * x,
 	            B::m_elements[0][1] - B::m_elements[0][3] * y,
+	            B::m_elements[1][0] - B::m_elements[1][2] * x,
 	            B::m_elements[1][1] - B::m_elements[1][3] * y);
     matrix2x2<T> m2 = m.invert ();
     T xx = (B::m_elements[2][2]+B::m_elements[3][2])*x - B::m_elements[2][0] - B::m_elements[3][0];

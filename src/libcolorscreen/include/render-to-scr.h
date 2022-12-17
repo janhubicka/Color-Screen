@@ -13,6 +13,7 @@ public:
   {
     m_scr_to_img.set_parameters (param, img);
     m_scr_to_img.get_range (m_img.width, m_img.height, &m_scr_xshift, &m_scr_yshift, &m_scr_width, &m_scr_height);
+    m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift, &m_final_yshift, &m_final_width, &m_final_height);
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
@@ -28,6 +29,16 @@ public:
   int get_height ()
   {
     return m_scr_height;
+  }
+  /* This returns screen coordinate width of rendered output.  */
+  int get_final_width ()
+  {
+    return m_final_width;
+  }
+  /* This returns screen coordinate height of rendered output.  */
+  int get_final_height ()
+  {
+    return m_final_height;
   }
   DLL_PUBLIC static bool render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
@@ -46,6 +57,9 @@ protected:
      start at position (-scr_xshift, -scr_yshift).  */
   int m_scr_xshift, m_scr_yshift;
   int m_scr_width, m_scr_height;
+
+  int m_final_xshift, m_final_yshift;
+  int m_final_width, m_final_height;
 };
 
 /* Do no rendering of color screen.  */
@@ -83,6 +97,12 @@ public:
     coord_t xx, yy;
     m_scr_to_img.to_img (x - m_scr_xshift, y - m_scr_yshift, &xx, &yy);
     render_pixel_img (xx, yy, r, g, b);
+  }
+  void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_pixel (xx + m_scr_xshift, yy + m_scr_yshift, r, g, b);
   }
 private:
   bool m_color;

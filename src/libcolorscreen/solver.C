@@ -82,8 +82,8 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	}
       else if (scrweights)
 	{
-	  coord_t dist = /*sqrt*/ pow ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y), 4);
-	  //coord_t dist = /*sqrt*/ ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
+	  //coord_t dist = /*sqrt*/ pow ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y), 4);
+	  coord_t dist = /*sqrt*/ ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
 	  double weight = 1 / (dist + 0.5);
 	  gsl_vector_set (w, i * 2, weight);
 	  gsl_vector_set (w, i * 2 + 1, weight);
@@ -183,9 +183,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 {
   if (sparam.npoints < 3)
     return 0;
-  coord_t tilt_x_min=-1, tilt_x_max=1;
+  coord_t tilt_x_min=-3, tilt_x_max=3;
   int tilt_x_steps = 21;
-  coord_t tilt_y_min=-1, tilt_y_max=1;
+  coord_t tilt_y_min=-3, tilt_y_max=3;
   int tilt_y_steps = 21;
   int nbest = 0;
   int iterations = 10;
@@ -196,7 +196,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 
   coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
   coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, sparam.npoints <= 10);
-  if (sparam.npoints > 100000)
+  if (sparam.npoints > 10)
     {
       if (progress)
 	progress->set_task ("optimizing", tilt_x_steps * tilt_y_steps * iterations);
@@ -241,7 +241,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   if (sparam.npoints < 10)
     return NULL;
   int xshift, yshift, width, height;
-  int step = 1;
+  int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;

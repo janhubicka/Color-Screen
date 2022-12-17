@@ -12,6 +12,12 @@ public:
   {
     render_pixel_scr (x - m_scr_xshift, y - m_scr_yshift, r, g, b);
   }
+  void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_pixel_scr (xx, yy, r, g, b);
+  }
   void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;

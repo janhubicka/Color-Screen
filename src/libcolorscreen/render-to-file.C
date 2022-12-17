@@ -146,8 +146,8 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	double render_width = render.get_width ();
-	double render_height = render.get_height ();
+	double render_width = render.get_final_width ();
+	double render_height = render.get_final_height ();
 	double out_stepx, out_stepy;
 	int outwidth;
 	int outheight;
@@ -167,7 +167,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    for (int x = 0; x < outwidth; x++)
 	      {
 		int rr, gg, bb;
-		render.render_pixel (x * out_stepx, y * out_stepy, &rr, &gg,
+		render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
 				     &bb);
 		outrow[3 * x] = rr;
 		outrow[3 * x + 1] = gg;
@@ -195,8 +195,8 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	double render_width = render.get_width ();
-	double render_height = render.get_height ();
+	double render_width = render.get_final_width ();
+	double render_height = render.get_final_height ();
 	double out_stepx, out_stepy;
 	int outwidth;
 	int outheight;
@@ -226,7 +226,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    for (int x = 0; x < outwidth; x++)
 	      {
 		int rr, gg, bb;
-		render.render_pixel (x * out_stepx, y * out_stepy, &rr, &gg,
+		render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
 				     &bb);
 		outrow[3 * x] = rr;
 		outrow[3 * x + 1] = gg;
