@@ -157,6 +157,10 @@ done:
   DLL_PUBLIC static bool render_tile (enum render_scr_detect_type_t render_type, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *p = NULL);
+  color_class_map *get_color_class_map ()
+  {
+    return m_color_class_map;
+  }
 protected:
   scr_detect m_scr_detect;
   color_class_map *m_color_class_map;

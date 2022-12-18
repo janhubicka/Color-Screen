@@ -424,6 +424,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == solver_editing)
     {
+      if (k == 'd')
+	{
+	  save_parameters ();
+	  current.type = Dufay;
+	  file_progress_info progress (stdout);
+	  detect_solver_points (scan, current_scr_detect, current_solver, &progress);
+	}
       if (k == 'a')
 	autosolving = false;
       if (k == 'A')

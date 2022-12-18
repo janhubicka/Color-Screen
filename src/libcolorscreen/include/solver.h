@@ -3,6 +3,8 @@
 #include "scr-to-img.h"
 #include "color.h"
 #include "progress-info.h"
+#include "scr-detect.h"
+#include "imagedata.h"
 struct solver_parameters
 {
   solver_parameters ()
@@ -68,6 +70,11 @@ struct solver_parameters
     npoints--;
   }
   void
+  remove_points ()
+  {
+    npoints = 0;
+  }
+  void
   dump (FILE *out)
   {
     for (int i =0; i < npoints; i++)
@@ -78,6 +85,9 @@ struct solver_parameters
   static point_location *get_point_locations (enum scr_type type, int *n);
 };
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
+coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
+void detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress);
+
 
 #endif

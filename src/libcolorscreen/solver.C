@@ -179,6 +179,14 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 } 
 
 coord_t
+simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
+{
+  if (progress)
+    progress->set_task ("optimizing", 1);
+  return solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, true);
+}
+
+coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
   if (sparam.npoints < 3)

@@ -147,7 +147,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-progress-info.lo \
 	libcolorscreen_la-render-to-file.lo libcolorscreen_la-color.lo \
 	libcolorscreen_la-sensitivity.lo libcolorscreen_la-solver.lo \
-	libcolorscreen_la-mesh.lo
+	libcolorscreen_la-mesh.lo \
+	libcolorscreen_la-scr-detect-geometry.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -188,6 +189,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-color.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render.Plo \
+	./$(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Plo \
 	./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo \
 	./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo \
 	./$(DEPDIR)/libcolorscreen_la-screen.Plo \
@@ -379,7 +381,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -488,6 +490,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-screen.Plo@am__quote@ # am--include-marker
@@ -656,6 +659,13 @@ libcolorscreen_la-mesh.lo: mesh.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-mesh.lo `test -f 'mesh.C' || echo '$(srcdir)/'`mesh.C
 
+libcolorscreen_la-scr-detect-geometry.lo: scr-detect-geometry.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-scr-detect-geometry.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Tpo -c -o libcolorscreen_la-scr-detect-geometry.lo `test -f 'scr-detect-geometry.C' || echo '$(srcdir)/'`scr-detect-geometry.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Tpo $(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='scr-detect-geometry.C' object='libcolorscreen_la-scr-detect-geometry.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-scr-detect-geometry.lo `test -f 'scr-detect-geometry.C' || echo '$(srcdir)/'`scr-detect-geometry.C
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -823,6 +833,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
@@ -888,6 +899,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-scr.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect-geometry.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-scr-to-img.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-screen.Plo
