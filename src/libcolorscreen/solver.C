@@ -1,5 +1,6 @@
 #include <gsl/gsl_multifit.h>
 #include "include/solver.h"
+#include "screen-map.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
@@ -269,6 +270,52 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	for (int x = 0; x < width; x++)
 	  {
 	    coord_t xx, yy;
+	    solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
+	    scr_to_img map2;
+	    map2.set_parameters (lparam, img_data);
+	    map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	    mesh_trans->set_point (x,y, xx, yy);
+	  }
+      if (progress)
+	progress->inc_progress ();
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      delete mesh_trans;
+      return NULL;
+    }
+  //mesh_trans->print (stdout);
+  if (progress)
+    progress->set_task ("inverting mesh", 1);
+  mesh_trans->precompute_inverse ();
+  return mesh_trans;
+}
+mesh *
+solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)
+{
+  int xshift, yshift, width, height;
+  int step = 1;
+  if (param->mesh_trans)
+    abort ();
+  scr_to_img map;
+  map.set_parameters (*param, img_data);
+  map.get_range (img_data.width, img_data.height, &xshift, &yshift, &width, &height);
+  width = (width + step - 1) / step;
+  height = (height + step - 1) / step;
+  if (progress)
+    progress->set_task ("computing mesh", height);
+  mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
+#pragma omp parallel for default(none) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap)
+  for (int y = 0; y < height; y++)
+    {
+      // TODO: copying motor corrections is unnecesary and expensive.
+      scr_to_img_parameters lparam = *param;
+      solver_parameters sparam;/* = sparam2;*/
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < width; x++)
+	  {
+	    coord_t xx, yy;
+	    smap.get_solver_points_nearby (x * step - xshift, y * step - yshift, 100, sparam);
 	    solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
 	    scr_to_img map2;
 	    map2.set_parameters (lparam, img_data);

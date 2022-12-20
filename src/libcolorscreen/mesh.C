@@ -16,7 +16,7 @@ void
 mesh::precompute_inverse()
 {
   if (m_invdata)
-    abort ();
+    return;
 
   mesh_coord_t minx = m_data[0].x, maxx = m_data[0].x, miny = m_data[0].y, maxy = m_data[0].y;
   for (int y = 0; y < m_height; y++)

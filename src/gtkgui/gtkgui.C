@@ -429,7 +429,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  save_parameters ();
 	  current.type = Dufay;
 	  file_progress_info progress (stdout);
-	  detect_solver_points (scan, current_scr_detect, current_solver, &progress);
+	  current_mesh = detect_solver_points (scan, current_scr_detect, current_solver, &progress);
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+
 	}
       if (k == 'a')
 	autosolving = false;

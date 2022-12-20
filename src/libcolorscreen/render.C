@@ -219,9 +219,9 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
     }
 
 
-  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
-  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
-  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * p.img->maxval);
+  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
 
   for (int i = 0; i <= p.img->maxval; i++)

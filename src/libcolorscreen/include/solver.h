@@ -79,7 +79,7 @@ struct solver_parameters
   {
     for (int i =0; i < npoints; i++)
       {
-	fprintf (out, "point %i img %f %f maps to scr %f %f\n", i, point[i].img_x, point[i].img_y, point[i].screen_x, point[i].screen_y);
+	fprintf (out, "point %i img %f %f maps to scr %f %f color %i\n", i, point[i].img_x, point[i].img_y, point[i].screen_x, point[i].screen_y, (int)point[i].color);
       }
   }
   static point_location *get_point_locations (enum scr_type type, int *n);
@@ -87,7 +87,7 @@ struct solver_parameters
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
-void detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress);
+mesh *detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress);
 
 
 #endif
