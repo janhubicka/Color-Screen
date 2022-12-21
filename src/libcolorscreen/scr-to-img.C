@@ -317,7 +317,7 @@ scr_to_img::get_final_range (int img_width, int img_height,
 			     int *final_xshift, int *final_yshift,
 			     int *final_width, int *final_height)
 {
-  get_final_range (0.0, 0.0, (coord_t)img_width, (coord_t)img_height,
+  get_final_range (img_width * 0.06, img_height * 0.06, (coord_t)img_width * 0.94, (coord_t)img_height * 0.94,
 		   final_xshift, final_yshift,
 		   final_width, final_height);
 }

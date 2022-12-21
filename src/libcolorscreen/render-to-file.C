@@ -137,8 +137,11 @@ render_to_file (enum output_mode mode, const char *outfname,
   switch (mode)
     {
     case none:
+    case corrected_color:
       {
 	render_img render (param, scan, rparam, 65535);
+	if (mode == corrected_color)
+	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
@@ -152,10 +155,16 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outwidth;
 	int outheight;
 
+#if 0
 	/* FIXME: it should be same as realistic.  */
 	outwidth = render_width * 4;
 	outheight = render_height * 4;
 	out_stepy = out_stepx = 0.25;
+#endif
+	double pixelsize = render.pixel_size ();
+	outwidth = render_width / pixelsize;
+	outheight = render_height / pixelsize;
+	out_stepx = out_stepy = pixelsize;
 
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,

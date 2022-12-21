@@ -294,7 +294,7 @@ mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)
 {
   int xshift, yshift, width, height;
-  int step = 1;
+  int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
@@ -316,10 +316,20 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	  {
 	    coord_t xx, yy;
 	    smap.get_solver_points_nearby (x * step - xshift, y * step - yshift, 100, sparam);
-	    solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
-	    scr_to_img map2;
-	    map2.set_parameters (lparam, img_data);
-	    map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	    if (0
+	       	&& (sparam.point[0].screen_x == x * step - xshift
+		    || sparam.point[0].screen_y == y * step - yshift))
+	      {
+		xx = sparam.point[0].img_x;
+		yy = sparam.point[0].img_y;
+	      }
+	    else
+	      {
+		solver (&lparam, img_data, sparam.npoints, sparam.point, false, false, x * step - xshift, y * step - yshift);
+		scr_to_img map2;
+		map2.set_parameters (lparam, img_data);
+		map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	      }
 	    mesh_trans->set_point (x,y, xx, yy);
 	  }
       if (progress)

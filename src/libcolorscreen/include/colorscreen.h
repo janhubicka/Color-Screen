@@ -8,6 +8,7 @@
 enum output_mode
 {
   none,
+  corrected_color,
   realistic,
   preview_grid,
   color_preview_grid,

@@ -254,10 +254,16 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  if (!progress || !progress->cancel_requested ())
 	    for (int y = 0 ; y < m_prec_height; y++)
 	      {
-		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5,0.5, 0.3333);
-		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5, 0.5, 0.3333);
-		dufay_prec_green (x, y) = pixel (0, 0, 0.5, 1 - 0.333);
-		dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 1 - 0.333);
+		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
+		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
+		dufay_prec_green (x, y) = pixel (0, 0, 0.5, 0.5);
+		dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
+#if 0
+		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5, 0.3333, 0.5);
+		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5,0.3333, 0.5);
+		dufay_prec_green (x, y) = pixel (0, 0, 1 - 0.333, 0.5);
+		dufay_prec_blue (x, y) = pixel (0.5, 0, 1 - 0.333, 0.5);
+#endif
 	      }
 	  if (progress)
 	    progress->inc_progress ();

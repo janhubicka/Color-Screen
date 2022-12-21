@@ -5,7 +5,7 @@
 namespace
 {
 
-const bool verbose = true;
+const bool verbose = false;
 
 struct patch_entry
 {
@@ -16,9 +16,18 @@ bool
 set_bit (uint8_t *visited, int p)
 {
   int pos = p / 8;
-  int bit = p & 8;
+  int bit = p & 7;
   bool ret = visited[pos] & (1U << bit);
   visited[pos] |= (1U << bit);
+  return ret;
+}
+bool
+clear_bit (uint8_t *visited, int p)
+{
+  int pos = p / 8;
+  int bit = p & 7;
+  bool ret = visited[pos] & (1U << bit);
+  visited[pos] &= ~(1U << bit);
   return ret;
 }
 
@@ -48,7 +57,7 @@ find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y,
 	      if (visited)
 		{
 		  if (set_bit (visited, yy * color_map.width + xx))
-		    break;
+		    continue;
 		}
 	      else
 		{
@@ -190,15 +199,31 @@ confirm_patch (color_class_map *color_map,
 	       coord_t *cx, coord_t *cy, uint8_t *visited)
 {
   patch_entry entries[max_patch_size + 1];
-  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size, entries, visited);
+  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size + 1, entries, visited);
   //if (verbose)
-    //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
+   //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size || size > max_patch_size)
     return false;
   patch_center (entries, size, cx, cy);
   if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) > max_distance * max_distance)
     return false;
   //printf ("center %f %f\n", *cx, *cy);
+  return true;
+}
+bool
+confirm_strip (color_class_map *color_map,
+	       coord_t x, coord_t y, scr_detect::color_class c,
+	       int min_patch_size, uint8_t *visited)
+{
+  patch_entry entries[min_patch_size + 1];
+  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
+  /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
+  for (int i = 0; i < size; i++)
+    clear_bit (visited, entries[i].y * color_map->width + entries[i].x);
+  //if (verbose)
+    //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
+  if (size < min_patch_size)
+    return false;
   return true;
 }
 
@@ -210,17 +235,18 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
-  int max_patch_size = screen_xsize * screen_ysize / 3;
-  int min_patch_size = screen_xsize * screen_ysize / 8;
-  coord_t max_distance = (screen_xsize + screen_ysize) * 0.3;
+  int max_patch_size = floor (screen_xsize * screen_ysize / 3);
+  int min_patch_size = std::min ((int)(screen_xsize * screen_ysize / 5), 1);
+  coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
   int nfound = 1;
 
   int xshift, yshift, width, height;
   scr_map.get_range (img.width, img.height, &xshift, &yshift, &width, &height);
   int nexpected = 2 * img.width * img.height / (screen_xsize * screen_ysize);
-  if (verbose)
+  if (verbose || 1)
     printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
-  progress->set_task ("Flood fill", nexpected);
+  if (progress)
+    progress->set_task ("Flood fill", nexpected);
   screen_map *map = new screen_map(xshift * 2, yshift, width * 2, height);
 
   struct queue_entry
@@ -230,7 +256,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
   };
   std::vector<queue_entry> queue;
   queue.push_back ((struct queue_entry){0, 0, greenx, greeny});
-  map->set_coord (0, 0, param.center_x, param.center_y);
+  map->set_coord (0, 0, greenx, greeny);
   if (sparam)
     sparam->remove_points ();
   //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
@@ -265,6 +291,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	}
       if (map->in_range_p (e.scr_xm2, e.scr_y - 1)
 	  && !map->known_p (e.scr_xm2, e.scr_y - 1)
+	  && confirm_strip (color_map, e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
 	  && confirm_patch (color_map, e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
 	  map->set_coord (e.scr_xm2, e.scr_y - 1, ix, iy);
@@ -273,6 +300,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	}
       if (map->in_range_p (e.scr_xm2, e.scr_y + 1)
 	  && !map->known_p (e.scr_xm2, e.scr_y + 1)
+	  && confirm_strip (color_map, e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
 	  && confirm_patch (color_map, e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
 	  map->set_coord (e.scr_xm2, e.scr_y + 1, ix, iy);
@@ -280,7 +308,12 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	  nfound++;
 	}
     }
-  printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nexpected * 100.0 / nfound);
+  if (nfound < nexpected / 3)
+    {
+      delete map;
+      return NULL;
+    }
+  printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
   return map;
 }
 }
@@ -289,42 +322,44 @@ mesh *
 detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress)
 {
   int max_diam = std::max (img.width, img.height);
-  bool found = false;
   render_parameters empty;
   render_scr_detect render (dparam, img, empty, 256);
   render.precompute_all (progress);
-  progress->set_task ("Looking for initial grid", max_diam);
+  if (progress)
+    progress->set_task ("Looking for initial grid", max_diam);
   uint8_t *visited = (uint8_t *)calloc ((img.width * img.height + 7) / 8, 1);
-  for (int d = 0; d < max_diam && !found; d++)
+  scr_to_img_parameters param;
+  screen_map *smap = NULL;
+  param.type = Dufay;
+  for (int d = 0; d < max_diam && !smap; d++)
     {
       if (!progress || !progress->cancel_requested ())
-	for (int i = -d; i < d && !found; i++)
+	for (int i = -d; i < d && !smap; i++)
 	  {
 	    if (try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 + d, visited)
 		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 - d, visited)
 		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + d, img.height / 2 + i, visited)
 		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 - d, img.height / 2 + i, visited))
 	      {
-		found = true;
+		if (verbose)
+		  {
+		    printf ("Initial grid found at:\n");
+		    sparam.dump (stdout);
+		  }
+		memset (visited, 0, (img.width * img.height + 7) / 8);
+		simple_solver (&param, img, sparam, progress);
+		smap = flood_fill (sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get_color_class_map (), /*&sparam*/ NULL, visited, progress);
+		if (!smap)
+		  memset (visited, 0, (img.width * img.height + 7) / 8);
 		break;
 	      }
 	  }
       if (progress)
 	progress->inc_progress ();
     }
-  if (!found)
-    return NULL;
-  if (verbose)
-  {
-    printf ("Initial grid found at:\n");
-    sparam.dump (stdout);
-  }
-  memset (visited, 0, (img.width * img.height + 7) / 8);
-  scr_to_img_parameters param;
-  param.type = Dufay;
-  simple_solver (&param, img, sparam, progress);
-  screen_map *smap = flood_fill (sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get_color_class_map (), /*&sparam*/ NULL, visited, progress);
   free (visited);
+  if (!smap)
+    return NULL;
   smap->check_consistency (param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
 			   sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
   //smap->get_solver_points_nearby (0, 0, 200, sparam);
@@ -333,6 +368,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
   delete smap;
 
+#if 0
   const int xsteps = 50, ysteps = 50;
   sparam.remove_points ();
   m->precompute_inverse ();
@@ -347,5 +383,6 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 	m->apply (sx, sy, &ix, &iy);
         sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
+#endif
   return m;
 }

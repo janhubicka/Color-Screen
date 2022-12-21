@@ -39,6 +39,8 @@ parse_mode (const char *mode)
 {
   if (!strcmp (mode, "none"))
     return none;
+  if (!strcmp (mode, "corrected-color"))
+    return corrected_color;
   else if (!strcmp (mode, "realistic"))
     return realistic;
   else if (!strcmp (mode, "preview-grid"))
@@ -102,6 +104,7 @@ main (int argc, char **argv)
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
   struct solver_parameters solver_param;
   bool force_precise = false;
+  bool detect_geometry = false;
 
   binname = argv[0];
 
@@ -135,6 +138,8 @@ main (int argc, char **argv)
 	  i++;
 	  color_model = parse_color_model (argv[i]);
 	}
+      else if (!strcmp (argv[i], "--detect-geometry"))
+	detect_geometry = true;
       else if (!strcmp (argv[i], "--precise"))
 	force_precise = true;
       else if (!strcmp (argv[i], "--dye-balance"))
@@ -203,7 +208,16 @@ main (int argc, char **argv)
   if (force_precise)
     rparam.precise = true;
 
-  if (solver_param.npoints)
+  if (detect_geometry && scan.rgbdata)
+    {
+      if (verbose)
+	{
+	  printf ("Detecting geometry");
+	  record_time ();
+	}
+      param.mesh_trans = detect_solver_points (scan, dparam, solver_param, NULL);
+    }
+  else if (solver_param.npoints)
     {
       if (verbose)
 	{
