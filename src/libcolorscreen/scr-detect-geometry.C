@@ -230,11 +230,16 @@ confirm_strip (color_class_map *color_map,
 screen_map *
 flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, color_class_map *color_map, solver_parameters *sparam, uint8_t *visited, progress_info *progress)
 {
+  double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
+  double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
+
+  /* If screen is estimated too small or too large give up.  */
+  if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 || screen_ysize > 100)
+    return NULL;
+
   scr_to_img scr_map;
   scr_map.set_parameters (param, img);
 
-  double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
-  double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
   int max_patch_size = floor (screen_xsize * screen_ysize / 3);
   int min_patch_size = std::min ((int)(screen_xsize * screen_ysize / 5), 1);
   coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
@@ -350,8 +355,16 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 		simple_solver (&param, img, sparam, progress);
 		smap = flood_fill (sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get_color_class_map (), /*&sparam*/ NULL, visited, progress);
 		if (!smap)
-		  memset (visited, 0, (img.width * img.height + 7) / 8);
-		break;
+		  {
+		    if (progress)
+		      {
+			progress->set_task ("Looking for initial grid", max_diam);
+			progress->set_progress (d);
+		      }
+		    memset (visited, 0, (img.width * img.height + 7) / 8);
+		  }
+		else
+		  break;
 	      }
 	  }
       if (progress)
