@@ -1,12 +1,19 @@
 #ifndef ANALYZE_PAGET_H
 #include "render-to-scr.h"
 #include "progress-info.h"
+#include "bitmap.h"
 class analyze_paget
 {
 public:
   analyze_paget()
   : m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0)
   {
+  }
+  ~analyze_paget()
+  {
+    free (m_red);
+    free (m_green);
+    free (m_blue);
   }
   luminosity_t &blue (int x, int y)
     {
@@ -45,12 +52,6 @@ public:
      unsigned int xx = x + y;
      unsigned int yy = -x + y;
      return red (xx / 2, yy);
-  }
-  ~analyze_paget()
-  {
-    free (m_red);
-    free (m_green);
-    free (m_blue);
   }
   int get_xshift ()
   {

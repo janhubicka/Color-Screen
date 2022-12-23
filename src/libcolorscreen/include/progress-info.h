@@ -91,6 +91,9 @@ public:
   {
     m_current = p;
   }
+
+  virtual void pause_stdout ();
+  virtual void resume_stdout ();
 private:
   const static int debug = false;
   std::atomic<const char *>m_task;
@@ -105,7 +108,10 @@ public:
   file_progress_info (FILE *f, bool display = true);
   ~file_progress_info ();
   void display_progress ();
+  virtual void pause_stdout ();
+  virtual void resume_stdout ();
 private:
+  void pause_stdout (bool final);
   FILE *m_file;
   pthread_t m_thread;
   std::atomic_ulong m_displayed;

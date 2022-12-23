@@ -13,6 +13,13 @@ public:
     free (data);
   }
   bool
+  test_bit (size_t p)
+  {
+    int pos = p / 8;
+    int bit = p & 7;
+    return data[pos] & (1U << bit);
+  }
+  bool
   set_bit (size_t p)
   {
     int pos = p / 8;
@@ -49,6 +56,11 @@ public:
   }
   ~bitmap_2d()
   {
+  }
+  bool
+  test_bit (size_t x, size_t y)
+  {
+    return bitmap::test_bit (y * width + x);
   }
   bool
   set_bit (size_t x, size_t y)

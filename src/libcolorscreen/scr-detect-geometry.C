@@ -85,7 +85,7 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
 }
 
 bool
-try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited)
+try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
   const int max_size = 100;
   const int npatches = 5;
@@ -101,7 +101,13 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
   if (!patch_center (entries, size, &rbpatches[0][0].x, &rbpatches[0][0].y))
     return false;
   if (verbose)
-    printf ("Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
+    {
+      if (progress)
+        progress->pause_stdout ();
+      printf ("Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
+      if (progress)
+        progress->resume_stdout ();
+    }
 
   bool patch_found = false;
 
@@ -125,13 +131,25 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
   if (!patch_found)
   {
     if (verbose)
-      printf ("Blue patch not found\n");
+      {
+	if (progress)
+	  progress->pause_stdout ();
+	printf ("Blue patch not found\n");
+      if (progress)
+        progress->resume_stdout ();
+      }
     return false;
   }
   coord_t patch_stepx = rbpatches[0][1].x - rbpatches[0][0].x;
   coord_t patch_stepy = rbpatches[0][1].y - rbpatches[0][0].y;
   if (verbose)
-    printf ("found blue patch of size %i and center %f %f guessing patch distance %f %f\n", size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
+    {
+      if (progress)
+        progress->pause_stdout ();
+      printf ("found blue patch of size %i and center %f %f guessing patch distance %f %f\n", size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
+      if (progress)
+        progress->resume_stdout ();
+    }
   for (int p = 2; p < npatches * 2; p++)
     {
       int nx = rbpatches[0][p - 1].x + patch_stepx;
@@ -140,20 +158,38 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
       if (size == 0 || size == max_size)
 	{
 	  if (verbose)
-	    printf ("Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
 	  return 0;
 	}
       if (!patch_center (entries, size, &rbpatches[0][p].x, &rbpatches[0][p].y))
 	{
 	  if (verbose)
-	    printf ("Center of patch 0, %i is not inside\n", p);
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Center of patch 0, %i is not inside\n", p);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
 	  return 0;
 	}
       patch_stepx = (rbpatches[0][p].x - rbpatches[0][0].x) / p;
       patch_stepy = (rbpatches[0][p].y - rbpatches[0][0].y) / p;
     }
   if (verbose)
-    printf ("Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
+      if (progress)
+	progress->resume_stdout ();
+    }
   for (int r = 1; r < npatches; r++)
     {
       int nx = rbpatches[r - 1][0].x - 2*patch_stepy;
@@ -162,13 +198,25 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
       if (size == 0 || size == max_size)
 	{
 	  if (verbose)
-	    printf ("Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
 	  return 0;
 	}
       if (!patch_center (entries, size, &rbpatches[r][0].x, &rbpatches[r][0].y))
 	{
 	  if (verbose)
-	    printf ("Center of patch %i,%i is not inside\n", r, 0);
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Center of patch %i,%i is not inside\n", r, 0);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
 	  return 0;
 	}
       for (int p = 1; p < npatches * 2; p++)
@@ -179,13 +227,25 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
 	  if (size == 0 || size == max_size)
 	    {
 	      if (verbose)
-		printf ("Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
+		{
+		  if (progress)
+		    progress->pause_stdout ();
+		  printf ("Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
+		  if (progress)
+		    progress->resume_stdout ();
+		}
 	      return 0;
 	    }
 	  if (!patch_center (entries, size, &rbpatches[r][p].x, &rbpatches[r][p].y))
 	    {
 	      if (verbose)
-		printf ("Center of patch %i,%i is not inside\n", r, p);
+		{
+		  if (progress)
+		    progress->pause_stdout ();
+		  printf ("Center of patch %i,%i is not inside\n", r, p);
+		  if (progress)
+		    progress->resume_stdout ();
+		}
 	      return 0;
 	    }
 	}
@@ -225,7 +285,7 @@ confirm_strip (color_class_map *color_map,
   int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
   /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
   for (int i = 0; i < size; i++)
-    visited->clear_bit (entries[i].y, entries[i].x);
+    visited->clear_bit (entries[i].x, entries[i].y);
   //if (verbose)
     //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size)
@@ -255,7 +315,13 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
   scr_map.get_range (img.width, img.height, &xshift, &yshift, &width, &height);
   int nexpected = 2 * img.width * img.height / (screen_xsize * screen_ysize);
   if (verbose || 1)
-    printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+    {
+      if (progress)
+        progress->pause_stdout ();
+      printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+      if (progress)
+        progress->resume_stdout ();
+    }
   if (progress)
     progress->set_task ("Flood fill", nexpected);
   screen_map *map = new screen_map(xshift * 2, yshift, width * 2, height);
@@ -324,7 +390,11 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
       delete map;
       return NULL;
     }
+  if (progress)
+    progress->pause_stdout ();
   printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
+  if (progress)
+    progress->resume_stdout ();
   return map;
 }
 }
@@ -347,15 +417,19 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
       if (!progress || !progress->cancel_requested ())
 	for (int i = -d; i < d && !smap; i++)
 	  {
-	    if (try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 + d, &visited)
-		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 - d, &visited)
-		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + d, img.height / 2 + i, &visited)
-		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 - d, img.height / 2 + i, &visited))
+	    if (try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 + d, &visited, progress)
+		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + i, img.height / 2 - d, &visited, progress)
+		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 + d, img.height / 2 + i, &visited, progress)
+		|| try_guess_screen (*render.get_color_class_map (), sparam, img.width / 2 - d, img.height / 2 + i, &visited, progress))
 	      {
 		if (verbose)
 		  {
+		    if (progress)
+		      progress->pause_stdout ();
 		    printf ("Initial grid found at:\n");
 		    sparam.dump (stdout);
+		    if (progress)
+		      progress->resume_stdout ();
 		  }
 		visited.clear ();
 		simple_solver (&param, img, sparam, progress);

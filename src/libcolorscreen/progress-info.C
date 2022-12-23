@@ -2,6 +2,14 @@
 #include <cstring>
 #include <cstdlib>
 #include "include/progress-info.h"
+void
+progress_info::pause_stdout ()
+{
+}
+void
+progress_info::resume_stdout ()
+{
+}
 static void *
 thread_start (void *arg)
 {
@@ -16,7 +24,6 @@ thread_start (void *arg)
 }
 file_progress_info::file_progress_info (FILE *f, bool display)
 {
-  pthread_attr_t attr;
   // TODO: For some reason Windows pthread API will not cancel the thread.
 #ifdef _WIN32
   display = false;
@@ -28,6 +35,59 @@ file_progress_info::file_progress_info (FILE *f, bool display)
   m_last_status = -1;
   if (!display)
     return;
+  resume_stdout ();
+}
+file_progress_info::~file_progress_info ()
+{
+  pause_stdout (true);
+}
+void
+file_progress_info::pause_stdout (bool final)
+{
+  if (!m_initialized)
+    return;
+  pthread_cancel (m_thread);
+  pthread_join (m_thread, NULL);
+  if (m_displayed)
+    {
+      const char *task = m_last_task;
+      //fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
+      if (task)
+        {
+	  if (!final)
+	    {
+	      int n = strlen (task) + 9;
+	      fprintf (m_file, "\r%*s\r", n, "");
+	    }
+	  else
+	    {
+	      fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
+	      m_last_task = NULL;
+	      free ((void *)task);
+	    }
+        }
+      fflush (m_file);
+    }
+  m_initialized = false;
+}
+void
+file_progress_info::pause_stdout ()
+{
+  pause_stdout (false);
+}
+void
+file_progress_info::resume_stdout ()
+{
+  if (m_initialized)
+    return;
+  if (m_displayed)
+    {
+      const char *task;
+      float status;
+      get_status (&task, &status);
+      fprintf (m_file, "\r%s: %2.2f%%\n", task, status);
+    }
+  pthread_attr_t attr;
   if (pthread_attr_init (&attr))
     {
       perror ("Can not initialize thread attributes");
@@ -39,20 +99,6 @@ file_progress_info::file_progress_info (FILE *f, bool display)
       return;
     }
   m_initialized = true;
-}
-file_progress_info::~file_progress_info ()
-{
-  if (!m_initialized)
-    return;
-  pthread_cancel (m_thread);
-  pthread_join (m_thread, NULL);
-  if (m_displayed)
-    {
-      const char *task = m_last_task;
-      fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
-      fflush (m_file);
-      free ((void *)task);
-    }
 }
 void
 file_progress_info::display_progress ()

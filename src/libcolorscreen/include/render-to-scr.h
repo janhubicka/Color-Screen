@@ -29,6 +29,14 @@ public:
   {
     return m_final_height;
   }
+  int get_final_xshift ()
+  {
+    return m_final_xshift;
+  }
+  int get_final_yshift ()
+  {
+    return m_final_yshift;
+  }
   DLL_PUBLIC static bool render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
