@@ -235,41 +235,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	}
     }
   else
-    {
-      /* G B .
-	 R R .
-	 . . .  */
-      m_prec_red = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t) * 2);
-      m_prec_green = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
-      m_prec_blue = (luminosity_t *)malloc (m_prec_width * m_prec_height * sizeof (luminosity_t));
-      if (!m_prec_red || !m_prec_green || !m_prec_blue)
-	return false;
-      if (progress)
-	progress->set_task ("determining colors", m_prec_height);
-#define pixel(xo,yo,width,height) m_params.precise ? sample_scr_square ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo, width, height)\
-			 : get_img_pixel_scr ((x - m_prec_xshift) + xo, (y - m_prec_yshift) + yo)
-#pragma omp parallel for default (none) shared (progress)
-      for (int x = 0; x < m_prec_width; x++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int y = 0 ; y < m_prec_height; y++)
-	      {
-		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
-		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
-		dufay_prec_green (x, y) = pixel (0, 0, 0.5, 0.5);
-		dufay_prec_blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
-#if 0
-		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5, 0.3333, 0.5);
-		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5,0.3333, 0.5);
-		dufay_prec_green (x, y) = pixel (0, 0, 1 - 0.333, 0.5);
-		dufay_prec_blue (x, y) = pixel (0.5, 0, 1 - 0.333, 0.5);
-#endif
-	      }
-	  if (progress)
-	    progress->inc_progress ();
-	}
-#undef pixel
-    }
+    if (!m_dufay.analyze (this, m_prec_width, m_prec_height, m_prec_xshift, m_prec_yshift, m_params.precise, progress))
+      return false;
   return !progress || !progress->cancelled ();
 }
 
@@ -322,7 +289,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
-#define get_red(xx, yy) dufay_prec_red (xp + (xx), yp + (yy))
+#define get_red(xx, yy) m_dufay.red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
@@ -332,7 +299,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       yy = y;
       xo = my_modf (xx, &xp);
       yo = my_modf (yy, &yp);
-#define get_green(xx, yy) dufay_prec_green (xp + (xx), yp + (yy))
+#define get_green(xx, yy) m_dufay.green (xp + (xx), yp + (yy))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
@@ -342,7 +309,7 @@ render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int 
       yy = y;
       xo = my_modf (xx, &xp);
       yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) dufay_prec_blue (xp + (xx), yp + (yy))
+#define get_blue(xx, yy) m_dufay.blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),

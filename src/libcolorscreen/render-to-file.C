@@ -162,6 +162,8 @@ render_to_file (enum output_mode mode, const char *outfname,
 	out_stepy = out_stepx = 0.25;
 #endif
 	double pixelsize = render.pixel_size ();
+	printf ("Pixel size:%f\n", pixelsize);
+	pixelsize = 0.119245;
 	outwidth = render_width / pixelsize;
 	outheight = render_height / pixelsize;
 	out_stepx = out_stepy = pixelsize;

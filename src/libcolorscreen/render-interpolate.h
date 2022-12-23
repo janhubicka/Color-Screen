@@ -2,6 +2,7 @@
 #define RENDEINTERPOLATE_H
 #include "include/render-to-scr.h"
 #include "include/screen.h"
+#include "analyze-dufay.h"
 class render_interpolate : public render_to_scr
 {
 public:
@@ -34,6 +35,7 @@ public:
   }
 private:
   int m_prec_xshift, m_prec_yshift, m_prec_width, m_prec_height;
+  analyze_dufay m_dufay;
   luminosity_t *m_prec_red;
   luminosity_t *m_prec_green;
   luminosity_t *m_prec_blue;

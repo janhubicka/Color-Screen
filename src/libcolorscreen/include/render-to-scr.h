@@ -32,9 +32,9 @@ public:
   DLL_PUBLIC static bool render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
 				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
-protected:
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
+protected:
   static class screen *get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress);
   static void release_screen (class screen *scr);
 
