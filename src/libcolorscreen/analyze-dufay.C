@@ -2,6 +2,7 @@
 bool
 analyze_dufay::analyze (render_to_scr *render, int width, int height, int xshift, int yshift, bool precise, progress_info *progress)
 {
+  assert (!m_red);
   m_width = width;
   m_height = height;
   m_xshift = xshift;
@@ -39,5 +40,5 @@ analyze_dufay::analyze (render_to_scr *render, int width, int height, int xshift
 	progress->inc_progress ();
     }
 #undef pixel
-  return true;
+  return !progress || !progress->cancelled ();
 }
