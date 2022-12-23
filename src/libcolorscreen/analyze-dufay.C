@@ -1,4 +1,4 @@
-#include "analyze-dufay.h"
+#include "include/analyze-dufay.h"
 bool
 analyze_dufay::analyze (render_to_scr *render, int width, int height, int xshift, int yshift, bool precise, progress_info *progress)
 {

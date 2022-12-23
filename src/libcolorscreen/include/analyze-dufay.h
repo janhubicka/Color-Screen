@@ -1,6 +1,6 @@
 #ifndef ANALYZE_DUFAY_H
-#include "include/render-to-scr.h"
-#include "include/progress-info.h"
+#include "render-to-scr.h"
+#include "progress-info.h"
 class analyze_dufay
 {
 public:

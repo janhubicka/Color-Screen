@@ -2,8 +2,8 @@
 #define RENDEINTERPOLATE_H
 #include "include/render-to-scr.h"
 #include "include/screen.h"
-#include "analyze-dufay.h"
-#include "analyze-paget.h"
+#include "include/analyze-dufay.h"
+#include "include/analyze-paget.h"
 class render_interpolate : public render_to_scr
 {
 public:

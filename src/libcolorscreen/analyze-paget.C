@@ -1,4 +1,4 @@
-#include "analyze-paget.h"
+#include "include/analyze-paget.h"
 #include "include/screen.h"
 bool
 analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress)
