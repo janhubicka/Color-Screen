@@ -85,9 +85,27 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
 }
 
 bool
+confirm_strip (color_class_map *color_map,
+	       coord_t x, coord_t y, scr_detect::color_class c,
+	       int min_patch_size, bitmap_2d *visited)
+{
+  patch_entry entries[min_patch_size + 1];
+  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
+  /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
+  if (visited)
+    for (int i = 0; i < size; i++)
+      visited->clear_bit (entries[i].x, entries[i].y);
+  //if (verbose)
+    //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
+  if (size < min_patch_size)
+    return false;
+  return true;
+}
+
+bool
 try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
-  const int max_size = 100;
+  const int max_size = 200;
   const int npatches = 5;
   struct patch_info
   {
@@ -192,8 +210,22 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
     }
   for (int r = 1; r < npatches; r++)
     {
+      int rx = rbpatches[r - 1][0].x - patch_stepy;
+      int ry = rbpatches[r - 1][0].y + patch_stepx;
       int nx = rbpatches[r - 1][0].x - 2*patch_stepy;
       int ny = rbpatches[r - 1][0].y + 2*patch_stepx;
+      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, NULL))
+	 {
+	  if (verbose)
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	      if (progress)
+		progress->resume_stdout ();
+	    }
+	  return 0;
+	 }
       size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
       if (size == 0 || size == max_size)
 	{
@@ -250,6 +282,13 @@ try_guess_screen (color_class_map &color_map, solver_parameters &sparam, int x, 
 	    }
 	}
     }
+  /* Be sure that every point is unique.  */
+  for (int r = 0; r < npatches; r++)
+    for (int p = 0; p < npatches * 2; p++)
+      for (int r1 = 0; r1 < r; r1++)
+        for (int p1 = 0; p1 < p; p1++)
+	  if (rbpatches[r][p].x == rbpatches[r1][p1].x && rbpatches[r][p].y == rbpatches[r1][p1].y)
+	    return false;
   sparam.remove_points ();
   for (int r = 0; r < npatches; r++)
     for (int p = 0; p < npatches * 2; p++)
@@ -264,33 +303,18 @@ confirm_patch (color_class_map *color_map,
 	       coord_t *cx, coord_t *cy, bitmap_2d *visited)
 {
   patch_entry entries[max_patch_size + 1];
+  const char *fail = NULL;
   int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size + 1, entries, visited);
-  //if (verbose)
-   //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size || size > max_patch_size)
-    return false;
-  if (!patch_center (entries, size, cx, cy))
-    return false;
-  if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) > max_distance * max_distance)
-    return false;
+    fail = "rejected: bad size";
+  else if (!patch_center (entries, size, cx, cy))
+    fail = "rejected: center not in patch";
+  else if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) > max_distance * max_distance)
+    fail = "rejected: distance out of tolerance";
+  if (verbose && fail)
+    printf ("size: %i (expecting %i...%i) coord: %f %f center %f %f color %i%s\n", size, min_patch_size, max_patch_size,x,y, *cx, *cy, (int)c, fail ? fail : "");
   //printf ("center %f %f\n", *cx, *cy);
-  return true;
-}
-bool
-confirm_strip (color_class_map *color_map,
-	       coord_t x, coord_t y, scr_detect::color_class c,
-	       int min_patch_size, bitmap_2d *visited)
-{
-  patch_entry entries[min_patch_size + 1];
-  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
-  /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
-  for (int i = 0; i < size; i++)
-    visited->clear_bit (entries[i].x, entries[i].y);
-  //if (verbose)
-    //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
-  if (size < min_patch_size)
-    return false;
-  return true;
+  return !fail;
 }
 
 screen_map *
@@ -306,8 +330,8 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
   scr_to_img scr_map;
   scr_map.set_parameters (param, img);
 
-  int max_patch_size = floor (screen_xsize * screen_ysize / 3);
-  int min_patch_size = std::min ((int)(screen_xsize * screen_ysize / 5), 1);
+  int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
+  int min_patch_size = std::max ((int)(screen_xsize * screen_ysize / 5), 1);
   coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
   int nfound = 1;
 
@@ -350,43 +374,44 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
-      if (map->in_range_p (e.scr_xm2 - 1, e.scr_y)
-	  && !map->known_p (e.scr_xm2 - 1, e.scr_y)
+      if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
 	  && confirm_patch (color_map, e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
-	  map->set_coord (e.scr_xm2 - 1, e.scr_y, ix, iy);
+	  map->safe_set_coord (e.scr_xm2 - 1, e.scr_y, ix, iy);
 	  queue.push_back ((struct queue_entry){e.scr_xm2 - 1, e.scr_y, ix, iy});
 	  nfound++;
 	}
-      if (map->in_range_p (e.scr_xm2 + 1, e.scr_y)
-	  && !map->known_p (e.scr_xm2 + 1, e.scr_y)
+      if (!map->known_p (e.scr_xm2 + 1, e.scr_y)
 	  && confirm_patch (color_map, e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_xm2 + 1) & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
-	  map->set_coord (e.scr_xm2 + 1, e.scr_y, ix, iy);
+	  map->safe_set_coord (e.scr_xm2 + 1, e.scr_y, ix, iy);
 	  queue.push_back ((struct queue_entry){e.scr_xm2 + 1, e.scr_y, ix, iy});
 	  nfound++;
 	}
-      if (map->in_range_p (e.scr_xm2, e.scr_y - 1)
-	  && !map->known_p (e.scr_xm2, e.scr_y - 1)
+      if (!map->known_p (e.scr_xm2, e.scr_y - 1)
 	  && confirm_strip (color_map, e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
 	  && confirm_patch (color_map, e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
-	  map->set_coord (e.scr_xm2, e.scr_y - 1, ix, iy);
+	  map->safe_set_coord (e.scr_xm2, e.scr_y - 1, ix, iy);
 	  queue.push_back ((struct queue_entry){e.scr_xm2, e.scr_y - 1, ix, iy});
 	  nfound++;
 	}
-      if (map->in_range_p (e.scr_xm2, e.scr_y + 1)
-	  && !map->known_p (e.scr_xm2, e.scr_y + 1)
+      if (!map->known_p (e.scr_xm2, e.scr_y + 1)
 	  && confirm_strip (color_map, e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
 	  && confirm_patch (color_map, e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
 	{
-	  map->set_coord (e.scr_xm2, e.scr_y + 1, ix, iy);
+	  map->safe_set_coord (e.scr_xm2, e.scr_y + 1, ix, iy);
 	  queue.push_back ((struct queue_entry){e.scr_xm2, e.scr_y + 1, ix, iy});
 	  nfound++;
 	}
     }
-  if (nfound < nexpected / 3)
+  if (nfound < nexpected / 5)
     {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Found %i points (%i expected, %f%%). Rejecting.\n", nfound, nexpected, nfound * 100.0 / nexpected);
+      if (progress)
+	progress->resume_stdout ();
       delete map;
       return NULL;
     }
@@ -457,7 +482,24 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   //smap->get_solver_points_nearby (0, 0, 200, sparam);
   //sparam.dump (stdout);
   //return NULL;
+  const int xsteps = 50, ysteps = 50;
+  sparam.remove_points ();
   mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
+  m->precompute_inverse ();
+  for (int y = 0; y < img.height; y += img.height / ysteps)
+    for (int x = 0; x < img.width; x += img.width / xsteps)
+      {
+	coord_t sx, sy;
+	coord_t ix, iy;
+	m->invert (x, y, &sx, &sy);
+	sx = (int)sx;
+	sy = (int)sy;
+	m->apply (sx, sy, &ix, &iy);
+	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
+      }
+  /* First get solver parameters sane so range can be determined.  */
+  simple_solver (&param, img, sparam, progress);
+
 
   if (known_pixels)
     {
@@ -470,24 +512,6 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 	for (int x = 0; x < img.width; x ++)
 	  if (smap->known_p (x - *xshift, y - *yshift))
 	    (*known_pixels)->set_bit (x, y);
-
-    }
-  else
-    {
-      const int xsteps = 50, ysteps = 50;
-      sparam.remove_points ();
-      m->precompute_inverse ();
-      for (int y = 0; y < img.height; y += img.height / ysteps)
-	for (int x = 0; x < img.width; x += img.width / xsteps)
-	  {
-	    coord_t sx, sy;
-	    coord_t ix, iy;
-	    m->invert (x, y, &sx, &sy);
-	    sx = (int)sx;
-	    sy = (int)sy;
-	    m->apply (sx, sy, &ix, &iy);
-	    sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
-	  }
     }
   delete smap;
   return m;
