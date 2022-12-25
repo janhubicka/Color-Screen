@@ -212,7 +212,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, coord_t sx, coord_t s
   assert (pixel_known_p (sx, sy));
   render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
   release_img ();
-  //render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
+  render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
   /**r = 65535;*/
   return loaded;
 }
@@ -375,13 +375,14 @@ print_status ()
 void
 analyze (int x, int y, progress_info *progress)
 {
-  images[y][x].analyze (!y ? 10 : 0, y == stitch_height - 1 ? 10 : 0, !x ? 10 : 0, x == stitch_width - 1 ? 10 : 0, progress);
+  const int border = 10;
+  images[y][x].analyze (!y ? border : 0, y == stitch_height - 1 ? border : 0, !x ? border : 0, x == stitch_width - 1 ? border : 0, progress);
 }
 
 void
 determine_positions (progress_info *progress)
 {
-  int percentage = 5;
+  int percentage = 20;
   for (int y = 0; y < stitch_height; y++)
     {
       if (!y)
