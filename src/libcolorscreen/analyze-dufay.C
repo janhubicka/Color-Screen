@@ -49,7 +49,6 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
   bool found = false;
   luminosity_t best_sqsum = 0;
   int best_xshift = 0, best_yshift = 0;
-  percentage=20;
 
   xstart = -other.m_width + 2 + m_width * skipleft / 100;
   ystart = -other.m_height + 2 + m_height * skiptop / 100;
@@ -71,7 +70,6 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
-      int step = 32;
       luminosity_t lbest_sqsum = 0;
       int lbest_xshift = 0, lbest_yshift = 0;
       for (int x = xstart; x < xend; x++)
@@ -89,17 +87,20 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
 	  xxend = std::min (-other.m_xshift + other.m_width + x, xxend);
 	  yyend = std::min (-other.m_yshift + other.m_height + y, yyend);
 
-	  if (yystart >= yyend || xxstart >= xxend)
-	    continue;
-	  assert (yystart < yyend && xxstart < xxend);
-	  //if ((xxend - xxstart) * (yyend - yystart) * 100 < m_n_known_pixels * percentage)
+	  //if (yystart >= yyend || xxstart >= xxend)
 	    //continue;
+	  assert (yystart < yyend && xxstart < xxend);
+	  if ((xxend - xxstart) * (yyend - yystart) * 100 < m_n_known_pixels * percentage)
+	    continue;
+
+	  int xstep = std::max ((xxend - xxstart) / 30, 1);
+	  int ystep = std::max ((yyend - yystart) / 30, 1);
 
 	  //printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend, m_xshift, m_yshift, m_width, m_height, other.m_xshift, other.m_yshift, other.m_width, other.m_height);
 
-	  for (int yy = yystart; yy < yyend; yy+= step)
+	  for (int yy = yystart; yy < yyend; yy+= ystep)
 	    {
-	      for (int xx = xxstart; xx < xxend; xx+= step)
+	      for (int xx = xxstart; xx < xxend; xx+= xstep)
 		{
 		  int x1 = xx + m_xshift;
 		  int y1 = yy + m_yshift;
@@ -137,7 +138,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
 		  noverlap++;
 		}
 	    }
-	  if (noverlap * step * step * 100 < m_n_known_pixels * percentage)
+	  if (noverlap * xstep * ystep * 100 < m_n_known_pixels * percentage)
 	    continue;
 	  //printf ("Overlap %i, known pixels %i\n", noverlap *= step * step, m_n_known_pixels);
 	  sqsum /= noverlap;
@@ -170,7 +171,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
     {
       if (progress)
 	progress->pause_stdout ();
-      //printf ("Best match on offset %i,%i sqsum %f\n", best_xshift, best_yshift, best_sqsum);
+      printf ("Best match on offset %i,%i sqsum %f\n", best_xshift, best_yshift, best_sqsum);
       if (progress)
 	progress->resume_stdout ();
     }
