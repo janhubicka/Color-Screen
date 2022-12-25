@@ -173,10 +173,10 @@ public:
       }
     return n;
   }
+  int width, height, xshift, yshift;
 private:
   struct coord_entry {coord_t x, y;};
   coord_entry *map;
-  int width, height, xshift, yshift;
 };
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress);

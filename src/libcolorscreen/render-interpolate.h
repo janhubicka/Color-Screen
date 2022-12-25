@@ -34,14 +34,13 @@ public:
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
     return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
+  void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b);
 private:
   analyze_dufay m_dufay;
   analyze_paget m_paget;
   screen *m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
-
-  void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b);
 
 };
 #endif

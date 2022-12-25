@@ -85,7 +85,8 @@ file_progress_info::resume_stdout ()
       const char *task;
       float status;
       get_status (&task, &status);
-      fprintf (m_file, "\r%s: %2.2f%%\n", task, status);
+      fprintf (m_file, "\r%s: %2.2f%%", task, status);
+      fflush (m_file);
     }
   pthread_attr_t attr;
   if (pthread_attr_init (&attr))

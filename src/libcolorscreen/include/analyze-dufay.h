@@ -1,4 +1,5 @@
 #ifndef ANALYZE_DUFAY_H
+#define ANALYZE_DUFAY_H
 #include "render-to-scr.h"
 #include "progress-info.h"
 #include "bitmap.h"
@@ -46,7 +47,15 @@ public:
   }
   bool analyze(render_to_scr *render, int width, int height, int xshift, int yshift, bool precise, progress_info *progress = NULL);
   bool find_best_match (int percentake, analyze_dufay &other, int skiptop, int skipbottom, int skipleft, int skipright, int *xshift, int *yshift, progress_info *progress = NULL);
-  bool compute_known_pixels (image_data &img, scr_to_img &scr_to_img, progress_info *progress = NULL);
+  void set_known_pixels (bitmap_2d *bitmap)
+  {
+    assert (!m_known_pixels && !m_n_known_pixels);
+    m_known_pixels = bitmap;
+    for (int y = 0; y < m_height; y++)
+      for (int x = 0; x < m_width; x++)
+	if (bitmap->test_bit (x,y))
+	  m_n_known_pixels++;
+  }
 private:
   int m_xshift, m_yshift, m_width, m_height;
   luminosity_t *m_red, *m_green, *m_blue;

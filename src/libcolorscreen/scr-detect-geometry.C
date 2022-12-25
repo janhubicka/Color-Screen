@@ -400,7 +400,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 }
 
 mesh *
-detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress)
+detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels)
 {
   int max_diam = std::max (img.width, img.height);
   render_parameters empty;
@@ -458,23 +458,37 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   //sparam.dump (stdout);
   //return NULL;
   mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
-  delete smap;
 
-#if 1
-  const int xsteps = 50, ysteps = 50;
-  sparam.remove_points ();
-  m->precompute_inverse ();
-  for (int y = 0; y < img.height; y += img.height / ysteps)
-    for (int x = 0; x < img.width; x += img.width / xsteps)
-      {
-	coord_t sx, sy;
-	coord_t ix, iy;
-	m->invert (x, y, &sx, &sy);
-	sx = (int)sx;
-	sy = (int)sy;
-	m->apply (sx, sy, &ix, &iy);
-        sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
-      }
-#endif
+  if (known_pixels)
+    {
+      *xshift = smap->xshift;
+      *yshift = smap->yshift;
+      *width = smap->width;
+      *height = smap->height;
+      *known_pixels = new bitmap_2d (smap->width, smap->height);
+      for (int y = 0; y < img.height; y ++)
+	for (int x = 0; x < img.width; x ++)
+	  if (smap->known_p (x - *xshift, y - *yshift))
+	    (*known_pixels)->set_bit (x, y);
+
+    }
+  else
+    {
+      const int xsteps = 50, ysteps = 50;
+      sparam.remove_points ();
+      m->precompute_inverse ();
+      for (int y = 0; y < img.height; y += img.height / ysteps)
+	for (int x = 0; x < img.width; x += img.width / xsteps)
+	  {
+	    coord_t sx, sy;
+	    coord_t ix, iy;
+	    m->invert (x, y, &sx, &sy);
+	    sx = (int)sx;
+	    sy = (int)sy;
+	    m->apply (sx, sy, &ix, &iy);
+	    sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
+	  }
+    }
+  delete smap;
   return m;
 }

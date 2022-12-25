@@ -43,51 +43,18 @@ analyze_dufay::analyze (render_to_scr *render, int width, int height, int xshift
   return !progress || !progress->cancelled ();
 }
 bool
-analyze_dufay::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, progress_info *progress)
-{
-  assert (!m_known_pixels);
-  m_known_pixels = new bitmap_2d (m_width, m_height);
-  if (!m_known_pixels)
-    return false;
-  if (progress)
-    progress->set_task ("determining known pixels", m_width * m_height);
-  for (int y = 0; y < m_height; y++)
-    {
-      for (int x = 0; x < m_width; x++)
-	{
-	  coord_t x1, y1;
-	  scr_to_img.to_img (x - m_xshift - 1, y - m_yshift - 1, &x1, &y1);
-	  if (x1 < 0 || x1 >= img.width || y1 < 0 || y1 >= img.height)
-	    continue;
-	  scr_to_img.to_img (x - m_xshift + 2, y - m_yshift - 1, &x1, &y1);
-	  if (x1 < 0 || x1 >= img.width || y1 < 0 || y1 >= img.height)
-	    continue;
-	  scr_to_img.to_img (x - m_xshift - 1, y - m_yshift + 2, &x1, &y1);
-	  if (x1 < 0 || x1 >= img.width || y1 < 0 || y1 >= img.height)
-	    continue;
-	  scr_to_img.to_img (x - m_xshift + 2, y - m_yshift + 2, &x1, &y1);
-	  if (x1 < 0 || x1 >= img.width || y1 < 0 || y1 >= img.height)
-	    continue;
-	  m_known_pixels->set_bit (x, y);
-	  m_n_known_pixels++;
-	}
-      if (progress)
-	progress->inc_progress ();
-    }
-  return true;
-}
-bool
 analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skiptop, int skipbottom, int skipleft, int skipright, int *xshift_ret, int *yshift_ret, progress_info *progress)
 {
   int xstart, xend, ystart, yend;
   bool found = false;
   luminosity_t best_sqsum = 0;
   int best_xshift = 0, best_yshift = 0;
+  percentage=20;
 
-  xstart = -other.m_width;
-  ystart = -other.m_height;
-  xend = m_width;
-  yend = m_height;
+  xstart = -other.m_width + 2 + m_width * skipleft / 100;
+  ystart = -other.m_height + 2 + m_height * skiptop / 100;
+  xend = m_width * (100 - skipright) / 100 - 2;
+  yend = m_height * (100 - skipbottom) / 100 - 2;
 
   xstart -= m_xshift - other.m_xshift;
   ystart -= m_yshift - other.m_yshift;
@@ -97,14 +64,14 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
     progress->set_task ("determining best overlap", (yend - ystart));
   if (progress)
     progress->pause_stdout ();
-  printf ("Searching range %i to %i, %i to %i; num pixels: %i %i\n", xstart, xend, ystart, yend, m_n_known_pixels, other.m_n_known_pixels);
+  //printf ("Searching range %i to %i, %i to %i; num pixels: %i %i skip top %i skip bottom %i skip left %i skip right %i\n", xstart, xend, ystart, yend, m_n_known_pixels, other.m_n_known_pixels, skiptop, skipbottom, skipleft, skipright);
   if (progress)
     progress->resume_stdout ();
 #pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, found, best_sqsum, best_xshift, best_yshift, skiptop, skipbottom, skipleft, skipright)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
-      int step = 128;
+      int step = 32;
       luminosity_t lbest_sqsum = 0;
       int lbest_xshift = 0, lbest_yshift = 0;
       for (int x = xstart; x < xend; x++)
@@ -124,8 +91,9 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
 
 	  if (yystart >= yyend || xxstart >= xxend)
 	    continue;
-	  if ((xxend - xxstart) * (yyend - yystart) * 100 < m_n_known_pixels * percentage)
-	    continue;
+	  assert (yystart < yyend && xxstart < xxend);
+	  //if ((xxend - xxstart) * (yyend - yystart) * 100 < m_n_known_pixels * percentage)
+	    //continue;
 
 	  //printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend, m_xshift, m_yshift, m_width, m_height, other.m_xshift, other.m_yshift, other.m_width, other.m_height);
 
@@ -136,16 +104,22 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
 		  int x1 = xx + m_xshift;
 		  int y1 = yy + m_yshift;
 		  //printf ("%i %i\n",x1,y1);
+		  ////if (!(x1 >= 0 && x1 < m_width && y1 >= 0 && y1 < m_height))
+		    //printf ("%i %i\n",x1,y1);
+		  //assert (x1 >= 0 && x1 < m_width && y1 >= 0 && y1 < m_height);
 		  if (!m_known_pixels->test_bit (x1, y1))
 		    continue;
 		  int x2 = xx - x + other.m_xshift;
 		  int y2 = yy - y + other.m_yshift;
+		  //if (!(x2 >= 0 && x2 < other.m_width && y2 >= 0 && y2 < other.m_height))
+		    //printf ("%i %i\n",x1,y1);
+		  //assert (x2 >= 0 && x2 < other.m_width && y2 >= 0 && y2 < other.m_height);
 		  if (!m_known_pixels->test_bit (x2, y2))
 		    continue;
 #if 1
 		  luminosity_t lum = red (2 * x1, y1) + red (2 * x1 + 1, y1) + green (x1, y1) + blue (x1, y1);;
-		  lum_sum += lum;
-		  //lum = 1;
+		  //lum_sum += lum;
+		lum = 1;
 		  sqsum += (red (2 * x1, y1) - other.red (2 * x2, y2)) * (red (2 * x1, y1) - other.red (2 * x2, y2)) / (lum * lum);
 		  sqsum += (red (2 * x1 + 1, y1) - other.red (2 * x2 + 1, y2)) * (red (2 * x1 + 1, y1) - other.red (2 * x2 + 1, y2)) / (lum * lum);
 		  sqsum += (green (x1, y1) - other.green (x2, y2)) * (green (x1, y1) - other.green (x2, y2)) / (lum * lum);
@@ -167,6 +141,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
 	    continue;
 	  //printf ("Overlap %i, known pixels %i\n", noverlap *= step * step, m_n_known_pixels);
 	  sqsum /= noverlap;
+	  //sqsum /= lum_sum;
 	  if (!lfound || sqsum < lbest_sqsum)
 	    {
 	      lfound = true;
@@ -195,7 +170,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
     {
       if (progress)
 	progress->pause_stdout ();
-      printf ("Best match on offset %i,%i sqsum %f\n", best_xshift, best_yshift, best_sqsum);
+      //printf ("Best match on offset %i,%i sqsum %f\n", best_xshift, best_yshift, best_sqsum);
       if (progress)
 	progress->resume_stdout ();
     }

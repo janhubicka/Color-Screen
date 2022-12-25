@@ -193,7 +193,6 @@ render_to_file (enum output_mode mode, const char *outfname,
     case predictive:
     case combined:
       {
-	rparam.precise = true;
 	bool screen_compensation = mode == predictive;
 	bool adjust_luminosity = mode == combined;
 

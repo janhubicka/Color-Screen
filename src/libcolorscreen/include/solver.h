@@ -5,6 +5,7 @@
 #include "progress-info.h"
 #include "scr-detect.h"
 #include "imagedata.h"
+#include "bitmap.h"
 struct solver_parameters
 {
   solver_parameters ()
@@ -87,7 +88,7 @@ struct solver_parameters
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
-mesh *detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress);
+mesh *detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress = NULL, int *xshift = NULL, int *yshift = NULL, int *width = NULL, int *height = NULL, bitmap_2d **known_pixels = NULL);
 
 
 #endif
