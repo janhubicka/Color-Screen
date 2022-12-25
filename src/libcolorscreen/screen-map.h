@@ -29,10 +29,28 @@ public:
     //printf ("Check %i %i: %i\n",x,y, map[y * width + x].x != 0);
     return (map[y * width + x].x != 0);
   }
-  void set_coord (int x, int y, coord_t img_x, coord_t img_y)
+  void set_coord (int xx, int yy, coord_t img_x, coord_t img_y)
   {
-    x += xshift;
-    y += yshift;
+    int x = xx + xshift;
+    int y = yy + yshift;
+    if (img_x == 0)
+      img_x = 0.00001;
+    if (img_y == 0)
+      img_y = 0.00001;
+    map[y * width + x].x = img_x;
+    map[y * width + x].y = img_y;
+  }
+  void safe_set_coord (int xx, int yy, coord_t img_x, coord_t img_y)
+  {
+    int x = xx + xshift;
+    int y = yy + yshift;
+    if (x < 0 || x >= width || y < 0 || y >= height)
+      {
+	grow (x < 0, x >= width, y < 0, y >= height);
+	x = xx + xshift;
+	y = yy + yshift;
+	assert (x >= 0 && x < width && y >= 0 && y < height);
+      }
     if (img_x == 0)
       img_x = 0.00001;
     if (img_y == 0)
@@ -172,6 +190,36 @@ public:
 	  }
       }
     return n;
+  }
+  bool
+  grow (bool left, bool right, bool top, bool bottom)
+  {
+    int new_xshift = xshift;
+    int new_yshift = yshift;
+    int new_width = width;
+    int new_height = height;
+    int xgrow = width / 8 + 1;
+    int ygrow = height / 8 + 1;
+    if (left)
+      new_xshift += xgrow, new_width += xgrow;
+    if (right)
+      new_width += xgrow;
+    if (top)
+      new_yshift += ygrow, new_height += ygrow;
+    if (bottom)
+      new_height += ygrow;
+    coord_entry *new_map = (coord_entry *)calloc (new_width * new_height, sizeof (coord_entry));
+    if (!new_map)
+      return false;
+    for (int y = 0; y < height; y++)
+      memcpy (new_map + (new_width * (y + new_yshift - yshift) + new_xshift - xshift), map + width * y, width * sizeof (coord_entry));
+    free (map);
+    map = new_map;
+    width = new_width;
+    height = new_height;
+    xshift = new_xshift;
+    yshift = new_yshift;
+    return true;
   }
   int width, height, xshift, yshift;
 private:
