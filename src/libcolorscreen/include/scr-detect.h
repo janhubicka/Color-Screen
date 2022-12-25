@@ -53,12 +53,13 @@ public:
     m_color_adjust.apply_to_rgb (lookup_table[ir], lookup_table[ig], lookup_table[ib], &r, &g, &b);
     if (r * r + b * b + g * g < m_param.min_luminosity * m_param.min_luminosity)
       return unknown;
-    if (r > (fabs (g) + fabs(b)) * m_param.min_ratio)
+    if (r > (fabs (g) + fabs(b)) * m_param.min_ratio && r > g && r > b)
       return red;
-    if (g > (fabs(r) + fabs(b)) * m_param.min_ratio)
+    if (g > (fabs(r) + fabs(b)) * m_param.min_ratio && g > r && g > b)
       return green;
-    if (b > (fabs(r) + fabs(g)) * m_param.min_ratio)
+    if (b > (fabs(r) + fabs(g)) * m_param.min_ratio && b > r && b > g)
       return blue;
+
     return unknown;
   }
   scr_detect_parameters m_param;
