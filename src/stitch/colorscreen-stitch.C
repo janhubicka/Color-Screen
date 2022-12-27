@@ -11,6 +11,7 @@ namespace {
 int stitch_width, stitch_height;
 scr_to_img_parameters param;
 render_parameters rparam;
+render_parameters passthrough_rparam;
 scr_detect_parameters dparam;
 solver_parameters solver_param;
 
@@ -40,8 +41,8 @@ class stitch_image
   void analyze (int skiptop, int skipbottom, int skipleft, int skipright, progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   bool pixel_known_p (coord_t sx, coord_t sy);
-  bool render_pixel (render_parameters & rparam, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
-  bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, progress_info *progress);
+  bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
+  bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, progress_info *progress);
 private:
   static long time;
   static long lastused;
@@ -60,7 +61,7 @@ stitch_image::load_img (progress_info *progress)
   refcount++;
   if (img)
     return;
-  if (nloaded > stitch_width * 2)
+  if (nloaded > stitch_width)
     {
       int minx = -1, miny = -1;
       long minlast;
@@ -74,8 +75,13 @@ stitch_image::load_img (progress_info *progress)
 	    }
       if (minx != -1)
 	{
-	  delete images[minx][miny].render;
-	  delete images[minx][miny].render2;
+	  progress->pause_stdout ();
+	  printf ("Releaing input tile %s\n", filename);
+	  progress->resume_stdout ();
+	  if (render)
+	    delete images[minx][miny].render;
+	  if (render2)
+	    delete images[minx][miny].render2;
 	  delete img;
 	  images[minx][miny].img = NULL;
 	  images[minx][miny].render = NULL;
@@ -86,7 +92,8 @@ stitch_image::load_img (progress_info *progress)
 	printf ("Too many images referenced\n");
     }
   progress->pause_stdout ();
-  printf ("Loading %s\n", filename);
+  nloaded++;
+  printf ("Loading input tile %s (%i tiles in memory)\n", filename, nloaded);
   progress->resume_stdout ();
   img = new image_data;
   const char *error;
@@ -170,7 +177,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   param.mesh_trans = mesh_trans;
   param.type = Dufay;
   render_to_scr render (param, *img, rparam, 256);
-  render.precompute_all (progress);
+  render.precompute_all (true, progress);
   scr_to_img_map.set_parameters (param, *img);
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
@@ -197,25 +204,24 @@ stitch_image::pixel_known_p (coord_t sx, coord_t sy)
 }
 
 bool
-stitch_image::render_pixel (render_parameters & my_rparam, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *progress)
+stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *progress)
 {
   bool loaded = false;
   lastused = ++time;
-  if (!render)
+  if (!render2)
     {
-      nloaded++;
       load_img (progress);
-      render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
-      render2 = new render_img (param, *img, my_rparam, 65535);
+      //render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
+      render2 = new render_img (param, *img, passthrough_rparam, 65535);
       render2->set_color_display ();
-      render->precompute_all (progress);
+      //render->precompute_all (progress);
       render2->precompute_all (progress);
       loaded = true;
     }
   assert (pixel_known_p (sx, sy));
-  render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-  release_img ();
+  //render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
   render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
+  release_img ();
   /**r = 65535;*/
   return loaded;
 }
@@ -228,6 +234,7 @@ open_tile_output_file (const char *outfname,
 		       int xoffset, int yoffset,
 		       int outwidth, int outheight,
 		       uint16_t ** outrow, bool verbose, const char **error,
+		       void *icc_profile, uint32_t icc_profile_size,
 		       progress_info *progress)
 {
   TIFF *out = TIFFOpen (outfname, "wb");
@@ -237,7 +244,7 @@ open_tile_output_file (const char *outfname,
       *error = "can not open output file";
       return NULL;
     }
-  uint16_t extras[] = {EXTRASAMPLE_ASSOCALPHA};
+  uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
       || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4)
@@ -248,7 +255,7 @@ open_tile_output_file (const char *outfname,
       || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
       || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
       || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc))
     {
       *error = "write error";
       return NULL;
@@ -309,43 +316,46 @@ write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_in
 }
 
 bool
-stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, progress_info *progress)
+stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, progress_info *progress)
 {
   std::string fname=filename;
   std::string prefix="tile-";
   uint16_t *outrow;
   coord_t final_xpos, final_ypos;
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
-  int xmin = final_xpos - final_xshift;
-  int ymin = final_ypos - final_yshift;
+  int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
+  int ymin = floor ((final_ypos - final_yshift) / ystep) * ystep;
 
-  TIFF *out = open_tile_output_file ((prefix+fname).c_str(), xmin - stitch_xmin, ymin - stitch_ymin, final_width, final_height, &outrow, true, error, progress);
+  TIFF *out = open_tile_output_file ((prefix+fname).c_str(), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, true, error, img->icc_profile, img->icc_profile_size, progress);
   if (!out)
     return false;
-  for (int y = ymin; y < ymin + final_height; y++)
+  int j = 0;
+  for (coord_t y = ymin; j < final_height / ystep; y+=ystep, j++)
     {
-      for (int x = xmin; x < xmin + final_width; x++)
+      int i = 0;
+      for (coord_t x = xmin; i < final_width / xstep; x+=xstep, i++)
 	{
 	  coord_t sx, sy;
 	  int r = 0,g = 0,b = 0;
 	  map.final_to_scr (x, y, &sx, &sy);
+	  //printf ("%f %f\n",x,y);
 	  if (pixel_known_p (sx, sy))
 	    {
-	      render_pixel (rparam, sx, sy,&r,&g,&b, progress);
-	      outrow[4 * (x - xmin)] = r;
-	      outrow[4 * (x - xmin) + 1] = g;
-	      outrow[4 * (x - xmin) + 2] = b;
-	      outrow[4 * (x - xmin) + 3] = 65535;
+	      render_pixel (rparam, passthrough_rparam, sx, sy,&r,&g,&b, progress);
+	      outrow[4 * i] = r;
+	      outrow[4 * i + 1] = g;
+	      outrow[4 * i + 2] = b;
+	      outrow[4 * i + 3] = 65535;
 	    }
 	  else
 	    {
-	      outrow[4 * (x - xmin)] = 0;
-	      outrow[4 * (x - xmin) + 1] = 0;
-	      outrow[4 * (x - xmin) + 2] = 0;
-	      outrow[4 * (x - xmin) + 3] = 0;
+	      outrow[4 * i] = 0;
+	      outrow[4 * i + 1] = 0;
+	      outrow[4 * i + 2] = 0;
+	      outrow[4 * i + 3] = 0;
 	    }
 	}
-      if (!write_row (out, y - ymin, outrow, error, progress))
+      if (!write_row (out, j, outrow, error, progress))
 	{
 	  *error = "Writting failed";
 	  TIFFClose (out);
@@ -597,6 +607,7 @@ determine_positions (progress_info *progress)
 static TIFF *
 open_output_file (const char *outfname, int outwidth, int outheight,
 		  uint16_t ** outrow, bool verbose, const char **error,
+		  void *icc_profile, uint32_t icc_profile_size,
 		  progress_info *progress)
 {
   TIFF *out = TIFFOpen (outfname, "wb");
@@ -612,7 +623,8 @@ open_output_file (const char *outfname, int outwidth, int outheight,
       || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc))
     {
       *error = "write error";
       return NULL;
@@ -625,7 +637,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
     }
   if (progress)
     {
-      progress->set_task ("Rendering and saving", outheight);
+      progress->set_task ("Rendering and saving tile", outheight);
     }
   if (verbose)
     {
@@ -667,6 +679,8 @@ main (int argc, char **argv)
       exit (1);
     }
   fclose (in);
+  passthrough_rparam.gamma = rparam.gamma;
+  passthrough_rparam.output_gamma = rparam.gamma;
 
   stitch_width = atoi(argv[3]);
   if (stitch_width <= 0 || stitch_width > MAX_DIM)
@@ -712,11 +726,18 @@ main (int argc, char **argv)
   progress.pause_stdout ();
   progress.resume_stdout ();
 
+  const coord_t xstep = 0.2, ystep = 0.2;
   TIFF *out;
   uint16_t *outrow;
+  /* We need ICC profile.  */
+  images[0][0].load_img (&progress);
+  passthrough_rparam.gray_max = images[0][0].img->maxval;
   out =
-    open_output_file (outfname, xmax-xmin, ymax-ymin, &outrow, true,
-		      &error, &progress);
+    open_output_file (outfname, (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, true,
+		      &error,
+		      images[0][0].img->icc_profile, images[0][0].img->icc_profile_size,
+		      &progress);
+  images[0][0].release_img ();
   if (!out)
     return false;
   scr_to_img_parameters scr_param;
@@ -726,9 +747,12 @@ main (int argc, char **argv)
   data.height=1000;
   scr_to_img map;
   map.set_parameters (scr_param, data);
-  for (int y = ymin; y < ymax; y++)
+  int j = 0;
+  for (coord_t y = ymin; j < (ymax-ymin) / ystep; y+=ystep, j++)
     {
-      for (int x = xmin; x < xmax; x++)
+      int i = 0;
+      bool set_p = false;
+      for (coord_t x = xmin; i < (xmax-xmin) / xstep; x+=xstep, i++)
 	{
 	  coord_t sx, sy;
 	  int r = 0,g = 0,b = 0;
@@ -743,20 +767,29 @@ main (int argc, char **argv)
 		break;
 	    }
 	  if (iy != stitch_height)
-	  {
-	    images[iy][ix].render_pixel (rparam, sx,sy,&r,&g,&b, &progress);
-	    if (!images[iy][ix].output
-		&& !images[iy][ix].write_tile (&error, map, xmin, ymin, &progress))
-	      {
-		fprintf (stderr, "Writting tile: %s\n", error);
-		exit (1);
-	      }
-	  }
-	  outrow[3 * (x - xmin)] = r;
-	  outrow[3 * (x - xmin) + 1] = g;
-	  outrow[3 * (x - xmin) + 2] = b;
+	    {
+	      if (images[iy][ix].render_pixel (rparam, passthrough_rparam, sx,sy,&r,&g,&b, &progress))
+		set_p = true;
+	      if (!images[iy][ix].output)
+		{
+		  if (!images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, &progress))
+		    {
+		      fprintf (stderr, "Writting tile: %s\n", error);
+		      exit (1);
+		    }
+		  set_p = true;
+		}
+	    }
+	  outrow[3 * i] = r;
+	  outrow[3 * i + 1] = g;
+	  outrow[3 * i + 2] = b;
 	}
-      if (!write_row (out, y - ymin, outrow, &error, &progress))
+      if (set_p)
+	{
+	  progress.set_task ("Rendering and saving", (ymax-ymin) / ystep);
+	  progress.set_progress (j);
+	}
+      if (!write_row (out, j, outrow, &error, &progress))
 	{
 	  fprintf (stderr, "Writting failed: %s\n", error);
 	  exit (1);
