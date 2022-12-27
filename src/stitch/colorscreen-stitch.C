@@ -1,4 +1,5 @@
 #include <sys/time.h>
+#include <bits/stdc++.h>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/analyze-dufay.h"
 #include <tiffio.h>
@@ -32,6 +33,7 @@ class stitch_image
 
   int xpos, ypos;
   bool analyzed;
+  bool output;
 
   void load_img (progress_info *);
   void release_img ();
@@ -39,6 +41,7 @@ class stitch_image
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
+  bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, progress_info *progress);
 private:
   static long time;
   static long lastused;
@@ -215,6 +218,145 @@ stitch_image::render_pixel (render_parameters & my_rparam, coord_t sx, coord_t s
   render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
   /**r = 65535;*/
   return loaded;
+}
+
+/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
+   File will be 16bit RGB TIFF.
+   Allocate output buffer to hold single row to OUTROW.  */
+static TIFF *
+open_tile_output_file (const char *outfname, 
+		       int xoffset, int yoffset,
+		       int outwidth, int outheight,
+		       uint16_t ** outrow, bool verbose, const char **error,
+		       progress_info *progress)
+{
+  TIFF *out = TIFFOpen (outfname, "wb");
+  double dpi = 300;
+  if (!out)
+    {
+      *error = "can not open output file";
+      return NULL;
+    }
+  uint16_t extras[] = {EXTRASAMPLE_ASSOCALPHA};
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4)
+      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
+      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
+      || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
+      || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
+      || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
+    {
+      *error = "write error";
+      return NULL;
+    }
+  if (xoffset || yoffset || 1)
+    {
+      if (!TIFFSetField (out, TIFFTAG_XPOSITION, (double)(xoffset / dpi))
+	  || !TIFFSetField (out, TIFFTAG_YPOSITION, (double)(yoffset / dpi))
+	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLWIDTH, (long)(outwidth + xoffset))
+	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLLENGTH, (long)(outheight + yoffset)))
+	{
+	  *error = "write error";
+	  return NULL;
+	}
+    }
+  *outrow = (uint16_t *) malloc (outwidth * 2 * 4);
+  if (!*outrow)
+    {
+      *error = "Out of memory allocating output buffer";
+      return NULL;
+    }
+  if (progress)
+    {
+      progress->set_task ("Rendering and saving", outheight);
+    }
+  if (verbose)
+    {
+      progress->pause_stdout ();
+      printf ("Rendering %s at offset %i,%i in resolution %ix%i\n", outfname, xoffset, yoffset, outwidth,
+	      outheight);
+      fflush (stdout);
+      progress->resume_stdout ();
+    }
+  return out;
+}
+
+/* Write one row.  */
+static bool
+write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
+{
+  if (progress && progress->cancel_requested ())
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Cancelled";
+      return false;
+    }
+  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Write error";
+      return false;
+    }
+   if (progress)
+     progress->inc_progress ();
+  return true;
+}
+
+bool
+stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, progress_info *progress)
+{
+  std::string fname=filename;
+  std::string prefix="tile-";
+  uint16_t *outrow;
+  coord_t final_xpos, final_ypos;
+  map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
+  int xmin = final_xpos - final_xshift;
+  int ymin = final_ypos - final_yshift;
+
+  TIFF *out = open_tile_output_file ((prefix+fname).c_str(), xmin - stitch_xmin, ymin - stitch_ymin, final_width, final_height, &outrow, true, error, progress);
+  if (!out)
+    return false;
+  for (int y = ymin; y < ymin + final_height; y++)
+    {
+      for (int x = xmin; x < xmin + final_width; x++)
+	{
+	  coord_t sx, sy;
+	  int r = 0,g = 0,b = 0;
+	  map.final_to_scr (x, y, &sx, &sy);
+	  if (pixel_known_p (sx, sy))
+	    {
+	      render_pixel (rparam, sx, sy,&r,&g,&b, progress);
+	      outrow[4 * (x - xmin)] = r;
+	      outrow[4 * (x - xmin) + 1] = g;
+	      outrow[4 * (x - xmin) + 2] = b;
+	      outrow[4 * (x - xmin) + 3] = 65535;
+	    }
+	  else
+	    {
+	      outrow[4 * (x - xmin)] = 0;
+	      outrow[4 * (x - xmin) + 1] = 0;
+	      outrow[4 * (x - xmin) + 2] = 0;
+	      outrow[4 * (x - xmin) + 3] = 0;
+	    }
+	}
+      if (!write_row (out, y - ymin, outrow, error, progress))
+	{
+	  *error = "Writting failed";
+	  TIFFClose (out);
+	  free (outrow);
+	  return false;
+	}
+    }
+  TIFFClose (out);
+  free (outrow);
+  output = true;
+  return true;
 }
 
 void
@@ -487,34 +629,13 @@ open_output_file (const char *outfname, int outwidth, int outheight,
     }
   if (verbose)
     {
-      printf ("Rendering %s in resolution %ix%i: 00%%", outfname, outwidth,
+      progress->pause_stdout ();
+      printf ("Rendering %s in resolution %ix%i\n", outfname, outwidth,
 	      outheight);
       fflush (stdout);
+      progress->resume_stdout ();
     }
   return out;
-}
-
-/* Write one row.  */
-static bool
-write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
-{
-  if (progress && progress->cancel_requested ())
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Cancelled";
-      return false;
-    }
-  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Write error";
-      return false;
-    }
-   if (progress)
-     progress->inc_progress ();
-  return true;
 }
 }
 
@@ -624,7 +745,12 @@ main (int argc, char **argv)
 	  if (iy != stitch_height)
 	  {
 	    images[iy][ix].render_pixel (rparam, sx,sy,&r,&g,&b, &progress);
-	    //printf ("%i %i %i\n", r,g,b);
+	    if (!images[iy][ix].output
+		&& !images[iy][ix].write_tile (&error, map, xmin, ymin, &progress))
+	      {
+		fprintf (stderr, "Writting tile: %s\n", error);
+		exit (1);
+	      }
 	  }
 	  outrow[3 * (x - xmin)] = r;
 	  outrow[3 * (x - xmin) + 1] = g;
