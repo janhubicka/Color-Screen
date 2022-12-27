@@ -16,9 +16,9 @@ public:
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
-  DLL_PUBLIC bool precompute_all (progress_info *progress);
-  DLL_PUBLIC bool precompute (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
-  DLL_PUBLIC bool precompute_img_range (luminosity_t, luminosity_t, luminosity_t, luminosity_t, progress_info *progress);
+  DLL_PUBLIC bool precompute_all (bool grayscale_needed, progress_info *progress);
+  DLL_PUBLIC bool precompute (bool grayscale_needed, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
+  DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
   /* This returns screen coordinate width of rendered output.  */
   int get_final_width ()
   {
@@ -61,6 +61,10 @@ public:
     : render_to_scr (param, img, rparam, dstmaxval), m_color (false)
   { }
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
+  bool precompute_all (progress_info *progress = NULL)
+  {
+    return render_to_scr::precompute_all (!m_color, progress);
+  }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     luminosity_t gg, rr, bb;

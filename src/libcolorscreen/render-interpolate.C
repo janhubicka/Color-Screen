@@ -9,7 +9,7 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data
 flatten_attr bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
-  if (!render_to_scr::precompute (xmin, ymin, xmax, ymax, progress))
+  if (!render_to_scr::precompute (true, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)
     {

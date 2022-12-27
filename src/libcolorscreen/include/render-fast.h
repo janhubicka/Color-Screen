@@ -5,6 +5,10 @@ class render_fast : public render_to_scr
 {
 public:
   render_fast (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval);
+  bool precompute_all (progress_info *progress)
+  {
+    return render_to_scr::precompute_all (true, progress);
+  }
   void render_pixel (int x, int y, int *r, int *g, int *b);
   void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {

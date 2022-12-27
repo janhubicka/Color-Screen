@@ -201,7 +201,7 @@ public:
 
 protected:
   inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
-  bool precompute_all (bool duffay, progress_info *progress);
+  bool precompute_all (bool grayscale_needed, progress_info *progress);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 

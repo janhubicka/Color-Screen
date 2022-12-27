@@ -18,6 +18,10 @@ public:
     if (m_screen)
       release_screen (m_screen);
   }
+  bool precompute_all (progress_info *progress)
+  {
+    return render_to_scr::precompute_all (!m_color, progress);
+  }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);
   void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b);

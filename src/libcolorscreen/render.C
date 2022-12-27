@@ -394,7 +394,7 @@ static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharp
 }
 
 bool
-render::precompute_all (bool duffay, progress_info *progress)
+render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
   lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
   m_lookup_table = lookup_table_cache.get (par, progress, &m_lookup_table_id);
@@ -406,20 +406,23 @@ render::precompute_all (bool duffay, progress_info *progress)
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
-  if (!m_gray_data)
+  if (grayscale_needed)
     {
-      graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
-      if (p.gamma < 0.001)
-	p.gamma = 0.001;
-      if (p.gamma > 1000)
-	p.gamma = 1000;
-      m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
-      m_gray_data = m_gray_data_holder->m_gray_data;
-    }
-  if (m_params.sharpen_radius && m_params.sharpen_amount)
-    {
-      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
-      m_sharpened_data = sharpened_data_cache.get (p, progress);
+      if (!m_gray_data)
+	{
+	  graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
+	  if (p.gamma < 0.001)
+	    p.gamma = 0.001;
+	  if (p.gamma > 1000)
+	    p.gamma = 1000;
+	  m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
+	  m_gray_data = m_gray_data_holder->m_gray_data;
+	}
+      if (m_params.sharpen_radius && m_params.sharpen_amount)
+	{
+	  sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
+	  m_sharpened_data = sharpened_data_cache.get (p, progress);
+	}
     }
 
   color_matrix color;
