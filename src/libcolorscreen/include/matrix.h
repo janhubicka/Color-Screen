@@ -145,7 +145,8 @@ public:
     T c = B::m_elements[0][1];
     T d = B::m_elements[1][1];
     T det_rec = 1 / (a * d - b * c);
-    matrix2x2 ret (d * det_rec, -b * det_rec, -c * det_rec, a * det_rec);
+    matrix2x2 ret (d * det_rec, -b * det_rec,
+		   -c * det_rec, a * det_rec);
     return ret;
   }
 };

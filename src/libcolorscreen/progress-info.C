@@ -41,6 +41,17 @@ file_progress_info::~file_progress_info ()
 {
   pause_stdout (true);
 }
+static void
+clear_task (FILE *f, const char *task)
+{
+  int n = task ? strlen (task) + 9 : 0;
+  fprintf (f, "\r%*s\r", n, "");
+}
+static void
+print_finished (FILE *f, const char *task)
+{
+  fprintf (f, "\r%s: %2.2f%%\n", task, 100.0);
+}
 void
 file_progress_info::pause_stdout (bool final)
 {
@@ -51,17 +62,13 @@ file_progress_info::pause_stdout (bool final)
   if (m_displayed)
     {
       const char *task = m_last_task;
-      //fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
       if (task)
         {
 	  if (!final)
-	    {
-	      int n = strlen (task) + 9;
-	      fprintf (m_file, "\r%*s\r", n, "");
-	    }
+	    clear_task (m_file, task);
 	  else
 	    {
-	      fprintf (m_file, "\r%s: %2.2f%%\n", task, 100.0);
+	      print_finished (m_file, task);
 	      m_last_task = NULL;
 	      free ((void *)task);
 	    }
@@ -114,7 +121,7 @@ file_progress_info::display_progress ()
       if (m_last_task && strcmp (m_last_task, task))
 	{
 	  const char *t = m_last_task;
-          fprintf (m_file, "\r%s: %2.2f%%\n", t, 100.0);
+	  clear_task (m_file, t);
 	  n = true;
 	}
       else if (status - m_last_status < 0.01)
