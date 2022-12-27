@@ -19,6 +19,7 @@ public:
   gray **data;
   /* Optional color scan.  */
   pixel **rgbdata;
+  void *icc_profile;
 
   DLL_PUBLIC image_data ();
   DLL_PUBLIC ~image_data ();
@@ -26,6 +27,7 @@ public:
   int width, height;
   /* Maximal value of the image data.  */
   int maxval;
+  uint32_t icc_profile_size;
   /* Unique id of the image (used for caching).  */
   unsigned long id;
 

@@ -148,10 +148,12 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 struct out_lookup_table_params
 {
   int maxval;
+  luminosity_t output_gamma;
   bool
   operator==(out_lookup_table_params &o)
   {
-    return maxval == o.maxval;
+    return maxval == o.maxval
+	   && output_gamma == o.output_gamma;
   }
 };
 
@@ -160,8 +162,13 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
   //printf ("Output table for %i\n", p.maxval);
-  for (int i = 0; i < 65536; i++)
-    lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * p.maxval;
+  //
+  if (p.output_gamma == -1)
+    for (int i = 0; i < 65536; i++)
+      lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * p.maxval;
+  else
+    for (int i = 0; i < 65536; i++)
+      lookup_table[i] = pow ((i+ 0.5) / 65535, 1/p.output_gamma) * p.maxval;
   return lookup_table;
 }
 
@@ -396,7 +403,7 @@ render::precompute_all (bool duffay, progress_info *progress)
       lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
     }
-  out_lookup_table_params out_par = {m_dst_maxval};
+  out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   if (!m_gray_data)

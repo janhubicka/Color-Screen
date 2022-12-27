@@ -68,7 +68,7 @@ private:
 };
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), width (0), height (0), maxval (0), id (lru_caches::get ()), loader (NULL), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), loader (NULL), own (false)
 { 
 }
 
@@ -179,6 +179,14 @@ tiff_image_data_loader::init_loader (const char *name, const char **error)
   if (debug)
     printf("checking smaples per pixel\n");
   TIFFGetFieldDefaulted(m_tif, TIFFTAG_SAMPLESPERPIXEL, &m_samples);
+  void *iccprof;
+  uint32_t size;
+  if (TIFFGetField (m_tif, TIFFTAG_ICCPROFILE, &size, &iccprof))
+    {
+      m_img->icc_profile = malloc (size);
+      memcpy (m_img->icc_profile, iccprof, size);
+      m_img->icc_profile_size = size;
+    }
   if (m_samples != 1 && m_samples != 3 && m_samples != 4)
     {
       if (debug)

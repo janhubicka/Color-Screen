@@ -18,7 +18,7 @@
 struct DLL_PUBLIC render_parameters
 {
   render_parameters()
-  : gamma (2.2), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1.5),
+  : gamma (2.2), output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance (1, 1, 1),
     mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
     age(0),
@@ -32,6 +32,8 @@ struct DLL_PUBLIC render_parameters
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
+  /* Output gamma.  -1 means sRGB transfer curve.  */
+  luminosity_t output_gamma;
   /* Radious (in pixels) and amount for unsharp-mask filter.  */
   luminosity_t sharpen_radius, sharpen_amount;
   /* Pre-saturation increase (this works on data collected from the scan before
@@ -348,25 +350,6 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 	  b *= lum2 / lum;
 	}
     }
-#if 0
-  static synthetic_hd_curve c (10, output_curve);
-#if 1
-  luminosity_t lum = r * 0.3086 + g * 0.6094 + b * 0.0820;
-  luminosity_t lum2;
-  lum2 = c.apply (lum) /*0.2*/;
-  if (lum != lum2)
-    {
-      //fprintf (stderr, "%f %f\n", lum, lum2);
-      r *= lum2 / lum;
-      g *= lum2 / lum;
-      b *= lum2 / lum;
-    }
-#else
-  r = c.apply (r);
-  g = c.apply (g);
-  b = c.apply (b);
-#endif
-#endif
 
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
