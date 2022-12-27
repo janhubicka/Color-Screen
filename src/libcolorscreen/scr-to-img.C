@@ -149,16 +149,6 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 : 0);
   m_scr_to_final_matrix = rotation_2x2matrix (rotate);
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
-  {
-    coord_t fx, fy;
-    scr_to_final (100,10,&fx,&fy);
-    final_to_scr (fx, fy, &fx, &fy);
-    if (fabs (fx - 100) > 0.00001 || fabs (fy - 10) > 0.0001)
-    {
-      printf ("%f %f\n",fx,fy);
-      abort ();
-    }
-  }
 }
 
 /* Determine rectangular section of the screen to which the whole image
