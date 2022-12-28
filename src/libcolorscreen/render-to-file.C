@@ -338,7 +338,7 @@ render_to_file (enum output_mode mode, const char *outfname,
     case detect_adjusted:
       {
 	render_scr_detect render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (progress))
+	if (!render.precompute_all (false, progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
 	    return false;

@@ -221,6 +221,27 @@ public:
     yshift = new_yshift;
     return true;
   }
+  void
+  add_solver_points (solver_parameters *sparam, int xgrid, int ygrid)
+  {
+    int xstep = width / xgrid;
+    int ystep = height / ygrid;
+    sparam->remove_points ();
+    for (int x = 0; x + xstep - 1 < width; x += xstep)
+      for (int y = 0; y + ystep - 1 < height; y += ystep)
+	{
+	  bool found = false;
+	  for (int yy = y ; yy < y+ystep && !found; yy++)
+	    for (int xx = x ; xx < x+xstep && !found; xx++)
+	      if (known_p (xx - xshift, yy - yshift))
+		{
+		  coord_t ix, iy;
+		  found = true;
+		  get_coord (xx -xshift, yy - yshift, &ix, &iy);
+		  sparam->add_point (ix, iy, (xx - xshift) / 2.0, yy - yshift, (xx - xshift ? solver_parameters::blue : solver_parameters::green));
+		}
+	}
+  }
   int width, height, xshift, yshift;
 private:
   struct coord_entry {coord_t x, y;};

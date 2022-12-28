@@ -430,7 +430,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   int max_diam = std::max (img.width, img.height);
   render_parameters empty;
   render_scr_detect render (dparam, img, empty, 256);
-  render.precompute_all (progress);
+  render.precompute_all (false, progress);
   if (progress)
     progress->set_task ("Looking for initial grid", max_diam);
   bitmap_2d visited (img.width, img.height);
@@ -482,9 +482,13 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   //smap->get_solver_points_nearby (0, 0, 200, sparam);
   //sparam.dump (stdout);
   //return NULL;
-  const int xsteps = 50, ysteps = 50;
-  sparam.remove_points ();
+  //
+  //
+  /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
+  simple_solver (&param, img, sparam, progress);
   mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
+
+  const int xsteps = 50, ysteps = 50;
   m->precompute_inverse ();
   for (int y = 0; y < img.height; y += img.height / ysteps)
     for (int x = 0; x < img.width; x += img.width / xsteps)
@@ -497,7 +501,6 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 	m->apply (sx, sy, &ix, &iy);
 	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
-  /* First get solver parameters sane so range can be determined.  */
   simple_solver (&param, img, sparam, progress);
 
 

@@ -310,7 +310,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     case render_type_adjusted_color:
       {
 	render_scr_detect render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
+	if (!render.precompute_all (false, progress))
 	  return false;
 
 	if (step > 1)
@@ -358,7 +358,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     case render_type_pixel_colors:
       {
 	render_scr_detect render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
+	if (!render.precompute_all (false, progress))
 	  return false;
 	if (step > 1)
 	  {
@@ -519,11 +519,11 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
   return !progress || !progress->cancelled ();
 }
 bool
-render_scr_detect::precompute_all (progress_info *progress)
+render_scr_detect::precompute_all (bool grayscale_needed, progress_info *progress)
 {
   color_class_params p = {m_img.id, &m_img, m_scr_detect.m_param, &m_scr_detect};
   m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
-  return render::precompute_all (false, progress);
+  return render::precompute_all (grayscale_needed, progress);
 }
 
 
@@ -569,7 +569,7 @@ render_scr_nearest_scaled::~render_scr_nearest_scaled ()
 bool
 render_scr_nearest_scaled::precompute_all (progress_info *progress)
 {
-  if (!render_scr_detect::precompute_all (progress))
+  if (!render_scr_detect::precompute_all (true, progress))
     return false;
   patches_cache_params p = {m_color_class_map_id, m_gray_data_id, m_color_class_map, &m_img, this};
   m_patches = patches_cache.get (p, progress);
@@ -579,7 +579,7 @@ render_scr_nearest_scaled::precompute_all (progress_info *progress)
 bool
 render_scr_relax::precompute_all (progress_info *progress)
 {
-  if (!render_scr_detect::precompute_all (progress))
+  if (!render_scr_detect::precompute_all (true, progress))
     return false;
   color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map, this};
   m_color_data_handle = color_data_cache.get (p, progress);

@@ -183,6 +183,8 @@ tiff_image_data_loader::init_loader (const char *name, const char **error)
   uint32_t size;
   if (TIFFGetField (m_tif, TIFFTAG_ICCPROFILE, &size, &iccprof))
     {
+      //m_img->icc_profile = iccprof;
+      //m_img->icc_profile_size = size;
       m_img->icc_profile = malloc (size);
       memcpy (m_img->icc_profile, iccprof, size);
       m_img->icc_profile_size = size;

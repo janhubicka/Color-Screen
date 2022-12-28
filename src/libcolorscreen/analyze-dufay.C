@@ -61,11 +61,6 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, int skipto
   yend -= m_yshift - other.m_yshift;
   if (progress)
     progress->set_task ("determining best overlap", (yend - ystart));
-  if (progress)
-    progress->pause_stdout ();
-  //printf ("Searching range %i to %i, %i to %i; num pixels: %i %i skip top %i skip bottom %i skip left %i skip right %i\n", xstart, xend, ystart, yend, m_n_known_pixels, other.m_n_known_pixels, skiptop, skipbottom, skipleft, skipright);
-  if (progress)
-    progress->resume_stdout ();
 #pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, found, best_sqsum, best_xshift, best_yshift, skiptop, skipbottom, skipleft, skipright)
   for (int y = ystart; y < yend; y++)
     {

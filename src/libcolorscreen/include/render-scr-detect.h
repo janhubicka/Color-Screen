@@ -69,7 +69,7 @@ public:
 	return;
       }
   }
-  bool precompute_all (progress_info *);
+  bool precompute_all (bool grayscale_needed, progress_info *);
   enum render_scr_detect_type_t
   {
     render_type_original,
@@ -178,6 +178,10 @@ public:
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
   rgbdata fast_sample_pixel_img (int x, int y);
+  bool precompute_all (progress_info *progress)
+  {
+    return render_scr_detect::precompute_all (true, progress);
+  }
 private:
   void inline sample_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
 };
@@ -309,6 +313,10 @@ public:
       set_color (0,0,0,r,g,b);
     else
       set_color (get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue), r, g, b);
+  }
+  bool precompute_all (progress_info *progress)
+  {
+    return render_scr_detect::precompute_all (true, progress);
   }
 private:
 };
