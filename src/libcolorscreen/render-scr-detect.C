@@ -526,10 +526,38 @@ render_scr_detect::precompute_all (bool grayscale_needed, progress_info *progres
   return render::precompute_all (grayscale_needed, progress);
 }
 
+bool
+render_scr_detect::precompute_rgbdata (progress_info *progress)
+{
+  if (m_precomputed_rgbdata)
+    return true;
+  m_precomputed_rgbdata = (rgbdata *)malloc (m_img.width * m_img.height * sizeof (rgbdata));
+  if (!m_precomputed_rgbdata)
+    return false;
+  if (progress)
+    progress->set_task ("determining adjusted colors for screen detection", m_img.height);
+#pragma omp parallel for default(none) shared(progress)
+  for (int y = 0; y < m_img.height; y++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < m_img.width; x++)
+	  m_precomputed_rgbdata[y * m_img.width + x] = fast_get_adjusted_pixel (x, y);
+       if (progress)
+	 progress->inc_progress ();
+    }
+  if (progress && progress->cancelled ())
+    {
+      free (m_precomputed_rgbdata);
+      return false;
+    }
+  return true;
+}
+
 
 render_scr_detect::~render_scr_detect ()
 {
   color_class_cache.release (m_color_class_map);
+  free (m_precomputed_rgbdata);
 }
 
 int cmp_entry(const void *p1, const void *p2)

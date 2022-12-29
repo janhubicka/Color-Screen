@@ -1,5 +1,6 @@
 #ifndef SCREEN_MAP_H
 #define SCREEN_MAP_H
+#include <limits>
 #include "include/solver.h"
 class
 screen_map
@@ -241,6 +242,26 @@ public:
 		  sparam->add_point (ix, iy, (xx - xshift) / 2.0, yy - yshift, (xx - xshift ? solver_parameters::blue : solver_parameters::green));
 		}
 	}
+  }
+  void
+  get_known_range (int *xminr, int *yminr, int *xmaxr, int *ymaxr)
+  {
+    int xmin = std::numeric_limits<int>::max (), ymin = std::numeric_limits<int>::max (), xmax = std::numeric_limits<int>::min (), ymax = std::numeric_limits<int>::min ();
+    for (int y = 0 ; y < height; y++)
+      for (int x = 0 ; x < width * 2; x++)
+	if (known_p (x - xshift, y - yshift))
+	  {
+	    coord_t ix, iy;
+	    get_coord (x - xshift, y - yshift, &ix, &iy);
+	    xmin = std::min (xmin, (int)floor (ix));
+	    ymin = std::min (ymin, (int)floor (iy));
+	    xmax = std::max (xmax, (int)ceil (ix));
+	    ymax = std::max (ymax, (int)ceil (iy));
+	  }
+    *xminr = xmin;
+    *yminr = ymin;
+    *xmaxr = xmax;
+    *ymaxr = ymax;
   }
   int width, height, xshift, yshift;
 private:

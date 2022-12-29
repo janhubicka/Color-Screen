@@ -8,7 +8,7 @@ class render_scr_detect : public render
 {
 public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-    : render (img, rparam, dstmaxval)
+    : render (img, rparam, dstmaxval), m_precomputed_rgbdata (NULL), m_color_class_map (NULL)
   {
     m_scr_detect.set_parameters (param, rparam.gamma, m_img.maxval);
   }
@@ -70,6 +70,7 @@ public:
       }
   }
   bool precompute_all (bool grayscale_needed, progress_info *);
+  bool precompute_rgbdata (progress_info *progress);
   enum render_scr_detect_type_t
   {
     render_type_original,
@@ -80,6 +81,47 @@ public:
     render_type_scr_nearest_scaled,
     render_type_scr_relax
   };
+  void get_adjusted_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    xp -= (coord_t)0.5;
+    yp -= (coord_t)0.5;
+    int sx, sy;
+    coord_t rx = my_modf (xp, &sx);
+    coord_t ry = my_modf (yp, &sy);
+
+    if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
+      {
+	rgbdata d[4][4];
+        for (int yy = -1; yy <= 2; yy++)
+          for (int xx = -1; xx <= 2; xx++)
+  	    d[yy+1][xx+1] = /*fast_get_adjusted_pixel (sx + xx, sy + yy);*/ m_precomputed_rgbdata[(yy + sy) * m_img.width + (xx + sx)];
+	*r = cubic_interpolate (cubic_interpolate (d[0][0].red, d[1][0].red, d[2][0].red, d[3][0].red, ry),
+				cubic_interpolate (d[0][1].red, d[1][1].red, d[2][1].red, d[3][1].red, ry),
+				cubic_interpolate (d[0][2].red, d[1][2].red, d[2][2].red, d[3][2].red, ry),
+				cubic_interpolate (d[0][3].red, d[1][3].red, d[2][3].red, d[3][3].red, ry),
+				rx);
+	*g = cubic_interpolate (cubic_interpolate (d[0][0].green, d[1][0].green, d[2][0].green, d[3][0].green, ry),
+				cubic_interpolate (d[0][1].green, d[1][1].green, d[2][1].green, d[3][1].green, ry),
+				cubic_interpolate (d[0][2].green, d[1][2].green, d[2][2].green, d[3][2].green, ry),
+				cubic_interpolate (d[0][3].green, d[1][3].green, d[2][3].green, d[3][3].green, ry),
+				rx);
+	*b = cubic_interpolate (cubic_interpolate (d[0][0].blue, d[1][0].blue, d[2][0].blue, d[3][0].blue, ry),
+				cubic_interpolate (d[0][1].blue, d[1][1].blue, d[2][1].blue, d[3][1].blue, ry),
+				cubic_interpolate (d[0][2].blue, d[1][2].blue, d[2][2].blue, d[3][2].blue, ry),
+				cubic_interpolate (d[0][3].blue, d[1][3].blue, d[2][3].blue, d[3][3].blue, ry),
+				rx);
+      }
+    else
+      *r = *g = *b = 0;
+  }
+  rgbdata fast_precomputed_get_adjusted_pixel (int x, int y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    rgbdata d = m_precomputed_rgbdata[y * m_img.width + x];
+    *r = d.red;
+    *g = d.green;
+    *b = d.blue;
+    return d;
+  }
   rgbdata fast_get_adjusted_pixel (int x, int y)
   {
     rgbdata d;
@@ -162,8 +204,9 @@ done:
     return m_color_class_map;
   }
 protected:
-  scr_detect m_scr_detect;
+  rgbdata *m_precomputed_rgbdata;
   color_class_map *m_color_class_map;
+  scr_detect m_scr_detect;
   unsigned long m_color_class_map_id;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);

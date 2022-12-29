@@ -146,7 +146,10 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   m_matrix = mm;
   m_inverse_matrix = m_matrix.invert ();
 
-  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 : 0);
+  /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems to be 23.77.
+     We organize the grid making red lines horizontal, so rotate by additional 90 degrees
+     to get image right.  */
+  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 + 0.77 : 0);
   m_scr_to_final_matrix = rotation_2x2matrix (rotate);
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }

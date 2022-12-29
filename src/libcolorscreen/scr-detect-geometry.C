@@ -317,8 +317,295 @@ confirm_patch (color_class_map *color_map,
   return !fail;
 }
 
+#define N_PRIORITIES 4
+
+bool
+confirm (render_scr_detect *render,
+	 coord_t coordinate1_x, coord_t coordinate1_y,
+	 coord_t coordinate2_x, coord_t coordinate2_y,
+	 coord_t x, coord_t y, scr_detect::color_class t,
+	 int width, int height,
+	 coord_t max_distance,
+	 coord_t *rcx, coord_t *rcy, int *priority, bool strip)
+{
+  coord_t bestcy = x, bestcx = y, minsum = 0, bestinner = 0, bestouter = 0;
+  const int sample_steps = 2;
+  const coord_t pixel_step = 0.1;
+  bool found = false;
+  int xmin = ceil (std::min (std::min (coordinate1_x / 2, coordinate2_x / 2), std::min (-coordinate1_x / 2, -coordinate2_x / 2)));
+  int xmax = ceil (std::max (std::max (coordinate1_x / 2, coordinate2_x / 2), std::max (-coordinate1_x / 2, -coordinate2_x / 2)));
+  int ymin = ceil (std::min (std::min (coordinate1_y / 2, coordinate2_y / 2), std::min (-coordinate1_y / 2, -coordinate2_y / 2)));
+  int ymax = ceil (std::max (std::max (coordinate1_y / 2, coordinate2_y / 2), std::max (-coordinate1_y / 2, -coordinate2_y / 2)));
+
+  /* Do not try to search towards end of screen since it gives wrong resutls.
+     broder 4x4 is necessary for interpolation.  */
+  if (y - max_distance /4 + ymin - 4 < 0
+      || y + max_distance /4 + ymax + 4 >= height
+      || x - max_distance /4 + xmin - 4 < 0
+      || x + max_distance /4 + xmax + 3 >= width)
+    return false;
+
+  if (!strip)
+#if 0
+    {
+      coord_t cx = x;
+      coord_t cy = y;
+      for (int i = 0; i < 5; i++)
+	{
+	  coord_t xsum = 0, xavg = 0;
+	  coord_t ysum = 0, yavg =0;
+	  switch ((int) t)
+	    {
+	      case 0:
+	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		  {
+		    luminosity_t color[3];
+		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		    xsum += color[t];
+		    ysum += color[t];
+		    xavg += color[t] * (xx + 0.5 - cx);
+		    yavg += color[t] * (yy + 0.5 - cy);
+		  }
+	      break;
+	      case 1:
+	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		  {
+		    luminosity_t color[3];
+		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		    xsum += color[t];
+		    ysum += color[t];
+		    xavg += color[t] * (xx + 0.5 - cx);
+		    yavg += color[t] * (yy + 0.5 - cy);
+		  }
+	      break;
+	      case 2:
+	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		  {
+		    luminosity_t color[3];
+		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		    xsum += color[t];
+		    ysum += color[t];
+		    xavg += color[t] * (xx + 0.5 - cx);
+		    yavg += color[t] * (yy + 0.5 - cy);
+		  }
+	      break;
+	      default:
+	      abort ();
+	    }
+	  coord_t xadj = xavg / xsum / 2;
+	  coord_t yadj = yavg / ysum / 2;
+	  coord_t sum = xadj * xadj + yadj * yadj;
+	  printf ("%i:sum %f %f %f %f %f %f\n",i,sum,xavg,yavg,xsum,ysum,xavg/xsum, yavg/ysum);
+	  cx += xavg / xsum / 2;
+	  cy += yavg / ysum / 2;
+	  if (sum < 0.1)
+	    break;
+	}
+      bestcx = cx;
+      bestcy = cy;
+      if ((cx - x) * (cx -x) + (cy - y) * (cy - y) > max_distance / 2)
+	return false;
+    }
+#else
+    {
+      //printf ("%i %i %i %i\n",xmin,xmax,ymin,ymax);
+      for (coord_t cy = std::max (y - max_distance / 4, (coord_t)-ymin); cy <= std::min (y + max_distance / 4, (coord_t)height - ymax); cy+= pixel_step)
+	for (coord_t cx = std::max (x - max_distance / 4, (coord_t)-xmin); cx <= std::min (x + max_distance / 4, (coord_t)width - xmax); cx+= pixel_step)
+	  {
+	    coord_t xsum = 0;
+	    coord_t ysum = 0;
+	    switch ((int) t)
+	      {
+		case 0:
+		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		    {
+		      luminosity_t color[3];
+		      render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx);
+		      ysum += color[t] * (yy + 0.5 - cy);
+		    }
+		break;
+		case 1:
+		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		    {
+		      luminosity_t color[3];
+		      render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx);
+		      ysum += color[t] * (yy + 0.5 - cy);
+		    }
+		break;
+		case 2:
+		for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
+		  for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
+		    {
+		      luminosity_t color[3];
+		      render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
+		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
+		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx);
+		      ysum += color[t] * (yy + 0.5 - cy);
+		    }
+		break;
+		default:
+		abort ();
+	      }
+	   coord_t sum = xsum * xsum + ysum * ysum;
+	   //printf ("%f %f: %f %f %f\n", cx-x, cy-y, xsum, ysum, sum);
+	   if (!found || minsum > sum)
+	     {
+	       bestcx = cx;
+	       bestcy = cy;
+	       minsum = sum;
+	       found = true;
+	   }
+	 }
+      if (!found)
+	return false;
+    }
+#endif
+  else
+  {
+    bestcx = x;
+    bestcy = y;
+  }
+  for (int yy = -sample_steps; yy <= sample_steps; yy++)
+    for (int xx = -sample_steps; xx <= sample_steps; xx++)
+      {
+	luminosity_t color[3];
+	render->get_adjusted_pixel (bestcx + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate1_y,
+				    bestcy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
+				    &color[0], &color[1], &color[2]);
+	luminosity_t sum = /*color[0]+color[1]+color[2]*/ 1;
+	if (sum > 0 && color[t] > 0)
+	  {
+	    if ((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
+	      bestouter += color[t] / sum;
+	    else
+	      bestinner += color[t] / sum;
+	  }
+      }
+#if 0
+    for (coord_t cy = std::max (y - max_distance / 4, (coord_t)0); cy <= std::min (y + max_distance / 4, (coord_t)height); cy+= pixel_step)
+      for (coord_t cx = std::max (x - max_distance / 4, (coord_t)0); cx <= std::min (x + max_distance / 4, (coord_t)width); cx+= pixel_step)
+	{
+	  coord_t xsum = 0;
+	  coord_t ysum = 0;
+	  coord_t inner = 0;
+	  coord_t outer = 0;
+	  for (int yy = -sample_steps; yy <= sample_steps; yy++)
+	    for (int xx = -sample_steps; xx <= sample_steps; xx++)
+	      {
+		luminosity_t color[3];
+		render->get_adjusted_pixel (cx + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate1_y,
+					    cy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
+					    &color[0], &color[1], &color[2]);
+		xsum += std::max (color[t], (luminosity_t)0) * xx;
+		ysum += std::max (color[t], (luminosity_t)0) * yy;
+		luminosity_t sum = color[0]+color[1]+color[2];
+		if (sum > 0 && color[t] > 0)
+		  {
+		    if ((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
+		      outer += color[t] / sum;
+		    else
+		      inner += color[t] / sum;
+		  }
+	      }
+	   coord_t sum = xsum * xsum + ysum * ysum;
+	   //printf ("%f %f: %f %f %f\n", cx-x, cy-y, xsum, ysum, sum);
+	   if (!found || minsum > sum)
+	     {
+	       bestcx = cx;
+	     bestcy = cy;
+	     bestinner = inner;
+	     bestouter = outer;
+	     minsum = sum;
+	     found = true;
+	   }
+      }
+#endif
+  *rcx = bestcx;
+  *rcy = bestcy;
+  /*  For sample_steps == 2:
+      O O O O O
+      O I I I O
+      O I I I O
+      O I I I O
+      O O O O O  */
+  if (!strip)
+    {
+      bestinner /= (2 * sample_steps - 1) * (2 * sample_steps - 1);
+      bestouter /= 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+    }
+  /*  For sample_steps == 2:
+      O O O O O
+      I I I I I
+      I I I I I
+      I I I I I
+      O O O O O  */
+  else
+    {
+      bestinner /= (2 * sample_steps - 1) * (2 * sample_steps + 1);
+      bestouter /= 2 * (2 * sample_steps + 1);
+    }
+  if (bestinner < bestouter * 1.2)
+    {
+      //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t);
+      return false;
+    }
+  else if (bestinner > bestouter * 4)
+    *priority = 3;
+  else if (bestinner > bestouter * 2)
+    *priority = 2;
+  else if (bestinner > bestouter * 1.8)
+    *priority = 1;
+  else
+    *priority = 0;
+  //printf ("given:%f %f best:%f %f inner:%f outer:%f priority:%i color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t, *priority);
+  return true;
+}
+
+template<int N, typename T>
+class priority_queue
+{
+public:
+  const int npriorities = N;
+  std::vector<T> queue[N];
+  void
+  insert (T e, int priority)
+  {
+    queue[N - priority - 1].push_back (e);
+  }
+  bool
+  extract_min (T &e)
+  {
+    for (int i = 0; i < npriorities; i++)
+      if (queue[i].size ())
+	{
+	  e = queue[i].back ();
+	  queue[i].pop_back ();
+	  return true;
+	}
+    return false;
+  }
+};
+
 screen_map *
-flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, progress_info *progress)
+flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
@@ -355,17 +642,18 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
     int scr_xm2, scr_y;
     coord_t img_x, img_y;
   };
-  std::vector<queue_entry> queue;
-  queue.push_back ((struct queue_entry){0, 0, greenx, greeny});
+  priority_queue<N_PRIORITIES,queue_entry> queue;
+  queue.insert ((struct queue_entry){0, 0, greenx, greeny}, 0);
   map->set_coord (0, 0, greenx, greeny);
   if (sparam)
     sparam->remove_points ();
   //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
-  while (queue.size () /*&& nfound < 500*/)
+  queue_entry e;
+  while (queue.extract_min (e) /*&& nfound < 500*/)
     {
       coord_t ix, iy;
-      queue_entry e = queue.back ();
-      queue.pop_back ();
+      int priority = 0;
+      int priority2 = 0;
       //if (verbose)
         //printf ("visiting %i %i %f %f %f %f\n", e.scr_xm2, e.scr_y, e.img_x, e.img_y, param.coordinate1_x, param.coordinate1_y);
       if (progress)
@@ -374,36 +662,42 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
+//#define cpatch(x,y,t, priority) confirm_patch (color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+#define cpatch(x,y,t, priority) confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)
+//#define cstrip(x,y,t, priority) confirm_strip (color_map, x, y, t, min_patch_size, visited)
+#define cstrip(x,y,t, priority) confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)
       if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
-	  && confirm_patch (color_map, e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+	  && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	{
 	  map->safe_set_coord (e.scr_xm2 - 1, e.scr_y, ix, iy);
-	  queue.push_back ((struct queue_entry){e.scr_xm2 - 1, e.scr_y, ix, iy});
+	  queue.insert ((struct queue_entry){e.scr_xm2 - 1, e.scr_y, ix, iy}, priority);
 	  nfound++;
 	}
       if (!map->known_p (e.scr_xm2 + 1, e.scr_y)
-	  && confirm_patch (color_map, e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_xm2 + 1) & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+	  && cpatch (e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_xm2 + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	{
 	  map->safe_set_coord (e.scr_xm2 + 1, e.scr_y, ix, iy);
-	  queue.push_back ((struct queue_entry){e.scr_xm2 + 1, e.scr_y, ix, iy});
+	  queue.insert ((struct queue_entry){e.scr_xm2 + 1, e.scr_y, ix, iy}, priority);
 	  nfound++;
 	}
       if (!map->known_p (e.scr_xm2, e.scr_y - 1)
-	  && confirm_strip (color_map, e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
-	  && confirm_patch (color_map, e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+	  && cstrip (e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, priority)
+	  && cpatch (e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	{
 	  map->safe_set_coord (e.scr_xm2, e.scr_y - 1, ix, iy);
-	  queue.push_back ((struct queue_entry){e.scr_xm2, e.scr_y - 1, ix, iy});
+	  queue.insert ((struct queue_entry){e.scr_xm2, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
 	  nfound++;
 	}
       if (!map->known_p (e.scr_xm2, e.scr_y + 1)
-	  && confirm_strip (color_map, e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, min_patch_size, visited)
-	  && confirm_patch (color_map, e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+	  && cstrip (e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, priority)
+	  && cpatch (e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	{
 	  map->safe_set_coord (e.scr_xm2, e.scr_y + 1, ix, iy);
-	  queue.push_back ((struct queue_entry){e.scr_xm2, e.scr_y + 1, ix, iy});
+	  queue.insert ((struct queue_entry){e.scr_xm2, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
 	  nfound++;
 	}
+#undef cpatch
+#undef cstrip
     }
   if (nfound < nexpected / 5)
     {
@@ -437,6 +731,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   scr_to_img_parameters param;
   screen_map *smap = NULL;
   param.type = Dufay;
+  render.precompute_rgbdata (progress);
   for (int d = 0; d < max_diam && !smap; d++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -458,7 +753,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 		  }
 		visited.clear ();
 		simple_solver (&param, img, sparam, progress);
-		smap = flood_fill (sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get_color_class_map (), /*&sparam*/ NULL, &visited, progress);
+		smap = flood_fill (sparam.point[0].img_x, sparam.point[0].img_y, param, img, &render, render.get_color_class_map (), /*&sparam*/ NULL, &visited, progress);
 		if (!smap)
 		  {
 		    if (progress)
@@ -490,6 +785,9 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 
   const int xsteps = 50, ysteps = 50;
   m->precompute_inverse ();
+  if (progress)
+    progress->set_task ("Determinig solver points", 1);
+  sparam.remove_points ();
   for (int y = 0; y < img.height; y += img.height / ysteps)
     for (int x = 0; x < img.width; x += img.width / xsteps)
       {
@@ -516,6 +814,14 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 	  if (smap->known_p (x - *xshift, y - *yshift))
 	    (*known_pixels)->set_bit (x, y);
     }
+  int xmin, ymin, xmax, ymax;
+  smap->get_known_range (&xmin, &ymin, &xmax, &ymax);
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Unalanyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n", xmin * 100.0 / img.width, 100 - xmax * 100.0 / img.width, ymin * 100.0 / img.height, 100 - ymax * 100.0 / img.height);
+  if (progress)
+    progress->resume_stdout ();
+  
   delete smap;
   return m;
 }
