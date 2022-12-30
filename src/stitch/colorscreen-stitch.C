@@ -448,10 +448,10 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
       return false;
     }
   int j = 0;
-  for (coord_t y = ymin; j < final_height / ystep; y+=ystep, j++)
+  for (coord_t y = ymin; j < (int)(final_height / ystep); y+=ystep, j++)
     {
       int i = 0;
-      for (coord_t x = xmin; i < final_width / xstep; x+=xstep, i++)
+      for (coord_t x = xmin; i < (int)(final_width / xstep); x+=xstep, i++)
 	{
 	  coord_t sx, sy;
 	  int r = 0,g = 0,b = 0;
