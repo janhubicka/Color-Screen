@@ -917,7 +917,8 @@ main (int argc, char **argv)
     for (int y = 0; y < stitch_height; y++)
       for (int x = 0; x < stitch_width; x++)
 	if (!images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, &progress)
-	    || !images[y][x].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress))
+	    || !images[y][x].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress)
+	    || !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, &progress))
 	  {
 	    fprintf (stderr, "Writting tile: %s\n", error);
 	    exit (1);
