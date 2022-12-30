@@ -232,7 +232,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
   coord_t my_pixelsize;
-  mesh_trans = detect_solver_points (*img, dparam, solver_param, progress);
+  mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &my_pixelsize);
   if (!mesh_trans)
     {
       progress->pause_stdout ();
@@ -251,7 +251,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
     {
       initialized = true;
       pixel_size = my_pixelsize;
-      my_screen = render_to_scr::get_screen (Dufay, false, pixel_size, progress);
+      my_screen = render_to_scr::get_screen (Dufay, false, my_pixelsize, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
   final_xshift = render.get_final_xshift ();
