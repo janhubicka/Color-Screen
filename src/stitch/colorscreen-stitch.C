@@ -433,12 +433,25 @@ bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
   std::string fname=filename;
-  std::string prefix= mode == render_demosaiced ? "demosaicedtile-" : mode == render_original ? "tile-" : "predictivetile=";
+  std::string prefix;
   uint16_t *outrow;
   coord_t final_xpos, final_ypos;
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
   int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
   int ymin = floor ((final_ypos - final_yshift) / ystep) * ystep;
+
+  switch(mode)
+  {
+  case render_demosaiced:
+    prefix = "demosaicedtile-";
+    break;
+  case render_original:
+    prefix = "tile-";
+    break;
+  case render_predictive:
+    prefix = "predictivetile-";
+    break;
+  }
 
   load_img (progress);
   TIFF *out = open_tile_output_file ((prefix+fname).c_str(), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, true, error, img->icc_profile, img->icc_profile_size, mode, progress);
@@ -913,7 +926,7 @@ main (int argc, char **argv)
     for (int x = 0; x < stitch_width; x++)
       if (images[y][x].img)
 	images[y][x].release_image_data (&progress);
-  delete my_screen;
+  render_to_scr::release_screen (my_screen);
 
 
   return 0;

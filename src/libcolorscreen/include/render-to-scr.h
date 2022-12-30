@@ -43,8 +43,8 @@ public:
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
   static class screen *get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress);
-protected:
   static void release_screen (class screen *scr);
+protected:
 
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
