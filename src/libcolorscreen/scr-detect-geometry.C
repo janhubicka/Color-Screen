@@ -615,6 +615,10 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
   if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 || screen_ysize > 100)
     return NULL;
 
+  /* Do not flip the image.  */
+  if (param.coordinate1_y < 0)
+    return NULL;
+
   scr_to_img scr_map;
   scr_map.set_parameters (param, img);
 
