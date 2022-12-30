@@ -197,7 +197,9 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
   int xmax = img.width * (100 - skipright) / 100;
   int ymin = img.height * skiptop / 100;
   int ymax = img.height * (100 - skipbottom) / 100;
-  //printf ("Range: %i %i %i %i\n",xmin,xmax,ymin,ymax);
+  progress->pause_stdout ();
+  printf ("Skip: %i %i %i %i Range: %i %i %i %i\n", skiptop, skipbottom, skipleft, skipright,xmin,xmax,ymin,ymax);
+  progress->resume_stdout ();
   for (int y = 0; y < height; y++)
     {
       for (int x = 0; x < width; x++)
