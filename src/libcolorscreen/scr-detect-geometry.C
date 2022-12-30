@@ -3,6 +3,7 @@
 #include "include/render-scr-detect.h"
 #include "screen-map.h"
 #include "include/bitmap.h"
+#include "include/render-to-scr.h"
 namespace
 {
 
@@ -719,7 +720,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 }
 
 mesh *
-detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels)
+detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress, coord_t *pixel_size, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels)
 {
   int max_diam = std::max (img.width, img.height);
   render_parameters empty;
@@ -772,8 +773,12 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
     }
   if (!smap)
     return NULL;
+  if (progress)
+    progress->pause_stdout ();
   smap->check_consistency (param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
 			   sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
+  if (progress)
+    progress->resume_stdout ();
   //smap->get_solver_points_nearby (0, 0, 200, sparam);
   //sparam.dump (stdout);
   //return NULL;
@@ -781,6 +786,11 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
   //
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
   simple_solver (&param, img, sparam, progress);
+  if (pixel_size)
+    {
+      render_to_scr render (param, img, empty, 256);
+      *pixel_size = render.pixel_size ();
+    }
   mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
 
   const int xsteps = 50, ysteps = 50;

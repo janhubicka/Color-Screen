@@ -208,6 +208,16 @@ struct DLL_PUBLIC scr_to_img_parameters
     }
     n_motor_corrections--;
   }
+  coord_t
+  screen_per_inch ()
+  {
+    if (type == Dufay)
+      /* Dufaycolor manual promises 500 lines per inch.  Screen has 2 lines  */
+      return 250;
+    else
+      /* 2 squares per screen.  */
+      return 25.4 / 2;
+  }
 };
 
 class image_data;

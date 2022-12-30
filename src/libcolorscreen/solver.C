@@ -91,13 +91,24 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	}
     }
 
-  {
-    gsl_multifit_linear_workspace * work
-      = gsl_multifit_linear_alloc (n*2, 6);
-    gsl_multifit_wlinear (X, w, y, c, cov,
-                          &chisq, work);
-    gsl_multifit_linear_free (work);
-  }
+  if (weights || scrweights || 1)
+    {
+      gsl_multifit_linear_workspace * work
+	= gsl_multifit_linear_alloc (n*2, 6);
+      gsl_multifit_wlinear (X, w, y, c, cov,
+			    &chisq, work);
+      gsl_multifit_linear_free (work);
+    }
+  else
+    {
+      gsl_multifit_robust_workspace * work
+	= gsl_multifit_robust_alloc (gsl_multifit_robust_welsch, n*2, 6);
+      gsl_multifit_robust (X, y, c, cov,
+			  work);
+      chisq = 0;
+      gsl_multifit_robust_free (work);
+    }
+
 
 #define C(i) (gsl_vector_get(c,(i)))
 #define COV(i,j) (gsl_matrix_get(cov,(i),(j)))

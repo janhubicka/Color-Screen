@@ -8,7 +8,7 @@
 
 namespace {
 #define MAX_DIM 10
-const int border = 20;
+const int border = 30;
 /* Seems that DT scans intends to overlap by 30%.  */
 const int percentage = 25;
 const bool stitched_file = false;
@@ -20,9 +20,14 @@ render_parameters passthrough_rparam;
 scr_detect_parameters dparam;
 solver_parameters solver_param;
 
+bool initialized = false;
+screen *my_screen;
+coord_t pixel_size;
+
 enum render_mode
 {
   render_demosaiced,
+  render_predictive,
   render_original
 };
 
@@ -43,13 +48,14 @@ class stitch_image
 
   render_interpolate *render;
   render_img *render2;
+  render_interpolate *render3;
 
   int xpos, ypos;
   bool analyzed;
   bool output;
 
   stitch_image ()
-  : filename (NULL), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), known_pixels (NULL), render (NULL), render2 (NULL), refcount (0)
+  : filename (NULL), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
   {
   }
   ~stitch_image ();
@@ -78,6 +84,8 @@ stitch_image::~stitch_image ()
     delete render;
   if (render2)
     delete render2;
+  if (render3)
+    delete render3;
   if (img)
     delete img;
   if (mesh_trans)
@@ -97,10 +105,13 @@ stitch_image::release_image_data (progress_info *progress)
     delete render;
   if (render2)
     delete render2;
+  if (render3)
+    delete render3;
   delete img;
   img = NULL;
   render = NULL;
   render2 = NULL;
+  render3 = NULL;
   nloaded--;
 }
 
@@ -111,7 +122,7 @@ stitch_image::load_img (progress_info *progress)
   lastused = ++current_time;
   if (img)
     return;
-  if (nloaded >= stitched_file ? stitch_width * 2 : 2)
+  if (nloaded >= (stitched_file ? stitch_width * 2 : 1))
     {
       int minx = -1, miny = -1;
       long minlast = 0;
@@ -220,6 +231,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   //bitmap_2d *bitmap;
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
+  coord_t my_pixelsize;
   mesh_trans = detect_solver_points (*img, dparam, solver_param, progress);
   if (!mesh_trans)
     {
@@ -235,6 +247,12 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   param.type = Dufay;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, progress);
+  if (!initialized)
+    {
+      initialized = true;
+      pixel_size = my_pixelsize;
+      my_screen = render_to_scr::get_screen (Dufay, false, pixel_size, progress);
+    }
   scr_to_img_map.set_parameters (param, *img);
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
@@ -242,7 +260,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   final_height = render.get_final_height ();
 
   scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
-  dufay.analyze (&render, width, height, xshift, yshift, true, progress);
+  dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
   dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress));
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
@@ -272,31 +290,52 @@ bool
 stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *progress)
 {
   bool loaded = false;
-  if (mode == render_demosaiced ? !render : !render2)
+  switch (mode)
     {
-      load_img (progress);
-      if (mode == render_demosaiced)
+     case render_demosaiced:
+      if (!render)
 	{
+	  load_img (progress);
 	  render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
 	  render->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
 	}
       else
+	lastused = ++current_time;
+      assert (pixel_known_p (sx, sy));
+      render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
+      break;
+     case render_original:
+      if (!render2)
 	{
-          render2 = new render_img (param, *img, passthrough_rparam, 65535);
-          render2->set_color_display ();
-          render2->precompute_all (progress);
+	  load_img (progress);
+	  render2 = new render_img (param, *img, passthrough_rparam, 65535);
+	  render2->set_color_display ();
+	  render2->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
 	}
-      release_img ();
-      loaded = true;
+      else
+	lastused = ++current_time;
+      assert (pixel_known_p (sx, sy));
+      render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
+      break;
+     case render_predictive:
+      if (!render3)
+	{
+	  load_img (progress);
+	  render3 = new render_interpolate (param, *img, my_rparam, 65535, true, false);
+	  render3->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
+	}
+      else
+	lastused = ++current_time;
+      assert (pixel_known_p (sx, sy));
+      render3->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
+      break;
     }
-  else
-    lastused = ++current_time;
-  assert (pixel_known_p (sx, sy));
-  if (mode == render_demosaiced)
-    render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-  else
-    render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
-  /**r = 65535;*/
   return loaded;
 }
 
@@ -394,7 +433,7 @@ bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
   std::string fname=filename;
-  std::string prefix= mode == render_demosaiced ? "demosaicedtile-" : "tile-";
+  std::string prefix= mode == render_demosaiced ? "demosaicedtile-" : mode == render_original ? "tile-" : "predictivetile=";
   uint16_t *outrow;
   coord_t final_xpos, final_ypos;
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
@@ -778,7 +817,7 @@ main (int argc, char **argv)
   int xmin, ymin, xmax, ymax;
   determine_viewport (xmin, xmax, ymin, ymax);
 
-  const coord_t xstep = 0.2, ystep = 0.2;
+  const coord_t xstep = pixel_size, ystep = pixel_size;
   /* We need ICC profile.  */
   images[0][0].load_img (&progress);
   passthrough_rparam.gray_max = images[0][0].img->maxval;
@@ -803,7 +842,7 @@ main (int argc, char **argv)
       if (!out)
 	{
 	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not open final stitch file %s: %f\n", outfname, error);
+	  fprintf (stderr, "Can not open final stitch file %s: %s\n", outfname, error);
 	  exit (1);
 	}
       for (coord_t y = ymin; j < (ymax-ymin) / ystep; y+=ystep, j++)
@@ -831,7 +870,8 @@ main (int argc, char **argv)
 		  if (!images[iy][ix].output)
 		    {
 		      if (!images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, &progress)
-			  || !images[iy][ix].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress))
+			  || !images[iy][ix].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress)
+			  || !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, &progress))
 			{
 			  fprintf (stderr, "Writting tile: %s\n", error);
 			  exit (1);
@@ -873,6 +913,7 @@ main (int argc, char **argv)
     for (int x = 0; x < stitch_width; x++)
       if (images[y][x].img)
 	images[y][x].release_image_data (&progress);
+  delete my_screen;
 
 
   return 0;

@@ -30,7 +30,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	return false;
     }
   else
-    if (!m_dufay.analyze (this, width, height, xshift, yshift, m_params.precise, progress))
+    if (!m_dufay.analyze (this, &m_img, &m_scr_to_img, m_screen, width, height, xshift, yshift, m_params.precise, m_params.collection_threshold, progress))
       return false;
   return !progress || !progress->cancelled ();
 }

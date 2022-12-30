@@ -45,7 +45,7 @@ public:
   {
     return m_yshift;
   }
-  bool analyze(render_to_scr *render, int width, int height, int xshift, int yshift, bool precise, progress_info *progress = NULL);
+  bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
   bool find_best_match (int percentake, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift, int *yshift, progress_info *progress = NULL);
   void set_known_pixels (bitmap_2d *bitmap)
   {
@@ -56,7 +56,8 @@ public:
 	if (bitmap->test_bit (x,y))
 	  m_n_known_pixels++;
   }
-  bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress);
+  void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
+  bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
 private:
   int m_xshift, m_yshift, m_width, m_height;
   luminosity_t *m_red, *m_green, *m_blue;
