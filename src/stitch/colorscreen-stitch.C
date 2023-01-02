@@ -1,5 +1,5 @@
 #include <sys/time.h>
-#include <bits/stdc++.h>
+#include <string>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/analyze-dufay.h"
 #include <tiffio.h>
