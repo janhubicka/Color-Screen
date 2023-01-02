@@ -613,7 +613,7 @@ analyze_dufay::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosi
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
-	rvec.push_back (red (x * 2 + 1, y));
+	rvec.push_back (red (x * 2, y));
 	rvec.push_back (red (x * 2 + 1, y));
 	gvec.push_back (green (x, y));
 	bvec.push_back (blue (x, y));

@@ -563,14 +563,15 @@ confirm (render_scr_detect *render,
       bestinner /= (2 * sample_steps - 1) * (2 * sample_steps + 1);
       bestouter /= 2 * (2 * sample_steps + 1);
     }
+  coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
   if (bestinner < bestouter * 1.2)
     {
       //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t);
       return false;
     }
-  else if (bestinner > bestouter * 4)
+  else if (bestinner > bestouter * 4 && dist < max_distance * max_distance / 128)
     *priority = 3;
-  else if (bestinner > bestouter * 2)
+  else if (bestinner > bestouter * 2 && dist < max_distance * max_distance / 32)
     *priority = 2;
   else if (bestinner > bestouter * 1.8)
     *priority = 1;

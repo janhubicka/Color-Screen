@@ -151,11 +151,19 @@ image_data::allocate ()
   return true;
 }
 
+/* Silence warnings.
+   They happen commonly while loading scans.  */
+static
+void warning_handler(const char* module, const char* fmt, va_list ap)
+{
+}
+
 bool
 tiff_image_data_loader::init_loader (const char *name, const char **error)
 {
   if (debug)
     printf("TIFFopen\n");
+  TIFFSetWarningHandler (warning_handler);
   m_tif = TIFFOpen(name, "r");
   if (!m_tif)
     {
