@@ -835,13 +835,13 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
 
   if (known_pixels)
     {
-      *xshift = smap->xshift;
+      *xshift = smap->xshift / 2;
       *yshift = smap->yshift;
-      *width = smap->width;
+      *width = smap->width / 2;
       *height = smap->height;
-      *known_pixels = new bitmap_2d (smap->width, smap->height);
+      *known_pixels = new bitmap_2d (smap->width / 2, smap->height);
       for (int y = 0; y < smap->height; y ++)
-	for (int x = 0; x < smap->width; x ++)
+	for (int x = 0; x < smap->width / 2; x ++)
 	  if (smap->known_p (x * 2 - *xshift * 2, y - *yshift))
 	    (*known_pixels)->set_bit (x, y);
     }

@@ -160,14 +160,14 @@ stitch_image::load_img (progress_info *progress)
   progress->resume_stdout ();
   img = new image_data;
   const char *error;
-  img_width = img->width;
-  img_height = img->height;
   if (!img->load (filename, &error, progress))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", filename, error);
       exit (1);
     }
+  img_width = img->width;
+  img_height = img->height;
   if (!img->rgbdata)
     {
       progress->pause_stdout ();
@@ -231,6 +231,7 @@ void
 stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2)
 {
   int n = 0;
+  coord_t border = 5 / 100.0;
   for (int y = -yshift; y < -yshift + height; y++)
     {
       int yy = y + ypos - other.ypos;
@@ -241,7 +242,26 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
 		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
 		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+	    {
+	      coord_t x1, y1, x2, y2;
+	      //mesh_trans->apply (x + xshift,y + yshift, &x1, &y1);
+	      //mesh_trans->apply (xx + other.xshift, yy + other.yshift, &x2, &y2);
+	      mesh_trans->apply (x,y, &x1, &y1);
+	      other.mesh_trans->apply (xx, yy, &x2, &y2);
+	      //printf ("%f %f %f %f\n",x1,y1,x2,y2);
+	      assert (x1 >= 0);
+	      assert (y1 >= 0);
+	      assert (x2 >= 0);
+	      assert (y2 >= 0);
+	      assert (x1 <= img_width);
+	      assert (y1 <= img_height);
+	      assert (x2 <= other.img_width);
+	      assert (y2 <= other.img_height);
+	      if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
+	          || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
+		continue;
 	      n++;
+	    }
 	  }
     }
   if (!n)
@@ -258,12 +278,17 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
 		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
 	      {
+		coord_t x1, y1, x2, y2;
+		//mesh_trans->apply (x + xshift,y + yshift, &x1, &y1);
+		//mesh_trans->apply (xx + other.xshift, yy + other.yshift, &x2, &y2);
+		mesh_trans->apply (x,y, &x1, &y1);
+		other.mesh_trans->apply (xx, yy, &x2, &y2);
+		if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
+		    || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
+		  continue;
 	        if (m++ == next)
 		  {
 		    next += step;
-		    coord_t x1, y1, x2, y2;
-		    mesh_trans->apply (x,y, &x1, &y1);
-		    mesh_trans->apply (xx,yy, &x2, &y2);
 		    fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, x1, y1, x2, y2);
 		  }
 	      }
@@ -849,7 +874,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
 		  void *icc_profile, uint32_t icc_profile_size,
 		  progress_info *progress)
 {
-  TIFF *out = TIFFOpen (outfname, "wb");
+  TIFF *out = TIFFOpen (outfname, "wb8");
   if (!out)
     {
       *error = "can not open output file";
