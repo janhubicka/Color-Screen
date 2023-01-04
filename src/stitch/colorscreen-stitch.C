@@ -479,7 +479,7 @@ open_tile_output_file (const char *outfname,
 	}
     }
   *outrow = (uint16_t *) malloc (outwidth * 2 * 4);
-  if (!*outrow)
+  if (!outrow)
     {
       *error = "Out of memory allocating output buffer";
       return NULL;
@@ -896,7 +896,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
       return NULL;
     }
   *outrow = (uint16_t *) malloc (outwidth * 2 * 3);
-  if (!*outrow)
+  if (!outrow)
     {
       *error = "Out of memory allocating output buffer";
       return NULL;
