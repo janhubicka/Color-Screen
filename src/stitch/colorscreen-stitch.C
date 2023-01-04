@@ -11,7 +11,7 @@ namespace {
 const int border = 30;
 /* Seems that DT scans intends to overlap by 30%.  */
 const int percentage = 25;
-const bool stitched_file = false;
+const bool stitched_file = true;
 
 int stitch_width, stitch_height;
 scr_to_img_parameters param;
@@ -36,14 +36,19 @@ class stitch_image
   public:
   char *filename;
   std::string screen_filename;
+  std::string known_screen_filename;
   image_data *img;
   mesh *mesh_trans;
   scr_to_img_parameters param;
   scr_to_img scr_to_img_map;
+  int img_width, img_height;
   int xshift, yshift, width, height;
   int final_xshift, final_yshift;
   int final_width, final_height;
   analyze_dufay dufay;
+  /* Screen patches that was detected by screen detection algorithm.  */
+  bitmap_2d *screen_detected_patches;
+  /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
   bitmap_2d *known_pixels;
 
   render_interpolate *render;
@@ -55,7 +60,7 @@ class stitch_image
   bool output;
 
   stitch_image ()
-  : filename (NULL), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
+  : filename (NULL), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
   {
   }
   ~stitch_image ();
@@ -64,6 +69,7 @@ class stitch_image
   void analyze (int skiptop, int skipbottom, int skipleft, int skipright, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
+  void output_common_points (FILE *f, stitch_image &other, int n1, int n2);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
@@ -80,18 +86,13 @@ stitch_image images[MAX_DIM][MAX_DIM];
 
 stitch_image::~stitch_image ()
 {
-  if (render)
-    delete render;
-  if (render2)
-    delete render2;
-  if (render3)
-    delete render3;
-  if (img)
-    delete img;
-  if (mesh_trans)
-    delete mesh_trans;
-  if (known_pixels)
-    delete known_pixels;
+  delete render;
+  delete render2;
+  delete render3;
+  delete img;
+  delete mesh_trans;
+  delete known_pixels;
+  delete screen_detected_patches;
 }
 
 void
@@ -101,16 +102,13 @@ stitch_image::release_image_data (progress_info *progress)
   printf ("Releasing input tile %s\n", filename);
   progress->resume_stdout ();
   assert (!refcount && img);
-  if (render)
-    delete render;
-  if (render2)
-    delete render2;
-  if (render3)
-    delete render3;
   delete img;
   img = NULL;
+  delete render;
   render = NULL;
+  delete render2;
   render2 = NULL;
+  delete render3;
   render3 = NULL;
   nloaded--;
 }
@@ -162,6 +160,8 @@ stitch_image::load_img (progress_info *progress)
   progress->resume_stdout ();
   img = new image_data;
   const char *error;
+  img_width = img->width;
+  img_height = img->height;
   if (!img->load (filename, &error, progress))
     {
       progress->pause_stdout ();
@@ -181,6 +181,7 @@ stitch_image::release_img ()
 {
   refcount--;
 }
+
 bitmap_2d*
 stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress)
 {
@@ -225,6 +226,51 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
   return known_pixels;
 }
 
+/* Output common points to hugin pto file.  */
+void
+stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2)
+{
+  int n = 0;
+  for (int y = -yshift; y < -yshift + height; y++)
+    {
+      int yy = y + ypos - other.ypos;
+      if (yy >= -other.yshift && yy < -other.yshift + other.height)
+	for (int x = -xshift; x < -xshift + width; x++)
+	  {
+	    int xx = x + xpos - other.xpos;
+	    if (xx >= -other.xshift && xx < -other.xshift + other.width
+		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
+		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+	      n++;
+	  }
+    }
+  if (!n)
+    return;
+  int step = std::max (n / 1000, 1);
+  for (int y = -yshift, m = 0, next = 0; y < -yshift + height; y++)
+    {
+      int yy = y + ypos - other.ypos;
+      if (yy >= -other.yshift && yy < -other.yshift + other.height)
+	for (int x = -xshift; x < -xshift + width; x++)
+	  {
+	    int xx = x + xpos - other.xpos;
+	    if (xx >= -other.xshift && xx < -other.xshift + other.width
+		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
+		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+	      {
+	        if (m++ == next)
+		  {
+		    next += step;
+		    coord_t x1, y1, x2, y2;
+		    mesh_trans->apply (x,y, &x1, &y1);
+		    mesh_trans->apply (xx,yy, &x2, &y2);
+		    fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, x1, y1, x2, y2);
+		  }
+	      }
+	  }
+    }
+}
+
 void
 stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress)
 {
@@ -234,7 +280,9 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
   coord_t my_pixelsize;
-  mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &my_pixelsize);
+  int detected_xshift, detected_yshift, detected_width, detected_height;
+  bitmap_2d *my_screen_detected_patches;
+  mesh_trans = detect_solver_points (*img, dparam, rparam.gamma, solver_param, progress, &my_pixelsize, &detected_xshift, &detected_yshift, &detected_width, &detected_height, &my_screen_detected_patches);
   if (!mesh_trans)
     {
       progress->pause_stdout ();
@@ -262,15 +310,30 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   final_height = render.get_final_height ();
 
   scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
+  screen_detected_patches = new bitmap_2d (width, height);
+  for (int y = 0; y < height; y++)
+    if (y - yshift +  detected_yshift > 0 && y - yshift +  detected_yshift < detected_height)
+      for (int x = 0; x < width; x++)
+        if (x - xshift +  detected_xshift > 0 && x - xshift +  detected_xshift < detected_width
+	    && my_screen_detected_patches->test_bit (x - xshift + detected_xshift, y - yshift +  detected_yshift))
+           screen_detected_patches->set_bit (x, y);
+  delete my_screen_detected_patches;
   dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
-  dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress));
+  dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
+  known_screen_filename = (std::string)"known_screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
   const char *error;
   if (!dufay.write_screen (screen_filename.c_str (), NULL, &error, progress))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", screen_filename.c_str (), error);
+      exit (1);
+    }
+  if (!dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress))
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
       exit (1);
     }
   //dufay.set_known_pixels (bitmap);
@@ -648,6 +711,69 @@ analyze (int x, int y, progress_info *progress)
 }
 
 void
+produce_hugin_pto_file (const char *name, progress_info *progress)
+{
+  FILE *f = fopen (name,"wt");
+  if (!f)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Can not open %s\n", name);
+      exit (1);
+    }
+  fprintf (f, "# hugin project file\n"
+	   "#hugin_ptoversion 2\n"
+	   "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "m i0\n");
+  for (int y = 0; y < stitch_height; y++)
+    for (int x = 0; x < stitch_width; x++)
+     fprintf (f, "i w%i h%i f0 v1 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename);
+  fprintf (f, "# specify variables that should be optimized\n"
+	   "v Ra0\n"
+	   "v Rb0\n"
+	   "v Rc0\n"
+	   "v Rd0\n"
+	   "v Re0\n"
+	   "v Vb0\n"
+	   "v Vc0\n"
+	   "v Vd0\n");
+  for (int i = 1; i < stitch_width * stitch_height; i++)
+    fprintf (f, "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v Eev%i\n"
+	     "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v r%i\n"
+	     "v p%i\n"
+	     "v y%i\n"
+	     "v Vb%i\n"
+	     "v Vc%i\n"
+	     "v Vd%i\n",i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i);
+#if 0
+  for (int y = 0; y < stitch_height; y++)
+    for (int x = 0; x < stitch_width; x++)
+      {
+	if (x >= 1)
+	  images[y][x-1].output_common_points (f, images[y][x], y * stitch_width + x - 1, y * stitch_width + x);
+	if (y >= 1)
+	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * stitch_width + x, y * stitch_width + x);
+      }
+#endif
+  for (int y = 0; y < stitch_height; y++)
+    for (int x = 0; x < stitch_width; x++)
+      for (int y2 = 0; y2 < stitch_height; y2++)
+        for (int x2 = 0; x2 < stitch_width; x2++)
+	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
+	    images[y][x].output_common_points (f, images[y2][x2], y * stitch_width + x, y2 * stitch_width + x2);
+  fclose (f);
+}
+
+void
 determine_positions (progress_info *progress)
 {
   for (int y = 0; y < stitch_height; y++)
@@ -849,6 +975,7 @@ main (int argc, char **argv)
   data.height=1000;
   scr_to_img map;
   map.set_parameters (scr_param, data);
+  produce_hugin_pto_file ("hugin.pto", &progress);
   if (stitched_file)
     {
       TIFF *out;
@@ -865,11 +992,11 @@ main (int argc, char **argv)
 	  fprintf (stderr, "Can not open final stitch file %s: %s\n", outfname, error);
 	  exit (1);
 	}
-      for (coord_t y = ymin; j < (ymax-ymin) / ystep; y+=ystep, j++)
+      for (coord_t y = ymin; j < (int)((ymax-ymin) / ystep); y+=ystep, j++)
 	{
 	  int i = 0;
 	  bool set_p = false;
-	  for (coord_t x = xmin; i < (xmax-xmin) / xstep; x+=xstep, i++)
+	  for (coord_t x = xmin; i < (int)((xmax-xmin) / xstep); x+=xstep, i++)
 	    {
 	      coord_t sx, sy;
 	      int r = 0,g = 0,b = 0;

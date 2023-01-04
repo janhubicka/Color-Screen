@@ -484,6 +484,8 @@ confirm (render_scr_detect *render,
     bestcx = x;
     bestcy = y;
   }
+  //int nouter = 0, ninner = 0;
+  luminosity_t min = 0;
   for (int yy = -sample_steps; yy <= sample_steps; yy++)
     for (int xx = -sample_steps; xx <= sample_steps; xx++)
       {
@@ -491,15 +493,20 @@ confirm (render_scr_detect *render,
 	render->get_adjusted_pixel (bestcx + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate1_y,
 				    bestcy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
 				    &color[0], &color[1], &color[2]);
-	luminosity_t sum = /*color[0]+color[1]+color[2]*/ 1;
-	if (sum > 0 && color[t] > 0)
+	luminosity_t sum = color[0]+color[1]+color[2];
+	sum = std::max (sum, (luminosity_t)0.0001);
+	min = std::min (color[t] / sum, min);
+	if (/*sum > 0 && color[t] > 0*/1)
 	  {
 	    if ((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
-	      bestouter += color[t] / sum;
+	      bestouter += color[t] / sum;// nouter++;
 	    else
-	      bestinner += color[t] / sum;
+	      bestinner += color[t] / sum;// ninner++;
 	  }
       }
+
+  //if (bestinner <= 0)
+    //return false;
 #if 0
     for (coord_t cy = std::max (y - max_distance / 4, (coord_t)0); cy <= std::min (y + max_distance / 4, (coord_t)height); cy+= pixel_step)
       for (coord_t cx = std::max (x - max_distance / 4, (coord_t)0); cx <= std::min (x + max_distance / 4, (coord_t)width); cx+= pixel_step)
@@ -549,8 +556,12 @@ confirm (render_scr_detect *render,
       O O O O O  */
   if (!strip)
     {
-      bestinner /= (2 * sample_steps - 1) * (2 * sample_steps - 1);
-      bestouter /= 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+      int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
+      int nouter = 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+      bestinner -= min * ninner;
+      bestouter -= min * nouter;
+      bestinner *= (1 / (luminosity_t) ninner);
+      bestouter *= (1 / (luminosity_t) nouter);
     }
   /*  For sample_steps == 2:
       O O O O O
@@ -560,20 +571,24 @@ confirm (render_scr_detect *render,
       O O O O O  */
   else
     {
-      bestinner /= (2 * sample_steps - 1) * (2 * sample_steps + 1);
-      bestouter /= 2 * (2 * sample_steps + 1);
+      int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
+      int nouter = 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+      bestinner -= min * ninner;
+      bestouter -= min * nouter;
+      bestinner *= (1 / (luminosity_t) ninner);
+      bestouter *= (1 / (luminosity_t) nouter);
     }
   coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
-  if (bestinner < bestouter * 1.2)
+  if (bestinner <= 0 || bestinner < bestouter * 1.6)
     {
       //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t);
       return false;
     }
-  else if (bestinner > bestouter * 4 && dist < max_distance * max_distance / 128)
+  else if (bestinner > bestouter * 8 && dist < max_distance * max_distance / 128)
     *priority = 3;
-  else if (bestinner > bestouter * 2 && dist < max_distance * max_distance / 32)
+  else if (bestinner > bestouter * 4 && dist < max_distance * max_distance / 32)
     *priority = 2;
-  else if (bestinner > bestouter * 1.8)
+  else if (bestinner > bestouter * 2)
     *priority = 1;
   else
     *priority = 0;
@@ -725,10 +740,11 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 }
 
 mesh *
-detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, progress_info *progress, coord_t *pixel_size, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels)
+detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, progress_info *progress, coord_t *pixel_size, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels)
 {
   int max_diam = std::max (img.width, img.height);
   render_parameters empty;
+  empty.gamma = gamma;
   render_scr_detect render (dparam, img, empty, 256);
   render.precompute_all (false, progress);
   if (progress)
@@ -778,12 +794,6 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
     }
   if (!smap)
     return NULL;
-  if (progress)
-    progress->pause_stdout ();
-  smap->check_consistency (param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
-			   sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
-  if (progress)
-    progress->resume_stdout ();
   //smap->get_solver_points_nearby (0, 0, 200, sparam);
   //sparam.dump (stdout);
   //return NULL;
@@ -815,6 +825,12 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
 	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
   simple_solver (&param, img, sparam, progress);
+  if (progress)
+    progress->pause_stdout ();
+  smap->check_consistency (param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
+			   sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
+  if (progress)
+    progress->resume_stdout ();
 
 
   if (known_pixels)
@@ -824,9 +840,9 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, solver_par
       *width = smap->width;
       *height = smap->height;
       *known_pixels = new bitmap_2d (smap->width, smap->height);
-      for (int y = 0; y < img.height; y ++)
-	for (int x = 0; x < img.width; x ++)
-	  if (smap->known_p (x - *xshift, y - *yshift))
+      for (int y = 0; y < smap->height; y ++)
+	for (int x = 0; x < smap->width; x ++)
+	  if (smap->known_p (x * 2 - *xshift * 2, y - *yshift))
 	    (*known_pixels)->set_bit (x, y);
     }
   int xmin, ymin, xmax, ymax;
