@@ -540,6 +540,7 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       *error = "can not open screen file";
       return false;
     }
+#if 0
   uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, m_width)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, m_height)
@@ -553,6 +554,59 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
     {
       *error = "write error";
+      return false;
+    }
+#endif
+  uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
+  printf ("Width %i height %i\n", m_width, m_height);
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, m_width))
+  {
+      *error = "write error: imagewidth";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_IMAGELENGTH, m_height))
+  {
+      *error = "write error: imageheight";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4))
+  {
+      *error = "write error: samples per pixel";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16))
+  {
+      *error = "write error: bits per sample";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT))
+  {
+      *error = "write error: sampleformat";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT))
+  {
+      *error = "write error: orientation";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG))
+  {
+      *error = "write error: orientation";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB))
+  {
+      *error = "write error: photometric rgb";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras))
+  {
+      *error = "write error: extrasamples";
+      return false;
+  }
+  if (!TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc))
+    {
+      *error = "write error: ICC";
       return false;
     }
   uint16_t *outrow = (uint16_t *) malloc (m_width * 2 * 4);
