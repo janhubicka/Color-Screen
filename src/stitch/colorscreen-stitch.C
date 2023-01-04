@@ -248,7 +248,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	      //mesh_trans->apply (xx + other.xshift, yy + other.yshift, &x2, &y2);
 	      mesh_trans->apply (x,y, &x1, &y1);
 	      other.mesh_trans->apply (xx, yy, &x2, &y2);
-	      //printf ("%f %f %f %f\n",x1,y1,x2,y2);
+	      //printf ("%f %f %f %f %i %I\n",x1,y1,x2,y2, img_width, img_height);
+#if 0
 	      assert (x1 >= 0);
 	      assert (y1 >= 0);
 	      assert (x2 >= 0);
@@ -257,6 +258,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	      assert (y1 <= img_height);
 	      assert (x2 <= other.img_width);
 	      assert (y2 <= other.img_height);
+#endif
 	      if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
 	          || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
 		continue;

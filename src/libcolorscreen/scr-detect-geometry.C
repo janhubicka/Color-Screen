@@ -494,7 +494,11 @@ confirm (render_scr_detect *render,
 				    bestcy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
 				    &color[0], &color[1], &color[2]);
 	luminosity_t sum = color[0]+color[1]+color[2];
+	color[0] = std::max (color[0], (luminosity_t)0);
+	color[1] = std::max (color[1], (luminosity_t)0);
+	color[2] = std::max (color[2], (luminosity_t)0);
 	sum = std::max (sum, (luminosity_t)0.0001);
+	//sum=1;
 	min = std::min (color[t] / sum, min);
 	if (/*sum > 0 && color[t] > 0*/1)
 	  {
@@ -579,16 +583,16 @@ confirm (render_scr_detect *render,
       bestouter *= (1 / (luminosity_t) nouter);
     }
   coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
-  if (bestinner <= 0 || bestinner < bestouter * 1.6)
+  if (bestinner <= 0 || bestinner < bestouter * 2)
     {
-      //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t);
+      //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i min:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t, min);
       return false;
     }
   else if (bestinner > bestouter * 8 && dist < max_distance * max_distance / 128)
     *priority = 3;
   else if (bestinner > bestouter * 4 && dist < max_distance * max_distance / 32)
     *priority = 2;
-  else if (bestinner > bestouter * 2)
+  else if (bestinner > bestouter * 3)
     *priority = 1;
   else
     *priority = 0;
@@ -683,7 +687,7 @@ flood_fill (coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
-//#define cpatch(x,y,t, priority) confirm_patch (color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited))
+//#define cpatch(x,y,t, priority) confirm_patch (color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited)
 #define cpatch(x,y,t, priority) confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)
 //#define cstrip(x,y,t, priority) confirm_strip (color_map, x, y, t, min_patch_size, visited)
 #define cstrip(x,y,t, priority) confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)
