@@ -541,8 +541,8 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       return false;
     }
   uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, m_width)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, m_height)
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, (uint32_t) m_width)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, (uint32_t) m_height)
       || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4)
       || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
       || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
@@ -550,10 +550,12 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
       || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
-      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc)*/)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t) sRGB_icc_len, sRGB_icc))
     {
+#if 0
       *error = "write error";
       return false;
+#endif
     }
   uint16_t *outrow = (uint16_t *) malloc (m_width * 2 * 4);
   if (!*outrow)
