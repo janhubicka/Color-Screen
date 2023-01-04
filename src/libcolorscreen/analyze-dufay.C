@@ -540,7 +540,7 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       *error = "can not open screen file";
       return false;
     }
-  uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
+  static uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, (uint32_t) m_width)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, (uint32_t) m_height)
       || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4)
@@ -552,13 +552,11 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
       || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
       || !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t) sRGB_icc_len, sRGB_icc))
     {
-#if 0
       *error = "write error";
       return false;
-#endif
     }
   uint16_t *outrow = (uint16_t *) malloc (m_width * 2 * 4);
-  if (!*outrow)
+  if (!outrow)
     {
       *error = "Out of memory allocating output buffer";
       return false;
@@ -604,7 +602,7 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
     }
   free (outrow);
   TIFFClose (out);
-  return out;
+  return true;
 }
 void
 analyze_dufay::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax)

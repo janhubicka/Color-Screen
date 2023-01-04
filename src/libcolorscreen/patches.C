@@ -58,8 +58,8 @@ done:
 		  set_patch_index (queue[i].x, queue[i].y, 0, 0);
 	      }
 	  }
-	if (progress)
-	  progress->inc_progress ();
+      if (progress)
+        progress->inc_progress ();
     }
   if (debug)
     printf ("Detected %i patches %f known pixels per patch\n", num_patches (), num_pixels / (double)num_patches ());

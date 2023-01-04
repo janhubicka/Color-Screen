@@ -1,5 +1,5 @@
 #ifndef GAUSIAN_BLUR_H
-#define GAUSIAN_BLUR
+#define GAUSIAN_BLUR_H
 
 #define BLUR_EPSILON 0.000001
 

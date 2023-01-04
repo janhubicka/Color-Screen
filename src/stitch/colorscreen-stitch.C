@@ -351,13 +351,13 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
   const char *error;
-  if (!dufay.write_screen (screen_filename.c_str (), NULL, &error, progress))
+  if (!dufay.write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", screen_filename.c_str (), error);
       exit (1);
     }
-  if (!dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress))
+  if (!dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
@@ -462,7 +462,7 @@ open_tile_output_file (const char *outfname,
       || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
       || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
       || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
-      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile && mode == render_original ? icc_profile_size : sRGB_icc_len, icc_profile && mode == render_original ? icc_profile : sRGB_icc)*/)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile && mode == render_original ? icc_profile_size : sRGB_icc_len, icc_profile && mode == render_original ? icc_profile : sRGB_icc))
     {
       *error = "write error";
       return NULL;
@@ -890,7 +890,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
       || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc)*/)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc))
     {
       *error = "write error";
       return NULL;
