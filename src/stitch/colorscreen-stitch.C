@@ -462,7 +462,7 @@ open_tile_output_file (const char *outfname,
       || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
       || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
       || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile && mode == render_original ? icc_profile_size : sRGB_icc_len, icc_profile && mode == render_original ? icc_profile : sRGB_icc))
+      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile && mode == render_original ? icc_profile_size : sRGB_icc_len, icc_profile && mode == render_original ? icc_profile : sRGB_icc)*/)
     {
       *error = "write error";
       return NULL;
@@ -890,8 +890,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
       || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc))
+      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc)*/)
     {
       *error = "write error";
       return NULL;
