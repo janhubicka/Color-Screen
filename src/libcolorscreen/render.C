@@ -3,6 +3,7 @@
 #include "lru-cache.h"
 #include "include/sensitivity.h"
 #include "gaussian-blur.h"
+#include "sharpen.h"
 
 class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
@@ -289,7 +290,7 @@ struct sharpen_params
 	   && lookup_table_id == o.lookup_table_id;
   }
 };
-
+#if 0
 void
 blur_horisontal (luminosity_t *out, luminosity_t *lookup_table, unsigned short *data, int width, int clen, luminosity_t *cmatrix)
 {
@@ -328,10 +329,26 @@ blur_horisontal (luminosity_t *out, luminosity_t *lookup_table, unsigned short *
       out[x] = sum;
     }
 }
+#endif
+
+luminosity_t
+getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
+{
+  return table[graydata[y][x]];
+}
 
 luminosity_t *
 get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
 {
+  luminosity_t *out = (luminosity_t *)calloc (p.width * p.height, sizeof (luminosity_t));
+  if (!out)
+    return NULL;
+  if (!sharpen<unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
+    {
+      free (out);
+      return NULL;
+    }
+#if 0
   luminosity_t *cmatrix;
   int clen = fir_blur::gen_convolve_matrix (p.radius, &cmatrix);
   if (!clen)
@@ -360,12 +377,12 @@ get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
 	  if (yp < 0 || yp > p.height)
 	    memset (hblur + tp * p.width, 0, sizeof (luminosity_t) * p.width);
 	  else
-	    blur_horisontal (hblur + tp * p.width, p.lookup_table, p.gray_data[yp], p.width, clen, cmatrix);
+	    blur_horisontal<unsigned short **, luminosity_t *> (hblur + tp * p.width, p.gray_data, p.lookup_table, getdata_helper, yp, p.width, clen, cmatrix);
 	}
       for (int y = ystart; y <= yend; y++)
 	{
 	  if (y + clen / 2 - 1 < p.height)
-	    blur_horisontal (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, p.lookup_table, p.gray_data[y + clen / 2 - 1], p.width, clen, cmatrix);
+	    blur_horisontal<unsigned short **, luminosity_t *> (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, p.gray_data, p.lookup_table, getdata_helper, y + clen / 2 - 1, p.width, clen, cmatrix);
 	  else
 	    memset (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, 0, sizeof (luminosity_t) * p.width);
 	  for (int d = 0; d < clen; d++)
@@ -386,6 +403,8 @@ get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
     }
 
   free (cmatrix);
+  return out;
+#endif
   return out;
 }
 static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache;

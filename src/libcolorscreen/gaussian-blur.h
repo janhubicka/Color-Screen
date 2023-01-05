@@ -1,5 +1,6 @@
 #ifndef GAUSIAN_BLUR_H
 #define GAUSIAN_BLUR_H
+#include <functional>
 
 #define BLUR_EPSILON 0.000001
 
@@ -40,6 +41,48 @@ public:
 	}
       return clen;
     }
+
+  /* Helper for bluring.  Apply horisontal blur on DATA line Y of given WIDTH and write to OUT.
+     CLEN and CMATRIX are precomputed using code above.
+     For performance reasons do not use lambda function since it won't get inlined.  */
+  template<typename T,typename P, luminosity_t (*getdata)(T data, int x, int y, int width, P param)>
+  inline static void
+  blur_horisontal(luminosity_t *out, T data, P param, int y, int width, int clen, luminosity_t *cmatrix)
+  {
+    if (width < clen)
+    {
+      for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
+      {
+	luminosity_t sum = 0;
+	for (int d = std::max (- clen / 2, -x); d < std::min (clen / 2, width - x); d++)
+	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	out[x] = sum;
+      }
+      return;
+    }
+     
+    for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
+      {
+	luminosity_t sum = 0;
+	for (int d = -x; d < clen / 2; d++)
+	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	out[x] = sum;
+      }
+    for (int x = clen / 2; x < width - clen / 2; x++)
+      {
+	luminosity_t sum = 0;
+	for (int d = - clen / 2; d < clen / 2; d++)
+	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	out[x] = sum;
+      }
+    for (int x = width - clen / 2; x < width; x++)
+      {
+	luminosity_t sum = 0;
+	for (int d = - clen / 2; d < width - x; d++)
+	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	out[x] = sum;
+      }
+  }
 private:
 
   static int
@@ -59,6 +102,5 @@ private:
 	      exp (-(x * x) / (2.0 * sigma * sigma));
     }
 };
-
 
 #endif
