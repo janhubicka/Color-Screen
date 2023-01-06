@@ -134,7 +134,79 @@ struct DLL_PUBLIC render_parameters
 struct rgbdata
 {
   luminosity_t red, green, blue;
+  rgbdata &operator+=(const luminosity_t other)
+  {
+    red += other;
+    green += other;
+    blue += other;
+    return *this;
+  }
+  rgbdata &operator-=(const luminosity_t other)
+  {
+    red -= other;
+    green -= other;
+    blue -= other;
+    return *this;
+  }
+  rgbdata &operator*=(const luminosity_t other)
+  {
+    red *= other;
+    green *= other;
+    blue *= other;
+    return *this;
+  }
+  rgbdata &operator+=(const rgbdata other)
+  {
+    red += other.red;
+    green += other.green;
+    blue += other.blue;
+    return *this;
+  }
+  rgbdata &operator-=(const rgbdata other)
+  {
+    red -= other.red;
+    green -= other.green;
+    blue -= other.blue;
+    return *this;
+  }
+  rgbdata &operator*=(const rgbdata other)
+  {
+    red *= other.red;
+    green *= other.green;
+    blue *= other.blue;
+    return *this;
+  }
 };
+inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
+{
+  lhs += rhs;
+  return lhs;
+}
+inline rgbdata operator-(rgbdata lhs, luminosity_t rhs)
+{
+  lhs -= rhs;
+  return lhs;
+}
+inline rgbdata operator*(rgbdata lhs, luminosity_t rhs)
+{
+  lhs *= rhs;
+  return lhs;
+}
+inline rgbdata operator+(rgbdata lhs, rgbdata rhs)
+{
+  lhs += rhs;
+  return lhs;
+}
+inline rgbdata operator-(rgbdata lhs, rgbdata rhs)
+{
+  lhs -= rhs;
+  return lhs;
+}
+inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
+{
+  lhs *= rhs;
+  return lhs;
+}
 
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */

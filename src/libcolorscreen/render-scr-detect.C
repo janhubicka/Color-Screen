@@ -3,6 +3,7 @@
 #include "include/render-scr-detect.h"
 #include "include/render-to-scr.h"
 #include "lru-cache.h"
+#include "sharpen.h"
 struct color_data
 {
   luminosity_t *m_data[3];
@@ -526,6 +527,12 @@ render_scr_detect::precompute_all (bool grayscale_needed, progress_info *progres
   return render::precompute_all (grayscale_needed, progress);
 }
 
+rgbdata
+getdata_helper (render_scr_detect &r, int x, int y, int, int)
+{
+  return r.fast_get_adjusted_pixel (x, y);
+}
+
 bool
 render_scr_detect::precompute_rgbdata (progress_info *progress)
 {
@@ -534,6 +541,8 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   m_precomputed_rgbdata = (rgbdata *)malloc (m_img.width * m_img.height * sizeof (rgbdata));
   if (!m_precomputed_rgbdata)
     return false;
+  sharpen<rgbdata, render_scr_detect &,int, getdata_helper> (m_precomputed_rgbdata, *this, 0, m_img.width, m_img.height, 2, 2, progress);
+#if 0
   if (progress)
     progress->set_task ("determining adjusted colors for screen detection", m_img.height);
 #pragma omp parallel for default(none) shared(progress)
@@ -545,6 +554,7 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
        if (progress)
 	 progress->inc_progress ();
     }
+#endif
   if (progress && progress->cancelled ())
     {
       free (m_precomputed_rgbdata);

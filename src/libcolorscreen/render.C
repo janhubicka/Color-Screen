@@ -162,8 +162,6 @@ luminosity_t *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
-  //printf ("Output table for %i\n", p.maxval);
-  //
   if (p.output_gamma == -1)
     for (int i = 0; i < 65536; i++)
       lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * p.maxval;
@@ -290,47 +288,8 @@ struct sharpen_params
 	   && lookup_table_id == o.lookup_table_id;
   }
 };
-#if 0
-void
-blur_horisontal (luminosity_t *out, luminosity_t *lookup_table, unsigned short *data, int width, int clen, luminosity_t *cmatrix)
-{
-  if (width < clen)
-  {
-    for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
-    {
-      luminosity_t sum = 0;
-      for (int d = std::max (- clen / 2, -x); d < std::min (clen / 2, width - x); d++)
-	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
-      out[x] = sum;
-    }
-    return;
-  }
-      
-   
-  for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
-    {
-      luminosity_t sum = 0;
-      for (int d = -x; d < clen / 2; d++)
-	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
-      out[x] = sum;
-    }
-  for (int x = clen / 2; x < width - clen / 2; x++)
-    {
-      luminosity_t sum = 0;
-      for (int d = - clen / 2; d < clen / 2; d++)
-	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
-      out[x] = sum;
-    }
-  for (int x = width - clen / 2; x < width; x++)
-    {
-      luminosity_t sum = 0;
-      for (int d = - clen / 2; d < width - x; d++)
-	sum += cmatrix[d + clen / 2] * lookup_table [data[x + d]];
-      out[x] = sum;
-    }
-}
-#endif
 
+/* Helper for sharpening template.  */
 luminosity_t
 getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
 {
@@ -343,68 +302,11 @@ get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
   luminosity_t *out = (luminosity_t *)calloc (p.width * p.height, sizeof (luminosity_t));
   if (!out)
     return NULL;
-  if (!sharpen<unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
+  if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
     {
       free (out);
       return NULL;
     }
-#if 0
-  luminosity_t *cmatrix;
-  int clen = fir_blur::gen_convolve_matrix (p.radius, &cmatrix);
-  if (!clen)
-    return NULL;
-  if (progress)
-    progress->set_task ("sharpening", p.height);
-  luminosity_t *out = (luminosity_t *)calloc (p.width * p.height, sizeof (luminosity_t));
-#pragma omp parallel shared(progress,out,clen,cmatrix,p) default(none)
-    {
-      luminosity_t *hblur = (luminosity_t *)calloc (p.width * clen, sizeof (luminosity_t));
-      luminosity_t *rotated_cmatrix = (luminosity_t *)malloc (clen * sizeof (luminosity_t));
-#ifdef _OPENMP
-      int tn = omp_get_thread_num ();
-      int threads = omp_get_max_threads ();
-#else
-      int tn = 0;
-      int threads = 1;
-#endif
-      int ystart = tn * p.height / threads;
-      int yend = (tn + 1) * p.height / threads - 1;
-
-      for (int d = -clen/2; d < clen/2 - 1; d++)
-	{
-	  int yp = ystart + d;
-	  int tp = (yp + clen) % clen;
-	  if (yp < 0 || yp > p.height)
-	    memset (hblur + tp * p.width, 0, sizeof (luminosity_t) * p.width);
-	  else
-	    blur_horisontal<unsigned short **, luminosity_t *> (hblur + tp * p.width, p.gray_data, p.lookup_table, getdata_helper, yp, p.width, clen, cmatrix);
-	}
-      for (int y = ystart; y <= yend; y++)
-	{
-	  if (y + clen / 2 - 1 < p.height)
-	    blur_horisontal<unsigned short **, luminosity_t *> (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, p.gray_data, p.lookup_table, getdata_helper, y + clen / 2 - 1, p.width, clen, cmatrix);
-	  else
-	    memset (hblur + ((y + clen / 2 - 1 + clen) % clen) * p.width, 0, sizeof (luminosity_t) * p.width);
-	  for (int d = 0; d < clen; d++)
-	    rotated_cmatrix[(y + d - clen / 2 + clen) % clen] = cmatrix[d];
-	  for (int x = 0; x < p.width; x++)
-	    {
-	      luminosity_t sum = 0;
-	      for (int d = 0; d < clen; d++)
-		sum += rotated_cmatrix[d] * hblur[d * p.width + x];
-	      luminosity_t orig = p.lookup_table [p.gray_data[y][x]];
-	      out[y * p.width + x] = orig + (orig - sum) * p.amount;
-	    }
-	  if (progress)
-	     progress->inc_progress ();
-	}
-      free (rotated_cmatrix);
-      free (hblur);
-    }
-
-  free (cmatrix);
-  return out;
-#endif
   return out;
 }
 static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache;
@@ -500,18 +402,6 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);
 	  break;
-#if 0
-	  adjusted_finlay_matrix m;
-	  xyz_srgb_matrix m2;
-	  color_matrix mm;
-	  xyz white;
-	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
-	  m.normalize_grayscale (white.x, white.y, white.z);
-	  mm = m2 * m;
-	  //mm.normalize_grayscale ();
-	  color = mm * color;
-	  break;
-#endif
 	}
       /* Colors derived from reconstructed filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_reconstructed_wager:

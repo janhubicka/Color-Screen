@@ -44,18 +44,20 @@ public:
 
   /* Helper for bluring.  Apply horisontal blur on DATA line Y of given WIDTH and write to OUT.
      CLEN and CMATRIX are precomputed using code above.
-     For performance reasons do not use lambda function since it won't get inlined.  */
-  template<typename T,typename P, luminosity_t (*getdata)(T data, int x, int y, int width, P param)>
+     For performance reasons do not use lambda function since it won't get inlined.
+     O is output type name, T is data type name, P is extra bookeeping parameter type.  */
+  template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
   inline static void
-  blur_horisontal(luminosity_t *out, T data, P param, int y, int width, int clen, luminosity_t *cmatrix)
+  blur_horisontal(O *out, T data, P param, int y, int width, int clen, luminosity_t *cmatrix)
   {
     if (width < clen)
     {
       for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
-	luminosity_t sum = 0;
-	for (int d = std::max (- clen / 2, -x); d < std::min (clen / 2, width - x); d++)
-	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+        int m = std::max (- clen / 2, -x);
+	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	for (int d = m; d < std::min (clen / 2, width - x); d++)
+	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
       return;
@@ -63,23 +65,25 @@ public:
      
     for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
-	luminosity_t sum = 0;
-	for (int d = -x; d < clen / 2; d++)
-	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	O sum = getdata (data, 0, y, width, param) * cmatrix[-x + clen / 2];
+	for (int d = -x + 1; d < clen / 2; d++)
+	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
     for (int x = clen / 2; x < width - clen / 2; x++)
       {
-	luminosity_t sum = 0;
-	for (int d = - clen / 2; d < clen / 2; d++)
-	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	int m = - clen / 2;
+	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	for (int d = m + 1; d < clen / 2; d++)
+	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
     for (int x = width - clen / 2; x < width; x++)
       {
-	luminosity_t sum = 0;
-	for (int d = - clen / 2; d < width - x; d++)
-	  sum += cmatrix[d + clen / 2] * getdata (data, x + d, y, width, param);
+	int m = - clen / 2;
+	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	for (int d = m + 1; d < width - x; d++)
+	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
   }
