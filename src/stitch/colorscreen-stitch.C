@@ -35,7 +35,7 @@ struct stitching_params
 
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false),
-    outer_tile_border (30), min_overlap_percentage (25), max_overlap_percentage (40)
+    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (40)
   {}
 } stitching_params;
 
@@ -875,9 +875,9 @@ determine_positions (progress_info *progress)
 	    }
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
-#if 0
+#if 1
 	  progress->pause_stdout ();
-	  print_status ();
+	  print_status (stdout);
 	  progress->resume_stdout ();
 #endif
 	}
@@ -897,7 +897,7 @@ determine_positions (progress_info *progress)
 	    }
 	  images[y][x+1].xpos = images[y][x].xpos + xs;
 	  images[y][x+1].ypos = images[y][x].ypos + ys;
-#if 0
+#if 1
 	  progress->pause_stdout ();
 	  print_status (stdout);
 	  progress->resume_stdout ();

@@ -169,12 +169,6 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 		red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
 		green (x, y) = pixel (0, 0, 0.5, 0.5);
 		blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
-#if 0
-		dufay_prec_red (2 * x, y) = pixel (0.25, 0.5, 0.3333, 0.5);
-		dufay_prec_red (2 * x + 1, y) = pixel (0.75, 0.5,0.3333, 0.5);
-		dufay_prec_green (x, y) = pixel (0, 0, 1 - 0.333, 0.5);
-		dufay_prec_blue (x, y) = pixel (0.5, 0, 1 - 0.333, 0.5);
-#endif
 	      }
 	  if (progress)
 	    progress->inc_progress ();
@@ -186,6 +180,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 bool
 analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift_ret, int *yshift_ret, FILE *report_file, progress_info *progress)
 {
+  bool val_known;
   if (filename1)
     {
       FILE *f = fopen ("project-cpfind.pto","wt");
@@ -346,7 +341,8 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	        fprintf (report_file, "Best offset %i %i with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
 	      if (progress)
 		progress->resume_stdout ();
-	      return true;
+	      val_known = true;
+	      //return true;
 	    }
 	  else
 	    if (report_file)
@@ -364,18 +360,146 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
   int best_xshift = 0, best_yshift = 0;
   int best_noverlap;
 
-  xstart = -other.m_width + 2;
-  ystart = -other.m_height + 2;
-  xend = m_width - 2;
-  yend = m_height - 2;
+  struct range_t {int min, max;};
+  std::vector <range_t> range;
+  std::vector <range_t> other_range;
+  range.resize (m_height);
+
+  int first = -1, last = -1;
+  int left = -1, right = -1;
+  for (int y = 0; y < m_height; y++)
+    {
+      int x;
+      for (x = 0; x < m_width; x++)
+	if (m_known_pixels->test_bit (x, y))
+	  break;
+      if (x == m_width)
+	{
+	  range[y].min = 0;
+	  range[y].max = -1;
+	  continue;
+	}
+      last = y;
+      range[y].min = x;
+      for (x = m_width - 1; !m_known_pixels->test_bit (x, y); x--)
+	;
+      range[y].max = x;
+      if (first == -1)
+	{
+	  first = y;
+	  left = range[y].min;
+	  right = range[y].max;
+	}
+      else
+	{
+	  left = std::min (left, range[y].min);
+	  right = std::max (right, range[y].max);
+	}
+    }
+  other_range.resize (other.m_height);
+  int other_first = -1, other_last = -1;
+  int other_left = -1, other_right = -1;
+  for (int y = 0; y < other.m_height; y++)
+    {
+      int x;
+      for (x = 0; x < other.m_width; x++)
+	if (other.m_known_pixels->test_bit (x, y))
+	  break;
+      if (x == other.m_width)
+	{
+	  other_range[y].min = 0;
+	  other_range[y].max = -1;
+	  continue;
+	}
+      other_last = y;
+      other_range[y].min = x;
+      for (x = other.m_width - 1; !other.m_known_pixels->test_bit (x, y); x--)
+	;
+      other_range[y].max = x;
+      if (other_first == -1)
+	{
+	  other_first = y;
+	  other_left = other_range[y].min;
+	  other_right = other_range[y].max;
+	}
+      else
+	{
+	  other_left = std::min (other_left, other_range[y].min);
+	  other_right = std::max (other_right, other_range[y].max);
+	}
+    }
+  if (first == -1 || other_first == -1)
+    return false;
+
+
+  xstart = left - other_right + 2;
+  ystart = first - other_last + 2;
+  xend = right - other_left - 2;
+  yend = last - other_first - 2;
 
   xstart -= m_xshift - other.m_xshift;
   ystart -= m_yshift - other.m_yshift;
   xend -= m_xshift - other.m_xshift;
   yend -= m_yshift - other.m_yshift;
+  if (report_file && val_known && ((*xshift_ret < xstart || *xshift_ret > xend) || (*yshift_ret < ystart || *yshift_ret > yend)))
+    fprintf (report_file, "cpfind output: %i,%i out of range\n", *xshift_ret, *yshift_ret);
+
+  rgbdata *sums = (rgbdata *) malloc (sizeof (rgbdata) * m_width * m_height);
+  rgbdata *other_sums = (rgbdata *) malloc (sizeof (rgbdata) * other.m_width * other.m_height);
+  if (!sums || !other_sums)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Out of memory allocating density summary\n");
+      if (progress)
+	progress->resume_stdout ();
+      return false;
+    }
+  if (progress)
+    progress->set_task ("summarizing densities", m_height + other.m_height);
+  for (int y = 0; y < m_height; y++)
+    {
+      int x;
+      rgbdata sum = {0,0,0};
+      for (x = 0; x < m_width; x++)
+	{
+	  sum.red += red (x * 2, y) + red (x * 2 + 1, y);
+	  sum.green += green (x, y);
+	  sum.blue += blue (x, y);
+	}
+      for (x = 0; x < m_width; x++)
+	{
+	  sums[y * m_width + x] = sum;
+	  sum.red -= red (x * 2, y) + red (x * 2 + 1, y);
+	  sum.green -= green (x, y);
+	  sum.blue -= blue (x, y);
+	}
+      if (progress)
+	progress->inc_progress ();
+    }
+  for (int y = 0; y < other.m_height; y++)
+    {
+      int x;
+      rgbdata sum = {0,0,0};
+      for (x = 0; x < other.m_width; x++)
+	{
+	  sum.red += other.red (x * 2, y) + other.red (x * 2 + 1, y);
+	  sum.green += other.green (x, y);
+	  sum.blue += other.blue (x, y);
+	}
+      for (x = 0; x < other.m_width; x++)
+	{
+	  other_sums[y * other.m_width + x] = sum;
+	  sum.red -= other.red (x * 2, y) + other.red (x * 2 + 1, y);
+	  sum.green -= other.green (x, y);
+	  sum.blue -= other.blue (x, y);
+	}
+      if (progress)
+	progress->inc_progress ();
+    }
   if (progress)
     progress->set_task ("determining best overlap", (yend - ystart));
-#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap)
+#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
@@ -385,43 +509,96 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
       int lbest_noverlap;
       for (int x = xstart; x < xend; x++)
 	{
-	  int noverlap = 0;
-	  int xxstart = -m_xshift;
-	  int xxend = -m_xshift + m_width;
-	  int yystart = -m_yshift;
-	  int yyend = -m_yshift + m_height;
+	  int est_noverlap = 0;
+	  int xxstart = -m_xshift + left;
+	  int xxend = -m_xshift + right + 1;
+	  int yystart = -m_yshift + first;
+	  int yyend = -m_yshift + last + 1;
 	  luminosity_t sqsum = 0;
-	  luminosity_t lum_sum = 0;
+	  bool is_cpfind = false;
+	  if (report_file && val_known && *xshift_ret == x && *yshift_ret == y)
+	    is_cpfind = true;
 
-	  xxstart = std::max (-other.m_xshift + x, xxstart);
-	  yystart = std::max (-other.m_yshift + y, yystart);
-	  xxend = std::min (-other.m_xshift + other.m_width + x, xxend);
-	  yyend = std::min (-other.m_yshift + other.m_height + y, yyend);
+	  xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
+	  yystart = std::max (-other.m_yshift + y + other_first, yystart);
+	  xxend = std::min (-other.m_xshift + other_right + 1 + x, xxend);
+	  yyend = std::min (-other.m_yshift + other_last + 1 + y, yyend);
 
 	  //if (yystart >= yyend || xxstart >= xxend)
 	    //continue;
+	  //printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend, m_xshift, m_yshift, m_width, m_height, other.m_xshift, other.m_yshift, other.m_width, other.m_height);
 	  assert (yystart < yyend && xxstart < xxend);
-	  if ((xxend - xxstart) * (yyend - yystart) * 100 < m_n_known_pixels * percentage)
-	    continue;
+	  if ((xxend - xxstart) * (yyend - yystart) * 100 < std::min (m_n_known_pixels, other.m_n_known_pixels) * percentage)
+	    {
+	      if (is_cpfind)
+		fprintf (report_file, "cpfind overlap too small test 1 max:%i known:%i (ranges %i...%i %i...%i)\n", (xxend - xxstart) * (yyend - yystart), std::min (m_n_known_pixels, other.m_n_known_pixels), xxstart, xxend, yystart, yyend);
+	      continue;
+	    }
 
+#if 1
 	  int xstep = std::max ((xxend - xxstart) / 30, 1);
 	  int ystep = std::max ((yyend - yystart) / 30, 1);
+#else
+	  int xstep = 1;
+	  int ystep = 1;
+#endif
 	  luminosity_t rsum1 = 0, rsum2 = 0, gsum1 = 0, gsum2 = 0, bsum1 = 0, bsum2 = 0;
 
 	  //printf ("Shift %i %i checking %i to %i, %i to %i; img1 %i %i %i %i; img2 %i %i %i %i\n", x, y, xxstart, xxend, yystart, yyend, m_xshift, m_yshift, m_width, m_height, other.m_xshift, other.m_yshift, other.m_width, other.m_height);
+	  for (int yy = yystart; yy < yyend; yy++)
+	    {
+	      int y1 = yy + m_yshift;
+	      int xxstart = -m_xshift + range[y1].min;
+	      int xxend = -m_xshift + range[y1].max + 1;
+	      int y2 = yy - y + other.m_yshift;
+	      xxstart = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
+	      xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x, xxend);
+	      if (xxend > xxstart)
+		{
+		  est_noverlap += xxend - xxstart;
+		  rsum1 = sums[xxstart + m_xshift + y1 * m_width].red - sums[xxend - 1 + m_xshift + y1 * m_width].red;
+		  gsum1 = sums[xxstart + m_xshift + y1 * m_width].green - sums[xxend - 1 + m_xshift + y1 * m_width].green;
+		  bsum1 = sums[xxstart + m_xshift + y1 * m_width].blue - sums[xxend - 1 + m_xshift + y1 * m_width].blue;
+		  rsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].red - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].red;
+		  gsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].green - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].green;
+		  bsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].blue - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].blue;
+		}
+	    }
+	  if (est_noverlap * 100 < std::min (m_n_known_pixels, other.m_n_known_pixels) * percentage)
+	    {
+	      if (is_cpfind)
+		fprintf (report_file, "cpfind overlap too small test 2 estimated overlap:%i known %i\n", est_noverlap, std::min (m_n_known_pixels, other.m_n_known_pixels));
+	      continue;
+	    }
 	  
+#if 0
+	  int noverlap = 0;
 	  for (int yy = yystart; yy < yyend; yy+= ystep)
 	    {
+	      int y1 = yy + m_yshift;
+	      int xxstart = -m_xshift + range[y1].min;
+	      int xxend = -m_xshift + range[y1].max + 1;
+	      int y2 = yy - y + other.m_yshift;
+	      xxstart = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
+	      xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x, xxend);
 	      for (int xx = xxstart; xx < xxend; xx+= xstep)
 		{
 		  int x1 = xx + m_xshift;
-		  int y1 = yy + m_yshift;
+#if 0
 		  if (!m_known_pixels->test_bit (x1, y1))
+		  {
+		    abort ();
 		    continue;
+		  }
+#endif
 		  int x2 = xx - x + other.m_xshift;
-		  int y2 = yy - y + other.m_yshift;
-		  if (!m_known_pixels->test_bit (x2, y2))
+#if 0
+		  if (!other.m_known_pixels->test_bit (x2, y2))
+		  {
+		    abort ();
 		    continue;
+		  }
+#endif
 		  rsum1 += red (2 * x1, y1) + red (2 * x1 + 1, y1);
 		  rsum2 += other.red (2 * x2, y2) + other.red (2 * x2 + 1, y2);
 		  gsum1 += green (x1, y1);
@@ -432,73 +609,64 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 		}
 	    }
 	  if (noverlap * xstep * ystep * 100 < std::min (m_n_known_pixels, other.m_n_known_pixels) * percentage)
-	    continue;
-	  if (!rsum1 || !gsum1 || !bsum1)
-	    continue;
-	  int rscale = rsum2 / rsum1;
-	  int gscale = gsum2 / gsum1;
-	  int bscale = bsum2 / bsum1;
-	  const luminosity_t exposure_tolerance = 0.1;
+	    {
+	      if (is_cpfind)
+		printf ("cpfind overlap too small test 3 overlap:%i steps %i %i known %i\n", noverlap, xstep, ystep, std::min (m_n_known_pixels, other.m_n_known_pixels));
+	      continue;
+	    }
+#endif
+	  luminosity_t rscale = rsum1 > 0 ? rsum2 / rsum1 : 1;
+	  luminosity_t gscale = gsum1 > 0 ? gsum2 / gsum1 : 1;
+	  luminosity_t bscale = bsum1 > 0 ? bsum2 / bsum1 : 1;
+	  const luminosity_t exposure_tolerance = 0.25;
 	  if (fabs (rscale - 1) > exposure_tolerance
 	      || fabs (gscale -1) > exposure_tolerance
 	      || fabs (bscale -1) > exposure_tolerance)
-	    continue;
+	    {
+	      if (is_cpfind)
+		fprintf (report_file, "cpfind answer rejected because of overall density (red %f:%f %f green %f:%f %f blue %f:%f %f\n", rsum1, rsum2, rscale, gsum1, gsum2, gscale, bsum1, bsum2, bscale);
+	      continue;
+	    }
+	  if (is_cpfind)
+	    fprintf (report_file, "cpfind answer exposure correction %f %f %f\n", rscale, gscale, bscale);
 
 	  for (int yy = yystart; yy < yyend; yy+= ystep)
 	    {
+	      int y1 = yy + m_yshift;
+	      int xxstart = -m_xshift + range[y1].min;
+	      int xxend = -m_xshift + range[y1].max + 1;
+	      int y2 = yy - y + other.m_yshift;
+	      xxstart = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
+	      xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x, xxend);
 	      for (int xx = xxstart; xx < xxend; xx+= xstep)
 		{
 		  int x1 = xx + m_xshift;
 		  int y1 = yy + m_yshift;
-		  //printf ("%i %i\n",x1,y1);
-		  ////if (!(x1 >= 0 && x1 < m_width && y1 >= 0 && y1 < m_height))
-		    //printf ("%i %i\n",x1,y1);
-		  //assert (x1 >= 0 && x1 < m_width && y1 >= 0 && y1 < m_height);
+#if 0
 		  if (!m_known_pixels->test_bit (x1, y1))
 		    continue;
+#endif
 		  int x2 = xx - x + other.m_xshift;
 		  int y2 = yy - y + other.m_yshift;
-		  //if (!(x2 >= 0 && x2 < other.m_width && y2 >= 0 && y2 < other.m_height))
-		    //printf ("%i %i\n",x1,y1);
-		  //assert (x2 >= 0 && x2 < other.m_width && y2 >= 0 && y2 < other.m_height);
-		  if (!m_known_pixels->test_bit (x2, y2))
+#if 0
+		  if (!other.m_known_pixels->test_bit (x2, y2))
 		    continue;
-#if 0
-		  sqsum += fabs (green (x1, y1) * gscale - other.green (x2, y2)) / std::max (green (x1, y1) * gscale, (luminosity_t)0.00001);
-		  sqsum += fabs (blue (x1, y1) * bscale - other.blue (x2, y2)) / std::max (blue (x1, y1) * bscale, (luminosity_t)0.00001);
-#else
-		  //luminosity_t lum = /*red (2 * x1, y1) + red (2 * x1 + 1, y1) +*/ green (x1, y1) + blue (x1, y1);;
-		  //lum_sum += lum;
-		  luminosity_t lum = 1;
-		  sqsum += (red (2 * x1, y1) * rscale - other.red (2 * x2, y2)) * (red (2 * x1, y1) * rscale - other.red (2 * x2, y2)) / (lum * lum);
-		  sqsum += (red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2)) * (red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2)) / (lum * lum);
-		  sqsum += (green (x1, y1) * gscale - other.green (x2, y2)) * (green (x1, y1) * gscale - other.green (x2, y2)) / (lum * lum);
-		  sqsum += (blue (x1, y1) * bscale - other.blue (x2, y2)) * (blue (x1, y1) * bscale - other.blue (x2, y2)) / (lum * lum);
-#if 0
-		  if (fabs (red (2 * x1, y1) * rscale - other.red (2 * x2, y2)) > 0.01)
-		    sqsum += 1;
-		  if (fabs (red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2)) > 0.01)
-		    sqsum += 1;
-		  if (fabs (green (x1, y1) * gscale - other.green (x2, y2)) > 0.01)
-		    sqsum += 1;
-		  if (fabs (blue (x1, y1) * gscale - other.blue (x2, y2)) > 0.01)
-		    sqsum += 1;
 #endif
-#endif
+		  sqsum += fabs ((red (2 * x1, y1) * rscale - other.red (2 * x2, y2)));
+		  sqsum += fabs ((red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2)));
+		  sqsum += fabs ((green (x1, y1) * gscale - other.green (x2, y2)));
+		  sqsum += fabs ((blue (x1, y1) * bscale - other.blue (x2, y2)));
 		}
 	    }
-	  if (noverlap * xstep * ystep * 100 < std::min (m_n_known_pixels, other.m_n_known_pixels) * percentage)
-	    continue;
-	  //printf ("Overlap %i, known pixels %i\n", noverlap *= step * step, m_n_known_pixels);
-	  sqsum /= noverlap;
-	  //sqsum /= lum_sum;
+	  sqsum /= est_noverlap;
 	  if (!lfound || sqsum < lbest_sqsum)
 	    {
 	      lfound = true;
 	      lbest_sqsum = sqsum;
 	      lbest_xshift = x;
 	      lbest_yshift = y;
-	      lbest_noverlap = noverlap * xstep * ystep;
+	      //lbest_noverlap = noverlap * xstep * ystep;
+	      lbest_noverlap = est_noverlap;
 	      lbest_rscale = rscale;
 	      lbest_gscale = gscale;
 	      lbest_bscale = bscale;
@@ -521,6 +689,19 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	      best_noverlap = lbest_noverlap;
 	    }
 	}
+    }
+  free (sums);
+  free (other_sums);
+  if (val_known && (*xshift_ret != best_xshift || *yshift_ret != best_yshift))
+    {
+      if (progress)
+	progress->pause_stdout ();
+      if (report_file)
+        fprintf (report_file, "Mismatch with cpfind: %i,%i compared to %i,%i\n", *xshift_ret, *yshift_ret, best_xshift, best_yshift);
+      printf ("Mismatch with cpfind: %i,%i compared to %i,%i\n", *xshift_ret, *yshift_ret, best_xshift, best_yshift);
+      if (progress)
+	progress->resume_stdout ();
+      return false;
     }
   *xshift_ret = best_xshift;
   *yshift_ret = best_yshift;
