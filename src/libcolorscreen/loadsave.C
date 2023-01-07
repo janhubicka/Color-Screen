@@ -58,7 +58,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scr_detect_blue: %f %f %f\n", dparam->blue.red, dparam->blue.green, dparam->blue.blue) < 0
 	  || fprintf (f, "scr_detect_black: %f %f %f\n", dparam->black.red, dparam->black.green, dparam->black.blue) < 0
 	  || fprintf (f, "scr_detect_min_luminosity: %f\n", dparam->min_luminosity) < 0
-	  || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0)
+	  || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0
+	  || fprintf (f, "scr_detect_sharpen_radius: %f\n", dparam->sharpen_radius) < 0
+	  || fprintf (f, "scr_detect_sharpen_amount: %f\n", dparam->sharpen_amount) < 0)
 	return false;
     }
   if (rparam)
@@ -526,6 +528,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, dparam_check (min_ratio)))
 	    {
 	      *error = "error parsing scr_detect_min_ratio";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scr_detect_sharpen_radius"))
+	{
+	  if (!read_scalar (f, dparam_check (sharpen_radius)))
+	    {
+	      *error = "error parsing scr_detect_sharpen_radius";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scr_detect_sharpen_amount"))
+	{
+	  if (!read_luminosity (f, dparam_check (sharpen_amount)))
+	    {
+	      *error = "error parsing scr_detect_sharpen_amount";
 	      return false;
 	    }
 	}

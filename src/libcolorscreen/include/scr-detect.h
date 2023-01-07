@@ -8,7 +8,7 @@
 struct scr_detect_parameters
 {
   scr_detect_parameters ()
-  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.000), min_ratio (1)
+  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.000), min_ratio (1), sharpen_radius (1), sharpen_amount (0)
   { }
 
   /* Typical valus of red, green and blue dyes scaled to range (0,1) in the scan's gamma.  */
@@ -17,12 +17,18 @@ struct scr_detect_parameters
   luminosity_t min_luminosity;
   /* Determine dye as a given color if its luminosity is greater than ratio times the sum of luminosities of the other two colors.  */
   luminosity_t min_ratio;
+
+  /* Sharpening info.  */
+  coord_t sharpen_radius;
+  luminosity_t sharpen_amount;
   bool operator== (scr_detect_parameters &other) const
   {
     return black == other.black
 	   && red == other.red
 	   && green == other.green
-	   && blue == other.blue;
+	   && blue == other.blue
+	   && sharpen_radius == other.sharpen_radius
+	   && sharpen_amount == other.sharpen_amount;
   }
   bool operator!= (scr_detect_parameters &other) const
   {
@@ -46,11 +52,12 @@ public:
   {
     m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
   }
-  enum color_class classify_color (int ir, int ig, int ib)
+  enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b)
   {
-    luminosity_t r, g, b;
-
-    m_color_adjust.apply_to_rgb (lookup_table[ir], lookup_table[ig], lookup_table[ib], &r, &g, &b);
+    luminosity_t m = std::min (std::min (std::min (r, g), b), (luminosity_t)0);
+    r -= m;
+    g -= m;
+    b -= m;
     if (r * r + b * b + g * g < m_param.min_luminosity * m_param.min_luminosity)
       return unknown;
     if (r > (fabs (g) + fabs(b)) * m_param.min_ratio && r > g && r > b)
@@ -61,6 +68,12 @@ public:
       return blue;
 
     return unknown;
+  }
+  enum color_class classify_color (int ir, int ig, int ib)
+  {
+    luminosity_t r, g, b;
+    adjust_color (ir, ig, ib, &r, &g, &b);
+    return classify_adjusted_color (r, g, b);
   }
   scr_detect_parameters m_param;
 private:

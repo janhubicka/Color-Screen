@@ -7,18 +7,44 @@
 #include "../libcolorscreen/render-interpolate.h"
 
 namespace {
-#define MAX_DIM 10
-const int border = 30;
-/* Seems that DT scans intends to overlap by 30%.  */
-const int percentage = 25;
-const bool stitched_file = true;
 
-int stitch_width, stitch_height;
+struct stitching_params
+{
+  static const int max_dim = 10;
+
+  bool demosaiced_tiles;
+  bool predictive_tiles;
+  bool orig_tiles;
+
+  coord_t outer_tile_border;
+  coord_t min_overlap_percentage;
+  // TODO: ignored.
+  coord_t max_overlap_percentage;
+
+  int width, height;
+  std::string filename[max_dim][max_dim];
+  std::string csp_filename;
+  std::string hugin_pto_filename;
+  std::string report_filename;
+  std::string stitched_filename;
+
+  bool produce_stitched_file_p ()
+  {
+    return !stitched_filename.empty ();
+  }
+
+  stitching_params ()
+  : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false),
+    outer_tile_border (30), min_overlap_percentage (25), max_overlap_percentage (40)
+  {}
+} stitching_params;
+
 scr_to_img_parameters param;
 render_parameters rparam;
 render_parameters passthrough_rparam;
 scr_detect_parameters dparam;
 solver_parameters solver_param;
+FILE *report_file;
 
 bool initialized = false;
 screen *my_screen;
@@ -34,7 +60,7 @@ enum render_mode
 class stitch_image
 {
   public:
-  char *filename;
+  std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
   image_data *img;
@@ -60,7 +86,7 @@ class stitch_image
   bool output;
 
   stitch_image ()
-  : filename (NULL), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
+  : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
   {
   }
   ~stitch_image ();
@@ -82,7 +108,7 @@ private:
 long stitch_image::current_time;
 int stitch_image::nloaded;
 
-stitch_image images[MAX_DIM][MAX_DIM];
+stitch_image images[stitching_params::max_dim][stitching_params::max_dim];
 
 stitch_image::~stitch_image ()
 {
@@ -98,9 +124,9 @@ stitch_image::~stitch_image ()
 void
 stitch_image::release_image_data (progress_info *progress)
 {
-  progress->pause_stdout ();
-  printf ("Releasing input tile %s\n", filename);
-  progress->resume_stdout ();
+  //progress->pause_stdout ();
+  //printf ("Releasing input tile %s\n", filename.c_str ());
+  //progress->resume_stdout ();
   assert (!refcount && img);
   delete img;
   img = NULL;
@@ -120,7 +146,8 @@ stitch_image::load_img (progress_info *progress)
   lastused = ++current_time;
   if (img)
     return;
-  if (nloaded >= (stitched_file ? stitch_width * 2 : 1))
+  if (nloaded >= (stitching_params.produce_stitched_file_p ()
+		  ? stitching_params.width * 2 : 1))
     {
       int minx = -1, miny = -1;
       long minlast = 0;
@@ -129,17 +156,17 @@ stitch_image::load_img (progress_info *progress)
 
 #if 0
       progress->pause_stdout ();
-      for (int y = 0; y < stitch_height; y++)
+      for (int y = 0; y < stitching_params.height; y++)
       {
-	for (int x = 0; x < stitch_width; x++)
+	for (int x = 0; x < stitching_params.width; x++)
 	  printf (" %i:%5i", images[y][x].img != NULL, (int)images[y][x].lastused);
         printf ("\n");
       }
       progress->resume_stdout ();
 #endif
 
-      for (int y = 0; y < stitch_height; y++)
-	for (int x = 0; x < stitch_width; x++)
+      for (int y = 0; y < stitching_params.height; y++)
+	for (int x = 0; x < stitching_params.width; x++)
 	  if (images[y][x].refcount)
 	    nref++;
 	  else if (images[y][x].img
@@ -156,14 +183,14 @@ stitch_image::load_img (progress_info *progress)
     }
   nloaded++;
   progress->pause_stdout ();
-  printf ("Loading input tile %s (%i tiles in memory)\n", filename, nloaded);
+  printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
   progress->resume_stdout ();
   img = new image_data;
   const char *error;
-  if (!img->load (filename, &error, progress))
+  if (!img->load (filename.c_str (), &error, progress))
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", filename, error);
+      fprintf (stderr, "Can not load %s: %s\n", filename.c_str (), error);
       exit (1);
     }
   img_width = img->width;
@@ -171,7 +198,7 @@ stitch_image::load_img (progress_info *progress)
   if (!img->rgbdata)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "File %s is not having color channels\n", filename);
+      fprintf (stderr, "File %s is not having color channels\n", filename.c_str ());
       exit (1);
     }
 }
@@ -189,7 +216,7 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
   if (!known_pixels)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Out of memory allocating known pixels bitmap for %s\n", filename);
+      fprintf (stderr, "Out of memory allocating known pixels bitmap for %s\n", filename.c_str ());
       exit (1);
     }
   if (progress)
@@ -198,9 +225,9 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
   int xmax = img.width * (100 - skipright) / 100;
   int ymin = img.height * skiptop / 100;
   int ymax = img.height * (100 - skipbottom) / 100;
-  progress->pause_stdout ();
-  printf ("Skip: %i %i %i %i Range: %i %i %i %i\n", skiptop, skipbottom, skipleft, skipright,xmin,xmax,ymin,ymax);
-  progress->resume_stdout ();
+  //progress->pause_stdout ();
+  //printf ("Skip: %i %i %i %i Range: %i %i %i %i\n", skiptop, skipbottom, skipleft, skipright,xmin,xmax,ymin,ymax);
+  //progress->resume_stdout ();
   for (int y = 0; y < height; y++)
     {
       for (int x = 0; x < width; x++)
@@ -309,11 +336,11 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   coord_t my_pixelsize;
   int detected_xshift, detected_yshift, detected_width, detected_height;
   bitmap_2d *my_screen_detected_patches;
-  mesh_trans = detect_solver_points (*img, dparam, rparam.gamma, solver_param, progress, &my_pixelsize, &detected_xshift, &detected_yshift, &detected_width, &detected_height, &my_screen_detected_patches);
+  mesh_trans = detect_solver_points (*img, dparam, rparam.gamma, solver_param, progress, &my_pixelsize, &detected_xshift, &detected_yshift, &detected_width, &detected_height, &my_screen_detected_patches, report_file);
   if (!mesh_trans)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Failed to analyze screen of %s\n", filename);
+      fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
       exit (1);
     }
   render_parameters my_rparam;
@@ -438,7 +465,7 @@ static TIFF *
 open_tile_output_file (const char *outfname, 
 		       int xoffset, int yoffset,
 		       int outwidth, int outheight,
-		       uint16_t ** outrow, bool verbose, const char **error,
+		       uint16_t ** outrow, const char **error,
 		       void *icc_profile, uint32_t icc_profile_size,
 		       enum render_mode mode,
 		       progress_info *progress)
@@ -488,13 +515,11 @@ open_tile_output_file (const char *outfname,
     {
       progress->set_task ("Rendering and saving", outheight);
     }
-  if (verbose)
-    {
-      progress->pause_stdout ();
-      printf ("Rendering %s at offset %i,%i in resolution %ix%i\n", outfname, xoffset, yoffset, outwidth,
-	      outheight);
-      progress->resume_stdout ();
-    }
+  if (report_file)
+    fprintf (report_file, "Rendering %s at offset %i,%i width dimension %ix%i\n", outfname, xoffset, yoffset, outwidth, outheight);
+  progress->pause_stdout ();
+  printf ("Rendering %s at offset %i,%i width dimension %ix%i\n", outfname, xoffset, yoffset, outwidth, outheight);
+  progress->resume_stdout ();
   return out;
 }
 
@@ -524,7 +549,6 @@ write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_in
 bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
-  std::string fname=filename;
   std::string prefix;
   uint16_t *outrow;
   coord_t final_xpos, final_ypos;
@@ -546,7 +570,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   }
 
   load_img (progress);
-  TIFF *out = open_tile_output_file ((prefix+fname).c_str(), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, true, error, img->icc_profile, img->icc_profile_size, mode, progress);
+  TIFF *out = open_tile_output_file ((prefix+filename).c_str(), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, error, img->icc_profile, img->icc_profile_size, mode, progress);
   if (!out)
     {
       release_img ();
@@ -603,7 +627,15 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
 void
 print_help (const char *filename)
 {
-  printf ("%s output.tif parameters.par <xdim> <ydim> imag11.tif img12.tif ....\n", filename);
+  printf ("%s <parameters> <tiles> ....\n", filename);
+  printf ("Supported parameters:\n");
+  printf ("--report=filename.txt                       store report about stitching operation to a file\n");
+  printf ("--csp=filename.par                          load given screen discovery and rendering parameters\n");
+  printf ("--stitched=filename.tif                     store stitched file (with no blending)\n");
+  printf ("--hugin-pto=filename.pto                    store project file for hugin\n");
+  printf ("--demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
+  printf ("--predictive-tiles                          store predictive tiles (for later blending)\n");
+  printf ("--orig-tiles                                store geometrically corrected tiles (for later blending)\n");
 }
 
 void
@@ -620,8 +652,8 @@ determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
   ymin = 0;
   xmax = 0;
   ymax = 0;
-  for (int y = 0; y < stitch_height; y++)
-    for (int x = 0; x < stitch_width; x++)
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
       if (images[y][x].analyzed)
 	{
 	  coord_t x1,y1,x2,y2;
@@ -648,9 +680,48 @@ determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
 	}
 }
 
+void
+print_panorama_map (FILE *out)
+{
+  int xmin, ymin, xmax, ymax;
+  scr_to_img_parameters scr_param;
+  image_data data;
+  scr_param.type = Dufay;
+  data.width=1000;
+  data.height=1000;
+  scr_to_img map;
+  map.set_parameters (scr_param, data);
+  determine_viewport (xmin, xmax, ymin, ymax);
+  fprintf (out, "Viewport range %i %i %i %i\n", xmin, xmax, ymin, ymax);
+  for (int y = 0; y < 20; y++)
+    {
+      for (int x = 0; x < 20; x++)
+	{
+	  coord_t fx = xmin + (xmax - xmin) * x / 20;
+	  coord_t fy = ymin + (ymax - ymin) * y / 20;
+	  coord_t sx, sy;
+	  int ix = 0, iy = 0;
+	  map.final_to_scr (fx, fy, &sx, &sy);
+	  for (iy = 0 ; iy < stitching_params.height; iy++)
+	    {
+	      for (ix = 0 ; ix < stitching_params.width; ix++)
+		if (images[iy][ix].analyzed && images[iy][ix].pixel_known_p (sx, sy))
+		  break;
+	      if (ix != stitching_params.width)
+		break;
+	    }
+
+	  if (iy == stitching_params.height)
+	    fprintf (out, "   ");
+	  else
+	    fprintf (out, " %i%i",iy+1,ix+1);
+	}
+      fprintf (out, "\n");
+    }
+}
 
 void
-print_status ()
+print_status (FILE *out)
 {
   scr_to_img_parameters scr_param;
   image_data data;
@@ -660,7 +731,7 @@ print_status ()
   scr_to_img map;
   map.set_parameters (scr_param, data);
 
-  for (int y = 0; y < stitch_height; y++)
+  for (int y = 0; y < stitching_params.height; y++)
     {
       if (y)
 	{
@@ -672,10 +743,10 @@ print_status ()
 	  ry -= images[y-1][0].yshift;
 	  rx2 -= images[y][0].xshift;
 	  ry2 -= images[y][0].yshift;
-	  printf (" down %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
+	  fprintf (out, " down %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
 	}
-      else printf ("                  ");
-      for (int x = 1; x < stitch_width; x++)
+      else fprintf (out, "                  ");
+      for (int x = 1; x < stitching_params.width; x++)
       {
 	coord_t rx, ry;
 	map.scr_to_final (images[y][x-1].xpos, images[y][x-1].ypos, &rx, &ry);
@@ -685,56 +756,31 @@ print_status ()
 	ry -= images[y][x-1].yshift;
 	rx2 -= images[y][x].xshift;
 	ry2 -= images[y][x].yshift;
-	printf (" right %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
+	fprintf (out, " right %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
 	//printf ("  %-5i,%-5i range: %-5i:%-5i,%-5i:%-5i", (int)rx,(int)ry,(int)rx-images[y][x].xshift+sx,(int)rx-images[y][x].xshift+images[y][x].final_width+sx,(int)ry-images[y][x].yshift+sy,(int)ry-images[y][x].yshift+images[y][x].final_height+sy);
       }
-      printf ("\n");
+      fprintf (out, "\n");
     }
-  for (int y = 0; y < stitch_height; y++)
+  for (int y = 0; y < stitching_params.height; y++)
     {
-      for (int x = 0; x < stitch_width; x++)
+      for (int x = 0; x < stitching_params.width; x++)
       {
 	coord_t rx, ry;
 	map.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx, &ry);
-	printf ("  %-5i,%-5i  rotated:%-5i,%-5i ", images[y][x].xpos, images[y][x].ypos, (int)rx,(int)ry);
+	fprintf (out, "  %-5i,%-5i  rotated:%-5i,%-5i ", images[y][x].xpos, images[y][x].ypos, (int)rx,(int)ry);
       }
-      printf ("\n");
+      fprintf (out, "\n");
     }
-  int xmin, ymin, xmax, ymax;
-  determine_viewport (xmin, xmax, ymin, ymax);
-  printf ("Viewport range %i %i %i %i\n", xmin, xmax, ymin, ymax);
-  for (int y = 0; y < 20; y++)
-    {
-      for (int x = 0; x < 20; x++)
-	{
-	  coord_t fx = xmin + (xmax - xmin) * x / 20;
-	  coord_t fy = ymin + (ymax - ymin) * y / 20;
-	  coord_t sx, sy;
-	  int ix = 0, iy = 0;
-	  map.final_to_scr (fx, fy, &sx, &sy);
-	  //printf ("%f %f %f %f\n",fx,fy,sx,sy);
-	  for (iy = 0 ; iy < stitch_height; iy++)
-	    {
-	      for (ix = 0 ; ix < stitch_width; ix++)
-		if (images[iy][ix].analyzed && images[iy][ix].pixel_known_p (sx, sy))
-		  break;
-	      if (ix != stitch_width)
-		break;
-	    }
-
-	  if (iy == stitch_height)
-	    printf ("   ");
-	  else
-	    printf (" %i%i",iy+1,ix+1);
-	}
-      printf ("\n");
-    }
+  print_panorama_map (out);
 }
 
 void
 analyze (int x, int y, progress_info *progress)
 {
-  images[y][x].analyze (!y ? border : 0, y == stitch_height - 1 ? border : 0, !x ? border : 0, x == stitch_width - 1 ? border : 0, progress);
+  images[y][x].analyze (!y ? stitching_params.outer_tile_border : 0,
+			y == stitching_params.height - 1 ? stitching_params.outer_tile_border : 0,
+			!x ? stitching_params.outer_tile_border : 0,
+		       	x == stitching_params.width - 1 ? stitching_params.outer_tile_border : 0, progress);
 }
 
 void
@@ -751,9 +797,9 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
 	   "#hugin_ptoversion 2\n"
 	   "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
 	   "m i0\n");
-  for (int y = 0; y < stitch_height; y++)
-    for (int x = 0; x < stitch_width; x++)
-     fprintf (f, "i w%i h%i f0 v1 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename);
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+     fprintf (f, "i w%i h%i f0 v1 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename.c_str ());
   fprintf (f, "# specify variables that should be optimized\n"
 	   "v Ra0\n"
 	   "v Rb0\n"
@@ -763,7 +809,7 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
 	   "v Vb0\n"
 	   "v Vc0\n"
 	   "v Vd0\n");
-  for (int i = 1; i < stitch_width * stitch_height; i++)
+  for (int i = 1; i < stitching_params.width * stitching_params.height; i++)
     fprintf (f, "v Ra%i\n"
 	     "v Rb%i\n"
 	     "v Rc%i\n"
@@ -782,28 +828,33 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
 	     "v Vc%i\n"
 	     "v Vd%i\n",i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i);
 #if 0
-  for (int y = 0; y < stitch_height; y++)
-    for (int x = 0; x < stitch_width; x++)
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
       {
 	if (x >= 1)
-	  images[y][x-1].output_common_points (f, images[y][x], y * stitch_width + x - 1, y * stitch_width + x);
+	  images[y][x-1].output_common_points (f, images[y][x], y * stitching_params.width + x - 1, y * stitching_params.width + x);
 	if (y >= 1)
-	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * stitch_width + x, y * stitch_width + x);
+	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * stitching_params.width + x, y * stitching_params.width + x);
       }
 #endif
-  for (int y = 0; y < stitch_height; y++)
-    for (int x = 0; x < stitch_width; x++)
-      for (int y2 = 0; y2 < stitch_height; y2++)
-        for (int x2 = 0; x2 < stitch_width; x2++)
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+      for (int y2 = 0; y2 < stitching_params.height; y2++)
+        for (int x2 = 0; x2 < stitching_params.width; x2++)
 	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
-	    images[y][x].output_common_points (f, images[y2][x2], y * stitch_width + x, y2 * stitch_width + x2);
+	    images[y][x].output_common_points (f, images[y2][x2], y * stitching_params.width + x, y2 * stitching_params.width + x2);
   fclose (f);
 }
 
 void
 determine_positions (progress_info *progress)
 {
-  for (int y = 0; y < stitch_height; y++)
+  if (stitching_params.width == 1 && stitching_params.height == 1)
+    {
+      analyze (0, 0, progress);
+      return;
+    }
+  for (int y = 0; y < stitching_params.height; y++)
     {
       if (!y)
 	{
@@ -816,55 +867,70 @@ determine_positions (progress_info *progress)
 	  int ys;
 	  analyze (0, y-1, progress);
 	  analyze (0, y, progress);
-	  if (!images[y-1][0].dufay.find_best_match (percentage, images[y][0].dufay, images[y-1][0].screen_filename.c_str (), images[y][0].screen_filename.c_str(), &xs, &ys, progress))
+	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][0].dufay, images[y-1][0].screen_filename.c_str (), images[y][0].screen_filename.c_str(), &xs, &ys, report_file, progress))
 	    {
 	      progress->pause_stdout ();
-	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename, images[y][0].filename);
+	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename.c_str (), images[y][0].filename.c_str ());
 	      exit (1);
 	    }
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
+#if 0
 	  progress->pause_stdout ();
 	  print_status ();
 	  progress->resume_stdout ();
+#endif
 	}
-      for (int x = 0; x < stitch_width - 1; x++)
+      for (int x = 0; x < stitching_params.width - 1; x++)
 	{
 	  int xs;
 	  int ys;
 	  analyze (x, y, progress);
 	  analyze (x + 1,y, progress);
-	  if (!images[y][x].dufay.find_best_match (percentage, images[y][x+1].dufay, images[y][x].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, progress))
+	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][x+1].dufay, images[y][x].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, report_file, progress))
 	    {
 	      progress->pause_stdout ();
-	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename, images[y][x + 1].filename);
+	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
+	      if (report_file)
+		print_status (report_file);
 	      exit (1);
 	    }
 	  images[y][x+1].xpos = images[y][x].xpos + xs;
 	  images[y][x+1].ypos = images[y][x].ypos + ys;
+#if 0
 	  progress->pause_stdout ();
-	  print_status ();
+	  print_status (stdout);
 	  progress->resume_stdout ();
+#endif
 	  /* Confirm position.  */
 	  if (y)
 	    {
-	      if (!images[y-1][x+1].dufay.find_best_match (percentage, images[y][x+1].dufay, images[y-1][x+1].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, progress))
+	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][x+1].dufay, images[y-1][x+1].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, report_file, progress))
 		{
 		  progress->pause_stdout ();
-		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename, images[y][x + 1].filename);
+		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
+		  if (report_file)
+		    print_status (report_file);
 		  exit (1);
 		}
 	      if (images[y][x+1].xpos != images[y-1][x+1].xpos + xs
 		  || images[y][x+1].ypos != images[y-1][x+1].ypos + ys)
 		{
 		  progress->pause_stdout ();
-		  fprintf (stderr, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename, images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
+		  fprintf (stderr, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
+		  if (report_file)
+		    print_status (report_file);
 		  exit (1);
 		}
 
 	    }
 	}
     }
+  if (report_file)
+    print_status (report_file);
+  progress->pause_stdout ();
+  print_panorama_map (stdout);
+  progress->resume_stdout ();
 }
 
 /* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
@@ -872,7 +938,7 @@ determine_positions (progress_info *progress)
    Allocate output buffer to hold single row to OUTROW.  */
 static TIFF *
 open_output_file (const char *outfname, int outwidth, int outheight,
-		  uint16_t ** outrow, bool verbose, const char **error,
+		  uint16_t ** outrow, const char **error,
 		  void *icc_profile, uint32_t icc_profile_size,
 		  progress_info *progress)
 {
@@ -905,93 +971,90 @@ open_output_file (const char *outfname, int outwidth, int outheight,
     {
       progress->set_task ("Rendering and saving tile", outheight);
     }
-  if (verbose)
-    {
-      progress->pause_stdout ();
-      printf ("Rendering %s in resolution %ix%i\n", outfname, outwidth,
-	      outheight);
-      progress->resume_stdout ();
-    }
+  if (report_file)
+    fprintf (report_file, "Rendering %s in resolution %ix%i\n", outfname, outwidth, outheight);
+  progress->pause_stdout ();
+  printf ("Rendering %s in resolution %ix%i\n", outfname, outwidth, outheight);
+  progress->resume_stdout ();
   return out;
 }
-}
 
-int
-main (int argc, char **argv)
+void stitch (progress_info *progress)
 {
-  char *outfname;
-  const char *error;
-  const char *cspname;
-
-  if (argc < 5)
-  {
-    print_help (argv[0]);
-    exit(1);
-  }
-  outfname = argv[1];
-  cspname = argv[2];
-  /* Load color screen and rendering parameters.  */
-  FILE *in = fopen (cspname, "rt");
-  printf ("Loading color screen parameters: %s\n", cspname);
-  if (!in)
-    {
-      perror (cspname);
-      exit (1);
-    }
-  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
-    {
-      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-      exit (1);
-    }
-  fclose (in);
   passthrough_rparam.gamma = rparam.gamma;
   passthrough_rparam.output_gamma = rparam.gamma;
+  const char *error;
 
-  stitch_width = atoi(argv[3]);
-  if (stitch_width <= 0 || stitch_width > MAX_DIM)
+  if ((stitching_params.width == 1 || stitching_params.height == 1) && stitching_params.outer_tile_border > 40)
     {
-      fprintf (stderr, "Invalid stich width %s\n", argv[3]);
-      print_help (argv[0]);
-      exit(1);
+      fprintf (stderr, "Outer tile border is too large for single row or column stitching\n");
+      exit (1);
     }
-  stitch_height = atoi(argv[4]);
-  if (stitch_height <= 0 || stitch_height > MAX_DIM)
+  if (stitching_params.outer_tile_border > 80)
     {
-      fprintf (stderr, "Invalid stich height %s\n", argv[4]);
-      print_help (argv[0]);
-      exit(1);
+      fprintf (stderr, "Outer tile border is too large\n");
+      exit (1);
     }
-  if (argc != 5 + stitch_width * stitch_height)
+  if (stitching_params.report_filename.length ())
     {
-      fprintf (stderr, "Expected %i parameters, have %i\n", 5 + stitch_width * stitch_height, argc);
-      print_help (argv[0]);
-      exit(1);
-    }
-  for (int y = 0, n = 5; y < stitch_height; y++)
-    {
-      for (int x = 0; x < stitch_width; x++)
+      report_file = fopen (stitching_params.report_filename.c_str (), "wt");
+      if (!report_file)
 	{
-	  images[y][x].filename = argv[n++];
-	  printf ("   %s", images[y][x].filename);
+	  fprintf (stderr, "Can not open report file: %s\n", stitching_params.report_filename.c_str ());
+	  exit (1);
 	}
-      printf ("\n");
     }
-  file_progress_info progress (stdout);
-#if 0
-  for (int y = 0; y < stitch_height; y++)
+  progress->pause_stdout ();
+  printf ("Stitching:\n");
+  if (report_file)
+    fprintf (report_file, "Stitching:\n");
+  for (int y = 0; y < stitching_params.height; y++)
     {
-      for (int x = 0; x < stitch_width; x++)
-	images[y][x].analyze (&progress);
+      for (int x = 0; x < stitching_params.height; x++)
+	{
+	  printf ("  %s", images[y][x].filename.c_str ());
+	  if (report_file)
+	    printf ("  %s", images[y][x].filename.c_str ());
+	}
+      printf("\n");
+      if (report_file)
+        fprintf (report_file, "\n");
     }
-#endif
-  determine_positions (&progress);
+  progress->resume_stdout ();
+
+  if (stitching_params.csp_filename.length ())
+    {
+      const char *cspname = stitching_params.csp_filename.c_str ();
+      FILE *in = fopen (cspname, "rt");
+      progress->pause_stdout ();
+      printf ("Loading color screen parameters: %s\n", cspname);
+      progress->resume_stdout ();
+      if (!in)
+	{
+	  perror (cspname);
+	  exit (1);
+	}
+      if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	{
+	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  exit (1);
+	}
+      fclose (in);
+      if (report_file)
+	{
+	  fprintf (report_file, "Loading color screen parameters: %s\n", cspname);
+	  save_csp (report_file, &param, &dparam, &rparam, &solver_param);
+	}
+    }
+
+  determine_positions (progress);
 
   int xmin, ymin, xmax, ymax;
   determine_viewport (xmin, xmax, ymin, ymax);
 
   const coord_t xstep = pixel_size, ystep = pixel_size;
   /* We need ICC profile.  */
-  images[0][0].load_img (&progress);
+  images[0][0].load_img (progress);
   passthrough_rparam.gray_max = images[0][0].img->maxval;
   images[0][0].release_img ();
   scr_to_img_parameters scr_param;
@@ -1001,21 +1064,22 @@ main (int argc, char **argv)
   data.height=1000;
   scr_to_img map;
   map.set_parameters (scr_param, data);
-  produce_hugin_pto_file ("hugin.pto", &progress);
-  if (stitched_file)
+  if (stitching_params.hugin_pto_filename.length ())
+    produce_hugin_pto_file (stitching_params.hugin_pto_filename.c_str (), progress);
+  if (stitching_params.produce_stitched_file_p ())
     {
       TIFF *out;
       uint16_t *outrow;
       out =
-	open_output_file (outfname, (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, true,
+	open_output_file (stitching_params.stitched_filename.c_str (), (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, 
 			  &error,
 			  images[0][0].img->icc_profile, images[0][0].img->icc_profile_size,
-			  &progress);
+			  progress);
 	int j = 0;
       if (!out)
 	{
-	  progress.pause_stdout ();
-	  fprintf (stderr, "Can not open final stitch file %s: %s\n", outfname, error);
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Can not open final stitch file %s: %s\n", stitching_params.stitched_filename.c_str (), error);
 	  exit (1);
 	}
       for (coord_t y = ymin; j < (int)((ymax-ymin) / ystep); y+=ystep, j++)
@@ -1028,23 +1092,23 @@ main (int argc, char **argv)
 	      int r = 0,g = 0,b = 0;
 	      int ix = 0, iy = 0;
 	      map.final_to_scr (x, y, &sx, &sy);
-	      for (iy = 0 ; iy < stitch_height; iy++)
+	      for (iy = 0 ; iy < stitching_params.height; iy++)
 		{
-		  for (ix = 0 ; ix < stitch_width; ix++)
+		  for (ix = 0 ; ix < stitching_params.width; ix++)
 		    if (images[iy][ix].analyzed && images[iy][ix].pixel_known_p (sx, sy))
 		      break;
-		  if (ix != stitch_width)
+		  if (ix != stitching_params.width)
 		    break;
 		}
-	      if (iy != stitch_height)
+	      if (iy != stitching_params.height)
 		{
-		  if (images[iy][ix].render_pixel (rparam, passthrough_rparam, sx,sy, render_original,&r,&g,&b, &progress))
+		  if (images[iy][ix].render_pixel (rparam, passthrough_rparam, sx,sy, render_original,&r,&g,&b, progress))
 		    set_p = true;
 		  if (!images[iy][ix].output)
 		    {
-		      if (!images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, &progress)
-			  || !images[iy][ix].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress)
-			  || !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, &progress))
+		      if ((stitching_params.orig_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, progress))
+			  || (stitching_params.demosaiced_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, progress))
+			  || (stitching_params.predictive_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, progress)))
 			{
 			  fprintf (stderr, "Writting tile: %s\n", error);
 			  exit (1);
@@ -1058,36 +1122,197 @@ main (int argc, char **argv)
 	    }
 	  if (set_p)
 	    {
-	      progress.set_task ("Rendering and saving", (ymax-ymin) / ystep);
-	      progress.set_progress (j);
+	      progress->set_task ("Rendering and saving", (ymax-ymin) / ystep);
+	      progress->set_progress (j);
 	    }
-	  if (!write_row (out, j, outrow, &error, &progress))
+	  if (!write_row (out, j, outrow, &error, progress))
 	    {
 	      fprintf (stderr, "Writting failed: %s\n", error);
 	      exit (1);
 	    }
 	}
-      progress.set_task ("Closing output file", 1);
+      progress->set_task ("Closing output file", 1);
 
       TIFFClose (out);
       free (outrow);
-      progress.set_task ("Releasing memory", 1);
+      progress->set_task ("Releasing memory", 1);
     }
   else
-    for (int y = 0; y < stitch_height; y++)
-      for (int x = 0; x < stitch_width; x++)
-	if (!images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, &progress)
-	    || !images[y][x].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, &progress)
-	    || !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, &progress))
+    for (int y = 0; y < stitching_params.height; y++)
+      for (int x = 0; x < stitching_params.width; x++)
+	if ((stitching_params.orig_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, progress))
+	    || (stitching_params.demosaiced_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, progress))
+	    || (stitching_params.predictive_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, progress)))
 	  {
 	    fprintf (stderr, "Writting tile: %s\n", error);
 	    exit (1);
 	  }
-  for (int y = 0; y < stitch_height; y++)
-    for (int x = 0; x < stitch_width; x++)
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
       if (images[y][x].img)
-	images[y][x].release_image_data (&progress);
-  render_to_scr::release_screen (my_screen);
+	images[y][x].release_image_data (progress);
+  if (my_screen)
+    render_to_scr::release_screen (my_screen);
+  if (report_file)
+    fclose (report_file);
+}
+}
+
+int
+main (int argc, char **argv)
+{
+  file_progress_info progress (stdout);
+  std::vector<std::string> fnames;
+
+  for (int i = 1; i < argc; i++)
+    {
+      if (!strcmp (argv[i], "--report"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing report filename\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.report_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--report="))
+	{
+	  stitching_params.report_filename = argv[i] + strlen ("--report=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--csp"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing csp filename\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.csp_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--csp="))
+	{
+	  stitching_params.csp_filename = argv[i] + strlen ("--csp=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--hugin-pto"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing hugin-pto filename\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.hugin_pto_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--hugin-pto="))
+	{
+	  stitching_params.hugin_pto_filename = argv[i] + strlen ("--hugin-pto=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--stitched"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing stitched filename\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.stitched_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--stitched="))
+	{
+	  stitching_params.stitched_filename = argv[i] + strlen ("--stitched=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--demosaiced-tiles"))
+	{
+	  stitching_params.demosaiced_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--predictive-tiles"))
+	{
+	  stitching_params.predictive_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--orig-tiles"))
+	{
+	  stitching_params.orig_tiles = true;
+	  continue;
+	}
+      std::string name = argv[i];
+      fnames.push_back (name);
+    }
+  if (!fnames.size ())
+    {
+      fprintf (stderr, "No files to stitch\n");
+      print_help (argv[0]);
+      exit (1);
+    }
+  if (fnames.size () == 1)
+    {
+      stitching_params.width = 1;
+      stitching_params.height = 1;
+    }
+  else
+    {
+      int indexpos;
+      if (fnames[0].length () != fnames[1].length ())
+	{
+	  fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
+	  print_help (argv[0]);
+	  exit (1);
+	}
+      for (indexpos = 0; indexpos < (int)fnames[0].length () - 2; indexpos++)
+	if (fnames[0][indexpos] != fnames[1][indexpos]
+	    || (fnames[0][indexpos] == '1' && fnames[0][indexpos + 1] != fnames[1][indexpos + 1]))
+	  break;
+      if (fnames[0][indexpos] != '1' || fnames[0][indexpos + 1] != '1')
+	{
+	  fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
+	  print_help (argv[0]);
+	  exit (1);
+	}
+      int w;
+      for (w = 1; w < (int)fnames.size (); w++)
+	if (fnames[w][indexpos+1] != '1' + w)
+	  break;
+      stitching_params.width = w;
+      stitching_params.height = fnames.size () / w;
+      for (int y = 0; y < stitching_params.height; y++)
+        for (int x = 0; x < stitching_params.width; x++)
+	  {
+	    int i = y * stitching_params.width + x;
+	    if (fnames[i].length () != fnames[0].length ()
+		|| fnames[i][indexpos] != '1' + y
+		|| fnames[i][indexpos + 1] != '1' + x)
+	      {
+		fprintf (stderr, "Unexpected tile filename '%s'\n", fnames[i].c_str ());
+		print_help (argv[0]);
+		exit (1);
+	      }
+	  }
+    }
+  if (stitching_params.width * stitching_params.height != (int)fnames.size ())
+    {
+      fprintf (stderr, "For %ix%i tiles I expect %i filenames, found %i\n", stitching_params.width, stitching_params.height, stitching_params.width * stitching_params.height, (int)fnames.size ());
+      print_help (argv[0]);
+      exit (1);
+    }
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+      images[y][x].filename = fnames[y * stitching_params.width + x];
+
+  stitch (&progress);
 
 
   return 0;

@@ -46,7 +46,7 @@ public:
     return m_yshift;
   }
   bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
-  bool find_best_match (int percentake, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift, int *yshift, progress_info *progress = NULL);
+  bool find_best_match (int percentake, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift, int *yshift, FILE *report_file = NULL, progress_info *progress = NULL);
   void set_known_pixels (bitmap_2d *bitmap)
   {
     assert (!m_known_pixels && !m_n_known_pixels);

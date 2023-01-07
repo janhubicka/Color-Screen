@@ -184,7 +184,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
   return !progress || !progress->cancelled ();
 }
 bool
-analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift_ret, int *yshift_ret, progress_info *progress)
+analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift_ret, int *yshift_ret, FILE *report_file, progress_info *progress)
 {
   if (filename1)
     {
@@ -209,7 +209,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	{
 	  if (progress)
 	    progress->pause_stdout ();
-	  printf ("Failed to write screen\n");
+	  fprintf (stderr, "Failed to write screen\n");
 	  return false;
 	}
       fprintf (f, "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n m i0\n"
@@ -218,16 +218,16 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
       fclose (f);
       if (progress)
 	progress->pause_stdout ();
-      if (system ("cpfind --fullscale --ransacmode=rpy project-cpfind.pto -o project-cpfind-out.pto"))
+      if (system ("cpfind --fullscale --ransacmode=rpy project-cpfind.pto -o project-cpfind-out.pto >cpfind.out"))
 	{
-	  printf ("Failed to execute cpfind\n");
+	  fprintf (stderr, "Failed to execute cpfind\n");
 	  progress->resume_stdout ();
 	  return false;
 	}
       f = fopen ("project-cpfind-out.pto", "r");
       if (!f)
 	{
-	  printf ("Failed to open cpfind output file\n");
+	  fprintf (stderr, "Failed to open cpfind output file\n");
 	  progress->resume_stdout ();
 	  return false;
 	}
@@ -257,53 +257,53 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	  npoints++;
 	  if (fscanf (f, "%f", &x1) != 1)
 	    {
-	      printf ("Parse error 1\n");
+	      fprintf (stderr, "Parse error 1\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'y')
 	    {
-	      printf ("Parse error 2\n");
+	      fprintf (stderr, "Parse error 2\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y1) != 1)
 	    {
-	      printf ("Parse error 3\n");
+	      fprintf (stderr, "Parse error 3\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'X')
 	    {
-	      printf ("Parse error 4\n");
+	      fprintf (stderr, "Parse error 4\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &x2) != 1)
 	    {
-	      printf ("Parse error 5\n");
+	      fprintf (stderr, "Parse error 5\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'Y')
 	    {
-	      printf ("Parse error 6\n");
+	      fprintf (stderr, "Parse error 6\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y2) != 1)
 	    {
-	      printf ("Parse error 7\n");
+	      fprintf (stderr, "Parse error 7\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 #if 0
 	  if (fscanf (f, "x%f y%f X%f Y%f to\n", &x1, &y1, &x2, &y2) != 4)
 	    {
-	      printf ("Parse error\n");
+	      printf (stderr, "Parse error\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
@@ -314,10 +314,12 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	  if (fabs ((x2 - x1) - xo) > 0.3
 	      || fabs ((y2 - y1) - yo) > 0.3)
 	    {
-	      printf ("Control point %f %f %f %f identified by cpfind discarded since offset is not integer\n",x1,y1,x2,y2);
+	      if (report_file)
+	        fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is not integer\n",x1,y1,x2,y2);
 	      continue;
 	    }
-	  printf ("Control point: x1 %f y2 %f x2 %f y2 %f offsetx %i offsety %i\n",x1,y1,x2,y2,xo,yo);
+	  if (report_file)
+	    fprintf (report_file, "Control point: x1 %f y2 %f x2 %f y2 %f offsetx %i offsety %i\n",x1,y1,x2,y2,xo,yo);
 	  bool found = false;
 	  for (offsets &o : off)
 	    if (o.x == xo && o.y == yo)
@@ -340,16 +342,18 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	    {
 	      *xshift_ret = -max.x - (m_xshift - other.m_xshift);
 	      *yshift_ret = -max.y - (m_yshift - other.m_yshift);
-	      printf ("Best offset %i %i with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
+	      if (report_file)
+	        fprintf (report_file, "Best offset %i %i with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
 	      if (progress)
 		progress->resume_stdout ();
 	      return true;
 	    }
 	  else
-	    printf ("Cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
+	    if (report_file)
+	      fprintf (report_file, "Cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
 	}
       else
-        printf ("Cpfind did not ifnd useful points; trying to find match myself\n");
+        fprintf (report_file, "Cpfind did not ifnd useful points; trying to find match myself\n");
       if (progress)
 	progress->resume_stdout ();
     }
@@ -520,14 +524,8 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
     }
   *xshift_ret = best_xshift;
   *yshift_ret = best_yshift;
-  if (found)
-    {
-      if (progress)
-	progress->pause_stdout ();
-      printf ("Best match on offset %i,%i sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
-      if (progress)
-	progress->resume_stdout ();
-    }
+  if (found && report_file)
+    fprintf (report_file, "Best match on offset %i,%i sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
   return found;
 }
 bool

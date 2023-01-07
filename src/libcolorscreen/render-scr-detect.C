@@ -37,13 +37,16 @@ struct color_class_params
 {
   unsigned long image_id;
   image_data *img;
+  rgbdata *precomputed_rgbdata;
   scr_detect_parameters p;
   scr_detect *d;
+  luminosity_t gamma;
 
   bool
   operator==(color_class_params &o)
   {
     return image_id == o.image_id
+	   && gamma == o.gamma
 	   && p == o.p;
   }
 };
@@ -60,11 +63,21 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
   for (int y = 0; y < img.height; y++)
     {
       if (!progress || !progress->cancel_requested ())
-	for (int x = 0; x < img.width; x++)
-	  map->set_class (x, y,
-			  p.d->classify_color (img.rgbdata[y][x].r,
-					       img.rgbdata[y][x].g,
-					       img.rgbdata[y][x].b));
+	{
+	  if (p.precomputed_rgbdata)
+	    for (int x = 0; x < img.width; x++)
+	      map->set_class (x, y,
+			      p.d->classify_adjusted_color (
+				p.precomputed_rgbdata[y * img.width + x].red,
+				p.precomputed_rgbdata[y * img.width + x].green,
+				p.precomputed_rgbdata[y * img.width + x].blue));
+	  else
+	    for (int x = 0; x < img.width; x++)
+	      map->set_class (x, y,
+			      p.d->classify_color (img.rgbdata[y][x].r,
+						   img.rgbdata[y][x].g,
+						   img.rgbdata[y][x].b));
+	}
        if (progress)
 	 progress->inc_progress ();
     }
@@ -76,6 +89,67 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
   return map;
 }
 static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache;
+
+/* Lookup table translates raw input data into linear values.  */
+struct precomputed_rgbdata_params
+{
+  unsigned long image_id;
+  scr_detect_parameters p;
+  luminosity_t gamma;
+
+  image_data *img;
+  scr_detect *d;
+  render_scr_detect *r;
+
+  bool
+  operator==(precomputed_rgbdata_params &o)
+  {
+    return image_id == o.image_id
+	   && p.red == o.p.red
+	   && p.green == o.p.green
+	   && p.blue == o.p.blue
+	   && p.sharpen_radius == o.p.sharpen_radius
+	   && p.sharpen_amount == o.p.sharpen_amount
+	   && gamma == o.gamma;
+  }
+};
+
+rgbdata
+getdata_helper (render_scr_detect &r, int x, int y, int, int)
+{
+  return r.fast_get_adjusted_pixel (x, y);
+}
+
+rgbdata *get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
+{
+  rgbdata *precomputed_rgbdata = (rgbdata *)malloc (p.img->width * p.img->height * sizeof (rgbdata));
+  bool ok = true;
+  if (!precomputed_rgbdata)
+    return NULL;
+  if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
+    ok = sharpen<rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
+  else
+    {
+      if (progress)
+	progress->set_task ("determining adjusted colors for screen detection", p.img->height);
+#pragma omp parallel for default(none) shared(p,precomputed_rgbdata,progress)
+      for (int y = 0; y < p.img->height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < p.img->width; x++)
+	      precomputed_rgbdata[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel (x, y);
+	   if (progress)
+	     progress->inc_progress ();
+	}
+    }
+  if (!ok || (progress && progress->cancelled ()))
+    {
+      free (precomputed_rgbdata);
+      return NULL;
+    }
+  return precomputed_rgbdata;
+}
+static lru_cache <precomputed_rgbdata_params, rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache;
 
 /* Lookup table translates raw input data into linear values.  */
 struct patches_cache_params
@@ -522,15 +596,14 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 bool
 render_scr_detect::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  color_class_params p = {m_img.id, &m_img, m_scr_detect.m_param, &m_scr_detect};
+  if (m_scr_detect.m_param.sharpen_radius > 0 || m_scr_detect.m_param.sharpen_amount > 0)
+    {
+      if (!precompute_rgbdata (progress))
+	return false;
+    }
+  color_class_params p = {m_precomputed_rgbdata ? m_precomputed_rgbdata_id : m_img.id, &m_img, m_precomputed_rgbdata, m_scr_detect.m_param, &m_scr_detect, m_params.gamma};
   m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
   return render::precompute_all (grayscale_needed, progress);
-}
-
-rgbdata
-getdata_helper (render_scr_detect &r, int x, int y, int, int)
-{
-  return r.fast_get_adjusted_pixel (x, y);
 }
 
 bool
@@ -538,36 +611,16 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
 {
   if (m_precomputed_rgbdata)
     return true;
-  m_precomputed_rgbdata = (rgbdata *)malloc (m_img.width * m_img.height * sizeof (rgbdata));
-  if (!m_precomputed_rgbdata)
-    return false;
-  sharpen<rgbdata, render_scr_detect &,int, getdata_helper> (m_precomputed_rgbdata, *this, 0, m_img.width, m_img.height, 2, 2, progress);
-#if 0
-  if (progress)
-    progress->set_task ("determining adjusted colors for screen detection", m_img.height);
-#pragma omp parallel for default(none) shared(progress)
-  for (int y = 0; y < m_img.height; y++)
-    {
-      if (!progress || !progress->cancel_requested ())
-	for (int x = 0; x < m_img.width; x++)
-	  m_precomputed_rgbdata[y * m_img.width + x] = fast_get_adjusted_pixel (x, y);
-       if (progress)
-	 progress->inc_progress ();
-    }
-#endif
-  if (progress && progress->cancelled ())
-    {
-      free (m_precomputed_rgbdata);
-      return false;
-    }
-  return true;
+  struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
+  m_precomputed_rgbdata = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
+  return m_precomputed_rgbdata;
 }
 
 
 render_scr_detect::~render_scr_detect ()
 {
   color_class_cache.release (m_color_class_map);
-  free (m_precomputed_rgbdata);
+  precomputed_rgbdata_cache.release (m_precomputed_rgbdata);
 }
 
 int cmp_entry(const void *p1, const void *p2)

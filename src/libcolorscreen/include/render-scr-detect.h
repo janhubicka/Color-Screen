@@ -114,19 +114,22 @@ public:
     else
       *r = *g = *b = 0;
   }
-  rgbdata fast_precomputed_get_adjusted_pixel (int x, int y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  rgbdata fast_precomputed_get_adjusted_pixel (int x, int y)
   {
-    rgbdata d = m_precomputed_rgbdata[y * m_img.width + x];
-    *r = d.red;
-    *g = d.green;
-    *b = d.blue;
-    return d;
+    return m_precomputed_rgbdata[y * m_img.width + x];
   }
-  rgbdata fast_get_adjusted_pixel (int x, int y)
+  rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y)
   {
     rgbdata d;
     m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return d;
+  }
+  rgbdata fast_get_adjusted_pixel (int x, int y)
+  {
+    if (m_precomputed_rgbdata)
+      return fast_precomputed_get_adjusted_pixel (x, y);
+    else
+      return fast_nonprecomputed_get_adjusted_pixel (x, y);
   }
   rgbdata fast_get_screen_pixel (int x, int y)
   {
@@ -208,6 +211,7 @@ protected:
   color_class_map *m_color_class_map;
   scr_detect m_scr_detect;
   unsigned long m_color_class_map_id;
+  unsigned long m_precomputed_rgbdata_id;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 };

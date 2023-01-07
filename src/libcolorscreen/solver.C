@@ -102,7 +102,8 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   else
     {
       gsl_multifit_robust_workspace * work
-	= gsl_multifit_robust_alloc (gsl_multifit_robust_welsch, n*2, 6);
+	= gsl_multifit_robust_alloc (gsl_multifit_robust_default, n*2, 6);
+      work->maxiter = 10000;
       gsl_multifit_robust (X, y, c, cov,
 			  work);
       chisq = 0;
