@@ -89,6 +89,7 @@ class stitch_image
   int xpos, ypos;
   bool analyzed;
   bool output;
+  int gray_max;
 
   stitch_image ()
   : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
@@ -344,6 +345,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   int detected_xshift, detected_yshift, detected_width, detected_height;
   bitmap_2d *my_screen_detected_patches;
   mesh_trans = detect_solver_points (*img, dparam, rparam.gamma, solver_param, progress, &my_pixelsize, &detected_xshift, &detected_yshift, &detected_width, &detected_height, &my_screen_detected_patches, report_file);
+  gray_max = img->maxval;
   if (!mesh_trans)
     {
       progress->pause_stdout ();
@@ -639,26 +641,28 @@ print_help (const char *filename)
   printf ("%s <parameters> <tiles> ....\n", filename);
   printf ("\n");
   printf ("Supported parameters:\n");
-  printf ("--report=filename.txt                       store report about stitching operation to a file\n");
-  printf ("--csp=filename.par                          load given screen discovery and rendering parameters\n");
-  printf ("--stitched=filename.tif                     store stitched file (with no blending)\n");
-  printf ("--hugin-pto=filename.pto                    store project file for hugin\n");
-  printf ("\n");
-  printf ("--demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
-  printf ("--predictive-tiles                          store predictive tiles (for later blending)\n");
-  printf ("--screen-tiles                              store screen tiles (for verification)\n");
-  printf ("--known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
-  printf ("--orig-tiles                                store geometrically corrected tiles (for later blending)\n");
-  printf ("\n");
-  printf ("--np-cpfind                                 enable use of Hugin's cpfind to detrmine overlap\n");
-  printf ("--cpfind                                    disable use of Hugin's cpfind to detrmine overlap\n");
-  printf ("--cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
-  printf ("\n");
-  printf ("--min-overlap=precentage                    minimal overlap\n");
-  printf ("--max-overlap=precentage                    maximal overlap\n");
-  printf ("--outer-tile-border=percentage              border to ignore in outer files\n");
-  printf ("\n");
-  printf ("--panorama-map                              print panorama map in ascii-art\n");
+  printf (" input files:");
+  printf ("  --csp=filename.par                          load given screen discovery and rendering parameters\n");
+  printf ("  --ncols=n                                   number of columns of tiles\n");
+  printf (" output files:");
+  printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
+  printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
+  printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
+  printf (" tiles to ouptut:");
+  printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
+  printf ("  --predictive-tiles                          store predictive tiles (for later blending)\n");
+  printf ("  --screen-tiles                              store screen tiles (for verification)\n");
+  printf ("  --known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
+  printf ("  --orig-tiles                                store geometrically corrected tiles (for later blending)\n");
+  printf (" overlap detection:");
+  printf ("  --np-cpfind                                 enable use of Hugin's cpfind to detrmine overlap\n");
+  printf ("  --cpfind                                    disable use of Hugin's cpfind to detrmine overlap\n");
+  printf ("  --cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
+  printf ("  --min-overlap=precentage                    minimal overlap\n");
+  printf ("  --max-overlap=precentage                    maximal overlap\n");
+  printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
+  printf (" other:");
+  printf ("  --panorama-map                              print panorama map in ascii-art\n");
 }
 
 void
@@ -1076,17 +1080,7 @@ void stitch (progress_info *progress)
   determine_viewport (xmin, xmax, ymin, ymax);
 
   const coord_t xstep = pixel_size, ystep = pixel_size;
-  /* We need ICC profile.  */
-  images[0][0].load_img (progress);
-  passthrough_rparam.gray_max = images[0][0].img->maxval;
-  images[0][0].release_img ();
-  scr_to_img_parameters scr_param;
-  image_data data;
-  scr_param.type = Dufay;
-  data.width=1000;
-  data.height=1000;
-  scr_to_img map;
-  map.set_parameters (scr_param, data);
+  passthrough_rparam.gray_max = images[0][0].gray_max;
   if (stitching_params.hugin_pto_filename.length ())
     produce_hugin_pto_file (stitching_params.hugin_pto_filename.c_str (), progress);
   if (stitching_params.produce_stitched_file_p ())
@@ -1114,7 +1108,7 @@ void stitch (progress_info *progress)
 	      coord_t sx, sy;
 	      int r = 0,g = 0,b = 0;
 	      int ix = 0, iy = 0;
-	      map.final_to_scr (x, y, &sx, &sy);
+	      common_scr_to_img.final_to_scr (x, y, &sx, &sy);
 	      for (iy = 0 ; iy < stitching_params.height; iy++)
 		{
 		  for (ix = 0 ; ix < stitching_params.width; ix++)
@@ -1129,9 +1123,9 @@ void stitch (progress_info *progress)
 		    set_p = true;
 		  if (!images[iy][ix].output)
 		    {
-		      if ((stitching_params.orig_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, progress))
-			  || (stitching_params.demosaiced_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, progress))
-			  || (stitching_params.predictive_tiles && !images[iy][ix].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, progress)))
+		      if ((stitching_params.orig_tiles && !images[iy][ix].write_tile (&error, common_scr_to_img, xmin, ymin, xstep, ystep, render_original, progress))
+			  || (stitching_params.demosaiced_tiles && !images[iy][ix].write_tile (&error, common_scr_to_img, xmin, ymin, 1, 1, render_demosaiced, progress))
+			  || (stitching_params.predictive_tiles && !images[iy][ix].write_tile (&error, common_scr_to_img, xmin, ymin, xstep, ystep, render_predictive, progress)))
 			{
 			  fprintf (stderr, "Writting tile: %s\n", error);
 			  exit (1);
@@ -1163,9 +1157,9 @@ void stitch (progress_info *progress)
   else
     for (int y = 0; y < stitching_params.height; y++)
       for (int x = 0; x < stitching_params.width; x++)
-	if ((stitching_params.orig_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_original, progress))
-	    || (stitching_params.demosaiced_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, 1, 1, render_demosaiced, progress))
-	    || (stitching_params.predictive_tiles && !images[y][x].write_tile (&error, map, xmin, ymin, xstep, ystep, render_predictive, progress)))
+	if ((stitching_params.orig_tiles && !images[y][x].write_tile (&error, common_scr_to_img, xmin, ymin, xstep, ystep, render_original, progress))
+	    || (stitching_params.demosaiced_tiles && !images[y][x].write_tile (&error, common_scr_to_img, xmin, ymin, 1, 1, render_demosaiced, progress))
+	    || (stitching_params.predictive_tiles && !images[y][x].write_tile (&error, common_scr_to_img, xmin, ymin, xstep, ystep, render_predictive, progress)))
 	  {
 	    fprintf (stderr, "Writting tile: %s\n", error);
 	    exit (1);
@@ -1186,6 +1180,7 @@ main (int argc, char **argv)
 {
   file_progress_info progress (stdout);
   std::vector<std::string> fnames;
+  int ncols = 0;
 
   for (int i = 1; i < argc; i++)
     {
@@ -1329,6 +1324,11 @@ main (int argc, char **argv)
 	  stitching_params.max_overlap_percentage = atoi (argv[i] + strlen ("--max-overlap="));
 	  continue;
 	}
+      if (!strncmp (argv[i], "--ncols=", strlen ("--ncols=")))
+	{
+	  ncols = atoi (argv[i] + strlen ("--ncols="));
+	  continue;
+	}
       if (!strncmp (argv[i], "--", 2))
 	{
 	  fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
@@ -1348,6 +1348,12 @@ main (int argc, char **argv)
     {
       stitching_params.width = 1;
       stitching_params.height = 1;
+   
+   }
+  if (ncols > 0)
+    {
+      stitching_params.width = ncols;
+      stitching_params.height = fnames.size () / ncols;
     }
   else
     {

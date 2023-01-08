@@ -137,6 +137,92 @@ public:
   void
   print (FILE *f);
   void precompute_inverse();
+  bool
+  grow (int left, int right, int top, int bottom)
+  {
+    int new_xshift = m_xshift + left * m_xstep;
+    int new_yshift = m_yshift + top * m_ystep;
+    int new_width = m_width + left + right;
+    int new_height = m_height + top + bottom;
+    assert (!m_invdata);
+    point *new_data = (point *)malloc (new_width * new_height * sizeof (point));
+    if (!new_data)
+      return false;
+    for (int y = 0; y < m_height; y++)
+      memcpy (new_data + (new_width * (y + top) + left), m_data + m_width * y, m_width * sizeof (point));
+    free (m_data);
+    m_data = new_data;
+    m_width = new_width;
+    m_height = new_height;
+    m_xshift = new_xshift;
+    m_yshift = new_yshift;
+    return true;
+  }
+  bool
+  need_to_grow_left (int width, int height)
+  {
+    for (int y = 0; y < m_height; y++)
+      if (m_data[y * m_width].x >= 0 && m_data[y * m_width].x < width
+	  && m_data[y * m_width].y >= 0 && m_data[y * m_width].y < height)
+	return true;
+    return false;
+  }
+  bool
+  need_to_grow_top (int width, int height)
+  {
+    for (int x = 0; x < m_width; x++)
+      if (m_data[x].x >= 0 && m_data[x].x < width
+	  && m_data[x].y >= 0 && m_data[x].y < height)
+	return true;
+    return false;
+  }
+  bool
+  need_to_grow_right (int width, int height)
+  {
+    for (int y = 0; y < m_height; y++)
+      if (m_data[y * m_width + m_width - 1].x >= 0 && m_data[y * m_width + m_width - 1].x < width
+	  && m_data[y * m_width + m_width - 1].y >= 0 && m_data[y * m_width + m_width - 1].y < height)
+	return true;
+    return false;
+  }
+  bool
+  need_to_grow_bottom (int width, int height)
+  {
+    for (int x = 0; x < m_width; x++)
+      if (m_data[(m_height - 1) * m_width + x].x >= 0 && m_data[(m_height - 1) * m_width + x].x < width
+	  && m_data[(m_height - 1) * m_width + x].y >= 0 && m_data[(m_height - 1) * m_width + x].y < height)
+    return false;
+  }
+  int
+  get_width ()
+  {
+    return m_width;
+  }
+  int
+  get_height ()
+  {
+    return m_height;
+  }
+  coord_t
+  get_xshift ()
+  {
+    return m_xshift;
+  }
+  coord_t
+  get_yshift ()
+  {
+    return m_yshift;
+  }
+  coord_t
+  get_xstep ()
+  {
+    return m_xstep;
+  }
+  coord_t
+  get_ystep ()
+  {
+    return m_ystep;
+  }
 private:
   struct mesh_inverse
     {

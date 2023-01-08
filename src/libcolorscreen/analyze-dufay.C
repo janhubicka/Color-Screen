@@ -177,7 +177,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 #undef pixel
   return !progress || !progress->cancelled ();
 }
-bool
+int
 analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufay &other, int cpfind, int *xshift_ret, int *yshift_ret, int direction, scr_to_img &map, FILE *report_file, progress_info *progress)
 {
   bool val_known = false;
@@ -343,7 +343,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		progress->resume_stdout ();
 	      val_known = true;
 	      if (cpfind != 2)
-	        return true;
+	        return 2;
 	    }
 	  else
 	    if (report_file)
@@ -736,7 +736,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
     }
   *xshift_ret = best_xshift;
   *yshift_ret = best_yshift;
-  return found;
+  return found ? (val_known || !cpfind ? 2 : 1) : 0;
 }
 bool
 analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress, luminosity_t rmin, luminosity_t rmax, luminosity_t gmin, luminosity_t gmax, luminosity_t bmin, luminosity_t bmax)

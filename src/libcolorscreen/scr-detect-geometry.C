@@ -751,7 +751,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
     {
       if (progress)
 	progress->pause_stdout ();
-      printf ("%i incosistent screen coordinates!\n", errs);
+      printf ("%i inconsistent screen coordinates!\n", errs);
       if (progress)
 	progress->resume_stdout ();
     }

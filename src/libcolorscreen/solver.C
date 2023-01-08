@@ -302,6 +302,30 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   mesh_trans->precompute_inverse ();
   return mesh_trans;
 }
+
+static void
+compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_parameters &lparam, image_data &img_data, mesh *mesh_trans, int x, int y)
+{
+  coord_t sx = x * mesh_trans->get_xstep () - mesh_trans->get_xshift ();
+  coord_t sy = y * mesh_trans->get_ystep () - mesh_trans->get_yshift ();
+  coord_t xx, yy;
+  smap.get_solver_points_nearby (sx, sy, 100, sparam);
+  if (0
+      && (sparam.point[0].screen_x == sx
+	  || sparam.point[0].screen_y == sy))
+    {
+      xx = sparam.point[0].img_x;
+      yy = sparam.point[0].img_y;
+    }
+  else
+    {
+      solver (&lparam, img_data, sparam.npoints, sparam.point, false, false, sx, sy);
+      scr_to_img map2;
+      map2.set_parameters (lparam, img_data);
+      map2.to_img (sx, sy, &xx, &yy);
+    }
+  mesh_trans->set_point (x,y, xx, yy);
+}
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)
 {
@@ -325,28 +349,49 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
       solver_parameters sparam;/* = sparam2;*/
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
-	  {
-	    coord_t xx, yy;
-	    smap.get_solver_points_nearby (x * step - xshift, y * step - yshift, 100, sparam);
-	    if (0
-	       	&& (sparam.point[0].screen_x == x * step - xshift
-		    || sparam.point[0].screen_y == y * step - yshift))
-	      {
-		xx = sparam.point[0].img_x;
-		yy = sparam.point[0].img_y;
-	      }
-	    else
-	      {
-		solver (&lparam, img_data, sparam.npoints, sparam.point, false, false, x * step - xshift, y * step - yshift);
-		scr_to_img map2;
-		map2.set_parameters (lparam, img_data);
-		map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
-	      }
-	    mesh_trans->set_point (x,y, xx, yy);
-	  }
+	  compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, y);
       if (progress)
 	progress->inc_progress ();
     }
+  if (progress)
+    progress->set_task ("growing mesh", height);
+  scr_to_img_parameters lparam = *param;
+  int miter = width + height;
+#if 1
+  while (miter > 0)
+    {
+      int grow_left = mesh_trans->need_to_grow_left (img_data.width, img_data.height) ? 1 : 0;
+      int grow_right = mesh_trans->need_to_grow_right (img_data.width, img_data.height) ? 1 : 0;
+      int grow_top = mesh_trans->need_to_grow_top (img_data.width, img_data.height) ? 1 : 0;
+      int grow_bottom = mesh_trans->need_to_grow_bottom (img_data.width, img_data.height) ? 1 : 0;
+      miter --;
+      if (!grow_left && !grow_right && !grow_top && !grow_bottom)
+	break;
+      if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
+	break;
+      solver_parameters sparam;/* = sparam2;*/
+      if (grow_left || grow_right)
+        {
+	  for (int y = 0; y < mesh_trans->get_height (); y++)
+	    {
+	      if (grow_left)
+		compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, 0, y);
+	      if (grow_right)
+		compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, mesh_trans->get_width () - 1, y);
+	    }
+        }
+      if (grow_top || grow_bottom)
+        {
+	  for (int x = 0; x < mesh_trans->get_width (); x++)
+	    {
+	      if (grow_top)
+		compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, 0);
+	      if (grow_bottom)
+		compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, mesh_trans->get_height () - 1);
+	    }
+        }
+    }
+#endif
   if (progress && progress->cancel_requested ())
     {
       delete mesh_trans;
