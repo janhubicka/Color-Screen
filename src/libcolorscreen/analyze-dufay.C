@@ -178,10 +178,10 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
   return !progress || !progress->cancelled ();
 }
 bool
-analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char *filename1, const char *filename2, int *xshift_ret, int *yshift_ret, FILE *report_file, progress_info *progress)
+analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufay &other, int cpfind, int *xshift_ret, int *yshift_ret, int direction, scr_to_img &map, FILE *report_file, progress_info *progress)
 {
-  bool val_known;
-  if (filename1)
+  bool val_known = false;
+  if (cpfind)
     {
       FILE *f = fopen ("project-cpfind.pto","wt");
       if (!f)
@@ -252,46 +252,46 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	  npoints++;
 	  if (fscanf (f, "%f", &x1) != 1)
 	    {
-	      fprintf (stderr, "Parse error 1\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 1\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'y')
 	    {
-	      fprintf (stderr, "Parse error 2\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 2\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y1) != 1)
 	    {
-	      fprintf (stderr, "Parse error 3\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 3\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'X')
 	    {
-	      fprintf (stderr, "Parse error 4\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 4\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &x2) != 1)
 	    {
-	      fprintf (stderr, "Parse error 5\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 5\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'Y')
 	    {
-	      fprintf (stderr, "Parse error 6\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 6\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y2) != 1)
 	    {
-	      fprintf (stderr, "Parse error 7\n");
+	      fprintf (stderr, "Error parsing cpfind's pto file 7\n");
 	      progress->resume_stdout ();
 	      return false;
 	    }
@@ -342,14 +342,15 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	      if (progress)
 		progress->resume_stdout ();
 	      val_known = true;
-	      //return true;
+	      if (cpfind != 2)
+	        return true;
 	    }
 	  else
 	    if (report_file)
-	      fprintf (report_file, "Cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
+	      fprintf (report_file, "cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
 	}
       else
-        fprintf (report_file, "Cpfind did not ifnd useful points; trying to find match myself\n");
+        fprintf (report_file, "cpfind failed to find useful points; trying to find match myself\n");
       if (progress)
 	progress->resume_stdout ();
     }
@@ -499,7 +500,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
     }
   if (progress)
     progress->set_task ("determining best overlap", (yend - ystart));
-#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file)
+#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, max_percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file,direction,map)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
@@ -518,6 +519,19 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	  bool is_cpfind = false;
 	  if (report_file && val_known && *xshift_ret == x && *yshift_ret == y)
 	    is_cpfind = true;
+
+	  if (direction >= 0)
+	    {
+	      coord_t xi, yi;
+	      map.scr_to_final (x, y, &xi, &yi);
+	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/8))
+		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/8)))
+		{
+		  if (is_cpfind)
+		    fprintf (report_file, "cpfind offset in wrong direction %f %f\n", xi, yi);
+		  continue;
+		}
+	    }
 
 	  xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
 	  yystart = std::max (-other.m_yshift + y + other_first, yystart);
@@ -570,6 +584,12 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 		fprintf (report_file, "cpfind overlap too small test 2 estimated overlap:%i known %i\n", est_noverlap, std::min (m_n_known_pixels, other.m_n_known_pixels));
 	      continue;
 	    }
+	  if (est_noverlap * 100 > std::max (m_n_known_pixels, other.m_n_known_pixels) * max_percentage)
+	    {
+	      if (is_cpfind)
+		fprintf (report_file, "cpfind overlap too large test 2 estimated overlap:%i known %i\n", est_noverlap, std::min (m_n_known_pixels, other.m_n_known_pixels));
+	      continue;
+	    }
 	  
 #if 0
 	  int noverlap = 0;
@@ -618,7 +638,7 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 	  luminosity_t rscale = rsum1 > 0 ? rsum2 / rsum1 : 1;
 	  luminosity_t gscale = gsum1 > 0 ? gsum2 / gsum1 : 1;
 	  luminosity_t bscale = bsum1 > 0 ? bsum2 / bsum1 : 1;
-	  const luminosity_t exposure_tolerance = 0.25;
+	  const luminosity_t exposure_tolerance = 0.35;
 	  if (fabs (rscale - 1) > exposure_tolerance
 	      || fabs (gscale -1) > exposure_tolerance
 	      || fabs (bscale -1) > exposure_tolerance)
@@ -652,13 +672,18 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
 		  if (!other.m_known_pixels->test_bit (x2, y2))
 		    continue;
 #endif
-		  sqsum += fabs ((red (2 * x1, y1) * rscale - other.red (2 * x2, y2)));
-		  sqsum += fabs ((red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2)));
-		  sqsum += fabs ((green (x1, y1) * gscale - other.green (x2, y2)));
-		  sqsum += fabs ((blue (x1, y1) * bscale - other.blue (x2, y2)));
+		  luminosity_t rdiff1 = red (2 * x1, y1) * rscale - other.red (2 * x2, y2);
+		  luminosity_t rdiff2 = red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2);
+		  luminosity_t gdiff = green (x1, y1) * gscale - other.green (x2, y2);
+		  luminosity_t bdiff = blue (x1, y1) * bscale - other.blue (x2, y2);
+		  sqsum += fabs (rdiff1) + fabs (rdiff2) + fabs (gdiff) + fabs (bdiff);
+		  //sqsum += rdiff1*rdiff1 + rdiff2*rdiff2 + gdiff*gdiff + bdiff*bdiff;
+		  //sqsum += rdiff1*rdiff1*rdiff1*rdiff2 + rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff + bdiff*bdiff*bdiff*bdiff;
 		}
 	    }
 	  sqsum /= est_noverlap;
+	  if (is_cpfind)
+	    fprintf (report_file, "cpfind answer sqsum %f overlap %i\n", sqsum, est_noverlap);
 	  if (!lfound || sqsum < lbest_sqsum)
 	    {
 	      lfound = true;
@@ -692,21 +717,25 @@ analyze_dufay::find_best_match (int percentage, analyze_dufay &other, const char
     }
   free (sums);
   free (other_sums);
+  coord_t fx, fy;
+  map.scr_to_final (best_xshift, best_yshift, &fx, &fy);
+  if (found && report_file)
+    fprintf (report_file, "Best match on offset %i,%i (final %f, %f0 sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, fx, fy, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
   if (val_known && (*xshift_ret != best_xshift || *yshift_ret != best_yshift))
     {
       if (progress)
 	progress->pause_stdout ();
+      coord_t fx1, fy1;
+      map.scr_to_final (*xshift_ret, *yshift_ret, &fx1, &fy1);
       if (report_file)
-        fprintf (report_file, "Mismatch with cpfind: %i,%i compared to %i,%i\n", *xshift_ret, *yshift_ret, best_xshift, best_yshift);
-      printf ("Mismatch with cpfind: %i,%i compared to %i,%i\n", *xshift_ret, *yshift_ret, best_xshift, best_yshift);
+        fprintf (report_file, "Mismatch with cpfind: %i,%i (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, fx1, fy1, best_xshift, best_yshift, fx, fy);
+      printf ("Mismatch with cpfind: %i,%i (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, fx1, fy1, best_xshift, best_yshift, fx, fy);
       if (progress)
 	progress->resume_stdout ();
       return false;
     }
   *xshift_ret = best_xshift;
   *yshift_ret = best_yshift;
-  if (found && report_file)
-    fprintf (report_file, "Best match on offset %i,%i sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
   return found;
 }
 bool

@@ -149,7 +149,7 @@ public:
     //abort ();
   }
   int
-  check_consistency (coord_t coordinate1_x, coord_t coordinate1_y, coord_t coordinate2_x, coord_t coordinate2_y, coord_t tolerance)
+  check_consistency (FILE *out, coord_t coordinate1_x, coord_t coordinate1_y, coord_t coordinate2_x, coord_t coordinate2_y, coord_t tolerance)
   {
     int n = 0;
     for (int y = 0; y < height - 1; y++)
@@ -171,7 +171,8 @@ public:
 		coord_t dist = (ex - rx) * (ex - rx) + (ey - ry) * (ey - ry);
 		if (dist > tolerance * tolerance)
 		  {
-		    printf ("Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x+1, y, rx, ry, sqrt(dist), tolerance);
+		    if (out)
+		      fprintf (out, "Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x+1, y, rx, ry, sqrt(dist), tolerance);
 		    n++;
 		  }
 	      }
@@ -184,7 +185,8 @@ public:
 		coord_t dist = (ex - rx) * (ex - rx) + (ey - ry) * (ey - ry);
 		if (dist > tolerance * tolerance)
 		  {
-		    printf ("Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x, y+1, rx, ry, sqrt(dist), tolerance);
+		    if (out)
+		      fprintf (out, "Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x, y+1, rx, ry, sqrt(dist), tolerance);
 		    n++;
 		  }
 	      }

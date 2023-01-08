@@ -15,11 +15,14 @@ struct stitching_params
   bool demosaiced_tiles;
   bool predictive_tiles;
   bool orig_tiles;
+  bool screen_tiles;
+  bool known_screen_tiles;
+  int cpfind;
+  bool panorama_map;
 
-  coord_t outer_tile_border;
-  coord_t min_overlap_percentage;
-  // TODO: ignored.
-  coord_t max_overlap_percentage;
+  int outer_tile_border;
+  int min_overlap_percentage;
+  int max_overlap_percentage;
 
   int width, height;
   std::string filename[max_dim][max_dim];
@@ -34,8 +37,9 @@ struct stitching_params
   }
 
   stitching_params ()
-  : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false),
-    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (40)
+  : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
+    cpfind (true), panorama_map (false),
+    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65)
   {}
 } stitching_params;
 
@@ -43,6 +47,7 @@ scr_to_img_parameters param;
 render_parameters rparam;
 render_parameters passthrough_rparam;
 scr_detect_parameters dparam;
+scr_to_img common_scr_to_img;
 solver_parameters solver_param;
 FILE *report_file;
 
@@ -330,6 +335,8 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
 {
   if (analyzed)
     return;
+  if (report_file)
+    fprintf (report_file, "Analysis of %s\n", filename.c_str ());
   //bitmap_2d *bitmap;
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
@@ -347,6 +354,8 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   my_rparam.gamma = rparam.gamma;
   my_rparam.precise = true;
   my_rparam.gray_max = img->maxval;
+  my_rparam.mix_red = 0;
+  my_rparam.mix_green = 0;
   param.mesh_trans = mesh_trans;
   param.type = Dufay;
   render_to_scr render (param, *img, my_rparam, 256);
@@ -378,13 +387,13 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
   const char *error;
-  if (!dufay.write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
+  if (stitching_params.screen_tiles && !dufay.write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", screen_filename.c_str (), error);
       exit (1);
     }
-  if (!dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
+  if (stitching_params.known_screen_tiles && !dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
@@ -628,26 +637,33 @@ void
 print_help (const char *filename)
 {
   printf ("%s <parameters> <tiles> ....\n", filename);
+  printf ("\n");
   printf ("Supported parameters:\n");
   printf ("--report=filename.txt                       store report about stitching operation to a file\n");
   printf ("--csp=filename.par                          load given screen discovery and rendering parameters\n");
   printf ("--stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("--hugin-pto=filename.pto                    store project file for hugin\n");
+  printf ("\n");
   printf ("--demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
   printf ("--predictive-tiles                          store predictive tiles (for later blending)\n");
+  printf ("--screen-tiles                              store screen tiles (for verification)\n");
+  printf ("--known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
   printf ("--orig-tiles                                store geometrically corrected tiles (for later blending)\n");
+  printf ("\n");
+  printf ("--np-cpfind                                 enable use of Hugin's cpfind to detrmine overlap\n");
+  printf ("--cpfind                                    disable use of Hugin's cpfind to detrmine overlap\n");
+  printf ("--cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
+  printf ("\n");
+  printf ("--min-overlap=precentage                    minimal overlap\n");
+  printf ("--max-overlap=precentage                    maximal overlap\n");
+  printf ("--outer-tile-border=percentage              border to ignore in outer files\n");
+  printf ("\n");
+  printf ("--panorama-map                              print panorama map in ascii-art\n");
 }
 
 void
 determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
 {
-  scr_to_img_parameters scr_param;
-  image_data data;
-  scr_param.type = Dufay;
-  data.width=1000;
-  data.height=1000;
-  scr_to_img map;
-  map.set_parameters (scr_param, data);
   xmin = 0;
   ymin = 0;
   xmax = 0;
@@ -658,7 +674,7 @@ determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
 	{
 	  coord_t x1,y1,x2,y2;
 	  coord_t rxpos, rypos;
-	  map.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rxpos, &rypos);
+	  common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rxpos, &rypos);
 	  x1 = -images[y][x].final_xshift + rxpos;
 	  y1 = -images[y][x].final_yshift + rypos;
 	  x2 = x1 + images[y][x].final_width;
@@ -684,24 +700,17 @@ void
 print_panorama_map (FILE *out)
 {
   int xmin, ymin, xmax, ymax;
-  scr_to_img_parameters scr_param;
-  image_data data;
-  scr_param.type = Dufay;
-  data.width=1000;
-  data.height=1000;
-  scr_to_img map;
-  map.set_parameters (scr_param, data);
   determine_viewport (xmin, xmax, ymin, ymax);
   fprintf (out, "Viewport range %i %i %i %i\n", xmin, xmax, ymin, ymax);
   for (int y = 0; y < 20; y++)
     {
-      for (int x = 0; x < 20; x++)
+      for (int x = 0; x < 40; x++)
 	{
-	  coord_t fx = xmin + (xmax - xmin) * x / 20;
+	  coord_t fx = xmin + (xmax - xmin) * x / 40;
 	  coord_t fy = ymin + (ymax - ymin) * y / 20;
 	  coord_t sx, sy;
 	  int ix = 0, iy = 0;
-	  map.final_to_scr (fx, fy, &sx, &sy);
+	  common_scr_to_img.final_to_scr (fx, fy, &sx, &sy);
 	  for (iy = 0 ; iy < stitching_params.height; iy++)
 	    {
 	      for (ix = 0 ; ix < stitching_params.width; ix++)
@@ -711,10 +720,16 @@ print_panorama_map (FILE *out)
 		break;
 	    }
 
+#if 0
 	  if (iy == stitching_params.height)
 	    fprintf (out, "   ");
 	  else
 	    fprintf (out, " %i%i",iy+1,ix+1);
+#endif
+	  if (iy == stitching_params.height)
+	    fprintf (out, " ");
+	  else
+	    fprintf (out, "%c",'a'+ix+iy*stitching_params.width);
 	}
       fprintf (out, "\n");
     }
@@ -723,22 +738,14 @@ print_panorama_map (FILE *out)
 void
 print_status (FILE *out)
 {
-  scr_to_img_parameters scr_param;
-  image_data data;
-  scr_param.type = Dufay;
-  data.width=1000;
-  data.height=1000;
-  scr_to_img map;
-  map.set_parameters (scr_param, data);
-
   for (int y = 0; y < stitching_params.height; y++)
     {
       if (y)
 	{
 	  coord_t rx, ry;
-	  map.scr_to_final (images[y-1][0].xpos, images[y-1][0].ypos, &rx, &ry);
+	  common_scr_to_img.scr_to_final (images[y-1][0].xpos, images[y-1][0].ypos, &rx, &ry);
 	  coord_t rx2, ry2;
-	  map.scr_to_final (images[y][0].xpos, images[y][0].ypos, &rx2, &ry2);
+	  common_scr_to_img.scr_to_final (images[y][0].xpos, images[y][0].ypos, &rx2, &ry2);
 	  rx -= images[y-1][0].xshift;
 	  ry -= images[y-1][0].yshift;
 	  rx2 -= images[y][0].xshift;
@@ -749,9 +756,9 @@ print_status (FILE *out)
       for (int x = 1; x < stitching_params.width; x++)
       {
 	coord_t rx, ry;
-	map.scr_to_final (images[y][x-1].xpos, images[y][x-1].ypos, &rx, &ry);
+	common_scr_to_img.scr_to_final (images[y][x-1].xpos, images[y][x-1].ypos, &rx, &ry);
 	coord_t rx2, ry2;
-	map.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx2, &ry2);
+	common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx2, &ry2);
 	rx -= images[y][x-1].xshift;
 	ry -= images[y][x-1].yshift;
 	rx2 -= images[y][x].xshift;
@@ -766,7 +773,7 @@ print_status (FILE *out)
       for (int x = 0; x < stitching_params.width; x++)
       {
 	coord_t rx, ry;
-	map.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx, &ry);
+	common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx, &ry);
 	fprintf (out, "  %-5i,%-5i  rotated:%-5i,%-5i ", images[y][x].xpos, images[y][x].ypos, (int)rx,(int)ry);
       }
       fprintf (out, "\n");
@@ -777,10 +784,10 @@ print_status (FILE *out)
 void
 analyze (int x, int y, progress_info *progress)
 {
-  images[y][x].analyze (!y ? stitching_params.outer_tile_border : 0,
-			y == stitching_params.height - 1 ? stitching_params.outer_tile_border : 0,
-			!x ? stitching_params.outer_tile_border : 0,
-		       	x == stitching_params.width - 1 ? stitching_params.outer_tile_border : 0, progress);
+  images[y][x].analyze (!y ? stitching_params.outer_tile_border : 2,
+			y == stitching_params.height - 1 ? stitching_params.outer_tile_border : 2,
+			!x ? stitching_params.outer_tile_border : 2,
+		       	x == stitching_params.width - 1 ? stitching_params.outer_tile_border : 2, progress);
 }
 
 void
@@ -867,7 +874,7 @@ determine_positions (progress_info *progress)
 	  int ys;
 	  analyze (0, y-1, progress);
 	  analyze (0, y, progress);
-	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][0].dufay, images[y-1][0].screen_filename.c_str (), images[y][0].screen_filename.c_str(), &xs, &ys, report_file, progress))
+	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][0].dufay, stitching_params.cpfind, &xs, &ys, 1, common_scr_to_img, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename.c_str (), images[y][0].filename.c_str ());
@@ -875,11 +882,12 @@ determine_positions (progress_info *progress)
 	    }
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
-#if 1
-	  progress->pause_stdout ();
-	  print_status (stdout);
-	  progress->resume_stdout ();
-#endif
+	  if (stitching_params.panorama_map)
+	    {
+	      progress->pause_stdout ();
+	      print_panorama_map (stdout);
+	      progress->resume_stdout ();
+	    }
 	}
       for (int x = 0; x < stitching_params.width - 1; x++)
 	{
@@ -887,7 +895,7 @@ determine_positions (progress_info *progress)
 	  int ys;
 	  analyze (x, y, progress);
 	  analyze (x + 1,y, progress);
-	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][x+1].dufay, images[y][x].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, report_file, progress))
+	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, 0, common_scr_to_img, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -897,15 +905,16 @@ determine_positions (progress_info *progress)
 	    }
 	  images[y][x+1].xpos = images[y][x].xpos + xs;
 	  images[y][x+1].ypos = images[y][x].ypos + ys;
-#if 1
-	  progress->pause_stdout ();
-	  print_status (stdout);
-	  progress->resume_stdout ();
-#endif
+	  if (stitching_params.panorama_map)
+	    {
+	      progress->pause_stdout ();
+	      print_panorama_map (stdout);
+	      progress->resume_stdout ();
+	    }
 	  /* Confirm position.  */
 	  if (y)
 	    {
-	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, images[y][x+1].dufay, images[y-1][x+1].screen_filename.c_str (), images[y][x+1].screen_filename.c_str(), &xs, &ys, report_file, progress))
+	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, 1, common_scr_to_img, report_file, progress))
 		{
 		  progress->pause_stdout ();
 		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -924,13 +933,18 @@ determine_positions (progress_info *progress)
 		}
 
 	    }
+	  if (report_file)
+	    fflush (report_file);
 	}
     }
   if (report_file)
     print_status (report_file);
-  progress->pause_stdout ();
-  print_panorama_map (stdout);
-  progress->resume_stdout ();
+  if (stitching_params.panorama_map)
+    {
+      progress->pause_stdout ();
+      print_panorama_map (stdout);
+      progress->resume_stdout ();
+    }
 }
 
 /* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
@@ -985,6 +999,15 @@ void stitch (progress_info *progress)
   passthrough_rparam.output_gamma = rparam.gamma;
   const char *error;
 
+  {
+    scr_to_img_parameters scr_param;
+    image_data data;
+    scr_param.type = Dufay;
+    data.width=1000;
+    data.height=1000;
+    common_scr_to_img.set_parameters (scr_param, data);
+  }
+
   if ((stitching_params.width == 1 || stitching_params.height == 1) && stitching_params.outer_tile_border > 40)
     {
       fprintf (stderr, "Outer tile border is too large for single row or column stitching\n");
@@ -1014,7 +1037,7 @@ void stitch (progress_info *progress)
 	{
 	  printf ("  %s", images[y][x].filename.c_str ());
 	  if (report_file)
-	    printf ("  %s", images[y][x].filename.c_str ());
+	    fprintf (report_file, "  %s", images[y][x].filename.c_str ());
 	}
       printf("\n");
       if (report_file)
@@ -1178,7 +1201,7 @@ main (int argc, char **argv)
 	  stitching_params.report_filename = argv[i];
 	  continue;
 	}
-      if (!strcmp (argv[i], "--report="))
+      if (!strncmp (argv[i], "--report=", strlen ("--report=")))
 	{
 	  stitching_params.report_filename = argv[i] + strlen ("--report=");
 	  continue;
@@ -1195,7 +1218,7 @@ main (int argc, char **argv)
 	  stitching_params.csp_filename = argv[i];
 	  continue;
 	}
-      if (!strcmp (argv[i], "--csp="))
+      if (!strncmp (argv[i], "--csp=", strlen ("--csp=")))
 	{
 	  stitching_params.csp_filename = argv[i] + strlen ("--csp=");
 	  continue;
@@ -1212,7 +1235,7 @@ main (int argc, char **argv)
 	  stitching_params.hugin_pto_filename = argv[i];
 	  continue;
 	}
-      if (!strcmp (argv[i], "--hugin-pto="))
+      if (!strncmp (argv[i], "--hugin-pto=", strlen ("--hugin-pto=")))
 	{
 	  stitching_params.hugin_pto_filename = argv[i] + strlen ("--hugin-pto=");
 	  continue;
@@ -1229,7 +1252,22 @@ main (int argc, char **argv)
 	  stitching_params.stitched_filename = argv[i];
 	  continue;
 	}
-      if (!strcmp (argv[i], "--stitched="))
+      if (!strcmp (argv[i], "--no-cpfind"))
+	{
+	  stitching_params.cpfind = 0;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--cpfind"))
+	{
+	  stitching_params.cpfind = 1;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--cpfind-verification"))
+	{
+	  stitching_params.cpfind = 2;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--stitched=", strlen ("--stitched=")))
 	{
 	  stitching_params.stitched_filename = argv[i] + strlen ("--stitched=");
 	  continue;
@@ -1248,6 +1286,54 @@ main (int argc, char **argv)
 	{
 	  stitching_params.orig_tiles = true;
 	  continue;
+	}
+      if (!strcmp (argv[i], "--screen-tiles"))
+	{
+	  stitching_params.screen_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--known-screen-tiles"))
+	{
+	  stitching_params.known_screen_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--panorama-map"))
+	{
+	  stitching_params.panorama_map = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--outer-tile-border"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing csp filename\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.outer_tile_border = atoi (argv[i]);
+	  continue;
+	}
+      if (!strncmp (argv[i], "--outer-tile-border=", strlen ("--outer-tile-border=")))
+	{
+	  stitching_params.outer_tile_border = atoi (argv[i] + strlen ("--outer-tile-border="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-overlap=", strlen ("--min-overlap=")))
+	{
+	  stitching_params.min_overlap_percentage = atoi (argv[i] + strlen ("--min-overlap="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-overlap=", strlen ("--max-overlap=")))
+	{
+	  stitching_params.max_overlap_percentage = atoi (argv[i] + strlen ("--max-overlap="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--", 2))
+	{
+	  fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
+	  print_help (argv[0]);
+	  exit (1);
 	}
       std::string name = argv[i];
       fnames.push_back (name);
@@ -1296,7 +1382,7 @@ main (int argc, char **argv)
 		|| fnames[i][indexpos] != '1' + y
 		|| fnames[i][indexpos + 1] != '1' + x)
 	      {
-		fprintf (stderr, "Unexpected tile filename '%s'\n", fnames[i].c_str ());
+		fprintf (stderr, "Unexpected tile filename '%s' for tile %i %i\n", fnames[i].c_str (), y + 1, x + 1);
 		print_help (argv[0]);
 		exit (1);
 	      }

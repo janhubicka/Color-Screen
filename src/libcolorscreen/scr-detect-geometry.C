@@ -745,12 +745,16 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
 	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
   simple_solver (&param, img, sparam, progress);
-  if (progress)
-    progress->pause_stdout ();
-  smap->check_consistency (param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
-			   sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
-  if (progress)
-    progress->resume_stdout ();
+  int errs = smap->check_consistency (report_file, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
+				      sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
+  if (errs)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("%i incosistent screen coordinates!\n", errs);
+      if (progress)
+	progress->resume_stdout ();
+    }
 
 
   if (known_pixels)
