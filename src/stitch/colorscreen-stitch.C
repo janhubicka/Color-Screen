@@ -24,6 +24,8 @@ struct stitching_params
   int min_overlap_percentage;
   int max_overlap_percentage;
 
+  int num_control_points;
+
   int width, height;
   std::string filename[max_dim][max_dim];
   std::string csp_filename;
@@ -39,7 +41,7 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false),
-    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65)
+    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100)
   {}
 } stitching_params;
 
@@ -301,7 +303,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
     }
   if (!n)
     return;
-  int step = std::max (n / 1000, 1);
+  int step = std::max (n / stitching_params.num_control_points, 1);
   for (int y = -yshift, m = 0, next = 0; y < -yshift + height; y++)
     {
       int yy = y + ypos - other.ypos;
@@ -641,27 +643,29 @@ print_help (const char *filename)
   printf ("%s <parameters> <tiles> ....\n", filename);
   printf ("\n");
   printf ("Supported parameters:\n");
-  printf (" input files:");
+  printf (" input files:\n");
   printf ("  --csp=filename.par                          load given screen discovery and rendering parameters\n");
   printf ("  --ncols=n                                   number of columns of tiles\n");
-  printf (" output files:");
+  printf (" output files:\n");
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
-  printf (" tiles to ouptut:");
+  printf (" tiles to ouptut:\n");
   printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
   printf ("  --predictive-tiles                          store predictive tiles (for later blending)\n");
   printf ("  --screen-tiles                              store screen tiles (for verification)\n");
   printf ("  --known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
   printf ("  --orig-tiles                                store geometrically corrected tiles (for later blending)\n");
-  printf (" overlap detection:");
-  printf ("  --np-cpfind                                 enable use of Hugin's cpfind to detrmine overlap\n");
-  printf ("  --cpfind                                    disable use of Hugin's cpfind to detrmine overlap\n");
+  printf (" overlap detection:\n");
+  printf ("  --np-cpfind                                 enable use of Hugin's cpfind to determine overlap\n");
+  printf ("  --cpfind                                    disable use of Hugin's cpfind to determine overlap\n");
   printf ("  --cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
   printf ("  --min-overlap=precentage                    minimal overlap\n");
   printf ("  --max-overlap=precentage                    maximal overlap\n");
   printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
-  printf (" other:");
+  printf (" hugin output:\n");
+  printf ("  --num-control-points=n                      number of control points for each pair of images\n");
+  printf (" other:\n");
   printf ("  --panorama-map                              print panorama map in ascii-art\n");
 }
 
@@ -1327,6 +1331,11 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--ncols=", strlen ("--ncols=")))
 	{
 	  ncols = atoi (argv[i] + strlen ("--ncols="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--num-control-points=", strlen ("--num-control-points=")))
+	{
+	  stitching_params.num_control_points = atoi (argv[i] + strlen ("--num-control-points="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))
