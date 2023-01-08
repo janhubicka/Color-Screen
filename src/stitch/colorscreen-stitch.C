@@ -25,6 +25,7 @@ struct stitching_params
   int max_overlap_percentage;
 
   int num_control_points;
+  coord_t hfov;
 
   int width, height;
   std::string filename[max_dim][max_dim];
@@ -41,7 +42,7 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false),
-    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100)
+    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100), hfov (28.534)
   {}
 } stitching_params;
 
@@ -810,11 +811,15 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
     }
   fprintf (f, "# hugin project file\n"
 	   "#hugin_ptoversion 2\n"
-	   "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
+	   //"p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "p f0 w39972 h31684 v82  k0 E0 R0 S13031,39972,11939,28553 n\"TIFF_m c:LZW r:CROP\"\n"
 	   "m i0\n");
   for (int y = 0; y < stitching_params.height; y++)
     for (int x = 0; x < stitching_params.width; x++)
-     fprintf (f, "i w%i h%i f0 v1 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename.c_str ());
+     if (!y && !x)
+       fprintf (f, "i w%i h%i f0 v%f Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, stitching_params.hfov, images[y][x].filename.c_str ());
+     else
+       fprintf (f, "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=1 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename.c_str ());
   fprintf (f, "# specify variables that should be optimized\n"
 	   "v Ra0\n"
 	   "v Rb0\n"

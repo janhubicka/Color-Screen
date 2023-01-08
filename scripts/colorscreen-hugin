@@ -1,0 +1,30 @@
+#! /bin/sh
+# Based on script by Terry Duell 2013, 2014
+Prefix=`basename $1 .pto`
+
+
+echo "Setting optimization variables to yaw pitch and roll"
+#pto_var -o project2.pto --opt=y,p,r,!TrX,!TrY,!TrZ  "$1" || exit 1
+pto_var -o project2.pto --opt=!y,!p,!r,TrX,TrY,!TrZ  "$1" || exit 1
+echo "basic optimization"
+autooptimiser -n -o project2.pto project2.pto || exit 1
+echo "rough estimate of final file dimensions"
+#pano_modify  --projection=0 --fov=AUTO --center --canvas=AUTO --crop=AUTO -o project2.pto project2.pto || exit 1
+pano_modify  --projection=0 --fov=AUTO  --canvas=AUTO --crop=AUTO -o project2.pto project2.pto || exit 1
+echo "Setting optimization variables to yaw pitch roll and translation"
+pto_var -o project2.pto --opt=y,p,r,TrX,TrY,TrZ  project2.pto || exit 1
+echo "Cleaning control points (they should all be OK)"
+cpclean -o project3.pto project2.pto || exit 1
+#linefind -o project3.pto project2.pto
+echo "Autopoptimizing"
+autooptimiser -n -o autoptim.pto project3.pto || exit 1
+echo "Determining stitched image size"
+#pano_modify  --projection=0 --fov=AUTO --center --canvas=AUTO --crop=AUTO -o autoptim2.pto autoptim.pto || exit 1
+pano_modify  --projection=0 --fov=AUTO  --canvas=AUTO --crop=AUTO -o autoptim2.pto autoptim.pto || exit 1
+echo "Repotimizing"
+autooptimiser -n -o autoptim.pto autoptim2.pto || exit 1
+sed -i "s/hugin_enblendOptions/hugin_enblendOptions --bigtiff --cache-threshold=8G --save-seams=seams.png --all-threads --compression=LZW --all-threads/" autoptim2.pto || exit 1
+echo "Stitching"
+hugin_executor --threads=16 --stitching autoptim2.pto
+
+# open pto files from each step in hugin to check how it all works
