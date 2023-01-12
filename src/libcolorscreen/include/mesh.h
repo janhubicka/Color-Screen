@@ -191,6 +191,7 @@ public:
     for (int x = 0; x < m_width; x++)
       if (m_data[(m_height - 1) * m_width + x].x >= 0 && m_data[(m_height - 1) * m_width + x].x < width
 	  && m_data[(m_height - 1) * m_width + x].y >= 0 && m_data[(m_height - 1) * m_width + x].y < height)
+      return true;
     return false;
   }
   int

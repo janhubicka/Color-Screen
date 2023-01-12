@@ -25,6 +25,7 @@ struct stitching_params
   int max_overlap_percentage;
 
   int num_control_points;
+  int min_screen_percentage;
   coord_t hfov;
 
   int width, height;
@@ -42,7 +43,7 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false),
-    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100), hfov (28.534)
+    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
 
@@ -84,6 +85,8 @@ class stitch_image
   bitmap_2d *screen_detected_patches;
   /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
   bitmap_2d *known_pixels;
+
+  detected_screen detected;
 
   render_interpolate *render;
   render_img *render2;
@@ -340,14 +343,89 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   if (analyzed)
     return;
   if (report_file)
-    fprintf (report_file, "Analysis of %s\n", filename.c_str ());
+    fprintf (report_file, "\n\nAnalysis of %s\n", filename.c_str ());
   //bitmap_2d *bitmap;
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
-  coord_t my_pixelsize;
-  int detected_xshift, detected_yshift, detected_width, detected_height;
-  bitmap_2d *my_screen_detected_patches;
-  mesh_trans = detect_solver_points (*img, dparam, rparam.gamma, solver_param, progress, &my_pixelsize, &detected_xshift, &detected_yshift, &detected_width, &detected_height, &my_screen_detected_patches, report_file);
+  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, false, true, progress, report_file);
+  if (detected.xmin > std::max (skipleft, 2) * img->width / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach left border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.xmin * 100 / img->width + 1);
+      exit (1);
+    }
+  if (detected.ymin > std::max (skiptop, 2) * img->height / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach top border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.ymin * 100 / img->height + 1);
+      exit (1);
+    }
+  if (detected.xmax < std::min (100 - skipright, 98) * img->width / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach right border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.xmax * 100 / img->width + 1);
+      exit (1);
+    }
+  if (detected.ymax < std::min (100 - skipbottom, 98) * img->height / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach bottom border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.ymax * 100 / img->height + 1);
+      exit (1);
+    }
+  double screen_xsize = sqrt (detected.param.coordinate1_x * detected.param.coordinate1_x + detected.param.coordinate1_y * detected.param.coordinate1_y);
+  double screen_ysize = sqrt (detected.param.coordinate2_x * detected.param.coordinate2_x + detected.param.coordinate2_y * detected.param.coordinate2_y);
+  int nexpected = 2 * (detected.xmax - detected.xmin) * (detected.ymax - detected.ymin) / (screen_xsize * screen_ysize);
+  if (nexpected * stitching_params.min_screen_percentage > detected.patches_found * 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen patches covers only %2.2f%% of the screen\n", detected.patches_found * 100.0 / nexpected);
+      if (skipleft)
+	fprintf (stderr, "Reducing --min-screen-percentage would bypass this error\n");
+      exit (1);
+    }
+  progress->pause_stdout ();
+  printf ("Analyzed %2.2f%% of the screen area", detected.patches_found * 100.0 / nexpected);
+  if (report_file)
+    fprintf (report_file, "Analyzed %2.2f%% of the screen area", detected.patches_found * 100.0 / nexpected);
+  if (skipleft)
+    {
+      printf ("; left border: %2.2f%%", detected.xmin * 100.0 / img->width);
+      if (report_file)
+        fprintf (report_file, "; left border: %2.2f%%", detected.xmin * 100.0 / img->width);
+    }
+  if (skiptop)
+    {
+      printf ("; top border: %2.2f%%", detected.ymin * 100.0 / img->height);
+      if (report_file)
+        fprintf (report_file, "; top border: %2.2f%%", detected.ymin * 100.0 / img->height);
+    }
+  if (skipright)
+    {
+      printf ("; right border: %2.2f%%", 100 - detected.xmax * 100.0 / img->width);
+      if (report_file)
+        fprintf (report_file, "; right border: %2.2f%%", 100 - detected.xmax * 100.0 / img->width);
+    }
+  if (skipbottom)
+    {
+      printf ("; bottom border: %2.2f%%", 100 - detected.ymax * 100.0 / img->height);
+      if (report_file)
+        fprintf (report_file, "; bottom border: %2.2f%%", 100 - detected.ymax * 100.0 / img->height);
+    }
+  printf ("\n");
+  if (report_file)
+    fprintf (report_file, "\n");
+  progress->resume_stdout ();
+
+
+  mesh_trans = detected.mesh_trans;
   gray_max = img->maxval;
   if (!mesh_trans)
     {
@@ -359,8 +437,10 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   my_rparam.gamma = rparam.gamma;
   my_rparam.precise = true;
   my_rparam.gray_max = img->maxval;
+  my_rparam.screen_blur_radius = 0.5;
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
+  my_rparam.mix_blue = 1;
   param.mesh_trans = mesh_trans;
   param.type = Dufay;
   render_to_scr render (param, *img, my_rparam, 256);
@@ -368,8 +448,8 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   if (!initialized)
     {
       initialized = true;
-      pixel_size = my_pixelsize;
-      my_screen = render_to_scr::get_screen (Dufay, false, my_pixelsize, progress);
+      pixel_size = detected.pixel_size;
+      my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
   final_xshift = render.get_final_xshift ();
@@ -380,12 +460,13 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
   screen_detected_patches = new bitmap_2d (width, height);
   for (int y = 0; y < height; y++)
-    if (y - yshift +  detected_yshift > 0 && y - yshift +  detected_yshift < detected_height)
+    if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < detected.known_patches->height)
       for (int x = 0; x < width; x++)
-        if (x - xshift +  detected_xshift > 0 && x - xshift +  detected_xshift < detected_width
-	    && my_screen_detected_patches->test_bit (x - xshift + detected_xshift, y - yshift +  detected_yshift))
+        if (x - xshift +  detected.xshift > 0 && x - xshift +  detected.xshift < detected.known_patches->width
+	    && detected.known_patches->test_bit (x - xshift + detected.xshift, y - yshift +  detected.yshift))
            screen_detected_patches->set_bit (x, y);
-  delete my_screen_detected_patches;
+  delete detected.known_patches;
+  detected.known_patches = NULL;
   dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
   dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
@@ -668,6 +749,7 @@ print_help (const char *filename)
   printf ("  --num-control-points=n                      number of control points for each pair of images\n");
   printf (" other:\n");
   printf ("  --panorama-map                              print panorama map in ascii-art\n");
+  printf ("  --min-screen-precentage                     minimum portion of screen required to be recognized by screen detection\n");
 }
 
 void
@@ -1076,13 +1158,14 @@ void stitch (progress_info *progress)
 	  exit (1);
 	}
       fclose (in);
-      if (report_file)
-	{
-	  fprintf (report_file, "Loading color screen parameters: %s\n", cspname);
-	  save_csp (report_file, &param, &dparam, &rparam, &solver_param);
-	}
+      solver_param.remove_points ();
     }
 
+  if (report_file)
+    {
+      fprintf (report_file, "Color screen parameters:\n");
+      save_csp (report_file, &param, &dparam, &rparam, &solver_param);
+    }
   determine_positions (progress);
 
   int xmin, ymin, xmax, ymax;
@@ -1341,6 +1424,16 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--num-control-points=", strlen ("--num-control-points=")))
 	{
 	  stitching_params.num_control_points = atoi (argv[i] + strlen ("--num-control-points="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
+	{
+	  stitching_params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--hfov=", strlen ("--hfove=")))
+	{
+	  stitching_params.hfov = atof (argv[i] + strlen ("--hfov="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))

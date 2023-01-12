@@ -30,6 +30,7 @@ static struct solver_parameters current_solver;
 static void setvals (void);
 static mesh *current_mesh = NULL;
 
+detected_screen detected;
 
 /* Undo history and the state of UI.  */
 static struct scr_to_img_parameters undobuf[UNDOLEVELS];
@@ -429,7 +430,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  save_parameters ();
 	  current.type = Dufay;
 	  file_progress_info progress (stdout);
-	  current_mesh = detect_solver_points (scan, current_scr_detect, rparams.gamma, current_solver, &progress);
+
+	  if (detected.smap)
+	    delete detected.smap;
+	  if (current_mesh)
+	    delete current_mesh;
+	  detected = detect_regular_screen (scan, current_scr_detect, rparams.gamma, current_solver, false, true, &progress);
+	  current_mesh = detected.mesh_trans;
 	  display_scheduled = true;
 	  preview_display_scheduled = true;
 

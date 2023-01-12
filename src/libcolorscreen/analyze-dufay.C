@@ -205,6 +205,8 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  if (progress)
 	    progress->pause_stdout ();
 	  fprintf (stderr, "Failed to write screen\n");
+	  if (progress)
+	    progress->resume_stdout ();
 	  return false;
 	}
       fprintf (f, "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n m i0\n"
@@ -212,18 +214,24 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		  "i w%i h%i f0 v10 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", /*m_width, m_height,*/ mwidth, mheight, /*filename1*/"screen1.tif", /*other.m_width, other.m_height,*/ mwidth, mheight, /*filename2*/"screen2.tif");
       fclose (f);
       if (progress)
-	progress->pause_stdout ();
+	progress->set_task ("executing cpfind", 1);
       if (system ("cpfind --fullscale --ransacmode=rpy project-cpfind.pto -o project-cpfind-out.pto >cpfind.out"))
 	{
+	  if (progress)
+	    progress->pause_stdout ();
 	  fprintf (stderr, "Failed to execute cpfind\n");
-	  progress->resume_stdout ();
+	  if (progress)
+	    progress->resume_stdout ();
 	  return false;
 	}
       f = fopen ("project-cpfind-out.pto", "r");
       if (!f)
 	{
+	  if (progress)
+	    progress->pause_stdout ();
 	  fprintf (stderr, "Failed to open cpfind output file\n");
-	  progress->resume_stdout ();
+	  if (progress)
+	    progress->resume_stdout ();
 	  return false;
 	}
       struct offsets {
@@ -252,47 +260,68 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  npoints++;
 	  if (fscanf (f, "%f", &x1) != 1)
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 1\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'y')
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 2\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y1) != 1)
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 3\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'X')
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 4\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &x2) != 1)
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 5\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if ((c = fgetc (f)) != ' '
 	      || (c = fgetc (f)) != 'Y')
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 6\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 	  if (fscanf (f, "%f", &y2) != 1)
 	    {
+	      if (progress)
+		progress->pause_stdout ();
 	      fprintf (stderr, "Error parsing cpfind's pto file 7\n");
-	      progress->resume_stdout ();
+	      if (progress)
+		progress->resume_stdout ();
 	      return false;
 	    }
 #if 0
@@ -339,8 +368,6 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	      *yshift_ret = -max.y - (m_yshift - other.m_yshift);
 	      if (report_file)
 	        fprintf (report_file, "Best offset %i %i with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
-	      if (progress)
-		progress->resume_stdout ();
 	      val_known = true;
 	      if (cpfind != 2)
 	        return 2;
@@ -351,8 +378,6 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	}
       else
         fprintf (report_file, "cpfind failed to find useful points; trying to find match myself\n");
-      if (progress)
-	progress->resume_stdout ();
     }
   int xstart, xend, ystart, yend;
   bool found = false;
@@ -570,12 +595,12 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	      if (xxend > xxstart)
 		{
 		  est_noverlap += xxend - xxstart;
-		  rsum1 = sums[xxstart + m_xshift + y1 * m_width].red - sums[xxend - 1 + m_xshift + y1 * m_width].red;
-		  gsum1 = sums[xxstart + m_xshift + y1 * m_width].green - sums[xxend - 1 + m_xshift + y1 * m_width].green;
-		  bsum1 = sums[xxstart + m_xshift + y1 * m_width].blue - sums[xxend - 1 + m_xshift + y1 * m_width].blue;
-		  rsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].red - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].red;
-		  gsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].green - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].green;
-		  bsum2 = other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].blue - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].blue;
+		  rsum1 += sums[xxstart + m_xshift + y1 * m_width].red - sums[xxend - 1 + m_xshift + y1 * m_width].red;
+		  gsum1 += sums[xxstart + m_xshift + y1 * m_width].green - sums[xxend - 1 + m_xshift + y1 * m_width].green;
+		  bsum1 += sums[xxstart + m_xshift + y1 * m_width].blue - sums[xxend - 1 + m_xshift + y1 * m_width].blue;
+		  rsum2 += other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].red - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].red;
+		  gsum2 += other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].green - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].green;
+		  bsum2 += other_sums[xxstart - x + other.m_xshift + y2 * other.m_width].blue - other_sums[xxend - x - 1 + other.m_xshift + y2 * other.m_width].blue;
 		}
 	    }
 	  if (est_noverlap * 100 < std::min (m_n_known_pixels, other.m_n_known_pixels) * percentage)
@@ -638,7 +663,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  luminosity_t rscale = rsum1 > 0 ? rsum2 / rsum1 : 1;
 	  luminosity_t gscale = gsum1 > 0 ? gsum2 / gsum1 : 1;
 	  luminosity_t bscale = bsum1 > 0 ? bsum2 / bsum1 : 1;
-	  const luminosity_t exposure_tolerance = 0.35;
+	  const luminosity_t exposure_tolerance = 0.6;
 	  if (fabs (rscale - 1) > exposure_tolerance
 	      || fabs (gscale -1) > exposure_tolerance
 	      || fabs (bscale -1) > exposure_tolerance)
@@ -677,8 +702,12 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		  luminosity_t gdiff = green (x1, y1) * gscale - other.green (x2, y2);
 		  luminosity_t bdiff = blue (x1, y1) * bscale - other.blue (x2, y2);
 		  sqsum += fabs (rdiff1) + fabs (rdiff2) + fabs (gdiff) + fabs (bdiff);
+		  //rdiff1 *= 65546;
+		  //rdiff2 *= 65546;
+		  //gdiff *= 65536;
+		  //bdiff *= 65536;
 		  //sqsum += rdiff1*rdiff1 + rdiff2*rdiff2 + gdiff*gdiff + bdiff*bdiff;
-		  //sqsum += rdiff1*rdiff1*rdiff1*rdiff2 + rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff + bdiff*bdiff*bdiff*bdiff;
+		  //sqsum += rdiff1*rdiff1*rdiff1*rdiff1 + rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff + bdiff*bdiff*bdiff*bdiff;
 		}
 	    }
 	  sqsum /= est_noverlap;
@@ -773,9 +802,9 @@ analyze_dufay::write_screen (const char *filename, bitmap_2d *known_pixels, cons
     {
       progress->set_task ("Saving screen", m_height);
     }
-  progress->pause_stdout ();
-  printf ("Saving screen to %s in resolution %ix%i\n", filename, m_width, m_height);
-  progress->resume_stdout ();
+  //progress->pause_stdout ();
+  //printf ("Saving screen to %s in resolution %ix%i\n", filename, m_width, m_height);
+  //progress->resume_stdout ();
   luminosity_t rscale = rmax > rmin ? 1/(rmax-rmin) : 1;
   luminosity_t gscale = gmax > gmin ? 1/(gmax-gmin) : 1;
   luminosity_t bscale = bmax > bmin ? 1/(bmax-bmin) : 1;

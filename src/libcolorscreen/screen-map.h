@@ -61,8 +61,10 @@ public:
   }
   void get_coord (int x, int y, coord_t *img_x, coord_t *img_y)
   {
+#if 0
     if (!known_p (x, y))
       abort ();
+#endif
     x += xshift;
     y += yshift;
     *img_x = map[y * width + x].x;
@@ -94,11 +96,13 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d + i, y - d, &img_x, &img_y);
+#if 0
 		if (img_x < 0 || img_y < 0)
 		  {
 		    printf ("%i %i %i %i %p\n", x - d + i, y - d, xshift, yshift, this);
 		    abort ();
 		  }
+#endif
 		sparams.add_point (img_x, img_y, (x - d + i) / 2.0, y - d, (x - d + i) & 1 ? solver_parameters::blue : solver_parameters::green);
 		npoints++;
 	      }
@@ -106,11 +110,13 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d + i, y + d, &img_x, &img_y);
+#if 0
 		if (img_x < 0 || img_y < 0)
 		  {
 		    printf ("%i %i %i %i %p\n", x - d + i, y + d, xshift, yshift, this);
 		    abort ();
 		  }
+#endif
 		sparams.add_point (img_x, img_y, (x - d + i) / 2.0, y + d, (x - d + i) & 1 ? solver_parameters::blue : solver_parameters::green);
 		npoints++;
 	      }
@@ -121,11 +127,13 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d, y - d + i, &img_x, &img_y);
+#if 0
 		if (img_x < 0 || img_y < 0)
 		  {
 		    printf ("%i %i %i %i %p\n", x - d, y - d + i, xshift, yshift, this);
 		    abort ();
 		  }
+#endif
 		sparams.add_point (img_x, img_y, (x - d) / 2.0, y - d + i, (x - d) & 1 ? solver_parameters::blue : solver_parameters::green);
 		npoints++;
 	      }
@@ -133,11 +141,13 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x + d, y - d + i, &img_x, &img_y);
+#if 0
 		if (img_x < 0 || img_y < 0)
 		  {
 		    printf ("%i %i %i %i %p\n", x + d, y - d + i, xshift, yshift, this);
 		    abort ();
 		  }
+#endif
 		sparams.add_point (img_x, img_y, (x + d) / 2.0, y - d + i, (x + d) & 1 ? solver_parameters::blue : solver_parameters::green);
 		npoints++;
 	      }

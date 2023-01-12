@@ -556,7 +556,7 @@ public:
 };
 
 screen_map *
-flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, progress_info *progress)
+flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
@@ -649,6 +649,8 @@ flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parame
 #undef cpatch
 #undef cstrip
     }
+  /* Dufay screen has two points per screen repetetion.  */
+  *npatches = nfound;
   if (nfound < nexpected / 5)
     {
       if (report_file)
@@ -656,23 +658,28 @@ flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parame
       delete map;
       return NULL;
     }
-  if (progress)
-    progress->pause_stdout ();
+  //if (progress)
+    //progress->pause_stdout ();
   if (report_file)
     fprintf (report_file, "Found %i patches (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
-  printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
-  if (progress)
-    progress->resume_stdout ();
+  //printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
+  //if (progress)
+    //progress->resume_stdout ();
   return map;
 }
 }
 
-mesh *
-detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, progress_info *progress, coord_t *pixel_size, int *xshift, int *yshift, int *width, int *height, bitmap_2d **known_pixels, FILE *report_file)
+detected_screen
+detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
 {
+  detected_screen ret;
   int max_diam = std::max (img.width, img.height);
   render_parameters empty;
+
   empty.gamma = gamma;
+  ret.mesh_trans = NULL;
+  ret.known_patches = NULL;
+  ret.smap = NULL;
   render_scr_detect render (dparam, img, empty, 256);
   render.precompute_all (false, progress);
   if (progress)
@@ -700,7 +707,7 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
 		  }
 		visited.clear ();
 		simple_solver (&param, img, sparam, progress);
-		smap = flood_fill (report_file, sparam.point[0].img_x, sparam.point[0].img_y, param, img, &render, render.get_color_class_map (), /*&sparam*/ NULL, &visited, progress);
+		smap = flood_fill (report_file, sparam.point[0].img_x, sparam.point[0].img_y, param, img, &render, render.get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, progress);
 		if (!smap)
 		  {
 		    if (progress)
@@ -718,15 +725,59 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
 	progress->inc_progress ();
     }
   if (!smap)
-    return NULL;
+    return ret;
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
-  simple_solver (&param, img, sparam, progress);
-  if (pixel_size)
+  sparam.remove_points ();
+  for (int y = -smap->yshift, nf = 0, next =0, step = ret.patches_found / 1000; y < smap->height - smap->yshift; y ++)
+    for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
+      if (smap->known_p (x,y) && nf++ > next)
+	{
+	  next += step;
+	  coord_t ix, iy;
+	  smap->get_coord (x, y, &ix, &iy);
+	  sparam.add_point (ix, iy, x / 2.0, y, solver_parameters::green);
+	}
+  simple_solver (&ret.param, img, sparam, progress);
+  {
+    render_to_scr render (ret.param, img, empty, 256);
+    ret.pixel_size = render.pixel_size ();
+  }
+  smap->get_known_range (&ret.xmin, &ret.ymin, &ret.xmax, &ret.ymax);
+#if 1
+  {
+    scr_to_img map;
+    map.set_parameters (ret.param, img);
+    for (int y = -smap->yshift; y < smap->height - smap->yshift; y ++)
+      for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
+        if (!smap->known_p (x, y))
+	  {
+	    bool found = false;
+	    for (int yy = std::max (y - 10, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + 10) && !found; yy++)
+	      for (int xx = std::max (x - 10, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + 10) && !found; xx++)
+		if (smap->known_p (xx, yy))
+		  found = true;
+	    if (!found)
+	      {
+		coord_t ix, iy;
+		map.to_img (x / 2.0, y, &ix, &iy);
+		smap->set_coord (x, y, ix, iy);
+	      }
+	    //else
+		//printf ("found %i %i\n",x,y);
+	  }
+  }
+#endif
+  int errs = smap->check_consistency (report_file, ret.param.coordinate1_x, ret.param.coordinate1_y, ret.param.coordinate2_x, ret.param.coordinate2_y,
+				      sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 2);
+  if (errs)
     {
-      render_to_scr render (param, img, empty, 256);
-      *pixel_size = render.pixel_size ();
+      if (progress)
+	progress->pause_stdout ();
+      printf ("%i inconsistent screen coordinates!\n", errs);
+      if (progress)
+	progress->resume_stdout ();
     }
-  mesh *m = solver_mesh (&param, img, sparam, *smap, progress);
+  mesh *m = solver_mesh (&ret.param, img, sparam, *smap, progress);
 
   const int xsteps = 50, ysteps = 50;
   m->precompute_inverse ();
@@ -744,40 +795,26 @@ detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity
 	m->apply (sx, sy, &ix, &iy);
 	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
-  simple_solver (&param, img, sparam, progress);
-  int errs = smap->check_consistency (report_file, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y,
-				      sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) / 2);
-  if (errs)
-    {
-      if (progress)
-	progress->pause_stdout ();
-      printf ("%i inconsistent screen coordinates!\n", errs);
-      if (progress)
-	progress->resume_stdout ();
-    }
 
 
-  if (known_pixels)
+  if (return_known_patches)
     {
-      *xshift = smap->xshift / 2;
-      *yshift = smap->yshift;
-      *width = smap->width / 2;
-      *height = smap->height;
-      *known_pixels = new bitmap_2d (smap->width / 2, smap->height);
+      ret.xshift = smap->xshift / 2;
+      ret.yshift = smap->yshift;
+      ret.known_patches = new bitmap_2d (smap->width / 2, smap->height);
       for (int y = 0; y < smap->height; y ++)
 	for (int x = 0; x < smap->width / 2; x ++)
-	  if (smap->known_p (x * 2 - *xshift * 2, y - *yshift))
-	    (*known_pixels)->set_bit (x, y);
+	  if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift))
+	    ret.known_patches->set_bit (x, y);
     }
-  int xmin, ymin, xmax, ymax;
-  smap->get_known_range (&xmin, &ymin, &xmax, &ymax);
   if (progress)
     progress->pause_stdout ();
   if (report_file)
-    fprintf (report_file, "Unalanyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n", xmin * 100.0 / img.width, 100 - xmax * 100.0 / img.width, ymin * 100.0 / img.height, 100 - ymax * 100.0 / img.height);
+    fprintf (report_file, "Unalanyzed border left: %f%%, right %f%%, top %f%%, bottom %f%%\n", ret.xmin * 100.0 / img.width, 100 - ret.xmax * 100.0 / img.width, ret.ymin * 100.0 / img.height, 100 - ret.ymax * 100.0 / img.height);
   if (progress)
     progress->resume_stdout ();
   
   delete smap;
-  return m;
+  ret.mesh_trans = m;
+  return ret;
 }

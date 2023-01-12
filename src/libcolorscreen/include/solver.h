@@ -88,7 +88,22 @@ struct solver_parameters
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
-mesh *detect_solver_points (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, progress_info *progress = NULL, coord_t *pixel_size = NULL, int *xshift = NULL, int *yshift = NULL, int *width = NULL, int *height = NULL, bitmap_2d **known_pixels = NULL, FILE *report_file = NULL);
+
+/* Invormation about auto-detected screen.
+   If mesh_trans is NULL the detection failed.  */
+struct detected_screen
+{
+  mesh *mesh_trans;
+  scr_to_img_parameters param;
+  int xmin, ymin, xmax, ymax;
+  int patches_found;
+  coord_t pixel_size;
+
+  int xshift, yshift;
+  bitmap_2d *known_patches;
+  struct screen_map *smap;
+};
+detected_screen detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool return_known_patches, bool return_screen_map, progress_info *progress = NULL, FILE *report_file = NULL);
 
 
 #endif
