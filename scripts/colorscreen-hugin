@@ -23,8 +23,8 @@ echo "Determining stitched image size"
 pano_modify  --projection=0 --fov=AUTO  --canvas=AUTO --crop=AUTO -o autoptim2.pto autoptim.pto || exit 1
 echo "Repotimizing"
 autooptimiser -n -o autoptim.pto autoptim2.pto || exit 1
-sed -i "s/hugin_enblendOptions/hugin_enblendOptions --bigtiff --cache-threshold=8G --save-seams=seams.png --all-threads --compression=LZW --all-threads/" autoptim2.pto || exit 1
+sed  "s/hugin_enblendOptions/hugin_enblendOptions --bigtiff --cache-threshold=8G --save-seams=seams.png --all-threads --compression=LZW --all-threads/" <autoptim2.pto >autooptim3.pto || exit 1
 echo "Stitching"
-hugin_executor --threads=16 --stitching autoptim2.pto
+hugin_executor --threads=16 --stitching autooptim3.pto
 
 # open pto files from each step in hugin to check how it all works
