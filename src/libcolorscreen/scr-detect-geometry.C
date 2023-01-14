@@ -728,6 +728,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
     return ret;
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
   sparam.remove_points ();
+
   for (int y = -smap->yshift, nf = 0, next =0, step = ret.patches_found / 1000; y < smap->height - smap->yshift; y ++)
     for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
       if (smap->known_p (x,y) && nf++ > next)
@@ -735,8 +736,9 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	  next += step;
 	  coord_t ix, iy;
 	  smap->get_coord (x, y, &ix, &iy);
-	  sparam.add_point (ix, iy, x / 2.0, y, solver_parameters::green);
+	  sparam.add_point (ix, iy, x / 2.0, y, x & 1 ? solver_parameters::blue : solver_parameters::green);
 	}
+
   simple_solver (&ret.param, img, sparam, progress);
   {
     render_to_scr render (ret.param, img, empty, 256);
@@ -804,7 +806,8 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
       ret.known_patches = new bitmap_2d (smap->width / 2, smap->height);
       for (int y = 0; y < smap->height; y ++)
 	for (int x = 0; x < smap->width / 2; x ++)
-	  if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift))
+	  if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift)
+	      && smap->known_p (x * 2 - ret.xshift * 2 + 1, y - ret.yshift))
 	    ret.known_patches->set_bit (x, y);
     }
   if (progress)

@@ -72,6 +72,17 @@ public:
   {
     return bitmap::clear_bit (y * width + x);
   }
+  bool
+  test_range (size_t x, size_t y, size_t r)
+  {
+    if (x < r || y < r || x + r >= (size_t)width || y + r >= (size_t)height)
+      return false;
+    for (size_t yy = y - r; yy < y + r; yy++)
+      for (size_t xx = x - r; xx < x + r; xx++)
+	if (!test_bit (xx, yy))
+	  return false;
+    return true;
+  }
   void
   clear ()
   {

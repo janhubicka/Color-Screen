@@ -56,6 +56,20 @@ struct color_t
     color_t ret (pow (red, g), pow (green, g), pow (blue, g));
     return ret;
   }
+
+  /* Sign preserving gamma.  */
+  inline color_t
+  sgngamma (luminosity_t g)
+  {
+    color_t ret (pow (fabs (red), g), pow (fabs (green), g), pow (fabs (blue), g));
+    if (red < 0)
+      ret.red = -ret.red;
+    if (green < 0)
+      ret.green = -ret.green;
+    if (blue < 0)
+      ret.blue = -ret.blue;
+    return ret;
+  }
 };
 typedef matrix4x4<luminosity_t> color_matrix;
 color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,

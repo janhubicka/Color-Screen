@@ -39,6 +39,11 @@ struct scr_detect_parameters
 class scr_detect
 {
 public:
+  scr_detect ()
+  : lookup_table (NULL)
+  {
+  }
+  ~scr_detect ();
   void set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval);
   enum color_class
   {

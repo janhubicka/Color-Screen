@@ -557,7 +557,7 @@ render::get_lookup_table (luminosity_t gamma, int maxval)
 void
 render::release_lookup_table (luminosity_t *table)
 {
-  out_lookup_table_cache.release (table);
+  lookup_table_cache.release (table);
 }
 
 /* Compute graydata of downscaled image.  */

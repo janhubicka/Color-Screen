@@ -19,6 +19,8 @@ struct stitching_params
   bool known_screen_tiles;
   int cpfind;
   bool panorama_map;
+  bool optimize_colors;
+  bool reoptimize_colors;
 
   int outer_tile_border;
   int min_overlap_percentage;
@@ -42,8 +44,8 @@ struct stitching_params
 
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false),
-    outer_tile_border (30), min_overlap_percentage (20), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
+    cpfind (true), panorama_map (false), optimize_colors (false), reoptimize_colors (false),
+    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
 
@@ -279,25 +281,12 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    int xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
-		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+		&& screen_detected_patches->test_range (x + xshift, y + yshift, 4)
+		&& screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, 4))
 	    {
 	      coord_t x1, y1, x2, y2;
-	      //mesh_trans->apply (x + xshift,y + yshift, &x1, &y1);
-	      //mesh_trans->apply (xx + other.xshift, yy + other.yshift, &x2, &y2);
 	      mesh_trans->apply (x,y, &x1, &y1);
 	      other.mesh_trans->apply (xx, yy, &x2, &y2);
-	      //printf ("%f %f %f %f %i %I\n",x1,y1,x2,y2, img_width, img_height);
-#if 0
-	      assert (x1 >= 0);
-	      assert (y1 >= 0);
-	      assert (x2 >= 0);
-	      assert (y2 >= 0);
-	      assert (x1 <= img_width);
-	      assert (y1 <= img_height);
-	      assert (x2 <= other.img_width);
-	      assert (y2 <= other.img_height);
-#endif
 	      if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
 	          || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
 		continue;
@@ -316,12 +305,10 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    int xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_bit (x + xshift, y + yshift)
-		&& screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+		&& screen_detected_patches->test_range (x + xshift, y + yshift, 4)
+		&& screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, 4))
 	      {
 		coord_t x1, y1, x2, y2;
-		//mesh_trans->apply (x + xshift,y + yshift, &x1, &y1);
-		//mesh_trans->apply (xx + other.xshift, yy + other.yshift, &x2, &y2);
 		mesh_trans->apply (x,y, &x1, &y1);
 		other.mesh_trans->apply (xx, yy, &x2, &y2);
 		if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
@@ -347,38 +334,37 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   //bitmap_2d *bitmap;
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
+  if (stitching_params.optimize_colors)
+  {
+    if (!optimize_screen_colors (&dparam, img, rparam.gamma, img->width / 2 - 500, img->height /2 - 500, 1000, 1000,  progress, report_file))
+      {
+	progress->pause_stdout ();
+	fprintf (stderr, "Failed analyze screen colors of %s\n", filename.c_str ());
+	exit (1);
+      }
+  }
   detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, false, true, progress, report_file);
-  if (detected.xmin > std::max (skipleft, 2) * img->width / 100)
+  mesh_trans = detected.mesh_trans;
+  if (!mesh_trans)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach left border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.xmin * 100 / img->width + 1);
+      fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
       exit (1);
     }
-  if (detected.ymin > std::max (skiptop, 2) * img->height / 100)
+  if (stitching_params.reoptimize_colors)
     {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach top border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.ymin * 100 / img->height + 1);
-      exit (1);
-    }
-  if (detected.xmax < std::min (100 - skipright, 98) * img->width / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach right border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.xmax * 100 / img->width + 1);
-      exit (1);
-    }
-  if (detected.ymax < std::min (100 - skipbottom, 98) * img->height / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach bottom border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.ymax * 100 / img->height + 1);
-      exit (1);
+      scr_detect_parameters optimized_dparam = dparam;
+      optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
+      delete mesh_trans;
+      delete detected.known_patches;
+      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, false, true, progress, report_file);
+      mesh_trans = detected.mesh_trans;
+      if (!mesh_trans)
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Failed to analyze screen of %s after optimizing screen colors. Probably a bug\n", filename.c_str ());
+	  exit (1);
+	}
     }
   double screen_xsize = sqrt (detected.param.coordinate1_x * detected.param.coordinate1_x + detected.param.coordinate1_y * detected.param.coordinate1_y);
   double screen_ysize = sqrt (detected.param.coordinate2_x * detected.param.coordinate2_x + detected.param.coordinate2_y * detected.param.coordinate2_y);
@@ -423,16 +409,41 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   if (report_file)
     fprintf (report_file, "\n");
   progress->resume_stdout ();
-
-
-  mesh_trans = detected.mesh_trans;
-  gray_max = img->maxval;
-  if (!mesh_trans)
+  if (detected.xmin > std::max (skipleft, 2) * img->width / 100)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
+      fprintf (stderr, "Detected screen failed to reach left border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.xmin * 100 / img->width + 1);
       exit (1);
     }
+  if (detected.ymin > std::max (skiptop, 2) * img->height / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach top border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.ymin * 100 / img->height + 1);
+      exit (1);
+    }
+  if (detected.xmax < std::min (100 - skipright, 98) * img->width / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach right border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.xmax * 100 / img->width + 1);
+      exit (1);
+    }
+  if (detected.ymax < std::min (100 - skipbottom, 98) * img->height / 100)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Detected screen failed to reach bottom border of the image\n");
+      if (skipleft)
+	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.ymax * 100 / img->height + 1);
+      exit (1);
+    }
+
+
+  gray_max = img->maxval;
   render_parameters my_rparam;
   my_rparam.gamma = rparam.gamma;
   my_rparam.precise = true;
@@ -449,7 +460,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
     {
       initialized = true;
       pixel_size = detected.pixel_size;
-      my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size, progress);
+      my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
   final_xshift = render.get_final_xshift ();
@@ -750,6 +761,8 @@ print_help (const char *filename)
   printf (" other:\n");
   printf ("  --panorama-map                              print panorama map in ascii-art\n");
   printf ("  --min-screen-precentage                     minimum portion of screen required to be recognized by screen detection\n");
+  printf ("  --optimize-colors                           auto-optimize screen colors\n");
+  printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
 }
 
 void
@@ -1023,7 +1036,10 @@ determine_positions (progress_info *progress)
 		  progress->pause_stdout ();
 		  fprintf (stderr, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
 		  if (report_file)
+		  {
+		    fprintf (report_file, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
 		    print_status (report_file);
+		  }
 		  exit (1);
 		}
 
@@ -1387,6 +1403,16 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--panorama-map"))
 	{
 	  stitching_params.panorama_map = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--optimize-colors"))
+	{
+	  stitching_params.optimize_colors = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--reoptimize-colors"))
+	{
+	  stitching_params.reoptimize_colors = true;
 	  continue;
 	}
       if (!strcmp (argv[i], "--outer-tile-border"))

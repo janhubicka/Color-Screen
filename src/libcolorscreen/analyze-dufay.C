@@ -177,6 +177,23 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 #undef pixel
   return !progress || !progress->cancelled ();
 }
+
+static void
+add(unsigned char ov[256][256][3], int c, double x, double y)
+{
+	int xx = x * 255.5;
+	int yy = y * 255.5;
+	if (xx < 0)
+		xx = 0;
+	if (xx > 255)
+		xx = 255;
+	if (yy < 0)
+		yy = 0;
+	if (yy > 255)
+		yy = 255;
+	if (ov[xx][yy][c]<255)
+		ov[xx][yy][c]++;
+}
 int
 analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufay &other, int cpfind, int *xshift_ret, int *yshift_ret, int direction, scr_to_img &map, FILE *report_file, progress_info *progress)
 {
@@ -210,8 +227,10 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  return false;
 	}
       fprintf (f, "p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n m i0\n"
-		  "i w%i h%i f0 v10 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n"
-		  "i w%i h%i f0 v10 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", /*m_width, m_height,*/ mwidth, mheight, /*filename1*/"screen1.tif", /*other.m_width, other.m_height,*/ mwidth, mheight, /*filename2*/"screen2.tif");
+		  "i w%i h%i f0 v28.53 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n"
+		  "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0.334802534835735 TrY0.00196425708222156 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=0 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5  n\"%s\"\n"
+		  "v TrX1\n"
+		  "v TrY1\n", /*m_width, m_height,*/ mwidth, mheight, /*filename1*/"screen1.tif", /*other.m_width, other.m_height,*/ mwidth, mheight, /*filename2*/"screen2.tif");
       fclose (f);
       if (progress)
 	progress->set_task ("executing cpfind", 1);
@@ -701,12 +720,12 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		  luminosity_t rdiff2 = red (2 * x1 + 1, y1) * rscale - other.red (2 * x2 + 1, y2);
 		  luminosity_t gdiff = green (x1, y1) * gscale - other.green (x2, y2);
 		  luminosity_t bdiff = blue (x1, y1) * bscale - other.blue (x2, y2);
-		  sqsum += fabs (rdiff1) + fabs (rdiff2) + fabs (gdiff) + fabs (bdiff);
-		  //rdiff1 *= 65546;
-		  //rdiff2 *= 65546;
-		  //gdiff *= 65536;
-		  //bdiff *= 65536;
-		  //sqsum += rdiff1*rdiff1 + rdiff2*rdiff2 + gdiff*gdiff + bdiff*bdiff;
+		  //sqsum += fabs (rdiff1) + fabs (rdiff2) + fabs (gdiff) + fabs (bdiff);
+		  rdiff1 *= 65546;
+		  rdiff2 *= 65546;
+		  gdiff *= 65536;
+		  bdiff *= 65536;
+		  sqsum += rdiff1*rdiff1 + rdiff2*rdiff2 + gdiff*gdiff + bdiff*bdiff;
 		  //sqsum += rdiff1*rdiff1*rdiff1*rdiff1 + rdiff2*rdiff2*rdiff2*rdiff2 + gdiff*gdiff*gdiff*gdiff + bdiff*bdiff*bdiff*bdiff;
 		}
 	    }
@@ -765,6 +784,70 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
     }
   *xshift_ret = best_xshift;
   *yshift_ret = best_yshift;
+  int y = best_yshift;
+  int x = best_xshift;
+  /* Output heatmap.  */
+  if (0)
+    {
+      static int fn;
+      char name[256];
+      sprintf (name, "overlap%i%c.tif", fn, direction ? 'v' : 'h');
+      unsigned char ov[256][256][3];
+      memset (ov, 0, 256*256*3);
+      fn++;
+      int xxstart = -m_xshift + left;
+      int xxend = -m_xshift + right + 1;
+      int yystart = -m_yshift + first;
+      int yyend = -m_yshift + last + 1;
+
+      xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
+      yystart = std::max (-other.m_yshift + y + other_first, yystart);
+      xxend = std::min (-other.m_xshift + other_right + 1 + x, xxend);
+      yyend = std::min (-other.m_yshift + other_last + 1 + y, yyend);
+
+      for (int yy = yystart; yy < yyend; yy++)
+	{
+	  int y1 = yy + m_yshift;
+	  int xxstart = -m_xshift + range[y1].min;
+	  int xxend = -m_xshift + range[y1].max + 1;
+	  int y2 = yy - y + other.m_yshift;
+	  xxstart = std::max (-other.m_xshift + x + other_range[y2].min, xxstart);
+	  xxend = std::min (-other.m_xshift + other_range[y2].max + 1 + x, xxend);
+	  for (int xx = xxstart ; xx < xxend; xx++)
+	    {
+	      int x1 = xx + m_xshift;
+	      int x2 = xx - x + other.m_xshift;
+	      add (ov, 0,  red (x1 * 2, y1), other.red (x2 * 2, y2));
+	      add (ov, 0,  red (x1 * 2+1, y1), other.red (x2 * 2+1, y2));
+	      add (ov, 1,  green (x1, y1), other.green (x2, y2));
+	      add (ov, 2,  blue (x1, y1), other.blue (x2, y2));
+
+	      //fprintf (redf, "%f %f\n", red (x1 * 2, y1), other.red (x2 * 2, y2));
+	      //fprintf (redf, "%f %f\n", red (x1 * 2+ 1, y1), other.red (x2 * 2+ 1, y2));
+	      //fprintf (greenf, "%f %f\n", green (x1, y1), other.green (x2, y2));
+	      //fprintf (bluef, "%f %f\n", blue (x1, y1), other.blue (x2, y2));
+	    }
+	}
+      TIFF *out = TIFFOpen (name, "wb");
+      if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, (uint32_t) 256)
+	  || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, (uint32_t) 256)
+	  || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
+	  || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 8)
+	  || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
+	  || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+	  || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+	  || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB))
+	{
+	  abort ();
+	}
+      for (int y = 0; y < 256; y++)
+	if (TIFFWriteScanline (out, ov[y], y, 0) < 0)
+	{
+		abort ();
+	}
+      TIFFClose (out);
+    }
+
   return found ? (val_known || !cpfind ? 2 : 1) : 0;
 }
 bool

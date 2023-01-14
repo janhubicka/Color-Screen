@@ -1749,6 +1749,11 @@ spectrum_dyes_to_xyz::xyz_matrix ()
 	r = dyes_rgb_to_xyz (1, 0, 0);
 	g = dyes_rgb_to_xyz (0, 1, 0);
 	b = dyes_rgb_to_xyz (0, 0, 1);
+#if 0
+	printf ("red %f %f %f\n",r.x, r.y, r.z);
+	printf ("green %f %f %f\n",g.x, g.y, g.z);
+	printf ("blue %f %f %f\n",b.x, b.y, b.z);
+#endif
 	color_matrix m (r.x, g.x, b.x, 0,
 			r.y, g.y, b.y, 0,
 			r.z, g.z, b.z, 0,

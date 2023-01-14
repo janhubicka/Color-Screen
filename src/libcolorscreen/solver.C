@@ -1,6 +1,8 @@
 #include <gsl/gsl_multifit.h>
 #include "include/solver.h"
+#include "include/colorscreen.h"
 #include "screen-map.h"
+#include "sharpen.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
@@ -330,7 +332,7 @@ mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)
 {
   int xshift, yshift, width, height;
-  int step = 10;
+  const int step = 10;
   if (param->mesh_trans)
     abort ();
   scr_to_img map;
@@ -439,4 +441,362 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
 	return dufay_points;
       default: abort ();
     }
+}
+
+/* Given known portion of screen collect color samples and optimize to PARAM.
+   M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. */
+void
+optimize_screen_colors (scr_detect_parameters *param, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress, FILE *report)
+{
+  int count = 0;
+  const int range = 2;
+  for (int y = 0; y < known_patches->height; y++)
+    for (int x = 0; x < known_patches->width; x++)
+      if (known_patches->test_range (x, y, range))
+	count++;
+  const int samples = 1000;
+  int nnr = 0, nng = 0, nnb = 0;
+  color_t reds[samples*2];
+  color_t greens[samples];
+  color_t blues[samples];
+  luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
+
+  for (int y = -yshift, nf = 0, next =0, step = count / samples; y < known_patches->height - yshift; y++)
+    for (int x = -xshift; x < known_patches->width - xshift; x++)
+      if (known_patches->test_range (x + xshift,y + yshift, range) && nf++ > next)
+	{
+	  coord_t ix, iy;
+	  next += step;
+	  m->apply (x, y, &ix, &iy);
+	  if (nng < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (img->rgbdata[(int)iy][(int)ix].r
+		  || img->rgbdata[(int)iy][(int)ix].g
+		  || img->rgbdata[(int)iy][(int)ix].b))
+
+	    {
+	      greens[nng].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
+	      greens[nng].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
+	      greens[nng].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      nng++;
+	    }
+	  m->apply ((x)+0.5, y, &ix, &iy);
+	  if (nnb < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (img->rgbdata[(int)iy][(int)ix].r
+		  || img->rgbdata[(int)iy][(int)ix].g
+		  || img->rgbdata[(int)iy][(int)ix].b))
+	    {
+	      blues[nnb].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
+	      blues[nnb].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
+	      blues[nnb].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      nnb++;
+	    }
+	  m->apply ((x), y + 0.5, &ix, &iy);
+	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (img->rgbdata[(int)iy][(int)ix].r
+		  || img->rgbdata[(int)iy][(int)ix].g
+		  || img->rgbdata[(int)iy][(int)ix].b))
+	    {
+	      reds[nnr].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
+	      reds[nnr].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
+	      reds[nnr].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      nnr++;
+	    }
+	  m->apply ((x) + 0.5, y + 0.5, &ix, &iy);
+	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
+	      && (img->rgbdata[(int)iy][(int)ix].r
+		  || img->rgbdata[(int)iy][(int)ix].g
+		  || img->rgbdata[(int)iy][(int)ix].b))
+	    {
+	      reds[nnr].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
+	      reds[nnr].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
+	      reds[nnr].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      nnr++;
+	    }
+	}
+  render::release_lookup_table (lookup_table);
+  if (nnr < 10 || nnb < 10 || nng < 10)
+    {
+      fprintf (stderr, "Failed to find enough samples\n");
+      abort ();
+    }
+  optimize_screen_colors (param, gamma, reds, nnr, greens, nng, blues, nnb, progress, report);
+}
+
+/* Helper for sharpening part of the scan.  */
+struct imgtile
+{
+  luminosity_t *lookup_table;
+  int xstart, ystart;
+  image_data *img;
+};
+
+static
+rgbdata get_pixel (struct imgtile *sec, int x, int y, int, int)
+{
+  rgbdata ret = {0,0,0};
+  x += sec->xstart;
+  y += sec->ystart;
+  if (x < 0 || y < 0 || x >= sec->img->width || y >= sec->img->height)
+    return ret;
+  ret.red = sec->lookup_table [sec->img->rgbdata[y][x].r];
+  ret.green = sec->lookup_table [sec->img->rgbdata[y][x].g];
+  ret.blue = sec->lookup_table [sec->img->rgbdata[y][x].b];
+  return ret;
+}
+struct entry {
+	rgbdata sharpened_color;
+	rgbdata orig_color;
+	luminosity_t priority;
+};
+bool
+compare_priorities(struct entry &e1, struct entry &e2)
+{
+  return e2.priority < e1.priority;
+}
+
+bool
+optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress, FILE *report)
+{
+  const double sharpen_amount = 0;
+  const double sharpen_radius = 3;
+  int clen = fir_blur::convolve_matrix_length (sharpen_radius);
+  rgbdata *sharpened = (rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (rgbdata));
+  if (!sharpened)
+    return false;
+  luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
+  struct imgtile section = {lookup_table, x - clen / 2, y - clen / 2, img};
+  sharpen<rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
+  std::vector<entry> pixels;
+  for (int yy = y ; yy < y + height; yy++)
+    for (int xx = x ; xx < x + width; xx++)
+      {
+	struct entry e;
+	e.orig_color = get_pixel (&section, xx-x+clen/2, yy-y+clen/2, 0, 0);
+	e.sharpened_color = sharpened[(yy-y+clen/2) * (width + clen) + xx -x + clen/2];
+	e.priority = 3 - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
+	pixels.push_back (e);
+      }
+  render::release_lookup_table (lookup_table);
+  free (sharpened);
+
+  sort (pixels.begin (), pixels.end (), compare_priorities);
+  int pos = pixels.size () / 2;
+  luminosity_t min_density = pixels[pos].orig_color.red + pixels[pos].orig_color.green + pixels[pos].orig_color.blue;
+  //printf ("\n min density %f\n", min_density);
+
+  for (entry &e : pixels)
+    e.priority = e.sharpened_color.red / std::max (e.sharpened_color.green + e.sharpened_color.blue, (luminosity_t)0.000001);
+  sort (pixels.begin (), pixels.end (), compare_priorities);
+
+  std::vector<color_t> reds;
+  for (entry &e : pixels)
+    {
+      if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
+	continue;
+      reds.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      //printf ("%f %f %f %f\n", e.orig_color.red, e.orig_color.green, e.orig_color.blue, e.priority);
+      if (reds.size () > pixels.size () / 1000)
+	break;
+    }
+  
+
+  for (entry &e : pixels)
+    e.priority = e.sharpened_color.green / std::max (e.sharpened_color.red + e.sharpened_color.blue, (luminosity_t)0.000001);
+  sort (pixels.begin (), pixels.end (), compare_priorities);
+
+  std::vector<color_t> greens;
+  for (entry &e : pixels)
+    {
+      if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
+	continue;
+      greens.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      if (greens.size () > pixels.size () / 1000)
+	break;
+    }
+  
+
+  for (entry &e : pixels)
+    e.priority = e.sharpened_color.blue / std::max (e.sharpened_color.red + e.sharpened_color.green, (luminosity_t)0.000001);
+  sort (pixels.begin (), pixels.end (), compare_priorities);
+
+  std::vector<color_t> blues;
+  for (entry &e : pixels)
+    {
+      if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
+	continue;
+      blues.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      if (blues.size () > pixels.size () / 1000)
+	break;
+    }
+  //printf ("%i %i %i\n",reds.size (), greens.size (), blues.size ());
+  if (!reds.size () || !greens.size () || !blues.size ())
+    return false;
+  optimize_screen_colors (param, gamma, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
+  return true;
+}
+
+/* Optimize screen colors based on known red, green and blue samples
+   and store resulting black, red, green and blue colors to PARAM.  */
+void
+optimize_screen_colors (scr_detect_parameters *param,
+			luminosity_t gamma,
+			color_t *reds,
+			int nreds,
+			color_t *greens,
+			int ngreens,
+			color_t *blues,
+			int nblues, progress_info *progress, FILE *report)
+{
+  if (!nreds || !ngreens || !nblues)
+    abort ();
+  int n = nreds + ngreens + nblues;
+  int matrixw = 4 * 3;
+  int matrixh = n * 3;
+  gsl_multifit_linear_workspace * work
+    = gsl_multifit_linear_alloc (matrixh, matrixw);
+  gsl_matrix *X, *cov;
+  gsl_vector *y, *w, *c;
+  X = gsl_matrix_alloc (matrixh, matrixw);
+  y = gsl_vector_alloc (matrixh);
+  w = gsl_vector_alloc (matrixh);
+  c = gsl_vector_alloc (matrixw);
+  cov = gsl_matrix_alloc (matrixw, matrixw);
+
+  double min_chisq = 0;
+  bool found = false;
+  color_t bestdark, bestred, bestgreen, bestblue;
+  luminosity_t bestlum = 0;
+  const int steps = 100;
+  if (progress)
+    progress->set_task ("optimizing colors", steps);
+  std::vector<luminosity_t> lums;
+  for (int i = 0; i < nreds; i++)
+    lums.push_back (reds[i].red + reds[i].green + reds[i].blue);
+  for (int i = 0; i < ngreens; i++)
+    lums.push_back (greens[i].red + greens[i].green + greens[i].blue);
+  for (int i = 0; i < nblues; i++)
+    lums.push_back (blues[i].red + blues[i].green + blues[i].blue);
+  sort(lums.begin (), lums.end ());
+  luminosity_t maxlum = lums[(int)(lums.size () * 0.1)];
+  for (int step = 0; step < steps ; step++)
+    {
+      luminosity_t mm = step * maxlum / steps;
+      if (progress)
+        progress->inc_progress ();
+      for (int i = 0; i < nreds; i++)
+	{
+	  int e = i * 3;
+	  coord_t ii = reds[i].red + reds[i].green + reds[i].blue - mm;
+	  for (int j = 0; j < 3; j++)
+	    {
+	      gsl_matrix_set (X, e+j, 0, j==0);
+	      gsl_matrix_set (X, e+j, 1, j==1);
+	      gsl_matrix_set (X, e+j, 2, j==2);
+	      gsl_matrix_set (X, e+j, 3, j==0 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 4, j==1 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 5, j==2 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 6, 0);
+	      gsl_matrix_set (X, e+j, 7, 0);
+	      gsl_matrix_set (X, e+j, 8, 0);
+	      gsl_matrix_set (X, e+j, 9, 0);
+	      gsl_matrix_set (X, e+j, 10, 0);
+	      gsl_matrix_set (X, e+j, 11, 0);
+	      gsl_vector_set (w, e+j, 1);
+	    }
+	  gsl_vector_set (y, e, reds[i].red);
+	  gsl_vector_set (y, e+1, reds[i].green);
+	  gsl_vector_set (y, e+2, reds[i].blue);
+	}
+      for (int i = 0; i < ngreens; i++)
+	{
+	  int e = (i + nreds) * 3;
+	  coord_t ii = greens[i].red + greens[i].green + greens[i].blue - mm;
+	  for (int j = 0; j < 3; j++)
+	    {
+	      gsl_matrix_set (X, e+j, 0, j==0);
+	      gsl_matrix_set (X, e+j, 1, j==1);
+	      gsl_matrix_set (X, e+j, 2, j==2);
+	      gsl_matrix_set (X, e+j, 3, 0);
+	      gsl_matrix_set (X, e+j, 4, 0);
+	      gsl_matrix_set (X, e+j, 5, 0);
+	      gsl_matrix_set (X, e+j, 6, j==0 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 7, j==1 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 8, j==2 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 9, 0);
+	      gsl_matrix_set (X, e+j, 10, 0);
+	      gsl_matrix_set (X, e+j, 11, 0);
+	      gsl_vector_set (w, e+j, 1);
+	    }
+	  gsl_vector_set (y, e, greens[i].red);
+	  gsl_vector_set (y, e+1, greens[i].green);
+	  gsl_vector_set (y, e+2, greens[i].blue);
+	  //printf ("%f %f %f\n",greens[i].red, greens[i].green, greens[i].blue);
+	}
+      for (int i = 0; i < nblues; i++)
+	{
+	  int e = (i + nreds + ngreens) * 3;
+	  coord_t ii = blues[i].red + blues[i].green + blues[i].blue - mm;
+	  for (int j = 0; j < 3; j++)
+	    {
+	      gsl_matrix_set (X, e+j, 0, j==0);
+	      gsl_matrix_set (X, e+j, 1, j==1);
+	      gsl_matrix_set (X, e+j, 2, j==2);
+	      gsl_matrix_set (X, e+j, 3, 0);
+	      gsl_matrix_set (X, e+j, 4, 0);
+	      gsl_matrix_set (X, e+j, 5, 0);
+	      gsl_matrix_set (X, e+j, 6, 0);
+	      gsl_matrix_set (X, e+j, 7, 0);
+	      gsl_matrix_set (X, e+j, 8, 0);
+	      gsl_matrix_set (X, e+j, 9, j==0 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 10, j==1 ? ii : 0);
+	      gsl_matrix_set (X, e+j, 11, j==2 ? ii : 0);
+	      gsl_vector_set (w, e+j, 1);
+	    }
+	  gsl_vector_set (y, e, blues[i].red);
+	  gsl_vector_set (y, e+1, blues[i].green);
+	  gsl_vector_set (y, e+2, blues[i].blue);
+	}
+      double chisq;
+      gsl_multifit_wlinear (X, w, y, c, cov,
+			    &chisq, work);
+      if (!found || chisq < min_chisq)
+	{
+	  min_chisq = chisq;
+	  found = true;
+	  bestdark.red = C(0);
+	  bestdark.green = C(1);
+	  bestdark.blue = C(2);
+	  bestred.red = C(3);
+	  bestred.green = C(4);
+	  bestred.blue = C(5);
+	  bestgreen.red = C(6);
+	  bestgreen.green = C(7);
+	  bestgreen.blue = C(8);
+	  bestblue.red = C(9);
+	  bestblue.green = C(10);
+	  bestblue.blue = C(11);
+	  bestlum = mm;
+	}
+    }
+#define C(i) (gsl_vector_get(c,(i)))
+  param->black = bestdark.sgngamma (gamma);
+  param->red = bestred.sgngamma (gamma);
+  param->green = bestgreen.sgngamma (gamma);
+  param->blue = bestblue.sgngamma (gamma);
+#if 1
+  if (report)
+    {
+      fprintf (report, "Color optimization:\n  Dark %f %f %f (lum %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, bestlum, min_chisq);
+      fprintf (report, "  Red %f %f %f\n", bestred.red, bestred.green, bestred.blue);
+      fprintf (report, "  Green %f %f %f\n", bestgreen.red, bestgreen.green, bestgreen.blue);
+      fprintf (report, "  Blue %f %f %f\n", bestblue.red, bestblue.green, bestblue.blue);
+      save_csp (report, NULL, param, NULL, NULL);
+    }
+#endif
+  gsl_multifit_linear_free (work);
+  gsl_matrix_free (X);
+  gsl_vector_free (y);
+  gsl_vector_free (w);
+  gsl_vector_free (c);
+  gsl_matrix_free (cov);
 }
