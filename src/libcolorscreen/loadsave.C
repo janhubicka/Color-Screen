@@ -28,7 +28,7 @@ static const char * const bool_names[2] =
 bool
 save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam)
 {
-  if (fprintf (f, HEADER) < 0)
+  if (fprintf (f, "%s\n", HEADER) < 0)
     return false;
   /* TODO: hack.  */
   setlocale(LC_NUMERIC, "C");

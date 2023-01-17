@@ -4,6 +4,7 @@
 #include "screen-map.h"
 #include "include/bitmap.h"
 #include "include/render-to-scr.h"
+#include "include/solver.h"
 namespace
 {
   const bool verbose = false;
@@ -669,26 +670,137 @@ flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parame
 }
 }
 
+/* List points in range 0...(xstep-1) and 0....(ystep - 1) starting from middle.  */
+struct int_point {int x,y;};
+std::vector<struct int_point>check_points(int xsteps, int ysteps)
+{
+  std::vector<struct int_point>ret;
+  ret.push_back((struct int_point){xsteps /2, ysteps /2});
+  for (int d = 1; d < std::max (xsteps, ysteps); d++)
+    {
+      for (int i = -d; i <= d; i++)
+	{
+	  int xx = xsteps / 2 + i;
+	  if (xx < 0 || xx >= xsteps)
+	    continue;
+	  int yy = ysteps / 2 - d;
+	  if (yy >= 0 && yy < ysteps)
+	    ret.push_back((struct int_point){xx, yy});
+	  yy = ysteps / 2 + d;
+	  if (yy >= 0 && yy < ysteps)
+	    ret.push_back((struct int_point){xx, yy});
+	}
+      for (int i = -d + 1; i < d; i++)
+	{
+	  int yy = ysteps / 2 + i;
+	  if (yy < 0 || yy >= ysteps)
+	    continue;
+	  int xx = xsteps / 2 - d;
+	  if (xx >= 0 && xx < xsteps)
+	    ret.push_back((struct int_point){xx, yy});
+	  xx = xsteps / 2 + d;
+	  if (xx >= 0 && xx < xsteps)
+	    ret.push_back((struct int_point){xx, yy});
+	}
+    }
+  return ret;
+}
+
 detected_screen
-detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
+detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool optimize_colors, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
 {
   detected_screen ret;
-  int max_diam = std::max (img.width, img.height);
   render_parameters empty;
 
   empty.gamma = gamma;
   ret.mesh_trans = NULL;
   ret.known_patches = NULL;
   ret.smap = NULL;
-  render_scr_detect render (dparam, img, empty, 256);
-  render.precompute_all (false, progress);
-  if (progress)
-    progress->set_task ("Looking for initial grid", max_diam);
+  render_scr_detect *render = NULL;
   bitmap_2d visited (img.width, img.height);
   scr_to_img_parameters param;
   screen_map *smap = NULL;
   param.type = Dufay;
-  render.precompute_rgbdata (progress);
+
+  const int search_xsteps = 6;
+  const int search_ysteps = 6;
+  if (progress)
+    progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
+  auto points = check_points (search_xsteps, search_ysteps);
+  for (int s = 0; s < (int)points.size () && !smap; s++)
+    {
+      int xmin = points[s].x * img.width / search_xsteps;
+      int ymin = points[s].y * img.height / search_ysteps;
+      int xmax = (points[s].x + 1) * img.width / search_xsteps;
+      int ymax = (points[s].y + 1) * img.height / search_ysteps;
+      int nattempts = 0;
+      const int  maxattempts = 10;
+      if (optimize_colors)
+	{
+	  if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      printf ("Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	      if (report_file)
+	        fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	      if (progress)
+		progress->resume_stdout ();
+	      continue;
+	    }
+	  /* Re-detect screen.  */
+	  delete render;
+	  render = NULL;
+	}
+      if (!render)
+	{
+	  render = new render_scr_detect (dparam, img, empty, 256);
+	  render->precompute_all (false, progress);
+	  render->precompute_rgbdata (progress);
+	}
+      if (!progress || !progress->cancel_requested ())
+	for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
+	  for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
+	    {
+	      if (try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
+		{
+		  nattempts++;
+		  if (verbose)
+		    {
+		      if (report_file && verbose)
+			fprintf (report_file, "Initial grid found at:\n");
+		      sparam.dump (report_file);
+		    }
+		  visited.clear ();
+		  simple_solver (&param, img, sparam, progress);
+		  smap = flood_fill (report_file, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, progress);
+		  if (!smap)
+		    {
+		      if (progress)
+			{
+			  progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
+			  progress->set_progress (s);
+			}
+		      visited.clear ();
+		      x+= 10;
+		    }
+		  else
+		    break;
+		}
+	    }
+      if (!smap)
+	{
+	  if (progress)
+	    progress->pause_stdout ();
+	  printf ("Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	  if (report_file)
+	    fprintf (report_file, "Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	  if (progress)
+	    progress->resume_stdout ();
+	}
+    }
+#if 0
+  int max_diam = std::max (img.width, img.height);
   for (int d = 0; d < max_diam && !smap; d++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -724,8 +836,12 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
       if (progress)
 	progress->inc_progress ();
     }
+#endif
   if (!smap)
-    return ret;
+    {
+      delete render;
+      return ret;
+    }
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
   sparam.remove_points ();
 
@@ -740,9 +856,16 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	}
 
   simple_solver (&ret.param, img, sparam, progress);
+  if (report_file)
+    {
+      fprintf (report_file, "Detected geometry\n");
+      save_csp (report_file, &param, NULL, NULL, NULL);
+    }
   {
     render_to_scr render (ret.param, img, empty, 256);
     ret.pixel_size = render.pixel_size ();
+    if (report_file)
+      fprintf (report_file, "pixel size: %f\n",ret.pixel_size);
   }
   smap->get_known_range (&ret.xmin, &ret.ymin, &ret.xmax, &ret.ymax);
 #if 1
@@ -817,6 +940,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
   if (progress)
     progress->resume_stdout ();
   
+  delete render;
   delete smap;
   ret.mesh_trans = m;
   return ret;

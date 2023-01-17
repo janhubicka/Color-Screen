@@ -334,6 +334,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   //bitmap_2d *bitmap;
   load_img (progress);
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
+#if 0
   if (stitching_params.optimize_colors)
   {
     if (!optimize_screen_colors (&dparam, img, rparam.gamma, img->width / 2 - 500, img->height /2 - 500, 1000, 1000,  progress, report_file))
@@ -343,7 +344,8 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
 	exit (1);
       }
   }
-  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, false, true, progress, report_file);
+#endif
+  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, stitching_params.optimize_colors, false, true, progress, report_file);
   mesh_trans = detected.mesh_trans;
   if (!mesh_trans)
     {
@@ -357,7 +359,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
-      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, false, true, progress, report_file);
+      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, false, false, true, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
 	{

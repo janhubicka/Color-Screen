@@ -629,7 +629,8 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
 	break;
     }
   //printf ("%i %i %i\n",reds.size (), greens.size (), blues.size ());
-  if (!reds.size () || !greens.size () || !blues.size ())
+  if (!reds.size () || !greens.size () || !blues.size ()
+      || (reds.size () + greens.size () + blues.size ()) < 4 * 3)
     return false;
   optimize_screen_colors (param, gamma, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
   return true;

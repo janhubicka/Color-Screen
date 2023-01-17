@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <math.h>
 #include <cstring>
 #include <cstdlib>
 #include "include/progress-info.h"
@@ -124,7 +125,7 @@ file_progress_info::display_progress ()
 	  clear_task (m_file, t);
 	  n = true;
 	}
-      else if (status - m_last_status < 0.01)
+      else if (fabs (status - m_last_status) < 0.01)
 	return;
       if (n)
         fprintf (m_file, "%s: %2.2f%%", task, status);
