@@ -557,11 +557,10 @@ public:
 };
 
 screen_map *
-flood_fill (FILE *report_file, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, progress_info *progress)
+flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
-  bool slow = false;
 
   /* If screen is estimated too small or too large give up.  */
   if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 || screen_ysize > 100)
@@ -707,7 +706,7 @@ std::vector<struct int_point>check_points(int xsteps, int ysteps)
 }
 
 detected_screen
-detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool optimize_colors, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
+detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool slow_floodfill, bool optimize_colors, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
 {
   detected_screen ret;
   render_parameters empty;
@@ -743,7 +742,10 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 		progress->pause_stdout ();
 	      printf ("Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
 	      if (report_file)
+	      {
 	        fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+		fflush (report_file);
+	      }
 	      if (progress)
 		progress->resume_stdout ();
 	      continue;
@@ -773,7 +775,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 		    }
 		  visited.clear ();
 		  simple_solver (&param, img, sparam, progress);
-		  smap = flood_fill (report_file, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, progress);
+		  smap = flood_fill (report_file, slow_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, progress);
 		  if (!smap)
 		    {
 		      if (progress)
@@ -855,6 +857,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	  sparam.add_point (ix, iy, x / 2.0, y, x & 1 ? solver_parameters::blue : solver_parameters::green);
 	}
 
+  ret.param.type = Dufay;
   simple_solver (&ret.param, img, sparam, progress);
   if (report_file)
     {

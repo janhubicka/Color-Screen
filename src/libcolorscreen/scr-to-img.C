@@ -3,6 +3,7 @@
 #include "include/scr-to-img.h"
 #include "include/imagedata.h"
 #include "include/spline.h"
+#include "include/render-to-scr.h"
 
 namespace {
 
@@ -323,4 +324,13 @@ scr_to_img::get_final_range (int img_width, int img_height,
   get_final_range (0, 0, (coord_t)img_width, (coord_t)img_height,
 		   final_xshift, final_yshift,
 		   final_width, final_height);
+}
+
+void
+scr_to_img::dump (FILE *f)
+{
+  fprintf (f, "scr to img dump:\n");
+  if (m_param.mesh_trans)
+    fprintf (f, "have mesh trans\n");
+  save_csp (f, &m_param, NULL, NULL, NULL);
 }

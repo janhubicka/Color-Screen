@@ -399,6 +399,7 @@ public:
   {
     return m_param.type;
   }
+  void dump (FILE *f);
 private:
   precomputed_function<coord_t> *m_motor_correction;
   /* Center of lenses after the motor corrections.  */

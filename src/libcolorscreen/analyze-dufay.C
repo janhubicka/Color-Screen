@@ -195,9 +195,12 @@ add(unsigned char ov[256][256][3], int c, double x, double y)
 		ov[xx][yy][c]++;
 }
 int
-analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufay &other, int cpfind, int *xshift_ret, int *yshift_ret, int direction, scr_to_img &map, FILE *report_file, progress_info *progress)
+analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufay &other, int cpfind, int *xshift_ret, int *yshift_ret, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress)
 {
   bool val_known = false;
+  /* Top left corner of other scan in screen coordinates.  */
+  coord_t lx, ly;
+  other_map.to_scr (0, 0, &lx, &ly);
   if (cpfind)
     {
       FILE *f = fopen ("project-cpfind.pto","wt");
@@ -256,7 +259,11 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
       struct offsets {
 	int x, y, n;
       };
+      struct bad_offsets {
+	coord_t x, y;
+      };
       std::vector<offsets> off;
+      std::vector<bad_offsets> bad_off;
       int npoints = 0;
       while (!feof (f))
 	{
@@ -354,11 +361,27 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 
 	  int xo = round (x2 - x1);
 	  int yo = round (y2 - y1);
+	  if (direction >= 0)
+	    {
+	      int xx = -xo - (m_xshift - other.m_xshift);
+	      int yy = -yo - (m_yshift - other.m_yshift);
+	      coord_t xi, yi;
+	      map.to_img (lx + xx, ly + yy, &xi, &yi);
+
+	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/8))
+		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/8)))
+		{
+		  fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, xi, yi);
+		  map.dump (stdout);
+		  continue;
+		}
+	    }
 	  if (fabs ((x2 - x1) - xo) > 0.3
 	      || fabs ((y2 - y1) - yo) > 0.3)
 	    {
 	      if (report_file)
 	        fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is not integer\n",x1,y1,x2,y2);
+	      bad_off.push_back ({x2-x1, y2-y1});
 	      continue;
 	    }
 	  if (report_file)
@@ -381,7 +404,11 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  for (offsets &o : off)
 	    if (o.n > max.n)
 	      max = o;
-	  if (max.n > npoints / 2)
+	  int real_n = max.n;
+	  for (bad_offsets &o : bad_off)
+	    if (fabs (o.x - max.x) < 0.5 && fabs (o.y - max.y) < 0.5)
+	      real_n++;
+	  if (real_n > std::min (npoints / 3, 2))
 	    {
 	      *xshift_ret = -max.x - (m_xshift - other.m_xshift);
 	      *yshift_ret = -max.y - (m_yshift - other.m_yshift);
@@ -389,7 +416,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	        fprintf (report_file, "Best offset %i %i with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
 	      val_known = true;
 	      if (cpfind != 2)
-	        return 2;
+	        return true;
 	    }
 	  else
 	    if (report_file)
@@ -474,7 +501,11 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	}
     }
   if (first == -1 || other_first == -1)
-    return false;
+    {
+      if (report_file)
+	fprintf (report_file, "Failed to find known pixels\n");
+      return false;
+    }
 
 
   xstart = left - other_right + 2;
@@ -544,7 +575,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
     }
   if (progress)
     progress->set_task ("determining best overlap", (yend - ystart));
-#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, max_percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file,direction,map)
+#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, max_percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file,direction,map,lx,ly)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
@@ -564,10 +595,11 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  if (report_file && val_known && *xshift_ret == x && *yshift_ret == y)
 	    is_cpfind = true;
 
+#if 1
 	  if (direction >= 0)
 	    {
 	      coord_t xi, yi;
-	      map.scr_to_final (x, y, &xi, &yi);
+	      map.to_img (x + lx, y + ly, &xi, &yi);
 	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/8))
 		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/8)))
 		{
@@ -576,6 +608,21 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		  continue;
 		}
 	    }
+#endif
+#if 0
+	  if (direction >= 0)
+	    {
+	      coord_t xi, yi;
+	      map.scr_to_final (x, y, &xi, &yi);
+	      if (fabs (yi) > fabs (xi)/8
+		  &&  (fabs (xi) > fabs (yi)/8))
+		{
+		  if (is_cpfind)
+		    fprintf (report_file, "cpfind offset in wrong direction %f %f\n", xi, yi);
+		  continue;
+		}
+	    }
+#endif
 
 	  xxstart = std::max (-other.m_xshift + x + other_left, xxstart);
 	  yystart = std::max (-other.m_yshift + y + other_first, yystart);
@@ -682,7 +729,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	  luminosity_t rscale = rsum1 > 0 ? rsum2 / rsum1 : 1;
 	  luminosity_t gscale = gsum1 > 0 ? gsum2 / gsum1 : 1;
 	  luminosity_t bscale = bsum1 > 0 ? bsum2 / bsum1 : 1;
-	  const luminosity_t exposure_tolerance = 0.6;
+	  const luminosity_t exposure_tolerance = 2.6;
 	  if (fabs (rscale - 1) > exposure_tolerance
 	      || fabs (gscale -1) > exposure_tolerance
 	      || fabs (bscale -1) > exposure_tolerance)

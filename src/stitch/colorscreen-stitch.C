@@ -21,6 +21,8 @@ struct stitching_params
   bool panorama_map;
   bool optimize_colors;
   bool reoptimize_colors;
+  bool slow_floodfill;
+  bool limit_directions;
 
   int outer_tile_border;
   int min_overlap_percentage;
@@ -44,7 +46,7 @@ struct stitching_params
 
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (false), reoptimize_colors (false),
+    cpfind (true), panorama_map (false), optimize_colors (false), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
@@ -77,7 +79,10 @@ class stitch_image
   image_data *img;
   mesh *mesh_trans;
   scr_to_img_parameters param;
+  /* scr_to_img map holding mesh_trans.  */
   scr_to_img scr_to_img_map;
+  /* scr_to_img map holding detected parameters.  */
+  scr_to_img basic_scr_to_img_map;
   int img_width, img_height;
   int xshift, yshift, width, height;
   int final_xshift, final_yshift;
@@ -345,7 +350,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       }
   }
 #endif
-  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, stitching_params.optimize_colors, false, true, progress, report_file);
+  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, stitching_params.optimize_colors, false, true, progress, report_file);
   mesh_trans = detected.mesh_trans;
   if (!mesh_trans)
     {
@@ -359,7 +364,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
-      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, false, false, true, progress, report_file);
+      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, false, true, false, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
 	{
@@ -465,6 +470,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
+  basic_scr_to_img_map.set_parameters (detected.param, *img);
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
   final_width = render.get_final_width ();
@@ -752,8 +758,8 @@ print_help (const char *filename)
   printf ("  --known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
   printf ("  --orig-tiles                                store geometrically corrected tiles (for later blending)\n");
   printf (" overlap detection:\n");
-  printf ("  --np-cpfind                                 enable use of Hugin's cpfind to determine overlap\n");
-  printf ("  --cpfind                                    disable use of Hugin's cpfind to determine overlap\n");
+  printf ("  --no-cpfind                                 disable use of Hugin's cpfind to determine overlap\n");
+  printf ("  --cpfind                                    enable use of Hugin's cpfind to determine overlap\n");
   printf ("  --cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
   printf ("  --min-overlap=precentage                    minimal overlap\n");
   printf ("  --max-overlap=precentage                    maximal overlap\n");
@@ -765,6 +771,8 @@ print_help (const char *filename)
   printf ("  --min-screen-precentage                     minimum portion of screen required to be recognized by screen detection\n");
   printf ("  --optimize-colors                           auto-optimize screen colors\n");
   printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
+  printf ("  --slow-floodfill                            use slower but hopefully more precise discovery of patches\n");
+  printf ("  --no-limit-direction                        do not limit overlap checking to expected directions\n");
 }
 
 void
@@ -984,7 +992,7 @@ determine_positions (progress_info *progress)
 	  int ys;
 	  analyze (0, y-1, progress);
 	  analyze (0, y, progress);
-	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][0].dufay, stitching_params.cpfind, &xs, &ys, 1, common_scr_to_img, report_file, progress))
+	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][0].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][0].basic_scr_to_img_map, images[y][0].basic_scr_to_img_map, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename.c_str (), images[y][0].filename.c_str ());
@@ -1005,7 +1013,7 @@ determine_positions (progress_info *progress)
 	  int ys;
 	  analyze (x, y, progress);
 	  analyze (x + 1,y, progress);
-	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, 0, common_scr_to_img, report_file, progress))
+	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 0 : -1, images[y][x].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -1024,7 +1032,7 @@ determine_positions (progress_info *progress)
 	  /* Confirm position.  */
 	  if (y)
 	    {
-	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, 1, common_scr_to_img, report_file, progress))
+	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][x+1].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
 		{
 		  progress->pause_stdout ();
 		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -1146,7 +1154,7 @@ void stitch (progress_info *progress)
     fprintf (report_file, "Stitching:\n");
   for (int y = 0; y < stitching_params.height; y++)
     {
-      for (int x = 0; x < stitching_params.height; x++)
+      for (int x = 0; x < stitching_params.width; x++)
 	{
 	  printf ("  %s", images[y][x].filename.c_str ());
 	  if (report_file)
@@ -1415,6 +1423,16 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--reoptimize-colors"))
 	{
 	  stitching_params.reoptimize_colors = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-limit-directions"))
+	{
+	  stitching_params.limit_directions = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--slow-floodfill"))
+	{
+	  stitching_params.slow_floodfill = true;
 	  continue;
 	}
       if (!strcmp (argv[i], "--outer-tile-border"))

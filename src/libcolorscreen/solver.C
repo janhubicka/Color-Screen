@@ -678,7 +678,7 @@ optimize_screen_colors (scr_detect_parameters *param,
   for (int i = 0; i < nblues; i++)
     lums.push_back (blues[i].red + blues[i].green + blues[i].blue);
   sort(lums.begin (), lums.end ());
-  luminosity_t maxlum = lums[(int)(lums.size () * 0.1)];
+  luminosity_t maxlum = lums[(int)(lums.size () * 0.5)];
   for (int step = 0; step < steps ; step++)
     {
       luminosity_t mm = step * maxlum / steps;
