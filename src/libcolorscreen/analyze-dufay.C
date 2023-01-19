@@ -368,11 +368,10 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	      coord_t xi, yi;
 	      map.to_img (lx + xx, ly + yy, &xi, &yi);
 
-	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/8))
-		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/8)))
+	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
+		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
 		{
 		  fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, xi, yi);
-		  map.dump (stdout);
 		  continue;
 		}
 	    }
@@ -600,8 +599,8 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	    {
 	      coord_t xi, yi;
 	      map.to_img (x + lx, y + ly, &xi, &yi);
-	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/8))
-		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/8)))
+	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
+		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
 		{
 		  if (is_cpfind)
 		    fprintf (report_file, "cpfind offset in wrong direction %f %f\n", xi, yi);
