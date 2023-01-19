@@ -55,16 +55,17 @@ public:
   void adjust_color (int r, int g, int b,
 		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
   {
-    m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
+   m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
   }
   enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b)
   {
+    luminosity_t ma = std::max (std::max (r, g), b);
+    if (ma < m_param.min_luminosity)
+      return unknown;
     luminosity_t m = std::min (std::min (std::min (r, g), b), (luminosity_t)0);
     r -= m;
     g -= m;
     b -= m;
-    if (r * r + b * b + g * g < m_param.min_luminosity * m_param.min_luminosity)
-      return unknown;
     if (r > (fabs (g) + fabs(b)) * m_param.min_ratio && r > g && r > b)
       return red;
     if (g > (fabs(r) + fabs(b)) * m_param.min_ratio && g > r && g > b)
