@@ -705,7 +705,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
 	      if (render_pixel (rparam, passthrough_rparam, sx, sy, mode,&r,&g,&b, progress)
 		  && progress)
 		{
-		  progress->set_task ("Rendering and saving tile", (final_width / xstep));
+		  progress->set_task ("Rendering and saving tile", (final_height / ystep));
 		  progress->set_progress (j);
 		}
 	      outrow[4 * i] = r;
