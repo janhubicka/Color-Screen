@@ -108,6 +108,7 @@ struct precomputed_rgbdata_params
 	   && p.red == o.p.red
 	   && p.green == o.p.green
 	   && p.blue == o.p.blue
+	   && p.black == o.p.black
 	   && p.sharpen_radius == o.p.sharpen_radius
 	   && p.sharpen_amount == o.p.sharpen_amount
 	   && gamma == o.gamma;
