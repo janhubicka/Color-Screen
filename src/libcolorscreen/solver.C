@@ -557,7 +557,7 @@ compare_priorities(struct entry &e1, struct entry &e2)
 bool
 optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress, FILE *report)
 {
-  const double sharpen_amount = 0;
+  const double sharpen_amount = 2;
   const double sharpen_radius = 3;
   int clen = fir_blur::convolve_matrix_length (sharpen_radius);
   rgbdata *sharpened = (rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (rgbdata));
@@ -760,6 +760,7 @@ optimize_screen_colors (scr_detect_parameters *param,
       double chisq;
       gsl_multifit_wlinear (X, w, y, c, cov,
 			    &chisq, work);
+#define C(i) (gsl_vector_get(c,(i)))
       if (!found || chisq < min_chisq)
 	{
 	  min_chisq = chisq;
@@ -779,15 +780,21 @@ optimize_screen_colors (scr_detect_parameters *param,
 	  bestlum = mm;
 	}
     }
-#define C(i) (gsl_vector_get(c,(i)))
-  param->black = bestdark.sgngamma (gamma);
-  param->red = bestred.sgngamma (gamma);
-  param->green = bestgreen.sgngamma (gamma);
-  param->blue = bestblue.sgngamma (gamma);
+#if 0
+  param->black = bestdark.sgngamma (1/gamma);
+  param->red = (bestred + bestdark).sgngamma (1/gamma);
+  param->green = (bestgreen + bestdark).sgngamma (1/gamma);
+  param->blue = (bestblue + bestdark).sgngamma (1/gamma);
+#else
+  param->black = bestdark;
+  param->red = bestred + bestdark;
+  param->green = bestgreen + bestdark;
+  param->blue = bestblue + bestdark;
+#endif
 #if 1
   if (report)
     {
-      fprintf (report, "Color optimization:\n  Dark %f %f %f (lum %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, bestlum, min_chisq);
+      fprintf (report, "Color optimization:\n  Dark %f %f %f (gamma %f lum %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, gamma, bestlum, min_chisq);
       fprintf (report, "  Red %f %f %f\n", bestred.red, bestred.green, bestred.blue);
       fprintf (report, "  Green %f %f %f\n", bestgreen.red, bestgreen.green, bestgreen.blue);
       fprintf (report, "  Blue %f %f %f\n", bestblue.red, bestblue.green, bestblue.blue);
