@@ -364,7 +364,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
-      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, false, true, false, progress, report_file);
+      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, false, false, true, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
 	{
