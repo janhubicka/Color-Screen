@@ -203,7 +203,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
   other_map.to_scr (0, 0, &lx, &ly);
   if (cpfind)
     {
-      FILE *f = fopen ("project-cpfind.pto","wt");
+      FILE *f = fopen (direction ? "project-cpfind-vert.pto" : "project-cpfind-hor.pto","wt");
       if (!f)
 	return false;
       int mwidth = std::max (m_width, other.m_width);
@@ -219,8 +219,10 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
       bmin = std::min (bmin, bmin2);
       bmax = std::max (bmax, bmax2);
       const char *error;
-      if (!write_screen ("screen1.tif", NULL, &error, progress, rmin, rmax, gmin, gmax, bmin, bmax)
-          || !other.write_screen ("screen2.tif", NULL, &error, progress, rmin, rmax, gmin, gmax, bmin, bmax))
+      const char *screen1 = direction ? "screen1-vert.tif" : "screen1-hor.tif";
+      const char *screen2 = direction ? "screen2-vert.tif" : "screen2-hor.tif";
+      if (!write_screen (screen1, NULL, &error, progress, rmin, rmax, gmin, gmax, bmin, bmax)
+          || !other.write_screen (screen2, NULL, &error, progress, rmin, rmax, gmin, gmax, bmin, bmax))
 	{
 	  if (progress)
 	    progress->pause_stdout ();
@@ -233,11 +235,11 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 		  "i w%i h%i f0 v28.53 Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n"
 		  "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0.334802534835735 TrY0.00196425708222156 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=0 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5  n\"%s\"\n"
 		  "v TrX1\n"
-		  "v TrY1\n", /*m_width, m_height,*/ mwidth, mheight, /*filename1*/"screen1.tif", /*other.m_width, other.m_height,*/ mwidth, mheight, /*filename2*/"screen2.tif");
+		  "v TrY1\n", /*m_width, m_height,*/ mwidth, mheight, /*filename1*/screen1, /*other.m_width, other.m_height,*/ mwidth, mheight, /*filename2*/screen2);
       fclose (f);
       if (progress)
 	progress->set_task ("executing cpfind", 1);
-      if (system ("cpfind --fullscale --ransacmode=rpy project-cpfind.pto -o project-cpfind-out.pto >cpfind.out"))
+      if (system (direction ? "cpfind --fullscale --ransacmode=rpy project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out": "cpfind --fullscale --ransacmode=rpy project-cpfind-hor.pto -o project-cpfind-hor-out.pto >cpfind.out"))
 	{
 	  if (progress)
 	    progress->pause_stdout ();
@@ -246,7 +248,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
 	    progress->resume_stdout ();
 	  return false;
 	}
-      f = fopen ("project-cpfind-out.pto", "r");
+      f = fopen (direction ? "project-cpfind-vert-out.pto" : "project-cpfind-hor-out.pto", "r");
       if (!f)
 	{
 	  if (progress)
@@ -833,7 +835,7 @@ analyze_dufay::find_best_match (int percentage, int max_percentage, analyze_dufa
   int y = best_yshift;
   int x = best_xshift;
   /* Output heatmap.  */
-  if (0)
+  if (1)
     {
       static int fn;
       char name[256];
