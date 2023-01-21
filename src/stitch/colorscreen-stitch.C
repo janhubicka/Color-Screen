@@ -772,7 +772,7 @@ print_help (const char *filename)
   printf ("  --optimize-colors                           auto-optimize screen colors\n");
   printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
   printf ("  --slow-floodfill                            use slower but hopefully more precise discovery of patches\n");
-  printf ("  --no-limit-direction                        do not limit overlap checking to expected directions\n");
+  printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
 }
 
 void
@@ -1205,12 +1205,14 @@ void stitch (progress_info *progress)
     {
       TIFF *out;
       uint16_t *outrow;
+      images[0][0].load_img (progress);
       out =
 	open_output_file (stitching_params.stitched_filename.c_str (), (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, 
 			  &error,
 			  images[0][0].img->icc_profile, images[0][0].img->icc_profile_size,
 			  progress);
-	int j = 0;
+      images[0][0].release_img ();
+      int j = 0;
       if (!out)
 	{
 	  progress->pause_stdout ();
