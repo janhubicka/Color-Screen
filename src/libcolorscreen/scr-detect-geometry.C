@@ -557,7 +557,7 @@ public:
 };
 
 screen_map *
-flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, progress_info *progress)
+flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
@@ -651,20 +651,67 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
     }
   /* Dufay screen has two points per screen repetetion.  */
   *npatches = nfound;
-  if (nfound < nexpected / 5)
+  int xmin, ymin, xmax, ymax;
+  map->get_known_range (&xmin, &ymin, &xmax, &ymax);
+  nexpected = 2 * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  if (nexpected * dsparams->min_screen_percentage > nfound * 100)
     {
       if (report_file)
-        fprintf (report_file, "Found %i patches (%i expected, %f%%). Rejecting.\n", nfound, nexpected, nfound * 100.0 / nexpected);
+	{
+	  fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / nexpected);
+	  //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
+	}
       delete map;
       return NULL;
     }
-  //if (progress)
-    //progress->pause_stdout ();
+  progress->pause_stdout ();
+  printf ("Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
   if (report_file)
-    fprintf (report_file, "Found %i patches (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
-  //printf ("Found %i points (%i expected, %f%%)\n", nfound, nexpected, nfound * 100.0 / nexpected);
-  //if (progress)
-    //progress->resume_stdout ();
+    fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
+  printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
+  if (report_file)
+    fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
+  printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
+  if (report_file)
+    fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
+  printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+  if (report_file)
+    fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+  printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+  if (report_file)
+    fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+  printf ("\n");
+  if (report_file)
+    fprintf (report_file, "\n");
+  progress->resume_stdout ();
+  if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach left border of the image\n");
+      delete map;
+      return NULL;
+    }
+  if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach top border of the image\n");
+      delete map;
+      return NULL;
+    }
+  if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach right border of the image\n");
+      delete map;
+      return NULL;
+    }
+  if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach bottom border of the image\n");
+      delete map;
+      return NULL;
+    }
   return map;
 }
 }
@@ -706,7 +753,7 @@ std::vector<struct int_point>check_points(int xsteps, int ysteps)
 }
 
 detected_screen
-detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, bool slow_floodfill, bool optimize_colors, bool return_screen_map, bool return_known_patches, progress_info *progress, FILE *report_file)
+detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
   detected_screen ret;
   render_parameters empty;
@@ -734,7 +781,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
       int ymax = (points[s].y + 1) * img.height / search_ysteps;
       int nattempts = 0;
       const int  maxattempts = 10;
-      if (optimize_colors)
+      if (dsparams->optimize_colors)
 	{
 	  if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
 	    {
@@ -775,7 +822,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 		    }
 		  visited.clear ();
 		  simple_solver (&param, img, sparam, progress);
-		  smap = flood_fill (report_file, slow_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, progress);
+		  smap = flood_fill (report_file, dsparams->slow_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		  if (!smap)
 		    {
 		      if (progress)
@@ -925,7 +972,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
       }
 
 
-  if (return_known_patches)
+  if (dsparams->return_known_patches)
     {
       ret.xshift = smap->xshift / 2;
       ret.yshift = smap->yshift;

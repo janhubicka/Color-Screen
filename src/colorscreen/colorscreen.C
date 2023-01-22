@@ -215,8 +215,10 @@ main (int argc, char **argv)
 	  printf ("Detecting geometry");
 	  record_time ();
 	}
-      detected_screen d = detect_regular_screen (scan, dparam, rparam.gamma, solver_param, false, false, false, NULL);
-      param.mesh_trans = d.mesh_trans;
+      abort ();
+      // TODO update call once it is clear what we want to do.
+      //detected_screen d = detect_regular_screen (scan, dparam, rparam.gamma, solver_param, false, false, false, NULL);
+      //param.mesh_trans = d.mesh_trans;
     }
   else if (solver_param.npoints)
     {

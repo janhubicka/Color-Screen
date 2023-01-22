@@ -46,7 +46,7 @@ struct stitching_params
 
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (false), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
+    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
@@ -350,7 +350,16 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       }
   }
 #endif
-  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, stitching_params.optimize_colors, false, true, progress, report_file);
+  detect_regular_screen_params dsparams;
+  dsparams.min_screen_percentage = stitching_params.min_screen_percentage;
+  dsparams.border_top = skiptop;
+  dsparams.border_bottom = skipbottom;
+  dsparams.border_left = skipleft;
+  dsparams.border_right = skipright;
+  dsparams.optimize_colors = stitching_params.optimize_colors;
+  dsparams.slow_floodfill = stitching_params.slow_floodfill;
+  dsparams.return_known_patches = true;
+  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
   mesh_trans = detected.mesh_trans;
   if (!mesh_trans)
     {
@@ -364,7 +373,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
       optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
-      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, stitching_params.slow_floodfill, false, false, true, progress, report_file);
+      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
 	{
@@ -372,81 +381,6 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
 	  fprintf (stderr, "Failed to analyze screen of %s after optimizing screen colors. Probably a bug\n", filename.c_str ());
 	  exit (1);
 	}
-    }
-  double screen_xsize = sqrt (detected.param.coordinate1_x * detected.param.coordinate1_x + detected.param.coordinate1_y * detected.param.coordinate1_y);
-  double screen_ysize = sqrt (detected.param.coordinate2_x * detected.param.coordinate2_x + detected.param.coordinate2_y * detected.param.coordinate2_y);
-  int nexpected = 2 * (detected.xmax - detected.xmin) * (detected.ymax - detected.ymin) / (screen_xsize * screen_ysize);
-  if (nexpected * stitching_params.min_screen_percentage > detected.patches_found * 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen patches covers only %2.2f%% of the screen\n", detected.patches_found * 100.0 / nexpected);
-      if (skipleft)
-	fprintf (stderr, "Reducing --min-screen-percentage would bypass this error\n");
-      exit (1);
-    }
-  progress->pause_stdout ();
-  printf ("Analyzed %2.2f%% of the screen area", detected.patches_found * 100.0 / nexpected);
-  if (report_file)
-    fprintf (report_file, "Analyzed %2.2f%% of the screen area", detected.patches_found * 100.0 / nexpected);
-  if (skipleft)
-    {
-      printf ("; left border: %2.2f%%", detected.xmin * 100.0 / img->width);
-      if (report_file)
-        fprintf (report_file, "; left border: %2.2f%%", detected.xmin * 100.0 / img->width);
-    }
-  if (skiptop)
-    {
-      printf ("; top border: %2.2f%%", detected.ymin * 100.0 / img->height);
-      if (report_file)
-        fprintf (report_file, "; top border: %2.2f%%", detected.ymin * 100.0 / img->height);
-    }
-  if (skipright)
-    {
-      printf ("; right border: %2.2f%%", 100 - detected.xmax * 100.0 / img->width);
-      if (report_file)
-        fprintf (report_file, "; right border: %2.2f%%", 100 - detected.xmax * 100.0 / img->width);
-    }
-  if (skipbottom)
-    {
-      printf ("; bottom border: %2.2f%%", 100 - detected.ymax * 100.0 / img->height);
-      if (report_file)
-        fprintf (report_file, "; bottom border: %2.2f%%", 100 - detected.ymax * 100.0 / img->height);
-    }
-  printf ("\n");
-  if (report_file)
-    fprintf (report_file, "\n");
-  progress->resume_stdout ();
-  if (detected.xmin > std::max (skipleft, 2) * img->width / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach left border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.xmin * 100 / img->width + 1);
-      exit (1);
-    }
-  if (detected.ymin > std::max (skiptop, 2) * img->height / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach top border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", detected.ymin * 100 / img->height + 1);
-      exit (1);
-    }
-  if (detected.xmax < std::min (100 - skipright, 98) * img->width / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach right border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.xmax * 100 / img->width + 1);
-      exit (1);
-    }
-  if (detected.ymax < std::min (100 - skipbottom, 98) * img->height / 100)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Detected screen failed to reach bottom border of the image\n");
-      if (skipleft)
-	fprintf (stderr, "Setting --outer-tile-border to %i would bypass this error\n", 100 - detected.ymax * 100 / img->height + 1);
-      exit (1);
     }
 
 
@@ -769,7 +703,8 @@ print_help (const char *filename)
   printf (" other:\n");
   printf ("  --panorama-map                              print panorama map in ascii-art\n");
   printf ("  --min-screen-precentage                     minimum portion of screen required to be recognized by screen detection\n");
-  printf ("  --optimize-colors                           auto-optimize screen colors\n");
+  printf ("  --optimize-colors                           auto-optimize screen colors (default)\n");
+  printf ("  --no-optimize-colors                        do not auto-optimize screen colors\n");
   printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
   printf ("  --slow-floodfill                            use slower but hopefully more precise discovery of patches\n");
   printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
@@ -1420,6 +1355,11 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--optimize-colors"))
 	{
 	  stitching_params.optimize_colors = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-optimize-colors"))
+	{
+	  stitching_params.optimize_colors = false;
 	  continue;
 	}
       if (!strcmp (argv[i], "--reoptimize-colors"))

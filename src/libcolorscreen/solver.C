@@ -557,7 +557,7 @@ compare_priorities(struct entry &e1, struct entry &e2)
 bool
 optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress, FILE *report)
 {
-  const double sharpen_amount = 2;
+  const double sharpen_amount = 0;
   const double sharpen_radius = 3;
   int clen = fir_blur::convolve_matrix_length (sharpen_radius);
   rgbdata *sharpened = (rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (rgbdata));

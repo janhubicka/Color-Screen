@@ -435,7 +435,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    delete detected.smap;
 	  if (current_mesh)
 	    delete current_mesh;
-	  detected = detect_regular_screen (scan, current_scr_detect, rparams.gamma, current_solver, false, true, false, true, &progress);
+	  detect_regular_screen_params dsparams;
+	  detected = detect_regular_screen (scan, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
 	  current_mesh = detected.mesh_trans;
 	  display_scheduled = true;
 	  preview_display_scheduled = true;
@@ -917,6 +918,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	        current_scr_detect.black.red = r;
 	        current_scr_detect.black.green = g;
 	        current_scr_detect.black.blue = b;
+		printf ("Black %f %f %f\n",r,g,b);
 	      }
 	    if (setcolor == 2)
 	      {
