@@ -27,6 +27,7 @@ struct stitching_params
   int outer_tile_border;
   int min_overlap_percentage;
   int max_overlap_percentage;
+  luminosity_t max_contrast;
 
   int num_control_points;
   int min_screen_percentage;
@@ -47,7 +48,7 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
-    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), num_control_points (100), min_screen_percentage (75), hfov (28.534)
+    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (15), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
 
@@ -118,6 +119,7 @@ class stitch_image
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
+  void compare_contrast_with (stitch_image &other, progress_info *progress);
 private:
   static long current_time;
   static int nloaded;
@@ -278,6 +280,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 {
   int n = 0;
   coord_t border = 5 / 100.0;
+  const int range = 2;
   for (int y = -yshift; y < -yshift + height; y++)
     {
       int yy = y + ypos - other.ypos;
@@ -286,8 +289,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    int xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_range (x + xshift, y + yshift, 4)
-		&& screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, 4))
+		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
+		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
 	    {
 	      coord_t x1, y1, x2, y2;
 	      mesh_trans->apply (x,y, &x1, &y1);
@@ -310,8 +313,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    int xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_range (x + xshift, y + yshift, 4)
-		&& screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, 4))
+		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
+		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
 	      {
 		coord_t x1, y1, x2, y2;
 		mesh_trans->apply (x,y, &x1, &y1);
@@ -421,6 +424,7 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   delete detected.known_patches;
   detected.known_patches = NULL;
   dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
+  dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);
   dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
@@ -506,6 +510,169 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
   return loaded;
 }
 
+/* Write one row.  */
+static bool
+write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
+{
+  if (progress && progress->cancel_requested ())
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Cancelled";
+      return false;
+    }
+  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Write error";
+      return false;
+    }
+   if (progress)
+     progress->inc_progress ();
+  return true;
+}
+
+void
+stitch_image::compare_contrast_with (stitch_image &other, progress_info *progress)
+{
+  int x1, y1, x2, y2;
+  int xs = other.xpos - xpos;
+  int ys = other.ypos - ypos;
+  luminosity_t ratio = dufay.compare_contrast (other.dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);
+  if (ratio < 0)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Failed to compare contrast ratio of %s and %s\n", filename.c_str (), other.filename.c_str ());
+      if (progress)
+	progress->resume_stdout ();
+      return;
+    }
+  if (report_file)
+    fprintf (report_file, "Contrast difference of %s and %s: %f%%\n", filename.c_str (), other.filename.c_str (), (ratio - 1) * 100);
+  if ((ratio - 1) * 100 < stitching_params.max_contrast)
+    return;
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Out of threshold contrast difference of %s and %s: %f%%\n", filename.c_str (), other.filename.c_str (), (ratio - 1) * 100);
+  if (progress)
+    progress->resume_stdout ();
+
+  int range = 400;
+  //TODO
+  char buf[4096];
+  sprintf (buf, "contrast-%03i-%s-%s",(int)((ratio -1) * 100 + 0.5), filename.c_str(), other.filename.c_str());
+
+  load_img (progress);
+  other.load_img (progress);
+  progress->pause_stdout ();
+  printf ("Saving contrast diff %s\n", buf);
+  progress->resume_stdout ();
+
+  TIFF *out = TIFFOpen (buf, "wb");
+  double dpi = 300;
+  if (!out)
+    {
+      //*error = "can not open output file";
+      return;
+    }
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, range*3)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, range)
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
+      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
+      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
+      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
+      || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
+      || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
+      || (img->icc_profile && !TIFFSetField (out, TIFFTAG_ICCPROFILE, img->icc_profile_size, img->icc_profile)))
+    {
+      //*error = "write error";
+      return;
+    }
+  uint16_t *outrow = (uint16_t *) malloc (range * 6 * 3);
+  if (!outrow)
+    {
+      //*error = "Out of memory allocating output buffer";
+      return;
+    }
+  if (progress)
+    {
+      progress->set_task ("Rendering and saving contrast info", range);
+    }
+  for (int y = 0; y < range; y++)
+    {
+      for (int x =0 ; x < range; x++)
+        {
+	  int yy = y + y1 - range / 2;
+	  int xx = x + x1 - range / 2;
+	  if (yy >= 0 && yy < img->height && xx >= 0 && xx <= img->width)
+	    {
+	      outrow[x*3] = img->rgbdata[yy][xx].r;
+	      outrow[x*3+1] = img->rgbdata[yy][xx].g;
+	      outrow[x*3+2] = img->rgbdata[yy][xx].b;
+	      if (x < range/2)
+		{
+		  outrow[range * 6 + x*3] = img->rgbdata[yy][xx].r;
+		  outrow[range * 6 + x*3+1] = img->rgbdata[yy][xx].g;
+		  outrow[range * 6 + x*3+2] = img->rgbdata[yy][xx].b;
+		}
+	    }
+	  else
+	    {
+	      outrow[x*3] = 0;
+	      outrow[x*3+1] = 0;
+	      outrow[x*3+2] = 0;
+	      if (x < range / 2)
+		{
+		  outrow[range * 6 + x*3] = 0;
+		  outrow[range * 6 + x*3+1] = 0;
+		  outrow[range * 6 + x*3+2] = 0;
+		}
+	    }
+	  yy = y + y2 - range / 2;
+	  xx = x + x2 - range / 2;
+	  if (yy >= 0 && yy < other.img->height && xx >= 0 && xx <= other.img->width)
+	    {
+	      outrow[range * 3 + x*3] = other.img->rgbdata[yy][xx].r;
+	      outrow[range * 3 + x*3+1] = other.img->rgbdata[yy][xx].g;
+	      outrow[range * 3 + x*3+2] = other.img->rgbdata[yy][xx].b;
+	      if (x >= range/2)
+		{
+		  outrow[range * 6 + x*3] = other.img->rgbdata[yy][xx].r;
+		  outrow[range * 6 + x*3+1] = other.img->rgbdata[yy][xx].g;
+		  outrow[range * 6 + x*3+2] = other.img->rgbdata[yy][xx].b;
+		}
+	    }
+	  else
+	    {
+	      outrow[range * 3 + x*3] = 0;
+	      outrow[range * 3 + x*3+1] = 0;
+	      outrow[range * 3 + x*3+2] = 0;
+	      if (x >= range/2)
+		{
+		  outrow[range * 6 + x*3] = 0;
+		  outrow[range * 6 + x*3+1] = 0;
+		  outrow[range * 6 + x*3+2] = 0;
+		}
+	    }
+        }
+      const char *error;
+      if (!write_row (out, y, outrow, &error, progress))
+        {
+	  free (outrow);
+	  TIFFClose (out);
+	  return;
+        }
+    }
+  release_img ();
+  other.release_img ();
+  free (outrow);
+  TIFFClose (out);
+}
+
 /* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
    File will be 16bit RGB TIFF.
    Allocate output buffer to hold single row to OUTROW.  */
@@ -569,29 +736,6 @@ open_tile_output_file (const char *outfname,
   printf ("Rendering %s at offset %i,%i width dimension %ix%i\n", outfname, xoffset, yoffset, outwidth, outheight);
   progress->resume_stdout ();
   return out;
-}
-
-/* Write one row.  */
-static bool
-write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
-{
-  if (progress && progress->cancel_requested ())
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Cancelled";
-      return false;
-    }
-  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Write error";
-      return false;
-    }
-   if (progress)
-     progress->inc_progress ();
-  return true;
 }
 
 bool
@@ -698,6 +842,7 @@ print_help (const char *filename)
   printf ("  --min-overlap=precentage                    minimal overlap\n");
   printf ("  --max-overlap=precentage                    maximal overlap\n");
   printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
+  printf ("  --max-contrast=precentage                   report differences in contrast over this threshold\n");
   printf (" hugin output:\n");
   printf ("  --num-control-points=n                      number of control points for each pair of images\n");
   printf (" other:\n");
@@ -935,6 +1080,9 @@ determine_positions (progress_info *progress)
 	    }
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
+	  images[y-1][0].compare_contrast_with (images[y][0], progress);
+	  if (stitching_params.width)
+	    images[y-1][1].compare_contrast_with (images[y][0], progress);
 	  if (stitching_params.panorama_map)
 	    {
 	      progress->pause_stdout ();
@@ -989,6 +1137,14 @@ determine_positions (progress_info *progress)
 		}
 
 	    }
+	  if (y)
+	    {
+	      images[y-1][x+1].compare_contrast_with (images[y][x], progress);
+	      images[y-1][x+1].compare_contrast_with (images[y][x+1], progress);
+	      if (x + 2 < stitching_params.width)
+	        images[y-1][x+1].compare_contrast_with (images[y][x+2], progress);
+	    }
+	  images[y][x].compare_contrast_with (images[y][x+1], progress);
 	  if (report_file)
 	    fflush (report_file);
 	}
@@ -1381,7 +1537,7 @@ main (int argc, char **argv)
 	{
 	  if (i == argc - 1)
 	    {
-	      fprintf (stderr, "Missing csp filename\n");
+	      fprintf (stderr, "Missing tile border percentage\n");
 	      print_help (argv[0]);
 	      exit (1);
 	    }
@@ -1392,6 +1548,23 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--outer-tile-border=", strlen ("--outer-tile-border=")))
 	{
 	  stitching_params.outer_tile_border = atoi (argv[i] + strlen ("--outer-tile-border="));
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-contrast"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing max contrast\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.max_contrast = atoi (argv[i]);
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-contrast=", strlen ("--max-contrast=")))
+	{
+	  stitching_params.max_contrast = atoi (argv[i] + strlen ("--max-contrast="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--min-overlap=", strlen ("--min-overlap=")))

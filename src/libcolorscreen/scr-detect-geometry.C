@@ -267,10 +267,10 @@ confirm (render_scr_detect *render,
   const int sample_steps = 2;
   const coord_t pixel_step = 0.1;
   bool found = false;
-  int xmin = ceil (std::min (std::min (coordinate1_x / 2, coordinate2_x / 2), std::min (-coordinate1_x / 2, -coordinate2_x / 2)));
-  int xmax = ceil (std::max (std::max (coordinate1_x / 2, coordinate2_x / 2), std::max (-coordinate1_x / 2, -coordinate2_x / 2)));
-  int ymin = ceil (std::min (std::min (coordinate1_y / 2, coordinate2_y / 2), std::min (-coordinate1_y / 2, -coordinate2_y / 2)));
-  int ymax = ceil (std::max (std::max (coordinate1_y / 2, coordinate2_y / 2), std::max (-coordinate1_y / 2, -coordinate2_y / 2)));
+  int xmin = ceil (std::min (std::min (coordinate1_x / 8, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
+  int xmax = ceil (std::max (std::max (coordinate1_x / 6, coordinate2_x / 6), std::max (-coordinate1_x / 6, -coordinate2_x / 6)));
+  int ymin = ceil (std::min (std::min (coordinate1_y / 6, coordinate2_y / 6), std::min (-coordinate1_y / 6, -coordinate2_y / 6)));
+  int ymax = ceil (std::max (std::max (coordinate1_y / 6, coordinate2_y / 6), std::max (-coordinate1_y / 6, -coordinate2_y / 6)));
 
   /* Do not try to search towards end of screen since it gives wrong resutls.
      broder 4x4 is necessary for interpolation.  */
@@ -687,28 +687,28 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
   if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
     {
       if (report_file)
-	fprintf (report_file, "Detected screen failed to reach left border of the image\n");
+	fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
       delete map;
       return NULL;
     }
   if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
     {
       if (report_file)
-	fprintf (report_file, "Detected screen failed to reach top border of the image\n");
+	fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
       delete map;
       return NULL;
     }
   if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
     {
       if (report_file)
-	fprintf (report_file, "Detected screen failed to reach right border of the image\n");
+	fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
       delete map;
       return NULL;
     }
   if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
     {
       if (report_file)
-	fprintf (report_file, "Detected screen failed to reach bottom border of the image\n");
+	fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
       delete map;
       return NULL;
     }

@@ -7,14 +7,20 @@ class analyze_dufay
 {
 public:
   analyze_dufay()
-  : m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0), m_known_pixels (NULL), m_n_known_pixels (0)
+  : m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0), m_contrast (NULL), m_known_pixels (NULL), m_n_known_pixels (0)
   {
   }
+  struct contrast_info
+  {
+    luminosity_t min;
+    luminosity_t max;
+  };
   ~analyze_dufay()
   {
     free (m_red);
     free (m_green);
     free (m_blue);
+    free (m_contrast);
     if (m_known_pixels)
       delete m_known_pixels;
   }
@@ -37,6 +43,11 @@ public:
       y = std::min (std::max (y, 0), m_height - 1);
       return m_green [y * m_width + x];
     }
+
+  contrast_info &get_contrast (int x, int y)
+  {
+    return m_contrast[y * m_width + x];
+  }
   int get_xshift ()
   {
     return m_xshift;
@@ -46,7 +57,10 @@ public:
     return m_yshift;
   }
   bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
+  bool analyze_contrast (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, progress_info *progress = NULL);
   int find_best_match (int percentake, int max_percentage, analyze_dufay &other, int cpfind, int *xshift, int *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
+  luminosity_t compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress);
+
   void set_known_pixels (bitmap_2d *bitmap)
   {
     assert (!m_known_pixels && !m_n_known_pixels);
@@ -61,6 +75,7 @@ public:
 private:
   int m_xshift, m_yshift, m_width, m_height;
   luminosity_t *m_red, *m_green, *m_blue;
+  struct contrast_info *m_contrast;
   bitmap_2d *m_known_pixels;
   int m_n_known_pixels;
 };

@@ -389,16 +389,18 @@ jpg_image_data_loader::init_loader (const char *name, const char **error)
     }
   rgb = inColorspace == 1;
   int pixelFormat = rgb ? TJPF_RGB : TJPF_GRAY;
-  m_img_buf = (unsigned char *)tjAlloc(m_img->width * m_img->height * tjPixelSize[pixelFormat]);
+  //m_img_buf = (unsigned char *)tjAlloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
+  m_img_buf = (unsigned char *)malloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
   if (!m_img_buf)
     {
+	    fprintf (stderr, "%i %i\n", m_img->width, m_img->height);
       *error = "can not allocate decompressed image buffer";
       return false;
     }
   if (tjDecompress2(m_tj_instance, m_jpeg_buf, jpegSize, m_img_buf, m_img->width, 0, m_img->height,
 		    pixelFormat, TJFLAG_ACCURATEDCT) < 0)
     {
-      *error = "can not allocate decompressed image buffer";
+      *error = "jpeg decompression failed";
       return false;
     }
   free (m_jpeg_buf);
