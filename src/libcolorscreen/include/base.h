@@ -1,5 +1,6 @@
 #ifndef BASE_H
 #define BASE_H
+#include <cmath>
 typedef double coord_t;
 
 /* Like modf but always round down.  */

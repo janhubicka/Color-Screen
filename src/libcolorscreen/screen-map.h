@@ -275,6 +275,7 @@ public:
     *xmaxr = xmax;
     *ymaxr = ymax;
   }
+  bool write_outliers_info (const char *filename, int width, int height, scr_to_img &map, const char **error, progress_info *progress);
   int width, height, xshift, yshift;
 private:
   struct coord_entry {coord_t x, y;};

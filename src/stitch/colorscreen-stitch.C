@@ -6,6 +6,7 @@
 #include <tiffio.h>
 #include "../libcolorscreen/icc-srgb.h"
 #include "../libcolorscreen/render-interpolate.h"
+#include "../libcolorscreen/screen-map.h"
 
 namespace {
 
@@ -508,6 +509,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.optimize_colors = stitching_params.optimize_colors;
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
   dsparams.return_known_patches = true;
+  dsparams.return_screen_map = true;
   detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
   mesh_trans = detected.mesh_trans;
   if (!mesh_trans)
@@ -522,6 +524,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
       optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
+      delete detected.smap;
       detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
@@ -553,6 +556,15 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
       my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
+  
+  const char *error;
+  if (!detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, scr_to_img_map, &error, progress))
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Failed to write outliers: %s\n", error);
+      exit (1);
+    }
+  delete detected.smap;
   basic_scr_to_img_map.set_parameters (detected.param, *img);
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
@@ -576,7 +588,6 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
-  const char *error;
   if (stitching_params.screen_tiles && !dufay.write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();

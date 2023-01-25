@@ -612,10 +612,14 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
-#define cpatch(x,y,t, priority) (!slow ? confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited) \
-				 : confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))
-#define cstrip(x,y,t, priority) (!slow ? confirm_strip (color_map, x, y, t, min_patch_size, visited) \
-				 : confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true))
+//#define cpatch(x,y,t, priority) (!slow ? confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited) \
+				 //: confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))
+//#define cstrip(x,y,t, priority) (!slow ? confirm_strip (color_map, x, y, t, min_patch_size, visited) \
+				 //: confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true))
+#define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited)) \
+				 || confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))
+#define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, visited)) \
+				 || confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true))
       if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
 	  && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	{
@@ -925,20 +929,22 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
   {
     scr_to_img map;
     map.set_parameters (ret.param, img);
+    const int range = 10;
     for (int y = -smap->yshift; y < smap->height - smap->yshift; y ++)
       for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
         if (!smap->known_p (x, y))
 	  {
 	    bool found = false;
-	    for (int yy = std::max (y - 10, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + 10) && !found; yy++)
-	      for (int xx = std::max (x - 10, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + 10) && !found; xx++)
+	    for (int yy = std::max (y - range, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range) && !found; yy++)
+	      for (int xx = std::max (x - range * 2, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * 2) && !found; xx++)
 		if (smap->known_p (xx, yy))
 		  found = true;
 	    if (!found)
 	      {
 		coord_t ix, iy;
 		map.to_img (x / 2.0, y, &ix, &iy);
-		smap->set_coord (x, y, ix, iy);
+		if (ix <= ret.xmin || iy < ret.ymin || ix >= ret.xmax || iy >= ret.ymax)
+		  smap->set_coord (x, y, ix, iy);
 	      }
 	    //else
 		//printf ("found %i %i\n",x,y);
@@ -994,7 +1000,10 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
     progress->resume_stdout ();
   
   delete render;
-  delete smap;
+  if (!dsparams->return_screen_map)
+    delete smap;
+  else
+    ret.smap = smap;
   ret.mesh_trans = m;
   return ret;
 }
