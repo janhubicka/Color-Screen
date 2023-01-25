@@ -657,7 +657,7 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
   if (nexpected > 0 && nfound > 1000)
     {
       progress->pause_stdout ();
-      printf ("Analyzed %2.2f%% of the screen area", std::max (nfound * 100.0 / nexpected, 100.0));
+      printf ("Analyzed %2.2f%% of the screen area", std::min (nfound * 100.0 / nexpected, 100.0));
       if (report_file)
 	fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
       printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
