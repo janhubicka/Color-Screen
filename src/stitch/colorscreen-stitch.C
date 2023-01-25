@@ -608,10 +608,10 @@ stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 {
   coord_t ix, iy;
   scr_to_img_map.to_img (sx - xpos, sy - ypos, &ix, &iy);
-  return ix >= (left ? 0 : img->width * 0.02)
-	 && iy >= (top ? 0 : img->height * 0.02)
-	 && ix <= (right ? img->width : img->width * 0.98)
-	 && iy <= (bottom ? img->height : img->height * 0.98);
+  return ix >= (left ? 5 : img->width * 0.02)
+	 && iy >= (top ? 5 : img->height * 0.02)
+	 && ix <= (right ? img->width - 5 : img->width * 0.98)
+	 && iy <= (bottom ? img->height - 5 : img->height * 0.98);
 }
 
 bool
