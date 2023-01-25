@@ -654,6 +654,29 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
   nexpected = 2 * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  if (nexpected > 0 && nfound > 1000)
+    {
+      progress->pause_stdout ();
+      printf ("Analyzed %2.2f%% of the screen area", std::max (nfound * 100.0 / nexpected, 100.0));
+      if (report_file)
+	fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
+      printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
+      if (report_file)
+	fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
+      printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
+      if (report_file)
+	fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
+      printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+      if (report_file)
+	fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+      printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+      if (report_file)
+	fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+      printf ("\n");
+      if (report_file)
+	fprintf (report_file, "\n");
+      progress->resume_stdout ();
+    }
   if (nexpected * dsparams->min_screen_percentage > nfound * 100)
     {
       if (report_file)
@@ -664,26 +687,6 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
       delete map;
       return NULL;
     }
-  progress->pause_stdout ();
-  printf ("Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
-  if (report_file)
-    fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
-  printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
-  if (report_file)
-    fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
-  printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
-  if (report_file)
-    fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
-  printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
-  if (report_file)
-    fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
-  printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
-  if (report_file)
-    fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
-  printf ("\n");
-  if (report_file)
-    fprintf (report_file, "\n");
-  progress->resume_stdout ();
   if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
     {
       if (report_file)
