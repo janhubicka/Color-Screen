@@ -53,7 +53,7 @@ struct stitching_params
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
-    max_avg_distance (1), max_max_distance (10)
+    max_avg_distance (1.5), max_max_distance (10)
   {}
 } stitching_params;
 
@@ -450,9 +450,9 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
       if (distsum / npoints > stitching_params.max_avg_distance)
 	{
 	  progress->pause_stdout ();
-	  printf ("Average distance out of tolerance (--max-avg-distnace parameter)\n");
+	  printf ("Average distance out of tolerance (--max-avg-distance parameter)\n");
 	  if (report_file)
-	    fprintf (report_file, "Average distance out of tolerance (--max-avg-distnace parameter)\n");
+	    fprintf (report_file, "Average distance out of tolerance (--max-avg-distance parameter)\n");
 	  progress->resume_stdout ();
 	  write_stitch_info (progress);
 	  exit (1);
@@ -460,7 +460,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
       if (maxdist > stitching_params.max_max_distance)
 	{
 	  progress->pause_stdout ();
-	  printf ("Maximal distance out of tolerance (--max-max-distnace parameter)\n");
+	  printf ("Maximal distance out of tolerance (--max-max-distanace parameter)\n");
 	  if (report_file)
 	    fprintf (report_file, "Maximal distance out of tolerance (--max-max-distnace parameter)\n");
 	  progress->resume_stdout ();
@@ -1069,8 +1069,8 @@ print_help (const char *filename)
   printf ("  --max-overlap=precentage                    maximal overlap\n");
   printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
   printf ("  --max-contrast=precentage                   report differences in contrast over this threshold\n");
-  printf ("  --max-avx-dstance=npixels                   maximal average distance of real screen patches to estimated ones via affine transform\n");
-  printf ("  --max-max-dstance=npixels                   maximal maximal distance of real screen patches to estimated ones via affine transform\n");
+  printf ("  --max-avg-distance=npixels                  maximal average distance of real screen patches to estimated ones via affine transform\n");
+  printf ("  --max-max-distance=npixels                  maximal maximal distance of real screen patches to estimated ones via affine transform\n");
   printf (" hugin output:\n");
   printf ("  --num-control-points=n                      number of control points for each pair of images\n");
   printf (" other:\n");
@@ -1848,12 +1848,12 @@ main (int argc, char **argv)
 	  stitching_params.hfov = atof (argv[i] + strlen ("--hfov="));
 	  continue;
 	}
-      if (!strncmp (argv[i], "--max-avg-distance=", strlen ("--max-avg-distancee=")))
+      if (!strncmp (argv[i], "--max-avg-distance=", strlen ("--max-avg-distance=")))
 	{
 	  stitching_params.max_avg_distance = atof (argv[i] + strlen ("--max-avg-distance="));
 	  continue;
 	}
-      if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distancee=")))
+      if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distance=")))
 	{
 	  stitching_params.max_max_distance = atof (argv[i] + strlen ("--max-max-distance="));
 	  continue;
