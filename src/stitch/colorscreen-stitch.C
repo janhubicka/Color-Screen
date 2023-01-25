@@ -28,6 +28,7 @@ struct stitching_params
   int min_overlap_percentage;
   int max_overlap_percentage;
   luminosity_t max_contrast;
+  luminosity_t orig_tile_gamma;
 
   int num_control_points;
   int min_screen_percentage;
@@ -48,7 +49,7 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
-    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (15), num_control_points (100), min_screen_percentage (75), hfov (28.534)
+    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534)
   {}
 } stitching_params;
 
@@ -105,6 +106,8 @@ class stitch_image
   bool output;
   int gray_max;
 
+  bool top, bottom, left, right;
+
   stitch_image ()
   : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
   {
@@ -112,11 +115,12 @@ class stitch_image
   ~stitch_image ();
   void load_img (progress_info *);
   void release_img ();
-  void analyze (int skiptop, int skipbottom, int skipleft, int skipright, progress_info *);
+  void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   void output_common_points (FILE *f, stitch_image &other, int n1, int n2);
   bool pixel_known_p (coord_t sx, coord_t sy);
+  bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
@@ -333,10 +337,14 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 }
 
 void
-stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress)
+stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *progress)
 {
   if (analyzed)
     return;
+  top = top_p;
+  bottom = bottom_p;
+  left = left_p;
+  right = right_p;
   if (report_file)
     fprintf (report_file, "\n\nAnalysis of %s\n", filename.c_str ());
   //bitmap_2d *bitmap;
@@ -355,6 +363,10 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
 #endif
   detect_regular_screen_params dsparams;
   dsparams.min_screen_percentage = stitching_params.min_screen_percentage;
+  int skiptop = top ? stitching_params.outer_tile_border : 2;
+  int skipbottom = bottom ? stitching_params.outer_tile_border : 2;
+  int skipleft = left ? stitching_params.outer_tile_border : 2;
+  int skipright = right ? stitching_params.outer_tile_border : 2;
   dsparams.border_top = skiptop;
   dsparams.border_bottom = skipbottom;
   dsparams.border_left = skipleft;
@@ -424,7 +436,8 @@ stitch_image::analyze (int skiptop, int skipbottom, int skipleft, int skipright,
   delete detected.known_patches;
   detected.known_patches = NULL;
   dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
-  dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);
+  if (stitching_params.max_contrast >= 0)
+    dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);
   dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
@@ -454,7 +467,17 @@ stitch_image::pixel_known_p (coord_t sx, coord_t sy)
   int ay = floor (sy) + yshift - ypos;
   if (ax < 0 || ay < 0 || ax >= width || ay >= height)
     return false;
-  return known_pixels->test_bit (ax, ay);
+  return known_pixels->test_range (ax, ay, 2);
+}
+bool
+stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
+{
+  coord_t ix, iy;
+  scr_to_img_map.to_img (sx - xpos, sy - ypos, &ix, &iy);
+  return ix >= (left ? 0 : img->width * 0.02)
+	 && iy >= (top ? 0 : img->height * 0.02)
+	 && ix <= (right ? img->width : img->width * 0.98)
+	 && iy <= (bottom ? img->height : img->height * 0.98);
 }
 
 bool
@@ -474,7 +497,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
 	}
       else
 	lastused = ++current_time;
-      assert (pixel_known_p (sx, sy));
+      //assert (pixel_known_p (sx, sy));
       render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
      case render_original:
@@ -489,7 +512,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
 	}
       else
 	lastused = ++current_time;
-      assert (pixel_known_p (sx, sy));
+      //assert (pixel_known_p (sx, sy));
       render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
       break;
      case render_predictive:
@@ -503,7 +526,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
 	}
       else
 	lastused = ++current_time;
-      assert (pixel_known_p (sx, sy));
+      //assert (pixel_known_p (sx, sy));
       render3->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
     }
@@ -539,6 +562,8 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   int x1, y1, x2, y2;
   int xs = other.xpos - xpos;
   int ys = other.ypos - ypos;
+  if (stitching_params.max_contrast < 0)
+    return;
   luminosity_t ratio = dufay.compare_contrast (other.dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);
   if (ratio < 0)
     {
@@ -777,8 +802,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
 	  coord_t sx, sy;
 	  int r = 0,g = 0,b = 0;
 	  map.final_to_scr (x, y, &sx, &sy);
-	  //printf ("%f %f\n",x,y);
-	  if (pixel_known_p (sx, sy))
+	  if (mode == render_original /*&& 0*/? img_pixel_known_p (sx, sy) : pixel_known_p (sx, sy))
 	    {
 	      if (render_pixel (rparam, passthrough_rparam, sx, sy, mode,&r,&g,&b, progress)
 		  && progress)
@@ -978,10 +1002,7 @@ print_status (FILE *out)
 void
 analyze (int x, int y, progress_info *progress)
 {
-  images[y][x].analyze (!y ? stitching_params.outer_tile_border : 2,
-			y == stitching_params.height - 1 ? stitching_params.outer_tile_border : 2,
-			!x ? stitching_params.outer_tile_border : 2,
-		       	x == stitching_params.width - 1 ? stitching_params.outer_tile_border : 2, progress);
+  images[y][x].analyze (!y, y == stitching_params.height - 1, !x, x == stitching_params.width - 1, progress);
 }
 
 void
@@ -1208,7 +1229,10 @@ open_output_file (const char *outfname, int outwidth, int outheight,
 void stitch (progress_info *progress)
 {
   passthrough_rparam.gamma = rparam.gamma;
-  passthrough_rparam.output_gamma = rparam.gamma;
+  if (stitching_params.orig_tile_gamma > 0)
+    passthrough_rparam.output_gamma = stitching_params.orig_tile_gamma;
+  else
+    passthrough_rparam.output_gamma = rparam.gamma;
   const char *error;
 
   {
@@ -1585,6 +1609,16 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--num-control-points=", strlen ("--num-control-points=")))
 	{
 	  stitching_params.num_control_points = atoi (argv[i] + strlen ("--num-control-points="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
+	{
+	  stitching_params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--orig-tile-gamma=", strlen ("--orig-tile-gamma=")))
+	{
+	  stitching_params.orig_tile_gamma = atof (argv[i] + strlen ("--orig-tile-gamma="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
