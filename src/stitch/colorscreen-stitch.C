@@ -1,4 +1,5 @@
 #include <sys/time.h>
+#include <gsl/gsl_multifit.h>
 #include <string>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/analyze-dufay.h"
@@ -33,6 +34,8 @@ struct stitching_params
   int num_control_points;
   int min_screen_percentage;
   coord_t hfov;
+  coord_t max_avg_distance;
+  coord_t max_max_distance;
 
   int width, height;
   std::string filename[max_dim][max_dim];
@@ -49,7 +52,8 @@ struct stitching_params
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
-    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534)
+    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    max_avg_distance (1), max_max_distance (10)
   {}
 } stitching_params;
 
@@ -101,6 +105,9 @@ class stitch_image
   render_img *render2;
   render_interpolate *render3;
 
+  struct stitch_info {coord_t x,y;
+    		      int sum;} *stitch_info;
+
   int xpos, ypos;
   bool analyzed;
   bool output;
@@ -109,7 +116,7 @@ class stitch_image
   bool top, bottom, left, right;
 
   stitch_image ()
-  : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), refcount (0)
+  : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), stitch_info (NULL), refcount (0)
   {
   }
   ~stitch_image ();
@@ -118,12 +125,13 @@ class stitch_image
   void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
-  void output_common_points (FILE *f, stitch_image &other, int n1, int n2);
+  void output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
+  void write_stitch_info (progress_info *progress);
 private:
   static long current_time;
   static int nloaded;
@@ -144,6 +152,7 @@ stitch_image::~stitch_image ()
   delete mesh_trans;
   delete known_pixels;
   delete screen_detected_patches;
+  delete stitch_info;
 }
 
 void
@@ -280,7 +289,7 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
 
 /* Output common points to hugin pto file.  */
 void
-stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2)
+stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress)
 {
   int n = 0;
   coord_t border = 5 / 100.0;
@@ -299,8 +308,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	      coord_t x1, y1, x2, y2;
 	      mesh_trans->apply (x,y, &x1, &y1);
 	      other.mesh_trans->apply (xx, yy, &x2, &y2);
-	      if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
-	          || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
+	      if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
+	          || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
 		continue;
 	      n++;
 	    }
@@ -309,6 +318,19 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
   if (!n)
     return;
   int step = std::max (n / stitching_params.num_control_points, 1);
+  int npoints = n / step;
+  int nfound = 0;
+  gsl_matrix *X = NULL, *cov = NULL;
+  gsl_vector *vy = NULL, *w = NULL, *c = NULL;
+  if (collect_stitch_info)
+    {
+      X = gsl_matrix_alloc (npoints * 2, 6);
+      vy = gsl_vector_alloc (npoints * 2);
+      w = gsl_vector_alloc (npoints * 2);
+      c = gsl_vector_alloc (6);
+      cov = gsl_matrix_alloc (6, 6);
+    }
+
   for (int y = -yshift, m = 0, next = 0; y < -yshift + height; y++)
     {
       int yy = y + ypos - other.ypos;
@@ -323,16 +345,128 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		coord_t x1, y1, x2, y2;
 		mesh_trans->apply (x,y, &x1, &y1);
 		other.mesh_trans->apply (xx, yy, &x2, &y2);
-		if (x1 < img_width * border || x1 > img_width * (1 - border) || y1 < img_height * border || y1 > img_height * (1 - border)
-		    || x2 < other.img_width * border || x2 > other.img_width * (1 - border) || y2 < other.img_height * border || y2 > other.img_height * (1 - border))
+		if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
+		    || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
 		  continue;
 	        if (m++ == next)
 		  {
 		    next += step;
-		    fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, x1, y1, x2, y2);
+		    if (f)
+		      fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, x1, y1, x2, y2);
+
+		    if (!collect_stitch_info || nfound >= npoints)
+		      continue;
+
+		    gsl_matrix_set (X, nfound * 2, 0, 1.0);
+		    gsl_matrix_set (X, nfound * 2, 1, 0.0);
+		    gsl_matrix_set (X, nfound * 2, 2, x1);
+		    gsl_matrix_set (X, nfound * 2, 3, 0);
+		    gsl_matrix_set (X, nfound * 2, 4, y1);
+		    gsl_matrix_set (X, nfound * 2, 5, 0);
+
+		    gsl_matrix_set (X, nfound * 2+1, 0, 0.0);
+		    gsl_matrix_set (X, nfound * 2+1, 1, 1.0);
+		    gsl_matrix_set (X, nfound * 2+1, 2, 0);
+		    gsl_matrix_set (X, nfound * 2+1, 3, x1);
+		    gsl_matrix_set (X, nfound * 2+1, 4, 0);
+		    gsl_matrix_set (X, nfound * 2+1, 5, y1);
+
+		    gsl_vector_set (vy, nfound * 2, x2);
+		    gsl_vector_set (vy, nfound * 2 + 1, y2);
+		    gsl_vector_set (w, nfound * 2, 1.0);
+		    gsl_vector_set (w, nfound * 2 + 1, 1.0);
+		    nfound++;
 		  }
 	      }
 	  }
+    }
+  if (collect_stitch_info)
+    {
+      double chisq;
+      if (nfound != npoints)
+	abort ();
+      gsl_multifit_linear_workspace * work
+	= gsl_multifit_linear_alloc (npoints*2, 6);
+      gsl_multifit_wlinear (X, w, vy, c, cov,
+			    &chisq, work);
+      gsl_multifit_linear_free (work);
+      coord_t distsum = 0;
+      coord_t maxdist = 0;
+      if (!stitch_info)
+	stitch_info = (struct stitch_info *)calloc ((img_width / 10 + 1) * (img_height / 10 + 1), sizeof (struct stitch_info));
+      if (!other.stitch_info)
+	other.stitch_info = (struct stitch_info *)calloc ((other.img_width / 10 + 1) * (other.img_height / 10 + 1), sizeof (struct stitch_info));
+      npoints = 0;
+#define C(i) (gsl_vector_get(c,(i)))
+      for (int y = -yshift; y < -yshift + height; y++)
+	{
+	  int yy = y + ypos - other.ypos;
+	  if (yy >= -other.yshift && yy < -other.yshift + other.height)
+	    for (int x = -xshift; x < -xshift + width; x++)
+	      {
+		int xx = x + xpos - other.xpos;
+		if (xx >= -other.xshift && xx < -other.xshift + other.width
+		    && screen_detected_patches->test_bit (x + xshift, y + yshift)
+		    && other.screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+		  {
+		    coord_t x1, y1, x2, y2;
+		    mesh_trans->apply (x,y, &x1, &y1);
+		    other.mesh_trans->apply (xx, yy, &x2, &y2);
+		    if (x1 < 0 || x1 >= img_width || y1 < 0 || y1 >= img_height
+			|| x2 < 0 || x2 >= other.img_width || y2 < 0 || y2 > other.img_height)
+		      continue;
+		    coord_t px = C(0) + x1 * C(2) + y1 * C(4);
+		    coord_t py = C(1) + x1 * C(3) + y1 * C(5);
+		    coord_t dist = sqrt ((x2 - px) * (x2 - px) + (y2 - py) * (y2 - py));
+		    distsum += dist;
+		    maxdist = std::max (maxdist, dist);
+		    assert ((((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10 <= (img_width / 10 + 1) * (img_height / 10 + 1));
+		    assert ((((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10 >= 0);
+		    struct stitch_info &info = stitch_info[(((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10];
+		    info.x += fabs(x2-px);
+		    info.y += fabs(y2-py);
+		    info.sum++;
+		    assert ((((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10 <= (other.img_width / 10 + 1) * (other.img_height / 10 + 1));
+		    assert ((((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10 >= 0);
+		    struct stitch_info &info2 = other.stitch_info[(((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10];
+		    info2.x += fabs(x2-px);
+		    info2.y += fabs(y2-py);
+		    info2.sum++;
+		    npoints++;
+		  }
+	      }
+	}
+
+      progress->pause_stdout ();
+      printf ("Overlap of %s and %s avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), distsum / npoints, maxdist);
+      if (report_file)
+        fprintf (report_file, "Overlap of %s and %s avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), distsum / npoints, maxdist);
+      progress->resume_stdout ();
+      gsl_matrix_free (X);
+      gsl_vector_free (vy);
+      gsl_vector_free (w);
+      gsl_vector_free (c);
+      gsl_matrix_free (cov);
+      if (distsum / npoints > stitching_params.max_avg_distance)
+	{
+	  progress->pause_stdout ();
+	  printf ("Average distance out of tolerance (--max-avg-distnace parameter)\n");
+	  if (report_file)
+	    fprintf (report_file, "Average distance out of tolerance (--max-avg-distnace parameter)\n");
+	  progress->resume_stdout ();
+	  write_stitch_info (progress);
+	  exit (1);
+	}
+      if (maxdist > stitching_params.max_max_distance)
+	{
+	  progress->pause_stdout ();
+	  printf ("Maximal distance out of tolerance (--max-max-distnace parameter)\n");
+	  if (report_file)
+	    fprintf (report_file, "Maximal distance out of tolerance (--max-max-distnace parameter)\n");
+	  progress->resume_stdout ();
+	  write_stitch_info (progress);
+	  exit (1);
+	}
     }
 }
 
@@ -697,6 +831,73 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   free (outrow);
   TIFFClose (out);
 }
+void
+stitch_image::write_stitch_info (progress_info *progress)
+{
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Writting geometry info for %s\n", filename.c_str ());
+  if (progress)
+    progress->resume_stdout ();
+
+  std::string prefix = "geometry-";
+  TIFF *out = TIFFOpen ((prefix + filename).c_str (), "wb");
+  if (!out)
+    {
+      //*error = "can not open output file";
+      return;
+    }
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, img_width / 10 + 1)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, img_height / 10 + 1)
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
+      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
+      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
+      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB))
+    {
+      //*error = "write error";
+      return;
+    }
+  uint16_t *outrow = (uint16_t *) malloc ((img_width / 10 + 1) * 2 * 3);
+  if (!outrow)
+    {
+      //*error = "Out of memory allocating output buffer";
+      return;
+    }
+  if (progress)
+    {
+      progress->set_task ("Rendering and saving geometry info", img_height / 10 + 1);
+    }
+  for (int y = 0; y < img_height / 10 + 1; y++)
+    {
+      for (int x =0 ; x < img_width / 10 + 1; x++)
+        {
+	  struct stitch_info &i = stitch_info[y * (img_width / 10 + 1) + x];
+	  if (!i.sum)
+	    {
+	      outrow[x*3] = 0;
+	      outrow[x*3+1] = 0;
+	      outrow[x*3+2] = 65535;
+	    }
+	  else
+	    {
+	      outrow[x*3] = std::min ((i.x / i.sum) * 65535 / 2, (coord_t)65535);
+	      outrow[x*3+1] = std::min ((i.y / i.sum) * 65535 / 2, (coord_t)65535);
+	      outrow[x*3+2] = 0;
+	    }
+        }
+      const char *error;
+      if (!write_row (out, y, outrow, &error, progress))
+        {
+	  free (outrow);
+	  TIFFClose (out);
+	  return;
+        }
+    }
+  free (outrow);
+  TIFFClose (out);
+}
 
 /* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
    File will be 16bit RGB TIFF.
@@ -853,6 +1054,7 @@ print_help (const char *filename)
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
+  printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
   printf (" tiles to ouptut:\n");
   printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
   printf ("  --predictive-tiles                          store predictive tiles (for later blending)\n");
@@ -867,6 +1069,8 @@ print_help (const char *filename)
   printf ("  --max-overlap=precentage                    maximal overlap\n");
   printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
   printf ("  --max-contrast=precentage                   report differences in contrast over this threshold\n");
+  printf ("  --max-avx-dstance=npixels                   maximal average distance of real screen patches to estimated ones via affine transform\n");
+  printf ("  --max-max-dstance=npixels                   maximal maximal distance of real screen patches to estimated ones via affine transform\n");
   printf (" hugin output:\n");
   printf ("  --num-control-points=n                      number of control points for each pair of images\n");
   printf (" other:\n");
@@ -1068,7 +1272,7 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
       for (int y2 = 0; y2 < stitching_params.height; y2++)
         for (int x2 = 0; x2 < stitching_params.width; x2++)
 	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
-	    images[y][x].output_common_points (f, images[y2][x2], y * stitching_params.width + x, y2 * stitching_params.width + x2);
+	    images[y][x].output_common_points (f, images[y2][x2], y * stitching_params.width + x, y2 * stitching_params.width + x2, false, progress);
   fclose (f);
 }
 
@@ -1102,8 +1306,12 @@ determine_positions (progress_info *progress)
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
 	  images[y-1][0].compare_contrast_with (images[y][0], progress);
+	  images[y-1][0].output_common_points (NULL, images[y][0], 0, 0, true, progress);
 	  if (stitching_params.width)
-	    images[y-1][1].compare_contrast_with (images[y][0], progress);
+	    {
+	      images[y-1][1].compare_contrast_with (images[y][0], progress);
+	      images[y-1][1].output_common_points (NULL, images[y][0], 0, 0, true, progress);
+	    }
 	  if (stitching_params.panorama_map)
 	    {
 	      progress->pause_stdout ();
@@ -1161,11 +1369,17 @@ determine_positions (progress_info *progress)
 	  if (y)
 	    {
 	      images[y-1][x+1].compare_contrast_with (images[y][x], progress);
+	      images[y-1][x+1].output_common_points (NULL, images[y][x], 0, 0, true, progress);
 	      images[y-1][x+1].compare_contrast_with (images[y][x+1], progress);
+	      images[y-1][x+1].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
 	      if (x + 2 < stitching_params.width)
-	        images[y-1][x+1].compare_contrast_with (images[y][x+2], progress);
+	      {
+	         images[y-1][x+1].compare_contrast_with (images[y][x+2], progress);
+	         images[y-1][x+1].output_common_points (NULL, images[y][x+2], 0, 0, true, progress);
+	      }
 	    }
 	  images[y][x].compare_contrast_with (images[y][x+1], progress);
+          images[y][x].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
 	  if (report_file)
 	    fflush (report_file);
 	}
@@ -1311,6 +1525,9 @@ void stitch (progress_info *progress)
 
   int xmin, ymin, xmax, ymax;
   determine_viewport (xmin, xmax, ymin, ymax);
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+      images[y][x].write_stitch_info (progress);
 
   const coord_t xstep = pixel_size, ystep = pixel_size;
   passthrough_rparam.gray_max = images[0][0].gray_max;
@@ -1629,6 +1846,16 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--hfov=", strlen ("--hfove=")))
 	{
 	  stitching_params.hfov = atof (argv[i] + strlen ("--hfov="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-avg-distance=", strlen ("--max-avg-distancee=")))
+	{
+	  stitching_params.max_avg_distance = atof (argv[i] + strlen ("--max-avg-distance="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distancee=")))
+	{
+	  stitching_params.max_max_distance = atof (argv[i] + strlen ("--max-max-distance="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))
