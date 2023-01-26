@@ -88,7 +88,7 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
 bool
 confirm_strip (color_class_map *color_map,
 	       coord_t x, coord_t y, scr_detect::color_class c,
-	       int min_patch_size, bitmap_2d *visited)
+	       int min_patch_size, int *priority, bitmap_2d *visited)
 {
   patch_entry entries[min_patch_size + 1];
   int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
@@ -100,6 +100,7 @@ confirm_strip (color_class_map *color_map,
     //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size)
     return false;
+  *priority = 7;
   return true;
 }
 
@@ -179,7 +180,8 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
       int ry = rbpatches[r - 1][0].y + patch_stepx;
       int nx = rbpatches[r - 1][0].x - 2*patch_stepy;
       int ny = rbpatches[r - 1][0].y + 2*patch_stepx;
-      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, NULL))
+      int priority;
+      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, &priority, NULL))
 	 {
 	  if (report_file && verbose)
 	    fprintf (report_file, "Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
@@ -625,7 +627,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
-#define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, visited)) \
+#define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)))
       if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
 	  && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
