@@ -235,7 +235,7 @@ bool
 confirm_patch (FILE *report_file, color_class_map *color_map,
 	       coord_t x, coord_t y, scr_detect::color_class c,
 	       int min_patch_size, int max_patch_size, coord_t max_distance,
-	       coord_t *cx, coord_t *cy, bitmap_2d *visited)
+	       coord_t *cx, coord_t *cy, int *priority, bitmap_2d *visited)
 {
   patch_entry entries[max_patch_size + 1];
   const char *fail = NULL;
@@ -249,10 +249,21 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
   if (report_file && fail && verbose)
     fprintf (report_file, "size: %i (expecting %i...%i) coord: %f %f center %f %f color %i%s\n", size, min_patch_size, max_patch_size,x,y, *cx, *cy, (int)c, fail ? fail : "");
   //printf ("center %f %f\n", *cx, *cy);
-  return !fail;
+  if (fail)
+    return false;
+  coord_t dist = (*cx - x) * (*cx - x) + (*cy - y) * (*cy - y);
+  if (dist < max_distance * max_distance / 128)
+    *priority = 7;
+  else if (dist < max_distance * max_distance / 32)
+    *priority = 6;
+  else if (dist < max_distance * max_distance / 8)
+    *priority = 5;
+  else
+    *priority = 4;
+  return true;
 }
 
-#define N_PRIORITIES 4
+#define N_PRIORITIES 8
 
 bool
 confirm (render_scr_detect *render,
@@ -612,7 +623,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
-#define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited)) \
+#define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)))
