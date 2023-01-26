@@ -24,6 +24,7 @@ struct stitching_params
   bool optimize_colors;
   bool reoptimize_colors;
   bool slow_floodfill;
+  bool fast_floodfill;
   bool limit_directions;
 
   int outer_tile_border;
@@ -52,7 +53,7 @@ struct stitching_params
 
   stitching_params ()
   : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), limit_directions (true),
+    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
@@ -508,6 +509,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.border_right = skipright;
   dsparams.optimize_colors = stitching_params.optimize_colors;
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
+  dsparams.fast_floodfill = stitching_params.fast_floodfill;
   dsparams.return_known_patches = true;
   dsparams.return_screen_map = true;
   detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
@@ -525,6 +527,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
       delete mesh_trans;
       delete detected.known_patches;
       delete detected.smap;
+      dsparams.optimize_colors = false;
       detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!mesh_trans)
@@ -1090,7 +1093,8 @@ print_help (const char *filename)
   printf ("  --optimize-colors                           auto-optimize screen colors (default)\n");
   printf ("  --no-optimize-colors                        do not auto-optimize screen colors\n");
   printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
-  printf ("  --slow-floodfill                            use slower but hopefully more precise discovery of patches\n");
+  printf ("  --slow-floodfill                            use unly slower discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --fast-floodfill                            use unly faster discovery of patches (by default both slow and fast methods are used)\n");
   printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
 }
 
@@ -1783,6 +1787,11 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--slow-floodfill"))
 	{
 	  stitching_params.slow_floodfill = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--fast-floodfill"))
+	{
+	  stitching_params.fast_floodfill = true;
 	  continue;
 	}
       if (!strcmp (argv[i], "--outer-tile-border"))

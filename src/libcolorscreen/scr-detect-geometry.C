@@ -557,7 +557,7 @@ public:
 };
 
 screen_map *
-flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
+flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
   double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
@@ -612,14 +612,10 @@ flood_fill (FILE *report_file, bool slow, coord_t greenx, coord_t greeny, scr_to
 	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
-//#define cpatch(x,y,t, priority) (!slow ? confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited) \
-				 //: confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))
-//#define cstrip(x,y,t, priority) (!slow ? confirm_strip (color_map, x, y, t, min_patch_size, visited) \
-				 //: confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true))
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, visited)) \
-				 || confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, visited)) \
-				 || confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)))
       if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
 	  && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	{
@@ -829,7 +825,7 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 		    }
 		  visited.clear ();
 		  simple_solver (&param, img, sparam, progress);
-		  smap = flood_fill (report_file, dsparams->slow_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
+		  smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		  if (!smap)
 		    {
 		      if (progress)
