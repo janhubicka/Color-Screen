@@ -1,19 +1,17 @@
 #ifndef ANALYZE_PAGET_H
+#define ANALYZE_PAGET_H
 #include "render-to-scr.h"
-#include "progress-info.h"
-#include "bitmap.h"
-class analyze_paget
+#include "analyze-base.h"
+class analyze_paget : public analyze_base
 {
 public:
+  /* Two blues per X coordinate.  */
   analyze_paget()
-  : m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0)
+  : analyze_base (0, 1, 0, 1, 1, 1)
   {
   }
   ~analyze_paget()
   {
-    free (m_red);
-    free (m_green);
-    free (m_blue);
   }
   luminosity_t &blue (int x, int y)
     {
@@ -39,6 +37,21 @@ public:
     *xx = x - y;
     *yy = x + y;
   }
+  inline static void from_diagonal_coordinates (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
+  {
+    *xx = x + y;
+    *yy = -x + y;
+  }
+  inline static void to_diagonal_coordinates (int x, int y, int *xx, int *yy)
+  {
+    *xx = x - y;
+    *yy = x + y;
+  }
+  inline static void from_diagonal_coordinates (int x, int y, int *xx, int *yy)
+  {
+    *xx = x + y;
+    *yy = -x + y;
+  }
   /* Green pixel in diagonal coordinates.  */
   luminosity_t &diag_green (unsigned int x, unsigned int y)
   {
@@ -53,17 +66,9 @@ public:
      unsigned int yy = -x + y;
      return red (xx / 2, yy);
   }
-  int get_xshift ()
-  {
-    return m_xshift;
-  }
-  int get_yshift ()
-  {
-    return m_yshift;
-  }
   bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
+  virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
+  virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
 private:
-  int m_xshift, m_yshift, m_width, m_height;
-  luminosity_t *m_red, *m_green, *m_blue;
 };
 #endif

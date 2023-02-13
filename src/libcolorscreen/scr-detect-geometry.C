@@ -5,10 +5,10 @@
 #include "include/bitmap.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"
+#include "include/analyze-paget.h"
 namespace
 {
-  const bool verbose = false;
-
+const bool verbose = false;
 struct patch_entry
 {
 	int x, y;
@@ -104,15 +104,16 @@ confirm_strip (color_class_map *color_map,
   return true;
 }
 
+const int npatches = 5;
+struct patch_info
+{
+  coord_t x, y;
+};
+
 bool
 try_guess_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
   const int max_size = 200;
-  const int npatches = 5;
-  struct patch_info
-  {
-    coord_t x, y;
-  };
   struct patch_info rbpatches[npatches][npatches*2];
   patch_entry entries[max_size];
   int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited);
@@ -234,6 +235,258 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 }
 
 bool
+try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
+{
+  const int max_size = 1000;
+  struct patch_info rpatches[npatches][npatches];
+  struct patch_info gpatches[npatches][npatches];
+  struct patch_info bpatches[npatches*2][npatches];
+  patch_entry entries[max_size];
+  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited);
+  if (size == 0 || size == max_size)
+    return false;
+  if (!patch_center (entries, size, &gpatches[0][0].x, &gpatches[0][0].y))
+    return false;
+  if (report_file && verbose)
+    {
+      fprintf (report_file, "Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
+    }
+
+  bool patch_found = false;
+
+  for (int i = 0; i < size && !patch_found; i++)
+    {
+      int x = entries[i].x;
+      for (y = entries[i].y + 1; y < color_map.height && !patch_found; y++)
+	{
+	  scr_detect::color_class t = color_map.get_class (x, y);
+	  if (t == scr_detect::blue)
+	    {
+	      /* Do not mark as visited so we can revisit.  */
+	      int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, NULL);
+	      patch_found = patch_center (entries, size, &bpatches[0][0].x, &bpatches[0][0].y);
+	    }
+	  else if (t != scr_detect::unknown)
+	    break;
+	}
+    }
+  if (!patch_found)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Blue patch not found\n");
+      return false;
+    }
+  /* Bellow green dot should be two blue dots.  */
+  coord_t b1patch_stepx = bpatches[0][0].x - gpatches[0][0].x;
+  coord_t b1patch_stepy = bpatches[0][0].y - gpatches[0][0].y;
+  coord_t b2patch_stepx = b1patch_stepy;
+  coord_t b2patch_stepy = -b1patch_stepx;
+  coord_t bx, by;
+  size = find_patch (color_map, scr_detect::blue, gpatches[0][0].x + b2patch_stepx, gpatches[0][0].y + b2patch_stepy, max_size, entries, NULL);
+  if (!size || size == max_size)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Second Blue patch not found\n");
+    }
+  patch_found = patch_center (entries, size, &bx, &by);
+  if (!patch_found || (bx == bpatches[0][0].x && by == bpatches[0][0].y))
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Center of second Blue patch not found\n");
+      return false;
+    }
+  if (b1patch_stepx < 0)
+    {
+      std::swap (b1patch_stepx, b2patch_stepx);
+      std::swap (b1patch_stepy, b2patch_stepy);
+      std::swap (bpatches[0][0].x, bx);
+      std::swap (bpatches[0][0].y, by);
+    }
+  coord_t gpatch_stepx = (bpatches[0][0].x - gpatches[0][0].x) * 2;
+  coord_t gpatch_stepy = (bpatches[0][0].y - gpatches[0][0].y) * 2;
+  size = find_patch (color_map, scr_detect::green, gpatches[0][0].x + gpatch_stepx, gpatches[0][0].y + gpatch_stepy, max_size, entries, NULL);
+  if (!size || size == max_size)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Second green patch not found\n");
+      return false;
+    }
+  patch_found = patch_center (entries, size, &gpatches[0][1].x, &gpatches[0][1].y);
+  if (!patch_found)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Second green patch not found\n");
+      return false;
+    }
+  coord_t patch_stepx = (gpatches[0][1].x - gpatches[0][0].x) / 2;
+  coord_t patch_stepy = (gpatches[0][1].y - gpatches[0][0].y) / 2;
+  coord_t opatch_stepx = patch_stepy;
+  coord_t opatch_stepy = -patch_stepx;
+  size = find_patch (color_map, scr_detect::blue, gpatches[0][1].x + patch_stepx, gpatches[0][1].y + patch_stepy, max_size, entries, NULL);
+  if (!size || size == max_size)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Third blue patch not found\n");
+      return false;
+    }
+  patch_found = patch_center (entries, size, &bpatches[0][1].x, &bpatches[0][1].y);
+  if (!patch_found)
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Third blue patch not found\n");
+      return false;
+    }
+
+  //fprintf (report_file, "green %f %f blue +%f +%f green +%f +%f blue +%f +%f\n", gpatches[0][0].x, gpatches[0][0].y, bpatches[0][0].x-gpatches[0][0].x, bpatches[0][0].y-gpatches[0][0].y, gpatches[0][1].x-bpatches[0][0].x, gpatches[0][1].y-bpatches[0][0].y, bpatches[0][1].x-gpatches[0][1].x, bpatches[0][1].y-gpatches[0][1].y);
+  if (report_file && verbose)
+    fprintf (report_file, "found green patch of size %i and center %f %f guessing patch distance %f %f\n", size, gpatches[0][1].x, gpatches[0][1].y, patch_stepx, patch_stepy);
+#if 0
+  if (!report_file && verbose)
+    report_file = stdout;
+#endif
+  for (int p = 2; p < npatches; p++)
+    {
+      int nx = bpatches[0][p - 1].x + patch_stepx;
+      int ny = bpatches[0][p - 1].y + patch_stepy;
+      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
+      if (size == 0 || size == max_size)
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Failed to guess green patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	  return 0;
+	}
+      if (!patch_center (entries, size, &gpatches[0][p].x, &gpatches[0][p].y))
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	  return 0;
+	}
+
+      nx = gpatches[0][p].x + patch_stepx;
+      ny = gpatches[0][p].y + patch_stepy;
+      size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+      if (size == 0 || size == max_size)
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Failed to guess blue patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	  return 0;
+	}
+      if (!patch_center (entries, size, &bpatches[0][p].x, &bpatches[0][p].y))
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	  return 0;
+	}
+
+#if 0
+      nx = gpatches[0][p].x + opatch_stepx;
+      ny = gpatches[0][p].y + opatch_stepy;
+      size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+      if (size == 0 || size == max_size)
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Failed to guess 2nd blue patch 0, %i with steps %f %f\n", p, opatch_stepx, opatch_stepy);
+	  return 0;
+	}
+      if (!patch_center (entries, size, &bpatches[0][p].x, &bpatches[0][p].y))
+	{
+	  if (report_file && verbose)
+	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	  return 0;
+	}
+#endif
+      patch_stepx = (gpatches[0][p].x - gpatches[0][0].x) / p / 2;
+      patch_stepy = (gpatches[0][p].y - gpatches[0][0].y) / p / 2;
+    }
+  for (int p = 0; p < npatches; p++)
+  {
+    for (int q = 1; q < npatches * 2; q++)
+      if (q & 1)
+	{
+	  int nx = gpatches[(q-1)/2][p].x + opatch_stepx;
+	  int ny = gpatches[(q-1)/2][p].y + opatch_stepy;
+	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+	  if (size == 0 || size == max_size)
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+	      return 0;
+	    }
+	  if (!patch_center (entries, size, &bpatches[q][p].x, &bpatches[q][p].y))
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+	      return 0;
+	    }
+	  nx = bpatches[q-1][p].x + opatch_stepx;
+	  ny = bpatches[q-1][p].y + opatch_stepy;
+	  size = find_patch (color_map, scr_detect::red, nx, ny, max_size, entries, NULL);
+	  if (size == 0 || size == max_size)
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Failed to guess red patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+	      return 0;
+	    }
+	  if (!patch_center (entries, size, &rpatches[q/2][p].x, &rpatches[q/2][p].y))
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+	      return 0;
+	    }
+	}
+      else
+	{
+	  int nx = bpatches[q-1][p].x + opatch_stepx;
+	  int ny = bpatches[q-1][p].y + opatch_stepy;
+	  size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
+	  if (size == 0 || size == max_size)
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Failed to guess green patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+	      return 0;
+	    }
+	  if (!patch_center (entries, size, &gpatches[q/2][p].x, &gpatches[q/2][p].y))
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+	      return 0;
+	    }
+	  nx = rpatches[(q-1)/2][p].x + opatch_stepx;
+	  ny = rpatches[(q-1)/2][p].y + opatch_stepy;
+	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+	  if (size == 0 || size == max_size)
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+	      return 0;
+	    }
+	  if (!patch_center (entries, size, &bpatches[q][p].x, &bpatches[q][p].y))
+	    {
+	      if (report_file && verbose)
+		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+	      return 0;
+	    }
+      }
+  }
+
+  sparam.remove_points ();
+  for (int r = 0; r < npatches; r++)
+    for (int p = 0; p < npatches; p++)
+    {
+      sparam.add_point (gpatches[r][p].x, gpatches[r][p].y, (r+p)/2.0, (p-r)/2.0, solver_parameters::green);
+      //sparam.add_point (rpatches[r][p].x, bpatches[r][p].y, r, p, solver_parameters::red);
+      sparam.add_point (bpatches[r*2][p].x, bpatches[r*2][p].y, (r+p+0.5)/2.0, (p-r+0.5)/2.0, solver_parameters::blue);
+      //sparam.add_point (bpatches[r*2+1][p].x, bpatches[r*2+1][p].y, r, p, solver_parameters::blue);
+    }
+  if (verbose)
+    {
+      printf ("Initial screen found\n");
+    }
+
+  return true;
+}
+
+bool
 confirm_patch (FILE *report_file, color_class_map *color_map,
 	       coord_t x, coord_t y, scr_detect::color_class c,
 	       int min_patch_size, int max_patch_size, coord_t max_distance,
@@ -278,7 +531,9 @@ confirm (render_scr_detect *render,
 {
   coord_t bestcy = x, bestcx = y, minsum = 0, bestinner = 0, bestouter = 0;
   const int sample_steps = 2;
-  const coord_t pixel_step = 0.1;
+  // TODO: Works for Dufay.  */
+  //const coord_t pixel_step = 0.1;
+  const coord_t pixel_step = 1;
   bool found = false;
   int xmin = ceil (std::min (std::min (coordinate1_x / 8, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
   int xmax = ceil (std::max (std::max (coordinate1_x / 6, coordinate2_x / 6), std::max (-coordinate1_x / 6, -coordinate2_x / 6)));
@@ -569,6 +824,14 @@ public:
   }
 };
 
+static solver_parameters::point_color
+diagonal_coordinates_to_color (int x, int y)
+{
+  if (!(y&1))
+    return (x&1) ? solver_parameters::blue : solver_parameters::green;
+  return (x&1) ? solver_parameters::red : solver_parameters::blue;
+}
+
 screen_map *
 flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
 {
@@ -580,7 +843,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     return NULL;
 
   /* Do not flip the image.  */
-  if (param.coordinate1_y < 0)
+  if (param.type == Dufay && param.coordinate1_y < 0)
     return NULL;
 
   scr_to_img scr_map;
@@ -588,21 +851,31 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
   int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
   int min_patch_size = std::max ((int)(screen_xsize * screen_ysize / 5), 1);
+
+  /* Dufay has 2 square patch and one strip per screen tile, while Paget/Finlay has 8 squares.  */
+  if (param.type != Dufay)
+    {
+      max_patch_size /= 2;
+      min_patch_size /= 2;
+    }
   coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
   int nfound = 1;
 
   int xshift, yshift, width, height;
   scr_map.get_range (img.width, img.height, &xshift, &yshift, &width, &height);
-  int nexpected = 2 * img.width * img.height / (screen_xsize * screen_ysize);
+  int nexpected = (param.type != Dufay ? 4 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
+  //printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
   if (report_file)
     fprintf (report_file, "Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
   if (progress)
     progress->set_task ("Flood fill", nexpected);
-  screen_map *map = new screen_map(xshift * 2, yshift, width * 2, height);
+  screen_map *map = new screen_map(param.type, xshift * 2, yshift * (param.type == Dufay ? 1 : 2), width * 2, height * (param.type == Dufay ? 1 : 2));
 
   struct queue_entry
   {
-    int scr_xm2, scr_y;
+    /* X and Y inscreen specific coordinates so all points appear at integer
+       for Dufay X is multiplied by 2; for paget these are diagonal coordinates.  */
+    int scr_x, scr_y;
     coord_t img_x, img_y;
   };
   priority_queue<N_PRIORITIES,queue_entry> queue;
@@ -618,59 +891,87 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       int priority = 0;
       int priority2 = 0;
       //if (verbose)
-        //printf ("visiting %i %i %f %f %f %f\n", e.scr_xm2, e.scr_y, e.img_x, e.img_y, param.coordinate1_x, param.coordinate1_y);
+        //printf ("visiting %i %i %f %f %f %f\n", e.scr_x, e.scr_y, e.img_x, e.img_y, param.coordinate1_x, param.coordinate1_y);
       if (progress)
         progress->inc_progress ();
-      if (sparam)
-	sparam->add_point (e.img_x, e.img_y, e.scr_xm2 / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
+      if (param.type == Dufay)
+	{
+	  if (sparam)
+	    sparam->add_point (e.img_x, e.img_y, e.scr_x / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
 
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
 				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)))
-      if (!map->known_p (e.scr_xm2 - 1, e.scr_y)
-	  && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_xm2 - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
-	{
-	  map->safe_set_coord (e.scr_xm2 - 1, e.scr_y, ix, iy);
-	  queue.insert ((struct queue_entry){e.scr_xm2 - 1, e.scr_y, ix, iy}, priority);
-	  nfound++;
-	}
-      if (!map->known_p (e.scr_xm2 + 1, e.scr_y)
-	  && cpatch (e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_xm2 + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
-	{
-	  map->safe_set_coord (e.scr_xm2 + 1, e.scr_y, ix, iy);
-	  queue.insert ((struct queue_entry){e.scr_xm2 + 1, e.scr_y, ix, iy}, priority);
-	  nfound++;
-	}
-      if (!map->known_p (e.scr_xm2, e.scr_y - 1)
-	  && cstrip (e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, priority)
-	  && cpatch (e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, priority2))
-	{
-	  map->safe_set_coord (e.scr_xm2, e.scr_y - 1, ix, iy);
-	  queue.insert ((struct queue_entry){e.scr_xm2, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
-	  nfound++;
-	}
-      if (!map->known_p (e.scr_xm2, e.scr_y + 1)
-	  && cstrip (e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, priority)
-	  && cpatch (e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_xm2 & 1) ? scr_detect::blue : scr_detect::green, priority2))
-	{
-	  map->safe_set_coord (e.scr_xm2, e.scr_y + 1, ix, iy);
-	  queue.insert ((struct queue_entry){e.scr_xm2, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
-	  nfound++;
-	}
-#undef cpatch
+	  if (!map->known_p (e.scr_x - 1, e.scr_y)
+	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	    {
+	      map->safe_set_coord (e.scr_x - 1, e.scr_y, ix, iy);
+	      queue.insert ((struct queue_entry){e.scr_x - 1, e.scr_y, ix, iy}, priority);
+	      nfound++;
+	    }
+	  if (!map->known_p (e.scr_x + 1, e.scr_y)
+	      && cpatch (e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_x + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	    {
+	      map->safe_set_coord (e.scr_x + 1, e.scr_y, ix, iy);
+	      queue.insert ((struct queue_entry){e.scr_x + 1, e.scr_y, ix, iy}, priority);
+	      nfound++;
+	    }
+	  if (!map->known_p (e.scr_x, e.scr_y - 1)
+	      && cstrip (e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, priority)
+	      && cpatch (e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	    {
+	      map->safe_set_coord (e.scr_x, e.scr_y - 1, ix, iy);
+	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
+	      nfound++;
+	    }
+	  if (!map->known_p (e.scr_x, e.scr_y + 1)
+	      && cstrip (e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, priority)
+	      && cpatch (e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	    {
+	      map->safe_set_coord (e.scr_x, e.scr_y + 1, ix, iy);
+	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
+	      nfound++;
+	    }
 #undef cstrip
+	}
+      else
+	{
+	  int normal_scr_x, normal_scr_y;
+	  if (sparam)
+	    {
+	      analyze_paget::from_diagonal_coordinates (e.scr_x, e.scr_y, &normal_scr_x, &normal_scr_y);
+	      solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x, e.scr_y);
+	      if (sparam)
+		sparam->add_point (e.img_x, e.img_y, normal_scr_x / 2.0, normal_scr_y / 2.0, color);
+	    }
+	  for (int xx = -1; xx <= 1; xx++)
+	    for (int yy = -1; yy <= 1; yy++)
+	      if ((xx || yy) && !map->known_p (e.scr_x + xx, e.scr_y + yy))
+		{
+		  int ax, ay;
+	          analyze_paget::from_diagonal_coordinates (xx, yy, &ax, &ay);
+		  solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x + xx, e.scr_y + yy);
+		  if (cpatch (e.img_x + ax * param.coordinate1_x / 4 + ay * param.coordinate2_x / 4, e.img_y + ax * param.coordinate1_y / 4 + ay * param.coordinate2_y / 4, (scr_detect::color_class)color, priority))
+		    {
+		      map->safe_set_coord (e.scr_x + xx, e.scr_y + yy, ix, iy);
+		      queue.insert ((struct queue_entry){e.scr_x + xx, e.scr_y + yy, ix, iy}, priority);
+		      nfound++;
+		    }
+		}
+#undef cpatch
+	}
     }
   /* Dufay screen has two points per screen repetetion.  */
   *npatches = nfound;
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
-  nexpected = 2 * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  nexpected = (param.type != Dufay ? 4 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
   if (nexpected > 0 && nfound > 1000)
     {
       progress->pause_stdout ();
-      printf ("Analyzed %2.2f%% of the screen area", std::min (nfound * 100.0 / nexpected, 100.0));
+      printf ("Analyzed %2.2f%% of the screen area", /*std::min (*/nfound * 100.0 / nexpected/*, 100.0)*/);
       if (report_file)
 	fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
       printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
@@ -773,16 +1074,18 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 {
   detected_screen ret;
   render_parameters empty;
+  enum scr_type type = Finlay;
 
   empty.gamma = gamma;
   ret.mesh_trans = NULL;
   ret.known_patches = NULL;
   ret.smap = NULL;
+  ret.param.type = type;
   render_scr_detect *render = NULL;
   bitmap_2d visited (img.width, img.height);
   scr_to_img_parameters param;
   screen_map *smap = NULL;
-  param.type = Dufay;
+  param.type = type;
 
   const int search_xsteps = 6;
   const int search_ysteps = 6;
@@ -827,13 +1130,13 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
 	  for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
 	    {
-	      if (try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
+	      if (type == Dufay ? try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress)
+		  : try_guess_paget_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		{
 		  nattempts++;
-		  if (verbose)
+	          if (report_file && verbose)
 		    {
-		      if (report_file && verbose)
-			fprintf (report_file, "Initial grid found at:\n");
+		      fprintf (report_file, "Initial grid found at:\n");
 		      sparam.dump (report_file);
 		    }
 		  visited.clear ();
@@ -917,11 +1220,15 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	  next += step;
 	  coord_t ix, iy;
 	  smap->get_coord (x, y, &ix, &iy);
-	  sparam.add_point (ix, iy, x / 2.0, y, x & 1 ? solver_parameters::blue : solver_parameters::green);
+	  coord_t sx, sy;
+	  solver_parameters::point_color color;
+	  smap->get_screen_coord (x, y, &sx, &sy, &color);
+	  sparam.add_point (ix, iy, sx, sy, color);
 	}
 
-  ret.param.type = Dufay;
+  ret.param.type = type;
   simple_solver (&ret.param, img, sparam, progress);
+  //printf ("Solved as:%f %f %f %f\n", ret.param.coordinate1_x, ret.param.coordinate1_y, ret.param.coordinate2_x, ret.param.coordinate2_y);
   if (report_file)
     {
       fprintf (report_file, "Detected geometry\n");
@@ -951,7 +1258,9 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	    if (!found)
 	      {
 		coord_t ix, iy;
-		map.to_img (x / 2.0, y, &ix, &iy);
+		coord_t sx, sy;
+		smap->get_screen_coord (x, y, &sx, &sy);
+		map.to_img (sx, sy, &ix, &iy);
 		if (ix <= ret.xmin || iy < ret.ymin || ix >= ret.xmax || iy >= ret.ymax)
 		  smap->set_coord (x, y, ix, iy);
 	      }
@@ -976,9 +1285,10 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
   m->precompute_inverse ();
   if (progress)
     progress->set_task ("Determinig solver points", 1);
+#if 1
   sparam.remove_points ();
-  for (int y = 0; y < img.height; y += img.height / ysteps)
-    for (int x = 0; x < img.width; x += img.width / xsteps)
+  for (int y = img.height / (ysteps + 2); y < img.height - img.height / (ysteps + 2); y += img.height / (ysteps + 2))
+    for (int x = img.width / (xsteps + 2); x < img.width - img.height / (ysteps + 2); x += img.width / (xsteps + 2))
       {
 	coord_t sx, sy;
 	coord_t ix, iy;
@@ -988,18 +1298,35 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	m->apply (sx, sy, &ix, &iy);
 	sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
       }
+#endif
 
 
   if (dsparams->return_known_patches)
     {
-      ret.xshift = smap->xshift / 2;
-      ret.yshift = smap->yshift;
-      ret.known_patches = new bitmap_2d (smap->width / 2, smap->height);
-      for (int y = 0; y < smap->height; y ++)
-	for (int x = 0; x < smap->width / 2; x ++)
-	  if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift)
-	      && smap->known_p (x * 2 - ret.xshift * 2 + 1, y - ret.yshift))
-	    ret.known_patches->set_bit (x, y);
+      if (type == Dufay)
+	{
+	  ret.xshift = smap->xshift / 2;
+	  ret.yshift = smap->yshift;
+	  ret.known_patches = new bitmap_2d (smap->width / 2, smap->height);
+	  for (int y = 0; y < smap->height; y ++)
+	    for (int x = 0; x < smap->width / 2; x ++)
+	      if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift)
+		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y - ret.yshift))
+		ret.known_patches->set_bit (x, y);
+	}
+      else
+	{
+	  ret.xshift = smap->xshift / 2;
+	  ret.yshift = smap->yshift / 2;
+	  ret.known_patches = new bitmap_2d (smap->width / 2, smap->height / 2);
+	  for (int y = 0; y < smap->height / 2; y ++)
+	    for (int x = 0; x < smap->width / 2; x ++)
+	      if (smap->known_p (x * 2 - ret.xshift * 2, y * 2 - ret.yshift)
+		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y * 2 - ret.yshift)
+		  && smap->known_p (x * 2 - ret.xshift * 2, y * 2 - ret.yshift + 1)
+		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y * 2 - ret.yshift + 1))
+		ret.known_patches->set_bit (x, y);
+	}
     }
   if (progress)
     progress->pause_stdout ();

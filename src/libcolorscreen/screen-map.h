@@ -2,12 +2,13 @@
 #define SCREEN_MAP_H
 #include <limits>
 #include "include/solver.h"
+#include "include/analyze-paget.h"
 class
 screen_map
 {
 public:
-  screen_map (int xshift1, int yshift1, int width1, int height1)
-  : width (width1), height (height1), xshift (xshift1), yshift (yshift1)
+  screen_map (enum scr_type type1, int xshift1, int yshift1, int width1, int height1)
+  : type (type1), width (width1), height (height1), xshift (xshift1), yshift (yshift1)
   {
     map = (coord_entry *)calloc (width * height, sizeof (coord_entry));
   }
@@ -70,12 +71,47 @@ public:
     *img_x = map[y * width + x].x;
     *img_y = map[y * width + x].y;
   }
+  void get_screen_coord (int x, int y, coord_t *scr_x, coord_t *scr_y, solver_parameters::point_color *color = NULL)
+  {
+    if (type == Dufay)
+      {
+	*scr_x = x / 2.0;
+	*scr_y = y;
+	if (!color)
+	  return;
+	*color = (x & 1) ? solver_parameters::blue : solver_parameters::green;
+      }
+    else
+      {
+        analyze_paget::from_diagonal_coordinates (x, y, scr_x, scr_y);
+	*scr_x /= 4.0;
+	*scr_y /= 4.0;
+	if (!color)
+	  return;
+        if (!(y & 1))
+	  *color = (x & 1) ? solver_parameters::blue : solver_parameters::green;
+	else
+	  *color = (x & 1) ? solver_parameters::red : solver_parameters::blue;
+      }
+  }
   void get_solver_points_nearby (coord_t sx, coord_t sy, int n, solver_parameters &sparams)
   {
     int npoints = 0;
     // TODO: Round properly
-    int x = sx * 2;
-    int y = sy;
+    int x;
+    int y;
+    if (type == Dufay)
+      {
+	x = sx * 2;
+	y = sy;
+      }
+    else
+      {
+	coord_t dx, dy;
+        analyze_paget::to_diagonal_coordinates (sx, sy, &dx, &dy);
+	x = dx * 2;
+	y = dy * 2;
+      }
     //printf ("pre: %i %i\n", x, y);
     x += xshift;
     y += yshift;
@@ -103,7 +139,10 @@ public:
 		    abort ();
 		  }
 #endif
-		sparams.add_point (img_x, img_y, (x - d + i) / 2.0, y - d, (x - d + i) & 1 ? solver_parameters::blue : solver_parameters::green);
+		coord_t ssx, ssy;
+		solver_parameters::point_color color;
+		get_screen_coord ((x - d + i), y - d, &ssx, &ssy, &color);
+		sparams.add_point (img_x, img_y, ssx, ssy, color);
 		npoints++;
 	      }
 	    if (d && known_p (x - d + i, y + d))
@@ -117,7 +156,10 @@ public:
 		    abort ();
 		  }
 #endif
-		sparams.add_point (img_x, img_y, (x - d + i) / 2.0, y + d, (x - d + i) & 1 ? solver_parameters::blue : solver_parameters::green);
+		coord_t ssx, ssy;
+		solver_parameters::point_color color;
+		get_screen_coord ((x - d + i), y + d, &ssx, &ssy, &color);
+		sparams.add_point (img_x, img_y, ssx, ssy, color);
 		npoints++;
 	      }
 	  }
@@ -134,7 +176,10 @@ public:
 		    abort ();
 		  }
 #endif
-		sparams.add_point (img_x, img_y, (x - d) / 2.0, y - d + i, (x - d) & 1 ? solver_parameters::blue : solver_parameters::green);
+		coord_t ssx, ssy;
+		solver_parameters::point_color color;
+		get_screen_coord ((x - d), y - d + i, &ssx, &ssy, &color);
+		sparams.add_point (img_x, img_y, ssx, ssy, color);
 		npoints++;
 	      }
 	    if (known_p (x+d, y - d + i))
@@ -148,7 +193,10 @@ public:
 		    abort ();
 		  }
 #endif
-		sparams.add_point (img_x, img_y, (x + d) / 2.0, y - d + i, (x + d) & 1 ? solver_parameters::blue : solver_parameters::green);
+		coord_t ssx, ssy;
+		solver_parameters::point_color color;
+		get_screen_coord ((x + d), y - d + i, &ssx, &ssy, &color);
+		sparams.add_point (img_x, img_y, ssx, ssy, color);
 		npoints++;
 	      }
 	  }
@@ -211,8 +259,8 @@ public:
     int new_yshift = yshift;
     int new_width = width;
     int new_height = height;
-    int xgrow = width / 8 + 1;
-    int ygrow = height / 8 + 1;
+    int xgrow = (width / 8 + 3) & ~1;
+    int ygrow = (height / 8 + 3) & ~1;
     if (left)
       new_xshift += xgrow, new_width += xgrow;
     if (right)
@@ -248,10 +296,12 @@ public:
 	    for (int xx = x ; xx < x+xstep && !found; xx++)
 	      if (known_p (xx - xshift, yy - yshift))
 		{
-		  coord_t ix, iy;
+		  coord_t ix, iy, sx, sy;
+		  solver_parameters::point_color color;
 		  found = true;
 		  get_coord (xx -xshift, yy - yshift, &ix, &iy);
-		  sparam->add_point (ix, iy, (xx - xshift) / 2.0, yy - yshift, (xx - xshift ? solver_parameters::blue : solver_parameters::green));
+		  get_screen_coord (xx - xshift, yy - yshift, &sx, &sy, &color);
+		  sparam->add_point (ix, iy, /*(xx - xshift) / 2.0, yy - yshift, (xx - xshift ? solver_parameters::blue : solver_parameters::green)*/ sx, sy, color);
 		}
 	}
   }
@@ -276,6 +326,7 @@ public:
     *ymaxr = ymax;
   }
   bool write_outliers_info (const char *filename, int width, int height, scr_to_img &map, const char **error, progress_info *progress);
+  enum scr_type type;
   int width, height, xshift, yshift;
 private:
   struct coord_entry {coord_t x, y;};

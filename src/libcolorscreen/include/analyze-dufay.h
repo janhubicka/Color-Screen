@@ -1,28 +1,17 @@
 #ifndef ANALYZE_DUFAY_H
 #define ANALYZE_DUFAY_H
 #include "render-to-scr.h"
-#include "progress-info.h"
-#include "bitmap.h"
-class analyze_dufay
+#include "analyze-base.h"
+class analyze_dufay : public analyze_base
 {
 public:
   analyze_dufay()
-  : m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0), m_contrast (NULL), m_known_pixels (NULL), m_n_known_pixels (0)
+  /* We store two reds per X coordinate.  */
+  : analyze_base (1, 0, 0, 0, 0, 0)
   {
   }
-  struct contrast_info
-  {
-    luminosity_t min;
-    luminosity_t max;
-  };
   ~analyze_dufay()
   {
-    free (m_red);
-    free (m_green);
-    free (m_blue);
-    free (m_contrast);
-    if (m_known_pixels)
-      delete m_known_pixels;
   }
   luminosity_t &blue (int x, int y)
     {
@@ -44,39 +33,9 @@ public:
       return m_green [y * m_width + x];
     }
 
-  contrast_info &get_contrast (int x, int y)
-  {
-    return m_contrast[y * m_width + x];
-  }
-  int get_xshift ()
-  {
-    return m_xshift;
-  }
-  int get_yshift ()
-  {
-    return m_yshift;
-  }
   bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
   bool analyze_contrast (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, progress_info *progress = NULL);
-  int find_best_match (int percentake, int max_percentage, analyze_dufay &other, int cpfind, int *xshift, int *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
   luminosity_t compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress);
-
-  void set_known_pixels (bitmap_2d *bitmap)
-  {
-    assert (!m_known_pixels && !m_n_known_pixels);
-    m_known_pixels = bitmap;
-    for (int y = 0; y < m_height; y++)
-      for (int x = 0; x < m_width; x++)
-	if (bitmap->test_bit (x,y))
-	  m_n_known_pixels++;
-  }
-  void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
-  bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
 private:
-  int m_xshift, m_yshift, m_width, m_height;
-  luminosity_t *m_red, *m_green, *m_blue;
-  struct contrast_info *m_contrast;
-  bitmap_2d *m_known_pixels;
-  int m_n_known_pixels;
 };
 #endif

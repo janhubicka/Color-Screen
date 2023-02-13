@@ -151,7 +151,9 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-scr-detect-geometry.lo \
 	libcolorscreen_la-analyze-dufay.lo \
 	libcolorscreen_la-analyze-paget.lo \
-	libcolorscreen_la-screen-map.lo
+	libcolorscreen_la-screen-map.lo \
+	libcolorscreen_la-analyze-base.lo \
+	libcolorscreen_la-tiff-writer.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -179,7 +181,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/gtkgui
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo \
+am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
+	./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo \
 	./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo \
 	./$(DEPDIR)/libcolorscreen_la-color.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
@@ -202,6 +205,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo \
 	./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo \
 	./$(DEPDIR)/libcolorscreen_la-solver.Plo \
 	./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo \
+	./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo \
 	./$(DEPDIR)/matrix.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -383,11 +387,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h
+include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -483,6 +487,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-color.Plo@am__quote@ # am--include-marker
@@ -506,6 +511,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-solver.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -696,6 +702,20 @@ libcolorscreen_la-screen-map.lo: screen-map.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-screen-map.lo `test -f 'screen-map.C' || echo '$(srcdir)/'`screen-map.C
 
+libcolorscreen_la-analyze-base.lo: analyze-base.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-analyze-base.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-analyze-base.Tpo -c -o libcolorscreen_la-analyze-base.lo `test -f 'analyze-base.C' || echo '$(srcdir)/'`analyze-base.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-analyze-base.Tpo $(DEPDIR)/libcolorscreen_la-analyze-base.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='analyze-base.C' object='libcolorscreen_la-analyze-base.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-analyze-base.lo `test -f 'analyze-base.C' || echo '$(srcdir)/'`analyze-base.C
+
+libcolorscreen_la-tiff-writer.lo: tiff-writer.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-tiff-writer.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-tiff-writer.Tpo -c -o libcolorscreen_la-tiff-writer.lo `test -f 'tiff-writer.C' || echo '$(srcdir)/'`tiff-writer.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-tiff-writer.Tpo $(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='tiff-writer.C' object='libcolorscreen_la-tiff-writer.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-tiff-writer.lo `test -f 'tiff-writer.C' || echo '$(srcdir)/'`tiff-writer.C
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -850,7 +870,8 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
+		-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
@@ -873,6 +894,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-solver.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -919,7 +941,8 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
+		-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
@@ -942,6 +965,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-sensitivity.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-solver.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum-to-xyz.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

@@ -425,10 +425,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == solver_editing)
     {
-      if (k == 'd')
+      if (k == 'D')
 	{
 	  save_parameters ();
-	  current.type = Dufay;
 	  file_progress_info progress (stdout);
 
 	  if (detected.smap)
@@ -437,6 +436,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
 	  detected = detect_regular_screen (scan, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
+	  current.type = detected.param.type;
 	  current_mesh = detected.mesh_trans;
 	  display_scheduled = true;
 	  preview_display_scheduled = true;

@@ -14,6 +14,8 @@ struct stitching_params
 {
   static const int max_dim = 10;
 
+  enum scr_type type;
+
   bool demosaiced_tiles;
   bool predictive_tiles;
   bool orig_tiles;
@@ -52,7 +54,7 @@ struct stitching_params
   }
 
   stitching_params ()
-  : demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
+  : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
@@ -96,6 +98,7 @@ class stitch_image
   int final_xshift, final_yshift;
   int final_width, final_height;
   analyze_dufay dufay;
+  analyze_paget paget;
   /* Screen patches that was detected by screen detection algorithm.  */
   bitmap_2d *screen_detected_patches;
   /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
@@ -110,7 +113,7 @@ class stitch_image
   struct stitch_info {coord_t x,y;
     		      int sum;} *stitch_info;
 
-  int xpos, ypos;
+  coord_t xpos, ypos;
   bool analyzed;
   bool output;
   int gray_max;
@@ -134,6 +137,12 @@ class stitch_image
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress);
+
+  analyze_base &
+  get_analyzer ()
+  {
+    return stitching_params.type == Dufay ? (analyze_base &)dufay : (analyze_base &)paget;
+  }
 private:
   static long current_time;
   static int nloaded;
@@ -499,10 +508,11 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
 #endif
   detect_regular_screen_params dsparams;
   dsparams.min_screen_percentage = stitching_params.min_screen_percentage;
-  int skiptop = top ? stitching_params.outer_tile_border : 2;
-  int skipbottom = bottom ? stitching_params.outer_tile_border : 2;
-  int skipleft = left ? stitching_params.outer_tile_border : 2;
-  int skipright = right ? stitching_params.outer_tile_border : 2;
+  int inborder = stitching_params.type == Dufay ? 2 : 15;
+  int skiptop = top ? stitching_params.outer_tile_border : inborder;
+  int skipbottom = bottom ? stitching_params.outer_tile_border : inborder;
+  int skipleft = left ? stitching_params.outer_tile_border : inborder;
+  int skipright = right ? stitching_params.outer_tile_border : inborder;
   dsparams.border_top = skiptop;
   dsparams.border_bottom = skipbottom;
   dsparams.border_left = skipleft;
@@ -549,14 +559,14 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
   param.mesh_trans = mesh_trans;
-  param.type = Dufay;
+  param.type = stitching_params.type;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, progress);
   if (!initialized)
     {
       initialized = true;
       pixel_size = detected.pixel_size;
-      my_screen = render_to_scr::get_screen (Dufay, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
+      my_screen = render_to_scr::get_screen (stitching_params.type, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
   scr_to_img_map.set_parameters (param, *img);
   
@@ -584,20 +594,26 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
            screen_detected_patches->set_bit (x, y);
   delete detected.known_patches;
   detected.known_patches = NULL;
-  dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
+  if (stitching_params.type == Dufay)
+    dufay.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
+  else
+    {
+      assert (detected.param.type != Dufay);
+      paget.analyze (&render, img, &scr_to_img_map, my_screen, width, height, xshift, yshift, true, 0.7, progress);
+    }
   if (stitching_params.max_contrast >= 0)
     dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);
-  dufay.set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
+  get_analyzer().set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
   known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
-  if (stitching_params.screen_tiles && !dufay.write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
+  if (stitching_params.screen_tiles && !get_analyzer().write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", screen_filename.c_str (), error);
       exit (1);
     }
-  if (stitching_params.known_screen_tiles && !dufay.write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
+  if (stitching_params.known_screen_tiles && !get_analyzer().write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
@@ -1211,7 +1227,7 @@ print_status (FILE *out)
       {
 	coord_t rx, ry;
 	common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx, &ry);
-	fprintf (out, "  %-5i,%-5i  rotated:%-5i,%-5i ", images[y][x].xpos, images[y][x].ypos, (int)rx,(int)ry);
+	fprintf (out, "  %-5f,%-5f  rotated:%-5f,%-5f ", images[y][x].xpos, images[y][x].ypos, rx,ry);
       }
       fprintf (out, "\n");
     }
@@ -1308,11 +1324,11 @@ determine_positions (progress_info *progress)
 	}
       else
 	{
-	  int xs;
-	  int ys;
+	  coord_t xs;
+	  coord_t ys;
 	  analyze (0, y-1, progress);
 	  analyze (0, y, progress);
-	  if (!images[y-1][0].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][0].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][0].basic_scr_to_img_map, images[y][0].basic_scr_to_img_map, report_file, progress))
+	  if (!images[y-1][0].get_analyzer().find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][0].get_analyzer(), stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][0].basic_scr_to_img_map, images[y][0].basic_scr_to_img_map, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename.c_str (), images[y][0].filename.c_str ());
@@ -1336,11 +1352,11 @@ determine_positions (progress_info *progress)
 	}
       for (int x = 0; x < stitching_params.width - 1; x++)
 	{
-	  int xs;
-	  int ys;
+	  coord_t xs;
+	  coord_t ys;
 	  analyze (x, y, progress);
 	  analyze (x + 1,y, progress);
-	  if (!images[y][x].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 0 : -1, images[y][x].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
+	  if (!images[y][x].get_analyzer().find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].get_analyzer(), stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 0 : -1, images[y][x].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
 	    {
 	      progress->pause_stdout ();
 	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -1359,7 +1375,7 @@ determine_positions (progress_info *progress)
 	  /* Confirm position.  */
 	  if (y)
 	    {
-	      if (!images[y-1][x+1].dufay.find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].dufay, stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][x+1].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
+	      if (!images[y-1][x+1].get_analyzer().find_best_match (stitching_params.min_overlap_percentage, stitching_params.max_overlap_percentage, images[y][x+1].get_analyzer(), stitching_params.cpfind, &xs, &ys, stitching_params.limit_directions ? 1 : -1, images[y-1][x+1].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
 		{
 		  progress->pause_stdout ();
 		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
@@ -1371,10 +1387,10 @@ determine_positions (progress_info *progress)
 		  || images[y][x+1].ypos != images[y-1][x+1].ypos + ys)
 		{
 		  progress->pause_stdout ();
-		  fprintf (stderr, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
+		  fprintf (stderr, "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
 		  if (report_file)
 		  {
-		    fprintf (report_file, "Stitching mismatch in %s: %i,%i is not equal to %i,%i\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
+		    fprintf (report_file, "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
 		    print_status (report_file);
 		  }
 		  exit (1);
@@ -1467,7 +1483,7 @@ void stitch (progress_info *progress)
   {
     scr_to_img_parameters scr_param;
     image_data data;
-    scr_param.type = Dufay;
+    scr_param.type = stitching_params.type;
     data.width=1000;
     data.height=1000;
     common_scr_to_img.set_parameters (scr_param, data);
@@ -1542,7 +1558,8 @@ void stitch (progress_info *progress)
   determine_viewport (xmin, xmax, ymin, ymax);
   for (int y = 0; y < stitching_params.height; y++)
     for (int x = 0; x < stitching_params.width; x++)
-      images[y][x].write_stitch_info (progress);
+      if (images[y][x].stitch_info)
+        images[y][x].write_stitch_info (progress);
 
   const coord_t xstep = pixel_size, ystep = pixel_size;
   passthrough_rparam.gray_max = images[0][0].gray_max;
@@ -1876,6 +1893,22 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distance=")))
 	{
 	  stitching_params.max_max_distance = atof (argv[i] + strlen ("--max-max-distance="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--screen-type=", strlen ("--screen-type=")))
+	{
+	  const char * t = argv[i] + strlen ("--screen-type=");
+	  if (!strcmp (t, "Paget"))
+	    stitching_params.type = Paget;
+	  else if (!strcmp (t, "Dufay"))
+	    stitching_params.type = Dufay;
+	  else if (!strcmp (t, "Finlay"))
+	    stitching_params.type = Finlay;
+	  else
+	    {
+	      fprintf (stderr, "Unknown or unsupported screen type: %s\n", t);
+	      exit (1);
+	    }
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))
