@@ -17,11 +17,11 @@ struct patch_entry
 
 /* Lookup patch of a given color, coordinates and maximal size.  Return number of vertices in patch.  */
 int
-find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y, int max_patch_size, patch_entry *entries, bitmap_2d *visited)
+find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y, int max_patch_size, patch_entry *entries, bitmap_2d *visited, bool permanent)
 {
   if (x < 0 || y < 0 || x >= color_map.width || y >= color_map.height)
     return 0;
-  if (visited && visited->set_bit (x, y))
+  if (visited->set_bit (x, y))
     return 0;
   scr_detect::color_class t = color_map.get_class (x, y);
   if (t != c)
@@ -38,20 +38,8 @@ find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y,
 	for (int xx = std::max (cx - 1, 0); xx < std::min (cx + 2, color_map.width); xx++)
 	  if ((xx != cx || yy != cy) && color_map.get_class (xx, yy) == t)
 	    {
-	      if (visited)
-		{
-		  if (visited->set_bit (xx, yy))
-		    continue;
-		}
-	      else
-		{
-		  int q;
-		  for (q = 0; q < end; q++)
-		    if (entries[q].x == xx && entries[q].y == yy)
-		      break;
-		  if (q != end)
-		    continue;
-		}
+	      if (visited->set_bit (xx, yy))
+		continue;
 	      entries[end].x = xx;
 	      entries[end].y = yy;
 	      end++;
@@ -61,6 +49,9 @@ find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y,
       start++;
     }
 done:
+  if (!permanent)
+    for (int i = 0; i < end; i++)
+      visited->clear_bit (entries[i].x, entries[i].y);
   return end;
 }
 
@@ -91,11 +82,8 @@ confirm_strip (color_class_map *color_map,
 	       int min_patch_size, int *priority, bitmap_2d *visited)
 {
   patch_entry entries[min_patch_size + 1];
-  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited);
   /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
-  if (visited)
-    for (int i = 0; i < size; i++)
-      visited->clear_bit (entries[i].x, entries[i].y);
+  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited, false);
   //if (verbose)
     //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size)
@@ -116,7 +104,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   const int max_size = 200;
   struct patch_info rbpatches[npatches][npatches*2];
   patch_entry entries[max_size];
-  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited);
+  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited, true);
   if (size == 0 || size == max_size)
     return false;
   if (!patch_center (entries, size, &rbpatches[0][0].x, &rbpatches[0][0].y))
@@ -135,7 +123,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	if (t == scr_detect::blue)
 	  {
 	    /* Do not mark as visited so we can revisit.  */
-	    int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, NULL);
+	    int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, visited, false);
 	    patch_found = patch_center (entries, size, &rbpatches[0][1].x, &rbpatches[0][1].y);
 	  }
 	else if (t != scr_detect::unknown)
@@ -157,7 +145,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
     {
       int nx = rbpatches[0][p - 1].x + patch_stepx;
       int ny = rbpatches[0][p - 1].y + patch_stepy;
-      size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, NULL);
+      size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
@@ -188,7 +176,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	    fprintf (report_file, "Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
 	  return 0;
 	 }
-      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
+      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
@@ -205,7 +193,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	{
 	  int nx = rbpatches[r][p - 1].x + patch_stepx;
 	  int ny = rbpatches[r][p - 1].y + patch_stepy;
-	  size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, NULL);
+	  size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
@@ -242,7 +230,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   struct patch_info gpatches[npatches][npatches];
   struct patch_info bpatches[npatches*2][npatches];
   patch_entry entries[max_size];
-  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited);
+  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited, true);
   if (size == 0 || size == max_size)
     return false;
   if (!patch_center (entries, size, &gpatches[0][0].x, &gpatches[0][0].y))
@@ -263,7 +251,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  if (t == scr_detect::blue)
 	    {
 	      /* Do not mark as visited so we can revisit.  */
-	      int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, NULL);
+	      int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, visited, false);
 	      patch_found = patch_center (entries, size, &bpatches[0][0].x, &bpatches[0][0].y);
 	    }
 	  else if (t != scr_detect::unknown)
@@ -282,7 +270,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   coord_t b2patch_stepx = b1patch_stepy;
   coord_t b2patch_stepy = -b1patch_stepx;
   coord_t bx, by;
-  size = find_patch (color_map, scr_detect::blue, gpatches[0][0].x + b2patch_stepx, gpatches[0][0].y + b2patch_stepy, max_size, entries, NULL);
+  size = find_patch (color_map, scr_detect::blue, gpatches[0][0].x + b2patch_stepx, gpatches[0][0].y + b2patch_stepy, max_size, entries, visited, false);
   if (!size || size == max_size)
     {
       if (report_file && verbose)
@@ -304,7 +292,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
     }
   coord_t gpatch_stepx = (bpatches[0][0].x - gpatches[0][0].x) * 2;
   coord_t gpatch_stepy = (bpatches[0][0].y - gpatches[0][0].y) * 2;
-  size = find_patch (color_map, scr_detect::green, gpatches[0][0].x + gpatch_stepx, gpatches[0][0].y + gpatch_stepy, max_size, entries, NULL);
+  size = find_patch (color_map, scr_detect::green, gpatches[0][0].x + gpatch_stepx, gpatches[0][0].y + gpatch_stepy, max_size, entries, visited, false);
   if (!size || size == max_size)
     {
       if (report_file && verbose)
@@ -322,7 +310,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   coord_t patch_stepy = (gpatches[0][1].y - gpatches[0][0].y) / 2;
   coord_t opatch_stepx = patch_stepy;
   coord_t opatch_stepy = -patch_stepx;
-  size = find_patch (color_map, scr_detect::blue, gpatches[0][1].x + patch_stepx, gpatches[0][1].y + patch_stepy, max_size, entries, NULL);
+  size = find_patch (color_map, scr_detect::blue, gpatches[0][1].x + patch_stepx, gpatches[0][1].y + patch_stepy, max_size, entries, visited, false);
   if (!size || size == max_size)
     {
       if (report_file && verbose)
@@ -348,7 +336,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
     {
       int nx = bpatches[0][p - 1].x + patch_stepx;
       int ny = bpatches[0][p - 1].y + patch_stepy;
-      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
+      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
@@ -364,7 +352,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 
       nx = gpatches[0][p].x + patch_stepx;
       ny = gpatches[0][p].y + patch_stepy;
-      size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+      size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
@@ -405,7 +393,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	{
 	  int nx = gpatches[(q-1)/2][p].x + opatch_stepx;
 	  int ny = gpatches[(q-1)/2][p].y + opatch_stepy;
-	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
@@ -420,7 +408,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	    }
 	  nx = bpatches[q-1][p].x + opatch_stepx;
 	  ny = bpatches[q-1][p].y + opatch_stepy;
-	  size = find_patch (color_map, scr_detect::red, nx, ny, max_size, entries, NULL);
+	  size = find_patch (color_map, scr_detect::red, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
@@ -438,7 +426,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	{
 	  int nx = bpatches[q-1][p].x + opatch_stepx;
 	  int ny = bpatches[q-1][p].y + opatch_stepy;
-	  size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, NULL);
+	  size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
@@ -453,7 +441,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	    }
 	  nx = rpatches[(q-1)/2][p].x + opatch_stepx;
 	  ny = rpatches[(q-1)/2][p].y + opatch_stepy;
-	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
+	  size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
@@ -494,7 +482,7 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
 {
   patch_entry entries[max_patch_size + 1];
   const char *fail = NULL;
-  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size + 1, entries, visited);
+  int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size + 1, entries, visited, true);
   if (size < min_patch_size || size > max_patch_size)
     fail = "rejected: bad size";
   else if (!patch_center (entries, size, cx, cy))
@@ -1125,6 +1113,11 @@ detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosit
 	  render = new render_scr_detect (dparam, img, empty, 256);
 	  render->precompute_all (false, progress);
 	  render->precompute_rgbdata (progress);
+	}
+      if (progress)
+	{
+	  progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
+	  progress->set_progress (s);
 	}
       if (!progress || !progress->cancel_requested ())
 	for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
