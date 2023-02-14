@@ -530,7 +530,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.return_known_patches = true;
   dsparams.do_mesh = stitching_params.mesh_trans;
   dsparams.return_screen_map = true;
-  detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
+  detected = detect_regular_screen (*img, stitching_params.type, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
   if (!detected.success)
     {
       progress->pause_stdout ();
@@ -546,7 +546,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
       delete detected.known_patches;
       delete detected.smap;
       dsparams.optimize_colors = false;
-      detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
+      detected = detect_regular_screen (*img, stitching_params.type, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
       mesh_trans = detected.mesh_trans;
       if (!detected.success)
 	{

@@ -121,7 +121,7 @@ struct detect_regular_screen_params
   bool return_screen_map;
   bool do_mesh;
 };
-detected_screen detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress = NULL, FILE *report_file = NULL);
+detected_screen detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress = NULL, FILE *report_file = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, luminosity_t gamma, color_t *reds, int nreds, color_t *greens, int ngreens, color_t *blues, int nblues, progress_info *progress = NULL, FILE *report = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress = NULL, FILE *report = NULL);
 bool optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress = NULL, FILE *report = NULL);

@@ -8,7 +8,8 @@
 #include "include/analyze-paget.h"
 namespace
 {
-const bool verbose = false;
+//const bool verbose = false;
+const bool verbose = true;
 struct patch_entry
 {
 	int x, y;
@@ -170,7 +171,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
       int nx = rbpatches[r - 1][0].x - 2*patch_stepy;
       int ny = rbpatches[r - 1][0].y + 2*patch_stepx;
       int priority;
-      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, &priority, NULL))
+      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, &priority, visited))
 	 {
 	  if (report_file && verbose)
 	    fprintf (report_file, "Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
@@ -1067,11 +1068,10 @@ std::vector<struct int_point>check_points(int xsteps, int ysteps)
 }
 
 detected_screen
-detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
+detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
   detected_screen ret;
   render_parameters empty;
-  enum scr_type type = Finlay;
 
   empty.gamma = gamma;
   ret.mesh_trans = NULL;

@@ -435,7 +435,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  if (current_mesh)
 	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
-	  detected = detect_regular_screen (scan, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
+	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
 	  current.type = detected.param.type;
 	  current_mesh = detected.mesh_trans;
 	  display_scheduled = true;
