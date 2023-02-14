@@ -28,6 +28,7 @@ struct stitching_params
   bool slow_floodfill;
   bool fast_floodfill;
   bool limit_directions;
+  bool mesh_trans;
 
   int outer_tile_border;
   int min_overlap_percentage;
@@ -55,7 +56,7 @@ struct stitching_params
 
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true),
+    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
     outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
@@ -317,8 +318,10 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
 	    {
 	      coord_t x1, y1, x2, y2;
-	      mesh_trans->apply (x,y, &x1, &y1);
-	      other.mesh_trans->apply (xx, yy, &x2, &y2);
+	      scr_to_img_map.to_img (x, y, &x1, &y1);
+	      other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
+	      //mesh_trans->apply (x,y, &x1, &y1);
+	      //other.mesh_trans->apply (xx, yy, &x2, &y2);
 	      if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
 	          || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
 		continue;
@@ -354,8 +357,10 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
 	      {
 		coord_t x1, y1, x2, y2;
-		mesh_trans->apply (x,y, &x1, &y1);
-		other.mesh_trans->apply (xx, yy, &x2, &y2);
+		//mesh_trans->apply (x,y, &x1, &y1);
+		//other.mesh_trans->apply (xx, yy, &x2, &y2);
+	        scr_to_img_map.to_img (x, y, &x1, &y1);
+	        other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
 		if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
 		    || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
 		  continue;
@@ -421,8 +426,10 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		    && other.screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
 		  {
 		    coord_t x1, y1, x2, y2;
-		    mesh_trans->apply (x,y, &x1, &y1);
-		    other.mesh_trans->apply (xx, yy, &x2, &y2);
+		    //mesh_trans->apply (x,y, &x1, &y1);
+		    //other.mesh_trans->apply (xx, yy, &x2, &y2);
+	            scr_to_img_map.to_img (x, y, &x1, &y1);
+	            other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
 		    if (x1 < 0 || x1 >= img_width || y1 < 0 || y1 >= img_height
 			|| x2 < 0 || x2 >= other.img_width || y2 < 0 || y2 > other.img_height)
 		      continue;
@@ -521,15 +528,16 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
   dsparams.fast_floodfill = stitching_params.fast_floodfill;
   dsparams.return_known_patches = true;
+  dsparams.do_mesh = stitching_params.mesh_trans;
   dsparams.return_screen_map = true;
   detected = detect_regular_screen (*img, dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
-  mesh_trans = detected.mesh_trans;
-  if (!mesh_trans)
+  if (!detected.success)
     {
       progress->pause_stdout ();
       fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
       exit (1);
     }
+  mesh_trans = detected.mesh_trans;
   if (stitching_params.reoptimize_colors)
     {
       scr_detect_parameters optimized_dparam = dparam;
@@ -540,7 +548,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
       dsparams.optimize_colors = false;
       detected = detect_regular_screen (*img, optimized_dparam, rparam.gamma, solver_param, &dsparams, progress, report_file);
       mesh_trans = detected.mesh_trans;
-      if (!mesh_trans)
+      if (!detected.success)
 	{
 	  progress->pause_stdout ();
 	  fprintf (stderr, "Failed to analyze screen of %s after optimizing screen colors. Probably a bug\n", filename.c_str ());
@@ -1909,6 +1917,16 @@ main (int argc, char **argv)
 	      fprintf (stderr, "Unknown or unsupported screen type: %s\n", t);
 	      exit (1);
 	    }
+	  continue;
+	}
+      if (!strcmp (argv[i], "--mesh"))
+	{
+	  stitching_params.mesh_trans = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-mesh"))
+	{
+	  stitching_params.mesh_trans = false;
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))

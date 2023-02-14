@@ -61,201 +61,207 @@ analyze_base::find_best_match_using_cpfind (analyze_base &other, coord_t *xshift
 	      "v TrX1\n"
 	      "v TrY1\n", /*m_width, m_height,*/ mwidth * scale, mheight * scale, /*filename1*/screen1, /*other.m_width, other.m_height,*/ mwidth * scale, mheight * scale, /*filename2*/screen2);
   fclose (f);
-  if (progress)
-    progress->set_task ("executing cpfind", 1);
-  //if (system (direction ? "cpfind --fullscale --ransacmode=rpy project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out": "cpfind --fullscale --ransacmode=rpy project-cpfind-hor.pto -o project-cpfind-hor-out.pto >cpfind.out"))
-  if (system (direction ? "cpfind --fullscale  project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out": "cpfind --fullscale  project-cpfind-hor.pto -o project-cpfind-hor-out.pto >cpfind.out"))
+  /* cpfind ransac does not understand the setup where camera shifts.  But use it as last resort.  */
+  for (int m = 0; m < 2; m++)
     {
       if (progress)
-	progress->pause_stdout ();
-      fprintf (stderr, "Failed to execute cpfind\n");
-      if (progress)
-	progress->resume_stdout ();
-      return false;
-    }
-  f = fopen (direction ? "project-cpfind-vert-out.pto" : "project-cpfind-hor-out.pto", "r");
-  if (!f)
-    {
-      if (progress)
-	progress->pause_stdout ();
-      fprintf (stderr, "Failed to open cpfind output file\n");
-      if (progress)
-	progress->resume_stdout ();
-      return false;
-    }
-  struct offsets {
-    int x, y, n;
-  };
-  struct bad_offsets {
-    coord_t x, y;
-  };
-  std::vector<offsets> off;
-  std::vector<bad_offsets> bad_off;
-  int npoints = 0;
-  while (!feof (f))
-    {
-      int c;
-      if ((c = fgetc (f)) != 'c'
-	  || (c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'n'
-	  || (c = fgetc (f)) != '0'
-	  || (c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'N'
-	  || (c = fgetc (f)) != '1'
-	  || (c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'x')
-	{
-	  while (c != EOF && c != '\n')
-	    c = fgetc (f);
-	  continue;
-	}
-      float x1, y1, x2, y2;
-      npoints++;
-      if (fscanf (f, "%f", &x1) != 1)
+	progress->set_task ("executing cpfind", 1);
+      char cmd[256];
+      sprintf (cmd, "cpfind --fullscale %s project-cpfind-%s.pto -o project-cpfind-%s-out.pto >cpfind.out", m ? "" : "--ransacmode=rpy", direction ? "vert" : "hor", direction ? "vert" : "hor");
+      //if (system (direction ? "cpfind --fullscale --ransacmode=rpy project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out": "cpfind --fullscale --ransacmode=rpy project-cpfind-hor.pto -o project-cpfind-hor-out.pto >cpfind.out"))
+      if (system (cmd))
 	{
 	  if (progress)
 	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 1\n");
+	  fprintf (stderr, "Failed to execute cpfind\n");
 	  if (progress)
 	    progress->resume_stdout ();
 	  return false;
 	}
-      if ((c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'y')
+      f = fopen (direction ? "project-cpfind-vert-out.pto" : "project-cpfind-hor-out.pto", "r");
+      if (!f)
 	{
 	  if (progress)
 	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 2\n");
+	  fprintf (stderr, "Failed to open cpfind output file\n");
 	  if (progress)
 	    progress->resume_stdout ();
 	  return false;
 	}
-      if (fscanf (f, "%f", &y1) != 1)
+      struct offsets {
+	int x, y, n;
+      };
+      struct bad_offsets {
+	coord_t x, y;
+      };
+      std::vector<offsets> off;
+      std::vector<bad_offsets> bad_off;
+      int npoints = 0;
+      while (!feof (f))
 	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 3\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  return false;
-	}
-      if ((c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'X')
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 4\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  return false;
-	}
-      if (fscanf (f, "%f", &x2) != 1)
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 5\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  return false;
-	}
-      if ((c = fgetc (f)) != ' '
-	  || (c = fgetc (f)) != 'Y')
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 6\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  return false;
-	}
-      if (fscanf (f, "%f", &y2) != 1)
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  fprintf (stderr, "Error parsing cpfind's pto file 7\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  return false;
-	}
-#if 0
-      if (fscanf (f, "x%f y%f X%f Y%f to\n", &x1, &y1, &x2, &y2) != 4)
-	{
-	  printf (stderr, "Parse error\n");
-	  progress->resume_stdout ();
-	  return false;
-	}
-#endif
-
-      int xo = round (x2 - x1);
-      int yo = round (y2 - y1);
-      if (direction >= 0)
-	{
-	  int xx = -xo / (coord_t)scale - (m_xshift - other.m_xshift);
-	  int yy = -yo / (coord_t)scale - (m_yshift - other.m_yshift);
-	  coord_t xi, yi;
-	  map.to_img (lx + xx, ly + yy, &xi, &yi);
-
-	  if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
-	      || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
+	  int c;
+	  if ((c = fgetc (f)) != 'c'
+	      || (c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'n'
+	      || (c = fgetc (f)) != '0'
+	      || (c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'N'
+	      || (c = fgetc (f)) != '1'
+	      || (c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'x')
 	    {
-	      fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, xi, yi);
+	      while (c != EOF && c != '\n')
+		c = fgetc (f);
 	      continue;
 	    }
+	  float x1, y1, x2, y2;
+	  npoints++;
+	  if (fscanf (f, "%f", &x1) != 1)
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 1\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if ((c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'y')
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 2\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if (fscanf (f, "%f", &y1) != 1)
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 3\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if ((c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'X')
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 4\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if (fscanf (f, "%f", &x2) != 1)
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 5\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if ((c = fgetc (f)) != ' '
+	      || (c = fgetc (f)) != 'Y')
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 6\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+	  if (fscanf (f, "%f", &y2) != 1)
+	    {
+	      if (progress)
+		progress->pause_stdout ();
+	      fprintf (stderr, "Error parsing cpfind's pto file 7\n");
+	      if (progress)
+		progress->resume_stdout ();
+	      return false;
+	    }
+#if 0
+	  if (fscanf (f, "x%f y%f X%f Y%f to\n", &x1, &y1, &x2, &y2) != 4)
+	    {
+	      printf (stderr, "Parse error\n");
+	      progress->resume_stdout ();
+	      return false;
+	    }
+#endif
+
+	  int xo = round (x2 - x1);
+	  int yo = round (y2 - y1);
+	  if (direction >= 0)
+	    {
+	      int xx = -xo / (coord_t)scale - (m_xshift - other.m_xshift);
+	      int yy = -yo / (coord_t)scale - (m_yshift - other.m_yshift);
+	      coord_t xi, yi;
+	      map.to_img (lx + xx, ly + yy, &xi, &yi);
+
+	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
+		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
+		{
+		  fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, xi, yi);
+		  continue;
+		}
+	    }
+	  if (fabs ((x2 - x1) - xo) > 0.3
+	      || fabs ((y2 - y1) - yo) > 0.3)
+	    {
+	      if (report_file)
+		fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is not integer\n",x1,y1,x2,y2);
+	      bad_off.push_back ({x2-x1, y2-y1});
+	      continue;
+	    }
+	  /* For Paget screens only shifts with even sum makes sense
+	     TODO: If we ever support other scaled screens than pagets, this needs to be conditional.  */
+	  if (scale == 2 && ((xo + yo) & 1))
+	    {
+	      if (report_file)
+		fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since sum is not even\n",x1,y1,x2,y2);
+	      bad_off.push_back ({x2-x1, y2-y1});
+	      continue;
+	    }
+	  if (report_file)
+	    fprintf (report_file, "Control point: x1 %f y2 %f x2 %f y2 %f offsetx %i offsety %i\n",x1,y1,x2,y2,xo,yo);
+	  bool found = false;
+	  for (offsets &o : off)
+	    if (o.x == xo && o.y == yo)
+	      {
+		 o.n++;
+		 found = true;
+	      }
+	  if (!found)
+	    off.push_back ((struct offsets){xo,yo,1});
 	}
-      if (fabs ((x2 - x1) - xo) > 0.3
-	  || fabs ((y2 - y1) - yo) > 0.3)
+      fclose (f);
+      if (off.size ())
 	{
-	  if (report_file)
-	    fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is not integer\n",x1,y1,x2,y2);
-	  bad_off.push_back ({x2-x1, y2-y1});
-	  continue;
+	  offsets max;
+	  max = off[0];
+	  for (offsets &o : off)
+	    if (o.n > max.n)
+	      max = o;
+	  int real_n = max.n;
+	  for (bad_offsets &o : bad_off)
+	    if (fabs (o.x - max.x) < 0.5 && fabs (o.y - max.y) < 0.5)
+	      real_n++;
+	  if (real_n > std::min (npoints / 3, 2))
+	    {
+	      *xshift_ret = -max.x / (coord_t)scale - (m_xshift - other.m_xshift);
+	      *yshift_ret = -max.y / (coord_t)scale - (m_yshift - other.m_yshift);
+	      if (report_file)
+		fprintf (report_file, "Best offset %f %f with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
+	      return true;
+	    }
+	  else
+	    if (report_file)
+	      fprintf (report_file, "cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
 	}
-      /* For Paget screens only shifts with even sum makes sense
-         TODO: If we ever support other scaled screens than pagets, this needs to be conditional.  */
-      if (scale == 2 && ((xo + yo) & 1))
-        {
-	  if (report_file)
-	    fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since sum is not even\n",x1,y1,x2,y2);
-	  bad_off.push_back ({x2-x1, y2-y1});
-	  continue;
-        }
-      if (report_file)
-	fprintf (report_file, "Control point: x1 %f y2 %f x2 %f y2 %f offsetx %i offsety %i\n",x1,y1,x2,y2,xo,yo);
-      bool found = false;
-      for (offsets &o : off)
-	if (o.x == xo && o.y == yo)
-	  {
-	     o.n++;
-	     found = true;
-	  }
-      if (!found)
-	off.push_back ((struct offsets){xo,yo,1});
-    }
-  fclose (f);
-  if (off.size ())
-    {
-      offsets max;
-      max = off[0];
-      for (offsets &o : off)
-	if (o.n > max.n)
-	  max = o;
-      int real_n = max.n;
-      for (bad_offsets &o : bad_off)
-	if (fabs (o.x - max.x) < 0.5 && fabs (o.y - max.y) < 0.5)
-	  real_n++;
-      if (real_n > std::min (npoints / 3, 2))
-	{
-	  *xshift_ret = -max.x / (coord_t)scale - (m_xshift - other.m_xshift);
-	  *yshift_ret = -max.y / (coord_t)scale - (m_yshift - other.m_yshift);
-	  if (report_file)
-	    fprintf (report_file, "Best offset %f %f with %i points, shifts %i %i\n", *xshift_ret, *yshift_ret, max.n, m_xshift - other.m_xshift, m_yshift - other.m_yshift);
-	  return true;
-	}
-      else
-	if (report_file)
-	  fprintf (report_file, "cpfind result does not seem reliable. Best match is only %i points out of %i\n", max.n, npoints);
-    }
-  else if (report_file)
+      }
+  if (report_file)
     fprintf (report_file, "cpfind failed to find useful points; trying to find match myself\n");
   return false;
 }

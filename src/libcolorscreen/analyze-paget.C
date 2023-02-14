@@ -203,7 +203,7 @@ analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, cons
   if (*error)
     return false;
   if (progress)
-    progress->set_task ("Saving screen", m_height);
+    progress->set_task ("Saving screen", m_height * 2);
   luminosity_t rscale = rmax > rmin ? 1/(rmax-rmin) : 1;
   luminosity_t gscale = gmax > gmin ? 1/(gmax-gmin) : 1;
   luminosity_t bscale = bmax > bmin ? 1/(bmax-bmin) : 1;
@@ -237,8 +237,8 @@ analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, cons
 	      blue1 = (blue (2 * x - 1, y) + blue (2 * x, y) + blue (2 * x, y - 1) + blue (2 * x - 1, y -1)) * 0.25;
 	      blue2 = (blue (2 * x, y) + blue (2 * x + 1, y) + blue (2 * x, y - 1) + blue (2 * x + 1, y - 1)) * 0.25;
 
-	      //red1 = green1 = blue1 = (red1+green1+blue1) / 3;
-	      //red2 = green2 = blue2 = (red2+green2+blue2) / 3;
+	      red1 = green1 = blue1 = (red1+green1+blue1) / 3;
+	      red2 = green2 = blue2 = (red2+green2+blue2) / 3;
 	      out.row16bit ()[2 * x * 4 + 0] = std::max (std::min (linear_to_srgb ((red1 - rmin) * rscale) * 65535.5, 65535.0), 0.0);
 	      out.row16bit ()[2 * x * 4 + 1] = std::max (std::min (linear_to_srgb ((green1 - gmin) * gscale) * 65535.5, 65535.0), 0.0);
 	      out.row16bit ()[2 * x * 4 + 2] = std::max (std::min (linear_to_srgb ((blue1 - bmin) * bscale) * 65535.5, 65535.0), 0.0);

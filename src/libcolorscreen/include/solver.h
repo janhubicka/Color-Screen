@@ -93,6 +93,7 @@ mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_pa
    If mesh_trans is NULL the detection failed.  */
 struct detected_screen
 {
+  bool success;
   mesh *mesh_trans;
   scr_to_img_parameters param;
   int xmin, ymin, xmax, ymax;
@@ -109,7 +110,7 @@ struct detect_regular_screen_params
 {
   detect_regular_screen_params ()
   : min_screen_percentage (20), border_top (50), border_bottom (50), border_left (50), border_right (50),
-    optimize_colors (false), slow_floodfill (false), fast_floodfill (false), return_known_patches (false), return_screen_map (false)
+    optimize_colors (false), slow_floodfill (false), fast_floodfill (false), return_known_patches (false), return_screen_map (false), do_mesh (true)
   {}
   coord_t min_screen_percentage;
   coord_t border_top, border_bottom, border_left, border_right;
@@ -118,6 +119,7 @@ struct detect_regular_screen_params
   bool fast_floodfill;
   bool return_known_patches;
   bool return_screen_map;
+  bool do_mesh;
 };
 detected_screen detect_regular_screen (image_data &img, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress = NULL, FILE *report_file = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, luminosity_t gamma, color_t *reds, int nreds, color_t *greens, int ngreens, color_t *blues, int nblues, progress_info *progress = NULL, FILE *report = NULL);

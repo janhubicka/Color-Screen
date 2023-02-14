@@ -224,13 +224,13 @@ public:
 	      {
 		coord_t rx = map[y * width + x + 1].x;
 		coord_t ry = map[y * width + x + 1].y;
-		coord_t ex = map[y * width + x].x + coordinate1_x / 2;
-		coord_t ey = map[y * width + x].y + coordinate1_y / 2;
+		coord_t ex = map[y * width + x].x + coordinate1_x;
+		coord_t ey = map[y * width + x].y + coordinate1_y;
 		coord_t dist = (ex - rx) * (ex - rx) + (ey - ry) * (ey - ry);
 		if (dist > tolerance * tolerance)
 		  {
 		    if (out)
-		      fprintf (out, "Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x+1, y, rx, ry, sqrt(dist), tolerance);
+		      fprintf (out, "Out of tolerance points %i,%i (%f,%f) and %i,%i (%f,%f) expected %f %f distance:%f tolerance:%f\n",x,y, map[y * width + x].x, map[y * width + x].y, x+1, y, rx, ry, ex, ey, sqrt(dist), tolerance);
 		    n++;
 		  }
 	      }
