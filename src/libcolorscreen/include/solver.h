@@ -100,8 +100,13 @@ struct detected_screen
   int patches_found;
   coord_t pixel_size;
 
+  /* xshift and yshift of known patches.
+     We can not use smap shifts because known_patches is in screen
+     coordinates, while smap is, on Finlay and Paget, in diagonal
+     coordinates.  */
   int xshift, yshift;
   bitmap_2d *known_patches;
+
   struct screen_map *smap;
 };
 

@@ -1,3 +1,4 @@
+#include <limits.h>
 #include "include/scr-detect.h"
 #include "include/solver.h"
 #include "include/render-scr-detect.h"
@@ -8,8 +9,8 @@
 #include "include/analyze-paget.h"
 namespace
 {
-//const bool verbose = false;
-const bool verbose = true;
+const bool verbose = false;
+//onst bool verbose = true;
 struct patch_entry
 {
 	int x, y;
@@ -935,7 +936,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x) / 2;
 	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y) / 2;
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 /*|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false))*/)
+				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
 	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
 	    {
@@ -1318,6 +1319,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
     ret.mesh_trans = NULL;
 
 
+  /* Known patches is a bitmap in screen coordinates that is set of 1 if any patches
+     belonging to a given screen coordinate was found.  */
   if (dsparams->return_known_patches)
     {
       if (type == Dufay)
@@ -1333,18 +1336,35 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	}
       else
 	{
-	  /* TODO: We need to turn diagonal coordinates to screen coordinates.
-	     For this we need separate shifts & widths  */
-	  ret.xshift = smap->xshift / 2;
-	  ret.yshift = smap->yshift / 2;
-	  ret.known_patches = new bitmap_2d (smap->width / 2, smap->height / 2);
-	  for (int y = 0; y < smap->height / 2; y ++)
-	    for (int x = 0; x < smap->width / 2; x ++)
-	      if (smap->known_p (x * 2 - ret.xshift * 2, y * 2 - ret.yshift)
-		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y * 2 - ret.yshift)
-		  && smap->known_p (x * 2 - ret.xshift * 2, y * 2 - ret.yshift + 1)
-		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y * 2 - ret.yshift + 1))
-		ret.known_patches->set_bit (x, y);
+	  int xmin = INT_MAX, xmax = INT_MIN, ymin = INT_MAX, ymax = INT_MIN;
+	  for (int y = 0; y < smap->height; y ++)
+	    for (int x = 0; x < smap->width; x ++)
+	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
+		 {
+		   int xx, yy;
+		   analyze_paget::from_diagonal_coordinates (x - smap->xshift, y - smap->yshift, &xx, &yy);
+		   xx /= 4;
+		   yy /= 4;
+		   xmin = std::min (xmin, xx);
+		   xmax = std::max (xmax, xx);
+		   ymin = std::min (ymin, yy);
+		   ymax = std::max (ymax, yy);
+		 }
+	  ret.xshift = -xmin;
+	  ret.yshift = -ymin;
+	  ret.known_patches = new bitmap_2d (xmax - xmin + 1, ymax - ymin + 1);
+	  for (int y = 0; y < smap->height; y ++)
+	    for (int x = 0; x < smap->width; x ++)
+	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
+		 {
+		   int xx, yy;
+		   analyze_paget::from_diagonal_coordinates (x  - smap->xshift, y  - smap->yshift, &xx, &yy);
+		   xx /= 4;
+		   yy /= 4;
+		   /* TODO: perhaps we should be conservative here and require all entries
+		      to be set.  But most likely this makes no difference.  */
+		   ret.known_patches->set_bit (xx + ret.xshift, yy + ret.yshift);
+		 }
 	}
     }
   if (progress)

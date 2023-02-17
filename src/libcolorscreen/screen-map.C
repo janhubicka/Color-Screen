@@ -26,7 +26,7 @@ write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_in
 bool
 screen_map::write_outliers_info (const char *filename, int imgwidth, int imgheight, scr_to_img &map, const char **error, progress_info *progress)
 {
-  const int scale = 10;
+  const int scale = 50;
   struct summary {coord_t x, y;};
   int infowidth = imgwidth / scale + 1;
   int infoheight = imgheight / scale + 1;
@@ -41,8 +41,10 @@ screen_map::write_outliers_info (const char *filename, int imgwidth, int imgheig
       if (known_p (x - xshift, y - yshift))
         {
 	  coord_t ix1, ix2, iy1, iy2;
+	  coord_t sx, sy;
 	  get_coord (x - xshift, y - yshift, &ix1, &iy1);
-	  map.to_img ((x - xshift) / 2.0, y - yshift, &ix2, &iy2);
+	  get_screen_coord (x - xshift, y - yshift, &sx, &sy);
+	  map.to_img (sx, sy, &ix2, &iy2);
 	  if (ix1 < 0 || ix1 >= imgwidth || iy1 < 0 || iy1 >= imgheight)
 		  continue;
 	  struct summary &i = info[((int)ix1) / scale + (((int)iy1) / scale) * infowidth];
