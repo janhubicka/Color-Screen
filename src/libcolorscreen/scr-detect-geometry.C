@@ -525,7 +525,7 @@ confirm (render_scr_detect *render,
   //const coord_t pixel_step = 0.1;
   const coord_t pixel_step = 1;
   bool found = false;
-  int xmin = ceil (std::min (std::min (coordinate1_x / 8, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
+  int xmin = ceil (std::min (std::min (coordinate1_x / 6, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
   int xmax = ceil (std::max (std::max (coordinate1_x / 6, coordinate2_x / 6), std::max (-coordinate1_x / 6, -coordinate2_x / 6)));
   int ymin = ceil (std::min (std::min (coordinate1_y / 6, coordinate2_y / 6), std::min (-coordinate1_y / 6, -coordinate2_y / 6)));
   int ymax = ceil (std::max (std::max (coordinate1_y / 6, coordinate2_y / 6), std::max (-coordinate1_y / 6, -coordinate2_y / 6)));
@@ -539,76 +539,6 @@ confirm (render_scr_detect *render,
     return false;
 
   if (!strip)
-#if 0
-    {
-      coord_t cx = x;
-      coord_t cy = y;
-      for (int i = 0; i < 5; i++)
-	{
-	  coord_t xsum = 0, xavg = 0;
-	  coord_t ysum = 0, yavg =0;
-	  switch ((int) t)
-	    {
-	      case 0:
-	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
-		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
-		  {
-		    luminosity_t color[3];
-		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
-		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
-		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		    xsum += color[t];
-		    ysum += color[t];
-		    xavg += color[t] * (xx + 0.5 - cx);
-		    yavg += color[t] * (yy + 0.5 - cy);
-		  }
-	      break;
-	      case 1:
-	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
-		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
-		  {
-		    luminosity_t color[3];
-		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
-		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
-		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		    xsum += color[t];
-		    ysum += color[t];
-		    xavg += color[t] * (xx + 0.5 - cx);
-		    yavg += color[t] * (yy + 0.5 - cy);
-		  }
-	      break;
-	      case 2:
-	      for (int yy = floor (cy + ymin) ; yy < ceil (cy + ymax); yy++)
-		for (int xx = floor (cx + xmin) ; xx < ceil (cx + xmax); xx++)
-		  {
-		    luminosity_t color[3];
-		    render->fast_precomputed_get_adjusted_pixel (xx, yy, &color[0], &color[1], &color[2]);
-		    //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
-		    //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		    xsum += color[t];
-		    ysum += color[t];
-		    xavg += color[t] * (xx + 0.5 - cx);
-		    yavg += color[t] * (yy + 0.5 - cy);
-		  }
-	      break;
-	      default:
-	      abort ();
-	    }
-	  coord_t xadj = xavg / xsum / 2;
-	  coord_t yadj = yavg / ysum / 2;
-	  coord_t sum = xadj * xadj + yadj * yadj;
-	  printf ("%i:sum %f %f %f %f %f %f\n",i,sum,xavg,yavg,xsum,ysum,xavg/xsum, yavg/ysum);
-	  cx += xavg / xsum / 2;
-	  cy += yavg / ysum / 2;
-	  if (sum < 0.1)
-	    break;
-	}
-      bestcx = cx;
-      bestcy = cy;
-      if ((cx - x) * (cx -x) + (cy - y) * (cy - y) > max_distance / 2)
-	return false;
-    }
-#else
     {
       //printf ("%i %i %i %i\n",xmin,xmax,ymin,ymax);
       for (coord_t cy = std::max (y - max_distance / 4, (coord_t)-ymin); cy <= std::min (y + max_distance / 4, (coord_t)height - ymax); cy+= pixel_step)
@@ -667,7 +597,6 @@ confirm (render_scr_detect *render,
       if (!found)
 	return false;
     }
-#endif
   else
   {
     bestcx = x;
@@ -698,47 +627,6 @@ confirm (render_scr_detect *render,
 	  }
       }
 
-  //if (bestinner <= 0)
-    //return false;
-#if 0
-    for (coord_t cy = std::max (y - max_distance / 4, (coord_t)0); cy <= std::min (y + max_distance / 4, (coord_t)height); cy+= pixel_step)
-      for (coord_t cx = std::max (x - max_distance / 4, (coord_t)0); cx <= std::min (x + max_distance / 4, (coord_t)width); cx+= pixel_step)
-	{
-	  coord_t xsum = 0;
-	  coord_t ysum = 0;
-	  coord_t inner = 0;
-	  coord_t outer = 0;
-	  for (int yy = -sample_steps; yy <= sample_steps; yy++)
-	    for (int xx = -sample_steps; xx <= sample_steps; xx++)
-	      {
-		luminosity_t color[3];
-		render->get_adjusted_pixel (cx + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate1_y,
-					    cy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
-					    &color[0], &color[1], &color[2]);
-		xsum += std::max (color[t], (luminosity_t)0) * xx;
-		ysum += std::max (color[t], (luminosity_t)0) * yy;
-		luminosity_t sum = color[0]+color[1]+color[2];
-		if (sum > 0 && color[t] > 0)
-		  {
-		    if ((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
-		      outer += color[t] / sum;
-		    else
-		      inner += color[t] / sum;
-		  }
-	      }
-	   coord_t sum = xsum * xsum + ysum * ysum;
-	   //printf ("%f %f: %f %f %f\n", cx-x, cy-y, xsum, ysum, sum);
-	   if (!found || minsum > sum)
-	     {
-	       bestcx = cx;
-	     bestcy = cy;
-	     bestinner = inner;
-	     bestouter = outer;
-	     minsum = sum;
-	     found = true;
-	   }
-      }
-#endif
   *rcx = bestcx;
   *rcy = bestcy;
   /*  For sample_steps == 2:
@@ -853,13 +741,66 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
   int xshift, yshift, width, height;
   scr_map.get_range (img.width, img.height, &xshift, &yshift, &width, &height);
+#if 0
+  if (width <= xshift)
+    width = xshift + 1;
+  if (height <= yshift)
+    height = yshift + 1;
+#endif
   int nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
   //printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+  /* Be sure that coordinates 0,0 are on screen.
+     Normally, this should always be the case since screen discovery always
+     places point 0,0 on screen. But in case of large deformations we may hit this.   */
+  if (width <= xshift || height <= yshift)
+    return NULL;
   if (report_file)
     fprintf (report_file, "Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
   if (progress)
     progress->set_task ("Flood fill", nexpected);
-  screen_map *map = new screen_map(param.type, xshift * 2, yshift * (param.type == Dufay ? 1 : 2), width * 2, height * (param.type == Dufay ? 1 : 2));
+  if (param.type == Dufay)
+    {
+      xshift *= 2;
+      width *= 2;
+    }
+  else
+    {
+      coord_t cx, cy;
+      int xmin, ymin, xmax, ymax;
+      analyze_paget::to_diagonal_coordinates (-xshift, -yshift, &cx, &cy);
+      int ix = cx / 2;
+      int iy = cy / 2;
+      xmin = ix - 1;
+      xmax = ix + 1;
+      ymin = iy - 1;
+      ymax = iy + 1;
+      analyze_paget::to_diagonal_coordinates (-xshift + width, -yshift, &cx, &cy);
+      ix = cx / 2;
+      iy = cy / 2;
+      xmin = std::min (xmin, ix - 1);
+      xmax = std::max (xmax, ix + 1);
+      ymin = std::min (ymin, iy - 1);
+      ymax = std::max (ymax, iy + 1);
+      analyze_paget::to_diagonal_coordinates (-xshift, -yshift + height, &cx, &cy);
+      ix = cx / 2;
+      iy = cy / 2;
+      xmin = std::min (xmin, ix - 1);
+      xmax = std::max (xmax, ix + 1);
+      ymin = std::min (ymin, iy - 1);
+      ymax = std::max (ymax, iy + 1);
+      analyze_paget::to_diagonal_coordinates (-xshift + width, -yshift + height, &cx, &cy);
+      ix = cx / 2;
+      iy = cy / 2;
+      xmin = std::min (xmin, ix - 1);
+      xmax = std::max (xmax, ix + 1);
+      ymin = std::min (ymin, iy - 1);
+      ymax = std::max (ymax, iy + 1);
+      xshift = -xmin * 2;
+      yshift = -ymin * 2;
+      width = (xmax - xmin) * 2;
+      height = (ymax - ymin) * 2;
+    }
+  screen_map *map = new screen_map(param.type, xshift, yshift, width, height);
 
   struct queue_entry
   {
@@ -947,7 +888,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    }
 	  for (int xx = -1; xx <= 1; xx++)
 	    for (int yy = -1; yy <= 1; yy++)
-	      if ((xx || yy) && !map->known_p (e.scr_x + xx, e.scr_y + yy))
+	      if ((xx || yy) && ((xx != 0) + (yy != 0)) == 1
+	          && !map->known_p (e.scr_x + xx, e.scr_y + yy))
 		{
 		  int ax, ay;
 	          analyze_paget::from_diagonal_coordinates (xx, yy, &ax, &ay);
@@ -1260,6 +1202,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    {
 	      bool found = false;
 	      for (int yy = std::max (y - range, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range) && !found; yy++)
+		      /* TODO: *2 makes only sense for Dufay.  */
 		for (int xx = std::max (x - range * 2, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * 2) && !found; xx++)
 		  if (smap->known_p (xx, yy))
 		    found = true;
@@ -1283,7 +1226,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   else
     errs = smap->check_consistency (report_file, (ret.param.coordinate1_x - ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y - ret.param.coordinate2_y) / 4,
 				    (ret.param.coordinate1_x + ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y + ret.param.coordinate2_y) / 4,
-				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 8);
+				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 3);
   if (errs)
     {
       if (progress)

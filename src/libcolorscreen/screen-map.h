@@ -226,6 +226,7 @@ public:
     int new_yshift = yshift;
     int new_width = width;
     int new_height = height;
+    /* Even and odd coordinates have different meanings.   Be sure to not mix them up.  */
     int xgrow = (width / 8 + 3) & ~1;
     int ygrow = (height / 8 + 3) & ~1;
     if (left)

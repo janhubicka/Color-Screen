@@ -10,6 +10,8 @@
 
 namespace {
 
+	const int stitch_info_scale = 80;
+
 struct stitching_params
 {
   static const int max_dim = 10;
@@ -409,9 +411,9 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
       coord_t distsum = 0;
       coord_t maxdist = 0;
       if (!stitch_info)
-	stitch_info = (struct stitch_info *)calloc ((img_width / 10 + 1) * (img_height / 10 + 1), sizeof (struct stitch_info));
+	stitch_info = (struct stitch_info *)calloc ((img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1), sizeof (struct stitch_info));
       if (!other.stitch_info)
-	other.stitch_info = (struct stitch_info *)calloc ((other.img_width / 10 + 1) * (other.img_height / 10 + 1), sizeof (struct stitch_info));
+	other.stitch_info = (struct stitch_info *)calloc ((other.img_width / stitch_info_scale + 1) * (other.img_height / stitch_info_scale + 1), sizeof (struct stitch_info));
       npoints = 0;
 #define C(i) (gsl_vector_get(c,(i)))
       for (int y = -yshift; y < -yshift + height; y++)
@@ -438,15 +440,15 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		    coord_t dist = sqrt ((x2 - px) * (x2 - px) + (y2 - py) * (y2 - py));
 		    distsum += dist;
 		    maxdist = std::max (maxdist, dist);
-		    assert ((((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10 <= (img_width / 10 + 1) * (img_height / 10 + 1));
-		    assert ((((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10 >= 0);
-		    struct stitch_info &info = stitch_info[(((int)y1) / 10) * (img_width / 10 + 1) + ((int)x1) / 10];
+		    assert ((((int)y1) / stitch_info_scale) * (img_width / stitch_info_scale + 1) + ((int)x1) / stitch_info_scale <= (img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1));
+		    assert ((((int)y1) / stitch_info_scale) * (img_width / stitch_info_scale + 1) + ((int)x1) / stitch_info_scale >= 0);
+		    struct stitch_info &info = stitch_info[(((int)y1) / stitch_info_scale) * (img_width / stitch_info_scale + 1) + ((int)x1) / stitch_info_scale];
 		    info.x += fabs(x2-px);
 		    info.y += fabs(y2-py);
 		    info.sum++;
-		    assert ((((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10 <= (other.img_width / 10 + 1) * (other.img_height / 10 + 1));
-		    assert ((((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10 >= 0);
-		    struct stitch_info &info2 = other.stitch_info[(((int)y2) / 10) * (other.img_width / 10 + 1) + ((int)x2) / 10];
+		    assert ((((int)y2) / stitch_info_scale) * (other.img_width / stitch_info_scale + 1) + ((int)x2) / stitch_info_scale <= (other.img_width / stitch_info_scale + 1) * (other.img_height / stitch_info_scale + 1));
+		    assert ((((int)y2) / stitch_info_scale) * (other.img_width / stitch_info_scale + 1) + ((int)x2) / stitch_info_scale >= 0);
+		    struct stitch_info &info2 = other.stitch_info[(((int)y2) / stitch_info_scale) * (other.img_width / stitch_info_scale + 1) + ((int)x2) / stitch_info_scale];
 		    info2.x += fabs(x2-px);
 		    info2.y += fabs(y2-py);
 		    info2.sum++;
@@ -566,6 +568,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
+  param = detected.param;
   param.mesh_trans = mesh_trans;
   param.type = stitching_params.type;
   render_to_scr render (param, *img, my_rparam, 256);
@@ -885,8 +888,8 @@ stitch_image::write_stitch_info (progress_info *progress)
       //*error = "can not open output file";
       return;
     }
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, img_width / 10 + 1)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, img_height / 10 + 1)
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, img_width / stitch_info_scale + 1)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, img_height / stitch_info_scale + 1)
       || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
       || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
       || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
@@ -897,7 +900,7 @@ stitch_image::write_stitch_info (progress_info *progress)
       //*error = "write error";
       return;
     }
-  uint16_t *outrow = (uint16_t *) malloc ((img_width / 10 + 1) * 2 * 3);
+  uint16_t *outrow = (uint16_t *) malloc ((img_width / stitch_info_scale + 1) * 2 * 3);
   if (!outrow)
     {
       //*error = "Out of memory allocating output buffer";
@@ -905,13 +908,13 @@ stitch_image::write_stitch_info (progress_info *progress)
     }
   if (progress)
     {
-      progress->set_task ("Rendering and saving geometry info", img_height / 10 + 1);
+      progress->set_task ("Rendering and saving geometry info", img_height / stitch_info_scale + 1);
     }
-  for (int y = 0; y < img_height / 10 + 1; y++)
+  for (int y = 0; y < img_height / stitch_info_scale + 1; y++)
     {
-      for (int x =0 ; x < img_width / 10 + 1; x++)
+      for (int x =0 ; x < img_width / stitch_info_scale + 1; x++)
         {
-	  struct stitch_info &i = stitch_info[y * (img_width / 10 + 1) + x];
+	  struct stitch_info &i = stitch_info[y * (img_width / stitch_info_scale + 1) + x];
 	  if (!i.sum)
 	    {
 	      outrow[x*3] = 0;
