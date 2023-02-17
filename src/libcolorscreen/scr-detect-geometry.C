@@ -1323,6 +1323,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
      belonging to a given screen coordinate was found.  */
   if (dsparams->return_known_patches)
     {
+      /* TODO: test that Dufay path can be replaced by generic one.  */
       if (type == Dufay)
 	{
 	  ret.xshift = smap->xshift / 2;
@@ -1341,10 +1342,9 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    for (int x = 0; x < smap->width; x ++)
 	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
 		 {
-		   int xx, yy;
-		   analyze_paget::from_diagonal_coordinates (x - smap->xshift, y - smap->yshift, &xx, &yy);
-		   xx /= 4;
-		   yy /= 4;
+		   coord_t sx, sy;
+		   smap->get_screen_coord (x - smap->xshift, y - smap->yshift, &sx, &sy);
+		   int xx = sx, yy = sy;
 		   xmin = std::min (xmin, xx);
 		   xmax = std::max (xmax, xx);
 		   ymin = std::min (ymin, yy);
@@ -1357,10 +1357,9 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    for (int x = 0; x < smap->width; x ++)
 	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
 		 {
-		   int xx, yy;
-		   analyze_paget::from_diagonal_coordinates (x  - smap->xshift, y  - smap->yshift, &xx, &yy);
-		   xx /= 4;
-		   yy /= 4;
+		   coord_t sx, sy;
+		   smap->get_screen_coord (x - smap->xshift, y - smap->yshift, &sx, &sy);
+		   int xx = sx, yy = sy;
 		   /* TODO: perhaps we should be conservative here and require all entries
 		      to be set.  But most likely this makes no difference.  */
 		   ret.known_patches->set_bit (xx + ret.xshift, yy + ret.yshift);

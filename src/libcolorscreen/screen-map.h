@@ -112,33 +112,23 @@ public:
 	x = dx * 2;
 	y = dy * 2;
       }
-    //printf ("pre: %i %i\n", x, y);
     x += xshift;
     y += yshift;
     x = std::max (std::min (x, width), 0);
     y = std::max (std::min (y, height), 0);
     x -= xshift;
     y -= yshift;
-    //printf ("post: %i %i\n", x, y);
     sparams.remove_points ();
-    // TODO: Take into account that x is multiplied by 2. 
+    // TODO: Take into account that x and y may not be physically of same size
     for (int d = 0; d < std::max (width, height); d++)
       {
 	int lnpoints = npoints;
-	//printf ("d:%i\n",d);
 	for (int i = 0; i <= 2 * d; i++)
 	  {
 	    if (known_p (x - d + i, y - d))
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d + i, y - d, &img_x, &img_y);
-#if 0
-		if (img_x < 0 || img_y < 0)
-		  {
-		    printf ("%i %i %i %i %p\n", x - d + i, y - d, xshift, yshift, this);
-		    abort ();
-		  }
-#endif
 		coord_t ssx, ssy;
 		solver_parameters::point_color color;
 		get_screen_coord ((x - d + i), y - d, &ssx, &ssy, &color);
@@ -149,13 +139,6 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d + i, y + d, &img_x, &img_y);
-#if 0
-		if (img_x < 0 || img_y < 0)
-		  {
-		    printf ("%i %i %i %i %p\n", x - d + i, y + d, xshift, yshift, this);
-		    abort ();
-		  }
-#endif
 		coord_t ssx, ssy;
 		solver_parameters::point_color color;
 		get_screen_coord ((x - d + i), y + d, &ssx, &ssy, &color);
@@ -169,13 +152,6 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x - d, y - d + i, &img_x, &img_y);
-#if 0
-		if (img_x < 0 || img_y < 0)
-		  {
-		    printf ("%i %i %i %i %p\n", x - d, y - d + i, xshift, yshift, this);
-		    abort ();
-		  }
-#endif
 		coord_t ssx, ssy;
 		solver_parameters::point_color color;
 		get_screen_coord ((x - d), y - d + i, &ssx, &ssy, &color);
@@ -186,13 +162,6 @@ public:
 	      {
 		coord_t img_x, img_y;
 		get_coord (x + d, y - d + i, &img_x, &img_y);
-#if 0
-		if (img_x < 0 || img_y < 0)
-		  {
-		    printf ("%i %i %i %i %p\n", x + d, y - d + i, xshift, yshift, this);
-		    abort ();
-		  }
-#endif
 		coord_t ssx, ssy;
 		solver_parameters::point_color color;
 		get_screen_coord ((x + d), y - d + i, &ssx, &ssy, &color);
@@ -203,8 +172,6 @@ public:
 	if (lnpoints > n)
 	  return;
       }
-    //sparams.dump (stdout);
-    //abort ();
   }
   int
   check_consistency (FILE *out, coord_t coordinate1_x, coord_t coordinate1_y, coord_t coordinate2_x, coord_t coordinate2_y, coord_t tolerance)
@@ -301,7 +268,7 @@ public:
 		  found = true;
 		  get_coord (xx -xshift, yy - yshift, &ix, &iy);
 		  get_screen_coord (xx - xshift, yy - yshift, &sx, &sy, &color);
-		  sparam->add_point (ix, iy, /*(xx - xshift) / 2.0, yy - yshift, (xx - xshift ? solver_parameters::blue : solver_parameters::green)*/ sx, sy, color);
+		  sparam->add_point (ix, iy, sx, sy, color);
 		}
 	}
   }
