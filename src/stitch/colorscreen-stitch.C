@@ -310,14 +310,14 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
   const int range = 2;
   for (int y = -yshift; y < -yshift + height; y++)
     {
-      int yy = y + ypos - other.ypos;
+      coord_t yy = y + ypos - other.ypos;
       if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	for (int x = -xshift; x < -xshift + width; x++)
 	  {
-	    int xx = x + xpos - other.xpos;
+	    coord_t xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
-		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
+		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
 	    {
 	      coord_t x1, y1, x2, y2;
 	      scr_to_img_map.to_img (x, y, &x1, &y1);
@@ -349,14 +349,14 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 
   for (int y = -yshift, m = 0, next = 0; y < -yshift + height; y++)
     {
-      int yy = y + ypos - other.ypos;
+      coord_t yy = y + ypos - other.ypos;
       if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	for (int x = -xshift; x < -xshift + width; x++)
 	  {
-	    int xx = x + xpos - other.xpos;
+	    coord_t xx = x + xpos - other.xpos;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
-		&& other.screen_detected_patches->test_range (xx + other.xshift, yy + other.yshift, range))
+		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
 	      {
 		coord_t x1, y1, x2, y2;
 		//mesh_trans->apply (x,y, &x1, &y1);
@@ -418,14 +418,14 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 #define C(i) (gsl_vector_get(c,(i)))
       for (int y = -yshift; y < -yshift + height; y++)
 	{
-	  int yy = y + ypos - other.ypos;
+	  coord_t yy = y + ypos - other.ypos;
 	  if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	    for (int x = -xshift; x < -xshift + width; x++)
 	      {
-		int xx = x + xpos - other.xpos;
+		coord_t xx = x + xpos - other.xpos;
 		if (xx >= -other.xshift && xx < -other.xshift + other.width
 		    && screen_detected_patches->test_bit (x + xshift, y + yshift)
-		    && other.screen_detected_patches->test_bit (xx + other.xshift, yy + other.yshift))
+		    && other.screen_detected_patches->test_bit (floor (xx) + other.xshift, floor (yy) + other.yshift))
 		  {
 		    coord_t x1, y1, x2, y2;
 		    //mesh_trans->apply (x,y, &x1, &y1);

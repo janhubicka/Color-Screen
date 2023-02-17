@@ -47,7 +47,6 @@ screen_map::write_outliers_info (const char *filename, int imgwidth, int imgheig
 	  map.to_img (sx, sy, &ix2, &iy2);
 	  if (ix1 < 0 || ix1 >= imgwidth || iy1 < 0 || iy1 >= imgheight)
 		  continue;
-	  printf ("%f %f\n", ix1-ix2, iy1-iy2);
 	  struct summary &i = info[((int)ix1) / scale + (((int)iy1) / scale) * infowidth];
 	  i.x = std::max (i.x, fabs (ix1-ix2)+1);
 	  i.y = std::max (i.y, fabs (iy1-iy2)+1);
