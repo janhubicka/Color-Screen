@@ -31,6 +31,9 @@ struct stitching_params
   bool fast_floodfill;
   bool limit_directions;
   bool mesh_trans;
+  bool geometry_info;
+  bool individual_geometry_info;
+  bool outliers_info;
 
   int outer_tile_border;
   int inner_tile_border;
@@ -60,6 +63,7 @@ struct stitching_params
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
+    geometry_info (false), individual_geometry_info (false), outliers_info (false),
     outer_tile_border (30), inner_tile_border (5), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
@@ -134,13 +138,14 @@ class stitch_image
   void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
-  void output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
+  int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
-  void write_stitch_info (progress_info *progress);
+  void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
+  void clear_stitch_info ();
 
   analyze_base &
   get_analyzer ()
@@ -301,9 +306,17 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
     }
   return known_pixels;
 }
+void
+stitch_image::clear_stitch_info ()
+{
+  if (!stitch_info)
+    stitch_info = (struct stitch_info *)calloc ((img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1), sizeof (struct stitch_info));
+  else
+    memset (stitch_info, 0, (img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1) * sizeof (struct stitch_info));
+}
 
 /* Output common points to hugin pto file.  */
-void
+int
 stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress)
 {
   int n = 0;
@@ -333,7 +346,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  }
     }
   if (!n)
-    return;
+    return 0;
   int step = std::max (n / stitching_params.num_control_points, 1);
   int npoints = n / step;
   int nfound = 0;
@@ -412,9 +425,9 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
       coord_t distsum = 0;
       coord_t maxdist = 0;
       if (!stitch_info)
-	stitch_info = (struct stitch_info *)calloc ((img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1), sizeof (struct stitch_info));
+        clear_stitch_info ();
       if (!other.stitch_info)
-	other.stitch_info = (struct stitch_info *)calloc ((other.img_width / stitch_info_scale + 1) * (other.img_height / stitch_info_scale + 1), sizeof (struct stitch_info));
+        other.clear_stitch_info ();
       npoints = 0;
 #define C(i) (gsl_vector_get(c,(i)))
       for (int y = -yshift; y < -yshift + height; y++)
@@ -475,7 +488,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  if (report_file)
 	    fprintf (report_file, "Average distance out of tolerance (--max-avg-distance parameter)\n");
 	  progress->resume_stdout ();
-	  write_stitch_info (progress);
+  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	    write_stitch_info (progress);
 	  exit (1);
 	}
       if (maxdist > stitching_params.max_max_distance)
@@ -485,10 +499,12 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  if (report_file)
 	    fprintf (report_file, "Maximal distance out of tolerance (--max-max-distnace parameter)\n");
 	  progress->resume_stdout ();
-	  write_stitch_info (progress);
+  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	    write_stitch_info (progress);
 	  exit (1);
 	}
     }
+  return n;
 }
 
 void
@@ -589,7 +605,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   const char *error;
   if (!stitch_info_scale)
     stitch_info_scale = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) + 1;
-  if (!detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, stitch_info_scale, scr_to_img_map, &error, progress))
+  if (stitching_params.outliers_info && !detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, stitch_info_scale, scr_to_img_map, &error, progress))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Failed to write outliers: %s\n", error);
@@ -880,7 +896,7 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   TIFFClose (out);
 }
 void
-stitch_image::write_stitch_info (progress_info *progress)
+stitch_image::write_stitch_info (progress_info *progress, int x, int y, int xx, int yy)
 {
   if (progress)
     progress->pause_stdout ();
@@ -889,6 +905,11 @@ stitch_image::write_stitch_info (progress_info *progress)
     progress->resume_stdout ();
 
   std::string prefix = "geometry-";
+  std::string tfilename;
+  if (x < 0)
+    tfilename = prefix + filename;
+  else
+    tfilename = prefix + std::to_string (y) + std::to_string (x) + "-" + std::to_string (yy) + std::to_string (xx);
   TIFF *out = TIFFOpen ((prefix + filename).c_str (), "wb");
   if (!out)
     {
@@ -1120,6 +1141,9 @@ print_help (const char *filename)
   printf ("  --max-contrast=precentage                   report differences in contrast over this threshold\n");
   printf ("  --max-avg-distance=npixels                  maximal average distance of real screen patches to estimated ones via affine transform\n");
   printf ("  --max-max-distance=npixels                  maximal maximal distance of real screen patches to estimated ones via affine transform\n");
+  printf ("  --geometry-info                             store info about goemetry mismatches to tiff files\n");
+  printf ("  --individual-geometry-info                  store info about goemetry mismatches to tiff files; produce file for each pair\n");
+  printf ("  --outlier-info                              store info about outliers\n");
   printf (" hugin output:\n");
   printf ("  --num-control-points=n                      number of control points for each pair of images\n");
   printf (" other:\n");
@@ -1356,11 +1380,13 @@ determine_positions (progress_info *progress)
 	  images[y][0].xpos = images[y-1][0].xpos + xs;
 	  images[y][0].ypos = images[y-1][0].ypos + ys;
 	  images[y-1][0].compare_contrast_with (images[y][0], progress);
-	  images[y-1][0].output_common_points (NULL, images[y][0], 0, 0, true, progress);
+	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	    images[y-1][0].output_common_points (NULL, images[y][0], 0, 0, true, progress);
 	  if (stitching_params.width)
 	    {
 	      images[y-1][1].compare_contrast_with (images[y][0], progress);
-	      images[y-1][1].output_common_points (NULL, images[y][0], 0, 0, true, progress);
+	      if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	        images[y-1][1].output_common_points (NULL, images[y][0], 0, 0, true, progress);
 	    }
 	  if (stitching_params.panorama_map)
 	    {
@@ -1419,17 +1445,21 @@ determine_positions (progress_info *progress)
 	  if (y)
 	    {
 	      images[y-1][x+1].compare_contrast_with (images[y][x], progress);
-	      images[y-1][x+1].output_common_points (NULL, images[y][x], 0, 0, true, progress);
+	      if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	        images[y-1][x+1].output_common_points (NULL, images[y][x], 0, 0, true, progress);
 	      images[y-1][x+1].compare_contrast_with (images[y][x+1], progress);
-	      images[y-1][x+1].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
+	      if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	        images[y-1][x+1].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
 	      if (x + 2 < stitching_params.width)
 	      {
 	         images[y-1][x+1].compare_contrast_with (images[y][x+2], progress);
-	         images[y-1][x+1].output_common_points (NULL, images[y][x+2], 0, 0, true, progress);
+		 if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+		   images[y-1][x+1].output_common_points (NULL, images[y][x+2], 0, 0, true, progress);
 	      }
 	    }
 	  images[y][x].compare_contrast_with (images[y][x+1], progress);
-          images[y][x].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
+	 if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+            images[y][x].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
 	  if (report_file)
 	    fflush (report_file);
 	}
@@ -1575,10 +1605,22 @@ void stitch (progress_info *progress)
 
   int xmin, ymin, xmax, ymax;
   determine_viewport (xmin, xmax, ymin, ymax);
-  for (int y = 0; y < stitching_params.height; y++)
-    for (int x = 0; x < stitching_params.width; x++)
-      if (images[y][x].stitch_info)
-        images[y][x].write_stitch_info (progress);
+  if (stitching_params.geometry_info)
+    for (int y = 0; y < stitching_params.height; y++)
+      for (int x = 0; x < stitching_params.width; x++)
+	if (images[y][x].stitch_info)
+	  images[y][x].write_stitch_info (progress);
+  if (stitching_params.individual_geometry_info)
+    for (int y = 0; y < stitching_params.height; y++)
+      for (int x = 0; x < stitching_params.width; x++)
+	for (int yy = y; yy < stitching_params.height; yy++)
+	  for (int xx = yy == y ? x : 0; xx < stitching_params.width; xx++)
+	    if (x != xx || y != yy)
+	    {
+	      images[y][x].clear_stitch_info ();
+	      if (images[y][x].output_common_points (NULL, images[yy][xx], 0, 0, true, progress))
+		images[y][x].write_stitch_info (progress, x, y, xx, yy);
+	    }
 
   const coord_t xstep = pixel_size, ystep = pixel_size;
   passthrough_rparam.gray_max = images[0][0].gray_max;
@@ -1899,7 +1941,7 @@ main (int argc, char **argv)
 	  stitching_params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
 	  continue;
 	}
-      if (!strncmp (argv[i], "--hfov=", strlen ("--hfove=")))
+      if (!strncmp (argv[i], "--hfov=", strlen ("--hfov=")))
 	{
 	  stitching_params.hfov = atof (argv[i] + strlen ("--hfov="));
 	  continue;
@@ -1938,6 +1980,21 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--no-mesh"))
 	{
 	  stitching_params.mesh_trans = false;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--geometry-info", strlen ("--geometry-info")))
+	{
+	  stitching_params.geometry_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--individual-geometry-info", strlen ("--individual-geometry-info")))
+	{
+	  stitching_params.individual_geometry_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--outliers-info", strlen ("--outliers-info")))
+	{
+	  stitching_params.outliers_info = true;
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))
