@@ -1021,6 +1021,8 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
   coord_t max_distance[3] = {0,0,0};
   coord_t distance_sum[3] = {0,0,0};
   int distance_num[3] = {0,0,0};
+  int one_num[3] = {0,0,0};
+  int four_num[3] = {0,0,0};
   scr_to_img map;
   map.set_parameters (param, img);
   for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
@@ -1039,27 +1041,21 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
 	  max_distance [t] = std::max (max_distance[t], dist);
 	  distance_sum [t] += dist;
 	  distance_num [t] ++;
+	  if (dist >= 4)
+	    four_num[t]++;
+	  else if (dist >= 1)
+	    one_num[t]++;
 	}
   if (progress)
     progress->pause_stdout ();
-  if (distance_num[0])
-    {
-      printf ("Red patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0]);
-      if (report_file)
-	fprintf (report_file, "Red patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0]);
-    }
-  if (distance_num[1])
-    {
-      printf ("Green patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[1], type, distance_sum[1] / distance_num[1], max_distance[1]);
-      if (report_file)
-	fprintf (report_file, "Green patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[1], type, distance_sum[1] / distance_num[1], max_distance[1]);
-    }
-  if (distance_num[2])
-    {
-      printf ("Blue patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[2], type, distance_sum[2] / distance_num[2], max_distance[2]);
-      if (report_file)
-	fprintf (report_file, "Blue patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[2], type, distance_sum[2] / distance_num[2], max_distance[2]);
-    }
+  for (int c = 0; c < 3; c++)
+    if (distance_num[c])
+      {
+	const char *channel[3]={"Red", "Green", "Blue"};
+        printf ("%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %f2.2%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
+        if (report_file)
+	  fprintf (report_file, "%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %f2.2%% with distance over 4\n", channel[c], distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
+      }
   if (progress)
     progress->resume_stdout ();
 }
