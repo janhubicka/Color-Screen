@@ -888,7 +888,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    }
 	  for (int xx = -1; xx <= 1; xx++)
 	    for (int yy = -1; yy <= 1; yy++)
-	      if ((xx || yy) && ((xx != 0) + (yy != 0)) == 1
+	      if ((xx || yy)// && ((xx != 0) + (yy != 0)) == 1
 	          && !map->known_p (e.scr_x + xx, e.scr_y + yy))
 		{
 		  int ax, ay;
@@ -1157,6 +1157,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       return ret;
     }
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
+  if (progress)
+    progress->set_task ("Obtaininig intitial solver points", 1);
   sparam.remove_points ();
   for (int y = -smap->yshift, nf = 0, next =0, step = ret.patches_found / 1000; y < smap->height - smap->yshift; y ++)
     for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
@@ -1191,11 +1193,14 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   }
   smap->get_known_range (&ret.xmin, &ret.ymin, &ret.xmax, &ret.ymax);
   /* If we do mesh, insert fake control points to the detected screen so the binding tapes are not curly.  */
-  if (dsparams->do_mesh)
+  if (dsparams->do_mesh
+      && (dsparams->left || dsparams->top || dsparams->right || dsparams->bottom))
     {
       scr_to_img map;
       map.set_parameters (ret.param, img);
       const int range = 10;
+      if (progress)
+        progress->set_task ("Straightening corners", 1);
       for (int y = -smap->yshift; y < smap->height - smap->yshift; y ++)
 	for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
 	  if (!smap->known_p (x, y))
@@ -1212,13 +1217,15 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		  coord_t sx, sy;
 		  smap->get_screen_coord (x, y, &sx, &sy);
 		  map.to_img (sx, sy, &ix, &iy);
-		  if (ix <= ret.xmin || iy < ret.ymin || ix >= ret.xmax || iy >= ret.ymax)
+		  if ((ix <= ret.xmin && dsparams->left) || (iy < ret.ymin && dsparams->top) || (ix >= ret.xmax && dsparams->right) || (iy >= ret.ymax && dsparams->bottom))
 		    smap->set_coord (x, y, ix, iy);
 		}
 	      //else
 		  //printf ("found %i %i\n",x,y);
 	    }
     }
+  if (progress)
+    progress->set_task ("Checking screen consistency", 1);
   int errs;
   if (type == Dufay)
     errs = smap->check_consistency (report_file, ret.param.coordinate1_x / 2, ret.param.coordinate1_y / 2, ret.param.coordinate2_x, ret.param.coordinate2_y,
@@ -1266,6 +1273,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
      belonging to a given screen coordinate was found.  */
   if (dsparams->return_known_patches)
     {
+      if (progress)
+	progress->set_task ("Computing known patches", 1);
       /* TODO: test that Dufay path can be replaced by generic one.  */
       if (type == Dufay)
 	{

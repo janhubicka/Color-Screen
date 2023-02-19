@@ -689,7 +689,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
   int y = best_yshift;
   int x = best_xshift;
   /* Output heatmap.  */
-  if (1)
+  if (0)
     {
       static int fn;
       char name[256];
@@ -731,7 +731,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 	}
       const char *error;
       tiff_writer out (name, 256, 256, 8, false, &error);
-      if (*error)
+      if (error)
         {
 	  if (progress)
 	    progress->pause_stdout ();

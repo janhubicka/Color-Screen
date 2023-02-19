@@ -10,7 +10,7 @@
 
 namespace {
 
-	const int stitch_info_scale = 80;
+int stitch_info_scale = 0;
 
 struct stitching_params
 {
@@ -33,6 +33,7 @@ struct stitching_params
   bool mesh_trans;
 
   int outer_tile_border;
+  int inner_tile_border;
   int min_overlap_percentage;
   int max_overlap_percentage;
   luminosity_t max_contrast;
@@ -59,7 +60,7 @@ struct stitching_params
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
-    outer_tile_border (30), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    outer_tile_border (30), inner_tile_border (5), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
 } stitching_params;
@@ -517,7 +518,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
 #endif
   detect_regular_screen_params dsparams;
   dsparams.min_screen_percentage = stitching_params.min_screen_percentage;
-  int inborder = stitching_params.type == Dufay ? 2 : 15;
+  int inborder = stitching_params.inner_tile_border;
   int skiptop = top ? stitching_params.outer_tile_border : inborder;
   int skipbottom = bottom ? stitching_params.outer_tile_border : inborder;
   int skipleft = left ? stitching_params.outer_tile_border : inborder;
@@ -526,6 +527,10 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.border_bottom = skipbottom;
   dsparams.border_left = skipleft;
   dsparams.border_right = skipright;
+  dsparams.top = top;
+  dsparams.bottom = bottom;
+  dsparams.left = left;
+  dsparams.right = right;
   dsparams.optimize_colors = stitching_params.optimize_colors;
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
   dsparams.fast_floodfill = stitching_params.fast_floodfill;
@@ -582,7 +587,9 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   scr_to_img_map.set_parameters (param, *img);
   
   const char *error;
-  if (!detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, scr_to_img_map, &error, progress))
+  if (!stitch_info_scale)
+    stitch_info_scale = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) + 1;
+  if (!detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, stitch_info_scale, scr_to_img_map, &error, progress))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Failed to write outliers: %s\n", error);
@@ -1109,6 +1116,7 @@ print_help (const char *filename)
   printf ("  --min-overlap=precentage                    minimal overlap\n");
   printf ("  --max-overlap=precentage                    maximal overlap\n");
   printf ("  --outer-tile-border=percentage              border to ignore in outer files\n");
+  printf ("  --inner-tile-border=percentage              border to ignore in inner parts files\n");
   printf ("  --max-contrast=precentage                   report differences in contrast over this threshold\n");
   printf ("  --max-avg-distance=npixels                  maximal average distance of real screen patches to estimated ones via affine transform\n");
   printf ("  --max-max-distance=npixels                  maximal maximal distance of real screen patches to estimated ones via affine transform\n");

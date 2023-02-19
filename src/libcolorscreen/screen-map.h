@@ -293,7 +293,7 @@ public:
     *xmaxr = xmax;
     *ymaxr = ymax;
   }
-  bool write_outliers_info (const char *filename, int width, int height, scr_to_img &map, const char **error, progress_info *progress);
+  bool write_outliers_info (const char *filename, int width, int scale, int height, scr_to_img &map, const char **error, progress_info *progress);
   enum scr_type type;
   int width, height, xshift, yshift;
 private:
