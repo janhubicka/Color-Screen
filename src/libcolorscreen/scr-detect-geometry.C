@@ -1200,29 +1200,36 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       map.set_parameters (ret.param, img);
       const int range = 10;
       if (progress)
-        progress->set_task ("Straightening corners", 1);
-      for (int y = -smap->yshift; y < smap->height - smap->yshift; y ++)
-	for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
-	  if (!smap->known_p (x, y))
-	    {
-	      bool found = false;
-	      for (int yy = std::max (y - range, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range) && !found; yy++)
-		      /* TODO: *2 makes only sense for Dufay.  */
-		for (int xx = std::max (x - range * 2, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * 2) && !found; xx++)
-		  if (smap->known_p (xx, yy))
-		    found = true;
-	      if (!found)
-		{
-		  coord_t ix, iy;
-		  coord_t sx, sy;
-		  smap->get_screen_coord (x, y, &sx, &sy);
-		  map.to_img (sx, sy, &ix, &iy);
-		  if ((ix <= ret.xmin && dsparams->left) || (iy < ret.ymin && dsparams->top) || (ix >= ret.xmax && dsparams->right) || (iy >= ret.ymax && dsparams->bottom))
-		    smap->set_coord (x, y, ix, iy);
-		}
-	      //else
-		  //printf ("found %i %i\n",x,y);
-	    }
+        progress->set_task ("Straightening corners", smap->height);
+      for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
+	{
+	  int last_seen = range;
+	  for (int x = -smap->xshift; x < smap->width - smap->xshift; x++, last_seen++)
+	    if (!smap->known_p (x, y))
+	      {
+		bool found = last_seen < range;
+		for (int yy = std::max (y - range, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range) && !found; yy++)
+			/* TODO: *2 makes only sense for Dufay.  */
+		  for (int xx = std::max (x - range * 2, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * 2) && !found; xx++)
+		    if (smap->known_p (xx, yy))
+		      found = true;
+		if (!found)
+		  {
+		    coord_t ix, iy;
+		    coord_t sx, sy;
+		    smap->get_screen_coord (x, y, &sx, &sy);
+		    map.to_img (sx, sy, &ix, &iy);
+		    if ((ix <= ret.xmin && dsparams->left) || (iy < ret.ymin && dsparams->top) || (ix >= ret.xmax && dsparams->right) || (iy >= ret.ymax && dsparams->bottom))
+		      smap->set_coord (x, y, ix, iy);
+		  }
+		//else
+		    //printf ("found %i %i\n",x,y);
+	      }
+	    else
+	      last_seen = 0;
+	  if (progress)
+	    progress->inc_progress ();
+	}
     }
   if (progress)
     progress->set_task ("Checking screen consistency", 1);
