@@ -1889,6 +1889,23 @@ main (int argc, char **argv)
 	  stitching_params.outer_tile_border = atoi (argv[i] + strlen ("--outer-tile-border="));
 	  continue;
 	}
+      if (!strcmp (argv[i], "--inner-tile-border"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing tile border percentage\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.inner_tile_border = atoi (argv[i]);
+	  continue;
+	}
+      if (!strncmp (argv[i], "--inner-tile-border=", strlen ("--inner-tile-border=")))
+	{
+	  stitching_params.inner_tile_border = atoi (argv[i] + strlen ("--inner-tile-border="));
+	  continue;
+	}
       if (!strcmp (argv[i], "--max-contrast"))
 	{
 	  if (i == argc - 1)

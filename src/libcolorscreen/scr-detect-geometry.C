@@ -932,43 +932,48 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	fprintf (report_file, "\n");
       progress->resume_stdout ();
     }
-  if (nexpected * dsparams->min_screen_percentage > nfound * 100)
+  if (!dsparams->do_mesh && nfound > 100000)
+    ;
+  else
     {
-      if (report_file)
+      if (nexpected * dsparams->min_screen_percentage > nfound * 100)
 	{
-	  fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / nexpected);
-	  //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
+	  if (report_file)
+	    {
+	      fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / nexpected);
+	      //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
+	    }
+	  delete map;
+	  return NULL;
 	}
-      delete map;
-      return NULL;
-    }
-  if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
-    {
-      if (report_file)
-	fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
-      delete map;
-      return NULL;
-    }
-  if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
-    {
-      if (report_file)
-	fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
-      delete map;
-      return NULL;
-    }
-  if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
-    {
-      if (report_file)
-	fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
-      delete map;
-      return NULL;
-    }
-  if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
-    {
-      if (report_file)
-	fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
-      delete map;
-      return NULL;
+      if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
+	{
+	  if (report_file)
+	    fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
+	  delete map;
+	  return NULL;
+	}
+      if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
+	{
+	  if (report_file)
+	    fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
+	  delete map;
+	  return NULL;
+	}
+      if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
+	{
+	  if (report_file)
+	    fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
+	  delete map;
+	  return NULL;
+	}
+      if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
+	{
+	  if (report_file)
+	    fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
+	  delete map;
+	  return NULL;
+	}
     }
   return map;
 }
@@ -1008,6 +1013,55 @@ std::vector<struct int_point>check_points(int xsteps, int ysteps)
 	}
     }
   return ret;
+}
+
+static void
+summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &param, const char *type, FILE *report_file, progress_info *progress)
+{
+  coord_t max_distance[3] = {0,0,0};
+  coord_t distance_sum[3] = {0,0,0};
+  int distance_num[3] = {0,0,0};
+  scr_to_img map;
+  map.set_parameters (param, img);
+  for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
+    for (int x = -smap->xshift; x < smap->width - smap->xshift; x++)
+      if (smap->known_p (x, y))
+	{
+	  coord_t ix, iy;
+	  coord_t ix2, iy2;
+	  coord_t sx, sy;
+	  solver_parameters::point_color color;
+	  smap->get_screen_coord (x, y, &sx, &sy, &color);
+	  map.to_img (sx, sy, &ix, &iy);
+	  smap->get_coord (x, y, &ix2, &iy2);
+	  coord_t dist = sqrt ((ix-ix2) * (ix - ix2) + (iy - iy2) * (iy - iy2));
+	  int t = (int)color;
+	  max_distance [t] = std::max (max_distance[t], dist);
+	  distance_sum [t] += dist;
+	  distance_num [t] ++;
+	}
+  if (progress)
+    progress->pause_stdout ();
+  if (distance_num[0])
+    {
+      printf ("Red patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0]);
+      if (report_file)
+	fprintf (report_file, "Red patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0]);
+    }
+  if (distance_num[1])
+    {
+      printf ("Green patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[1], type, distance_sum[1] / distance_num[1], max_distance[1]);
+      if (report_file)
+	fprintf (report_file, "Green patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[1], type, distance_sum[1] / distance_num[1], max_distance[1]);
+    }
+  if (distance_num[2])
+    {
+      printf ("Blue patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[2], type, distance_sum[2] / distance_num[2], max_distance[2]);
+      if (report_file)
+	fprintf (report_file, "Blue patches %i. Avg distance to %s solution %f; max distance %f\n", distance_num[2], type, distance_sum[2] / distance_num[2], max_distance[2]);
+    }
+  if (progress)
+    progress->resume_stdout ();
 }
 
 detected_screen
@@ -1180,6 +1234,9 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   ret.param.lens_center_y = img.width / 2;
   ret.param.projection_distance = img.width;
   solver (&ret.param, img, sparam, progress);
+  summarise_quality (img, smap, ret.param, "linear", report_file, progress);
+
+
   if (report_file)
     {
       fprintf (report_file, "Detected geometry\n");
@@ -1271,6 +1328,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
 	  }
       ret.mesh_trans = m;
+      summarise_quality (img, smap, ret.param, "nonlinear", report_file, progress);
     }
   else
     ret.mesh_trans = NULL;
