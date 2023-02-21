@@ -8,7 +8,7 @@ screen_map
 {
 public:
   screen_map (enum scr_type type1, int xshift1, int yshift1, int width1, int height1)
-  : type (type1), width (width1), height (height1), xshift (xshift1), yshift (yshift1)
+  : type (type1), width (width1), height (height1), xshift (xshift1), yshift (yshift1), xmin (0), xmax (0), ymin (0), ymax (0)
   {
     map = (coord_entry *)calloc (width * height, sizeof (coord_entry));
   }
@@ -30,6 +30,20 @@ public:
     y += yshift;
     //printf ("Check %i %i: %i\n",x,y, map[y * width + x].x != 0);
     return (map[y * width + x].x != 0);
+  }
+  /* We insert fake points to straighten areas without grid detected.  */
+  bool known_and_not_fake_p (int x, int y)
+  {
+    if (!in_range_p (x, y))
+      return false;
+    x += xshift;
+    y += yshift;
+    //printf ("Check %i %i: %i\n",x,y, map[y * width + x].x != 0);
+    coord_t ix = map[y * width + x].x;
+    coord_t iy = map[y * width + x].y;
+    assert (xmin != xmax);
+    return (map[y * width + x].x != 0
+	    && ix >= xmin && ix <= xmax && iy >= ymin && iy <= ymax);
   }
   void set_coord (int xx, int yy, coord_t img_x, coord_t img_y)
   {
@@ -276,7 +290,7 @@ public:
   void
   get_known_range (int *xminr, int *yminr, int *xmaxr, int *ymaxr)
   {
-    int xmin = std::numeric_limits<int>::max (), ymin = std::numeric_limits<int>::max (), xmax = std::numeric_limits<int>::min (), ymax = std::numeric_limits<int>::min ();
+    xmin = std::numeric_limits<int>::max (), ymin = std::numeric_limits<int>::max (), xmax = std::numeric_limits<int>::min (), ymax = std::numeric_limits<int>::min ();
     for (int y = 0 ; y < height; y++)
       for (int x = 0 ; x < width * 2; x++)
 	if (known_p (x - xshift, y - yshift))
@@ -297,6 +311,7 @@ public:
   enum scr_type type;
   int width, height, xshift, yshift;
 private:
+  int xmin, xmax, ymin, ymax;
   struct coord_entry {coord_t x, y;};
   coord_entry *map;
 };
