@@ -517,32 +517,41 @@ confirm (render_scr_detect *render,
 	 coord_t x, coord_t y, scr_detect::color_class t,
 	 int width, int height,
 	 coord_t max_distance,
-	 coord_t *rcx, coord_t *rcy, int *priority, bool strip)
+	 coord_t *rcx, coord_t *rcy, int *priority,
+	 coord_t sum_range,
+	 bool strip)
 {
   coord_t bestcy = x, bestcx = y, minsum = 0, bestinner = 0, bestouter = 0;
   const int sample_steps = 2;
   // TODO: Works for Dufay.  */
   //const coord_t pixel_step = 0.1;
-  const coord_t pixel_step = 0.1;
+
+  /* Search just part of max distance range.  */
+  const int max_distance_scale = 4;
   bool found = false;
-  int xmin = ceil (std::min (std::min (coordinate1_x / 6, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
-  int xmax = ceil (std::max (std::max (coordinate1_x / 6, coordinate2_x / 6), std::max (-coordinate1_x / 6, -coordinate2_x / 6)));
-  int ymin = ceil (std::min (std::min (coordinate1_y / 6, coordinate2_y / 6), std::min (-coordinate1_y / 6, -coordinate2_y / 6)));
-  int ymax = ceil (std::max (std::max (coordinate1_y / 6, coordinate2_y / 6), std::max (-coordinate1_y / 6, -coordinate2_y / 6)));
+  /* We go to both directions from given X and Y coordinates.  */
+  sum_range = 0.5 * sum_range;
+  int xmin = ceil (std::min (std::min (coordinate1_x * sum_range, coordinate2_x * sum_range), std::min (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
+  int xmax = ceil (std::max (std::max (coordinate1_x * sum_range, coordinate2_x * sum_range), std::max (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
+  int ymin = ceil (std::min (std::min (coordinate1_y * sum_range, coordinate2_y * sum_range), std::min (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
+  int ymax = ceil (std::max (std::max (coordinate1_y * sum_range, coordinate2_y * sum_range), std::max (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
+  coord_t scaled_max_distance = max_distance / max_distance_scale;
+  coord_t pixel_step = scaled_max_distance / 5;
+  //printf ("%f\n",pixel_step);
 
   /* Do not try to search towards end of screen since it gives wrong resutls.
      broder 4x4 is necessary for interpolation.  */
-  if (y - max_distance /4 + ymin - 4 < 0
-      || y + max_distance /4 + ymax + 4 >= height
-      || x - max_distance /4 + xmin - 4 < 0
-      || x + max_distance /4 + xmax + 3 >= width)
+  if (y - scaled_max_distance + ymin - 4 < 0
+      || y + scaled_max_distance + ymax + 4 >= height
+      || x - scaled_max_distance + xmin - 4 < 0
+      || x + scaled_max_distance + xmax + 3 >= width)
     return false;
 
   if (!strip)
     {
       //printf ("%i %i %i %i\n",xmin,xmax,ymin,ymax);
-      for (coord_t cy = std::max (y - max_distance / 4, (coord_t)-ymin); cy <= std::min (y + max_distance / 4, (coord_t)height - ymax); cy+= pixel_step)
-	for (coord_t cx = std::max (x - max_distance / 4, (coord_t)-xmin); cx <= std::min (x + max_distance / 4, (coord_t)width - xmax); cx+= pixel_step)
+      for (coord_t cy = std::max (y - scaled_max_distance, (coord_t)-ymin); cy <= std::min (y + scaled_max_distance, (coord_t)height - ymax); cy+= pixel_step)
+	for (coord_t cx = std::max (x - scaled_max_distance, (coord_t)-xmin); cx <= std::min (x + scaled_max_distance, (coord_t)width - xmax); cx+= pixel_step)
 	  {
 	    coord_t xsum = 0;
 	    coord_t ysum = 0;
@@ -830,11 +839,11 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  if (sparam)
 	    sparam->add_point (e.img_x, e.img_y, e.scr_x / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
-
+  // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, true)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, true)))
 	  if (!map->known_p (e.scr_x - 1, e.scr_y)
 	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
@@ -877,7 +886,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x) / 2;
 	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y) / 2;
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, false)))
+				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 9, false)))
 	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
 	    {
