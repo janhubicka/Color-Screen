@@ -116,7 +116,7 @@ struct detect_regular_screen_params
   detect_regular_screen_params ()
   : min_screen_percentage (20), border_top (50), border_bottom (50), border_left (50), border_right (50),
     top (false), bottom (false), left (false), right (false),
-    optimize_colors (false), slow_floodfill (false), fast_floodfill (false), return_known_patches (false), return_screen_map (false), do_mesh (true)
+    optimize_colors (true), slow_floodfill (false), fast_floodfill (false), return_known_patches (false), return_screen_map (false), do_mesh (true)
   {}
   coord_t min_screen_percentage;
   coord_t border_top, border_bottom, border_left, border_right;
