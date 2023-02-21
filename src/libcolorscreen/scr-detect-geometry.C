@@ -523,7 +523,7 @@ confirm (render_scr_detect *render,
   const int sample_steps = 2;
   // TODO: Works for Dufay.  */
   //const coord_t pixel_step = 0.1;
-  const coord_t pixel_step = 1;
+  const coord_t pixel_step = 0.1;
   bool found = false;
   int xmin = ceil (std::min (std::min (coordinate1_x / 6, coordinate2_x / 6), std::min (-coordinate1_x / 6, -coordinate2_x / 6)));
   int xmax = ceil (std::max (std::max (coordinate1_x / 6, coordinate2_x / 6), std::max (-coordinate1_x / 6, -coordinate2_x / 6)));
@@ -908,13 +908,13 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   *npatches = nfound;
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
-  nexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
-  if (nexpected > 0 && nfound > 1000)
+  int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  if (snexpected > 0 && nfound > 1000)
     {
       progress->pause_stdout ();
-      printf ("Analyzed %2.2f%% of the screen area", /*std::min (*/nfound * 100.0 / nexpected/*, 100.0)*/);
+      printf ("Analyzed %2.2f%% of scan and %2.2f%% of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
       if (report_file)
-	fprintf (report_file, "Analyzed %2.2f%% of the screen area", nfound * 100.0 / nexpected);
+	fprintf (report_file, "Analyzed %2.2f%% of scan and %2.2f%%  of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
       printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
       if (report_file)
 	fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
@@ -936,11 +936,11 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     ;
   else
     {
-      if (nexpected * dsparams->min_screen_percentage > nfound * 100)
+      if (snexpected * dsparams->min_screen_percentage > nfound * 100)
 	{
 	  if (report_file)
 	    {
-	      fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / nexpected);
+	      fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / snexpected);
 	      //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
 	    }
 	  delete map;
@@ -1027,7 +1027,7 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
   map.set_parameters (param, img);
   for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
     for (int x = -smap->xshift; x < smap->width - smap->xshift; x++)
-      if (smap->known_p (x, y))
+      if (smap->known_and_not_fake_p (x, y))
 	{
 	  coord_t ix, iy;
 	  coord_t ix2, iy2;
@@ -1052,7 +1052,7 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
     if (distance_num[c])
       {
 	const char *channel[3]={"Red", "Green", "Blue"};
-        printf ("%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
+        printf ("%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], (one_num[c] + four_num[c]) * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
         if (report_file)
 	  fprintf (report_file, "%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
       }
@@ -1230,7 +1230,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   ret.param.lens_center_y = img.width / 2;
   ret.param.projection_distance = img.width;
   solver (&ret.param, img, sparam, progress);
-  summarise_quality (img, smap, ret.param, "linear", report_file, progress);
+  summarise_quality (img, smap, ret.param, "homographic", report_file, progress);
 
 
   if (report_file)
@@ -1245,6 +1245,16 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       fprintf (report_file, "pixel size: %f\n",ret.pixel_size);
   }
   smap->get_known_range (&ret.xmin, &ret.ymin, &ret.xmax, &ret.ymax);
+  if (progress)
+    progress->set_task ("Checking screen consistency", 1);
+  int errs;
+  if (type == Dufay)
+    errs = smap->check_consistency (report_file, ret.param.coordinate1_x / 2, ret.param.coordinate1_y / 2, ret.param.coordinate2_x, ret.param.coordinate2_y,
+				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 2);
+  else
+    errs = smap->check_consistency (report_file, (ret.param.coordinate1_x - ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y - ret.param.coordinate2_y) / 4,
+				    (ret.param.coordinate1_x + ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y + ret.param.coordinate2_y) / 4,
+				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 3);
   /* If we do mesh, insert fake control points to the detected screen so the binding tapes are not curly.  */
   if (dsparams->do_mesh
       && (dsparams->left || dsparams->top || dsparams->right || dsparams->bottom))
@@ -1272,8 +1282,10 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		    coord_t sx, sy;
 		    smap->get_screen_coord (x, y, &sx, &sy);
 		    map.to_img (sx, sy, &ix, &iy);
+	            last_seen = 0;
 		    if ((ix <= ret.xmin && dsparams->left) || (iy < ret.ymin && dsparams->top) || (ix >= ret.xmax && dsparams->right) || (iy >= ret.ymax && dsparams->bottom))
 		      smap->set_coord (x, y, ix, iy);
+		    
 		  }
 		//else
 		    //printf ("found %i %i\n",x,y);
@@ -1284,16 +1296,6 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    progress->inc_progress ();
 	}
     }
-  if (progress)
-    progress->set_task ("Checking screen consistency", 1);
-  int errs;
-  if (type == Dufay)
-    errs = smap->check_consistency (report_file, ret.param.coordinate1_x / 2, ret.param.coordinate1_y / 2, ret.param.coordinate2_x, ret.param.coordinate2_y,
-				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 2);
-  else
-    errs = smap->check_consistency (report_file, (ret.param.coordinate1_x - ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y - ret.param.coordinate2_y) / 4,
-				    (ret.param.coordinate1_x + ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y + ret.param.coordinate2_y) / 4,
-				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 3);
   if (errs)
     {
       if (progress)
@@ -1325,7 +1327,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  }
       ret.mesh_trans = m;
       ret.param.mesh_trans = m;
-      summarise_quality (img, smap, ret.param, "nonlinear", report_file, progress);
+      summarise_quality (img, smap, ret.param, "mesh", report_file, progress);
       ret.param.mesh_trans = NULL;
     }
   else
