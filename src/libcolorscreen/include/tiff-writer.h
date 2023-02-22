@@ -3,7 +3,7 @@
 class tiff_writer
 {
 public:
-  tiff_writer (const char *filename, int width, int height, int depth, int alpha, const char **error);
+  tiff_writer (const char *filename, int width, int height, int depth, bool alpha, const char **error);
   ~tiff_writer ();
   bool write_row ();
   uint16_t *row16bit ()

@@ -2,7 +2,7 @@
 #include "include/tiff-writer.h"
 extern unsigned char sRGB_icc[];
 extern unsigned int sRGB_icc_len;
-tiff_writer::tiff_writer (const char *filename, int width, int height, int depth, int alpha, const char **error)
+tiff_writer::tiff_writer (const char *filename, int width, int height, int depth, bool alpha, const char **error)
 {
   *error = NULL;
   out = TIFFOpen (filename, "wb");
@@ -24,6 +24,7 @@ tiff_writer::tiff_writer (const char *filename, int width, int height, int depth
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
       || (alpha && !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras))
+      || !TIFFSetField (out, TIFFTAG_COMPRESSION, COMPRESSION_LZW)
       || !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t) sRGB_icc_len, sRGB_icc))
     {
       *error = "write error";
@@ -31,7 +32,7 @@ tiff_writer::tiff_writer (const char *filename, int width, int height, int depth
       out = NULL;
       return;
     }
-  outrow = malloc (width * depth * (alpha ? 4 : 3) / 8);
+  outrow = malloc (width * (size_t)depth * (alpha ? 4 : 3) / 8);
   if (!outrow)
     {
       *error = "Out of memory allocating output buffer";
@@ -53,5 +54,7 @@ tiff_writer::~tiff_writer()
 {
    if (out)
      TIFFClose (out);
+   out = NULL;
    free (outrow);
+   outrow = NULL;
 }

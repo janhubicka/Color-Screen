@@ -393,6 +393,14 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	    }
         }
     }
+  if (!miter)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Maximum number of iterations reached.\n");
+      if (progress)
+	progress->resume_stdout ();
+    }
 #endif
   if (progress && progress->cancel_requested ())
     {

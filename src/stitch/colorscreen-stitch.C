@@ -7,6 +7,7 @@
 #include "../libcolorscreen/icc-srgb.h"
 #include "../libcolorscreen/render-interpolate.h"
 #include "../libcolorscreen/screen-map.h"
+#include "../libcolorscreen/include/tiff-writer.h"
 
 namespace {
 
@@ -34,6 +35,7 @@ struct stitching_params
   bool geometry_info;
   bool individual_geometry_info;
   bool outliers_info;
+  bool diffs;
 
   int outer_tile_border;
   int inner_tile_border;
@@ -63,7 +65,7 @@ struct stitching_params
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
-    geometry_info (false), individual_geometry_info (false), outliers_info (false),
+    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false),
     outer_tile_border (30), inner_tile_border (5), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
@@ -141,11 +143,13 @@ class stitch_image
   int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
+  bool patch_detected_p (int sx, int sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
   void clear_stitch_info ();
+  bool diff (stitch_image &other, progress_info *progress);
 
   analyze_base &
   get_analyzer ()
@@ -314,6 +318,132 @@ stitch_image::clear_stitch_info ()
   else
     memset (stitch_info, 0, (img_width / stitch_info_scale + 1) * (img_height / stitch_info_scale + 1) * sizeof (struct stitch_info));
 }
+bool
+stitch_image::patch_detected_p (int sx, int sy)
+{
+  sx = sx - xpos + xshift;
+  sy = sy - ypos + yshift;
+  if (sx < 0 || sy < 0 || sx >= screen_detected_patches->width || sy >= screen_detected_patches->height)
+    return false;
+  return screen_detected_patches->test_range (sx, sy, 2);
+}
+bool
+stitch_image::diff (stitch_image &other, progress_info *progress)
+{
+  coord_t sx, sy;
+  bool found = false;
+  scr_to_img_map.to_scr (0, 0, &sx, &sy);
+  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+    found = true;
+  scr_to_img_map.to_scr (img_width - 1, 0, &sx, &sy);
+  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+    found = true;
+  scr_to_img_map.to_scr (0, img_height - 1, &sx, &sy);
+  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+    found = true;
+  scr_to_img_map.to_scr (img_width - 1, img_height - 1, &sx, &sy);
+  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+    found = true;
+  if (!found)
+  {
+    printf ("No overlap\n");
+    return false;
+  }
+  int rxmin = INT_MAX, rxmax = INT_MIN, rymin = INT_MAX, rymax = INT_MIN;
+  progress->set_task ("determining overlap range", 1);
+  for (int y = 0; y < img_height; y += 10)
+    for (int x = 0; x < img_width; x += 10)
+      {
+         scr_to_img_map.to_scr (x, y, &sx, &sy);
+         if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+	   {
+	     rxmin = std::min (rxmin, x);
+	     rymin = std::min (rymin, y);
+	     rxmax = std::max (rxmax, x);
+	     rymax = std::max (rymax, y);
+	   }
+      }
+  progress->pause_stdout ();
+  printf ("Tiles %s and %s overlap in range x %i...%i y %i...%i\n", filename.c_str (), other.filename.c_str (), rxmin, rxmax, rymin, rymax);
+  if (report_file)
+    fprintf (report_file, "Tiles %s and %s overlap in range x %i...%i y %i...%i\n", filename.c_str (), other.filename.c_str (), rxmin, rxmax, rymin, rymax);
+  if (rxmin >= rxmax || rymin >= rymax)
+    return false;
+  progress->resume_stdout ();
+  int rwidth = rxmax - rxmin + 1;
+  int rheight = rymax - rymin + 1;
+  load_img (progress);
+  other.load_img (progress);
+  const char *error;
+  std::string fname = (std::string)"diff" + filename + other.filename;
+  tiff_writer out (fname.c_str (), rwidth, rheight, 16, false, &error);
+  if (error)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Can not open %s: %s\n", fname.c_str (), error);
+      exit (1);
+    }
+  if (progress)
+    progress->set_task ("Writting difference of two tiles", rheight);
+  int nimg_pixels = 0;
+  double sumdiff[3] = {0,0,0};
+  int maxdiff[3] = {0,0,0};
+  for (int y = rymin; y <= rymax; y++)
+    {
+      for (int x = rxmin; x <= rxmax; x++)
+	{
+	  int r = 0, g = 0, b = 0;
+          scr_to_img_map.to_scr (x, y, &sx, &sy);
+          if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+	   {
+	     int r2 = 0, g2 = 0, b2 = 0;
+	     render_pixel (rparam, passthrough_rparam, sx + xpos, sy + ypos, render_original, &r, &g, &b, progress);
+	     other.render_pixel (rparam, passthrough_rparam, sx + xpos, sy + ypos, render_original, &r2, &g2, &b2, progress);
+	     if (patch_detected_p (sx + xpos, sy + ypos) && other.patch_detected_p (sx + xpos, sy + ypos))
+	       {
+		 sumdiff[0] += abs (r2-r);
+		 sumdiff[1] += abs (g2-b);
+		 sumdiff[2] += abs (b2-b);
+		 nimg_pixels++;
+		 if (maxdiff[0] < abs (r2 - r))
+		   maxdiff[0] = abs (r2 - r);
+		 if (maxdiff[1] < abs (g2 - g))
+		   maxdiff[1] = abs (g2 - g);
+		 if (maxdiff[2] < abs (b2 - b))
+		   maxdiff[2] = abs (b2 - b);
+	       }
+	     out.row16bit() [(x - rxmin) * 3 + 0] = (r2 - r) + 65536 / 2;
+	     out.row16bit() [(x - rxmin) * 3 + 1] = (g2 - g) + 65536 / 2;
+	     out.row16bit() [(x - rxmin) * 3 + 2] = (b2 - b) + 65536 / 2;
+	   }
+	  else
+	   {
+	     out.row16bit() [(x - rxmin) * 3 + 0] = 0;
+	     out.row16bit() [(x - rxmin) * 3 + 1] = 0;
+	     out.row16bit() [(x - rxmin) * 3 + 2] = 0;
+	   }
+	}
+      if (!out.write_row ())
+        {
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Can not write %s\n", fname.c_str ());
+	  exit (1);
+        }
+      if (progress)
+	progress->inc_progress ();
+    }
+  if (nimg_pixels > 0)
+  {
+    progress->pause_stdout ();
+    printf ("Tiles %s and %s avg color difference red:%3.1f green:%3.1f blue:%3.1f; max red: %i, max green: %i, max blue: %i\n", filename.c_str (), other.filename.c_str (), sumdiff[0] / (double) nimg_pixels, sumdiff[1] / (double) nimg_pixels, sumdiff[2] / (double) nimg_pixels, maxdiff[0], maxdiff[1], maxdiff[2]);
+    if (report_file)
+      fprintf (report_file, "Tiles %s and %s avg color difference red:%3.1f green:%3.1f blue:%3.1f; max red: %i, max green: %i, max blue: %i\n", filename.c_str (), other.filename.c_str (), sumdiff[0] / (double) nimg_pixels, sumdiff[1] / (double) nimg_pixels, sumdiff[2] / (double) nimg_pixels, maxdiff[0], maxdiff[1], maxdiff[2]);
+    progress->resume_stdout ();
+  }
+  other.release_img ();
+  release_img ();
+  return true;
+}
 
 /* Output common points to hugin pto file.  */
 int
@@ -412,6 +542,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	      }
 	  }
     }
+  if (n < 1000)
+    return 0;
   if (collect_stitch_info)
     {
       double chisq;
@@ -472,9 +604,9 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	}
 
       progress->pause_stdout ();
-      printf ("Overlap of %s and %s avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), distsum / npoints, maxdist);
+      printf ("Overlap of %s and %s in %i points avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), npoints, distsum / npoints, maxdist);
       if (report_file)
-        fprintf (report_file, "Overlap of %s and %s avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), distsum / npoints, maxdist);
+        fprintf (report_file, "Overlap of %s and %s in %i points avg distance %f max distance %f\n", filename.c_str (), other.filename.c_str (), npoints, distsum / npoints, maxdist);
       progress->resume_stdout ();
       gsl_matrix_free (X);
       gsl_vector_free (vy);
@@ -672,10 +804,10 @@ stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 {
   coord_t ix, iy;
   scr_to_img_map.to_img (sx - xpos, sy - ypos, &ix, &iy);
-  return ix >= (left ? 5 : img->width * 0.02)
-	 && iy >= (top ? 5 : img->height * 0.02)
-	 && ix <= (right ? img->width - 5 : img->width * 0.98)
-	 && iy <= (bottom ? img->height - 5 : img->height * 0.98);
+  return ix >= (left ? 5 : img_width * 0.02)
+	 && iy >= (top ? 5 : img_height * 0.02)
+	 && ix <= (right ? img_width - 5 : img_width * 0.98)
+	 && iy <= (bottom ? img_height - 5 : img_height * 0.98);
 }
 
 bool
@@ -909,8 +1041,8 @@ stitch_image::write_stitch_info (progress_info *progress, int x, int y, int xx, 
   if (x < 0)
     tfilename = prefix + filename;
   else
-    tfilename = prefix + std::to_string (y) + std::to_string (x) + "-" + std::to_string (yy) + std::to_string (xx);
-  TIFF *out = TIFFOpen ((prefix + filename).c_str (), "wb");
+    tfilename = prefix + std::to_string (y) + std::to_string (x) + "-" + std::to_string (yy) + std::to_string (xx) + ".tif";
+  TIFF *out = TIFFOpen (tfilename.c_str (), "wb");
   if (!out)
     {
       //*error = "can not open output file";
@@ -1155,6 +1287,7 @@ print_help (const char *filename)
   printf ("  --slow-floodfill                            use unly slower discovery of patches (by default both slow and fast methods are used)\n");
   printf ("  --fast-floodfill                            use unly faster discovery of patches (by default both slow and fast methods are used)\n");
   printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
+  printf ("  --diffs                                     produce diff files for each overlapping pair of tiles\n");
 }
 
 void
@@ -1614,7 +1747,7 @@ void stitch (progress_info *progress)
     for (int y = 0; y < stitching_params.height; y++)
       for (int x = 0; x < stitching_params.width; x++)
 	for (int yy = y; yy < stitching_params.height; yy++)
-	  for (int xx = yy == y ? x : 0; xx < stitching_params.width; xx++)
+	  for (int xx = (yy == y ? x : 0); xx < stitching_params.width; xx++)
 	    if (x != xx || y != yy)
 	    {
 	      images[y][x].clear_stitch_info ();
@@ -1626,6 +1759,13 @@ void stitch (progress_info *progress)
   passthrough_rparam.gray_max = images[0][0].gray_max;
   if (stitching_params.hugin_pto_filename.length ())
     produce_hugin_pto_file (stitching_params.hugin_pto_filename.c_str (), progress);
+  if (stitching_params.diffs)
+    for (int y = 0; y < stitching_params.height; y++)
+      for (int x = 0; x < stitching_params.width; x++)
+	for (int yy = y; yy < stitching_params.height; yy++)
+	  for (int xx = (yy == y ? x : 0); xx < stitching_params.width; xx++)
+	    if (x != xx || y != yy)
+	      images[y][x].diff (images[yy][xx], progress);
   if (stitching_params.produce_stitched_file_p ())
     {
       TIFF *out;
@@ -2012,6 +2152,11 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--outliers-info", strlen ("--outliers-info")))
 	{
 	  stitching_params.outliers_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--diffs", strlen ("--diffs")))
+	{
+	  stitching_params.diffs = true;
 	  continue;
 	}
       if (!strncmp (argv[i], "--", 2))
