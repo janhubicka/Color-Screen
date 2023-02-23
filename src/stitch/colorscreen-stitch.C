@@ -346,10 +346,7 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   if (other.img_pixel_known_p (sx + xpos, sy + ypos))
     found = true;
   if (!found)
-  {
-    printf ("No overlap\n");
     return false;
-  }
   int rxmin = INT_MAX, rxmax = INT_MIN, rymin = INT_MAX, rymax = INT_MIN;
   progress->set_task ("determining overlap range", 1);
   for (int y = 0; y < img_height; y += 10)
