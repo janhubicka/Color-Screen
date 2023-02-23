@@ -519,6 +519,7 @@ confirm (render_scr_detect *render,
 	 coord_t max_distance,
 	 coord_t *rcx, coord_t *rcy, int *priority,
 	 coord_t sum_range,
+	 coord_t patch_xscale, coord_t patch_yscale,
 	 bool strip)
 {
   coord_t bestcy = x, bestcx = y, minsum = 0, bestinner = 0, bestouter = 0;
@@ -617,8 +618,8 @@ confirm (render_scr_detect *render,
     for (int xx = -sample_steps; xx <= sample_steps; xx++)
       {
 	luminosity_t color[3];
-	render->get_adjusted_pixel (bestcx + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate1_y,
-				    bestcy + (xx * ( 1 / ((coord_t)sample_steps * 2))) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps * 2))) * coordinate2_y,
+	render->get_adjusted_pixel (bestcx + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate1_y,
+				    bestcy + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate2_y,
 				    &color[0], &color[1], &color[2]);
 	luminosity_t sum = color[0]+color[1]+color[2];
 	color[0] = std::max (color[0], (luminosity_t)0);
@@ -841,9 +842,9 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
   // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, false)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, true)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true)))
 	  if (!map->known_p (e.scr_x - 1, e.scr_y)
 	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
@@ -881,12 +882,13 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	{
 	  /* Blue patches are smaller.  */
 	  int blue_min_patch_size = (min_patch_size + 1) / 2;
-	  coord_t c1_x = (-param.coordinate1_x + param.coordinate2_x) / 2;
-	  coord_t c1_y = (-param.coordinate1_y + param.coordinate2_y) / 2;
-	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x) / 2;
-	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y) / 2;
+	  coord_t c1_x = (-param.coordinate1_x + param.coordinate2_x);
+	  coord_t c1_y = (-param.coordinate1_y + param.coordinate2_y);
+	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x);
+	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y);
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 9, false)))
+				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.25, 0.25, false)))
+				 //|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.33 / 2, 0.33 / 2, false)))
 	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
 	    {
@@ -921,16 +923,45 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       return NULL;
     }
 
-  /* Determine better solution so the overall statistics are meaningfull.  */
+  /* Determine better screen dimension so the overall statistics are meaningfull.  */
   solver_parameters sparam2;
   scr_to_img_parameters param2;
   map->determine_solver_points (*npatches, &sparam2);
   param2 = param;
   simple_solver (&param2, img, sparam2, progress);
+  screen_xsize = sqrt (param2.coordinate1_x * param2.coordinate1_x + param2.coordinate1_y * param2.coordinate1_y);
+  screen_ysize = sqrt (param2.coordinate2_x * param2.coordinate2_x + param2.coordinate2_y * param2.coordinate2_y);
+  nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
+
+  /* Check for large unanalyzed areas.  */
   scr_to_img map2;
   map2.set_parameters (param2, img);
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
+  int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  if (snexpected > 0 && nfound > 1000)
+    {
+      progress->pause_stdout ();
+      printf ("Analyzed %2.2f%% of scan and %2.2f%% of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
+      if (report_file)
+	fprintf (report_file, "Analyzed %2.2f%% of scan and %2.2f%%  of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
+      printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
+      if (report_file)
+	fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
+      printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
+      if (report_file)
+	fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
+      printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+      if (report_file)
+	fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+      printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+      if (report_file)
+	fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+      printf ("\n");
+      if (report_file)
+	fprintf (report_file, "\n");
+      progress->resume_stdout ();
+    }
   if (progress)
     progress->set_task ("Checking known range", map->height);
   for (int y = -map->yshift; y < map->height - map->yshift; y++)
@@ -970,30 +1001,6 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  last_seen = 0;
       if (progress)
 	progress->inc_progress ();
-    }
-  int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
-  if (snexpected > 0 && nfound > 1000)
-    {
-      progress->pause_stdout ();
-      printf ("Analyzed %2.2f%% of scan and %2.2f%% of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
-      if (report_file)
-	fprintf (report_file, "Analyzed %2.2f%% of scan and %2.2f%%  of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
-      printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
-      if (report_file)
-	fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
-      printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
-      if (report_file)
-	fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
-      printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
-      if (report_file)
-	fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
-      printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
-      if (report_file)
-	fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
-      printf ("\n");
-      if (report_file)
-	fprintf (report_file, "\n");
-      progress->resume_stdout ();
     }
   if (!dsparams->do_mesh && nfound > 100000)
     ;
@@ -1191,7 +1198,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
        
 	 FIXME: This does not seem to work well since blue patches are too small
 	 and may get eliminated completely.  */
-      if (type != Dufay && 0)
+      if (type != Dufay && 1)
         {
 	  cmap = new color_class_map;
 	  cmap->allocate (img.width, img.height);
