@@ -1086,6 +1086,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   scr_to_img_parameters param;
   screen_map *smap = NULL;
   param.type = type;
+  color_class_map *cmap = NULL;
 
   const int search_xsteps = 6;
   const int search_ysteps = 6;
@@ -1116,6 +1117,11 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		progress->resume_stdout ();
 	      continue;
 	    }
+	  if (cmap)
+	    {
+	      delete cmap;
+	      cmap = NULL;
+	    }
 	  /* Re-detect screen.  */
 	  delete render;
 	  render = NULL;
@@ -1126,6 +1132,24 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  render->precompute_all (false, progress);
 	  render->precompute_rgbdata (progress);
 	}
+      /* In Finlay/Paget screen the blue patches touches by borders.
+         Enforce boundaries between patches so flood fill does not overflow.
+       
+	 FIXME: This does not seem to work well since blue patches are too small
+	 and may get eliminated completely.  */
+      if (type != Dufay && 0)
+        {
+	  cmap = new color_class_map;
+	  cmap->allocate (img.width, img.height);
+	  if (progress)
+	    progress->set_task ("prining screen", img.height);
+#pragma omp parallel for default(none) shared(progress,img,cmap,render)
+	  for (int y = 0; y < img.height; y++)
+	    {
+	      for (int x = 0; x < img.width; x++)
+		cmap->set_class (x, y, render->classify_pixel (x, y));
+	    }
+        }
       if (progress)
 	{
 	  progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
@@ -1136,7 +1160,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
 	    {
 	      if (type == Dufay ? try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress)
-		  : try_guess_paget_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
+		  : try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		{
 		  nattempts++;
 	          if (report_file && verbose)
@@ -1146,7 +1170,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		    }
 		  visited.clear ();
 		  simple_solver (&param, img, sparam, progress);
-		  smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
+		  smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, cmap ? cmap : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		  if (!smap)
 		    {
 		      if (progress)
@@ -1210,6 +1234,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	progress->inc_progress ();
     }
 #endif
+  if (cmap)
+    delete cmap;
   if (!smap)
     {
       delete render;
