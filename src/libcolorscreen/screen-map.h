@@ -307,6 +307,23 @@ public:
     *xmaxr = xmax;
     *ymaxr = ymax;
   }
+  void
+  determine_solver_points (int patches_found, solver_parameters *sparam)
+  {
+    sparam->remove_points ();
+    for (int y = -yshift, nf = 0, next =0, step = std::max (patches_found / 1000, 1); y < height - yshift; y ++)
+      for (int x = -xshift; x < width - xshift; x ++)
+	if (known_p (x,y) && nf++ > next)
+	  {
+	    next += step;
+	    coord_t ix, iy;
+	    get_coord (x, y, &ix, &iy);
+	    coord_t sx, sy;
+	    solver_parameters::point_color color;
+	    get_screen_coord (x, y, &sx, &sy, &color);
+	    sparam->add_point (ix, iy, sx, sy, color);
+	  }
+  }
   bool write_outliers_info (const char *filename, int width, int scale, int height, scr_to_img &map, const char **error, progress_info *progress);
   enum scr_type type;
   int width, height, xshift, yshift;

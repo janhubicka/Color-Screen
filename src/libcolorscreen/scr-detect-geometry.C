@@ -915,8 +915,62 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     }
   /* Dufay screen has two points per screen repetetion.  */
   *npatches = nfound;
+  if (nfound < 100)
+    {
+      delete map;
+      return NULL;
+    }
+
+  /* Determine better solution so the overall statistics are meaningfull.  */
+  solver_parameters sparam2;
+  scr_to_img_parameters param2;
+  map->determine_solver_points (*npatches, &sparam2);
+  param2 = param;
+  simple_solver (&param2, img, sparam2, progress);
+  scr_to_img map2;
+  map2.set_parameters (param2, img);
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
+  if (progress)
+    progress->set_task ("Checking known range", map->height);
+  for (int y = -map->yshift; y < map->height - map->yshift; y++)
+    {
+      int last_seen = INT_MAX / 2;
+      for (int x = -map->xshift; x < map->width - map->xshift; x++, last_seen++)
+	if (!map->known_p (x, y))
+	  {
+	    coord_t sx, sy, ix, iy;
+	    map->get_screen_coord (x, y, &sx, &sy);
+	    map2.to_img (sx, sy, &ix, &iy);
+	    if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+	      continue;
+	    int xrmul = 2;
+	    int yrmul = param.type != Dufay ? 2 : 1;
+	    bool found = last_seen < dsparams->max_unknown_screen_range * xrmul;
+	    for (int yy = std::max (y - dsparams->max_unknown_screen_range * yrmul, -map->yshift); yy < std::min (map->height - map->yshift, y + dsparams->max_unknown_screen_range * yrmul) && !found; yy++)
+	      for (int xx = std::max (x - dsparams->max_unknown_screen_range * xrmul, -map->xshift); xx < std::min (map->width - map->xshift, x + dsparams->max_unknown_screen_range * xrmul) && !found; xx++)
+		if (map->known_p (xx, yy))
+		  found = true;
+	    if (!found)
+	      {
+	        progress->pause_stdout ();
+	        printf ("Too large unanalyzed unknown screen area around image coordinates %f %f\n", ix, iy);
+		progress->resume_stdout ();
+		if (report_file)
+		  {
+		    fprintf (report_file, "Too large unanalyzed unknown screen area around image coordinates %f %f\n", ix, iy);
+		  }
+		delete map;
+		return NULL;
+	      }
+	    //else
+		//printf ("found %i %i\n",x,y);
+	  }
+	else
+	  last_seen = 0;
+      if (progress)
+	progress->inc_progress ();
+    }
   int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
   if (snexpected > 0 && nfound > 1000)
     {
@@ -1244,19 +1298,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
   if (progress)
     progress->set_task ("Obtaininig intitial solver points", 1);
-  sparam.remove_points ();
-  for (int y = -smap->yshift, nf = 0, next =0, step = ret.patches_found / 1000; y < smap->height - smap->yshift; y ++)
-    for (int x = -smap->xshift; x < smap->width - smap->xshift; x ++)
-      if (smap->known_p (x,y) && nf++ > next)
-	{
-	  next += step;
-	  coord_t ix, iy;
-	  smap->get_coord (x, y, &ix, &iy);
-	  coord_t sx, sy;
-	  solver_parameters::point_color color;
-	  smap->get_screen_coord (x, y, &sx, &sy, &color);
-	  sparam.add_point (ix, iy, sx, sy, color);
-	}
+  smap->determine_solver_points (ret.patches_found, &sparam);
 
   /* Determine scr-to-img parameters.
      Do perspective correction this time since this will be the final parameter produced.  */
@@ -1301,14 +1343,15 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
         progress->set_task ("Straightening corners", smap->height);
       for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
 	{
-	  int last_seen = range;
+	  int last_seen = INT_MAX / 2;
 	  for (int x = -smap->xshift; x < smap->width - smap->xshift; x++, last_seen++)
 	    if (!smap->known_p (x, y))
 	      {
-		bool found = last_seen < range;
-		for (int yy = std::max (y - range, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range) && !found; yy++)
-			/* TODO: *2 makes only sense for Dufay.  */
-		  for (int xx = std::max (x - range * 2, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * 2) && !found; xx++)
+		int xrmul = 2;
+		int yrmul = type != Dufay ? 2 : 1;
+		bool found = last_seen < range * xrmul;
+		for (int yy = std::max (y - range * yrmul, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range * yrmul) && !found; yy++)
+		  for (int xx = std::max (x - range * xrmul, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * xrmul) && !found; xx++)
 		    if (smap->known_p (xx, yy))
 		      found = true;
 		if (!found)

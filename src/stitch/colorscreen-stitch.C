@@ -41,6 +41,7 @@ struct stitching_params
   int inner_tile_border;
   int min_overlap_percentage;
   int max_overlap_percentage;
+  int max_unknown_screen_range;
   luminosity_t max_contrast;
   luminosity_t orig_tile_gamma;
 
@@ -66,7 +67,7 @@ struct stitching_params
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false),
-    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
 } stitching_params;
@@ -682,6 +683,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.optimize_colors = stitching_params.optimize_colors;
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
   dsparams.fast_floodfill = stitching_params.fast_floodfill;
+  dsparams.max_unknown_screen_range = stitching_params.max_unknown_screen_range;
   dsparams.return_known_patches = true;
   dsparams.do_mesh = stitching_params.mesh_trans;
   dsparams.return_screen_map = true;
@@ -2056,6 +2058,18 @@ main (int argc, char **argv)
 	    }
 	  i++;
 	  stitching_params.max_contrast = atoi (argv[i]);
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-unknown-screen-range"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing max contrast\n");
+	      print_help (argv[0]);
+	      exit (1);
+	    }
+	  i++;
+	  stitching_params.max_unknown_screen_range = atoi (argv[i]);
 	  continue;
 	}
       if (!strncmp (argv[i], "--max-contrast=", strlen ("--max-contrast=")))
