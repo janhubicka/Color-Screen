@@ -6,6 +6,9 @@
 #include "scr-detect.h"
 #include "imagedata.h"
 #include "bitmap.h"
+
+struct point_t {coord_t x, y;};
+
 struct solver_parameters
 {
   solver_parameters ()
@@ -84,6 +87,23 @@ struct solver_parameters
       }
   }
   static point_location *get_point_locations (enum scr_type type, int *n);
+};
+class homography
+{
+public:
+  enum solver_vars
+  {
+    solve_rotation = 1,
+    solve_free_rotation = 2,
+    solve_screen_weights = 4,
+    solve_image_weights = 8
+  };
+  static trans_4d_matrix get_matrix_4points (bool invert, point_t zero, point_t x, point_t y, point_t xpy);
+  static trans_4d_matrix get_matrix_5points (bool invert, point_t zero, point_t x, point_t y, point_t xpy, point_t txpy);
+  static trans_4d_matrix get_matrix (solver_parameters::point_t *points, int n, int flags,
+				     scr_to_img *map,
+				     coord_t wcenter_x, coord_t wcenter_y,
+				     coord_t *chisq_ret = NULL);
 };
 coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);

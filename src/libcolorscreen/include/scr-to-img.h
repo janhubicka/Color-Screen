@@ -337,8 +337,16 @@ public:
  	m_param.mesh_trans->apply (x, y, xp, yp);
 	return;
       }
+#if 0
+    coord_t xx, yy;
+    m_scr_to_img_homography_matrix.perspective_transform (x, y, xx, yy);
     m_matrix.apply (x,y, &x, &y);
     m_perspective_matrix.perspective_transform (x,y, x, y);
+    assert (fabs (x-xx) < 0.1);
+    assert (fabs (y-yy) < 0.1);
+#else
+    m_scr_to_img_homography_matrix.perspective_transform (x, y, x, y);
+#endif
     inverse_early_correction (x, y, xp, yp);
   }
   /* Map image coordinats to screen.  */
@@ -356,8 +364,16 @@ public:
     else
       {
 	apply_early_correction (xx, yy, &xx, &yy);
+#if 0
+        coord_t xx2, yy2;
+        m_img_to_scr_homography_matrix.perspective_transform (xx, yy, xx2, yy2);
 	m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
 	m_inverse_matrix.apply (xx,yy, xp, yp);
+        assert (fabs (xx2-*xp) < 0.1);
+        assert (fabs (yy2-*yp) < 0.1);
+#else
+        m_img_to_scr_homography_matrix.perspective_transform (xx, yy, *xp, *yp);
+#endif
       }
 
     /* Verify that inverse is working.  */
@@ -412,8 +428,10 @@ private:
   trans_4d_matrix m_perspective_matrix;
   /* final matrix producing screen coordinates.  */
   trans_3d_matrix m_matrix;
-  /* Invertedd matrix.  */
+  /* Inverted matrix.  */
   trans_3d_matrix m_inverse_matrix;
+  trans_4d_matrix m_scr_to_img_homography_matrix;
+  trans_4d_matrix m_img_to_scr_homography_matrix;
   std::atomic_ulong m_nwarnings;
 
   /* Matrix transforming final cordinates to screen coordinates.  */

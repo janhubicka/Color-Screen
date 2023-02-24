@@ -4,6 +4,7 @@
 #include "include/imagedata.h"
 #include "include/spline.h"
 #include "include/render-to-scr.h"
+#include "include/solver.h"
 
 namespace {
 
@@ -146,6 +147,28 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
 
   m_matrix = mm;
   m_inverse_matrix = m_matrix.invert ();
+
+  point_t zero;
+  point_t x;
+  point_t y;
+  point_t xpy;
+  point_t txpy;
+  coord_t tx, ty;
+  m_matrix.apply (0, 0, &tx, &ty);
+  m_perspective_matrix.perspective_transform (tx, ty, zero.x, zero.y);
+  m_matrix.apply (1, 0, &tx, &ty);
+  m_perspective_matrix.perspective_transform (tx, ty, x.x, x.y);
+  m_matrix.apply (0, 1, &tx, &ty);
+  m_perspective_matrix.perspective_transform (tx, ty, y.x, y.y);
+  m_matrix.apply (1, 1, &tx, &ty);
+  m_perspective_matrix.perspective_transform (tx, ty, xpy.x, xpy.y);
+  m_matrix.apply (2, 3, &tx, &ty);
+  m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
+  m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, zero, x, y, xpy, txpy);
+  m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, zero, x, y, xpy, txpy);
+  //m_scr_to_img_homography_matrix = homography_matrix_4points (false, zero, x, y, xpy);
+  //m_img_to_scr_homography_matrix = homography_matrix_4points (true, zero, x, y, xpy);
+
 
   /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems to be 23.77.
      We organize the grid making red lines horizontal, so rotate by additional 90 degrees
