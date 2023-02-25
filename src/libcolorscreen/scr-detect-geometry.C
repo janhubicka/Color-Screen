@@ -926,6 +926,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   /* Determine better screen dimension so the overall statistics are meaningfull.  */
   solver_parameters sparam2;
   scr_to_img_parameters param2;
+  if (dsparams->do_mesh)
+    sparam2.optimize_lens = sparam2.optimize_tilt = false;
   map->determine_solver_points (*npatches, &sparam2);
   param2 = param;
   simple_solver (&param2, img, sparam2, progress);
@@ -1133,6 +1135,9 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 {
   detected_screen ret;
   render_parameters empty;
+
+  if (dsparams->do_mesh)
+    sparam.optimize_lens = sparam.optimize_tilt = false;
 
   empty.gamma = gamma;
   ret.mesh_trans = NULL;
