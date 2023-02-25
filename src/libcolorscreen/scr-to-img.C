@@ -156,13 +156,13 @@ scr_to_img::set_parameters (scr_to_img_parameters param, image_data &img)
   coord_t tx, ty;
   m_matrix.apply (0, 0, &tx, &ty);
   m_perspective_matrix.perspective_transform (tx, ty, zero.x, zero.y);
-  m_matrix.apply (1, 0, &tx, &ty);
+  m_matrix.apply (1000, 0, &tx, &ty);
   m_perspective_matrix.perspective_transform (tx, ty, x.x, x.y);
-  m_matrix.apply (0, 1, &tx, &ty);
+  m_matrix.apply (0, 1000, &tx, &ty);
   m_perspective_matrix.perspective_transform (tx, ty, y.x, y.y);
-  m_matrix.apply (1, 1, &tx, &ty);
+  m_matrix.apply (1000, 1000, &tx, &ty);
   m_perspective_matrix.perspective_transform (tx, ty, xpy.x, xpy.y);
-  m_matrix.apply (2, 3, &tx, &ty);
+  m_matrix.apply (2000, 3000, &tx, &ty);
   m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
   m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, zero, x, y, xpy, txpy);
   m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, zero, x, y, xpy, txpy);

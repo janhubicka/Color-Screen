@@ -83,6 +83,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   if (sparam)
     {
+      if (fprintf (f, "solver_optimize_lens: %s\n", bool_names [(int)sparam->optimize_lens]) < 0
+	  || fprintf (f, "solver_optimize_tilt: %s\n", bool_names [(int)sparam->optimize_tilt]) < 0)
+	return false;
       for (int i = 0; i < sparam->npoints; i++)
 	{
 	  fprintf (f, "solver_point: %f %f %f %f %s\n",
@@ -216,6 +219,7 @@ read_color (FILE *f, color_t *c)
 #define param_check(name) param ? &param->name : NULL
 #define rparam_check(name) rparam ? &rparam->name : NULL
 #define dparam_check(name) dparam ? &dparam->name : NULL
+#define sparam_check(name) sparam ? &sparam->name : NULL
 
 bool
 load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error)
@@ -544,6 +548,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, dparam_check (sharpen_amount)))
 	    {
 	      *error = "error parsing scr_detect_sharpen_amount";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "solver_optimize_lens"))
+	{
+	  if (!parse_bool (f, sparam_check (optimize_lens)))
+	    {
+	      *error = "error parsing solver_optimize_lens";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "solver_optimize_tilt"))
+	{
+	  if (!parse_bool (f, sparam_check (optimize_lens)))
+	    {
+	      *error = "error parsing solver_optimize_tilt";
 	      return false;
 	    }
 	}

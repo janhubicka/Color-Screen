@@ -282,16 +282,16 @@ public:
     apply_motor_correction (x, y, &x, &y);
     x -= m_corrected_lens_center_x;
     y -= m_corrected_lens_center_y;
-    x *= m_inverted_projection_distance;
-    y *= m_inverted_projection_distance;
-    apply_lens_correction (x, y, xr, yr);
+    apply_lens_correction (x, y, &x, &y);
+    *xr = x * m_inverted_projection_distance;
+    *yr = y * m_inverted_projection_distance;
   }
   void
   inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-    inverse_lens_correction (x, y, &x, &y);
     x *= m_param.projection_distance;
     y *= m_param.projection_distance;
+    inverse_lens_correction (x, y, &x, &y);
     x += m_corrected_lens_center_x;
     y += m_corrected_lens_center_y;
     inverse_motor_correction (x, y, xr, yr);
