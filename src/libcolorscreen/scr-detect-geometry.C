@@ -962,6 +962,9 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	fprintf (report_file, "\n");
       progress->resume_stdout ();
     }
+  if (!dsparams->do_mesh && nfound > 100000)
+    return map;
+
   if (progress)
     progress->set_task ("Checking known range", map->height);
   for (int y = -map->yshift; y < map->height - map->yshift; y++)
@@ -1002,48 +1005,43 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       if (progress)
 	progress->inc_progress ();
     }
-  if (!dsparams->do_mesh && nfound > 100000)
-    ;
-  else
+  if (snexpected * dsparams->min_screen_percentage > nfound * 100)
     {
-      if (snexpected * dsparams->min_screen_percentage > nfound * 100)
+      if (report_file)
 	{
-	  if (report_file)
-	    {
-	      fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / snexpected);
-	      //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
-	    }
-	  delete map;
-	  return NULL;
+	  fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / snexpected);
+	  //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
 	}
-      if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
-	{
-	  if (report_file)
-	    fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
-	  delete map;
-	  return NULL;
-	}
-      if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
-	{
-	  if (report_file)
-	    fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
-	  delete map;
-	  return NULL;
-	}
-      if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
-	{
-	  if (report_file)
-	    fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
-	  delete map;
-	  return NULL;
-	}
-      if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
-	{
-	  if (report_file)
-	    fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
-	  delete map;
-	  return NULL;
-	}
+      delete map;
+      return NULL;
+    }
+  if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
+      delete map;
+      return NULL;
+    }
+  if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
+      delete map;
+      return NULL;
+    }
+  if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
+      delete map;
+      return NULL;
+    }
+  if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
+    {
+      if (report_file)
+	fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
+      delete map;
+      return NULL;
     }
   return map;
 }
@@ -1203,7 +1201,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  cmap = new color_class_map;
 	  cmap->allocate (img.width, img.height);
 	  if (progress)
-	    progress->set_task ("prining screen", img.height);
+	    progress->set_task ("pruning screen", img.height);
 #pragma omp parallel for default(none) shared(progress,img,cmap,render)
 	  for (int y = 0; y < img.height; y++)
 	    {

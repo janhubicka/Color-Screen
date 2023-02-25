@@ -15,9 +15,10 @@ bool debug = true;
 
 #if 1
 int
-print_matrix(FILE *f, const gsl_matrix *m)
+print_matrix(FILE *f, const char *name, const gsl_matrix *m)
 {
         int status, n = 0;
+	printf ("Matrix %s\n", name);
 
         for (size_t i = 0; i < m->size1; i++) {
                 for (size_t j = 0; j < m->size2; j++) {
@@ -70,7 +71,7 @@ equation_variables (int flags)
 /* Produce two rows of homography equation converting point S to D at index N.  */
 
 void
-init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, point_t s, point_t d)
+init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, enum scanner_type scanner_type, point_t s, point_t d)
 {
   if (invert)
     std::swap (s, d);
@@ -85,8 +86,16 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, poin
   gsl_matrix_set (A, n * 2    , 5, 0);
   if (flags & (homography::solve_rotation | homography::solve_free_rotation))
     {
-      gsl_matrix_set (A, n * 2, 6, -d.x*s.x);
-      gsl_matrix_set (A, n * 2, 7, -d.x*s.y);
+      if ((flags & homography::solve_free_rotation) || scanner_type != lens_move_horisontally)
+	{
+	  gsl_matrix_set (A, n * 2, 6, -d.x*s.x);
+	  gsl_matrix_set (A, n * 2, 7, -d.x*s.y);
+	}
+      else
+	{
+	  gsl_matrix_set (A, n * 2, 6, 0);
+	  gsl_matrix_set (A, n * 2, 7, 0);
+	}
       if (flags & homography::solve_free_rotation)
 	{
 	  gsl_matrix_set (A, n * 2, 8, 0);
@@ -102,8 +111,16 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, poin
   gsl_matrix_set (A, n * 2 + 1, 5, 1);
   if (flags & homography::solve_rotation)
     {
-      gsl_matrix_set (A, n * 2 + 1, 6, -d.y*s.x);
-      gsl_matrix_set (A, n * 2 + 1, 7, -d.y*s.y);
+      if (scanner_type != lens_move_vertically)
+         {
+            gsl_matrix_set (A, n * 2 + 1, 6, -d.y*s.x);
+            gsl_matrix_set (A, n * 2 + 1, 7, -d.y*s.y);
+	 }
+      else
+         {
+            gsl_matrix_set (A, n * 2 + 1, 6, 0);
+            gsl_matrix_set (A, n * 2 + 1, 7, 0);
+	 }
     }
   else if (flags & homography::solve_free_rotation)
     {
@@ -116,7 +133,7 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, poin
 
 /* Turn solution to a matrix.  */
 trans_4d_matrix
-soltion_to_matrix (gsl_vector *v, int flags)
+solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type)
 {
   trans_4d_matrix ret;
   ret.m_elements[0][0] = gsl_vector_get (v, 0);
@@ -129,7 +146,9 @@ soltion_to_matrix (gsl_vector *v, int flags)
   ret.m_elements[2][1] = 0;
   ret.m_elements[3][1] = gsl_vector_get (v, 5);
 
-  if (flags & (homography::solve_rotation | homography::solve_free_rotation))
+  if ((flags & (homography::solve_rotation)
+       && type != lens_move_horisontally)
+      || (flags & homography::solve_free_rotation))
     {
       ret.m_elements[0][2] = gsl_vector_get (v, 6);
       ret.m_elements[1][2] = gsl_vector_get (v, 7);
@@ -147,7 +166,8 @@ soltion_to_matrix (gsl_vector *v, int flags)
       ret.m_elements[0][3] = gsl_vector_get (v, 8);
       ret.m_elements[1][3] = gsl_vector_get (v, 9);
     }
-  else if (flags & homography::solve_rotation)
+  else if ((flags & homography::solve_rotation)
+	   && type != lens_move_vertically)
     {
       ret.m_elements[0][3] = gsl_vector_get (v, 6);
       ret.m_elements[1][3] = gsl_vector_get (v, 7);
@@ -169,8 +189,9 @@ soltion_to_matrix (gsl_vector *v, int flags)
 
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points,
-	bool weights, bool scrweights, coord_t wcenter_x, coord_t wcenter_y,
-      	bool final = false)
+	/*bool weights, bool scrweights,*/
+	coord_t wcenter_x, coord_t wcenter_y,
+	int flags, bool final = false)
 {
   if (debug_output && final)
     {
@@ -185,29 +206,151 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   param->coordinate1_y = 0;
   param->coordinate2_x = 0;
   param->coordinate2_y = 1;
+  if (flags & homography::solve_rotation)
+    {
+      param->tilt_x = 0;
+      param->tilt_y = 0;
+    }
   /* This map applies only non-linear part of corrections (that are not optimized).  */
   scr_to_img map;
   map.set_parameters (*param, img_data);
 
   double chisq;
-  trans_4d_matrix h = homography::get_matrix (points, n, /*(weights ? homography::solve_image_weights : 0) | (scrweights ? homography::solve_screen_weights : 0)*/0,
-					      &map,
+  trans_4d_matrix h = homography::get_matrix (points, n, flags,
+					      param->scanner_type, &map,
 					      wcenter_x, wcenter_y, &chisq);
-  coord_t center_x = h.m_elements[2][0];
-  coord_t center_y = h.m_elements[3][1];
-  coord_t coordinate1_x = center_x + h.m_elements[0][0];
-  coord_t coordinate1_y = center_y + h.m_elements[0][1];
-  coord_t coordinate2_x = center_x + h.m_elements[1][0];
-  coord_t coordinate2_y = center_y + h.m_elements[1][1];
+  coord_t center_x, center_y, coordinate1_x, coordinate1_y, coordinate2_x, coordinate2_y;
+
+  /* Determine center and coordinate vectors.  */
+  h.perspective_transform (0, 0, center_x, center_y);
+  h.perspective_transform (1, 0, coordinate1_x, coordinate1_y);
+  h.perspective_transform (0, 1, coordinate2_x, coordinate2_y);
+
   map.to_img (center_x, center_y, &center_x, &center_y);
   map.to_img (coordinate1_x, coordinate1_y, &coordinate1_x, &coordinate1_y);
   map.to_img (coordinate2_x, coordinate2_y, &coordinate2_x, &coordinate2_y);
+
   param->center_x = center_x;
   param->center_y = center_y;
   param->coordinate1_x = coordinate1_x - center_x;
   param->coordinate1_y = coordinate1_y - center_y;
   param->coordinate2_x = coordinate2_x - center_x;
   param->coordinate2_y = coordinate2_y - center_y;
+  /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
+  if (flags & homography::solve_rotation)
+    {
+      coord_t tilt_x_min=-3, tilt_x_max=3;
+      int tilt_x_steps = 21;
+      coord_t tilt_y_min=-3, tilt_y_max=3;
+      int tilt_y_steps = 21;
+      coord_t minsq = INT_MAX;
+      coord_t best_tilt_x = 1, best_tilt_y = 1;
+      for (int i = 0; i < 10; i++)
+	{
+	  coord_t txstep = (tilt_x_max - tilt_x_min) / (tilt_x_steps - 1);
+	  coord_t tystep = (tilt_y_max - tilt_y_min) / (tilt_y_steps - 1);
+	  for (int tx = 0; tx < tilt_x_steps; tx++)
+	      for (int ty = 0; ty < tilt_y_steps; ty++)
+		{
+		  param->tilt_x = tilt_x_min + txstep * tx;
+		  param->tilt_y = tilt_y_min + tystep * ty;
+		  coord_t sq = 0;
+		  scr_to_img map2;
+		  map2.set_parameters (*param, img_data);
+		  for (int sy = -1; sy <= 1; sy++)
+		    for (int sx = -1; sx <= 1; sx++)
+		      {
+			coord_t xt, yt;
+			map2.to_img (sx, sy, &xt, &yt);
+			coord_t px, py;
+			h.perspective_transform (sx, sy, px, py);
+			map.to_img (px, py, &px, &py);
+			sq += (px - xt) * (px - xt) + (py - yt) * (py - yt);
+		      }
+
+#if 0
+		    for (int i = 0; i < n; i++)
+		      {
+			coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
+			coord_t xt, yt;
+			map2.to_img (xs, ys, &xt, &yt);
+			coord_t px, py;
+			h.perspective_transform (xs, ys, px, py);
+			map.to_img (px, py, &px, &py);
+			sq += (px - xt) * (px - xt) + (py - yt) * (py - yt);
+		      }
+#endif
+		    if (sq < minsq)
+		      {
+			minsq = sq;
+			best_tilt_x = param->tilt_x;
+			best_tilt_y = param->tilt_y;
+			//printf ("Tilts %f %f %f %i\n", best_tilt_x, best_tilt_y, minsq, i);
+		      }
+		  }
+	    param->tilt_x = best_tilt_x;
+	    param->tilt_y = best_tilt_y;
+	    tilt_x_min = best_tilt_x - txstep;
+	    tilt_x_max = best_tilt_x + txstep;
+	    tilt_y_min = best_tilt_y - tystep;
+	    tilt_y_max = best_tilt_y + tystep;
+	  }
+	param->tilt_x = best_tilt_x;
+	param->tilt_y = best_tilt_y;
+	//printf ("Tilts %f %f %f\n", best_tilt_x, best_tilt_y, minsq);
+#if 0
+	/* Compute RQ decomposition.  */
+	gsl_matrix *A = gsl_matrix_alloc (3, 3);
+	gsl_matrix *P = gsl_matrix_alloc (3, 3);
+	gsl_matrix *Q = gsl_matrix_alloc (3, 3);
+	gsl_matrix *R = gsl_matrix_alloc (3, 3);
+	gsl_vector *tau = gsl_vector_alloc (3);
+      h.print (stdout);
+      for (int i = 0; i < 3; i++)
+	for (int j = 0; j < 3; j++)
+	  gsl_matrix_set (P, i, j, 2-j==i);
+      print_matrix (stdout, "P", P);
+
+      for (int i = 0; i < 3; i++)
+	for (int j = 0; j < 3; j++)
+	  gsl_matrix_set (A, i, j, h.m_elements[j][i]);
+      /* h is 4x4 and Y shift is in the last row.  */
+      gsl_matrix_set (A, 1, 2, h.m_elements[3][1]);
+
+      print_matrix (stdout, "A", A);
+      gsl_matrix_swap_rows (A, 0, 2);
+      print_matrix (stdout, "A rows reversed", A);
+      gsl_matrix_transpose (A);
+      print_matrix (stdout, "A transposed", A);
+
+      gsl_linalg_QR_decomp (A, tau);
+      gsl_linalg_QR_unpack (A, tau, Q, R);
+      gsl_matrix_swap_rows (R, 0, 2);
+      gsl_matrix_transpose (R);
+      gsl_matrix_swap_rows (R, 0, 2);
+      print_matrix (stdout, "R", R);
+      gsl_matrix_transpose (Q);
+      gsl_matrix_swap_rows (Q, 0, 2);
+      print_matrix (stdout, "Q", Q);
+      gsl_matrix_free (P);
+      gsl_matrix_free (R);
+      gsl_matrix_free (A);
+      gsl_vector_free (tau);
+      double sy = -gsl_matrix_get (Q, 2, 0);
+      sy *= param->projection_distance;
+      if (fabs (sy) > 1)
+	printf ("tilt y out of range %f\n", sy);
+      param->tilt_y = asin (sy) * 180 / M_PI;
+      printf ("solver sy: %f tilt %f\n", sy, param->tilt_y);
+      double cy = cos (asin (sy));
+      double sx = gsl_matrix_get (Q, 2, 1) / cy;
+      sx *= param->projection_distance;
+      if (fabs (sx) > 1)
+	printf ("tilt x out of range %f\n", sx);
+      param->tilt_x = asin (sx) * 180 / M_PI;
+      printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
+#endif
+    }
   if (debug_output && final)
     {
       printf ("New Translation %f %f\n", param->center_x, param->center_y);
@@ -230,6 +373,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	  map.to_img (px, py, &px, &py);
 
 #if 0
+	  map.to_img (px, py, &px, &py);
 	  if (debug_output)
 	    printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
 		px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
@@ -253,7 +397,7 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parame
 {
   if (progress)
     progress->set_task ("optimizing", 1);
-  return solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, true);
+  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
 }
 
 coord_t
@@ -261,19 +405,22 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 {
   if (sparam.npoints < 3)
     return 0;
+
+  if (param->mesh_trans)
+    abort ();
+
+
+  coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
+#if  0
+  coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
   coord_t tilt_x_min=-3, tilt_x_max=3;
   int tilt_x_steps = 21;
   coord_t tilt_y_min=-3, tilt_y_max=3;
   int tilt_y_steps = 21;
   int nbest = 0;
   int iterations = 10;
-
-  if (param->mesh_trans)
-    abort ();
-
-
-  coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
-  coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, sparam.npoints <= 10);
+  printf ("Chimin1 %f\n", chimin);
+  chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
   if (sparam.npoints > 10)
     {
       if (progress)
@@ -289,7 +436,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 		  {
 		    param->tilt_x = tilt_x_min + txstep * tx;
 		    param->tilt_y = tilt_y_min + tystep * ty;
-		    coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y);
+		    coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0));
 		    if (chi < chimin)
 		      {
 			chimin = chi;
@@ -308,9 +455,10 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	  tilt_y_max = best_tilty + tystep;
 	}
       //printf ("Found %i\n", nbest);
-      return solver (param, img_data, sparam.npoints, sparam.point, sparam.weighted, false, sparam.center_x, sparam.center_y, true);
+      return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y,  (sparam.weighted ? homography::solve_image_weights : 0), true);
     }
   else
+#endif
     return chimin;
 }
 mesh *
@@ -339,7 +487,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	for (int x = 0; x < width; x++)
 	  {
 	    coord_t xx, yy;
-	    solver (&lparam, img_data, sparam.npoints, sparam.point, false, true, x * step - xshift, y * step - yshift);
+	    solver (&lparam, img_data, sparam.npoints, sparam.point, x * step - xshift, y * step - yshift, homography::solve_screen_weights);
 	    scr_to_img map2;
 	    map2.set_parameters (lparam, img_data);
 	    map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
@@ -376,7 +524,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
     }
   else
     {
-      solver (&lparam, img_data, sparam.npoints, sparam.point, false, false, sx, sy);
+      solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, 0);
       scr_to_img map2;
       map2.set_parameters (lparam, img_data);
       map2.to_img (sx, sy, &xx, &yy);
@@ -879,6 +1027,7 @@ optimize_screen_colors (scr_detect_parameters *param,
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
 homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
+			enum scanner_type scanner_type,
 			scr_to_img *map,
 			coord_t wcenter_x, coord_t wcenter_y,
 			coord_t *chisq_ret)
@@ -901,7 +1050,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
       else
 	xt = xi, xt = yi;
 
-      init_equation (X, y, i, false, flags, {xs, ys}, {xt, yt});
+      init_equation (X, y, i, false, flags, scanner_type, {xs, ys}, {xt, yt});
 
       /* Weight should be 1 / (error^2).  */
       if (!(flags & (solve_screen_weights | solve_image_weights)))
@@ -909,7 +1058,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 	  gsl_vector_set (w, i * 2, 1.0);
 	  gsl_vector_set (w, i * 2 + 1, 1.0);
 	}
-      if (!(flags & (solve_image_weights)))
+      if (flags & solve_image_weights)
 	{
 	  coord_t dist = sqrt ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y));
 	  double weight = 1 / (dist + 0.5);
@@ -926,20 +1075,20 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 	}
     }
   gsl_multifit_linear_workspace * work
-    = gsl_multifit_linear_alloc (n*2, 6);
+    = gsl_multifit_linear_alloc (n*2, nvariables);
   double chisq;
   gsl_multifit_wlinear (X, w, y, c, cov,
 			&chisq, work);
   gsl_multifit_linear_free (work);
   /* TODO: robust solvers does not seem to work in practice.  Replace them by RANSAC?  */
 #if 0
-      gsl_multifit_robust_workspace * work
-	= gsl_multifit_robust_alloc (gsl_multifit_robust_default, n*2, 6);
-      work->maxiter = 10000;
-      gsl_multifit_robust (X, y, c, cov,
-			  work);
-      chisq = 0;
-      gsl_multifit_robust_free (work);
+  gsl_multifit_robust_workspace * work
+    = gsl_multifit_robust_alloc (gsl_multifit_robust_default, n*2, 6);
+  work->maxiter = 10000;
+  gsl_multifit_robust (X, y, c, cov,
+		      work);
+  chisq = 0;
+  gsl_multifit_robust_free (work);
 #endif
   if (chisq_ret)
     *chisq_ret = chisq;
@@ -947,7 +1096,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
   gsl_vector_free (y);
   gsl_vector_free (w);
   gsl_matrix_free (cov);
-  return soltion_to_matrix (c, flags);
+  return solution_to_matrix (c, flags, scanner_type);
 }
 
 /* Return homography matrix M.
@@ -959,18 +1108,20 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 
    This assumes fixed lens projection.  */
 trans_4d_matrix
-homography::get_matrix_4points (bool invert, point_t zero, point_t x, point_t y, point_t xpy)
+homography::get_matrix_4points (bool invert, enum scanner_type type, point_t zero, point_t x, point_t y, point_t xpy)
 {
   gsl_matrix *A = gsl_matrix_alloc (8, 8);
   gsl_vector *v = gsl_vector_alloc (8);
-  init_equation (A, v, 0, invert, solve_rotation, {0, 0}, zero);
-  init_equation (A, v, 1, invert, solve_rotation, {1, 0}, x);
-  init_equation (A, v, 2, invert, solve_rotation, {0, 1}, y);
-  init_equation (A, v, 3, invert, solve_rotation, {1, 1}, xpy);
+  init_equation (A, v, 0, invert, solve_rotation, type, {0, 0}, zero);
+  init_equation (A, v, 1, invert, solve_rotation, type, {1, 0}, x);
+  init_equation (A, v, 2, invert, solve_rotation, type, {0, 1}, y);
+  init_equation (A, v, 3, invert, solve_rotation, type, {1, 1}, xpy);
 
+  if (debug_output)
+    print_system (stdout, A,v);
   gsl_linalg_HH_svx (A, v);
   gsl_matrix_free (A);
-  return soltion_to_matrix (v, solve_rotation);
+  return solution_to_matrix (v, solve_rotation, type);
 }
 
 /* Return homography matrix M.
@@ -987,15 +1138,15 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
 {
   gsl_matrix *A = gsl_matrix_alloc (10, 10);
   gsl_vector *v = gsl_vector_alloc (10);
-  init_equation (A, v, 0, invert, solve_free_rotation, {0, 0}, zero);
-  init_equation (A, v, 1, invert, solve_free_rotation, {1, 0}, x);
-  init_equation (A, v, 2, invert, solve_free_rotation, {0, 1}, y);
-  init_equation (A, v, 3, invert, solve_free_rotation, {1, 1}, xpy);
-  init_equation (A, v, 4, invert, solve_free_rotation, {2, 3}, txpy);
+  init_equation (A, v, 0, invert, solve_free_rotation, fixed_lens, {0, 0}, zero);
+  init_equation (A, v, 1, invert, solve_free_rotation, fixed_lens, {1, 0}, x);
+  init_equation (A, v, 2, invert, solve_free_rotation, fixed_lens, {0, 1}, y);
+  init_equation (A, v, 3, invert, solve_free_rotation, fixed_lens, {1, 1}, xpy);
+  init_equation (A, v, 4, invert, solve_free_rotation, fixed_lens, {2, 3}, txpy);
 
   if (debug_output)
     print_system (stdout, A,v);
   gsl_linalg_HH_svx (A, v);
   gsl_matrix_free (A);
-  return soltion_to_matrix (v, solve_free_rotation);
+  return solution_to_matrix (v, solve_free_rotation, fixed_lens);
 }
