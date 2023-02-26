@@ -695,7 +695,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   if (stitching_params.reoptimize_colors)
     {
       scr_detect_parameters optimized_dparam = dparam;
-      optimize_screen_colors (&optimized_dparam, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
+      optimize_screen_colors (&optimized_dparam, stitching_params.type, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, rparam.gamma, progress, report_file);
       delete mesh_trans;
       delete detected.known_patches;
       delete detected.smap;
@@ -2061,12 +2061,17 @@ main (int argc, char **argv)
 	{
 	  if (i == argc - 1)
 	    {
-	      fprintf (stderr, "Missing max contrast\n");
+	      fprintf (stderr, "Missing unknown screen range\n");
 	      print_help (argv[0]);
 	      exit (1);
 	    }
 	  i++;
 	  stitching_params.max_unknown_screen_range = atoi (argv[i]);
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-unknown-screen-range="))
+	{
+	  stitching_params.max_unknown_screen_range = atoi (argv[i] + strlen("--max-unknown-screen-range="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--max-contrast=", strlen ("--max-contrast=")))

@@ -12,16 +12,18 @@ namespace
 bool debug_output = false;
 bool debug = true;
 
-// Compute a pseudorandom integer.
-// Output value in range [0, 32767]
 inline int fast_rand16(unsigned int *g_seed) {
     *g_seed = (214013* *g_seed+2531011);
     return ((*g_seed)>>16)&0x7FFF;
 }
+
+/* Random number generator used by RANSAC.  It is re-initialized every time RANSAC is run
+   so results are deterministic.  */
 inline int fast_rand32(unsigned int *g_seed) {
   return fast_rand16(g_seed) | (fast_rand16 (g_seed) << 15);
 }
 
+/* Debug facility.  */
 #if 1
 int
 print_matrix(FILE *f, const char *name, const gsl_matrix *m)
@@ -89,9 +91,10 @@ class translation_scale_matrix: public trans_4d_matrix
   }
 };
 
-/* Used to do two passes across set of points and produces a matrix which normalizes them
-   so they have center in 0 and scale sqrt(2).
+/* Used to do two passes across set of points and produces a translation and
+   scale matrix which normalizes them so they have center in 0 and scale sqrt(2).
    This improves numerical stability of homography computations  */
+
 class
 normalize_points
 {
@@ -194,8 +197,10 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags, enum
     }
 }
 
-/* Turn solution to a matrix.
-   AVG_X and AVG_Y are averages we shifted input problem  */
+/* Turn solution V to a matrix.
+   FLAGS and TYPE deterine the setup of the equations.  If INVERSER is true we are determining inverse matrix.
+   TS and TD are normalization matrices for source and destination coordinates.
+   If KEEP_VECTOR is false, free vector V.  */
 inline trans_4d_matrix
 solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type, bool inverse, trans_4d_matrix ts, trans_4d_matrix td, bool keep_vector = false)
 {
@@ -255,11 +260,14 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type, bool inver
   return ret;
 }
 
-/* Wrapper for homography::get_matrix that translates result back to PARAM.  */
+/* Determine homography matrix matching points specified by POINT and N.
+   Update PARAM for desired transformations.
+   If solve_screen_weights or solve_image_weights are set in FLAGS then
+   WCENTER_X and WCENTER_Y spedifies point where top optimize for.
+   If FINAL is true output info on results.  */
 
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points,
-	/*bool weights, bool scrweights,*/
 	coord_t wcenter_x, coord_t wcenter_y,
 	int flags, bool final = false)
 {
@@ -780,7 +788,7 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
 /* Given known portion of screen collect color samples and optimize to PARAM.
    M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. */
 void
-optimize_screen_colors (scr_detect_parameters *param, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress, FILE *report)
+optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress, FILE *report)
 {
   int count = 0;
   const int range = 2;
@@ -813,7 +821,10 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, mesh *m, 
 	      greens[nng].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
 	      nng++;
 	    }
-	  m->apply ((x)+0.5, y, &ix, &iy);
+	  if (type == Dufay)
+	    m->apply ((x)+0.5, y, &ix, &iy);
+	  else
+	    m->apply ((x)+0.25, y + 0.25, &ix, &iy);
 	  if (nnb < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g
@@ -835,7 +846,10 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, mesh *m, 
 	      reds[nnr].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
 	      nnr++;
 	    }
-	  m->apply ((x) + 0.5, y + 0.5, &ix, &iy);
+	  if (type == Dufay)
+	    m->apply ((x) + 0.5, y + 0.5, &ix, &iy);
+	  else
+	    m->apply ((x) + 0.5, y, &ix, &iy);
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g
@@ -987,132 +1001,178 @@ optimize_screen_colors (scr_detect_parameters *param,
   int n = nreds + ngreens + nblues;
   int matrixw = 4 * 3;
   int matrixh = n * 3;
-  gsl_multifit_linear_workspace * work
-    = gsl_multifit_linear_alloc (matrixh, matrixw);
-  gsl_matrix *X, *cov;
-  gsl_vector *y, *w, *c;
-  X = gsl_matrix_alloc (matrixh, matrixw);
-  y = gsl_vector_alloc (matrixh);
-  w = gsl_vector_alloc (matrixh);
-  c = gsl_vector_alloc (matrixw);
-  cov = gsl_matrix_alloc (matrixw, matrixw);
 
   double min_chisq = 0;
   bool found = false;
   color_t bestdark, bestred, bestgreen, bestblue;
-  luminosity_t bestlum = 0;
-  const int steps = 100;
-  if (progress)
-    progress->set_task ("optimizing colors", steps);
-  std::vector<luminosity_t> lums;
+  luminosity_t bestrlum = 0, bestglum = 0, bestblum = 0;
+  /* If true three dimenstional search is made for dark point.  */
+  const bool threed = true;
+  const int steps = 8;
+  /* with 3 bit per step, about 12 bits should be enough for everybody.  */
+  const int iterations = 4;
+  if (progress) 
+    progress->set_task ("optimizing colors", iterations * steps * (threed ? steps * steps : 1));
+
+  /* Determine max of search range.  If this is too large, the red/green/blue colors may become negative.  */
+  std::vector<luminosity_t> rlums;
+  std::vector<luminosity_t> glums;
+  std::vector<luminosity_t> blums;
   for (int i = 0; i < nreds; i++)
-    lums.push_back (reds[i].red + reds[i].green + reds[i].blue);
+    rlums.push_back (reds[i].red + reds[i].green + reds[i].blue);
   for (int i = 0; i < ngreens; i++)
-    lums.push_back (greens[i].red + greens[i].green + greens[i].blue);
+    glums.push_back (greens[i].red + greens[i].green + greens[i].blue);
   for (int i = 0; i < nblues; i++)
-    lums.push_back (blues[i].red + blues[i].green + blues[i].blue);
-  sort(lums.begin (), lums.end ());
-  luminosity_t maxlum = lums[(int)(lums.size () * 0.5)];
-  for (int step = 0; step < steps ; step++)
+    blums.push_back (blues[i].red + blues[i].green + blues[i].blue);
+  sort(rlums.begin (), rlums.end ());
+  sort(glums.begin (), glums.end ());
+  sort(blums.begin (), blums.end ());
+
+  luminosity_t minrlum = -0.2;
+  luminosity_t maxrlum = rlums[(int)(rlums.size () * 0.5)];
+  luminosity_t minglum = -0.2;
+  luminosity_t maxglum = glums[(int)(glums.size () * 0.5)];
+  luminosity_t minblum = -0.2;
+  luminosity_t maxblum = blums[(int)(blums.size () * 0.5)];
+
+  if (!threed)
+    maxrlum = maxglum = maxblum = std::min (maxrlum, std::min (maxglum, maxblum));
+
+
+  for (int iteration = 0; iteration < iterations; iteration++)
     {
-      luminosity_t mm = step * maxlum / steps;
-      if (progress)
-        progress->inc_progress ();
-      for (int i = 0; i < nreds; i++)
+#pragma omp parallel for default(none) shared(progress, minrlum, maxrlum, minglum, maxglum, minblum, maxblum, bestred, bestgreen, bestblue, bestrlum, bestglum, bestblum, reds, greens, blues, matrixh, matrixw, nreds, nblues, ngreens, found, min_chisq, bestdark)
+      for (int rstep = 0; rstep < steps ; rstep++)
 	{
-	  int e = i * 3;
-	  coord_t ii = reds[i].red + reds[i].green + reds[i].blue - mm;
-	  for (int j = 0; j < 3; j++)
-	    {
-	      gsl_matrix_set (X, e+j, 0, j==0);
-	      gsl_matrix_set (X, e+j, 1, j==1);
-	      gsl_matrix_set (X, e+j, 2, j==2);
-	      gsl_matrix_set (X, e+j, 3, j==0 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 4, j==1 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 5, j==2 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 6, 0);
-	      gsl_matrix_set (X, e+j, 7, 0);
-	      gsl_matrix_set (X, e+j, 8, 0);
-	      gsl_matrix_set (X, e+j, 9, 0);
-	      gsl_matrix_set (X, e+j, 10, 0);
-	      gsl_matrix_set (X, e+j, 11, 0);
-	      gsl_vector_set (w, e+j, 1);
-	    }
-	  gsl_vector_set (y, e, reds[i].red);
-	  gsl_vector_set (y, e+1, reds[i].green);
-	  gsl_vector_set (y, e+2, reds[i].blue);
-	}
-      for (int i = 0; i < ngreens; i++)
-	{
-	  int e = (i + nreds) * 3;
-	  coord_t ii = greens[i].red + greens[i].green + greens[i].blue - mm;
-	  for (int j = 0; j < 3; j++)
-	    {
-	      gsl_matrix_set (X, e+j, 0, j==0);
-	      gsl_matrix_set (X, e+j, 1, j==1);
-	      gsl_matrix_set (X, e+j, 2, j==2);
-	      gsl_matrix_set (X, e+j, 3, 0);
-	      gsl_matrix_set (X, e+j, 4, 0);
-	      gsl_matrix_set (X, e+j, 5, 0);
-	      gsl_matrix_set (X, e+j, 6, j==0 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 7, j==1 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 8, j==2 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 9, 0);
-	      gsl_matrix_set (X, e+j, 10, 0);
-	      gsl_matrix_set (X, e+j, 11, 0);
-	      gsl_vector_set (w, e+j, 1);
-	    }
-	  gsl_vector_set (y, e, greens[i].red);
-	  gsl_vector_set (y, e+1, greens[i].green);
-	  gsl_vector_set (y, e+2, greens[i].blue);
-	  //printf ("%f %f %f\n",greens[i].red, greens[i].green, greens[i].blue);
-	}
-      for (int i = 0; i < nblues; i++)
-	{
-	  int e = (i + nreds + ngreens) * 3;
-	  coord_t ii = blues[i].red + blues[i].green + blues[i].blue - mm;
-	  for (int j = 0; j < 3; j++)
-	    {
-	      gsl_matrix_set (X, e+j, 0, j==0);
-	      gsl_matrix_set (X, e+j, 1, j==1);
-	      gsl_matrix_set (X, e+j, 2, j==2);
-	      gsl_matrix_set (X, e+j, 3, 0);
-	      gsl_matrix_set (X, e+j, 4, 0);
-	      gsl_matrix_set (X, e+j, 5, 0);
-	      gsl_matrix_set (X, e+j, 6, 0);
-	      gsl_matrix_set (X, e+j, 7, 0);
-	      gsl_matrix_set (X, e+j, 8, 0);
-	      gsl_matrix_set (X, e+j, 9, j==0 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 10, j==1 ? ii : 0);
-	      gsl_matrix_set (X, e+j, 11, j==2 ? ii : 0);
-	      gsl_vector_set (w, e+j, 1);
-	    }
-	  gsl_vector_set (y, e, blues[i].red);
-	  gsl_vector_set (y, e+1, blues[i].green);
-	  gsl_vector_set (y, e+2, blues[i].blue);
-	}
-      double chisq;
-      gsl_multifit_wlinear (X, w, y, c, cov,
-			    &chisq, work);
+	  gsl_multifit_linear_workspace * work
+	    = gsl_multifit_linear_alloc (matrixh, matrixw);
+	  gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
+	  gsl_vector *y = gsl_vector_alloc (matrixh);
+	  gsl_vector *w = gsl_vector_alloc (matrixh);
+	  gsl_vector *c = gsl_vector_alloc (matrixw);
+	  gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
+
+	  for (int gstep = threed ? 0 : rstep; gstep < (threed ? steps : rstep+1) ; gstep++)
+	    for (int bstep = threed ? 0 : rstep; bstep < (threed? steps : rstep+1) ; bstep++)
+	      {
+		luminosity_t rmm = rstep * (maxrlum - minrlum) / steps + minrlum;
+		luminosity_t gmm = gstep * (maxglum - minglum) / steps + minglum;
+		luminosity_t bmm = bstep * (maxblum - minblum) / steps + minblum;
+		if (progress)
+		  progress->inc_progress ();
+		for (int i = 0; i < nreds; i++)
+		  {
+		    int e = i * 3;
+		    coord_t ii = reds[i].red + reds[i].green + reds[i].blue - rmm;
+		    for (int j = 0; j < 3; j++)
+		      {
+			gsl_matrix_set (X, e+j, 0, j==0);
+			gsl_matrix_set (X, e+j, 1, j==1);
+			gsl_matrix_set (X, e+j, 2, j==2);
+			gsl_matrix_set (X, e+j, 3, j==0 ? ii : 0);
+			gsl_matrix_set (X, e+j, 4, j==1 ? ii : 0);
+			gsl_matrix_set (X, e+j, 5, j==2 ? ii : 0);
+			gsl_matrix_set (X, e+j, 6, 0);
+			gsl_matrix_set (X, e+j, 7, 0);
+			gsl_matrix_set (X, e+j, 8, 0);
+			gsl_matrix_set (X, e+j, 9, 0);
+			gsl_matrix_set (X, e+j, 10, 0);
+			gsl_matrix_set (X, e+j, 11, 0);
+			gsl_vector_set (w, e+j, 1);
+		      }
+		    gsl_vector_set (y, e, reds[i].red);
+		    gsl_vector_set (y, e+1, reds[i].green);
+		    gsl_vector_set (y, e+2, reds[i].blue);
+		  }
+		for (int i = 0; i < ngreens; i++)
+		  {
+		    int e = (i + nreds) * 3;
+		    coord_t ii = greens[i].red + greens[i].green + greens[i].blue - gmm;
+		    for (int j = 0; j < 3; j++)
+		      {
+			gsl_matrix_set (X, e+j, 0, j==0);
+			gsl_matrix_set (X, e+j, 1, j==1);
+			gsl_matrix_set (X, e+j, 2, j==2);
+			gsl_matrix_set (X, e+j, 3, 0);
+			gsl_matrix_set (X, e+j, 4, 0);
+			gsl_matrix_set (X, e+j, 5, 0);
+			gsl_matrix_set (X, e+j, 6, j==0 ? ii : 0);
+			gsl_matrix_set (X, e+j, 7, j==1 ? ii : 0);
+			gsl_matrix_set (X, e+j, 8, j==2 ? ii : 0);
+			gsl_matrix_set (X, e+j, 9, 0);
+			gsl_matrix_set (X, e+j, 10, 0);
+			gsl_matrix_set (X, e+j, 11, 0);
+			gsl_vector_set (w, e+j, 1);
+		      }
+		    gsl_vector_set (y, e, greens[i].red);
+		    gsl_vector_set (y, e+1, greens[i].green);
+		    gsl_vector_set (y, e+2, greens[i].blue);
+		    //printf ("%f %f %f\n",greens[i].red, greens[i].green, greens[i].blue);
+		  }
+		for (int i = 0; i < nblues; i++)
+		  {
+		    int e = (i + nreds + ngreens) * 3;
+		    coord_t ii = blues[i].red + blues[i].green + blues[i].blue - bmm;
+		    for (int j = 0; j < 3; j++)
+		      {
+			gsl_matrix_set (X, e+j, 0, j==0);
+			gsl_matrix_set (X, e+j, 1, j==1);
+			gsl_matrix_set (X, e+j, 2, j==2);
+			gsl_matrix_set (X, e+j, 3, 0);
+			gsl_matrix_set (X, e+j, 4, 0);
+			gsl_matrix_set (X, e+j, 5, 0);
+			gsl_matrix_set (X, e+j, 6, 0);
+			gsl_matrix_set (X, e+j, 7, 0);
+			gsl_matrix_set (X, e+j, 8, 0);
+			gsl_matrix_set (X, e+j, 9, j==0 ? ii : 0);
+			gsl_matrix_set (X, e+j, 10, j==1 ? ii : 0);
+			gsl_matrix_set (X, e+j, 11, j==2 ? ii : 0);
+			gsl_vector_set (w, e+j, 1);
+		      }
+		    gsl_vector_set (y, e, blues[i].red);
+		    gsl_vector_set (y, e+1, blues[i].green);
+		    gsl_vector_set (y, e+2, blues[i].blue);
+		  }
+		double chisq;
+		gsl_multifit_wlinear (X, w, y, c, cov,
+				      &chisq, work);
 #define C(i) (gsl_vector_get(c,(i)))
-      if (!found || chisq < min_chisq)
-	{
-	  min_chisq = chisq;
-	  found = true;
-	  bestdark.red = C(0);
-	  bestdark.green = C(1);
-	  bestdark.blue = C(2);
-	  bestred.red = C(3);
-	  bestred.green = C(4);
-	  bestred.blue = C(5);
-	  bestgreen.red = C(6);
-	  bestgreen.green = C(7);
-	  bestgreen.blue = C(8);
-	  bestblue.red = C(9);
-	  bestblue.green = C(10);
-	  bestblue.blue = C(11);
-	  bestlum = mm;
+#pragma omp critical
+		if (!found || chisq < min_chisq)
+		  {
+		    //printf ("%f %f %f chisq %f\n",rmm,gmm,bmm,chisq);
+		    min_chisq = chisq;
+		    found = true;
+		    bestdark.red = C(0);
+		    bestdark.green = C(1);
+		    bestdark.blue = C(2);
+		    bestred.red = C(3);
+		    bestred.green = C(4);
+		    bestred.blue = C(5);
+		    bestgreen.red = C(6);
+		    bestgreen.green = C(7);
+		    bestgreen.blue = C(8);
+		    bestblue.red = C(9);
+		    bestblue.green = C(10);
+		    bestblue.blue = C(11);
+		    bestrlum = rmm;
+		    bestglum = gmm;
+		    bestblum = bmm;
+		  }
+	      }
+	  gsl_multifit_linear_free (work);
+	  gsl_matrix_free (X);
+	  gsl_vector_free (y);
+	  gsl_vector_free (w);
+	  gsl_vector_free (c);
+	  gsl_matrix_free (cov);
 	}
+      minrlum = bestrlum - (maxrlum - minrlum) / steps;
+      maxrlum = bestrlum + (maxrlum - minrlum) / steps;
+      minglum = bestglum - (maxglum - minglum) / steps;
+      maxglum = bestglum + (maxglum - minglum) / steps;
+      minblum = bestblum - (maxblum - minblum) / steps;
+      maxblum = bestblum + (maxblum - minblum) / steps;
     }
 #if 0
   param->black = bestdark.sgngamma (1/gamma);
@@ -1128,19 +1188,15 @@ optimize_screen_colors (scr_detect_parameters *param,
 #if 1
   if (report)
     {
-      fprintf (report, "Color optimization:\n  Dark %f %f %f (gamma %f lum %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, gamma, bestlum, min_chisq);
+      fprintf (report, "Color optimization:\n  Dark %f %f %f (gamma %f lum %f %f %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, gamma, bestrlum, bestglum, bestblum, min_chisq);
       fprintf (report, "  Red %f %f %f\n", bestred.red, bestred.green, bestred.blue);
       fprintf (report, "  Green %f %f %f\n", bestgreen.red, bestgreen.green, bestgreen.blue);
       fprintf (report, "  Blue %f %f %f\n", bestblue.red, bestblue.green, bestblue.blue);
       save_csp (report, NULL, param, NULL, NULL);
     }
 #endif
-  gsl_multifit_linear_free (work);
-  gsl_matrix_free (X);
-  gsl_vector_free (y);
-  gsl_vector_free (w);
-  gsl_vector_free (c);
-  gsl_matrix_free (cov);
+  if (report)
+    fflush (report);
 }
 
 static double
@@ -1339,8 +1395,8 @@ exit:
   gsl_matrix_free (A);
   gsl_vector_free (v);
 
-  if (final)
-    printf ("Iteration %i inliners %i out of %i, chisq %f inliner chisq %f\n", iteration, max_inliners, n, min_chisq, min_inliner_chisq);
+  //if (final)
+    //printf ("Iteration %i inliners %i out of %i, chisq %f inliner chisq %f\n", iteration, max_inliners, n, min_chisq, min_inliner_chisq);
   if (max_inliners > nsamples)
     {
       gsl_matrix *X = gsl_matrix_alloc (max_inliners * 2, nvariables);
@@ -1405,8 +1461,8 @@ exit:
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
       min_chisq = compute_chisq (tpoints, n, ret);
     }
-  if (final)
-    printf ("chisq %f after least squares\n", min_chisq);
+  //if (final)
+    //printf ("chisq %f after least squares\n", min_chisq);
 
   if (chisq_ret)
     *chisq_ret = min_chisq;
