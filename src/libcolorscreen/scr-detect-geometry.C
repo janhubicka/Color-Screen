@@ -10,7 +10,7 @@
 namespace
 {
 const bool verbose = false;
-//onst bool verbose = true;
+const int verbose_confirm = 0;
 struct patch_entry
 {
 	int x, y;
@@ -510,7 +510,7 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
 
 #define N_PRIORITIES 8
 
-bool
+  bool
 confirm (render_scr_detect *render,
 	 coord_t coordinate1_x, coord_t coordinate1_y,
 	 coord_t coordinate2_x, coord_t coordinate2_y,
@@ -520,7 +520,7 @@ confirm (render_scr_detect *render,
 	 coord_t *rcx, coord_t *rcy, int *priority,
 	 coord_t sum_range,
 	 coord_t patch_xscale, coord_t patch_yscale,
-	 bool strip)
+	 bool strip, bool corners)
 {
   coord_t bestcy = x, bestcx = y, minsum = 0, bestinner = 0, bestouter = 0;
   const int sample_steps = 2;
@@ -538,7 +538,9 @@ confirm (render_scr_detect *render,
   int ymax = ceil (std::max (std::max (coordinate1_y * sum_range, coordinate2_y * sum_range), std::max (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
   coord_t scaled_max_distance = max_distance / max_distance_scale;
   coord_t pixel_step = scaled_max_distance / 5;
-  //printf ("%f\n",pixel_step);
+
+  if (verbose_confirm > 1)
+    printf ("pixel step: %f ranges %i %i\n",pixel_step, xmax - xmin, ymax - ymin);
 
   /* Do not try to search towards end of screen since it gives wrong resutls.
      broder 4x4 is necessary for interpolation.  */
@@ -614,13 +616,22 @@ confirm (render_scr_detect *render,
   }
   //int nouter = 0, ninner = 0;
   luminosity_t min = 0;
+  if (verbose_confirm > 1)
+    {
+      printf ("coordinate1 %f %f\n", coordinate1_x, coordinate1_y);
+      printf ("coordinate2 %f %f\n", coordinate2_x, coordinate2_y);
+      printf ("patch_xscale %f %f t %i strip %i corner %i\n", patch_xscale, patch_yscale, t, strip, corners);
+    }
   for (int yy = -sample_steps; yy <= sample_steps; yy++)
+  {
     for (int xx = -sample_steps; xx <= sample_steps; xx++)
       {
 	luminosity_t color[3];
-	render->get_adjusted_pixel (bestcx + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate1_y,
-				    bestcy + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate2_x + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate2_y,
-				    &color[0], &color[1], &color[2]);
+	coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate2_x;
+	coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps) * patch_xscale)) * coordinate1_y + (yy * (1 / ((coord_t)sample_steps) * patch_yscale)) * coordinate2_y;
+
+	render->get_adjusted_pixel (ax, ay, &color[0], &color[1], &color[2]);
+
 	luminosity_t sum = color[0]+color[1]+color[2];
 	color[0] = std::max (color[0], (luminosity_t)0);
 	color[1] = std::max (color[1], (luminosity_t)0);
@@ -628,14 +639,36 @@ confirm (render_scr_detect *render,
 	sum = std::max (sum, (luminosity_t)0.0001);
 	//sum=1;
 	min = std::min (color[t] / sum, min);
+	if (verbose_confirm > 2)
+	  printf (" [%2.2F %2.2F]:", ax, ay);
+	if (verbose_confirm > 1)
+	  printf ("   r%+1.3F g%+1.3F b%+1.3F *%+1.3F*", color[0]*100, color[1]*100, color[2]*100, color[t] / sum);
 	if (/*sum > 0 && color[t] > 0*/1)
 	  {
-	    if ((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
-	      bestouter += color[t] / sum;// nouter++;
+	    if (corners && ((xx == -sample_steps || xx == sample_steps) && (yy == -sample_steps || yy == sample_steps)))
+	      {
+	        if (verbose_confirm > 1)
+		  printf ("X");
+	      }
+	    else if (((!strip && (xx == -sample_steps || xx == sample_steps)) || yy == -sample_steps || yy == sample_steps)
+		|| (corners && ((xx == -sample_steps || xx == sample_steps) && (yy == -sample_steps || yy == sample_steps))))
+	      {
+		bestouter += color[t] / sum;// nouter++;
+	        if (verbose_confirm > 1)
+		  printf ("O");
+	      }
 	    else
-	      bestinner += color[t] / sum;// ninner++;
+	      {
+		bestinner += color[t] / sum;// ninner++;
+	        if (verbose_confirm > 1)
+		  printf ("I");
+	      }
 	  }
       }
+    if (verbose_confirm > 1)
+      printf("\n");
+  }
+  //printf ("%f %f %f\n",min, bestinner, bestouter);
 
   *rcx = bestcx;
   *rcy = bestcy;
@@ -645,10 +678,27 @@ confirm (render_scr_detect *render,
       O I I I O
       O I I I O
       O O O O O  */
-  if (!strip)
+  if (!strip && !corners)
     {
       int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
       int nouter = 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+      assert (ninner + nouter == (sample_steps * 2 + 1) * (sample_steps * 2 + 1));
+      bestinner -= min * ninner;
+      bestouter -= min * nouter;
+      bestinner *= (1 / (luminosity_t) ninner);
+      bestouter *= (1 / (luminosity_t) nouter);
+    }
+  /*  For sample_steps == 2:
+        O O O  
+      O I I I O
+      O I I I O
+      O I I I O
+        O O O    */
+  else if (!strip)
+    {
+      int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
+      int nouter = 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1) - 4;
+      assert (ninner + nouter == (sample_steps * 2 + 1) * (sample_steps * 2 + 1) - 4);
       bestinner -= min * ninner;
       bestouter -= min * nouter;
       bestinner *= (1 / (luminosity_t) ninner);
@@ -664,15 +714,17 @@ confirm (render_scr_detect *render,
     {
       int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
       int nouter = 2 * (2 * sample_steps + 1) + 2*(2*sample_steps-1);
+      assert (ninner + nouter == (sample_steps * 2 + 1) * (sample_steps * 2 + 1));
       bestinner -= min * ninner;
       bestouter -= min * nouter;
       bestinner *= (1 / (luminosity_t) ninner);
       bestouter *= (1 / (luminosity_t) nouter);
     }
   coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
-  if (bestinner <= 0 || bestinner < bestouter * 2)
+  if (bestinner <= 0 || bestinner < bestouter * 2.5)
     {
-      //printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f color:%i min:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t, min);
+      if (verbose_confirm)
+        printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f ratio: %f color:%i min:%f\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, bestinner/bestouter, (int) t, min);
       return false;
     }
   else if (bestinner > bestouter * 8 && dist < max_distance * max_distance / 128)
@@ -683,7 +735,8 @@ confirm (render_scr_detect *render,
     *priority = 1;
   else
     *priority = 0;
-  //printf ("given:%f %f best:%f %f inner:%f outer:%f priority:%i color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, (int) t, *priority);
+  if (verbose_confirm > 1)
+    printf ("given:%f %f best:%f %f inner:%f outer:%f ratio:%f priority:%i color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, bestinner/bestouter, *priority, (int)t);
   return true;
 }
 
@@ -842,9 +895,9 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
   // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false)))
 #define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true)))
+				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false)))
 	  if (!map->known_p (e.scr_x - 1, e.scr_y)
 	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
@@ -887,7 +940,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x);
 	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y);
 #define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.25, 0.25, false)))
+				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue)))
 				 //|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.33 / 2, 0.33 / 2, false)))
 	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
