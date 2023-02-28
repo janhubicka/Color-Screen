@@ -984,6 +984,9 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   return true;
 }
 
+/* MacOS clang does not accept steps to be const int.  */
+#define COLOR_SOLVER_STEPS 8
+
 /* Optimize screen colors based on known red, green and blue samples
    and store resulting black, red, green and blue colors to PARAM.  */
 void
@@ -1008,11 +1011,10 @@ optimize_screen_colors (scr_detect_parameters *param,
   luminosity_t bestrlum = 0, bestglum = 0, bestblum = 0;
   /* If true three dimenstional search is made for dark point.  */
   const bool threed = true;
-  const int steps = 8;
   /* with 3 bit per step, about 12 bits should be enough for everybody.  */
   const int iterations = 4;
   if (progress) 
-    progress->set_task ("optimizing colors", iterations * steps * (threed ? steps * steps : 1));
+    progress->set_task ("optimizing colors", iterations * COLOR_SOLVER_STEPS * (threed ? COLOR_SOLVER_STEPS * COLOR_SOLVER_STEPS : 1));
 
   /* Determine max of search range.  If this is too large, the red/green/blue colors may become negative.  */
   std::vector<luminosity_t> rlums;
@@ -1042,7 +1044,7 @@ optimize_screen_colors (scr_detect_parameters *param,
   for (int iteration = 0; iteration < iterations; iteration++)
     {
 #pragma omp parallel for default(none) shared(progress, minrlum, maxrlum, minglum, maxglum, minblum, maxblum, bestred, bestgreen, bestblue, bestrlum, bestglum, bestblum, reds, greens, blues, matrixh, matrixw, nreds, nblues, ngreens, found, min_chisq, bestdark)
-      for (int rstep = 0; rstep < steps ; rstep++)
+      for (int rstep = 0; rstep < COLOR_SOLVER_STEPS ; rstep++)
 	{
 	  gsl_multifit_linear_workspace * work
 	    = gsl_multifit_linear_alloc (matrixh, matrixw);
@@ -1052,12 +1054,12 @@ optimize_screen_colors (scr_detect_parameters *param,
 	  gsl_vector *c = gsl_vector_alloc (matrixw);
 	  gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
 
-	  for (int gstep = threed ? 0 : rstep; gstep < (threed ? steps : rstep+1) ; gstep++)
-	    for (int bstep = threed ? 0 : rstep; bstep < (threed? steps : rstep+1) ; bstep++)
+	  for (int gstep = threed ? 0 : rstep; gstep < (threed ? COLOR_SOLVER_STEPS : rstep+1) ; gstep++)
+	    for (int bstep = threed ? 0 : rstep; bstep < (threed? COLOR_SOLVER_STEPS : rstep+1) ; bstep++)
 	      {
-		luminosity_t rmm = rstep * (maxrlum - minrlum) / steps + minrlum;
-		luminosity_t gmm = gstep * (maxglum - minglum) / steps + minglum;
-		luminosity_t bmm = bstep * (maxblum - minblum) / steps + minblum;
+		luminosity_t rmm = rstep * (maxrlum - minrlum) / COLOR_SOLVER_STEPS + minrlum;
+		luminosity_t gmm = gstep * (maxglum - minglum) / COLOR_SOLVER_STEPS + minglum;
+		luminosity_t bmm = bstep * (maxblum - minblum) / COLOR_SOLVER_STEPS + minblum;
 		if (progress)
 		  progress->inc_progress ();
 		for (int i = 0; i < nreds; i++)
@@ -1167,12 +1169,12 @@ optimize_screen_colors (scr_detect_parameters *param,
 	  gsl_vector_free (c);
 	  gsl_matrix_free (cov);
 	}
-      minrlum = bestrlum - (maxrlum - minrlum) / steps;
-      maxrlum = bestrlum + (maxrlum - minrlum) / steps;
-      minglum = bestglum - (maxglum - minglum) / steps;
-      maxglum = bestglum + (maxglum - minglum) / steps;
-      minblum = bestblum - (maxblum - minblum) / steps;
-      maxblum = bestblum + (maxblum - minblum) / steps;
+      minrlum = bestrlum - (maxrlum - minrlum) / COLOR_SOLVER_STEPS;
+      maxrlum = bestrlum + (maxrlum - minrlum) / COLOR_SOLVER_STEPS;
+      minglum = bestglum - (maxglum - minglum) / COLOR_SOLVER_STEPS;
+      maxglum = bestglum + (maxglum - minglum) / COLOR_SOLVER_STEPS;
+      minblum = bestblum - (maxblum - minblum) / COLOR_SOLVER_STEPS;
+      maxblum = bestblum + (maxblum - minblum) / COLOR_SOLVER_STEPS;
     }
 #if 0
   param->black = bestdark.sgngamma (1/gamma);
