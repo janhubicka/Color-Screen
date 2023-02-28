@@ -107,7 +107,7 @@ public:
 					    scanner_type type,
 					    scr_to_img *map,
 					    coord_t wcenter_x, coord_t wcenter_y,
-					    coord_t *chisq_ret = NULL, bool final = NULL);
+					    coord_t *chisq_ret = NULL, bool final = false);
   static trans_4d_matrix get_matrix (solver_parameters::point_t *points, int n, int flags,
 				     scanner_type type,
 				     scr_to_img *map,

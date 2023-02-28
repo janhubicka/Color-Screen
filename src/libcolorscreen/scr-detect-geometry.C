@@ -532,6 +532,7 @@ confirm (render_scr_detect *render,
   bool found = false;
   /* We go to both directions from given X and Y coordinates.  */
   sum_range = 0.5 * sum_range;
+
   int xmin = ceil (std::min (std::min (coordinate1_x * sum_range, coordinate2_x * sum_range), std::min (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
   int xmax = ceil (std::max (std::max (coordinate1_x * sum_range, coordinate2_x * sum_range), std::max (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
   int ymin = ceil (std::min (std::min (coordinate1_y * sum_range, coordinate2_y * sum_range), std::min (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
@@ -539,8 +540,12 @@ confirm (render_scr_detect *render,
   coord_t scaled_max_distance = max_distance / max_distance_scale;
   coord_t pixel_step = scaled_max_distance / 5;
 
+  /* We want to sum symmetrically in each direction.  */
+  ymin = xmin = std::min (std::min (std::min (xmin, ymin), -xmax), -ymax);
+  ymax = xmax = /*std::min (xmax, ymax)*/ -ymin;
+
   if (verbose_confirm > 1)
-    printf ("pixel step: %f ranges %i %i\n",pixel_step, xmax - xmin, ymax - ymin);
+    printf ("pixel step: %f ranges %i %i distance %f\n",pixel_step, xmax - xmin, ymax - ymin, scaled_max_distance);
 
   /* Do not try to search towards end of screen since it gives wrong resutls.
      broder 4x4 is necessary for interpolation.  */
@@ -552,12 +557,91 @@ confirm (render_scr_detect *render,
 
   if (!strip)
     {
+      luminosity_t min = INT_MAX, max = INT_MIN;
+      for (coord_t cy = std::max (y - scaled_max_distance, (coord_t)-ymin); cy <= std::min (y + scaled_max_distance, (coord_t)height - ymax); cy+= pixel_step)
+	for (coord_t cx = std::max (x - scaled_max_distance, (coord_t)-xmin); cx <= std::min (x + scaled_max_distance, (coord_t)width - xmax); cx+= pixel_step)
+	  {
+	    int xstart = floor (cx + xmin);
+	    int ystart = floor (cy + ymin);
+	    coord_t xsum = 0;
+	    coord_t ysum = 0;
+#define account(xx, yy, wx, wy)									\
+		    { rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);	\
+		      luminosity_t c = (t==0 ? 1 : -1) * color[0] + (t==0 ? 1 : -1) * color[1] + (t==0 ? 1 : -1) * color[2];\
+		      xsum += c * wx * wy * (xx + 0.5 - cx);				\
+		      ysum += c * wx * wy * (yy + 0.5 - cy);				\
+		      max = std::max (max, c);						\
+		      min = std::min (min, c); /*printf("  %7.2f %7.2f", (coord_t)wx, (coord_t)wy)*/;}
+	    for (int yy = ystart ; yy < ystart + ymax - ymin + 1; yy++)
+	      {
+		coord_t wy = 1;
+		if (yy == ystart)
+		  wy = 1 - (cy+ymin - ystart);
+		if (yy == ystart + ymax - ymin)
+		  wy = (cy+ymin - ystart);
+	        coord_t wx = 1 - (cx + ymin - xstart);
+		int xx = xstart;
+		account (xx, yy, wx, wy);
+		for (xx = xstart + 1; xx < xstart + xmax - ymin; xx++)
+		  account (xx, yy, 1, wy);
+		account (xx, yy, (1 - wx), wy);
+		//printf ("\n");
+	      }
+#undef account
+
+	   coord_t sum = xsum * xsum + ysum * ysum;
+	    if (verbose_confirm > 1)
+	      printf (" trying %f %f : %f %f xsum %f ysum %f sum %f %s\n  ", cx, cy, cx - x, cy - y, xsum, ysum, sum, minsum > sum ? "new best":"");
+	   if (!found || minsum > sum)
+	     {
+	       bestcx = cx;
+	       bestcy = cy;
+	       minsum = sum;
+	       found = true;
+	     }
+	  }
+      if (verbose_confirm > 1)
+       {
+	  int xstart = floor (bestcx + xmin);
+	  int ystart = floor (bestcy + ymin);
+	  printf ("best %f %f : %f %f min %f max %f\n  ", bestcx, bestcy, bestcx - x, bestcy - y, min, max);
+	  for (int xx = xstart; xx < floor (bestcx); xx++)
+	    printf (" ");
+          printf ("|\n");
+
+	  for (int yy = ystart ; yy < ystart + ymax - ymin + 1; yy++)
+	    {
+	      coord_t wy = 1;
+	      printf (yy == floor (bestcy) ? "->" : "  ");
+	      if (yy == ystart)
+		wy = 1 - (bestcy+ymin - ystart);
+	      if (yy == ystart + ymax - ymin)
+		wy = bestcy+ymin - ystart;
+
+#define account(xx, yy, wx, wy)\
+		    { rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);	\
+		      luminosity_t c = (t==0 ? 1 : -1) * color[0] + (t==0 ? 1 : -1) * color[1] + (t==0 ? 1 : -1) * color[2];\
+		      putc(".oO*"[(int)((c-min) * 3.9999 / (max - min))], stdout); }
+		      //printf (" %7.4f", c); }
+		      //printf (" %i %i %5.2f*%5.2f*%5.2f", xx, yy, c, (coord_t)wx, wy); }
+	      coord_t wx = 1 - (bestcx + ymin - xstart);
+	      int xx = xstart;
+	      account (xx, yy, wx, wy);
+	      for (xx = xstart + 1; xx < xstart + xmax - ymin; xx++)
+		account (xx, yy, 1, wy);
+	      account (xx, yy, (1 - wx), wy);
+#undef account
+	      printf ("\n");
+	    }
+       }
+#if 0
       //printf ("%i %i %i %i\n",xmin,xmax,ymin,ymax);
       for (coord_t cy = std::max (y - scaled_max_distance, (coord_t)-ymin); cy <= std::min (y + scaled_max_distance, (coord_t)height - ymax); cy+= pixel_step)
 	for (coord_t cx = std::max (x - scaled_max_distance, (coord_t)-xmin); cx <= std::min (x + scaled_max_distance, (coord_t)width - xmax); cx+= pixel_step)
 	  {
 	    coord_t xsum = 0;
 	    coord_t ysum = 0;
+	    int maxdistsq = xmax * xmax + ymax * ymax;
 	    switch ((int) t)
 	      {
 		case 0:
@@ -567,8 +651,8 @@ confirm (render_scr_detect *render,
 		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		      xsum += color[t] * (xx + 0.5 - cx);
-		      ysum += color[t] * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
+		      ysum += color[t] * (yy + 0.5 - cy) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
 		    }
 		break;
 		case 1:
@@ -578,8 +662,8 @@ confirm (render_scr_detect *render,
 		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		      xsum += color[t] * (xx + 0.5 - cx);
-		      ysum += color[t] * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
+		      ysum += color[t] * (yy + 0.5 - cy) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
 		    }
 		break;
 		case 2:
@@ -589,8 +673,8 @@ confirm (render_scr_detect *render,
 		      rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);
 		      //xsum += std::max (color[t], (luminosity_t)0) * (xx + 0.5 - cx);
 		      //ysum += std::max (color[t], (luminosity_t)0) * (yy + 0.5 - cy);
-		      xsum += color[t] * (xx + 0.5 - cx);
-		      ysum += color[t] * (yy + 0.5 - cy);
+		      xsum += color[t] * (xx + 0.5 - cx) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
+		      ysum += color[t] * (yy + 0.5 - cy) * (maxdistsq - (yy - cy) * (yy - cy) - (xx - cx) * (xx - cx) + 1);
 		    }
 		break;
 		default:
@@ -608,6 +692,7 @@ confirm (render_scr_detect *render,
 	 }
       if (!found)
 	return false;
+#endif
     }
   else
   {
@@ -640,9 +725,9 @@ confirm (render_scr_detect *render,
 	//sum=1;
 	min = std::min (color[t] / sum, min);
 	if (verbose_confirm > 2)
-	  printf (" [%2.2F %2.2F]:", ax, ay);
+	  printf (" [% 6.2F % 6.2F]:", ax - bestcx, ay - bestcy);
 	if (verbose_confirm > 1)
-	  printf ("   r%+1.3F g%+1.3F b%+1.3F *%+1.3F*", color[0]*100, color[1]*100, color[2]*100, color[t] / sum);
+	  printf ("   r% 8.3F g% 8.3F b% 8.3F *% 8.3F*", color[0]*100, color[1]*100, color[2]*100, color[t] / sum);
 	if (/*sum > 0 && color[t] > 0*/1)
 	  {
 	    if (corners && ((xx == -sample_steps || xx == sample_steps) && (yy == -sample_steps || yy == sample_steps)))
@@ -721,7 +806,7 @@ confirm (render_scr_detect *render,
       bestouter *= (1 / (luminosity_t) nouter);
     }
   coord_t dist = (bestcx - x) * (bestcx - x) + (bestcy - y) * (bestcy - y);
-  if (bestinner <= 0 || bestinner < bestouter * 2.5)
+  if (bestinner <= 0 || bestinner < bestouter * 2)
     {
       if (verbose_confirm)
         printf ("FAILED: given:%f %f best:%f %f inner:%f outer:%f ratio: %f color:%i min:%f\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter, bestinner/bestouter, (int) t, min);
@@ -744,13 +829,20 @@ template<int N, typename T>
 class priority_queue
 {
 public:
+  priority_queue ()
+  : sum {}
+  {}
   const int npriorities = N;
   std::vector<T> queue[N];
+  int sum[N];
+
   void
   insert (T e, int priority)
   {
+    sum[priority]++;
     queue[N - priority - 1].push_back (e);
   }
+
   bool
   extract_min (T &e)
   {
@@ -762,6 +854,17 @@ public:
 	  return true;
 	}
     return false;
+  }
+
+  void
+  print_sums (FILE *f)
+  {
+    fprintf (f, "Overall priority entries:");
+    for (int n : sum)
+      {
+	fprintf (f, " %i", n);
+      }
+    fprintf (f, "\n");
   }
 };
 
@@ -1015,6 +1118,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       printf ("\n");
       if (report_file)
 	fprintf (report_file, "\n");
+      queue.print_sums (stdout);
       progress->resume_stdout ();
     }
   if (!dsparams->do_mesh && nfound > 100000)
