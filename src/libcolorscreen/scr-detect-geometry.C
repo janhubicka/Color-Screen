@@ -13,7 +13,7 @@ const bool verbose = false;
 const int verbose_confirm = 0;
 struct patch_entry
 {
-	int x, y;
+  int x, y;
 };
 
 
@@ -567,7 +567,9 @@ confirm (render_scr_detect *render,
 	    coord_t ysum = 0;
 #define account(xx, yy, wx, wy)									\
 		    { rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);	\
-		      luminosity_t c = (t==0 ? 1 : -1) * color[0] + (t==0 ? 1 : -1) * color[1] + (t==0 ? 1 : -1) * color[2];\
+		      luminosity_t c = color[t];\
+		      luminosity_t d = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);\
+		      c = c / d;							\
 		      xsum += c * wx * wy * (xx + 0.5 - cx);				\
 		      ysum += c * wx * wy * (yy + 0.5 - cy);				\
 		      max = std::max (max, c);						\
@@ -620,7 +622,9 @@ confirm (render_scr_detect *render,
 
 #define account(xx, yy, wx, wy)\
 		    { rgbdata color = render->fast_precomputed_get_adjusted_pixel (xx, yy);	\
-		      luminosity_t c = (t==0 ? 1 : -1) * color[0] + (t==0 ? 1 : -1) * color[1] + (t==0 ? 1 : -1) * color[2];\
+		      luminosity_t c = color[t];\
+		      luminosity_t d = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);\
+		      c = c / d;							\
 		      putc(".oO*"[(int)((c-min) * 3.9999 / (max - min))], stdout); }
 		      //printf (" %7.4f", c); }
 		      //printf (" %i %i %5.2f*%5.2f*%5.2f", xx, yy, c, (coord_t)wx, wy); }
