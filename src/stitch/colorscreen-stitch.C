@@ -44,6 +44,7 @@ struct stitching_params
   int max_unknown_screen_range;
   luminosity_t max_contrast;
   luminosity_t orig_tile_gamma;
+  luminosity_t min_patch_contrast;
 
   int num_control_points;
   int min_screen_percentage;
@@ -67,7 +68,7 @@ struct stitching_params
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (false), fast_floodfill (false), limit_directions (true), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false),
-    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), orig_tile_gamma (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
 } stitching_params;
@@ -681,6 +682,8 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.slow_floodfill = stitching_params.slow_floodfill;
   dsparams.fast_floodfill = stitching_params.fast_floodfill;
   dsparams.max_unknown_screen_range = stitching_params.max_unknown_screen_range;
+  if (stitching_params.min_patch_contrast > 0)
+    dsparams.min_patch_contrast = stitching_params.min_patch_contrast;
   dsparams.return_known_patches = true;
   dsparams.do_mesh = stitching_params.mesh_trans;
   dsparams.return_screen_map = true;
@@ -1286,6 +1289,7 @@ print_help (const char *filename)
   printf ("  --slow-floodfill                            use unly slower discovery of patches (by default both slow and fast methods are used)\n");
   printf ("  --fast-floodfill                            use unly faster discovery of patches (by default both slow and fast methods are used)\n");
   printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
+  printf ("  --min-patch-contrast=contrast               specify minimal contrast accepted in patch discovery\n");
   printf ("  --diffs                                     produce diff files for each overlapping pair of tiles\n");
 }
 
@@ -2127,6 +2131,11 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distance=")))
 	{
 	  stitching_params.max_max_distance = atof (argv[i] + strlen ("--max-max-distance="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-patch-contrast=", strlen ("--max-max-distance=")))
+	{
+	  stitching_params.min_patch_contrast = atof (argv[i] + strlen ("--min-patch-contrast="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--screen-type=", strlen ("--screen-type=")))

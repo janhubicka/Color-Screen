@@ -324,6 +324,12 @@ render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int w
 }
 
 void
+render_scr_detect::get_normalized_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+{ 
+  downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_normalized_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+}
+
+void
 render_scr_detect::get_screen_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_screen_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
@@ -423,6 +429,56 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 		{
 		  int r, g, b;
 		  render.render_adjusted_pixel_img ((x + xoffset) * step, py, &r, &g,
+						&b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	    if (progress)
+	      progress->inc_progress ();
+	  }
+      }
+      break;
+    case render_type_normalized_color:
+      {
+	render_parameters rparam2 = rparam;
+	rparam2.brightness = 1;
+	render_scr_detect render (param, img, rparam2, 255);
+	if (!render.precompute_all (false, progress))
+	  return false;
+
+	if (step > 1)
+	  {
+	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+	    render.get_normalized_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (progress)
+	      progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+	    for (int y = 0; y < height; y++)
+	      {
+		if (!progress || !progress->cancel_requested ())
+		  for (int x = 0; x < width; x++)
+		    {
+		      int r, g, b;
+		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		    }
+		if (progress)
+		  progress->inc_progress ();
+	      }
+	    free (data);
+	    break;
+	  }
+
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	for (int y = 0; y < height; y++)
+	  {
+	    coord_t py = (y + yoffset) * step;
+	    if (!progress || !progress->cancel_requested ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+		  render.render_normalized_pixel_img ((x + xoffset) * step, py, &r, &g,
 						&b);
 		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 		}

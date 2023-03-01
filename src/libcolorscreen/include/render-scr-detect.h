@@ -20,8 +20,8 @@ public:
     scr_detect::color_class t = m_color_class_map->get_class (x, y);
     if (t == scr_detect::unknown)
       return scr_detect::unknown;
-    for (int yy = std::max (y - 1, 0); yy < std::min (y + 1, m_img.height); yy++)
-      for (int xx = std::max (x - 1, 0); xx < std::min (x + 1, m_img.width); xx++)
+    for (int yy = std::max (y - 1, 0); yy <= std::min (y + 1, m_img.height); yy++)
+      for (int xx = std::max (x - 1, 0); xx <= std::min (x + 1, m_img.width); xx++)
 	if (xx != x || yy != y)
 	  {
 	    scr_detect::color_class q = m_color_class_map->get_class (xx, yy);
@@ -75,6 +75,7 @@ public:
   {
     render_type_original,
     render_type_adjusted_color,
+    render_type_normalized_color,
     render_type_pixel_colors,
     render_type_realistic_scr,
     render_type_scr_nearest,
@@ -114,9 +115,35 @@ public:
     else
       *r = *g = *b = 0;
   }
+  static rgbdata
+  normalize_color (rgbdata c)
+  {
+    luminosity_t min = std::min (std::min (std::min (c.red, c.green), c.blue), (luminosity_t) 0);
+    c.red -= min;
+    c.green -= min;
+    c.blue -= min;
+    luminosity_t sum = c.red + c.green + c.blue;
+    if (!sum)
+      return {0, 0, 0};
+    luminosity_t adj = 1 / sum;
+#if 1
+    c.red *= adj;
+    c.green *= adj;
+    c.blue *= adj;
+#else
+    c.red = (2 * c.red - sum) * adj;
+    c.green = (2 * c.green - sum) * adj;
+    c.blue = (2 * c.blue - sum) * adj;
+#endif
+    return c;
+  }
   rgbdata fast_precomputed_get_adjusted_pixel (int x, int y)
   {
     return m_precomputed_rgbdata[y * m_img.width + x];
+  }
+  rgbdata fast_precomputed_get_normalized_pixel (int x, int y)
+  {
+    return normalize_color (m_precomputed_rgbdata[y * m_img.width + x]);
   }
   rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y)
   {
@@ -124,12 +151,23 @@ public:
     m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return d;
   }
+  rgbdata fast_nonprecomputed_get_normalized_pixel (int x, int y)
+  {
+    rgbdata d;
+    m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
+    return normalize_color (d);
+  }
   rgbdata fast_get_adjusted_pixel (int x, int y)
   {
     if (m_precomputed_rgbdata)
       return fast_precomputed_get_adjusted_pixel (x, y);
     else
       return fast_nonprecomputed_get_adjusted_pixel (x, y);
+  }
+  rgbdata fast_get_normalized_pixel (int x, int y)
+  {
+    rgbdata c = normalize_color (fast_get_adjusted_pixel (x, y));
+    return c;
   }
   rgbdata fast_get_screen_pixel (int x, int y)
   {
@@ -148,7 +186,21 @@ public:
 	set_color (0, 0, 0, r,g,b);
 	return;
       }
+    //rgbdata d = fast_get_adjusted_pixel (xx, yy);
     rgbdata d = fast_get_adjusted_pixel (xx, yy);
+    set_color (d.red,d.green,d.blue, r, g, b);
+  }
+  void inline render_normalized_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    int xx = x;
+    int yy = y;
+    if (xx < 0 || xx >= m_img.width || yy < 0 || yy >= m_img.height)
+      {
+	set_color (0, 0, 0, r,g,b);
+	return;
+      }
+    //rgbdata d = fast_get_normalized_pixel (xx, yy);
+    rgbdata d = fast_get_normalized_pixel (xx, yy);
     set_color (d.red,d.green,d.blue, r, g, b);
   }
   luminosity_t
@@ -213,6 +265,7 @@ protected:
   unsigned long m_color_class_map_id;
   unsigned long m_precomputed_rgbdata_id;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  void get_normalized_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
