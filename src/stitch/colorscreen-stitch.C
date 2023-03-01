@@ -1157,9 +1157,9 @@ open_tile_output_file (const char *outfname,
       progress->set_task ("Rendering and saving", outheight);
     }
   if (report_file)
-    fprintf (report_file, "Rendering %s at offset %i,%i width dimension %ix%i\n", outfname, xoffset, yoffset, outwidth, outheight);
+    fprintf (report_file, "Rendering %s at offset %i,%i (%ix%i pixels)\n", outfname, xoffset, yoffset, outwidth, outheight);
   progress->pause_stdout ();
-  printf ("Rendering %s at offset %i,%i width dimension %ix%i\n", outfname, xoffset, yoffset, outwidth, outheight);
+  printf ("Rendering %s at offset %i,%i (%ix%i pixels)\n", outfname, xoffset, yoffset, outwidth, outheight);
   progress->resume_stdout ();
   return out;
 }

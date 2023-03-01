@@ -11,6 +11,7 @@
 #include "config.h"
 #include "gtk-image-viewer.h"
 #include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/screen-map.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
@@ -435,6 +436,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  if (current_mesh)
 	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
+	  dsparams.slow_floodfill = true;
+	  dsparams.return_screen_map = true;
 	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
 	  current.type = detected.param.type;
 	  current_mesh = detected.mesh_trans;
@@ -714,15 +717,21 @@ previewrender (GdkPixbuf ** pixbuf)
 
 static void
 draw_circle (cairo_surface_t *surface, coord_t bigscale,
-    	     int xoffset, int yoffset,
-    	     coord_t x, coord_t y, coord_t r, coord_t g, coord_t b)
+    	     int xoffset, int yoffset, int width, int height,
+    	     coord_t x, coord_t y, coord_t r, coord_t g, coord_t b, coord_t radius = 3)
 {
+  if ((x + radius) * bigscale - xoffset < 0
+      || (y + radius) * bigscale - yoffset < 0
+      || (x - radius) * bigscale - xoffset > width 
+      || (y - radius) * bigscale - yoffset > height)
+    return;
+
   cairo_t *cr = cairo_create (surface);
   cairo_translate (cr, -xoffset, -yoffset);
   cairo_scale (cr, bigscale, bigscale);
 
   cairo_set_source_rgba (cr, r, g, b, 0.5);
-  cairo_arc (cr, x, y, 3, 0.0, 2 * G_PI);
+  cairo_arc (cr, x, y, radius, 0.0, 2 * G_PI);
 
   cairo_fill (cr);
   cairo_destroy (cr);
@@ -774,11 +783,28 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 					   pxsize,
 					   pysize,
 					   bigrowstride);
-  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x, current.center_y, 0, 0, 1);
-  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
-  draw_circle (surface, bigscale, xoffset, yoffset, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x, current.center_y, 0, 0, 1);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
 
-  draw_circle (surface, bigscale, xoffset, yoffset, current.lens_center_x, current.lens_center_y, 1, 0, 1);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.lens_center_x, current.lens_center_y, 1, 0, 1);
+
+  if (detected.smap && bigscale >= 1)
+    for (int y = 0; y < detected.smap->height; y++)
+      for (int x = 0; x < detected.smap->width; x++)
+        {
+	  int xx = x - detected.smap->xshift;
+	  int yy = y - detected.smap->yshift;
+	    if (detected.smap->known_p (xx, yy))
+              {
+		coord_t sx, sy;
+		coord_t ix, iy;
+		solver_parameters::point_color t;
+		detected.smap->get_screen_coord (xx, yy, &sx, &sy, &t);
+		detected.smap->get_coord (xx, yy, &ix, &iy);
+		draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, ix, iy, t == solver_parameters::blue, t == solver_parameters::green, t == solver_parameters::red, 1);
+              }
+         }
 
   if (current.n_motor_corrections && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
     for (int i = 0; i < current.n_motor_corrections; i++)
@@ -807,8 +833,8 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  coord_t sx, sy;
 	  map.to_img (current_solver.point[i].screen_x, current_solver.point[i].screen_y, &sx, &sy);
 
-	  draw_circle (surface, bigscale, xoffset, yoffset, xi, yi, b, g, r);
-	  draw_circle (surface, bigscale, xoffset, yoffset, sx, sy, 3*b/4, 3*g/4, 3*r/4);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, b, g, r);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, 3*b/4, 3*g/4, 3*r/4);
 
 	  coord_t patch_diam = sqrt (current.coordinate1_x * current.coordinate1_x + current.coordinate1_y * current.coordinate1_y) / 2;
 	  double scale = 200 / patch_diam / bigscale;
