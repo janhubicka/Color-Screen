@@ -806,7 +806,7 @@ confirm (render_scr_detect *render,
     {
       int ninner = (2 * sample_steps - 1) * (2 * sample_steps - 1);
       /* We count left/right and up/down separately. Corners are counted twice.  */
-      int nouter = (2 * sample_steps + 1) * 2;
+      int nouter = (2 * sample_steps - 1) * 2;
       bestinner -= min * ninner;
       bestouter_lr -= min * nouter;
       bestouter_ud -= min * nouter;
