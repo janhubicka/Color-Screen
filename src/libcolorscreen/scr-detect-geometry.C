@@ -1335,7 +1335,7 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
 	const char *channel[3]={"Red", "Green", "Blue"};
         printf ("%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], (one_num[c] + four_num[c]) * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
         if (report_file)
-	  fprintf (report_file, "%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[0], type, distance_sum[0] / distance_num[0], max_distance[0], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
+	  fprintf (report_file, "%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
       }
   if (progress)
     progress->resume_stdout ();
