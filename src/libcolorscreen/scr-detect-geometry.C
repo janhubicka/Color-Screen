@@ -1527,6 +1527,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   ret.param.lens_center_x = img.width / 2;
   ret.param.lens_center_y = img.width / 2;
   ret.param.projection_distance = img.width;
+  ret.param.k1 = dsparams->k1;
   solver (&ret.param, img, sparam, progress);
   summarise_quality (img, smap, ret.param, "homographic", report_file, progress);
 

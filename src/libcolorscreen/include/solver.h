@@ -145,6 +145,7 @@ struct detect_regular_screen_params
   detect_regular_screen_params ()
   : min_screen_percentage (20), border_top (50), border_bottom (50), border_left (50), border_right (50),
     top (false), bottom (false), left (false), right (false),
+    k1 (0),
     min_patch_contrast (2),
     max_unknown_screen_range (10000),
     optimize_colors (true), slow_floodfill (false), fast_floodfill (false), return_known_patches (false), return_screen_map (false), do_mesh (true)
@@ -153,6 +154,7 @@ struct detect_regular_screen_params
   coord_t border_top, border_bottom, border_left, border_right;
   /* True if this is part of an tile that is on top, bottom, left or right.  */
   coord_t top, bottom, left, right;
+  coord_t k1;
   luminosity_t min_patch_contrast;
   int max_unknown_screen_range;
   bool optimize_colors;

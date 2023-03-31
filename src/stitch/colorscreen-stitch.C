@@ -139,7 +139,7 @@ class stitch_image
   ~stitch_image ();
   void load_img (progress_info *);
   void release_img ();
-  void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *);
+  void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
@@ -639,7 +639,7 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 }
 
 void
-stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, progress_info *progress)
+stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *progress)
 {
   if (analyzed)
     return;
@@ -676,6 +676,7 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, pro
   dsparams.border_right = skipright;
   dsparams.top = top;
   dsparams.bottom = bottom;
+  dsparams.k1 = k1;
   dsparams.left = left;
   dsparams.right = right;
   dsparams.optimize_colors = stitching_params.optimize_colors;
@@ -1416,7 +1417,7 @@ print_status (FILE *out)
 void
 analyze (int x, int y, progress_info *progress)
 {
-  images[y][x].analyze (!y, y == stitching_params.height - 1, !x, x == stitching_params.width - 1, progress);
+  images[y][x].analyze (!y, y == stitching_params.height - 1, !x, x == stitching_params.width - 1, param.k1, progress);
 }
 
 void
