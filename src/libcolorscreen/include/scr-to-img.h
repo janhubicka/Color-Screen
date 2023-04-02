@@ -76,6 +76,10 @@ struct DLL_PUBLIC scr_to_img_parameters
 
   /* Rotation from screen coordinates to final coordinates.  */
   coord_t final_rotation;
+  /* Angle of the screen X and Y axis in the final coordinates.  */
+  coord_t final_angle;
+  /* Ratio of the X and Y axis in the final coordinates.  */
+  coord_t final_ratio;
 
   /* Stepping motor correction is described by a spline.  */
   coord_t *motor_correction_x, *motor_correction_y;
@@ -89,7 +93,7 @@ struct DLL_PUBLIC scr_to_img_parameters
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
     lens_center_x (0), lens_center_y (0), projection_distance (1), tilt_x (0), tilt_y(0), k1(0),
-    final_rotation (0), motor_correction_x (NULL), motor_correction_y (NULL),
+    final_rotation (0), final_angle (90), final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
     n_motor_corrections (0), mesh_trans (NULL), type (Finlay), scanner_type (fixed_lens)
   { }
   scr_to_img_parameters (const scr_to_img_parameters &from)
@@ -98,7 +102,7 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
     lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
     projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y) , k1(from.k1),
-    final_rotation (0), motor_correction_x (NULL), motor_correction_y (NULL),
+    final_rotation (from.final_rotation), final_angle (from.final_angle), final_ratio (from.final_ratio), motor_correction_x (NULL), motor_correction_y (NULL),
     n_motor_corrections (from.n_motor_corrections),
     mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type)
   {
@@ -140,6 +144,8 @@ struct DLL_PUBLIC scr_to_img_parameters
     tilt_y = from.tilt_y;
     k1 = from.k1;
     final_rotation = from.final_rotation;
+    final_angle = from.final_angle;
+    final_ratio = from.final_ratio;
     type = from.type;
     scanner_type = from.scanner_type;
     mesh_trans = from.mesh_trans;
@@ -170,6 +176,8 @@ struct DLL_PUBLIC scr_to_img_parameters
 	   && projection_distance == other.projection_distance
 	   && k1 == other.k1
 	   && final_rotation == other.final_rotation
+	   && final_angle == other.final_angle
+	   && final_ratio == other.final_ratio
 	   && tilt_x == other.tilt_x
 	   && tilt_y == other.tilt_y
 	   && type == other.type
@@ -218,6 +226,24 @@ struct DLL_PUBLIC scr_to_img_parameters
       /* 2 squares per screen.  */
       return 25.4 / 2;
   }
+  coord_t
+  get_xlen ()
+  {
+    return sqrt (coordinate1_x * coordinate1_x + coordinate1_y * coordinate1_y);
+  }
+  coord_t
+  get_ylen ()
+  {
+    return sqrt (coordinate2_x * coordinate2_x + coordinate2_y * coordinate2_y);
+  }
+  coord_t
+  get_angle ()
+  {
+    coord_t dot = coordinate1_x*coordinate2_x + coordinate1_y*coordinate2_y;
+    //coord_t det = coordinate1_x*coordinate2_y - coordinate1_y*coordinate2_x;
+    //return atan2(det, dot) * 180 / M_PI;
+    return acos (dot / (get_xlen () * get_ylen ())) * (180 / M_PI);
+  }
 };
 
 class image_data;
@@ -226,7 +252,7 @@ class image_data;
 class DLL_PUBLIC scr_to_img
 {
 public:
-  void set_parameters (scr_to_img_parameters param, image_data &img);
+  void set_parameters (scr_to_img_parameters &param, image_data &img);
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
 		  int *scr_width, int *scr_height);

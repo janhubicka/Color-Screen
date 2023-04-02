@@ -121,6 +121,8 @@ class stitch_image
   render_interpolate *render;
   render_img *render2;
   render_interpolate *render3;
+  coord_t angle;
+  coord_t ratio;
 
   struct stitch_info {coord_t x,y;
     		      int sum;} *stitch_info;
@@ -788,6 +790,13 @@ stitch_image::analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, coo
       fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
       exit (1);
     }
+  progress->pause_stdout ();
+  angle = param.get_angle ();
+  ratio = param.get_ylen () / param.get_xlen ();
+  printf ("Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_xlen (), param.get_ylen (), ratio);
+  if (report_file)
+    fprintf (report_file, "Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_xlen (), param.get_ylen (), ratio);
+  progress->resume_stdout ();
   //dufay.set_known_pixels (bitmap);
   analyzed = true;
   release_img ();
@@ -1666,14 +1675,12 @@ void stitch (progress_info *progress)
     passthrough_rparam.output_gamma = rparam.gamma;
   const char *error;
 
-  {
-    scr_to_img_parameters scr_param;
-    image_data data;
-    scr_param.type = stitching_params.type;
-    data.width=1000;
-    data.height=1000;
-    common_scr_to_img.set_parameters (scr_param, data);
-  }
+  scr_to_img_parameters scr_param;
+  image_data data;
+  scr_param.type = stitching_params.type;
+  data.width=1000;
+  data.height=1000;
+  common_scr_to_img.set_parameters (scr_param, data);
 
   if ((stitching_params.width == 1 || stitching_params.height == 1) && stitching_params.outer_tile_border > 40)
     {
@@ -1739,6 +1746,42 @@ void stitch (progress_info *progress)
       save_csp (report_file, &param, &dparam, &rparam, &solver_param);
     }
   determine_positions (progress);
+
+  std::vector<coord_t> angles;
+  std::vector<coord_t> ratios;
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+      {
+	angles.push_back (images[y][x].angle);
+	ratios.push_back (images[y][x].ratio);
+      }
+  sort(angles.begin(), angles.end());
+  sort(ratios.begin(), ratios.end());
+  int cap = (angles.size () + 3) / 4;
+  int imin = cap;
+  int imax = angles.size() - 1 - cap;
+  if (imin > imax)
+    imin = imax = angles.size () / 2;
+  coord_t avgangle = 0;
+  coord_t avgratio = 0;
+  for (int i = imin; i <= imax; i++)
+    {
+      avgangle += angles[i];
+      avgratio += ratios[i];
+    }
+  avgangle /= imax - imin + 1;
+  avgratio /= imax - imin + 1;
+  scr_param.final_angle = avgangle;
+  scr_param.final_ratio = avgratio;
+
+  progress->pause_stdout ();
+  printf ("Final angle %f ratio %f\n", scr_param.final_angle, scr_param.final_ratio);
+  if (report_file)
+    fprintf (report_file, "Final angle %f ratio %f\n", scr_param.final_angle, scr_param.final_ratio);
+  progress->resume_stdout ();
+  common_scr_to_img.set_parameters (scr_param, data);
+
+
 
   int xmin, ymin, xmax, ymax;
   determine_viewport (xmin, xmax, ymin, ymax);
