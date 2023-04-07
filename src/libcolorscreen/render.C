@@ -17,6 +17,7 @@ const char * render_parameters::color_model_names [] = {
   "paget",
   "Miethe_Goerz_reconstructed_by_Wagner",
   "Miethe_Goerz_mesured_by_Wagner",
+  "dufaycolor_reseau_by_dufaycolor_manual",
   "dufaycolor_NSMM_Bradford_11948",
   "dufaycolor_NSMM_Bradford_11951",
   "dufaycolor_NSMM_Bradford_11960",
@@ -431,6 +432,12 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome2 (1, 1, 19.7 / (20.35),
 							   1, 21 / (20.35),
 							   1,1,m_params.age);
+	  break;
+	}
+      case render_parameters::color_model_duffay_manual:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay_manual ();
 	  break;
 	}
       case render_parameters::color_model_duffay1:

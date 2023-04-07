@@ -240,8 +240,10 @@ stitch_image::load_img (progress_info *progress)
 	    }
       if (minx != -1)
 	images[miny][minx].release_image_data (progress);
+#if 0
       else
 	printf ("Too many (%i) images referenced\n", nref);
+#endif
     }
   nloaded++;
   progress->pause_stdout ();
@@ -616,24 +618,22 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
       gsl_matrix_free (cov);
       if (distsum / npoints > stitching_params.max_avg_distance)
 	{
+  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	    write_stitch_info (progress);
 	  progress->pause_stdout ();
 	  printf ("Average distance out of tolerance (--max-avg-distance parameter)\n");
 	  if (report_file)
 	    fprintf (report_file, "Average distance out of tolerance (--max-avg-distance parameter)\n");
-	  progress->resume_stdout ();
-  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
-	    write_stitch_info (progress);
 	  exit (1);
 	}
       if (maxdist > stitching_params.max_max_distance)
 	{
+  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
+	    write_stitch_info (progress);
 	  progress->pause_stdout ();
 	  printf ("Maximal distance out of tolerance (--max-max-distanace parameter)\n");
 	  if (report_file)
 	    fprintf (report_file, "Maximal distance out of tolerance (--max-max-distnace parameter)\n");
-	  progress->resume_stdout ();
-  	  if (stitching_params.geometry_info || stitching_params.individual_geometry_info)
-	    write_stitch_info (progress);
 	  exit (1);
 	}
     }
