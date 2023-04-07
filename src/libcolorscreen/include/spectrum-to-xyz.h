@@ -53,8 +53,8 @@ public:
 
 
   /* Set dyes to given measured spectra.  */
-  void set_dyes_to_duffay (int measurement);
-  void set_dyes_to_duffay_manual ();
+  void set_dyes_to_dufay (int measurement);
+  void set_dyes_to_dufay_manual ();
   void set_dyes_to_autochrome ();
   void set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
 			        luminosity_t green_patent, luminosity_t green_tartrazine,

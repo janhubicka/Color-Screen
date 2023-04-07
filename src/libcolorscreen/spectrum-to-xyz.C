@@ -213,7 +213,7 @@ const static spectra_entry autochrome_orrange[] =
 };
 /* Dufay_measuredODs_DC_MSI_NSMM11948.xlsx
  * NSMM, Bradford  - 11948*/
-const static spectra_entry real_duffay_red[] = {
+const static spectra_entry real_dufay_red[] = {
   {399.8, 1.6927},
   {415, 1.7791},
   {431.4, 2.0204},
@@ -237,7 +237,7 @@ const static spectra_entry real_duffay_red[] = {
   {719.8, 0.3778}
 };
 
-const static spectra_entry real_duffay_green[] = {
+const static spectra_entry real_dufay_green[] = {
   {399.8, 1.6847},
   {415, 1.8519},
   {431.4, 2.1937},
@@ -261,7 +261,7 @@ const static spectra_entry real_duffay_green[] = {
   {719.8, 0.53417}
 };
 
-const static spectra_entry real_duffay_blue[] = {
+const static spectra_entry real_dufay_blue[] = {
   {399.8, 1.0481},
   {415, 0.97954},
   {431.4, 1.0399},
@@ -287,7 +287,7 @@ const static spectra_entry real_duffay_blue[] = {
 
 /* Dufay_measuredODs_DC_MSI_NSMM11951.xlsx
    NSMM, Bradford  - 11951 */
-const static spectra_entry real_duffay_red2[] = {
+const static spectra_entry real_dufay_red2[] = {
   {399.8, 1.8533},
   {415, 1.968},
   {431.4, 2.152},
@@ -311,7 +311,7 @@ const static spectra_entry real_duffay_red2[] = {
   {719.8, 0.61987}
 };
 
-const static spectra_entry real_duffay_green2[] = {
+const static spectra_entry real_dufay_green2[] = {
   {399.8, 1.4331},
   {415, 1.513},
   {431.4, 1.6304},
@@ -335,7 +335,7 @@ const static spectra_entry real_duffay_green2[] = {
   {719.8, 0.52881}
 };
 
-const static spectra_entry real_duffay_blue2[] = {
+const static spectra_entry real_dufay_blue2[] = {
   {399.8, 1.0851 },
   {415  , 1.0968 },
   {431.4, 1.1751 },
@@ -363,7 +363,7 @@ const static spectra_entry real_duffay_blue2[] = {
 
 /* Dufay_measuredODs_DC_MSI_NSMM11960.xlsx
    NSMM, Bradford  - 11960 */
-const static spectra_entry real_duffay_red3[] = {
+const static spectra_entry real_dufay_red3[] = {
   {399.8, 1.7223 },
   {415  , 1.8139 },
   {431.4, 1.978  },
@@ -387,7 +387,7 @@ const static spectra_entry real_duffay_red3[] = {
   {719.8, 0.47837}
 };
 
-const static spectra_entry real_duffay_green3[] = {
+const static spectra_entry real_dufay_green3[] = {
   {399.8, 1.3607 },
   {415  , 1.4427 },
   {431.4, 1.5687 },
@@ -411,7 +411,7 @@ const static spectra_entry real_duffay_green3[] = {
   {719.8, 0.47378}
 };
 
-const static spectra_entry real_duffay_blue3[] = {
+const static spectra_entry real_dufay_blue3[] = {
   {399.8, 1.0618 },
   {415  , 1.0929 },
   {431.4, 1.1928 },
@@ -437,7 +437,7 @@ const static spectra_entry real_duffay_blue3[] = {
 
 /* Dufay_measuredODs_DC_MSI_NSMM11967.xlsx
    NSMM, Bradford  - 11960 (probably Spicer Dufay) */
-const static spectra_entry real_duffay_red4[] = {
+const static spectra_entry real_dufay_red4[] = {
   {399.8, 1.4999 },
   {415  , 1.5488 },
   {431.4, 1.6861 },
@@ -461,7 +461,7 @@ const static spectra_entry real_duffay_red4[] = {
   {719.8, 0.33736}
 };
 
-const static spectra_entry real_duffay_green4[] = {
+const static spectra_entry real_dufay_green4[] = {
   {399.8, 1.589  },
   {415  , 1.7027 },
   {431.4, 1.8468 },
@@ -485,7 +485,7 @@ const static spectra_entry real_duffay_green4[] = {
   {719.8, 0.38017}
 };
 
-const static spectra_entry real_duffay_blue4[] = {
+const static spectra_entry real_dufay_blue4[] = {
   {399.8, 1.2124 },
   {415  , 1.2054 },
   {431.4, 1.2408 },
@@ -534,7 +534,7 @@ const static spectra_entry real_duffay_blue4[] = {
 
 /* Dufay_measuredODs_DC_MSI_NSMM12075.xlsx
    Spicer-Dufay NSMM, Bradford  - 12075 (probably Spicer Dufay) */
-const static spectra_entry real_duffay_red5[] = {
+const static spectra_entry real_dufay_red5[] = {
   {399.8, 0.73443 },
   {415  , 0.72961 },
   {431.4, 0.79942 },
@@ -558,7 +558,7 @@ const static spectra_entry real_duffay_red5[] = {
   {719.8, 0.063112}
 };
 
-const static spectra_entry real_duffay_green5[] = {
+const static spectra_entry real_dufay_green5[] = {
   {399.8, 0.742   },
   {415  , 0.80711 },
   {431.4, 0.88456 },
@@ -583,7 +583,7 @@ const static spectra_entry real_duffay_green5[] = {
 };
 
 
-const static spectra_entry real_duffay_blue5[] = {
+const static spectra_entry real_dufay_blue5[] = {
   {399.8, 0.54229 },
   {415  , 0.52097 },
   {431.4, 0.56026 },
@@ -1630,39 +1630,39 @@ change_concentration (spectrum s, luminosity_t concentration)
 }
 
 void
-spectrum_dyes_to_xyz::set_dyes_to_duffay (int measurement)
+spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement)
 {
   if (debug)
-    printf ("Setting dyes to duffay measurement %i\n", measurement);
+    printf ("Setting dyes to dufay measurement %i\n", measurement);
   if (measurement == 0)
     {
-      compute_spectrum (red, sizeof (real_duffay_red) / sizeof (spectra_entry), real_duffay_red, true);
-      compute_spectrum (green, sizeof (real_duffay_green) / sizeof (spectra_entry), real_duffay_green, true);
-      compute_spectrum (blue, sizeof (real_duffay_blue) / sizeof (spectra_entry), real_duffay_blue, true);
+      compute_spectrum (red, sizeof (real_dufay_red) / sizeof (spectra_entry), real_dufay_red, true);
+      compute_spectrum (green, sizeof (real_dufay_green) / sizeof (spectra_entry), real_dufay_green, true);
+      compute_spectrum (blue, sizeof (real_dufay_blue) / sizeof (spectra_entry), real_dufay_blue, true);
     }
   else if (measurement == 1)
     {
-      compute_spectrum (red, sizeof (real_duffay_red2) / sizeof (spectra_entry), real_duffay_red2, true);
-      compute_spectrum (green, sizeof (real_duffay_green2) / sizeof (spectra_entry), real_duffay_green2, true);
-      compute_spectrum (blue, sizeof (real_duffay_blue2) / sizeof (spectra_entry), real_duffay_blue2, true);
+      compute_spectrum (red, sizeof (real_dufay_red2) / sizeof (spectra_entry), real_dufay_red2, true);
+      compute_spectrum (green, sizeof (real_dufay_green2) / sizeof (spectra_entry), real_dufay_green2, true);
+      compute_spectrum (blue, sizeof (real_dufay_blue2) / sizeof (spectra_entry), real_dufay_blue2, true);
     }
   else if (measurement == 2)
     {
-      compute_spectrum (red, sizeof (real_duffay_red3) / sizeof (spectra_entry), real_duffay_red3, true);
-      compute_spectrum (green, sizeof (real_duffay_green3) / sizeof (spectra_entry), real_duffay_green3, true);
-      compute_spectrum (blue, sizeof (real_duffay_blue3) / sizeof (spectra_entry), real_duffay_blue3, true);
+      compute_spectrum (red, sizeof (real_dufay_red3) / sizeof (spectra_entry), real_dufay_red3, true);
+      compute_spectrum (green, sizeof (real_dufay_green3) / sizeof (spectra_entry), real_dufay_green3, true);
+      compute_spectrum (blue, sizeof (real_dufay_blue3) / sizeof (spectra_entry), real_dufay_blue3, true);
     }
   else if (measurement == 3)
     {
-      compute_spectrum (red, sizeof (real_duffay_red4) / sizeof (spectra_entry), real_duffay_red4, true);
-      compute_spectrum (green, sizeof (real_duffay_green4) / sizeof (spectra_entry), real_duffay_green4, true);
-      compute_spectrum (blue, sizeof (real_duffay_blue4) / sizeof (spectra_entry), real_duffay_blue4, true);
+      compute_spectrum (red, sizeof (real_dufay_red4) / sizeof (spectra_entry), real_dufay_red4, true);
+      compute_spectrum (green, sizeof (real_dufay_green4) / sizeof (spectra_entry), real_dufay_green4, true);
+      compute_spectrum (blue, sizeof (real_dufay_blue4) / sizeof (spectra_entry), real_dufay_blue4, true);
     }
   else if (measurement == 4)
     {
-      compute_spectrum (red, sizeof (real_duffay_red5) / sizeof (spectra_entry), real_duffay_red5, true);
-      compute_spectrum (green, sizeof (real_duffay_green5) / sizeof (spectra_entry), real_duffay_green5, true);
-      compute_spectrum (blue, sizeof (real_duffay_blue5) / sizeof (spectra_entry), real_duffay_blue5, true);
+      compute_spectrum (red, sizeof (real_dufay_red5) / sizeof (spectra_entry), real_dufay_red5, true);
+      compute_spectrum (green, sizeof (real_dufay_green5) / sizeof (spectra_entry), real_dufay_green5, true);
+      compute_spectrum (blue, sizeof (real_dufay_blue5) / sizeof (spectra_entry), real_dufay_blue5, true);
     }
   else
     abort ();
@@ -1673,7 +1673,7 @@ spectrum_dyes_to_xyz::set_dyes_to_duffay (int measurement)
 #endif
 }
 void
-spectrum_dyes_to_xyz::set_dyes_to_duffay_manual ()
+spectrum_dyes_to_xyz::set_dyes_to_dufay_manual ()
 {
   compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, false);
   compute_spectrum (green, sizeof (manual_dufay_green) / sizeof (spectra_entry), manual_dufay_green, false);

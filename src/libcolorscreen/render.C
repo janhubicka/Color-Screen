@@ -434,20 +434,20 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 							   1,1,m_params.age);
 	  break;
 	}
-      case render_parameters::color_model_duffay_manual:
+      case render_parameters::color_model_dufay_manual:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay_manual ();
+	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay_manual ();
 	  break;
 	}
-      case render_parameters::color_model_duffay1:
-      case render_parameters::color_model_duffay2:
-      case render_parameters::color_model_duffay3:
-      case render_parameters::color_model_duffay4:
-      case render_parameters::color_model_duffay5:
+      case render_parameters::color_model_dufay1:
+      case render_parameters::color_model_dufay2:
+      case render_parameters::color_model_dufay3:
+      case render_parameters::color_model_dufay4:
+      case render_parameters::color_model_dufay5:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_duffay ((int)m_params.color_model - (int)render_parameters::color_model_duffay1);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay ((int)m_params.color_model - (int)render_parameters::color_model_dufay1);
 	  break;
 	}
       case render_parameters::color_model_max:
