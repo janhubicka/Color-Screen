@@ -75,6 +75,9 @@ typedef matrix4x4<luminosity_t> color_matrix;
 color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 			       luminosity_t gx, luminosity_t gy,
 			       luminosity_t bx, luminosity_t by);
+color_matrix matrix_by_dye_xyY (luminosity_t rx, luminosity_t ry, luminosity_t rY,
+			        luminosity_t gx, luminosity_t gy, luminosity_t gY,
+			        luminosity_t bx, luminosity_t by, luminosity_t bY);
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 
@@ -273,6 +276,8 @@ srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, l
 inline xyz
 xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
 {
+  if (!Y)
+    return (xyz){0,0,0};
   xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
   return ret;
 }

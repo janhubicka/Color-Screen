@@ -80,6 +80,8 @@ struct DLL_PUBLIC render_parameters
       color_model_miethe_goerz_reconstructed_wager,
       color_model_miethe_goerz_original_wager,
       color_model_dufay_manual,
+      color_model_dufay_color_cinematography_xyY,
+      color_model_dufay_color_cinematography_spectra,
       color_model_dufay1,
       color_model_dufay2,
       color_model_dufay3,
