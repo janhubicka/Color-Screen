@@ -331,10 +331,10 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
 
 
   /* Determine the coordinates.  */
-  *final_xshift = -minx - 1;
-  *final_yshift = -miny - 1;
-  *final_width = maxx-minx + 2;
-  *final_height = maxy-miny + 2;
+  *final_xshift = -floor (minx) - 1;
+  *final_yshift = -floor (miny) - 1;
+  *final_width = ceil (maxx)- floor (minx) + 2;
+  *final_height = ceil (maxy)- floor (miny) + 2;
 }
 
 /* Determine rectangular section of the final coordiantes to which the whole image
