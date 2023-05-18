@@ -74,6 +74,27 @@ class rotation_2x2matrix: public matrix2x2<coord_t>
 
 }
 
+void
+scr_to_img::update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle)
+{
+  //m_scr_to_img_homography_matrix = homography_matrix_4points (false, zero, x, y, xpy);
+  //m_img_to_scr_homography_matrix = homography_matrix_4points (true, zero, x, y, xpy);
+  //
+  m_param.final_angle = final_angle;
+  m_param.final_ratio = final_ratio;
+
+  double r = m_param.final_angle * M_PI / 180;
+  matrix2x2<coord_t> fm (1, 0,
+			 cos (r) * m_param.final_ratio, sin (r) * m_param.final_ratio);
+
+  /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems to be 23.77.
+     We organize the grid making red lines horizontal, so rotate by additional 90 degrees
+     to get image right.  */
+  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 + 0.77 : 0);
+  m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
+  m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
+}
+
 /* Initilalize the translation matrix to PARAM.  */
 void
 scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img)
@@ -166,19 +187,8 @@ scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img)
   m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
   m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, zero, x, y, xpy, txpy);
   m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, zero, x, y, xpy, txpy);
-  //m_scr_to_img_homography_matrix = homography_matrix_4points (false, zero, x, y, xpy);
-  //m_img_to_scr_homography_matrix = homography_matrix_4points (true, zero, x, y, xpy);
 
-  double r = m_param.final_angle * M_PI / 180;
-  matrix2x2<coord_t> fm (1, 0,
-			 cos (r) * m_param.final_ratio, sin (r) * m_param.final_ratio);
-
-  /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems to be 23.77.
-     We organize the grid making red lines horizontal, so rotate by additional 90 degrees
-     to get image right.  */
-  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 + 0.77 : 0);
-  m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
-  m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
+  update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
 }
 
 /* Determine rectangular section of the screen to which the whole image

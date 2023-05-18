@@ -141,6 +141,7 @@ class stitch_image
   ~stitch_image ();
   void load_img (progress_info *);
   void release_img ();
+  void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
   void analyze (bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
@@ -638,6 +639,14 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	}
     }
   return n;
+}
+
+void
+stitch_image::update_scr_to_final_parameters (coord_t ratio, coord_t anlge)
+{
+  scr_to_img_map.update_scr_to_final_parameters (ratio, angle);
+  basic_scr_to_img_map.update_scr_to_final_parameters (ratio, angle);
+  scr_to_img_map.get_final_range (img_width, img_height, &final_xshift, &final_yshift, &final_width, &final_height);
 }
 
 void
@@ -1773,6 +1782,9 @@ void stitch (progress_info *progress)
   avgratio /= imax - imin + 1;
   scr_param.final_angle = avgangle;
   scr_param.final_ratio = avgratio;
+  for (int y = 0; y < stitching_params.height; y++)
+    for (int x = 0; x < stitching_params.width; x++)
+      images[y][x].update_scr_to_final_parameters (avgratio, avgangle);
 
   progress->pause_stdout ();
   printf ("Final angle %f ratio %f\n", scr_param.final_angle, scr_param.final_ratio);

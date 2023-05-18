@@ -253,6 +253,7 @@ class DLL_PUBLIC scr_to_img
 {
 public:
   void set_parameters (scr_to_img_parameters &param, image_data &img);
+  void update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle);
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
 		  int *scr_width, int *scr_height);
