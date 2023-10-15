@@ -11,27 +11,29 @@ struct point_t {coord_t x, y;};
 
 struct solver_parameters
 {
-  solver_parameters ()
+  DLL_PUBLIC solver_parameters ()
   : npoints (0), point (NULL), optimize_lens (true), optimize_tilt (true), weighted (false)
   {
   }
-  ~solver_parameters ()
+  DLL_PUBLIC ~solver_parameters ()
   {
     free (point);
   }
+
+
+  /* Solver takes as input set of points.  Every point records
+      - image coordinates (img_x, img_y)
+      - screen coordinats (scr_x, scr_y)
+      - color (only used for visualization.  */
+ 
   enum point_color {red,green,blue,max_point_color};
-  static const char *point_color_names[(int)max_point_color];
-  struct point_location
-  {
-    coord_t x, y;
-    solver_parameters::point_color color;
-  };
   struct point_t
   {
     coord_t img_x, img_y;
     coord_t screen_x, screen_y;
     enum point_color color;
 
+    /* Translate point color to RGB.  */
     void
     get_rgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
     {
@@ -42,14 +44,19 @@ struct solver_parameters
     }
   };
 
+  /* Vector holding points.  */
   int npoints;
   struct point_t *point;
+  /* If true, lens parameters are auto-optimized.  */
   bool optimize_lens;
+  /* If true, image tilt is auto-optimized.  */
   bool optimize_tilt;
+  /* If true then weights of points are set according to the
+     distance to center_x and center_y.   */
   bool weighted;
   coord_t center_x, center_y;
 
-  int
+  DLL_PUBLIC int
   add_point (coord_t img_x, coord_t img_y, coord_t screen_x, coord_t screen_y, enum point_color color)
   {
     npoints++;
@@ -62,7 +69,7 @@ struct solver_parameters
     return npoints;
   }
 
-  void
+  DLL_PUBLIC void
   remove_point (int n)
   {
     /* Just for fun keep the order as points were added.  */
@@ -75,12 +82,12 @@ struct solver_parameters
 #endif
     npoints--;
   }
-  void
+  DLL_PUBLIC void
   remove_points ()
   {
     npoints = 0;
   }
-  void
+  DLL_PUBLIC void
   dump (FILE *out)
   {
     for (int i =0; i < npoints; i++)
@@ -88,7 +95,16 @@ struct solver_parameters
 	fprintf (out, "point %i img %f %f maps to scr %f %f color %i\n", i, point[i].img_x, point[i].img_y, point[i].screen_x, point[i].screen_y, (int)point[i].color);
       }
   }
+  /* get_point_location returns description of invividual color patches in single
+     period of the screen.  */
+  struct point_location
+  {
+    coord_t x, y;
+    solver_parameters::point_color color;
+  };
   static point_location *get_point_locations (enum scr_type type, int *n);
+  /* Names of colors in enum point_color.  */
+  static const char *point_color_names[(int)max_point_color];
 };
 class homography
 {
@@ -114,9 +130,9 @@ public:
 				     coord_t wcenter_x, coord_t wcenter_y,
 				     coord_t *chisq_ret = NULL);
 };
-coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
+DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
-mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
+DLL_PUBLIC mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);
 
 /* Invormation about auto-detected screen.
    If mesh_trans is NULL the detection failed.  */
@@ -142,7 +158,7 @@ struct detected_screen
 /* Parameters for reglar screen detection.  */
 struct detect_regular_screen_params
 {
-  detect_regular_screen_params ()
+  DLL_PUBLIC detect_regular_screen_params ()
   : min_screen_percentage (20), border_top (50), border_bottom (50), border_left (50), border_right (50),
     top (false), bottom (false), left (false), right (false),
     k1 (0),
@@ -164,7 +180,7 @@ struct detect_regular_screen_params
   bool return_screen_map;
   bool do_mesh;
 };
-detected_screen detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress = NULL, FILE *report_file = NULL);
+DLL_PUBLIC detected_screen detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress = NULL, FILE *report_file = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, luminosity_t gamma, color_t *reds, int nreds, color_t *greens, int ngreens, color_t *blues, int nblues, progress_info *progress = NULL, FILE *report = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress = NULL, FILE *report = NULL);
 bool optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress = NULL, FILE *report = NULL);
