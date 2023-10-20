@@ -262,6 +262,13 @@ xyz_to_srgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, l
   *g = linear_to_srgb (*g);
   *b = linear_to_srgb (*b);
 }
+inline void
+xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)
+{
+	*rx = x / (x + y + z);
+	*ry = y / (x + y + z);
+	*rY = y;
+}
 
 inline void
 srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, luminosity_t *y, luminosity_t *z)

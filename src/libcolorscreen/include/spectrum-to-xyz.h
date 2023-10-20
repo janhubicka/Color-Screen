@@ -53,7 +53,7 @@ public:
 
 
   /* Set dyes to given measured spectra.  */
-  void set_dyes_to_dufay (int measurement);
+  void set_dyes_to_dufay (int measurement, luminosity_t age);
   void set_dyes_to_dufay_manual ();
   void set_dyes_to_dufay_color_cinematography ();
   void set_dyes_to_autochrome ();

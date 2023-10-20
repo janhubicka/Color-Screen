@@ -23,7 +23,7 @@ struct DLL_PUBLIC render_parameters
     mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
     age(0),
     dye_balance (dye_balance_neutral),
-    screen_blur_radius (1.3),
+    screen_blur_radius (0.5),
     color_model (color_model_none), gray_min (0), gray_max (255),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     restore_original_luminosity (true), precise (true)
@@ -101,7 +101,7 @@ struct DLL_PUBLIC render_parameters
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
 
-  /* Use characteristics curves to resotre original luminosity.  */
+  /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;
 
   /* The following is used by interpolated rendering only.  */
@@ -111,6 +111,9 @@ struct DLL_PUBLIC render_parameters
   bool operator== (render_parameters &other) const
   {
     return gamma == other.gamma
+	   && output_gamma == other.output_gamma
+	   && sharpen_radius == other.sharpen_radius
+	   && sharpen_amount == other.sharpen_amount
 	   && presaturation == other.presaturation
 	   && saturation == other.saturation
 	   && brightness == other.brightness
@@ -123,8 +126,11 @@ struct DLL_PUBLIC render_parameters
 	   && backlight_temperature == backlight_temperature
 	   && gray_min == other.gray_min
 	   && gray_max == other.gray_max
+	   && screen_blur_radius == other.screen_blur_radius
+    	   && dye_balance == other.dye_balance
 	   && precise == other.precise
  	   && film_characteristics_curve == other.film_characteristics_curve
+	   && restore_original_luminosity == other.restore_original_luminosity
  	   && output_curve == other.output_curve;
   }
   bool operator!= (render_parameters &other) const

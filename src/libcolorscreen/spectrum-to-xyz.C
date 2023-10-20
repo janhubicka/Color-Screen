@@ -1753,8 +1753,12 @@ change_concentration (spectrum s, luminosity_t concentration)
 }
 
 void
-spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement)
+spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement, luminosity_t age)
 {
+  spectrum new_red, new_green, new_blue;
+  compute_spectrum (new_red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false);
+  compute_spectrum (new_green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false);
+  compute_spectrum (new_blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false);
   if (debug)
     printf ("Setting dyes to dufay measurement %i\n", measurement);
   if (measurement == 0)
@@ -1789,6 +1793,12 @@ spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement)
     }
   else
     abort ();
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      red[i] = (new_red[i] * (1 - age) + red[i] * age) / 1;
+      green[i] = (new_green[i] * (1 - age) + green[i] * age) / 1;
+      blue[i] = (new_blue[i] * (1 - age) + blue[i] * age) / 1;
+    }
 #if 0
   change_concentration (red, 1);
   change_concentration (green, 1);

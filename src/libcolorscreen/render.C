@@ -468,7 +468,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
       case render_parameters::color_model_dufay5:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay ((int)m_params.color_model - (int)render_parameters::color_model_dufay1);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay ((int)m_params.color_model - (int)render_parameters::color_model_dufay1, m_params.age);
 	  break;
 	}
       case render_parameters::color_model_max:
