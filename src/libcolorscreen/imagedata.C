@@ -7,6 +7,13 @@
 #include "lru-cache.h"
 #include "include/imagedata.h"
 
+#define HAVE_LIBRAW
+
+#ifdef HAVE_LIBRAW
+#include <libraw/libraw.h>
+#endif
+
+
 class image_data_loader
 {
 public:
@@ -66,6 +73,23 @@ private:
   uint16_t m_samples;
   uint32_t m_row;
 };
+
+class raw_image_data_loader: public image_data_loader
+{
+public:
+  raw_image_data_loader (image_data *img)
+  : m_img (img)
+  { }
+  virtual bool init_loader (const char *name, const char **error);
+  virtual bool load_part (int *permille, const char **error);
+  virtual ~raw_image_data_loader ()
+  {
+  }
+private:
+  image_data *m_img;
+  LibRaw RawProcessor;
+};
+
 
 image_data::image_data ()
 : data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), loader (NULL), own (false)
@@ -436,6 +460,51 @@ jpg_image_data_loader::load_part (int *permille, const char **error)
   return true;
 }
 
+bool
+raw_image_data_loader::init_loader (const char *name, const char **error)
+{
+  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
+  //RawProcessor.imgdata.params.half_size = 1;
+  int ret = RawProcessor.open_file(name);
+  if (ret != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  if ((ret = RawProcessor.dcraw_process()) != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  grayscale = false;
+  rgb = true;
+  m_img->width = RawProcessor.imgdata.sizes.width;
+  m_img->height = RawProcessor.imgdata.sizes.height;
+  m_img->maxval = 65535;
+  return true;
+}
+
+bool
+raw_image_data_loader::load_part (int *permille, const char **error)
+{
+  for (int y = 0; y < m_img->height; y++)
+    for (int x = 0; x < m_img->width; x++)
+      {
+	int i = y * m_img->width + x;
+	m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
+	m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
+	m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
+      }
+  *permille = 1000;
+  RawProcessor.recycle ();
+  return true;
+}
+
 static bool
 has_suffix (const char *name, const char *suffix)
 {
@@ -453,6 +522,8 @@ image_data::init_loader (const char *name, const char **error)
     loader = new tiff_image_data_loader (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
     loader = new jpg_image_data_loader (this);
+  else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq"))
+    loader = new raw_image_data_loader (this);
   if (!loader)
     {
       *error = "Unknown file extension";

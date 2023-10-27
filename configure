@@ -817,6 +817,7 @@ enable_maintainer_mode
 enable_openmp
 with_libtiff
 with_libjpeg
+with_libraw
 enable_gtkgui
 '
       ac_precious_vars='build_alias
@@ -1494,6 +1495,7 @@ Optional Packages:
                           compiler's sysroot if not specified).
   --with-libtiff=PATH      enter the PATH to libtiff package
   --with-libjpeg=PATH      enter the PATH to libjpeg package
+  --with-libraw=PATH      enter the PATH to libraw package
 
 Some influential environment variables:
   CC          C compiler command
@@ -18294,7 +18296,7 @@ printf "%s\n" "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
-CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -fno-exceptions -std=c++11 -DLIBCOLORSCREEN"
+CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -std=c++11 -DLIBCOLORSCREEN"
 if test -e penmp || test -e mp; then
   as_fn_error $? "AC_OPENMP clobbers files named 'mp' and 'penmp'. Aborting configure because one of these files already exists." "$LINENO" 5
 fi
@@ -18718,6 +18720,80 @@ fi
 
 fi
 
+
+# Check whether --with-libraw was given.
+if test ${with_libraw+y}
+then :
+  withval=$with_libraw;  if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi
+fi
+
+if test -n "$with_libraw"; then echo "option: with_libraw $with_libraw"; fi
+
+if test "$with_libraw" != "no"; then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for library containing libraw_init" >&5
+printf %s "checking for library containing libraw_init... " >&6; }
+if test ${ac_cv_search_libraw_init+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int libraw_init ();
+}
+int
+main (void)
+{
+return conftest::libraw_init ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' raw
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_libraw_init=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_libraw_init+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_libraw_init+y}
+then :
+
+else $as_nop
+  ac_cv_search_libraw_init=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_libraw_init" >&5
+printf "%s\n" "$ac_cv_search_libraw_init" >&6; }
+ac_res=$ac_cv_search_libraw_init
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  check_libraw_h="libraw.h"
+else $as_nop
+   echo " * * * try option --with-libraw=PATH"
+fi
+
+fi
+
 # Windows DLL require -no-undefined libtool argument.  Using it on other
 # systems makes using of libcolorscreen more complicated since -lcolorscreen
 # must then be done together with libraries colorscreen depends on (libtiff and
@@ -18800,8 +18876,6 @@ else $as_nop
 fi
 
 if test "$do_gtkgui" != "no"; then
-  ac_config_headers="$ac_config_headers src/gtkgui/config.h"
-
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for GTKGUI_BIN" >&5
@@ -18930,6 +19004,8 @@ else
 fi
 
 ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile src/stitch/Makefile examples/Makefile examples/amcolony/Makefile"
+
+ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h"
 
 
 cat >confcache <<\_ACEOF
@@ -20055,7 +20131,6 @@ do
   case $ac_config_target in
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
-    "src/gtkgui/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/gtkgui/config.h" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/libcolorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/libcolorscreen/Makefile" ;;
@@ -20064,6 +20139,8 @@ do
     "src/stitch/Makefile") CONFIG_FILES="$CONFIG_FILES src/stitch/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "examples/amcolony/Makefile") CONFIG_FILES="$CONFIG_FILES examples/amcolony/Makefile" ;;
+    "src/libcolorscreen/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/config.h" ;;
+    "src/gtkgui/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/gtkgui/config.h" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

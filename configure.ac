@@ -10,7 +10,7 @@ AC_PROG_RANLIB
 AM_MAINTAINER_MODE([disable])
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -fno-exceptions -std=c++11 -DLIBCOLORSCREEN"
+CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -std=c++11 -DLIBCOLORSCREEN"
 AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
@@ -54,6 +54,18 @@ AC_SEARCH_LIBS(tjInitDecompress,[turbojpeg],[check_libjpeg_h="turbojpeg.h"],
  [ echo " * * * try option --with-libjpeg=PATH"])
 fi
 
+AC_ARG_WITH(libraw,
+ [  --with-libraw=PATH      enter the PATH to libraw package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_libraw"; then echo "option: with_libraw $with_libraw"; fi
+
+if test "$with_libraw" != "no"; then
+AC_SEARCH_LIBS(libraw_init,[raw],[check_libraw_h="libraw.h"],
+ [ echo " * * * try option --with-libraw=PATH"])
+fi
+
 # Windows DLL require -no-undefined libtool argument.  Using it on other
 # systems makes using of libcolorscreen more complicated since -lcolorscreen
 # must then be done together with libraries colorscreen depends on (libtiff and
@@ -95,7 +107,6 @@ AC_LINK_EXPORT_DYNAMIC
 do_gtkgui=no
 AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
 if test "$do_gtkgui" != "no"; then
-  AC_CONFIG_HEADERS([src/gtkgui/config.h])
   PKG_CHECK_MODULES([GTKGUI_BIN], [
     glib-2.0
     gtk+-2.0
@@ -103,5 +114,6 @@ if test "$do_gtkgui" != "no"; then
 fi
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile src/stitch/Makefile examples/Makefile examples/amcolony/Makefile])
+AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h])
 
 AC_OUTPUT
