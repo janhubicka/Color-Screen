@@ -174,7 +174,7 @@ parse_bool (FILE *f, bool *val)
   return false;
 }
 
-static bool
+bool
 read_scalar (FILE *f, coord_t *ll)
 {
   double l;
@@ -270,6 +270,7 @@ bool
 load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error)
 {
   char buf[256];
+  skipwhitespace (f);
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {

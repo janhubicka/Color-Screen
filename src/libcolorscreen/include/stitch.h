@@ -7,6 +7,8 @@
 #include "analyze-paget.h"
 #include "solver.h"
 #include "../libcolorscreen/render-interpolate.h"
+struct tiff;
+typedef struct tiff TIFF;
 
 struct stitching_params
 {
@@ -107,28 +109,31 @@ class stitch_image
   render_interpolate *render;
   render_img *render2;
   render_interpolate *render3;
-  coord_t angle;
-  coord_t ratio;
+  /* Screen angle and ratio.  Used in Dufaycolor analysis since
+     the Dufaycolor screens are printed with different ratios and angles
+     of the horisontal and vertical lines.
+
+     Computed at analysis time and used in final output.  */
+  coord_t angle, ratio;
 
   struct stitch_info {coord_t x,y;
     		      int sum;} *stitch_info;
 
+  /* Position in the stitched image.  Determined during analysis.  */
   coord_t xpos, ypos;
   bool analyzed;
   bool output;
+  /* Gray max of the original data..  */
   int gray_max;
 
   bool top, bottom, left, right;
 
-  stitch_image ()
-  : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0), width (0), height (0), final_xshift (0), final_yshift (0), final_width (0), final_height (0), screen_detected_patches (NULL), known_pixels (NULL), render (NULL), render2 (NULL), render3 (NULL), stitch_info (NULL), refcount (0)
-  {
-  }
-  ~stitch_image ();
+  DLL_PUBLIC stitch_image ();
+  DLL_PUBLIC ~stitch_image ();
   void load_img (progress_info *);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
-  void analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
+  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
@@ -141,8 +146,11 @@ class stitch_image
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
   void clear_stitch_info ();
   bool diff (stitch_image &other, progress_info *progress);
+  bool save (FILE *f);
+  bool load (stitch_project *, FILE *f, const char **error);
 
   inline analyze_base & get_analyzer ();
+  static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
 private:
   static long current_time;
   static int nloaded;
@@ -153,30 +161,46 @@ private:
 
 class stitch_project
 {
-  public:
+public:
   struct stitching_params params;
   FILE *report_file;
   stitch_image images[stitching_params::max_dim][stitching_params::max_dim];
+  /* Expected to by initialized by user and used during analysis stage only
+     to pass k1.  */
   scr_to_img_parameters param;
+  /* Rendering parameters. Expected to be initialized by user.  */
   render_parameters rparam;
+  /* Rendering parameters used to output original tiles.  Initialized 
+     in initialize () call.  */
   render_parameters passthrough_rparam;
+  /* Used to output final image. Initialized by determine_angle.  */
   scr_to_img common_scr_to_img;
+  /* Screen detection parameters used at analysis stage only.  */
   scr_detect_parameters dparam;
+  /* Solver parameters used to analyze images.  Needed in analysis stage only.  */
   solver_parameters solver_param;
+  /* Used to determine output file size.  */
   coord_t pixel_size;
-  private:
+  DLL_PUBLIC stitch_project ();
+  DLL_PUBLIC ~stitch_project ();
+  bool initialize();
+  bool analyze_images (progress_info *progress);
+  void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
+  void determine_angle ();
+  bool save (FILE *f);
+  bool load (FILE *f, const char **error);
+  std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
+private:
+  /* Passed from initialize to analyze_angle to determine scr param.
+   * TODO: Localize to analyze_angle.  */
+  scr_to_img_parameters scr_param;
+  bool analyze (int x, int y, progress_info *);
+  void print_panorama_map (FILE *out);
+  void print_status (FILE *out);
+  /* Screen used to collect patch density at analysis stage.  */
   screen *my_screen;
   int stitch_info_scale = 0;
-  bool initialized;
   friend stitch_image;
-  public:
-  stitch_project () : params (), report_file (NULL), images(), param (), rparam (), passthrough_rparam (), common_scr_to_img (), dparam (), solver_param (), pixel_size (0), my_screen (NULL), stitch_info_scale (0), initialized (false)
-  {}
-  ~stitch_project ()
-  {
-  if (my_screen)
-    render_to_scr::release_screen (my_screen);
-  }
 };
 
 

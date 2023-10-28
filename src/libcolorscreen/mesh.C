@@ -287,7 +287,6 @@ mesh::load (FILE *f, const char **error)
       for (int x = 0; x < width; x++)
 	{
 	  float sx, sy;
-	  printf ("%i %i\n",x,y);
 	  if (!expect_keyword (f, "(")
 	      || fscanf (f, "%f", &sx) != 1
 	      || ! expect_keyword (f, ",")

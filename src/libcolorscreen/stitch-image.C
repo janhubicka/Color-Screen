@@ -4,10 +4,19 @@
 #include "include/tiff-writer.h"
 #include "render-interpolate.h"
 #include "screen-map.h"
+#include "loadsave.h"
 extern unsigned char sRGB_icc[];
 extern unsigned int sRGB_icc_len;
 long stitch_image::current_time;
 int stitch_image::nloaded;
+
+stitch_image::stitch_image ()
+: filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0),
+  width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
+  final_height (0), screen_detected_patches (NULL), known_pixels (NULL),
+  render (NULL), render2 (NULL), render3 (NULL), stitch_info (NULL), refcount (0)
+{
+}
 
 stitch_image::~stitch_image ()
 {
@@ -123,10 +132,10 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
     }
   if (progress)
     progress->set_task ("determining known pixels", width * height);
-  int xmin = img.width * skipleft / 100;
-  int xmax = img.width * (100 - skipright) / 100;
-  int ymin = img.height * skiptop / 100;
-  int ymax = img.height * (100 - skipbottom) / 100;
+  int xmin = img_width * skipleft / 100;
+  int xmax = img_width * (100 - skipright) / 100;
+  int ymin = img_height * skiptop / 100;
+  int ymax = img_height * (100 - skipbottom) / 100;
   //progress->pause_stdout ();
   //printf ("Skip: %i %i %i %i Range: %i %i %i %i\n", skiptop, skipbottom, skipleft, skipright,xmin,xmax,ymin,ymax);
   //progress->resume_stdout ();
@@ -486,11 +495,11 @@ stitch_image::update_scr_to_final_parameters (coord_t ratio, coord_t anlge)
   scr_to_img_map.get_final_range (img_width, img_height, &final_xshift, &final_yshift, &final_width, &final_height);
 }
 
-void
+bool
 stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *progress)
 {
   if (analyzed)
-    return;
+    return true;
   m_prj = prj;
   top = top_p;
   bottom = bottom_p;
@@ -578,9 +587,8 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   param.type = m_prj->params.type;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, progress);
-  if (!m_prj->initialized)
+  if (!m_prj->my_screen)
     {
-      m_prj->initialized = true;
       m_prj->pixel_size = detected.pixel_size;
       m_prj->my_screen = render_to_scr::get_screen (m_prj->params.type, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
@@ -647,6 +655,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   //dufay.set_known_pixels (bitmap);
   analyzed = true;
   release_img ();
+  return true;
 }
 
 bool
@@ -723,8 +732,8 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
 }
 
 /* Write one row.  */
-static bool
-write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
+bool
+stitch_image::write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
 {
   if (progress && progress->cancel_requested ())
     {
@@ -1028,7 +1037,7 @@ open_tile_output_file (const char *outfname,
 bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
-  std::string prefix;
+  std::string suffix;
   uint16_t *outrow;
   coord_t final_xpos, final_ypos;
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
@@ -1038,18 +1047,19 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   switch(mode)
   {
   case render_demosaiced:
-    prefix = "demosaicedtile-";
+    suffix = "-demosaicedtile";
     break;
   case render_original:
-    prefix = "tile-";
+    suffix = "-tile";
     break;
   case render_predictive:
-    prefix = "predictivetile-";
+    suffix = "-predictivetile";
     break;
   }
 
   load_img (progress);
-  TIFF *out = open_tile_output_file ((prefix+filename).c_str(), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, error, img->icc_profile, img->icc_profile_size, mode, progress);
+  std::string name = m_prj->adjusted_filename (filename, suffix, ".tif");
+  TIFF *out = open_tile_output_file (name.c_str (), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, error, img->icc_profile, img->icc_profile_size, mode, progress);
   if (!out)
     {
       release_img ();
@@ -1091,13 +1101,125 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
 	  TIFFClose (out);
 	  free (outrow);
 	  release_img ();
-	  return false;
-	}
+	  return false;}
     }
   progress->set_task ("Closing tile output file", 1);
   TIFFClose (out);
   free (outrow);
   output = true;
   release_img ();
+  return true;
+}
+
+bool
+stitch_image::save (FILE *f)
+{
+  if (fprintf (f, "stitch_image_filename: %s\n", filename.c_str ()) < 0
+      || fprintf (f, "stitch_image_angle: %f\n", angle) < 0
+      || fprintf (f, "stitch_image_ratio: %f\n", ratio) < 0
+      || fprintf (f, "stitch_image_position: %f %f\n", xpos, ypos) < 0
+      || fprintf (f, "stitch_image_size: %i %i\n", img_width, img_height) < 0
+      || fprintf (f, "stitch_image_scr_size: %i %i\n", width, height) < 0
+      || fprintf (f, "stitch_image_scr_shift: %i %i\n", xshift, yshift) < 0)
+    return false;
+  if (!save_csp (f, &param, NULL, NULL, NULL))
+    return false;
+  /*if (fprintf (f, "stitch_image_mesh: %s\n", mesh_trans ? "yes" : "no") < 0)
+    return false;
+  if (mesh_trans && !mesh_trans->save (f))
+    return false;*/
+  return true;
+}
+
+bool
+stitch_image::load (stitch_project *prj, FILE *f, const char **error)
+{
+  m_prj = prj;
+  if (!expect_keyword (f, "stitch_image_filename: "))
+    {
+      *error = "expected stitch_image_filename";
+      return false;
+    }
+  filename = "";
+  char c;
+  while ((c = getc (f)) != '\n')
+    {
+      filename.append (1, c);
+      if (feof (f))
+	{
+	  *error = "can not parse stitch_image_filename";
+	  return false;
+	}
+    }
+  if (!expect_keyword (f, "stitch_image_angle: ")
+      || !read_scalar (f, &angle))
+    {
+      *error = "expected stitch_image_angle";
+      return false;
+    }
+  if (!expect_keyword (f, "stitch_image_ratio: ")
+      || !read_scalar (f, &ratio))
+    {
+      *error = "expected stitch_image_ratio";
+      return false;
+    }
+  if (!expect_keyword (f, "stitch_image_position: ")
+      || !read_scalar (f, &xpos)
+      || !read_scalar (f, &ypos))
+    {
+      *error = "expected stitch_image_position";
+      return false;
+    }
+  if (!expect_keyword (f, "stitch_image_size: ")
+      || fscanf (f, "%i %i", &img_width, &img_height) != 2)
+    {
+      *error = "expected stitch_image_size";
+      return false;
+    }
+  if (!expect_keyword (f, "stitch_image_scr_size: ")
+      || fscanf (f, "%i %i", &width, &height) != 2)
+    {
+      *error = "expected stitch_image_scr_size";
+      return false;
+    }
+  if (!expect_keyword (f, "stitch_image_scr_shift: ")
+      || fscanf (f, "%i %i", &xshift, &yshift) != 2)
+    {
+      *error = "expected stitch_image_scr_shift";
+      return false;
+    }
+  if (!load_csp (f, &param, NULL, NULL, NULL, error))
+    return false;
+#if 0
+  if (!expect_keyword (f, "stitch_image_mesh: "))
+    {
+      *error = "expected stitch_image_mesh";
+      return false;
+    }
+  bool m;
+  if (!parse_bool (f, &m))
+    {
+      *error = "error parsing stitch_image_mesh";
+      return false;
+    }
+  if (m)
+    {
+      mesh_trans = mesh::load (f, error);
+      if (!mesh_trans)
+	return false;
+    }
+#endif
+  image_data data;
+  data.width=1000;
+  data.height=1000;
+  //param.mesh_trans = mesh_trans;
+  //param.mesh_trans = NULL;
+  basic_scr_to_img_map.set_parameters (param, data);
+  mesh_trans = param.mesh_trans;
+  param.mesh_trans = NULL;
+  scr_to_img_map.set_parameters (param, data);
+  param.mesh_trans = mesh_trans;
+  known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL);
+  analyzed = true;
   return true;
 }
