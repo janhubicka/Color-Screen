@@ -818,6 +818,7 @@ enable_openmp
 with_libtiff
 with_libjpeg
 with_libraw
+with_libzip
 enable_gtkgui
 '
       ac_precious_vars='build_alias
@@ -1496,6 +1497,7 @@ Optional Packages:
   --with-libtiff=PATH      enter the PATH to libtiff package
   --with-libjpeg=PATH      enter the PATH to libjpeg package
   --with-libraw=PATH      enter the PATH to libraw package
+  --with-libzip=PATH      enter the PATH to libzip package
 
 Some influential environment variables:
   CC          C compiler command
@@ -18790,6 +18792,80 @@ then :
   check_libraw_h="libraw.h"
 else $as_nop
    echo " * * * try option --with-libraw=PATH"
+fi
+
+fi
+
+
+# Check whether --with-libzip was given.
+if test ${with_libzip+y}
+then :
+  withval=$with_libzip;  if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi
+fi
+
+if test -n "$with_libzip"; then echo "option: with_libzip $with_libzip"; fi
+
+if test "$with_libzip" != "no"; then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for library containing zip_open" >&5
+printf %s "checking for library containing zip_open... " >&6; }
+if test ${ac_cv_search_zip_open+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+namespace conftest {
+  extern "C" int zip_open ();
+}
+int
+main (void)
+{
+return conftest::zip_open ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' zip
+do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_cxx_try_link "$LINENO"
+then :
+  ac_cv_search_zip_open=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext
+  if test ${ac_cv_search_zip_open+y}
+then :
+  break
+fi
+done
+if test ${ac_cv_search_zip_open+y}
+then :
+
+else $as_nop
+  ac_cv_search_zip_open=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_zip_open" >&5
+printf "%s\n" "$ac_cv_search_zip_open" >&6; }
+ac_res=$ac_cv_search_zip_open
+if test "$ac_res" != no
+then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  check_libzip_h="zip.h"
+else $as_nop
+   echo " * * * try option --with-libzip=PATH"
 fi
 
 fi

@@ -1353,6 +1353,7 @@ main (int argc, char **argv)
   const char *error;
   if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &current_solver, &error))
     fprintf (stderr, "%s\n", error);
+  current_mesh = current.mesh_trans;
   if (in)
     fclose (in);
   else
@@ -1372,6 +1373,7 @@ main (int argc, char **argv)
 
 
 
+  current.mesh_trans = current_mesh;
   save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver);
   window = initgtk (&argc, argv);
   setvals ();

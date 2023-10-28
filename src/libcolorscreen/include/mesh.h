@@ -224,6 +224,8 @@ public:
   {
     return m_ystep;
   }
+  bool save (FILE *f);
+  static mesh *load (FILE *f, const char **error);
 private:
   struct mesh_inverse
     {

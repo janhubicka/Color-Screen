@@ -1,4 +1,5 @@
 #include "include/mesh.h"
+#include "loadsave.h"
 void
 mesh::print (FILE *f)
 {
@@ -207,4 +208,105 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, c
   *xmax = ixmax;
   *ymin = iymin;
   *ymax = iymax;
+}
+
+
+bool
+mesh::save (FILE *f)
+{
+  if (fprintf (f, "  mesh_dimensions: %i %i\n", m_width, m_height) < 0)
+    return false;
+  if (fprintf (f, "  mesh_shifts: %f %f\n", m_xshift, m_yshift) < 0)
+    return false;
+  if (fprintf (f, "  mesh_steps: %f %f\n", m_xstep, m_ystep) < 0)
+    return false;
+  if (fprintf (f, "  mesh_points:") < 0)
+    return false;
+  for (int y = 0; y < m_height; y++)
+    {
+      if (y)
+        fprintf (f, "\n              ");
+      for (int x = 0; x < m_width; x++)
+	if (fprintf (f, " (%4.2f, %4.2f)", m_data[y * m_width +x].x, m_data[y * m_width +x].y) < 0)
+	  return false;
+    }
+  if (fprintf (f, "\n  mesh_end\n") < 0)
+    return false;
+  return true;
+}
+
+mesh *
+mesh::load (FILE *f, const char **error)
+{
+   if (!expect_keyword (f, "mesh_dimensions:"))
+     {
+       *error = "expected mesh_dimensions";
+       return NULL;
+     }
+   int width, height;
+   if (fscanf (f, "%i %i", &width, &height) != 2)
+     {
+       *error = "failed to parse mesh_dimensions";
+       return NULL;
+     }
+   float xshift, yshift;
+   if (!expect_keyword (f, "mesh_shifts:"))
+     {
+       *error = "expected mesh_shifts";
+       return NULL;
+     }
+   if (fscanf (f, "%f %f", &xshift, &yshift) != 2)
+     {
+       *error = "failed to parse mesh_shifts";
+       return NULL;
+     }
+   float xstep, ystep;
+   if (!expect_keyword (f, "mesh_steps:"))
+     {
+       *error = "expected mesh_steps";
+       return NULL;
+     }
+   if (fscanf (f, "%f %f", &xstep, &ystep) != 2)
+     {
+       *error = "failed to parse mesh_steps";
+       return NULL;
+     }
+   if (!expect_keyword (f, "mesh_points:"))
+     {
+       *error = "expected mesh_points";
+       return NULL;
+     }
+  mesh *m = new mesh (xshift, yshift, xstep, ystep, width, height);
+  if (!m)
+    {
+       *error = "failed to construct mesh";
+       return NULL;
+    }
+  for (int y = 0; y < height; y++)
+    {
+      for (int x = 0; x < width; x++)
+	{
+	  float sx, sy;
+	  printf ("%i %i\n",x,y);
+	  if (!expect_keyword (f, "(")
+	      || fscanf (f, "%f", &sx) != 1
+	      || ! expect_keyword (f, ",")
+	      || fscanf (f, "%f", &sy) != 1
+	      || ! expect_keyword (f, ")"))
+	  //if (fscanf (f, " (%f, %f)", &sx, &sy) != 2)
+	    {
+	      delete m;
+	      *error = "failed to parse mesh points";
+	      return NULL;
+	    }
+	  m->set_point (x, y, sx, sy);
+	}
+    }
+  if (!expect_keyword (f, "mesh_end"))
+    {
+      delete m;
+      *error = "expected mesh_end";
+      return NULL;
+    }
+  return m;
 }

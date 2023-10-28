@@ -4,8 +4,10 @@
 #include <cmath>
 #include <tiffio.h>
 #include <turbojpeg.h>
+#include <zip.h>
 #include "lru-cache.h"
 #include "include/imagedata.h"
+#include "llc.h"
 
 #define HAVE_LIBRAW
 
@@ -17,7 +19,7 @@
 class image_data_loader
 {
 public:
-  virtual bool init_loader (const char *name, const char **error) = 0;
+  virtual bool init_loader (const char *name, const char **error, progress_info *progress) = 0;
   virtual bool load_part (int *permille, const char **error) = 0;
   virtual ~image_data_loader ()
   { }
@@ -31,7 +33,7 @@ public:
   jpg_image_data_loader (image_data *img)
   : m_img (img), m_jpeg_buf (NULL), m_tj_instance (NULL), m_img_buf (NULL)
   { }
-  virtual bool init_loader (const char *name, const char **error);
+  virtual bool init_loader (const char *name, const char **error, progress_info *);
   virtual bool load_part (int *permille, const char **error);
   virtual ~jpg_image_data_loader ()
   {
@@ -55,7 +57,7 @@ public:
   tiff_image_data_loader (image_data *img)
   : m_tif (NULL), m_img (img), m_buf (NULL)
   { }
-  virtual bool init_loader (const char *name, const char **error);
+  virtual bool init_loader (const char *name, const char **error, progress_info *);
   virtual bool load_part (int *permille, const char **error);
   virtual ~tiff_image_data_loader ()
   {
@@ -80,7 +82,7 @@ public:
   raw_image_data_loader (image_data *img)
   : m_img (img)
   { }
-  virtual bool init_loader (const char *name, const char **error);
+  virtual bool init_loader (const char *name, const char **error, progress_info *);
   virtual bool load_part (int *permille, const char **error);
   virtual ~raw_image_data_loader ()
   {
@@ -183,7 +185,7 @@ void warning_handler(const char* module, const char* fmt, va_list ap)
 }
 
 bool
-tiff_image_data_loader::init_loader (const char *name, const char **error)
+tiff_image_data_loader::init_loader (const char *name, const char **error, progress_info *)
 {
   if (debug)
     printf("TIFFopen\n");
@@ -356,7 +358,7 @@ tiff_image_data_loader::load_part (int *permille, const char **error)
 }
 
 bool
-jpg_image_data_loader::init_loader (const char *name, const char **error)
+jpg_image_data_loader::init_loader (const char *name, const char **error, progress_info *)
 {
   FILE *jpegFile;
   if ((jpegFile = fopen(name, "rb")) == NULL)
@@ -417,7 +419,6 @@ jpg_image_data_loader::init_loader (const char *name, const char **error)
   m_img_buf = (unsigned char *)malloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
   if (!m_img_buf)
     {
-	    fprintf (stderr, "%i %i\n", m_img->width, m_img->height);
       *error = "can not allocate decompressed image buffer";
       return false;
     }
@@ -460,51 +461,6 @@ jpg_image_data_loader::load_part (int *permille, const char **error)
   return true;
 }
 
-bool
-raw_image_data_loader::init_loader (const char *name, const char **error)
-{
-  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
-  //RawProcessor.imgdata.params.half_size = 1;
-  int ret = RawProcessor.open_file(name);
-  if (ret != LIBRAW_SUCCESS)
-    {
-      *error = libraw_strerror(ret);
-      return false;
-    }
-  if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
-    {
-      *error = libraw_strerror(ret);
-      return false;
-    }
-  if ((ret = RawProcessor.dcraw_process()) != LIBRAW_SUCCESS)
-    {
-      *error = libraw_strerror(ret);
-      return false;
-    }
-  grayscale = false;
-  rgb = true;
-  m_img->width = RawProcessor.imgdata.sizes.width;
-  m_img->height = RawProcessor.imgdata.sizes.height;
-  m_img->maxval = 65535;
-  return true;
-}
-
-bool
-raw_image_data_loader::load_part (int *permille, const char **error)
-{
-  for (int y = 0; y < m_img->height; y++)
-    for (int x = 0; x < m_img->width; x++)
-      {
-	int i = y * m_img->width + x;
-	m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
-	m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
-	m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
-      }
-  *permille = 1000;
-  RawProcessor.recycle ();
-  return true;
-}
-
 static bool
 has_suffix (const char *name, const char *suffix)
 {
@@ -515,7 +471,122 @@ has_suffix (const char *name, const char *suffix)
 }
 
 bool
-image_data::init_loader (const char *name, const char **error)
+raw_image_data_loader::init_loader (const char *name, const char **error, progress_info *progress)
+{
+  size_t buffer_size;
+  void *buffer = NULL;
+  if (has_suffix (name, ".eip"))
+    {
+      int errcode;
+      zip_t *zip = NULL;
+      zip_file_t *zip_file = NULL;
+      zip = zip_open (name, ZIP_RDONLY, &errcode);
+      if (!zip)
+	{
+	  *error = "can not open eip zip archive";
+	  return false;
+	}
+      zip_file = zip_fopen (zip, "0.iiq", 0);
+      if (!zip_file)
+	{
+	  *error = "can not find 0.iiq in the eip zip archive";
+	  return false;
+	}
+      zip_stat_t stat;
+      if (zip_stat (zip, "0.iiq", 0, &stat))
+        {
+	  *error = "can not determine length of 0.iiq in the eip zip archive";
+	  return false;
+        }
+      buffer_size = stat.size;
+      buffer = malloc (buffer_size);
+      if (!buffer)
+        {
+	  *error = "can not allocate buffer to decompress RAW file";
+	  return false;
+        }
+      if (buffer_size != zip_fread (zip_file, buffer, buffer_size))
+	{
+	  *error = "can not decompress the RAW file";
+	  return false;
+	}
+      zip_fclose (zip_file);
+      zip_close (zip);
+    }
+  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
+  RawProcessor.imgdata.params.use_camera_matrix = 0;
+  RawProcessor.imgdata.params.output_color = 0;
+  RawProcessor.imgdata.params.user_qual = 0;
+  int ret;
+  if (buffer)
+    ret = RawProcessor.open_buffer (buffer, buffer_size);
+  else
+    ret = RawProcessor.open_file(name);
+  if (ret != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  if (progress)
+    progress->set_task ("unpacking RAW data",1);
+  if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  if (progress)
+    progress->set_task ("demosaicing",1);
+  if ((ret = RawProcessor.dcraw_process()) != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror(ret);
+      return false;
+    }
+  grayscale = false;
+  rgb = true;
+  m_img->width = RawProcessor.imgdata.sizes.width;
+  m_img->height = RawProcessor.imgdata.sizes.height;
+  m_img->maxval = 65535;
+  if (buffer)
+    free (buffer);
+  return true;
+}
+
+bool
+raw_image_data_loader::load_part (int *permille, const char **error)
+{
+  FILE *f = fopen ("/tmp/tmp.llc", "r");
+  llc *llci = NULL;
+  //printf ("LLC\n");
+  //if (f)
+    //llci = llc::load (f);
+  //else
+    //fprintf (stderr, "Missing LLC\n");
+  for (int y = 0; y < m_img->height; y++)
+    for (int x = 0; x < m_img->width; x++)
+      {
+	int i = y * m_img->width + x;
+	if (!llci)
+	  {
+	    m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
+	    m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
+	    m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
+	  }
+	else
+	  {
+	    m_img->rgbdata[y][x].r = llci->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].g = llci->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].b = llci->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y);
+	  }
+      }
+  if (llci)
+    delete llci;
+  *permille = 1000;
+  RawProcessor.recycle ();
+  return true;
+}
+
+bool
+image_data::init_loader (const char *name, const char **error, progress_info *progress)
 {
   assert (!loader);
   if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
@@ -524,12 +595,14 @@ image_data::init_loader (const char *name, const char **error)
     loader = new jpg_image_data_loader (this);
   else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq"))
     loader = new raw_image_data_loader (this);
+  else if (has_suffix (name, ".eip"))
+    loader = new raw_image_data_loader (this);
   if (!loader)
     {
       *error = "Unknown file extension";
       return false;
     }
-  bool ret = loader->init_loader (name, error);
+  bool ret = loader->init_loader (name, error, progress);
   if (!ret)
     {
       delete loader;
@@ -557,7 +630,7 @@ image_data::load (const char *name, const char **error, progress_info *progress)
   int permille;
   if (progress)
     progress->set_task ("loading image header",1);
-  if (!init_loader (name, error))
+  if (!init_loader (name, error, progress))
     return false;
 
   if (progress)

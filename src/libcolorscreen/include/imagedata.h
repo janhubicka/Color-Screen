@@ -34,7 +34,7 @@ public:
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
      message.  */
-  DLL_PUBLIC bool init_loader (const char *name, const char **error);
+  DLL_PUBLIC bool init_loader (const char *name, const char **error, progress_info *progress = NULL);
   /* True if grayscale allocation is needed
      (used after init_loader and before load_part).  */
   DLL_PUBLIC bool allocate_grayscale ();

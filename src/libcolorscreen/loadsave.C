@@ -2,6 +2,7 @@
 #include "include/render-to-scr.h"
 #include "include/scr-detect.h"
 #include "include/solver.h"
+#include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
 
 static const char * const scr_names[max_scr_type] =
@@ -21,8 +22,8 @@ const char * const scanner_type_names[max_scanner_type] =
 
 static const char * const bool_names[2] =
 {
-  "yes",
-  "no"
+  "no",
+  "yes"
 };
 
 bool
@@ -50,6 +51,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (fprintf (f, "motor_correction: %f %f\n", param->motor_correction_x[i], param->motor_correction_y[i]) < 0)
 	    return false;
 	}
+      if (param->mesh_trans)
+        {
+	  if (fprintf (f, "mesh: yes\n") < 0)
+	    return false;
+	  if (!param->mesh_trans->save (f))
+	    return false;
+        }
     }
   if (dparam)
     {
@@ -88,13 +96,18 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	return false;
       for (int i = 0; i < sparam->npoints; i++)
 	{
-	  fprintf (f, "solver_point: %f %f %f %f %s\n",
-	           sparam->point[i].img_x,
-	           sparam->point[i].img_y,
-	           sparam->point[i].screen_x,
-	           sparam->point[i].screen_y,
-		   solver_parameters::point_color_names [(int)sparam->point[i].color]);
+	  if (fprintf (f, "solver_point: %f %f %f %f %s\n",
+		       sparam->point[i].img_x,
+		       sparam->point[i].img_y,
+		       sparam->point[i].screen_x,
+		       sparam->point[i].screen_y,
+		       solver_parameters::point_color_names [(int)sparam->point[i].color]) < 0)
+	   return false;
 	}
+    }
+  if (fprintf (f, "screen_alignment_end\n") < 0)
+    {
+      return false;
     }
   return true;
 }
@@ -216,6 +229,38 @@ read_color (FILE *f, color_t *c)
   return read_rgb (f, c ? &c->red : NULL, c ? &c->green : NULL, c ? &c->blue : NULL);
 }
 
+bool
+expect_keyword (FILE *f, const char *keyword)
+{
+  skipwhitespace (f);
+  for (int i = 0; keyword[i]; i++)
+    {
+      if (feof (f))
+	{
+	  for (int j = 0; j < i; j++)
+	    ungetc (keyword[i], f);
+	  return false;
+	}
+      char c = getc (f);
+      if (!i && (c == '\r' || isspace (c)))
+	{
+	  skipwhitespace (f);
+	  if (feof (f))
+	    return false;
+	  c = getc (f);
+	}
+
+      if (c != keyword[i])
+        {
+	  for (int j = 0; j < i; j++)
+	    ungetc (keyword[i], f);
+	  ungetc (c, f);
+	  return false;
+        }
+    }
+  return true;
+}
+
 #define param_check(name) param ? &param->name : NULL
 #define rparam_check(name) rparam ? &rparam->name : NULL
 #define dparam_check(name) dparam ? &dparam->name : NULL
@@ -247,9 +292,12 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	  int c = getc (f);
-	  if (c == EOF)
+	  if (c == EOF || c=='\n')
 	    {
-	      if (!l)
+	      buf[l]=0;
+	      if (!l && c == EOF)
+		return true;
+	      if (!strcmp (buf, "screen_alignment_end"))
 		return true;
 	      *error = "file truncated";
 	      return false;
@@ -638,6 +686,28 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    {
 	      *error = "error parsing tilt_y";
 	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "mesh"))
+	{
+	  bool b;
+	  if (!parse_bool (f, &b))
+	    {
+	      *error = "error parsing mesh";
+	      return false;
+	    }
+	  if (b)
+	    {
+	      mesh *m = mesh::load (f, error);
+	      if (!m)
+		return false;
+	      if (param)
+		{
+		  m->precompute_inverse ();
+		  param->mesh_trans = m;
+		}
+	      else
+		delete m;
 	    }
 	}
       else

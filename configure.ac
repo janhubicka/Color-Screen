@@ -66,6 +66,18 @@ AC_SEARCH_LIBS(libraw_init,[raw],[check_libraw_h="libraw.h"],
  [ echo " * * * try option --with-libraw=PATH"])
 fi
 
+AC_ARG_WITH(libzip,
+ [  --with-libzip=PATH      enter the PATH to libzip package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_libzip"; then echo "option: with_libzip $with_libzip"; fi
+
+if test "$with_libzip" != "no"; then
+AC_SEARCH_LIBS(zip_open,[zip],[check_libzip_h="zip.h"],
+ [ echo " * * * try option --with-libzip=PATH"])
+fi
+
 # Windows DLL require -no-undefined libtool argument.  Using it on other
 # systems makes using of libcolorscreen more complicated since -lcolorscreen
 # must then be done together with libraries colorscreen depends on (libtiff and
