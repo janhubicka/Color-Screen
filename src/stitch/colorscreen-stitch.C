@@ -230,6 +230,25 @@ void stitch (progress_info *progress)
 	  fprintf (prj.report_file, "Color screen parameters:\n");
 	  save_csp (prj.report_file, &prj.param, &prj.dparam, &prj.rparam, &prj.solver_param);
 	}
+      if (!prj.analyze_images (progress))
+	{
+	  exit (1);
+	}
+      if (save_project_filename)
+	{
+	  FILE *f = fopen (save_project_filename, "wt");
+	  if (!f)
+	    {
+	      fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
+	      exit (1);
+	    }
+	  if (!prj.save (f))
+	    {
+	      fprintf (stderr, "Error saving project file: %s\n", save_project_filename);
+	      exit (1);
+	    }
+	  fclose (f);
+	}
     }
   else
     {
@@ -267,25 +286,6 @@ void stitch (progress_info *progress)
 	  exit (1);
 	}
       fclose(f);
-    }
-  if (!prj.analyze_images (progress))
-    {
-      exit (1);
-    }
-  if (save_project_filename)
-    {
-      FILE *f = fopen (save_project_filename, "wt");
-      if (!f)
-	{
-	  fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
-	  exit (1);
-	}
-      if (!prj.save (f))
-	{
-	  fprintf (stderr, "Error saving project file: %s\n", save_project_filename);
-	  exit (1);
-	}
-      fclose (f);
     }
 
   prj.determine_angle ();
