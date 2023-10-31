@@ -1,4 +1,5 @@
 #include "include/render.h"
+#include "icc.h"
 const char * render_parameters::color_model_names [] = {
   "none",
   "red",
@@ -23,6 +24,10 @@ const char * render_parameters::dye_balance_names [] = {
   "none",
   "neutral",
   "whitepoint"
+};
+const char * render_parameters::output_profile_names [] = {
+  "sRGB",
+  "original"
 };
 
 /* Return matrix which contains the color of dyes either as rgb or xyz.  */
@@ -202,4 +207,17 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based)
 	}
     }
   return dyes;
+}
+
+size_t
+render_parameters::get_icc_profile (void **buffer)
+{
+  bool is_rgb;
+  bool spectrum_based;
+  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based);
+  dyes.print (stdout);
+  xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
+  xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
+  xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
+  return create_profile (color_model_names[color_model], r, g, b, output_gamma, buffer);
 }

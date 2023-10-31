@@ -325,46 +325,42 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
     }
 
   color_matrix color;
-  /* Matrix converting dyes either to XYZ (default) or sRGB.  */
-  bool spectrum_based;
-  bool is_srgb;
-  color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based);
-  if (is_srgb)
+  if (m_params.presaturation != 1)
     {
-      if (m_params.presaturation != 1)
-	{
-	  presaturation_matrix m (m_params.presaturation);
-	  color = m * color;
-	}
-      color = dyes * color;
-    }
-  else
-    {
-      if (m_params.presaturation != 1)
-	{
-	  presaturation_matrix m (m_params.presaturation);
-	  color = m * color;
-	}
-      color = dyes * color;
-      if (m_params.backlight_temperature != 6500 && !spectrum_based)
-	{
-	  xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
-	  xyz white;
-	  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
-	  for (int i = 0; i < 4; i++)
-	    {
-	      color.m_elements[0][i] *= whitepoint.x / white.x;
-	      color.m_elements[1][i] *= whitepoint.y / white.y;
-	      color.m_elements[2][i] *= whitepoint.z / white.z;
-	    }
-	}
-      xyz_srgb_matrix m2;
-      color = m2 * color;
-    }
-  if (m_params.saturation != 1)
-    {
-      saturation_matrix m (m_params.saturation);
+      presaturation_matrix m (m_params.presaturation);
       color = m * color;
+    }
+  if (m_params.output_profile != render_parameters::output_profile_original)
+    {
+      /* Matrix converting dyes either to XYZ or sRGB.  */
+      bool spectrum_based;
+      bool is_srgb;
+      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based);
+      if (is_srgb)
+	color = dyes * color;
+      else
+	{
+	  color = dyes * color;
+	  if (m_params.backlight_temperature != 6500 && !spectrum_based)
+	    {
+	      xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
+	      xyz white;
+	      srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	      for (int i = 0; i < 4; i++)
+		{
+		  color.m_elements[0][i] *= whitepoint.x / white.x;
+		  color.m_elements[1][i] *= whitepoint.y / white.y;
+		  color.m_elements[2][i] *= whitepoint.z / white.z;
+		}
+	    }
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+	}
+      if (m_params.saturation != 1)
+	{
+	  saturation_matrix m (m_params.saturation);
+	  color = m * color;
+	}
     }
   color = color * m_params.brightness;
   m_color_matrix = color;

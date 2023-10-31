@@ -68,6 +68,18 @@ parse_mode (const char *mode)
       return predictive;
     }
 }
+/* Parse output mode.  */
+static enum render_parameters::output_profile_t
+parse_output_profile (const char *profile)
+{
+  int j;
+  for (j = 0; j < render_parameters::output_profile_max; j++)
+    if (!strcmp (profile, render_parameters::output_profile_names[j]))
+      return (render_parameters::output_profile_t)j;
+  fprintf (stderr, "Unkonwn output profile:%s\n", profile);
+  print_help ();
+  return render_parameters::output_profile_max;
+}
 
 /* Parse color model.  */
 static enum render_parameters::color_model_t
@@ -100,6 +112,7 @@ main (int argc, char **argv)
   const char *infname = NULL, *outfname = NULL, *cspname = NULL, *error = NULL;
   enum output_mode mode = interpolated;
   float age = -100;
+  enum render_parameters::output_profile_t output_profile = render_parameters::output_profile_max;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
   struct solver_parameters solver_param;
@@ -122,6 +135,13 @@ main (int argc, char **argv)
 	    print_help ();
 	  i++;
 	  mode = parse_mode (argv[i]);
+	}
+      else if (!strcmp (argv[i], "--output-profile"))
+	{
+	  if (i == argc - 1)
+	    print_help ();
+	  i++;
+	  output_profile = parse_output_profile (argv[i]);
 	}
       else if (!strcmp (argv[i], "--age"))
 	{
@@ -220,7 +240,8 @@ main (int argc, char **argv)
       //detected_screen d = detect_regular_screen (scan, dparam, rparam.gamma, solver_param, false, false, false, NULL);
       //param.mesh_trans = d.mesh_trans;
     }
-  else if (solver_param.npoints)
+  else if (solver_param.npoints
+	   && !param.mesh_trans)
     {
       if (verbose)
 	{
@@ -239,6 +260,8 @@ main (int argc, char **argv)
     rparam.color_model = color_model;
   if (dye_balance != render_parameters::dye_balance_max)
     rparam.dye_balance = dye_balance;
+  if (output_profile != render_parameters::output_profile_max)
+    rparam.output_profile = output_profile;
 
   /* ... and render!  */
   if (!render_to_file (mode, outfname, scan, param, dparam, rparam, NULL, verbose, &error))

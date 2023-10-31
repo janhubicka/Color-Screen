@@ -51,7 +51,9 @@ print_progress (int p, int max)
    Allocate output buffer to hold single row to OUTROW.  */
 static TIFF *
 open_output_file (const char *outfname, int outwidth, int outheight,
-		  uint16_t ** outrow, bool verbose, const char **error,
+		  uint16_t ** outrow, bool verbose,
+		  void *icc_profile, size_t icc_profile_len,
+		  const char **error,
 		  progress_info *progress)
 {
   TIFF *out = TIFFOpen (outfname, "wb");
@@ -67,7 +69,7 @@ open_output_file (const char *outfname, int outwidth, int outheight,
       || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      /*|| !TIFFSetField (out, TIFFTAG_ICCPROFILE, sRGB_icc_len, sRGB_icc)*/)
+      || (icc_profile && !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t)icc_profile_len, icc_profile)))
     {
       *error = "write error";
       return NULL;
@@ -131,6 +133,11 @@ render_to_file (enum output_mode mode, const char *outfname,
     }
   TIFF *out;
   uint16_t *outrow;
+  void *icc_profile = sRGB_icc;
+  size_t icc_profile_len = sRGB_icc_len;
+
+  if (rparam.output_profile == render_parameters::output_profile_original)
+    icc_profile_len = rparam.get_icc_profile (&icc_profile);
 
   /* Initialize rendering engine.  */
 
@@ -170,6 +177,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    scan.icc_profile, scan.icc_profile_size,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -228,6 +236,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -266,6 +275,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
+			    /* TODO: Maybe preview_grid and color_preview_grid
+			       should be in the scan profile.  */
 			    error, progress);
 	if (!out)
 	  return false;
@@ -302,6 +314,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height / downscale;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -350,6 +363,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height / downscale;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    sRGB_icc, sRGB_icc_len,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -398,6 +412,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height / downscale;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -443,6 +458,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height / downscale;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
 			    error, progress);
 	if (!out)
 	  return false;
@@ -492,6 +508,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int outheight = scan.height / downscale;
 	out =
 	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+			    icc_profile, icc_profile_len,
 			    error, progress);
 	if (!out)
 	  return false;

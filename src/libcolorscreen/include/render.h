@@ -97,9 +97,11 @@ struct DLL_PUBLIC render_parameters
   enum output_profile_t
     {
       output_profile_sRGB,
-      output_profile_original
+      output_profile_original,
+      output_profile_max
     };
   output_profile_t output_profile;
+  DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
   /* Gray range to boot to full contrast.  */
   int gray_min, gray_max;
 
@@ -144,6 +146,7 @@ struct DLL_PUBLIC render_parameters
     return !(*this == other);
   }
   color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
+  size_t get_icc_profile (void **buf);
 private:
   const bool debug = false;
 };
