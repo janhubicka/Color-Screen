@@ -210,8 +210,8 @@ render_to_file (enum output_mode mode, const char *outfname,
   void *icc_profile = sRGB_icc;
   size_t icc_profile_len = sRGB_icc_len;
 
-  if (hdr && (mode == none || mode == corrected_color))
-    hdr = false;
+  //if (hdrmode == none || mode == corrected_color))
+    //hdr = false;
 
   if (hdr)
     rparam.output_gamma = 1;
@@ -249,31 +249,57 @@ render_to_file (enum output_mode mode, const char *outfname,
 	out_stepy = out_stepx = 0.25;
 #endif
 	double pixelsize = render.pixel_size ();
-	printf ("Pixel size:%f\n", pixelsize);
+	//printf ("Pixel size:%f\n", pixelsize);
 	pixelsize = 0.119245;
 	outwidth = render_width / pixelsize;
 	outheight = render_height / pixelsize;
 	out_stepx = out_stepy = pixelsize;
 
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    scan.icc_profile, scan.icc_profile_size,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < outheight; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < outwidth; x++)
-	      {
-		int rr, gg, bb;
-		render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-				     &bb);
-		outrow[3 * x] = rr;
-		outrow[3 * x + 1] = gg;
-		outrow[3 * x + 2] = bb;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				scan.icc_profile, scan.icc_profile_size,
+				error, progress);
+	    if (!out)
 	      return false;
+	    for (int y = 0; y < outheight; y++)
+	      {
+		for (int x = 0; x < outwidth; x++)
+		  {
+		    int rr, gg, bb;
+		    render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
+					 &bb);
+		    outrow[3 * x] = rr;
+		    outrow[3 * x + 1] = gg;
+		    outrow[3 * x + 2] = bb;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    scan.icc_profile, scan.icc_profile_size,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < outheight; y++)
+	      {
+		for (int x = 0; x < outwidth; x++)
+		  {
+		    luminosity_t rr, gg, bb;
+		    render.render_hdr_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
+					 &bb);
+		    hdr_outrow[3 * x] = rr;
+		    hdr_outrow[3 * x + 1] = gg;
+		    hdr_outrow[3 * x + 2] = bb;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+	      }
 	  }
       }
       break;
@@ -379,29 +405,59 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int scale = 1;
 	int outwidth = scan.width;
 	int outheight = scan.height;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    /* TODO: Maybe preview_grid and color_preview_grid
-			       should be in the scan profile.  */
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height * scale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width * scale; x++)
-	      {
-		int rr, gg, bb;
-		render.render_pixel_img_antialias (x / (double) scale,
-						   y / (double) scale,
-						   1.0 / scale, 128, &rr, &gg,
-						   &bb);
-		outrow[3 * x] = rr;
-		outrow[3 * x + 1] = gg;
-		outrow[3 * x + 2] = bb;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				/* TODO: Maybe preview_grid and color_preview_grid
+				   should be in the scan profile.  */
+				error, progress);
+	    if (!out)
 	      return false;
+	    for (int y = 0; y < scan.height * scale; y++)
+	      {
+		for (int x = 0; x < scan.width * scale; x++)
+		  {
+		    int rr, gg, bb;
+		    render.render_pixel_img_antialias (x / (double) scale,
+						       y / (double) scale,
+						       1.0 / scale, 128, &rr, &gg,
+						       &bb);
+		    outrow[3 * x] = rr;
+		    outrow[3 * x + 1] = gg;
+		    outrow[3 * x + 2] = bb;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    /* TODO: Maybe preview_grid and color_preview_grid
+				       should be in the scan profile.  */
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height * scale; y++)
+	      {
+		for (int x = 0; x < scan.width * scale; x++)
+		  {
+		    luminosity_t rr, gg, bb;
+		    render.render_hdr_pixel_img_antialias (x / (double) scale,
+							   y / (double) scale,
+							   1.0 / scale, 128, &rr, &gg,
+							   &bb);
+		    hdr_outrow[3 * x] = rr;
+		    hdr_outrow[3 * x + 1] = gg;
+		    hdr_outrow[3 * x + 2] = bb;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+	      }
 	  }
       }
       break;

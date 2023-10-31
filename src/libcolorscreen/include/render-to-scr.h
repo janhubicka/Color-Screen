@@ -76,6 +76,15 @@ public:
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);
   }
+  void inline render_hdr_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    luminosity_t gg, rr, bb;
+    if (!m_color)
+      rr = gg = bb = get_img_pixel (x, y);
+    else
+      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
+    set_hdr_color (rr, gg, bb, r, g, b);
+  }
   void inline fast_render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     luminosity_t gg, rr, bb;
@@ -95,11 +104,23 @@ public:
     m_scr_to_img.to_img (x, y, &xx, &yy);
     render_pixel_img (xx, yy, r, g, b);
   }
+  void inline render_hdr_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.to_img (x, y, &xx, &yy);
+    render_hdr_pixel_img (xx, yy, r, g, b);
+  }
   void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
     render_pixel (xx, yy, r, g, b);
+  }
+  void inline render_hdr_pixel_final (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_hdr_pixel (xx, yy, r, g, b);
   }
 private:
   bool m_color;

@@ -24,11 +24,14 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);
+  void inline render_hdr_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
+  void inline render_hdr_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 private:
+  void inline render_pixel_img_antialias_priv (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   void inline sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline rgbdata fast_sample_pixel_img (int x, int y);
   screen *m_screen;
@@ -114,7 +117,16 @@ render_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, in
   set_color (rr, gg, bb, r,g,b);
 }
 flatten_attr void
-render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b)
+render_superpose_img::render_hdr_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  luminosity_t rr, gg, bb;
+  coord_t scr_x, scr_y;
+  m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
+  sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
+  set_hdr_color (rr, gg, bb, r,g,b);
+}
+flatten_attr void
+render_superpose_img::render_pixel_img_antialias_priv (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
   luminosity_t rr = 0, gg = 0, bb = 0;
   coord_t scr_x, scr_y;
@@ -123,7 +135,9 @@ render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t 
     {
       m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
       sample_pixel_img (x, y, scr_x, scr_y, &rr, &gg, &bb);
-      set_color (rr, gg, bb, r,g,b);
+      *r = rr;
+      *g = gg;
+      *b = bb;
       return;
     }
   else
@@ -147,7 +161,23 @@ render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t 
 	bb += bbb;
 	gg += ggg;
       }
-  set_color (3 * rr / (steps * steps), 3 * gg / (steps * steps), 3 * bb / (steps * steps), r,g,b);
+  *r = 3 * rr / (steps * steps);
+  *g = 3 * gg / (steps * steps);
+  *b = 3 * bb / (steps * steps);
+}
+flatten_attr void
+render_superpose_img::render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b)
+{
+  luminosity_t red, green, blue;
+  render_pixel_img_antialias_priv (x, y, pixelsize, steps, &red, &green, &blue);
+  set_color (red, green, blue, r, g, b);
+}
+flatten_attr void
+render_superpose_img::render_hdr_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  luminosity_t red, green, blue;
+  render_pixel_img_antialias_priv (x, y, pixelsize, steps, &red, &green, &blue);
+  set_hdr_color (red, green, blue, r, g, b);
 }
 
 /* Analyze average r, g and b color in a given tile in the image coordinates.  */

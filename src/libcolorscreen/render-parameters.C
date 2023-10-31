@@ -215,7 +215,6 @@ render_parameters::get_icc_profile (void **buffer)
   bool is_rgb;
   bool spectrum_based;
   color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based);
-  dyes.print (stdout);
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
