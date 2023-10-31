@@ -140,7 +140,10 @@ screen::dufay ()
       {
 	if (yy < strip_height || yy > size-strip_height)
 	  {
-	    if (xx < size / 4 || xx > size - size / 4)
+	    /* 4 makes width of red lines same as the red/green block,
+	       however based on test scans of dufays the real width
+	       of red lines is narrover.  */
+	    if (xx < size / 3.7 || xx > size - size / 3.7)
 	      {
 		mult[yy][xx][0] = 0;
 		mult[yy][xx][1] = 1;
