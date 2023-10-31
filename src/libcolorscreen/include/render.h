@@ -297,6 +297,7 @@ public:
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
+  inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *);
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
   inline luminosity_t get_data_green (int x, int y);
@@ -412,9 +413,9 @@ render::get_data_blue (int x, int y)
   return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
 }
 
-/* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
+/* Compute color in linear HDR image.  */
 inline void
-render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
+render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
 {
   r *= m_params.white_balance.red;
   g *= m_params.white_balance.green;
@@ -454,6 +455,16 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 	}
     }
 
+  *rr = r;
+  *gg = g;
+  *bb = b;
+}
+
+/* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
+inline void
+render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
+{
+  set_hdr_color (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));

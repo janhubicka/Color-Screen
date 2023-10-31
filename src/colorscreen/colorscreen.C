@@ -118,6 +118,7 @@ main (int argc, char **argv)
   struct solver_parameters solver_param;
   bool force_precise = false;
   bool detect_geometry = false;
+  bool hdr = false;
 
   binname = argv[0];
 
@@ -136,6 +137,8 @@ main (int argc, char **argv)
 	  i++;
 	  mode = parse_mode (argv[i]);
 	}
+      else if (!strcmp (argv[i], "--hdr"))
+	hdr = true;
       else if (!strcmp (argv[i], "--output-profile"))
 	{
 	  if (i == argc - 1)
@@ -264,7 +267,7 @@ main (int argc, char **argv)
     rparam.output_profile = output_profile;
 
   /* ... and render!  */
-  if (!render_to_file (mode, outfname, scan, param, dparam, rparam, NULL, verbose, &error))
+  if (!render_to_file (mode, outfname, scan, param, dparam, rparam, hdr, NULL, verbose, &error))
     {
       fprintf (stderr, "Can not save %s: %s\n", outfname, error);
       exit (1);

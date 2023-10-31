@@ -16,6 +16,12 @@ public:
     m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
     render_pixel_scr (xx, yy, r, g, b);
   }
+  void render_hdr_pixel_final (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_hdr_pixel_scr (xx, yy, r, g, b);
+  }
   void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
@@ -35,7 +41,9 @@ public:
     return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
   void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b);
+  void render_hdr_pixel_scr (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
 private:
+  void render_pixel_scr_int (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b, luminosity_t *lum = NULL);
   analyze_dufay m_dufay;
   analyze_paget m_paget;
   screen *m_screen;

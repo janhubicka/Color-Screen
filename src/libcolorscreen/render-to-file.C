@@ -116,13 +116,86 @@ write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_in
      progress->inc_progress ();
   return true;
 }
+
+/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
+   File will be 16bit RGB TIFF.
+   Allocate output buffer to hold single row to OUTROW.  */
+static TIFF *
+open_hdr_output_file (const char *outfname, int outwidth, int outheight,
+		      float ** outrow, bool verbose,
+		      void *icc_profile, size_t icc_profile_len,
+		      const char **error,
+		      progress_info *progress)
+{
+  TIFF *out = TIFFOpen (outfname, "wb");
+  if (!out)
+    {
+      *error = "can not open output file";
+      return NULL;
+    }
+  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
+      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
+      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 32)
+      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP)
+      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
+      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
+      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
+      || (icc_profile && !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t)icc_profile_len, icc_profile)))
+    {
+      *error = "write error";
+      return NULL;
+    }
+  *outrow = (float *) malloc (outwidth * 4 * 3);
+  if (!outrow)
+    {
+      *error = "Out of memory allocating output buffer";
+      return NULL;
+    }
+  if (progress)
+    {
+      progress->set_task ("Rendering and saving", outheight);
+    }
+  if (verbose)
+    {
+      printf ("Rendering %s in resolution %ix%i: 00%%", outfname, outwidth,
+	      outheight);
+      fflush (stdout);
+      record_time ();
+    }
+  return out;
+}
+
+/* Write one row.  */
+static bool
+write_hdr_row (TIFF * out, int y, float * outrow, const char **error, progress_info *progress)
+{
+  if (progress && progress->cancel_requested ())
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Cancelled";
+      return false;
+    }
+  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
+    {
+      free (outrow);
+      TIFFClose (out);
+      *error = "Write error";
+      return false;
+    }
+   if (progress)
+     progress->inc_progress ();
+  return true;
+}
 }
 
 /* Render image to TIFF file OUTFNAME.  */
 bool
 render_to_file (enum output_mode mode, const char *outfname,
 		image_data & scan, scr_to_img_parameters & param,
-		scr_detect_parameters & dparam, render_parameters & rparam,
+		scr_detect_parameters & dparam, render_parameters rparam,
+		bool hdr,
 		progress_info * progress, bool verbose, const char **error)
 {
   if (verbose)
@@ -132,9 +205,16 @@ render_to_file (enum output_mode mode, const char *outfname,
       record_time ();
     }
   TIFF *out;
-  uint16_t *outrow;
+  uint16_t *outrow = NULL;
+  float *hdr_outrow = NULL;
   void *icc_profile = sRGB_icc;
   size_t icc_profile_len = sRGB_icc_len;
+
+  if (hdr && (mode == none || mode == corrected_color))
+    hdr = false;
+
+  if (hdr)
+    rparam.output_gamma = 1;
 
   if (rparam.output_profile == render_parameters::output_profile_original)
     icc_profile_len = rparam.get_icc_profile (&icc_profile);
@@ -234,25 +314,51 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    outheight = render_height * 4;
 	    out_stepy = out_stepx = 0.25;
 	  }
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < outheight; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < outwidth; x++)
-	      {
-		int rr, gg, bb;
-		render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-				     &bb);
-		outrow[3 * x] = rr;
-		outrow[3 * x + 1] = gg;
-		outrow[3 * x + 2] = bb;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				error, progress);
+	    if (!out)
 	      return false;
+	    for (int y = 0; y < outheight; y++)
+	      {
+		for (int x = 0; x < outwidth; x++)
+		  {
+		    int rr, gg, bb;
+		    render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
+					 &bb);
+		    outrow[3 * x] = rr;
+		    outrow[3 * x + 1] = gg;
+		    outrow[3 * x + 2] = bb;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < outheight; y++)
+	      {
+		for (int x = 0; x < outwidth; x++)
+		  {
+		    float rr, gg, bb;
+		    render.render_hdr_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
+					 &bb);
+		    hdr_outrow[3 * x] = rr;
+		    hdr_outrow[3 * x + 1] = gg;
+		    hdr_outrow[3 * x + 2] = bb;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+	      }
 	  }
       }
       break;
@@ -547,6 +653,7 @@ render_to_file (enum output_mode mode, const char *outfname,
       abort ();
     }
   TIFFClose (out);
+  free (hdr_outrow);
   free (outrow);
   return true;
 }
