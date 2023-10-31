@@ -24,7 +24,7 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), gray_min (0), gray_max (255),
+    color_model (color_model_none), output_profile (output_profile_sRGB), gray_min (0), gray_max (255),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     restore_original_luminosity (true), precise (true)
   {
@@ -94,6 +94,12 @@ struct DLL_PUBLIC render_parameters
   DLL_PUBLIC static const char *color_model_names [(int)color_model_max];
   /* If true apply color model of Finlay taking plate.  */
   enum color_model_t color_model;
+  enum output_profile_t
+    {
+      output_profile_sRGB,
+      output_profile_original
+    };
+  output_profile_t output_profile;
   /* Gray range to boot to full contrast.  */
   int gray_min, gray_max;
 
@@ -137,6 +143,9 @@ struct DLL_PUBLIC render_parameters
   {
     return !(*this == other);
   }
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
+private:
+  const bool debug = false;
 };
 
 /* Datastructure used to store information about dye luminosities.  */
@@ -254,7 +263,7 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_spectrum_dyes_to_xyz (NULL), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+  : m_img (img), m_params (rparam), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_lookup_table_id (0), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
     if (m_params.gray_min > m_params.gray_max)
@@ -316,8 +325,6 @@ protected:
   image_data &m_img;
   /* Rendering parameters.  */
   render_parameters &m_params;
-  /* If non-NULL used to turn spectrum dyes to XYZ.  */
-  spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz;
   /* Grayscale we render from.  */
   unsigned short **m_gray_data;
   /* ID of graydata computed.  */
@@ -409,6 +416,7 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
   r *= m_params.white_balance.red;
   g *= m_params.white_balance.green;
   b *= m_params.white_balance.blue;
+#if 0
   if (m_spectrum_dyes_to_xyz)
     {
       /* At the moment all conversions are linear.
@@ -428,6 +436,7 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 	  b = c.z;
 	}
     }
+#endif
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
   if (m_params.output_curve)
     {

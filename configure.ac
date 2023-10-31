@@ -78,6 +78,18 @@ AC_SEARCH_LIBS(zip_open,[zip],[check_libzip_h="zip.h"],
  [ echo " * * * try option --with-libzip=PATH"])
 fi
 
+AC_ARG_WITH(liblcms2,
+ [  --with-liblcms2=PATH      enter the PATH to liblcms2 package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_liblcms2"; then echo "option: with_liblcms2 $with_liblcms2"; fi
+
+if test "$with_liblcms2" != "no"; then
+AC_SEARCH_LIBS(cmsCreateRGBProfile,[lcms2],[check_liblcms2_h="lcms2.h"],
+ [ echo " * * * try option --with-liblcms2=PATH"])
+fi
+
 # Windows DLL require -no-undefined libtool argument.  Using it on other
 # systems makes using of libcolorscreen more complicated since -lcolorscreen
 # must then be done together with libraries colorscreen depends on (libtiff and

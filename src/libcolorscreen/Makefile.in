@@ -155,7 +155,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-analyze-base.lo \
 	libcolorscreen_la-tiff-writer.lo libcolorscreen_la-llc.lo \
 	libcolorscreen_la-stitch-image.lo \
-	libcolorscreen_la-stitch-project.lo
+	libcolorscreen_la-stitch-project.lo libcolorscreen_la-icc.lo \
+	libcolorscreen_la-render-parameters.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -187,6 +188,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo \
 	./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo \
 	./$(DEPDIR)/libcolorscreen_la-color.Plo \
+	./$(DEPDIR)/libcolorscreen_la-icc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-llc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-loadsave.Plo \
@@ -195,6 +197,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-progress-info.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-fast.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo \
+	./$(DEPDIR)/libcolorscreen_la-render-parameters.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-scr-detect.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-tile.Plo \
 	./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo \
@@ -398,7 +401,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C llc.C stitch-image.C stitch-project.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C llc.C stitch-image.C stitch-project.C icc.C render-parameters.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -514,6 +517,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-color.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-icc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-llc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-loadsave.Plo@am__quote@ # am--include-marker
@@ -522,6 +526,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-progress-info.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-fast.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-parameters.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-scr-detect.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-tile.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo@am__quote@ # am--include-marker
@@ -763,6 +768,20 @@ libcolorscreen_la-stitch-project.lo: stitch-project.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-stitch-project.lo `test -f 'stitch-project.C' || echo '$(srcdir)/'`stitch-project.C
 
+libcolorscreen_la-icc.lo: icc.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-icc.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-icc.Tpo -c -o libcolorscreen_la-icc.lo `test -f 'icc.C' || echo '$(srcdir)/'`icc.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-icc.Tpo $(DEPDIR)/libcolorscreen_la-icc.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='icc.C' object='libcolorscreen_la-icc.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-icc.lo `test -f 'icc.C' || echo '$(srcdir)/'`icc.C
+
+libcolorscreen_la-render-parameters.lo: render-parameters.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-render-parameters.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-render-parameters.Tpo -c -o libcolorscreen_la-render-parameters.lo `test -f 'render-parameters.C' || echo '$(srcdir)/'`render-parameters.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-render-parameters.Tpo $(DEPDIR)/libcolorscreen_la-render-parameters.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='render-parameters.C' object='libcolorscreen_la-render-parameters.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-render-parameters.lo `test -f 'render-parameters.C' || echo '$(srcdir)/'`render-parameters.C
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -921,6 +940,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-llc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
@@ -929,6 +949,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-progress-info.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-fast.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-parameters.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-tile.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo
@@ -995,6 +1016,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-dufay.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-analyze-paget.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-llc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
@@ -1003,6 +1025,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-progress-info.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-fast.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-interpolate.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-parameters.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-scr-detect.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-tile.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-render-to-file.Plo
