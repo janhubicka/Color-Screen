@@ -293,7 +293,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	  int c = getc (f);
-	  if (c == EOF || c=='\n')
+	  if (c == EOF || c=='\n' || c=='\r')
 	    {
 	      buf[l]=0;
 	      if (!l && c == EOF)

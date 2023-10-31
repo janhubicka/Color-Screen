@@ -6,6 +6,7 @@
 
 class mesh
 {
+  const bool debug = false;
 public:
   /* Conserve memory; we do not need to be that precise here since we interpolate across small regions.  */
   typedef float mesh_coord_t;
@@ -26,12 +27,16 @@ public:
   void
   set_point (int x, int y, coord_t xx, coord_t yy)
   {
+    if (debug && (y < 0 || y >= m_height || x < 0 || x >=m_width))
+      abort ();
     m_data[y * m_width + x].x = xx;
     m_data[y * m_width + x].y = yy;
   }
   void
   get_point (int x, int y, coord_t *xx, coord_t *yy)
   {
+    if (debug && (y < 0 || y >= m_height || x < 0 || x >=m_width))
+      abort ();
     *xx = m_data[y * m_width + x].x;
     *yy = m_data[y * m_width + x].y;
   }

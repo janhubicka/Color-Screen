@@ -586,7 +586,7 @@ confirm (render_scr_detect *render,
 		      max = std::max (max, c);						\
 		      min = std::min (min, c); /*printf("  %7.2f %7.2f", (coord_t)wx, (coord_t)wy)*/;}
 
-		      //luminosity_t c = color[t];\
+		      //luminosity_t c = color[t];
 		      //luminosity_t d = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);
 		      //c = c / d;							
 	    for (int yy = ystart ; yy < ystart + ymax - ymin + 1; yy++)
@@ -1168,8 +1168,10 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
       printf ("\n");
       if (report_file)
+      {
 	fprintf (report_file, "\n");
-      queue.print_sums (stdout);
+        queue.print_sums (report_file);
+      }
       progress->resume_stdout ();
     }
   if (!dsparams->do_mesh && nfound > 100000)
@@ -1376,6 +1378,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       int ymax = (points[s].y + 1) * img.height / search_ysteps;
       int nattempts = 0;
       const int  maxattempts = 10;
+      if (report_file)
+        fflush (report_file);
       if (dsparams->optimize_colors)
 	{
 	  if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
@@ -1384,10 +1388,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		progress->pause_stdout ();
 	      printf ("Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
 	      if (report_file)
-	      {
-	        fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
-		fflush (report_file);
-	      }
+		fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
 	      if (progress)
 		progress->resume_stdout ();
 	      continue;
@@ -1434,6 +1435,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
 	  for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
 	    {
+	      if (report_file)
+		fflush (report_file);
 	      if (type == Dufay ? try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress)
 		  : try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		{
