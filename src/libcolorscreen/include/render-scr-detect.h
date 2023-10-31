@@ -380,8 +380,8 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval)
   { 
   }
-  void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  rgbdata
+  sample_pixel_img (coord_t x, coord_t y)
   {
      /* Search for nearest pixels of each known color.  */
      const coord_t inf = distance_list::max_distance + 1;
@@ -410,9 +410,15 @@ public:
 	   }
        }
      if (biggest == inf)
-      set_color (0,0,0,r,g,b);
-    else
-      set_color (get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue), r, g, b);
+      return {0, 0, 0};
+     else
+      return {get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue)};
+  }
+  void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue, r, g, b);
   }
   bool precompute_all (progress_info *progress)
   {

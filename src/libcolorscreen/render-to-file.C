@@ -474,39 +474,79 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height / downscale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width / downscale; x++)
-	      {
-		luminosity_t srr = 0, sgg = 0, sbb = 0;
-		for (int yy = 0; yy < downscale; yy++)
-		  for (int xx = 0; xx < downscale; xx++)
-		    {
-		      rgbdata rgb =
-			render.fast_sample_pixel_img (x * downscale + xx,
-						      y * downscale + yy);
-		      srr += rgb.red;
-		      sgg += rgb.green;
-		      sbb += rgb.blue;
-		    }
-		int r, g, b;
-		render.set_color (srr / (downscale * downscale),
-				  sgg / (downscale * downscale),
-				  sbb / (downscale * downscale), &r, &g, &b);
-		outrow[3 * x] = r;
-		outrow[3 * x + 1] = g;
-		outrow[3 * x + 2] = b;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				error, progress);
+	    if (!out)
 	      return false;
-	    if (verbose)
-	      print_progress (y, scan.height / downscale);
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.fast_sample_pixel_img (x * downscale + xx,
+							  y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    int r, g, b;
+		    render.set_color (srr / (downscale * downscale),
+				      sgg / (downscale * downscale),
+				      sbb / (downscale * downscale), &r, &g, &b);
+		    outrow[3 * x] = r;
+		    outrow[3 * x + 1] = g;
+		    outrow[3 * x + 2] = b;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.fast_sample_pixel_img (x * downscale + xx,
+							  y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    float r, g, b;
+		    render.set_hdr_color (srr / (downscale * downscale),
+					  sgg / (downscale * downscale),
+					  sbb / (downscale * downscale), &r, &g, &b);
+		    hdr_outrow[3 * x] = r;
+		    hdr_outrow[3 * x + 1] = g;
+		    hdr_outrow[3 * x + 2] = b;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
 	  }
 	break;
       }
@@ -523,39 +563,79 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    sRGB_icc, sRGB_icc_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height / downscale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width / downscale; x++)
-	      {
-		luminosity_t srr = 0, sgg = 0, sbb = 0;
-		for (int yy = 0; yy < downscale; yy++)
-		  for (int xx = 0; xx < downscale; xx++)
-		    {
-		      rgbdata rgb =
-			render.fast_get_adjusted_pixel (x * downscale + xx,
-							y * downscale + yy);
-		      srr += rgb.red;
-		      sgg += rgb.green;
-		      sbb += rgb.blue;
-		    }
-		int r, g, b;
-		render.set_color (srr / (downscale * downscale),
-				  sgg / (downscale * downscale),
-				  sbb / (downscale * downscale), &r, &g, &b);
-		outrow[3 * x] = r;
-		outrow[3 * x + 1] = g;
-		outrow[3 * x + 2] = b;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				sRGB_icc, sRGB_icc_len,
+				error, progress);
+	    if (!out)
 	      return false;
-	    if (verbose)
-	      print_progress (y, scan.height / downscale);
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.fast_get_adjusted_pixel (x * downscale + xx,
+							    y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    int r, g, b;
+		    render.set_color (srr / (downscale * downscale),
+				      sgg / (downscale * downscale),
+				      sbb / (downscale * downscale), &r, &g, &b);
+		    outrow[3 * x] = r;
+		    outrow[3 * x + 1] = g;
+		    outrow[3 * x + 2] = b;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    sRGB_icc, sRGB_icc_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.fast_get_adjusted_pixel (x * downscale + xx,
+							    y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    luminosity_t r, g, b;
+		    render.set_hdr_color (srr / (downscale * downscale),
+					  sgg / (downscale * downscale),
+					  sbb / (downscale * downscale), &r, &g, &b);
+		    hdr_outrow[3 * x] = r;
+		    hdr_outrow[3 * x + 1] = g;
+		    hdr_outrow[3 * x + 2] = b;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
 	  }
 	break;
       }
@@ -572,36 +652,79 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height / downscale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width / downscale; x++)
-	      {
-		int srr = 0, sgg = 0, sbb = 0;
-		int rr, gg, bb;
-		for (int yy = 0; yy < downscale; yy++)
-		  for (int xx = 0; xx < downscale; xx++)
-		    {
-		      render.render_pixel_img (x * downscale + xx,
-					       y * downscale + yy,
-					       &rr, &gg, &bb);
-		      srr += rr;
-		      sgg += gg;
-		      sbb += bb;
-		    }
-		outrow[3 * x] = srr / (downscale * downscale);
-		outrow[3 * x + 1] = sgg / (downscale * downscale);
-		outrow[3 * x + 2] = sbb / (downscale * downscale);
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				error, progress);
+	    if (!out)
 	      return false;
-	    if (verbose)
-	      print_progress (y, scan.height / downscale);
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.sample_pixel_img (x * downscale + xx,
+						     y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    int r, g, b;
+		    render.set_color (srr / (downscale * downscale),
+				      sgg / (downscale * downscale),
+				      sbb / (downscale * downscale), &r, &g, &b);
+		    outrow[3 * x] = r;
+		    outrow[3 * x + 1] = g;
+		    outrow[3 * x + 2] = b;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  rgbdata rgb =
+			    render.sample_pixel_img (x * downscale + xx,
+						     y * downscale + yy);
+			  srr += rgb.red;
+			  sgg += rgb.green;
+			  sbb += rgb.blue;
+			}
+		    luminosity_t r, g, b;
+		    render.set_hdr_color (srr / (downscale * downscale),
+					  sgg / (downscale * downscale),
+					  sbb / (downscale * downscale), &r, &g, &b);
+		    hdr_outrow[3 * x] = r;
+		    hdr_outrow[3 * x + 1] = g;
+		    hdr_outrow[3 * x + 2] = b;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
 	  }
       }
       break;
@@ -618,40 +741,81 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height / downscale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width / downscale; x++)
-	      {
-		luminosity_t srr = 0, sgg = 0, sbb = 0;
-		for (int yy = 0; yy < downscale; yy++)
-		  for (int xx = 0; xx < downscale; xx++)
-		    {
-		      luminosity_t rr, gg, bb;
-		      render.render_raw_pixel_img (x * downscale + xx,
-						   y * downscale + yy,
-						   &rr, &gg, &bb);
-		      srr += rr;
-		      sgg += gg;
-		      sbb += bb;
-		    }
-		int r, g, b;
-		render.set_color (srr / (downscale * downscale),
-				  sgg / (downscale * downscale),
-				  sbb / (downscale * downscale), &r, &g, &b);
-		outrow[3 * x] = r;
-		outrow[3 * x + 1] = g;
-		outrow[3 * x + 2] = b;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				error, progress);
+	    if (!out)
 	      return false;
-	    if (verbose)
-	      print_progress (y, scan.height / downscale);
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  luminosity_t rr, gg, bb;
+			  render.render_raw_pixel_img (x * downscale + xx,
+						       y * downscale + yy,
+						       &rr, &gg, &bb);
+			  srr += rr;
+			  sgg += gg;
+			  sbb += bb;
+			}
+		    int r, g, b;
+		    render.set_color (srr / (downscale * downscale),
+				      sgg / (downscale * downscale),
+				      sbb / (downscale * downscale), &r, &g, &b);
+		    outrow[3 * x] = r;
+		    outrow[3 * x + 1] = g;
+		    outrow[3 * x + 2] = b;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  luminosity_t rr, gg, bb;
+			  render.render_raw_pixel_img (x * downscale + xx,
+						       y * downscale + yy,
+						       &rr, &gg, &bb);
+			  srr += rr;
+			  sgg += gg;
+			  sbb += bb;
+			}
+		    luminosity_t r, g, b;
+		    render.set_hdr_color (srr / (downscale * downscale),
+					  sgg / (downscale * downscale),
+					  sbb / (downscale * downscale), &r, &g, &b);
+		    hdr_outrow[3 * x] = r;
+		    hdr_outrow[3 * x + 1] = g;
+		    hdr_outrow[3 * x + 2] = b;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
 	  }
       }
       break;
@@ -668,40 +832,81 @@ render_to_file (enum output_mode mode, const char *outfname,
 	int downscale = 1;
 	int outwidth = scan.width / downscale;
 	int outheight = scan.height / downscale;
-	out =
-	  open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-			    icc_profile, icc_profile_len,
-			    error, progress);
-	if (!out)
-	  return false;
-	for (int y = 0; y < scan.height / downscale; y++)
+	if (!hdr)
 	  {
-	    for (int x = 0; x < scan.width / downscale; x++)
-	      {
-		luminosity_t srr = 0, sgg = 0, sbb = 0;
-		for (int yy = 0; yy < downscale; yy++)
-		  for (int xx = 0; xx < downscale; xx++)
-		    {
-		      luminosity_t rr, gg, bb;
-		      render.render_raw_pixel_img (x * downscale + xx,
-						   y * downscale + yy,
-						   &rr, &gg, &bb);
-		      srr += rr;
-		      sgg += gg;
-		      sbb += bb;
-		    }
-		int r, g, b;
-		render.set_color (srr / (downscale * downscale),
-				  sgg / (downscale * downscale),
-				  sbb / (downscale * downscale), &r, &g, &b);
-		outrow[3 * x] = r;
-		outrow[3 * x + 1] = g;
-		outrow[3 * x + 2] = b;
-	      }
-	    if (!write_row (out, y, outrow, error, progress))
+	    out =
+	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
+				icc_profile, icc_profile_len,
+				error, progress);
+	    if (!out)
 	      return false;
-	    if (verbose)
-	      print_progress (y, scan.height / downscale);
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  luminosity_t rr, gg, bb;
+			  render.render_raw_pixel_img (x * downscale + xx,
+						       y * downscale + yy,
+						       &rr, &gg, &bb);
+			  srr += rr;
+			  sgg += gg;
+			  sbb += bb;
+			}
+		    int r, g, b;
+		    render.set_color (srr / (downscale * downscale),
+				      sgg / (downscale * downscale),
+				      sbb / (downscale * downscale), &r, &g, &b);
+		    outrow[3 * x] = r;
+		    outrow[3 * x + 1] = g;
+		    outrow[3 * x + 2] = b;
+		  }
+		if (!write_row (out, y, outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
+	  }
+	else
+	  {
+	    out =
+	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
+				    icc_profile, icc_profile_len,
+				    error, progress);
+	    if (!out)
+	      return false;
+	    for (int y = 0; y < scan.height / downscale; y++)
+	      {
+		for (int x = 0; x < scan.width / downscale; x++)
+		  {
+		    luminosity_t srr = 0, sgg = 0, sbb = 0;
+		    for (int yy = 0; yy < downscale; yy++)
+		      for (int xx = 0; xx < downscale; xx++)
+			{
+			  luminosity_t rr, gg, bb;
+			  render.render_raw_pixel_img (x * downscale + xx,
+						       y * downscale + yy,
+						       &rr, &gg, &bb);
+			  srr += rr;
+			  sgg += gg;
+			  sbb += bb;
+			}
+		    luminosity_t r, g, b;
+		    render.set_hdr_color (srr / (downscale * downscale),
+					  sgg / (downscale * downscale),
+					  sbb / (downscale * downscale), &r, &g, &b);
+		    hdr_outrow[3 * x] = r;
+		    hdr_outrow[3 * x + 1] = g;
+		    hdr_outrow[3 * x + 2] = b;
+		  }
+		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
+		  return false;
+		if (verbose)
+		  print_progress (y, scan.height / downscale);
+	      }
 	  }
       }
       break;
