@@ -2,6 +2,7 @@
 #include <tiffio.h>
 #include "include/stitch.h"
 #include "include/tiff-writer.h"
+#include "include/colorscreen.h"
 #include "render-interpolate.h"
 #include "screen-map.h"
 #include "loadsave.h"
@@ -673,6 +674,11 @@ stitch_image::pixel_known_p (coord_t sx, coord_t sy)
   return known_pixels->test_range (ax, ay, 2);
 }
 bool
+pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
+{
+  return ((stitch_image *)data)->pixel_known_p (sx, sy);
+}
+bool
 stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 {
   coord_t ix, iy;
@@ -681,6 +687,11 @@ stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 	 && iy >= (top ? 5 : img_height * 0.02)
 	 && ix <= (right ? img_width - 5 : img_width * 0.98)
 	 && iy <= (bottom ? img_height - 5 : img_height * 0.98);
+}
+bool
+img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
+{
+  return ((stitch_image *)data)->img_pixel_known_p (sx, sy);
 }
 
 bool
@@ -1102,21 +1113,52 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
   int ymin = floor ((final_ypos - final_yshift) / ystep) * ystep;
 
+  render_to_file_params rfparams;
   switch(mode)
   {
   case render_demosaiced:
     suffix = "-demosaicedtile";
+    rfparams.mode = interpolated;
     break;
   case render_original:
+    rfparams.mode = corrected_color;
     suffix = "-tile";
     break;
   case render_predictive:
     suffix = "-predictivetile";
+    rfparams.mode = predictive;
     break;
   }
 
   load_img (progress);
   std::string name = m_prj->adjusted_filename (filename, suffix, ".tif");
+
+  rfparams.filename = name.c_str ();
+  rfparams.tile = true;
+  coord_t xoffset = (xmin - stitch_xmin) / xstep;
+  coord_t yoffset = (ymin - stitch_ymin) / ystep;
+  rfparams.xoffset = floor (xoffset);
+  rfparams.yoffset = floor (yoffset);
+  /* Compensate sub-pixel differences.  */
+  rfparams.xstart = xmin + (xmin - stitch_xmin) - rfparams.xoffset * xstep;
+  rfparams.ystart = ymin + (ymin - stitch_ymin) - rfparams.yoffset * ystep;
+  rfparams.xstep = xstep;
+  rfparams.ystep = ystep;
+  rfparams.pixel_known_p = mode == render_original ? img_pixel_known_p_wrap : pixel_known_p_wrap;
+  rfparams.pixel_known_p_data = (void *)this;
+  rfparams.common_map = &map;
+  rfparams.xpos = xpos;
+  rfparams.ypos = ypos;
+  rfparams.width = final_width / xstep;
+  rfparams.height = final_height / ystep;
+  rfparams.pixel_size = m_prj->pixel_size;
+  if (!render_to_file (*img, param, m_prj->dparam, mode == render_original ? m_prj->passthrough_rparam : m_prj->rparam, rfparams, progress, error))
+    {
+      release_img ();
+      return false;
+    }
+  
+#if 0
   TIFF *out = open_tile_output_file (name.c_str (), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, error, img->icc_profile, img->icc_profile_size, mode, progress);
   if (!out)
     {
@@ -1166,6 +1208,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   TIFFClose (out);
   free (outrow);
   output = true;
+#endif
   release_img ();
   return true;
 }

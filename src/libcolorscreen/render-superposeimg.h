@@ -38,6 +38,12 @@ public:
     m_scr_to_img.to_img (xx, yy, &ix, &iy);
     return sample_pixel_img (ix, iy, xx, yy);
   }
+  rgbdata sample_pixel_scr (coord_t x, coord_t y)
+  {
+    coord_t ix, iy;
+    m_scr_to_img.to_img (x, y, &ix, &iy);
+    return sample_pixel_img (ix, iy, x, y);
+  }
 private:
   void inline render_pixel_img_antialias_priv (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline rgbdata sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y);

@@ -1,7 +1,6 @@
 #include <vector>
 #include <locale>
 #include "include/stitch.h"
-#include "include/tiff-writer.h"
 #include "render-interpolate.h"
 #include "screen-map.h"
 #include "loadsave.h"

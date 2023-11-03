@@ -8,9 +8,9 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
   if (p.hdr)
     {
       if (p.depth == 16)
-	pixel_format = pixel_16bit_hdr;
+	pixel_format = !p.alpha ? pixel_16bit_hdr : pixel_16bit_hdr_alpha;
       else if(p.depth == 32)
-	pixel_format = pixel_32bit_hdr;
+	pixel_format = !p.alpha ? pixel_32bit_hdr : pixel_16bit_hdr_alpha;
       else
 	{
 	  *error = "unduported bit depth in HDR tiff file";
@@ -20,9 +20,9 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
   else
     {
       if (p.depth == 8)
-	pixel_format = pixel_8bit;
+	pixel_format = !p.alpha ? pixel_8bit : pixel_8bit_alpha;
       else if (p.depth == 16)
-	pixel_format = pixel_16bit;
+	pixel_format = !p.alpha ? pixel_16bit : pixel_16bit_alpha;
       else
 	{
 	  *error = "unduported bit depth in HDR tiff file";
@@ -39,6 +39,9 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       return;
     }
   static uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
+  /* We must set some DPI since offset is specified relative to it.  */
+  if (p.tile && !p.xdpi)
+    p.xdpi = p.ydpi = 300;
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, (uint32_t) p.width)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, (uint32_t) p.height)
       || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, p.alpha ? 4 : 3)
@@ -48,13 +51,28 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
       || (p.alpha && !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras))
-      || !TIFFSetField (out, TIFFTAG_COMPRESSION, COMPRESSION_LZW)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, p.icc_profile ? (uint32_t)p.icc_profile_len : (uint32_t) sRGB_icc_len, p.icc_profile ? p.icc_profile : sRGB_icc))
+      //|| !TIFFSetField (out, TIFFTAG_COMPRESSION, COMPRESSION_LZW)
+      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, p.icc_profile ? (uint32_t)p.icc_profile_len : (uint32_t) sRGB_icc_len, p.icc_profile ? p.icc_profile : sRGB_icc)
+      || (p.xdpi && !TIFFSetField (out, TIFFTAG_XRESOLUTION, (double)p.xdpi))
+      || (p.ydpi && !TIFFSetField (out, TIFFTAG_YRESOLUTION, (double)p.ydpi)))
     {
       *error = "write error";
       TIFFClose (out);
       out = NULL;
       return;
+    }
+  if (p.tile)
+    {
+      if (!TIFFSetField (out, TIFFTAG_XPOSITION, ((double)p.xoffset / p.xdpi))
+	  || !TIFFSetField (out, TIFFTAG_YPOSITION, ((double)p.yoffset / p.ydpi))
+	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLWIDTH, (long)(p.width + p.xoffset))
+	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLLENGTH, (long)(p.height + p.yoffset)))
+	{
+	  *error = "write error";
+	  TIFFClose (out);
+	  out = NULL;
+	  return;
+	}
     }
   outrow = malloc (p.width * (size_t)p.depth * (p.alpha ? 4 : 3) / 8);
   if (!outrow)
@@ -70,6 +88,8 @@ tiff_writer::write_row ()
 {
   if (TIFFWriteScanline (out, outrow, y++, 0) < 0)
     {
+      TIFFClose (out);
+      out = NULL;
       return false;
     }
   return true;

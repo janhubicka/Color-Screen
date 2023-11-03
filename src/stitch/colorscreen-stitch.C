@@ -5,10 +5,12 @@
 #include "../libcolorscreen/include/analyze-dufay.h"
 #include "../libcolorscreen/include/stitch.h"
 #include <tiffio.h>
-#include "../libcolorscreen/icc-srgb.h"
 #include "../libcolorscreen/render-interpolate.h"
 #include "../libcolorscreen/screen-map.h"
 #include "../libcolorscreen/include/tiff-writer.h"
+
+extern unsigned char sRGB_icc[];
+extern unsigned int sRGB_icc_len;
 
 namespace {
 stitch_project *prj;
@@ -410,13 +412,16 @@ void stitch (progress_info *progress)
   else
     for (int y = 0; y < prj->params.height; y++)
       for (int x = 0; x < prj->params.width; x++)
+      {
+	coord_t demosaicedstep = prj->params.type == Dufay ? 0.5 : 0.25;
 	if ((prj->params.orig_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
-	    || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, 1, 1, stitch_image::render_demosaiced, progress))
+	    || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
 	    || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
 	  {
 	    fprintf (stderr, "Writting tile: %s\n", error);
 	    exit (1);
 	  }
+      }
   for (int y = 0; y < prj->params.height; y++)
     for (int x = 0; x < prj->params.width; x++)
       if (prj->images[y][x].img)

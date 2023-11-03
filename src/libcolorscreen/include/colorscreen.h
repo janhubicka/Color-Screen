@@ -15,12 +15,46 @@ enum output_mode
   interpolated,
   predictive,
   combined,
+  /* detect_adjusted must be first detect mode.  */
   detect_adjusted,
   detect_realistic,
   detect_nearest,
   detect_nearest_scaled,
   detect_relax,
 };
-DLL_PUBLIC bool render_to_file(enum output_mode mode, const char *outfname, image_data &scan, scr_to_img_parameters &param,
-			       scr_detect_parameters &dparam, render_parameters rparam, bool hdr, progress_info *progress, bool verbose, const char **error);
+struct render_to_file_params
+{
+  output_mode mode;
+  const char *filename;
+  int depth;
+  bool verbose;
+  bool hdr;
+  coord_t scale;
+  void *icc_profile;
+  int icc_profile_len;
+  int antialias;
+
+  /* Width and height of the output file.  It will be computed if set to 0.  */
+  int width, height;
+  bool tile;
+  /* Specifies top left corner in coordinates.  */
+  coord_t xstart, ystart;
+  /* Size of single pixel.  If 0 default is computed using output mode and scale. */
+  coord_t xstep, ystep;
+  /* Pixel size used to determine antialiasing factor.  It needs to be same in whole stitch project. */
+  coord_t pixel_size;
+  /* Offset of a tile.  */
+  int xoffset, yoffset;
+  bool (*pixel_known_p) (void *data, coord_t x, coord_t y);
+  void *pixel_known_p_data;
+  /* Common map used for stitching project.  */
+  scr_to_img *common_map;
+  /* Position of rendered image in the project.  */
+  coord_t xpos, ypos;
+  render_to_file_params ()
+  : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
+  {}
+};
+DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam,
+			render_to_file_params rfarams, progress_info *progress, const char **error);
 #endif

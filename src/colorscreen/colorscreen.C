@@ -111,16 +111,15 @@ parse_dye_balance (const char *model)
 int
 main (int argc, char **argv)
 {
-  const char *infname = NULL, *outfname = NULL, *cspname = NULL, *error = NULL;
-  enum output_mode mode = interpolated;
+  const char *infname = NULL, *cspname = NULL, *error = NULL;
   float age = -100;
   enum render_parameters::output_profile_t output_profile = render_parameters::output_profile_max;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
   struct solver_parameters solver_param;
+  render_to_file_params rfparams;
   bool force_precise = false;
   bool detect_geometry = false;
-  bool hdr = false;
 
   binname = argv[0];
 
@@ -137,10 +136,10 @@ main (int argc, char **argv)
 	  if (i == argc - 1)
 	    print_help ();
 	  i++;
-	  mode = parse_mode (argv[i]);
+	  rfparams.mode = parse_mode (argv[i]);
 	}
       else if (!strcmp (argv[i], "--hdr"))
-	hdr = true;
+	rfparams.hdr = true;
       else if (!strcmp (argv[i], "--output-profile"))
 	{
 	  if (i == argc - 1)
@@ -175,17 +174,17 @@ main (int argc, char **argv)
 	  dye_balance = parse_dye_balance (argv[i]);
 	}
       else if (!strncmp (argv[i], "--mode=", 7))
-	mode = parse_mode (argv[i]+7);
+	rfparams.mode = parse_mode (argv[i]+7);
       else if (!infname)
 	infname = argv[i];
       else if (!cspname)
 	cspname = argv[i];
-      else if (!outfname)
-	outfname = argv[i];
+      else if (!rfparams.filename)
+	rfparams.filename = argv[i];
       else
         print_help ();
     }
-  if (!infname || !cspname || !outfname)
+  if (!infname || !cspname || !rfparams.filename)
     print_help ();
 
   /* Load scan data.  */
@@ -206,7 +205,7 @@ main (int argc, char **argv)
       printf (" (resolution %ix%i)", scan.width, scan.height);
       print_time ();
     }
-  if (mode == detect_nearest && !scan.rgbdata)
+  if (rfparams.mode == detect_nearest && !scan.rgbdata)
     {
       fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
       exit (1);
@@ -269,9 +268,10 @@ main (int argc, char **argv)
     rparam.output_profile = output_profile;
 
   /* ... and render!  */
-  if (!render_to_file (mode, outfname, scan, param, dparam, rparam, hdr, NULL, verbose, &error))
+  rfparams.verbose = verbose;
+  if (!render_to_file (scan, param, dparam, rparam, rfparams, NULL, &error))
     {
-      fprintf (stderr, "Can not save %s: %s\n", outfname, error);
+      fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
       exit (1);
     }
   if (verbose)

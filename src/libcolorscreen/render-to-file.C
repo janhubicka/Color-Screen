@@ -46,22 +46,9 @@ print_progress (int p, int max)
     }
 }
 
-struct produce_file_params
-{
-  const char *filename;
-  int width, height;
-  coord_t stepx, stepy;
-  bool hdr;
-  bool verbose;
-  void *icc_profile;
-  size_t icc_profile_len;
-  int antialias;
-  coord_t dpi;
-};
-
-template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y)>
+template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y), rgbdata (T::*sample_scr_data)(coord_t x, coord_t y), bool support_tile>
 const char *
-produce_file (produce_file_params p, T &render, progress_info *progress)
+produce_file (render_to_file_params p, T &render, progress_info *progress)
 {
   const char *error = NULL;
   tiff_writer_params tp;
@@ -69,8 +56,18 @@ produce_file (produce_file_params p, T &render, progress_info *progress)
   tp.width = p.width;
   tp.height = p.height;
   tp.hdr = p.hdr;
+  tp.depth = p.depth;
   tp.icc_profile = p.icc_profile;
   tp.icc_profile_len = p.icc_profile_len;
+  tp.tile = p.tile;
+  if (p.tile)
+    {
+      if (!support_tile)
+         abort ();
+      tp.xoffset = p.xoffset;
+      tp.yoffset = p.yoffset;
+      tp.alpha = true;
+    }
   tiff_writer out(tp, &error);
   if (error)
     return error;
@@ -85,55 +82,135 @@ produce_file (produce_file_params p, T &render, progress_info *progress)
     {
       if (p.antialias == 1)
 	{
+	  if (p.tile && support_tile)
 #pragma omp parallel for default(none) shared(p,render,y,out)
-	  for (int x = 0; x < p.width; x++)
-	    {
-	      rgbdata d = (render.*sample_data) (x * p.stepx, y * p.stepy);
-	      if (!p.hdr)
-		{
-		  int rr, gg, bb;
-		  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		  out.put_pixel (x, rr, gg, bb);
-		}
-	      else
-		{
-		  luminosity_t rr, gg, bb;
-		  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		  out.put_hdr_pixel (x, rr, gg, bb);
-		}
-	    }
+	    for (int x = 0; x < p.width; x++)
+	      {
+		coord_t xx = x * p.xstep + p.xstart;
+		coord_t yy = y * p.ystep + p.ystart;
+		p.common_map->final_to_scr (xx, yy, &xx, &yy);
+		if (!p.pixel_known_p (p.pixel_known_p_data, xx, yy))
+		  {
+		    if (!p.hdr)
+		      out.kill_pixel (x);
+		    else
+		      out.kill_hdr_pixel (x);
+		  }
+		else
+		  {
+		    xx -= p.xpos;
+		    yy -= p.ypos;
+		    rgbdata d = (render.*sample_scr_data) (xx, yy);
+		    if (!p.hdr)
+		      {
+			int rr, gg, bb;
+			render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			out.put_pixel (x, rr, gg, bb);
+		      }
+		    else
+		      {
+			luminosity_t rr, gg, bb;
+			render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			out.put_hdr_pixel (x, rr, gg, bb);
+		      }
+		  }
+	      }
+	  else
+#pragma omp parallel for default(none) shared(p,render,y,out)
+	    for (int x = 0; x < p.width; x++)
+	      {
+		coord_t xx = x * p.xstep + p.xstart;
+		coord_t yy = y * p.ystep + p.ystart;
+		rgbdata d = (render.*sample_data) (xx, yy);
+		if (!p.hdr)
+		  {
+		    int rr, gg, bb;
+		    render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		    out.put_pixel (x, rr, gg, bb);
+		  }
+		else
+		  {
+		    luminosity_t rr, gg, bb;
+		    render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		    out.put_hdr_pixel (x, rr, gg, bb);
+		  }
+	      }
 	}
       else
 	{
-	  coord_t asx = p.stepx / p.antialias;
-	  coord_t asy = p.stepy / p.antialias;
+	  coord_t asx = p.xstep / p.antialias;
+	  coord_t asy = p.ystep / p.antialias;
 	  luminosity_t sc = 1.0 / (p.antialias * p.antialias);
+	  if (p.tile && support_tile)
 #pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc)
-	  for (int x = 0; x < p.width; x++)
-	    {
-	      rgbdata d = {0, 0, 0};
-	      for (int ay = 0 ; ay < p.antialias; ay++)
-		for (int ax = 0 ; ax < p.antialias; ax++)
+	    for (int x = 0; x < p.width; x++)
+	      {
+		coord_t xx = x * p.xstep + p.xstart;
+		coord_t yy = y * p.ystep + p.ystart;
+		coord_t xx2, yy2;
+		p.common_map->final_to_scr (xx, yy, &xx2, &yy2);
+		if (!p.pixel_known_p (p.pixel_known_p_data, xx2, yy2))
 		  {
-		    d += (render.*sample_data) (x * p.stepx + ax * asx, y * p.stepy + ay * asy);
+		    if (!p.hdr)
+		      out.kill_pixel (x);
+		    else
+		      out.kill_hdr_pixel (x);
 		  }
-	      d.red *= sc;
-	      d.green *= sc;
-	      d.blue *= sc;
-	      if (!p.hdr)
-		{
-		  int rr, gg, bb;
-		  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		  out.put_pixel (x, rr, gg, bb);
-		}
-	      else
-		{
-		  luminosity_t rr, gg, bb;
-		  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		  out.put_hdr_pixel (x, rr, gg, bb);
-		}
-	    }
-	}
+		else
+		  {
+		    rgbdata d = {0, 0, 0};
+		    for (int ay = 0 ; ay < p.antialias; ay++)
+		      for (int ax = 0 ; ax < p.antialias; ax++)
+			{
+			  p.common_map->final_to_scr (xx + ax * asx, yy + ay * asy, &xx2, &yy2);
+			  xx2 -= p.xpos;
+			  yy2 -= p.ypos;
+			  d += (render.*sample_scr_data) (xx2 + ax * asx, yy2 + ay * asy);
+			}
+		    d.red *= sc;
+		    d.green *= sc;
+		    d.blue *= sc;
+		    if (!p.hdr)
+		      {
+			int rr, gg, bb;
+			render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			out.put_pixel (x, rr, gg, bb);
+		      }
+		    else
+		      {
+			luminosity_t rr, gg, bb;
+			render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			out.put_hdr_pixel (x, rr, gg, bb);
+		      }
+		  }
+	      }
+	  else
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc)
+	    for (int x = 0; x < p.width; x++)
+	      {
+		rgbdata d = {0, 0, 0};
+		coord_t xx = x * p.xstep + p.xstart;
+		coord_t yy = y * p.ystep + p.ystart;
+		for (int ay = 0 ; ay < p.antialias; ay++)
+		  for (int ax = 0 ; ax < p.antialias; ax++)
+		    d += (render.*sample_data) (xx + ax * asx, yy + ay * asy);
+		d.red *= sc;
+		d.green *= sc;
+		d.blue *= sc;
+		if (!p.hdr)
+		  {
+		    int rr, gg, bb;
+		    render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		    out.put_pixel (x, rr, gg, bb);
+		  }
+		else
+		  {
+		    luminosity_t rr, gg, bb;
+		    render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		    out.put_hdr_pixel (x, rr, gg, bb);
+		  }
+	      }
+	  }
       if (!out.write_row ())
 	return "Write error";
       if (progress && progress->cancel_requested ())
@@ -149,10 +226,10 @@ produce_file (produce_file_params p, T &render, progress_info *progress)
 }
 
 bool
-get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & param, image_data &scan, int *width, int *height, coord_t *stepx, coord_t *stepy, int *antialias, coord_t *dpi)
+get_rendered_file_dimensions (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
 {
   render_parameters rparam;
-  switch (mode)
+  switch (p->mode)
     {
     case none:
     case corrected_color:
@@ -166,18 +243,30 @@ get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & par
 	render_img render (param, scan, rparam, 65535);
 	coord_t render_width = render.get_final_width ();
 	coord_t render_height = render.get_final_height ();
-	coord_t pixelsize = render.pixel_size ();
-	/* Interpolated mode makes no sense past 4 pixels per screen tile.  */
-	if (mode == interpolated)
-	  pixelsize = 0.25;
-	*antialias = 1;
-	if (mode == predictive || mode == realistic)
-	  *antialias = 4;
-	*width = render_width / pixelsize;
-	*height = render_height / pixelsize;
-	*stepx = pixelsize;
-	*stepy = pixelsize;
-	*dpi = 0;
+	if (!p->pixel_size)
+	  p->pixel_size = render.pixel_size ();
+	if (p->mode == interpolated)
+	  p->pixel_size = param.type == Dufay ? 0.5 : 0.25;
+	if (!p->xstep)
+	  {
+	    /* For interpolated the pixels are rotated, so it makes
+	       sense to enlarge image somewhat.  */
+	    p->xstep = p->pixel_size / p->scale * 0.5;
+	    p->ystep = p->pixel_size / p->scale * 0.5;
+	  }
+	if (!p->antialias)
+	  {
+	    p->antialias = round (1 * p->xstep / p->pixel_size);
+	    if (p->mode == predictive || p->mode == realistic)
+	      p->antialias = round (4 * p->xstep / p->pixel_size);
+	    if (!p->antialias)
+	      p->antialias = 1;
+	  }
+	if (!p->width)
+	  {
+	    p->width = render_width / p->xstep;
+	    p->height = render_height / p->ystep;
+	  }
       }
       break;
     case detect_realistic:
@@ -186,15 +275,22 @@ get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & par
     case detect_nearest_scaled:
     case detect_relax:
       {
-	*width = scan.width;
-	*height = scan.height;
-	if (mode == detect_realistic || mode == detect_adjusted)
-	  *antialias = 4;
-	else
-	  *antialias = 1;
-	*stepx = 1;
-	*stepy = 1;
-	*dpi = 0;
+	if (!p->xstep)
+	  p->xstep = p->ystep = 1 / p->scale;
+	if (!p->width)
+	  {
+	    p->width = scan.width / p->xstep;
+	    p->height = scan.height / p->ystep;
+	  }
+	if (!p->antialias)
+	  {
+	    if (p->mode == detect_realistic || p->mode == detect_adjusted)
+	      p->antialias = round (4 * p->xstep);
+	    else
+	      p->antialias = round (1 * p->ystep);
+	    if (!p->antialias)
+	      p->antialias = 1;
+	  }
       }
       break;
     }
@@ -203,22 +299,36 @@ get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & par
 
 /* Render image to TIFF file OUTFNAME.  */
 bool
-render_to_file (enum output_mode mode, const char *outfname,
-		image_data & scan, scr_to_img_parameters & param,
-		scr_detect_parameters & dparam, render_parameters rparam,
-		bool hdr,
-		progress_info * progress, bool verbose, const char **error)
+render_to_file (image_data & scan, scr_to_img_parameters & param,
+		scr_detect_parameters & dparam, render_parameters rparam /* modified */,
+		struct render_to_file_params rfparams /* modified */,
+		progress_info * progress, const char **error)
 {
-  if (verbose)
+  if (rfparams.verbose)
     {
       printf ("Precomputing...");
       fflush (stdout);
       record_time ();
     }
-  void *icc_profile = sRGB_icc;
-  size_t icc_profile_len = sRGB_icc_len;
+  void *icc_profile /*= sRGB_icc*/ = NULL;
+  size_t icc_profile_len = /*sRGB_icc_len =*/ 0;
 
-  if (hdr)
+  if ((int)rfparams.mode >= (int)detect_adjusted && !scan.rgbdata)
+    {
+      fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
+      exit (1);
+    }
+  if ((int)rfparams.mode == (int)corrected_color && !scan.rgbdata)
+    {
+      fprintf (stderr, "Corrected color is imposible in monochromatic scan\n");
+      exit (1);
+    }
+  if ((int)rfparams.mode == (int)color_preview_grid && !scan.rgbdata)
+    {
+      fprintf (stderr, "Color preview grid is imposible in monochromatic scan\n");
+      exit (1);
+    }
+  if (rfparams.hdr)
     {
       rparam.output_gamma = 1;
       rparam.output_profile = render_parameters::output_profile_original;
@@ -228,38 +338,41 @@ render_to_file (enum output_mode mode, const char *outfname,
     icc_profile_len = rparam.get_icc_profile (&icc_profile);
 
   /* Initialize rendering engine.  */
-  produce_file_params pfparams;
-  pfparams.filename = outfname;
-  pfparams.hdr = hdr;
-  pfparams.verbose = verbose;
-  if (!get_rendered_file_dimensions (mode, param, scan, &pfparams.width, &pfparams.height, &pfparams.stepx, &pfparams.stepy, &pfparams.antialias, &pfparams.dpi))
+  if (!get_rendered_file_dimensions (param, scan, &rfparams))
     {
       *error = "Precomputation failed (out of memory)";
       return false;
     }
-  pfparams.icc_profile = icc_profile;
-  pfparams.icc_profile_len = icc_profile_len;
+  bool icc_profile_set = rfparams.icc_profile;
+  if (!icc_profile_set)
+    {
+      rfparams.icc_profile = icc_profile;
+      rfparams.icc_profile_len = icc_profile_len;
+    }
 
-  switch (mode)
+  switch (rfparams.mode)
     {
     case none:
     case corrected_color:
       {
 	render_img render (param, scan, rparam, 65535);
-	if (mode == corrected_color)
+	if (rfparams.mode == corrected_color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
 
-	pfparams.icc_profile = scan.icc_profile;
-	pfparams.icc_profile_len = scan.icc_profile_size;
+	if (!icc_profile_set)
+	  {
+	    rfparams.icc_profile = scan.icc_profile;
+	    rfparams.icc_profile_len = scan.icc_profile_size;
+	  }
 	// TODO: For HDR output we want to linearize the ICC profile.
-	*error = produce_file<render_img, &render_img::sample_pixel_final> (pfparams, render, progress);
+	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
@@ -268,8 +381,8 @@ render_to_file (enum output_mode mode, const char *outfname,
     case predictive:
     case combined:
       {
-	bool screen_compensation = mode == predictive;
-	bool adjust_luminosity = mode == combined;
+	bool screen_compensation = rfparams.mode == predictive;
+	bool adjust_luminosity = rfparams.mode == combined;
 
 	render_interpolate render (param, scan, rparam, 65535,
 				   screen_compensation, adjust_luminosity);
@@ -278,10 +391,10 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
 
-	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final> (pfparams, render, progress);
+	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
@@ -290,19 +403,19 @@ render_to_file (enum output_mode mode, const char *outfname,
     case preview_grid:
     case color_preview_grid:
       {
-	render_superpose_img render (param, scan, rparam, 65535, mode != realistic);
-	if (mode == color_preview_grid && scan.rgbdata)
+	render_superpose_img render (param, scan, rparam, 65535, rfparams.mode != realistic);
+	if (rfparams.mode == color_preview_grid && scan.rgbdata)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
 	/* TODO: Maybe preview_grid and color_preview_grid
 	   should be in the scan profile.  */
-	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final> (pfparams, render, progress);
+	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
@@ -315,9 +428,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
-	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img> (pfparams, render, progress);
+	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
 	break;
@@ -330,9 +443,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
-	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel> (pfparams, render, progress);
+	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
 	break;
@@ -345,9 +458,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
-	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img> (pfparams, render, progress);
+	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
@@ -360,9 +473,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
-	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img> (pfparams, render, progress);
+	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
@@ -375,9 +488,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	    *error = "Precomputation failed (out of memory)";
 	    return false;
 	  }
-	if (verbose)
+	if (rfparams.verbose)
 	  print_time ();
-	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img> (pfparams, render, progress);
+	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
       }
