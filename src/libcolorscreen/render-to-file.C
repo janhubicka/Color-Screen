@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <sys/time.h>
-#include <tiffio.h>
+#include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "include/render-fast.h"
 #include "render-interpolate.h"
@@ -188,6 +188,99 @@ write_hdr_row (TIFF * out, int y, float * outrow, const char **error, progress_i
      progress->inc_progress ();
   return true;
 }
+
+struct produce_file_params
+{
+  const char *filename;
+  int width, height;
+  coord_t stepx, stepy;
+  bool hdr;
+  bool verbose;
+  void *icc_profile;
+  size_t icc_profile_len;
+  coord_t dpi;
+};
+
+template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y)>
+const char *
+produce_file (produce_file_params &p, T &render, progress_info *progress)
+{
+  const char *error = NULL;
+  tiff_writer_params tp;
+  tp.filename = p.filename;
+  tp.width = p.width;
+  tp.height = p.height;
+  tp.hdr = p.hdr;
+  tp.icc_profile = p.icc_profile;
+  tp.icc_profile_len = p.icc_profile_len;
+  tiff_writer out(tp, &error);
+  if (error)
+    return error;
+  if (p.verbose)
+    {
+      printf ("Rendering %s in resolution %ix%i: 00%%", p.filename, p.width,
+	      p.height);
+      fflush (stdout);
+      record_time ();
+    }
+  for (int y = 0; y < p.height; y++)
+    {
+      for (int x = 0; x < p.width; x++)
+	{
+	  rgbdata d = (render.*sample_data) (x * p.stepx, y * p.stepy);
+	  if (!p.hdr)
+	    {
+	      int rr, gg, bb;
+	      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+	      out.put_pixel (x, rr, gg, bb);
+	    }
+	  else
+	    {
+	      luminosity_t rr, gg, bb;
+	      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+	      out.put_hdr_pixel (x, rr, gg, bb);
+	    }
+	}
+      if (!out.write_row ())
+	return "Write error";
+      if (progress && progress->cancel_requested ())
+	return "Cancelled";
+      if (progress)
+	progress->inc_progress ();
+      if (p.verbose)
+	print_progress (y, p.height);
+    }
+  return NULL;
+}
+
+}
+
+bool
+get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & param, image_data &scan, int *width, int *height, coord_t *stepx, coord_t *stepy, coord_t *dpi)
+{
+  render_parameters rparam;
+  switch (mode)
+    {
+    case none:
+    case corrected_color:
+    case interpolated:
+    case predictive:
+      {
+	render_img render (param, scan, rparam, 65535);
+	coord_t render_width = render.get_final_width ();
+	coord_t render_height = render.get_final_height ();
+	coord_t pixelsize = render.pixel_size ();
+	/* Interpolated mode makes no sense past 4 pixels per screen tile.  */
+	if (mode == interpolated)
+	  pixelsize = 0.25;
+	*width = render_width / pixelsize;
+	*height = render_height / pixelsize;
+	*stepx = pixelsize;
+	*stepy = pixelsize;
+	*dpi = 0;
+      }
+    }
+  return true;
 }
 
 /* Render image to TIFF file OUTFNAME.  */
@@ -220,6 +313,17 @@ render_to_file (enum output_mode mode, const char *outfname,
     icc_profile_len = rparam.get_icc_profile (&icc_profile);
 
   /* Initialize rendering engine.  */
+  produce_file_params pfparams;
+  pfparams.filename = outfname;
+  pfparams.hdr = hdr;
+  pfparams.verbose = verbose;
+  if (!get_rendered_file_dimensions (mode, param, scan, &pfparams.width, &pfparams.height, &pfparams.stepx, &pfparams.stepy, &pfparams.dpi))
+    {
+      *error = "Precomputation failed (out of memory)";
+      return false;
+    }
+  pfparams.icc_profile = icc_profile;
+  pfparams.icc_profile_len = icc_profile_len;
 
   switch (mode)
     {
@@ -236,71 +340,13 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	double render_width = render.get_final_width ();
-	double render_height = render.get_final_height ();
-	double out_stepx, out_stepy;
-	int outwidth;
-	int outheight;
 
-#if 0
-	/* FIXME: it should be same as realistic.  */
-	outwidth = render_width * 4;
-	outheight = render_height * 4;
-	out_stepy = out_stepx = 0.25;
-#endif
-	double pixelsize = render.pixel_size ();
-	//printf ("Pixel size:%f\n", pixelsize);
-	pixelsize = 0.119245;
-	outwidth = render_width / pixelsize;
-	outheight = render_height / pixelsize;
-	out_stepx = out_stepy = pixelsize;
-
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				scan.icc_profile, scan.icc_profile_size,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < outheight; y++)
-	      {
-		for (int x = 0; x < outwidth; x++)
-		  {
-		    int rr, gg, bb;
-		    render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-					 &bb);
-		    outrow[3 * x] = rr;
-		    outrow[3 * x + 1] = gg;
-		    outrow[3 * x + 2] = bb;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    scan.icc_profile, scan.icc_profile_size,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < outheight; y++)
-	      {
-		for (int x = 0; x < outwidth; x++)
-		  {
-		    luminosity_t rr, gg, bb;
-		    render.render_hdr_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-					 &bb);
-		    hdr_outrow[3 * x] = rr;
-		    hdr_outrow[3 * x + 1] = gg;
-		    hdr_outrow[3 * x + 2] = bb;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-	      }
-	  }
+	pfparams.icc_profile = scan.icc_profile;
+	pfparams.icc_profile_len = scan.icc_profile_size;
+	// TODO: For HDR output we want to linearize the ICC profile.
+	*error = produce_file<render_img, &render_img::sample_pixel_final> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
       break;
     case interpolated:
@@ -319,73 +365,10 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	double render_width = render.get_final_width ();
-	double render_height = render.get_final_height ();
-	double out_stepx, out_stepy;
-	int outwidth;
-	int outheight;
 
-	/* In predictive and combined mode try to stay close to scan resolution.  */
-	if (mode == predictive || mode == combined)
-	  {
-	    double pixelsize = render.pixel_size ();
-	    outwidth = render_width / pixelsize;
-	    outheight = render_height / pixelsize;
-	    out_stepx = out_stepy = pixelsize;
-	  }
-	/* Interpolated mode makes no sense past 4 pixels per screen tile.  */
-	else
-	  {
-	    outwidth = render_width * 4;
-	    outheight = render_height * 4;
-	    out_stepy = out_stepx = 0.25;
-	  }
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < outheight; y++)
-	      {
-		for (int x = 0; x < outwidth; x++)
-		  {
-		    int rr, gg, bb;
-		    render.render_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-					 &bb);
-		    outrow[3 * x] = rr;
-		    outrow[3 * x + 1] = gg;
-		    outrow[3 * x + 2] = bb;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < outheight; y++)
-	      {
-		for (int x = 0; x < outwidth; x++)
-		  {
-		    float rr, gg, bb;
-		    render.render_hdr_pixel_final (x * out_stepx, y * out_stepy, &rr, &gg,
-					 &bb);
-		    hdr_outrow[3 * x] = rr;
-		    hdr_outrow[3 * x + 1] = gg;
-		    hdr_outrow[3 * x + 2] = bb;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-	      }
-	  }
+	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
       break;
     case realistic:
@@ -460,6 +443,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	      }
 	  }
       }
+      TIFFClose (out);
       break;
     case detect_realistic:
       {
@@ -548,6 +532,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 		  print_progress (y, scan.height / downscale);
 	      }
 	  }
+	TIFFClose (out);
 	break;
       }
     case detect_adjusted:
@@ -638,6 +623,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	      }
 	  }
 	break;
+	TIFFClose (out);
       }
     case detect_nearest:
       {
@@ -726,6 +712,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 		  print_progress (y, scan.height / downscale);
 	      }
 	  }
+	TIFFClose (out);
       }
       break;
     case detect_nearest_scaled:
@@ -818,6 +805,7 @@ render_to_file (enum output_mode mode, const char *outfname,
 	      }
 	  }
       }
+      TIFFClose (out);
       break;
     case detect_relax:
       {
@@ -909,11 +897,11 @@ render_to_file (enum output_mode mode, const char *outfname,
 	      }
 	  }
       }
+      TIFFClose (out);
       break;
     default:
       abort ();
     }
-  TIFFClose (out);
   free (hdr_outrow);
   free (outrow);
   return true;

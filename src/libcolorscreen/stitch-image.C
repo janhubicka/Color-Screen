@@ -226,7 +226,12 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   other.load_img (progress);
   const char *error;
   std::string fname = (std::string)"diff" + filename + other.filename;
-  tiff_writer out (fname.c_str (), rwidth, rheight, 16, false, &error);
+  tiff_writer_params p;
+  p.filename = fname.c_str ();
+  p.width = rwidth;
+  p.height = rheight;
+  p.depth = 16;
+  tiff_writer out (p, &error);
   if (error)
     {
       progress->pause_stdout ();
@@ -731,6 +736,59 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
   return loaded;
 }
 
+bool
+stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *progress)
+{
+  bool loaded = false;
+  switch (mode)
+    {
+     case render_demosaiced:
+      if (!render)
+	{
+	  load_img (progress);
+	  render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
+	  render->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
+	}
+      else
+	lastused = ++current_time;
+      //assert (pixel_known_p (sx, sy));
+      render->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
+      break;
+     case render_original:
+      if (!render2)
+	{
+	  load_img (progress);
+	  render2 = new render_img (param, *img, passthrough_rparam, 65535);
+	  render2->set_color_display ();
+	  render2->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
+	}
+      else
+	lastused = ++current_time;
+      //assert (pixel_known_p (sx, sy));
+      render2->render_hdr_pixel (sx - xpos, sy - ypos, r, g, b);
+      break;
+     case render_predictive:
+      if (!render3)
+	{
+	  load_img (progress);
+	  render3 = new render_interpolate (param, *img, my_rparam, 65535, true, false);
+	  render3->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
+	}
+      else
+	lastused = ++current_time;
+      //assert (pixel_known_p (sx, sy));
+      render3->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
+      break;
+    }
+  return loaded;
+}
+
 /* Write one row.  */
 bool
 stitch_image::write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
@@ -1101,7 +1159,8 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
 	  TIFFClose (out);
 	  free (outrow);
 	  release_img ();
-	  return false;}
+	  return false;
+	}
     }
   progress->set_task ("Closing tile output file", 1);
   TIFFClose (out);

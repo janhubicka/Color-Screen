@@ -33,12 +33,14 @@ struct stitching_params
   bool individual_geometry_info;
   bool outliers_info;
   bool diffs;
+  bool hdr;
 
   int outer_tile_border;
   int inner_tile_border;
   int min_overlap_percentage;
   int max_overlap_percentage;
   int max_unknown_screen_range;
+  int downscale;
   luminosity_t max_contrast;
   luminosity_t orig_tile_gamma;
   luminosity_t min_patch_contrast;
@@ -64,8 +66,8 @@ struct stitching_params
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
-    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false),
-    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
+    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10)
   {}
 };
@@ -141,6 +143,7 @@ class stitch_image
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
   bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
+  bool render_hdr_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
@@ -192,7 +195,7 @@ public:
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
-   * TODO: Localize to analyze_angle.  */
+     TODO: Localize to analyze_angle.  */
   scr_to_img_parameters scr_param;
   bool analyze (int x, int y, progress_info *);
   void print_panorama_map (FILE *out);

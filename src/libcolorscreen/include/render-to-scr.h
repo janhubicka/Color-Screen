@@ -67,23 +67,24 @@ public:
   {
     return render_to_scr::precompute_all (!m_color, progress);
   }
+  inline rgbdata sample_pixel_img (coord_t x, coord_t y)
+  {
+    rgbdata ret;
+    if (!m_color)
+      ret.red = ret.green = ret.blue = get_img_pixel (x, y);
+    else
+      get_img_rgb_pixel (x, y, &ret.red, &ret.green, &ret.blue);
+    return ret;
+  }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    luminosity_t gg, rr, bb;
-    if (!m_color)
-      rr = gg = bb = get_img_pixel (x, y);
-    else
-      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
-    set_color (rr, gg, bb, r, g, b);
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue, r, g, b);
   }
   void inline render_hdr_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
-    luminosity_t gg, rr, bb;
-    if (!m_color)
-      rr = gg = bb = get_img_pixel (x, y);
-    else
-      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
-    set_hdr_color (rr, gg, bb, r, g, b);
+    rgbdata d = sample_pixel_img (x, y);
+    set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
   void inline fast_render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
@@ -109,6 +110,12 @@ public:
     coord_t xx, yy;
     m_scr_to_img.to_img (x, y, &xx, &yy);
     render_hdr_pixel_img (xx, yy, r, g, b);
+  }
+  inline rgbdata sample_pixel_final (coord_t x, coord_t y)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    return sample_pixel_img (xx, yy);
   }
   void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {

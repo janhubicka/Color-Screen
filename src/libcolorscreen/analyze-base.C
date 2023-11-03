@@ -730,7 +730,12 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 	    }
 	}
       const char *error;
-      tiff_writer out (name, 256, 256, 8, false, &error);
+      tiff_writer_params p;
+      p.filename = name;
+      p.width = 256;
+      p.height = 256;
+      p.depth = 8;
+      tiff_writer out (p, &error);
       if (error)
         {
 	  if (progress)
@@ -764,7 +769,12 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 bool
 analyze_base::write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress, luminosity_t rmin, luminosity_t rmax, luminosity_t gmin, luminosity_t gmax, luminosity_t bmin, luminosity_t bmax)
 {
-  tiff_writer out(filename, m_width, m_height, 16, 1, error);
+  tiff_writer_params p;
+  p.filename = filename;
+  p.width = m_width;
+  p.height = m_height;
+  p.alpha = true;
+  tiff_writer out(p, error);
   if (*error)
     return false;
   if (progress)

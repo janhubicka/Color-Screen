@@ -1,4 +1,5 @@
 #include <vector>
+#include <locale>
 #include "include/stitch.h"
 #include "include/tiff-writer.h"
 #include "render-interpolate.h"

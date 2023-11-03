@@ -31,6 +31,8 @@ print_help (const char *filename)
   printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
   printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
+  printf ("  --downscale= factor                         reduce size of predictive panorama\n");
+  printf ("  --hdr                                       output predictive and interpolated panorama in hdr\n");
   printf (" tiles to ouptut:\n");
   printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
   printf ("  --predictive-tiles                          store predictive tiles (for later blending)\n");
@@ -320,6 +322,7 @@ void stitch (progress_info *progress)
 	    }
 
   const coord_t xstep = prj->pixel_size, ystep = prj->pixel_size;
+  const coord_t pred_xstep = prj->pixel_size, pred_ystep = prj->pixel_size * prj->params.downscale;
   prj->passthrough_rparam.gray_max = prj->images[0][0].gray_max;
   if (prj->params.hugin_pto_filename.length ())
     produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
@@ -375,7 +378,7 @@ void stitch (progress_info *progress)
 		    {
 		      if ((prj->params.orig_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
 			  || (prj->params.demosaiced_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, 1, 1, stitch_image::render_demosaiced, progress))
-			  || (prj->params.predictive_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_predictive, progress)))
+			  || (prj->params.predictive_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
 			{
 			  fprintf (stderr, "Writting tile: %s\n", error);
 			  exit (1);
@@ -409,7 +412,7 @@ void stitch (progress_info *progress)
       for (int x = 0; x < prj->params.width; x++)
 	if ((prj->params.orig_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
 	    || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, 1, 1, stitch_image::render_demosaiced, progress))
-	    || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_predictive, progress)))
+	    || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
 	  {
 	    fprintf (stderr, "Writting tile: %s\n", error);
 	    exit (1);
@@ -554,6 +557,16 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--orig-tiles"))
 	{
 	  prj->params.orig_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--hdr"))
+	{
+	  prj->params.hdr = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--downscale=", strlen ("--downscale=")))
+	{
+	  prj->params.downscale = std::min (atoi (argv[i] + strlen ("--downscale=")), 1);
 	  continue;
 	}
       if (!strcmp (argv[i], "--screen-tiles"))

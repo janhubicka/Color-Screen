@@ -35,8 +35,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   return !progress || !progress->cancelled ();
 }
 
-flatten_attr void
-render_interpolate::render_pixel_scr_int (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b, luminosity_t *lum)
+flatten_attr rgbdata
+render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 {
   luminosity_t red, green, blue;
   int xshift, yshift;
@@ -158,9 +158,7 @@ render_interpolate::render_pixel_scr_int (coord_t x, coord_t y, luminosity_t *r,
 #endif
       correction = std::max (std::min (correction, (luminosity_t)5.0), (luminosity_t)0.0);
 
-      *r = red * correction;
-      *g = green * correction;
-      *b = blue * correction;
+      return {red * correction, green * correction, blue * correction};
 #if 0
       red = std::min (1.0, std::max (0.0, red));
       green = std::min (1.0, std::max (0.0, green));
@@ -175,43 +173,27 @@ render_interpolate::render_pixel_scr_int (coord_t x, coord_t y, luminosity_t *r,
       //set_color_luminosity (red, green, blue, lum / llum * (red + green + blue)*0.333, r, g, b);
 #endif
     }
-  else if (m_adjust_luminosity && lum)
+  else if (m_adjust_luminosity)
     {
-      *r = red;
-      *g = green;
-      *b = blue;
-      *lum = get_img_pixel_scr (x - xshift, y - yshift);
+      luminosity_t lum = get_img_pixel_scr (x - xshift, y - yshift);
+      m_color_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
+      luminosity_t l = red * rwght + green * gwght + blue * bwght;
+      luminosity_t gr = (red * rwght + green * gwght + blue * bwght);
+      if (gr <= 0.00001 || l <= 0.00001)
+	red = green = blue = l;
+      else
+	{
+	  gr = l / gr;
+	  red *= gr;
+	  green *= gr;
+	  blue *= gr;
+	}
+      // TODO: Inverse color matrix can be stored.
+      m_color_matrix.invert ().apply_to_rgb (red, green, blue, &red, &green, &blue);
+      return {red, green, blue};
     }
   else
-    {
-      *r = red;
-      *g = green;
-      *b = blue;
-      //set_color (red, green, blue, r, g, b);
-    }
-}
-flatten_attr void
-render_interpolate::render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
-{
-  luminosity_t red, green, blue, lum = 0;
-  render_pixel_scr_int (x, y, &red, &green, &blue, &lum);
-  if (m_adjust_luminosity)
-    set_color_luminosity (red, green, blue, lum, r, g, b);
-  else
-    set_color (red, green, blue, r, g, b);
-}
-flatten_attr void
-render_interpolate::render_hdr_pixel_scr (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
-{
-  luminosity_t red, green, blue, lum = 0;
-  render_pixel_scr_int (x, y, &red, &green, &blue, &lum);
-  /* TODO: Implement or drop.  */
-#if 0
-  if (m_adjust_luminosity)
-    set_color_luminosity (red, green, blue, lum, r, g, b);
-  else
-#endif
-    set_hdr_color (red, green, blue, r, g, b);
+    return {red, green, blue};
 }
 
 render_interpolate::~render_interpolate ()

@@ -304,7 +304,6 @@ public:
   inline luminosity_t get_data_blue (int x, int y);
 
 protected:
-  inline void set_color_luminosity (luminosity_t, luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
   bool precompute_all (bool grayscale_needed, progress_info *progress);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
@@ -473,6 +472,7 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
   *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
 }
 
+#if 0
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval
    combining color and luminosity information.  */
 
@@ -505,6 +505,7 @@ render::set_color_luminosity (luminosity_t r, luminosity_t g, luminosity_t b, lu
   *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
   *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
 }
+#endif
 
 /* Determine grayscale value at a given position in the image.  */
 

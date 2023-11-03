@@ -277,13 +277,13 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
-  rgbdata fast_sample_pixel_img (int x, int y);
+  inline rgbdata fast_sample_pixel_img (int x, int y);
+  inline rgbdata sample_pixel_img (coord_t x, coord_t y);
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, progress);
   }
 private:
-  void inline sample_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
 };
 flatten_attr inline rgbdata
 render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y)
@@ -294,22 +294,20 @@ render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y)
   rgbdata ret = {graydata * rr, graydata * gg, graydata * bb};
   return ret;
 }
-flatten_attr inline void
-render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+flatten_attr inline rgbdata
+render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y)
 {
   luminosity_t rr, gg, bb;
   get_screen_color (x, y, &rr, &gg, &bb);
   luminosity_t graydata = get_img_pixel (x, y);
-  *r = graydata * rr;
-  *g = graydata * gg;
-  *b = graydata * bb;
+  rgbdata ret = {graydata * rr, graydata * gg, graydata * bb};
+  return ret;
 }
 flatten_attr void
 render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
 {
-  luminosity_t rr, gg, bb;
-  sample_pixel_img (x, y, &rr, &gg, &bb);
-  set_color (rr, gg, bb, r,g,b);
+  rgbdata d = sample_pixel_img (x, y);
+  set_color (d.red, d.green, d.blue, r,g,b);
 }
 
 inline void

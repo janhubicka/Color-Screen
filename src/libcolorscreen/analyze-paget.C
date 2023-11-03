@@ -199,7 +199,12 @@ analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 bool
 analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress, luminosity_t rmin, luminosity_t rmax, luminosity_t gmin, luminosity_t gmax, luminosity_t bmin, luminosity_t bmax)
 {
-  tiff_writer out(filename, 2*m_width, 2*m_height, 16, 1, error);
+  tiff_writer_params p;
+  p.filename = filename;
+  p.width = 2 * m_width;
+  p.height = 2 * m_height;
+  p.alpha = true;
+  tiff_writer out(p, error);
   if (*error)
     return false;
   if (progress)
