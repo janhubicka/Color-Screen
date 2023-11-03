@@ -76,9 +76,10 @@ tiff_writer::write_row ()
 }
 tiff_writer::~tiff_writer()
 {
-   if (out)
-     TIFFClose (out);
-   out = NULL;
-   free (outrow);
-   outrow = NULL;
+  //progress->set_task ("Closing tile output file", 1);
+  if (out)
+    TIFFClose (out);
+  out = NULL;
+  free (outrow);
+  outrow = NULL;
 }

@@ -177,7 +177,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
     {
       luminosity_t lum = get_img_pixel_scr (x - xshift, y - yshift);
       m_color_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
-      luminosity_t l = red * rwght + green * gwght + blue * bwght;
+      luminosity_t l = lum;
       luminosity_t gr = (red * rwght + green * gwght + blue * bwght);
       if (gr <= 0.00001 || l <= 0.00001)
 	red = green = blue = l;

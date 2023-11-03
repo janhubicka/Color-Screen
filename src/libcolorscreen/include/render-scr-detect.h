@@ -82,7 +82,7 @@ public:
     render_type_scr_nearest_scaled,
     render_type_scr_relax
   };
-  void get_adjusted_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  rgbdata get_adjusted_pixel (coord_t xp, coord_t yp)
   {
     xp -= (coord_t)0.5;
     yp -= (coord_t)0.5;
@@ -96,24 +96,26 @@ public:
         for (int yy = -1; yy <= 2; yy++)
           for (int xx = -1; xx <= 2; xx++)
   	    d[yy+1][xx+1] = /*fast_get_adjusted_pixel (sx + xx, sy + yy);*/ m_precomputed_rgbdata[(yy + sy) * m_img.width + (xx + sx)];
-	*r = cubic_interpolate (cubic_interpolate (d[0][0].red, d[1][0].red, d[2][0].red, d[3][0].red, ry),
+	luminosity_t rr,gg, bb;
+	rr = cubic_interpolate (cubic_interpolate (d[0][0].red, d[1][0].red, d[2][0].red, d[3][0].red, ry),
 				cubic_interpolate (d[0][1].red, d[1][1].red, d[2][1].red, d[3][1].red, ry),
 				cubic_interpolate (d[0][2].red, d[1][2].red, d[2][2].red, d[3][2].red, ry),
 				cubic_interpolate (d[0][3].red, d[1][3].red, d[2][3].red, d[3][3].red, ry),
 				rx);
-	*g = cubic_interpolate (cubic_interpolate (d[0][0].green, d[1][0].green, d[2][0].green, d[3][0].green, ry),
+	gg = cubic_interpolate (cubic_interpolate (d[0][0].green, d[1][0].green, d[2][0].green, d[3][0].green, ry),
 				cubic_interpolate (d[0][1].green, d[1][1].green, d[2][1].green, d[3][1].green, ry),
 				cubic_interpolate (d[0][2].green, d[1][2].green, d[2][2].green, d[3][2].green, ry),
 				cubic_interpolate (d[0][3].green, d[1][3].green, d[2][3].green, d[3][3].green, ry),
 				rx);
-	*b = cubic_interpolate (cubic_interpolate (d[0][0].blue, d[1][0].blue, d[2][0].blue, d[3][0].blue, ry),
+	bb = cubic_interpolate (cubic_interpolate (d[0][0].blue, d[1][0].blue, d[2][0].blue, d[3][0].blue, ry),
 				cubic_interpolate (d[0][1].blue, d[1][1].blue, d[2][1].blue, d[3][1].blue, ry),
 				cubic_interpolate (d[0][2].blue, d[1][2].blue, d[2][2].blue, d[3][2].blue, ry),
 				cubic_interpolate (d[0][3].blue, d[1][3].blue, d[2][3].blue, d[3][3].blue, ry),
 				rx);
+	return {rr, gg, bb};
       }
     else
-      *r = *g = *b = 0;
+      return {0, 0, 0};
   }
   static rgbdata
   normalize_color (rgbdata c)
@@ -339,28 +341,23 @@ public:
   { 
   }
   bool precompute_all (progress_info *);
-  void
-  render_raw_pixel_img (coord_t xx, coord_t yy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy)
   {
     int x = xx + 0.5;
     int y = yy + 0.5;
     if (x < 0 || x > m_img.width || y < 0 || y > m_img.height)
-    {
-      *r = *g = *b = 0;
-    }
+      return {0,0,0};
     else
-    {
-    *r = get_luminosity (0, x, y);
-    *g = get_luminosity (1, x, y);
-    *b = get_luminosity (2, x, y);
-    }
+      return {get_luminosity (0, x, y),
+	      get_luminosity (1, x, y),
+	      get_luminosity (2, x, y)};
   }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    luminosity_t rr, gg, bb;
-    render_raw_pixel_img (x, y, &rr, &gg, &bb);
-    set_color (rr,gg,bb,r,g,b);
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue,r,g,b);
   }
   ~render_scr_relax();
 private:
@@ -435,8 +432,8 @@ public:
   }
   ~render_scr_nearest_scaled ();
   bool precompute_all (progress_info *);
-  void
-  render_raw_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  rgbdata
+  sample_pixel_img (coord_t x, coord_t y)
   {
     int rx[3], ry[3];
     patches::patch_index_t ri[3];
@@ -444,11 +441,13 @@ public:
       {
 #if 1
 	patches::patch p = m_patches->get_patch (ri[0]);
-	*r = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	rgbdata ret;
+	ret.red = p.luminosity_sum / (luminosity_t) p.overall_pixels;
 	p = m_patches->get_patch (ri[1]);
-	*g = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	ret.green = p.luminosity_sum / (luminosity_t) p.overall_pixels;
 	p = m_patches->get_patch (ri[2]);
-	*b = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	ret.blue = p.luminosity_sum / (luminosity_t) p.overall_pixels;
+	return ret;
 #else
 	luminosity_t rr;
 	rr = ((ri[0] & 15) + 1) / 17.0;
@@ -464,18 +463,13 @@ public:
 #endif
       }
     else
-    {
-      *r = 0;
-      *g = 0;
-      *b = 0;
-    }
+      return {0, 0, 0};
   }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    luminosity_t rr, gg, bb;
-    render_raw_pixel_img (x, y, &rr, &gg, &bb);
-    set_color (rr,gg,bb,r,g,b);
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue,r,g,b);
   }
 private:
   patches *m_patches;

@@ -55,6 +55,8 @@ parse_mode (const char *mode)
     return combined;
   else if (!strcmp (mode, "detect-realistic"))
     return detect_realistic;
+  else if (!strcmp (mode, "detect-adjusted"))
+    return detect_adjusted;
   else if (!strcmp (mode, "detect-nearest"))
     return detect_nearest;
   else if (!strcmp (mode, "detect-nearest-scaled"))

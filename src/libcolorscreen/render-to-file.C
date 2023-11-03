@@ -46,149 +46,6 @@ print_progress (int p, int max)
     }
 }
 
-/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
-   File will be 16bit RGB TIFF.
-   Allocate output buffer to hold single row to OUTROW.  */
-static TIFF *
-open_output_file (const char *outfname, int outwidth, int outheight,
-		  uint16_t ** outrow, bool verbose,
-		  void *icc_profile, size_t icc_profile_len,
-		  const char **error,
-		  progress_info *progress)
-{
-  TIFF *out = TIFFOpen (outfname, "wb");
-  if (!out)
-    {
-      *error = "can not open output file";
-      return NULL;
-    }
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
-      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
-      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
-      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
-      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
-      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || (icc_profile && !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t)icc_profile_len, icc_profile)))
-    {
-      *error = "write error";
-      return NULL;
-    }
-  *outrow = (uint16_t *) malloc (outwidth * 2 * 3);
-  if (!outrow)
-    {
-      *error = "Out of memory allocating output buffer";
-      return NULL;
-    }
-  if (progress)
-    {
-      progress->set_task ("Rendering and saving", outheight);
-    }
-  if (verbose)
-    {
-      printf ("Rendering %s in resolution %ix%i: 00%%", outfname, outwidth,
-	      outheight);
-      fflush (stdout);
-      record_time ();
-    }
-  return out;
-}
-
-/* Write one row.  */
-static bool
-write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
-{
-  if (progress && progress->cancel_requested ())
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Cancelled";
-      return false;
-    }
-  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Write error";
-      return false;
-    }
-   if (progress)
-     progress->inc_progress ();
-  return true;
-}
-
-/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
-   File will be 16bit RGB TIFF.
-   Allocate output buffer to hold single row to OUTROW.  */
-static TIFF *
-open_hdr_output_file (const char *outfname, int outwidth, int outheight,
-		      float ** outrow, bool verbose,
-		      void *icc_profile, size_t icc_profile_len,
-		      const char **error,
-		      progress_info *progress)
-{
-  TIFF *out = TIFFOpen (outfname, "wb");
-  if (!out)
-    {
-      *error = "can not open output file";
-      return NULL;
-    }
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
-      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
-      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 32)
-      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP)
-      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
-      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
-      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || (icc_profile && !TIFFSetField (out, TIFFTAG_ICCPROFILE, (uint32_t)icc_profile_len, icc_profile)))
-    {
-      *error = "write error";
-      return NULL;
-    }
-  *outrow = (float *) malloc (outwidth * 4 * 3);
-  if (!outrow)
-    {
-      *error = "Out of memory allocating output buffer";
-      return NULL;
-    }
-  if (progress)
-    {
-      progress->set_task ("Rendering and saving", outheight);
-    }
-  if (verbose)
-    {
-      printf ("Rendering %s in resolution %ix%i: 00%%", outfname, outwidth,
-	      outheight);
-      fflush (stdout);
-      record_time ();
-    }
-  return out;
-}
-
-/* Write one row.  */
-static bool
-write_hdr_row (TIFF * out, int y, float * outrow, const char **error, progress_info *progress)
-{
-  if (progress && progress->cancel_requested ())
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Cancelled";
-      return false;
-    }
-  if (TIFFWriteScanline (out, outrow, y, 0) < 0)
-    {
-      free (outrow);
-      TIFFClose (out);
-      *error = "Write error";
-      return false;
-    }
-   if (progress)
-     progress->inc_progress ();
-  return true;
-}
-
 struct produce_file_params
 {
   const char *filename;
@@ -198,12 +55,13 @@ struct produce_file_params
   bool verbose;
   void *icc_profile;
   size_t icc_profile_len;
+  int antialias;
   coord_t dpi;
 };
 
 template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y)>
 const char *
-produce_file (produce_file_params &p, T &render, progress_info *progress)
+produce_file (produce_file_params p, T &render, progress_info *progress)
 {
   const char *error = NULL;
   tiff_writer_params tp;
@@ -225,20 +83,55 @@ produce_file (produce_file_params &p, T &render, progress_info *progress)
     }
   for (int y = 0; y < p.height; y++)
     {
-      for (int x = 0; x < p.width; x++)
+      if (p.antialias == 1)
 	{
-	  rgbdata d = (render.*sample_data) (x * p.stepx, y * p.stepy);
-	  if (!p.hdr)
+#pragma omp parallel for default(none) shared(p,render,y,out)
+	  for (int x = 0; x < p.width; x++)
 	    {
-	      int rr, gg, bb;
-	      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-	      out.put_pixel (x, rr, gg, bb);
+	      rgbdata d = (render.*sample_data) (x * p.stepx, y * p.stepy);
+	      if (!p.hdr)
+		{
+		  int rr, gg, bb;
+		  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		  out.put_pixel (x, rr, gg, bb);
+		}
+	      else
+		{
+		  luminosity_t rr, gg, bb;
+		  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		  out.put_hdr_pixel (x, rr, gg, bb);
+		}
 	    }
-	  else
+	}
+      else
+	{
+	  coord_t asx = p.stepx / p.antialias;
+	  coord_t asy = p.stepy / p.antialias;
+	  luminosity_t sc = 1.0 / (p.antialias * p.antialias);
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc)
+	  for (int x = 0; x < p.width; x++)
 	    {
-	      luminosity_t rr, gg, bb;
-	      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-	      out.put_hdr_pixel (x, rr, gg, bb);
+	      rgbdata d = {0, 0, 0};
+	      for (int ay = 0 ; ay < p.antialias; ay++)
+		for (int ax = 0 ; ax < p.antialias; ax++)
+		  {
+		    d += (render.*sample_data) (x * p.stepx + ax * asx, y * p.stepy + ay * asy);
+		  }
+	      d.red *= sc;
+	      d.green *= sc;
+	      d.blue *= sc;
+	      if (!p.hdr)
+		{
+		  int rr, gg, bb;
+		  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		  out.put_pixel (x, rr, gg, bb);
+		}
+	      else
+		{
+		  luminosity_t rr, gg, bb;
+		  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		  out.put_hdr_pixel (x, rr, gg, bb);
+		}
 	    }
 	}
       if (!out.write_row ())
@@ -256,7 +149,7 @@ produce_file (produce_file_params &p, T &render, progress_info *progress)
 }
 
 bool
-get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & param, image_data &scan, int *width, int *height, coord_t *stepx, coord_t *stepy, coord_t *dpi)
+get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & param, image_data &scan, int *width, int *height, coord_t *stepx, coord_t *stepy, int *antialias, coord_t *dpi)
 {
   render_parameters rparam;
   switch (mode)
@@ -265,6 +158,10 @@ get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & par
     case corrected_color:
     case interpolated:
     case predictive:
+    case combined:
+    case realistic:
+    case preview_grid:
+    case color_preview_grid:
       {
 	render_img render (param, scan, rparam, 65535);
 	coord_t render_width = render.get_final_width ();
@@ -273,12 +170,33 @@ get_rendered_file_dimensions (enum output_mode mode, scr_to_img_parameters & par
 	/* Interpolated mode makes no sense past 4 pixels per screen tile.  */
 	if (mode == interpolated)
 	  pixelsize = 0.25;
+	*antialias = 1;
+	if (mode == predictive || mode == realistic)
+	  *antialias = 4;
 	*width = render_width / pixelsize;
 	*height = render_height / pixelsize;
 	*stepx = pixelsize;
 	*stepy = pixelsize;
 	*dpi = 0;
       }
+      break;
+    case detect_realistic:
+    case detect_adjusted:
+    case detect_nearest:
+    case detect_nearest_scaled:
+    case detect_relax:
+      {
+	*width = scan.width;
+	*height = scan.height;
+	if (mode == detect_realistic || mode == detect_adjusted)
+	  *antialias = 4;
+	else
+	  *antialias = 1;
+	*stepx = 1;
+	*stepy = 1;
+	*dpi = 0;
+      }
+      break;
     }
   return true;
 }
@@ -297,17 +215,14 @@ render_to_file (enum output_mode mode, const char *outfname,
       fflush (stdout);
       record_time ();
     }
-  TIFF *out;
-  uint16_t *outrow = NULL;
-  float *hdr_outrow = NULL;
   void *icc_profile = sRGB_icc;
   size_t icc_profile_len = sRGB_icc_len;
 
-  //if (hdrmode == none || mode == corrected_color))
-    //hdr = false;
-
   if (hdr)
-    rparam.output_gamma = 1;
+    {
+      rparam.output_gamma = 1;
+      rparam.output_profile = render_parameters::output_profile_original;
+    }
 
   if (rparam.output_profile == render_parameters::output_profile_original)
     icc_profile_len = rparam.get_icc_profile (&icc_profile);
@@ -317,7 +232,7 @@ render_to_file (enum output_mode mode, const char *outfname,
   pfparams.filename = outfname;
   pfparams.hdr = hdr;
   pfparams.verbose = verbose;
-  if (!get_rendered_file_dimensions (mode, param, scan, &pfparams.width, &pfparams.height, &pfparams.stepx, &pfparams.stepy, &pfparams.dpi))
+  if (!get_rendered_file_dimensions (mode, param, scan, &pfparams.width, &pfparams.height, &pfparams.stepx, &pfparams.stepy, &pfparams.antialias, &pfparams.dpi))
     {
       *error = "Precomputation failed (out of memory)";
       return false;
@@ -385,65 +300,12 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int scale = 1;
-	int outwidth = scan.width;
-	int outheight = scan.height;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				/* TODO: Maybe preview_grid and color_preview_grid
-				   should be in the scan profile.  */
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height * scale; y++)
-	      {
-		for (int x = 0; x < scan.width * scale; x++)
-		  {
-		    int rr, gg, bb;
-		    render.render_pixel_img_antialias (x / (double) scale,
-						       y / (double) scale,
-						       1.0 / scale, 128, &rr, &gg,
-						       &bb);
-		    outrow[3 * x] = rr;
-		    outrow[3 * x + 1] = gg;
-		    outrow[3 * x + 2] = bb;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    /* TODO: Maybe preview_grid and color_preview_grid
-				       should be in the scan profile.  */
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height * scale; y++)
-	      {
-		for (int x = 0; x < scan.width * scale; x++)
-		  {
-		    luminosity_t rr, gg, bb;
-		    render.render_hdr_pixel_img_antialias (x / (double) scale,
-							   y / (double) scale,
-							   1.0 / scale, 128, &rr, &gg,
-							   &bb);
-		    hdr_outrow[3 * x] = rr;
-		    hdr_outrow[3 * x + 1] = gg;
-		    hdr_outrow[3 * x + 2] = bb;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-	      }
-	  }
+	/* TODO: Maybe preview_grid and color_preview_grid
+	   should be in the scan profile.  */
+	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
-      TIFFClose (out);
       break;
     case detect_realistic:
       {
@@ -455,84 +317,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 1;
-	int outwidth = scan.width / downscale;
-	int outheight = scan.height / downscale;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.fast_sample_pixel_img (x * downscale + xx,
-							  y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    int r, g, b;
-		    render.set_color (srr / (downscale * downscale),
-				      sgg / (downscale * downscale),
-				      sbb / (downscale * downscale), &r, &g, &b);
-		    outrow[3 * x] = r;
-		    outrow[3 * x + 1] = g;
-		    outrow[3 * x + 2] = b;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.fast_sample_pixel_img (x * downscale + xx,
-							  y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    float r, g, b;
-		    render.set_hdr_color (srr / (downscale * downscale),
-					  sgg / (downscale * downscale),
-					  sbb / (downscale * downscale), &r, &g, &b);
-		    hdr_outrow[3 * x] = r;
-		    hdr_outrow[3 * x + 1] = g;
-		    hdr_outrow[3 * x + 2] = b;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	TIFFClose (out);
+	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img> (pfparams, render, progress);
+	if (*error)
+	  return false;
 	break;
       }
     case detect_adjusted:
@@ -545,85 +332,10 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 1;
-	int outwidth = scan.width / downscale;
-	int outheight = scan.height / downscale;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				sRGB_icc, sRGB_icc_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.fast_get_adjusted_pixel (x * downscale + xx,
-							    y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    int r, g, b;
-		    render.set_color (srr / (downscale * downscale),
-				      sgg / (downscale * downscale),
-				      sbb / (downscale * downscale), &r, &g, &b);
-		    outrow[3 * x] = r;
-		    outrow[3 * x + 1] = g;
-		    outrow[3 * x + 2] = b;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    sRGB_icc, sRGB_icc_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.fast_get_adjusted_pixel (x * downscale + xx,
-							    y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    luminosity_t r, g, b;
-		    render.set_hdr_color (srr / (downscale * downscale),
-					  sgg / (downscale * downscale),
-					  sbb / (downscale * downscale), &r, &g, &b);
-		    hdr_outrow[3 * x] = r;
-		    hdr_outrow[3 * x + 1] = g;
-		    hdr_outrow[3 * x + 2] = b;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
+	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel> (pfparams, render, progress);
+	if (*error)
+	  return false;
 	break;
-	TIFFClose (out);
       }
     case detect_nearest:
       {
@@ -635,84 +347,9 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 1;
-	int outwidth = scan.width / downscale;
-	int outheight = scan.height / downscale;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.sample_pixel_img (x * downscale + xx,
-						     y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    int r, g, b;
-		    render.set_color (srr / (downscale * downscale),
-				      sgg / (downscale * downscale),
-				      sbb / (downscale * downscale), &r, &g, &b);
-		    outrow[3 * x] = r;
-		    outrow[3 * x + 1] = g;
-		    outrow[3 * x + 2] = b;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  rgbdata rgb =
-			    render.sample_pixel_img (x * downscale + xx,
-						     y * downscale + yy);
-			  srr += rgb.red;
-			  sgg += rgb.green;
-			  sbb += rgb.blue;
-			}
-		    luminosity_t r, g, b;
-		    render.set_hdr_color (srr / (downscale * downscale),
-					  sgg / (downscale * downscale),
-					  sbb / (downscale * downscale), &r, &g, &b);
-		    hdr_outrow[3 * x] = r;
-		    hdr_outrow[3 * x + 1] = g;
-		    hdr_outrow[3 * x + 2] = b;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	TIFFClose (out);
+	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
       break;
     case detect_nearest_scaled:
@@ -725,87 +362,10 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 1;
-	int outwidth = scan.width / downscale;
-	int outheight = scan.height / downscale;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  luminosity_t rr, gg, bb;
-			  render.render_raw_pixel_img (x * downscale + xx,
-						       y * downscale + yy,
-						       &rr, &gg, &bb);
-			  srr += rr;
-			  sgg += gg;
-			  sbb += bb;
-			}
-		    int r, g, b;
-		    render.set_color (srr / (downscale * downscale),
-				      sgg / (downscale * downscale),
-				      sbb / (downscale * downscale), &r, &g, &b);
-		    outrow[3 * x] = r;
-		    outrow[3 * x + 1] = g;
-		    outrow[3 * x + 2] = b;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  luminosity_t rr, gg, bb;
-			  render.render_raw_pixel_img (x * downscale + xx,
-						       y * downscale + yy,
-						       &rr, &gg, &bb);
-			  srr += rr;
-			  sgg += gg;
-			  sbb += bb;
-			}
-		    luminosity_t r, g, b;
-		    render.set_hdr_color (srr / (downscale * downscale),
-					  sgg / (downscale * downscale),
-					  sbb / (downscale * downscale), &r, &g, &b);
-		    hdr_outrow[3 * x] = r;
-		    hdr_outrow[3 * x + 1] = g;
-		    hdr_outrow[3 * x + 2] = b;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
+	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
-      TIFFClose (out);
       break;
     case detect_relax:
       {
@@ -817,92 +377,13 @@ render_to_file (enum output_mode mode, const char *outfname,
 	  }
 	if (verbose)
 	  print_time ();
-	int downscale = 1;
-	int outwidth = scan.width / downscale;
-	int outheight = scan.height / downscale;
-	if (!hdr)
-	  {
-	    out =
-	      open_output_file (outfname, outwidth, outheight, &outrow, verbose,
-				icc_profile, icc_profile_len,
-				error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  luminosity_t rr, gg, bb;
-			  render.render_raw_pixel_img (x * downscale + xx,
-						       y * downscale + yy,
-						       &rr, &gg, &bb);
-			  srr += rr;
-			  sgg += gg;
-			  sbb += bb;
-			}
-		    int r, g, b;
-		    render.set_color (srr / (downscale * downscale),
-				      sgg / (downscale * downscale),
-				      sbb / (downscale * downscale), &r, &g, &b);
-		    outrow[3 * x] = r;
-		    outrow[3 * x + 1] = g;
-		    outrow[3 * x + 2] = b;
-		  }
-		if (!write_row (out, y, outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
-	else
-	  {
-	    out =
-	      open_hdr_output_file (outfname, outwidth, outheight, &hdr_outrow, verbose,
-				    icc_profile, icc_profile_len,
-				    error, progress);
-	    if (!out)
-	      return false;
-	    for (int y = 0; y < scan.height / downscale; y++)
-	      {
-		for (int x = 0; x < scan.width / downscale; x++)
-		  {
-		    luminosity_t srr = 0, sgg = 0, sbb = 0;
-		    for (int yy = 0; yy < downscale; yy++)
-		      for (int xx = 0; xx < downscale; xx++)
-			{
-			  luminosity_t rr, gg, bb;
-			  render.render_raw_pixel_img (x * downscale + xx,
-						       y * downscale + yy,
-						       &rr, &gg, &bb);
-			  srr += rr;
-			  sgg += gg;
-			  sbb += bb;
-			}
-		    luminosity_t r, g, b;
-		    render.set_hdr_color (srr / (downscale * downscale),
-					  sgg / (downscale * downscale),
-					  sbb / (downscale * downscale), &r, &g, &b);
-		    hdr_outrow[3 * x] = r;
-		    hdr_outrow[3 * x + 1] = g;
-		    hdr_outrow[3 * x + 2] = b;
-		  }
-		if (!write_hdr_row (out, y, hdr_outrow, error, progress))
-		  return false;
-		if (verbose)
-		  print_progress (y, scan.height / downscale);
-	      }
-	  }
+	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img> (pfparams, render, progress);
+	if (*error)
+	  return false;
       }
-      TIFFClose (out);
       break;
     default:
       abort ();
     }
-  free (hdr_outrow);
-  free (outrow);
   return true;
 }

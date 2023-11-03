@@ -735,11 +735,11 @@ confirm (render_scr_detect *render,
       {
         if (xx == -sample_steps - outer_space + 1 || xx == sample_steps)
 	  xx += outer_space;
-	luminosity_t color[3];
 	coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_x;
 	coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_y + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_y;
 
-	render->get_adjusted_pixel (ax, ay, &color[0], &color[1], &color[2]);
+	rgbdata d = render->get_adjusted_pixel (ax, ay);
+	luminosity_t color[3] = {d.red, d.green, d.blue};
 
 	luminosity_t sum = color[0]+color[1]+color[2];
 	color[0] = std::max (color[0], (luminosity_t)0);
