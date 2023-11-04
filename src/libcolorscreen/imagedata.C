@@ -666,7 +666,7 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
 }
 
 bool
-image_data::load_part (int *permille, const char **error)
+image_data::load_part (int *permille, const char **error, progress_info *progress)
 {
   if (stitch)
     {
@@ -678,7 +678,7 @@ image_data::load_part (int *permille, const char **error)
 	  else
 	    {
 	      *permille = n * 1000 / (stitch->params.width * stitch->params.height);
-	      return (stitch->images[y][x].load_img (error, NULL));
+	      return (stitch->images[y][x].load_img (error, progress));
 	    }
       *permille = 1000;
       return true;
@@ -717,7 +717,7 @@ image_data::load (const char *name, const char **error, progress_info *progress)
 
   if (progress)
     progress->set_task ("loading",1000);
-  while (load_part (&permille, error))
+  while (load_part (&permille, error, progress))
     {
       if (permille == 1000)
 	return true;

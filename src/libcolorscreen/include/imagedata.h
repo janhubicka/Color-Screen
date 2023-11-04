@@ -50,7 +50,7 @@ public:
   /* Load part of image. Initialize PERMILLE to status.
      If PERMILLE==1000 loading is finished.
      If false is returned ERROR is initialized.  */
-  DLL_PUBLIC bool load_part (int *permille, const char **error);
+  DLL_PUBLIC bool load_part (int *permille, const char **error, progress_info *progress = NULL);
 
   /* Allocate memory.  */
   DLL_PUBLIC bool allocate ();

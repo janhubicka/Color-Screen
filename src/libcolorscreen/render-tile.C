@@ -281,6 +281,13 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	{
 	  coord_t py = (y + yoffset) * step + img.ymin;
 	  img.stitch->set_render_param (rparam);
+	  enum stitch_image::render_mode mode2 = stitch_image::render_demosaiced;
+	  if (render_type == render_type_fast)
+	    mode2 = stitch_image::render_fast_stitch;
+	  if (render_type == render_type_original)
+	    mode2 = stitch_image::render_original;
+	  if (render_type == render_type_predictive)
+	    mode2 = stitch_image::render_predictive;
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < width; x++)
 	      {
@@ -299,7 +306,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 
 		if (iy != img.stitch->params.height)
 		  {
-		    img.stitch->images[iy][ix].render_pixel (255, sx, sy, stitch_image::render_demosaiced, &r, &g, &b, progress);
+		    img.stitch->images[iy][ix].render_pixel (255, sx, sy, mode2, &r, &g, &b, progress);
 		    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 		  }
 		else

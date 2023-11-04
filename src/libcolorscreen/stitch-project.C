@@ -460,7 +460,12 @@ stitch_project::set_render_param (render_parameters &my_rparam)
 	    if (images[y][x].render3)
 	      {
 		delete images[y][x].render3;
-		images[y][x].render = NULL;
+		images[y][x].render3 = NULL;
+	      }
+	    if (images[y][x].render4)
+	      {
+		delete images[y][x].render4;
+		images[y][x].render4 = NULL;
 	      }
 	  }
     }

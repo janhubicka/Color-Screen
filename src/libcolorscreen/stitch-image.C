@@ -15,7 +15,7 @@ stitch_image::stitch_image ()
 : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (NULL), known_pixels (NULL),
-  render (NULL), render2 (NULL), render3 (NULL), stitch_info (NULL), refcount (0)
+  render (NULL), render2 (NULL), render3 (NULL), render4 (NULL), stitch_info (NULL), refcount (0)
 {
 }
 
@@ -24,6 +24,7 @@ stitch_image::~stitch_image ()
   delete render;
   delete render2;
   delete render3;
+  delete render4;
   delete img;
   delete mesh_trans;
   delete known_pixels;
@@ -761,6 +762,21 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode
 	lastused = ++current_time;
       //assert (pixel_known_p (sx, sy));
       render3->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
+      break;
+     case render_fast_stitch:
+      if (!render4)
+	{
+	  if (!load_img (&error, progress))
+	    return false;
+	  render4 = new render_fast (param, *img, m_prj->rparam, maxval);
+	  render4->precompute_all (progress);
+	  release_img ();
+	  loaded = true;
+	}
+      else
+	lastused = ++current_time;
+      //assert (pixel_known_p (sx, sy));
+      render4->render_pixel (sx - xpos, sy - ypos, r, g, b);
       break;
     case render_max:
       abort ();

@@ -76,6 +76,7 @@ struct stitching_params
 };
 
 class render_interpolate;
+class render_fast;
 class stitch_project;
 
 class stitch_image
@@ -87,6 +88,7 @@ class stitch_image
     render_demosaiced,
     render_predictive,
     render_original,
+    render_fast_stitch,
     render_max
   };
   std::string filename;
@@ -115,6 +117,7 @@ class stitch_image
   render_interpolate *render;
   render_img *render2;
   render_interpolate *render3;
+  render_fast *render4;
   /* Screen angle and ratio.  Used in Dufaycolor analysis since
      the Dufaycolor screens are printed with different ratios and angles
      of the horisontal and vertical lines.
