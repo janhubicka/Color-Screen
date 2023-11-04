@@ -276,7 +276,6 @@ render_to_scr::render_tile (enum render_type_t render_type,
     {
       if (progress)
 	progress->set_task ("rendering", height);
-      fprintf (stderr, "Rendering\n");
       pthread_mutex_lock (&img.stitch->lock);
       for (int y = 0; y < height; y++)
 	{

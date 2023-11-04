@@ -645,6 +645,7 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
       stitch->determine_angle ();
       int xmax, ymax;
       stitch->determine_viewport (xmin, xmax, ymin, ymax);
+      stitch->keep_all_images ();
       width = xmax - xmin;
       height = ymax - ymin;
       increase_lru_cache_sizes_for_stitch_projects (stitch->params.width * stitch->params.height);

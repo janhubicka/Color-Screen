@@ -200,7 +200,7 @@ public:
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
   void set_render_param (render_parameters & rparam);
   void set_passthru_render_param (render_parameters & rparam);
-  void eeep_all_images ()
+  void keep_all_images ()
   {
     release_images = false;
   }
