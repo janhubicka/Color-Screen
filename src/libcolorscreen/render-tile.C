@@ -280,7 +280,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
       pthread_mutex_lock (&img.stitch->lock);
       for (int y = 0; y < height; y++)
 	{
-	  coord_t py = (y + yoffset) * step - img.ymin;
+	  coord_t py = (y + yoffset) * step + img.ymin;
 	  img.stitch->set_render_param (rparam);
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < width; x++)
@@ -288,7 +288,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		int r, g, b;
 		coord_t sx, sy;
 		int ix = 0,iy;
-		img.stitch->common_scr_to_img.final_to_scr ((x + xoffset) * step - img.xmin, py, &sx, &sy);
+		img.stitch->common_scr_to_img.final_to_scr ((x + xoffset) * step + img.xmin, py, &sx, &sy);
 		for (iy = 0 ; iy < img.stitch->params.height; iy++)
 		  {
 		    for (ix = 0 ; ix < img.stitch->params.width; ix++)

@@ -647,6 +647,7 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
       stitch->determine_viewport (xmin, xmax, ymin, ymax);
       width = xmax - xmin;
       height = ymax - ymin;
+      increase_lru_cache_sizes_for_stitch_projects (stitch->params.width * stitch->params.height);
       return true;
     }
   if (!loader)
@@ -668,6 +669,16 @@ image_data::load_part (int *permille, const char **error)
 {
   if (stitch)
     {
+      int n = 0;
+      for (int y = 0; y < stitch->params.width; y++)
+	for (int x = 0; x < stitch->params.height; x++)
+	  if (stitch->images[y][x].img)
+	    n++;
+	  else
+	    {
+	      *permille = n * 1000 / (stitch->params.width * stitch->params.height);
+	      return (stitch->images[y][x].load_img (error, NULL));
+	    }
       *permille = 1000;
       return true;
     }

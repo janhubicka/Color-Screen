@@ -56,10 +56,8 @@ stitch_image::load_img (const char **error, progress_info *progress)
   lastused = ++current_time;
   if (img)
     return true;
-  /* TODO: This is preventing from loading all images at once.
-     For renering we need to change defaults.  */
-  if (/*(nloaded >= (m_prj->params.produce_stitched_file_p ()
-		  ? m_prj->params.width * 2 : 1))*/0)
+  if ((nloaded >= (m_prj->params.produce_stitched_file_p ()
+		  ? m_prj->params.width * 2 : 1)) && m_prj->release_images)
     {
       int minx = -1, miny = -1;
       long minlast = 0;
@@ -96,9 +94,11 @@ stitch_image::load_img (const char **error, progress_info *progress)
 #endif
     }
   nloaded++;
-  progress->pause_stdout ();
+  if (progress)
+    progress->pause_stdout ();
   printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
-  progress->resume_stdout ();
+  if (progress)
+    progress->resume_stdout ();
   img = new image_data;
   if (!img->load (filename.c_str (), error, progress))
     return false;

@@ -18,7 +18,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
   if (!m_red || !m_green || !m_blue)
     return false;
   if (progress)
-    progress->set_task ("determining colors", m_height);
+    progress->set_task ("determining intensities of Dufay screen patches", m_height);
   if (precise)
     {
       luminosity_t *w_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));

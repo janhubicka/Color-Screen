@@ -22,7 +22,7 @@ extern class lru_caches lru_caches;
    P represents parameters which are used to produce T.
    get_new is a function computing T based on P.  It is expected to
    allocate memory via new and lru_cache will eventually delete it.  */
-template<typename P, typename T, T *get_new (P &, progress_info *progress), int cache_size>
+template<typename P, typename T, T *get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache
 {
 public:
@@ -37,7 +37,7 @@ public:
   } *entries;
 
   lru_cache()
-  : entries (NULL)
+  : entries (NULL), cache_size (base_cache_size)
   {
     if (pthread_mutex_init(&lock, NULL) != 0)
       abort ();
@@ -52,6 +52,13 @@ public:
 	delete e->val;
 	delete e;
       }
+  }
+  void
+  increase_capacity (int n)
+  {
+    pthread_mutex_lock (&lock);
+    cache_size = n * base_cache_size;
+    pthread_mutex_unlock (&lock);
   }
 
   /* Get T for parameters P; do caching.
@@ -133,7 +140,15 @@ public:
 	}
   }
 private:
+  int cache_size;
   pthread_mutex_t lock;
 };
+
+extern void render_increase_lru_cache_sizes_for_stitch_projects (int n);
+inline void
+increase_lru_cache_sizes_for_stitch_projects (int n)
+{
+   render_increase_lru_cache_sizes_for_stitch_projects (n);
+}
 
 #endif

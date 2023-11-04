@@ -63,7 +63,7 @@ analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
       maxy = std::min (maxy, img->height);
 
       if (progress)
-	progress->set_task ("determining colors", maxy - miny + m_height * 2 * 3);
+	progress->set_task ("determining intensities of Paget/Finlay screen patches", maxy - miny + m_height * 2 * 3);
 
       /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)

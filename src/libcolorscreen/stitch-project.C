@@ -7,7 +7,8 @@
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     passthrough_rparam (), common_scr_to_img (), dparam (), solver_param (),
-    pixel_size (0), my_screen (NULL), stitch_info_scale (0)
+    pixel_size (0), my_screen (NULL), stitch_info_scale (0),
+    release_images (true)
 {}
 
 stitch_project::~stitch_project ()

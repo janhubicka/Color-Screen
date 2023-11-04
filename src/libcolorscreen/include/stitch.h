@@ -200,6 +200,10 @@ public:
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
   void set_render_param (render_parameters & rparam);
   void set_passthru_render_param (render_parameters & rparam);
+  void eeep_all_images ()
+  {
+    release_images = false;
+  }
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
@@ -212,6 +216,7 @@ private:
   int stitch_info_scale = 0;
   coord_t xdpi[(int)stitch_image::render_max];
   coord_t ydpi[(int)stitch_image::render_max];
+  bool release_images;
   friend stitch_image;
 };
 
