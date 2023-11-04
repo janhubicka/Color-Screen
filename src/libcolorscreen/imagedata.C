@@ -666,9 +666,12 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
 bool
 image_data::load_part (int *permille, const char **error)
 {
-  assert (loader);
   if (stitch)
-    return 1000;
+    {
+      *permille = 1000;
+      return true;
+    }
+  assert (loader);
   bool ret = loader->load_part (permille, error);
   if (!ret || *permille == 1000)
     {

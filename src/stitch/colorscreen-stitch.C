@@ -341,7 +341,12 @@ void stitch (progress_info *progress)
     {
       TIFF *out;
       uint16_t *outrow;
-      prj->images[0][0].load_img (progress);
+      if (!prj->images[0][0].load_img (&error, progress))
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Can not load first image %s\n", error);
+	  exit (1);
+	}
       out =
 	open_output_file (prj->params.stitched_filename.c_str (), (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, 
 			  &error,

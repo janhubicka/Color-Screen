@@ -49,13 +49,15 @@ stitch_image::release_image_data (progress_info *progress)
   nloaded--;
 }
 
-void
-stitch_image::load_img (progress_info *progress)
+bool
+stitch_image::load_img (const char **error, progress_info *progress)
 {
   refcount++;
   lastused = ++current_time;
   if (img)
-    return;
+    return true;
+  /* TODO: This is preventing from loading all images at once.
+     For renering we need to change defaults.  */
   if (/*(nloaded >= (m_prj->params.produce_stitched_file_p ()
 		  ? m_prj->params.width * 2 : 1))*/0)
     {
@@ -98,18 +100,12 @@ stitch_image::load_img (progress_info *progress)
   printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
   progress->resume_stdout ();
   img = new image_data;
-  const char *error;
-  if (!img->load (filename.c_str (), &error, progress))
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", filename.c_str (), error);
-      exit (1);
-    }
+  if (!img->load (filename.c_str (), error, progress))
+    return false;
   if (img->stitch)
     {
-      progress->pause_stdout ();
-      fprintf (stderr, "Can not embedd stitch projects in sitch projects \n");
-      exit (1);
+      *error = "Can not embedd stitch projects in sitch projects";
+      return false;
     }
   img_width = img->width;
   img_height = img->height;
@@ -119,10 +115,10 @@ stitch_image::load_img (progress_info *progress)
     img->ydpi = m_prj->params.scan_dpi;
   if (!img->rgbdata)
     {
-      progress->pause_stdout ();
-      fprintf (stderr, "File %s is not having color channels\n", filename.c_str ());
-      exit (1);
+      *error = "source image is not having color channels";
+      return false;
     }
+  return true;
 }
 
 void
@@ -233,9 +229,11 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   progress->resume_stdout ();
   int rwidth = rxmax - rxmin + 1;
   int rheight = rymax - rymin + 1;
-  load_img (progress);
-  other.load_img (progress);
   const char *error;
+  /* TODO: Error ignored.  */
+  if (!load_img (&error, progress)
+      || !other.load_img (&error, progress))
+    return false;
   std::string fname = (std::string)"diff" + filename + other.filename;
   tiff_writer_params p;
   p.filename = fname.c_str ();
@@ -524,7 +522,14 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   if (m_prj->report_file)
     fprintf (m_prj->report_file, "\n\nAnalysis of %s\n", filename.c_str ());
   //bitmap_2d *bitmap;
-  load_img (progress);
+  const char *error;
+  if (!load_img (&error, progress))
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Failed to load %s: %s", filename.c_str (), error);
+      progress->resume_stdout ();
+      return false;
+    }
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
 #if 0
   if (m_prj->params.optimize_colors)
@@ -610,7 +615,6 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
     }
   scr_to_img_map.set_parameters (param, *img);
   
-  const char *error;
   if (!m_prj->stitch_info_scale)
     m_prj->stitch_info_scale = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) + 1;
   if (m_prj->params.outliers_info && !detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, m_prj->stitch_info_scale, scr_to_img_map, &error, progress))
@@ -708,12 +712,15 @@ bool
 stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *progress)
 {
   bool loaded = false;
+  /* TODO: Ignored. */
+  const char *error;
   switch (mode)
     {
      case render_demosaiced:
       if (!render)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render = new render_interpolate (param, *img, m_prj->rparam, maxval, false, false);
 	  render->precompute_all (progress);
 	  release_img ();
@@ -727,7 +734,8 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode
      case render_original:
       if (!render2)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
 	  render2->set_color_display ();
 	  render2->precompute_all (progress);
@@ -742,7 +750,8 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode
      case render_predictive:
       if (!render3)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render3 = new render_interpolate (param, *img, m_prj->rparam, maxval, true, false);
 	  render3->precompute_all (progress);
 	  release_img ();
@@ -763,12 +772,15 @@ bool
 stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *progress)
 {
   bool loaded = false;
+  /* TODO: Ignored. */
+  const char *error;
   switch (mode)
     {
      case render_demosaiced:
       if (!render)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
 	  render->precompute_all (progress);
 	  release_img ();
@@ -782,7 +794,8 @@ stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters
      case render_original:
       if (!render2)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render2 = new render_img (param, *img, passthrough_rparam, 65535);
 	  render2->set_color_display ();
 	  render2->precompute_all (progress);
@@ -797,7 +810,8 @@ stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters
      case render_predictive:
       if (!render3)
 	{
-	  load_img (progress);
+	  if (!load_img (&error, progress))
+	    return false;
 	  render3 = new render_interpolate (param, *img, my_rparam, 65535, true, false);
 	  render3->precompute_all (progress);
 	  release_img ();
@@ -870,8 +884,11 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   char buf[4096];
   sprintf (buf, "contrast-%03i-%s-%s",(int)((ratio -1) * 100 + 0.5), filename.c_str(), other.filename.c_str());
 
-  load_img (progress);
-  other.load_img (progress);
+  /* TODO: Error ignored.  */
+  const char *error;
+  if (!load_img (&error, progress)
+      || !other.load_img (&error, progress))
+    return;
   progress->pause_stdout ();
   printf ("Saving contrast diff %s\n", buf);
   progress->resume_stdout ();
@@ -1086,7 +1103,8 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
     abort ();
   }
 
-  load_img (progress);
+  if (!load_img (error, progress))
+    return false;
   std::string name = m_prj->adjusted_filename (filename, suffix, ".tif");
 
   rfparams.filename = name.c_str ();

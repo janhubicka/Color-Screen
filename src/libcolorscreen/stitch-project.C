@@ -20,6 +20,7 @@ stitch_project::~stitch_project ()
 bool
 stitch_project::initialize ()
 {
+  pthread_mutex_init (&lock, NULL);
   passthrough_rparam.gamma = rparam.gamma;
   if (params.orig_tile_gamma > 0)
     passthrough_rparam.output_gamma = params.orig_tile_gamma;

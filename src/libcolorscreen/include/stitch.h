@@ -1,5 +1,6 @@
 #ifndef STITCH_H
 #define STITCH_H
+#include <pthread.h>
 #include <string>
 #include "scr-to-img.h"
 #include "render.h"
@@ -70,7 +71,8 @@ struct stitching_params
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
     outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10), scan_dpi (0)
-  {}
+  {
+  }
 };
 
 class render_interpolate;
@@ -134,7 +136,7 @@ class stitch_image
 
   DLL_PUBLIC stitch_image ();
   DLL_PUBLIC ~stitch_image ();
-  void load_img (progress_info *);
+  bool load_img (const char **error, progress_info *);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
   bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
@@ -186,6 +188,7 @@ public:
   solver_parameters solver_param;
   /* Used to determine output file size.  */
   coord_t pixel_size;
+  pthread_mutex_t lock;
   DLL_PUBLIC stitch_project ();
   DLL_PUBLIC ~stitch_project ();
   bool initialize();
