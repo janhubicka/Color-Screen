@@ -446,6 +446,10 @@ public:
   {
     return m_param.type;
   }
+  const scr_to_img_parameters &get_param ()
+  {
+    return m_param;
+  }
   void dump (FILE *f);
 private:
   precomputed_function<coord_t> *m_motor_correction;

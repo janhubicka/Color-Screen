@@ -44,7 +44,7 @@ public:
 				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
-  static screen *get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress);
+  static screen *get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress, unsigned long *id = NULL);
   static void release_screen (screen *scr);
 protected:
 

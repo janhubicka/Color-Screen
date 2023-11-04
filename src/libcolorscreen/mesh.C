@@ -1,5 +1,11 @@
 #include "include/mesh.h"
+#include "lru-cache.h"
 #include "loadsave.h"
+mesh::mesh(coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep, int width, int height)
+: id (lru_caches::get ()), m_data (NULL), m_invdata (NULL), m_xshift (xshift), m_yshift (yshift), m_xstep (xstep), m_ystep (ystep), m_xstepinv (1/xstep), m_ystepinv (1/ystep), m_width (width), m_height (height)
+{
+  m_data = (point *)malloc (width * height * sizeof (point));
+}
 void
 mesh::print (FILE *f)
 {

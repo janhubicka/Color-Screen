@@ -11,11 +11,7 @@ public:
   /* Conserve memory; we do not need to be that precise here since we interpolate across small regions.  */
   typedef float mesh_coord_t;
 
-  mesh(coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep, int width, int height)
-  : m_data (NULL), m_invdata (NULL), m_xshift (xshift), m_yshift (yshift), m_xstep (xstep), m_ystep (ystep), m_xstepinv (1/xstep), m_ystepinv (1/ystep), m_width (width), m_height (height)
-  {
-    m_data = (point *)malloc (width * height * sizeof (point));
-  }
+  mesh(coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep, int width, int height);
   ~mesh()
   {
     free (m_data);
@@ -231,6 +227,8 @@ public:
   }
   bool save (FILE *f);
   static mesh *load (FILE *f, const char **error);
+  /* Unique id of the mesh (used for caching).  */
+  unsigned long id;
 private:
   struct mesh_inverse
     {
@@ -303,6 +301,5 @@ private:
     p = triangle_interpolate (tl, tr, br, p);
     return p;
   }
-
 };
 #endif
