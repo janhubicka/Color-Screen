@@ -33,6 +33,7 @@ struct render_to_file_params
   void *icc_profile;
   int icc_profile_len;
   int antialias;
+  coord_t xdpi, ydpi;
 
   /* Width and height of the output file.  It will be computed if set to 0.  */
   int width, height;
@@ -52,9 +53,10 @@ struct render_to_file_params
   /* Position of rendered image in the project.  */
   coord_t xpos, ypos;
   render_to_file_params ()
-  : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
+  : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
   {}
 };
 DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam,
 			render_to_file_params rfarams, progress_info *progress, const char **error);
+DLL_PUBLIC bool complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p);
 #endif

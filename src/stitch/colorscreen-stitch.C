@@ -32,8 +32,9 @@ print_help (const char *filename)
   printf ("  --load-project=filename.csprj               store analysis to a project file\n");
   printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
+  printf ("  --scan-ppi=scan-ppi                         PPI of input scan\n");
   printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
-  printf ("  --downscale= factor                         reduce size of predictive panorama\n");
+  printf ("  --downscale=factor                          reduce size of predictive panorama\n");
   printf ("  --hdr                                       output predictive and interpolated panorama in hdr\n");
   printf (" tiles to ouptut:\n");
   printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
@@ -324,7 +325,7 @@ void stitch (progress_info *progress)
 	    }
 
   const coord_t xstep = prj->pixel_size, ystep = prj->pixel_size;
-  const coord_t pred_xstep = prj->pixel_size, pred_ystep = prj->pixel_size * prj->params.downscale;
+  const coord_t pred_xstep = prj->pixel_size * prj->params.downscale, pred_ystep = prj->pixel_size * prj->params.downscale;
   prj->passthrough_rparam.gray_max = prj->images[0][0].gray_max;
   if (prj->params.hugin_pto_filename.length ())
     produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
@@ -571,7 +572,7 @@ main (int argc, char **argv)
 	}
       if (!strncmp (argv[i], "--downscale=", strlen ("--downscale=")))
 	{
-	  prj->params.downscale = std::min (atoi (argv[i] + strlen ("--downscale=")), 1);
+	  prj->params.downscale = std::max (atoi (argv[i] + strlen ("--downscale=")), 1);
 	  continue;
 	}
       if (!strcmp (argv[i], "--screen-tiles"))
@@ -715,6 +716,11 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--orig-tile-gamma=", strlen ("--orig-tile-gamma=")))
 	{
 	  prj->params.orig_tile_gamma = atof (argv[i] + strlen ("--orig-tile-gamma="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--scan-ppi=", strlen ("--scan-ppi=")))
+	{
+	  prj->params.scan_dpi = atof (argv[i] + strlen ("--scan-ppi="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))

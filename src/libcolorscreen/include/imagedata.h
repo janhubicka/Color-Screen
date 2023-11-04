@@ -5,6 +5,7 @@
 #include "progress-info.h"
 
 class image_data_loader;
+class stitch_project;
 
 /* Scanned image descriptor.  */
 class DLL_PUBLIC image_data
@@ -30,6 +31,8 @@ public:
   uint32_t icc_profile_size;
   /* Unique id of the image (used for caching).  */
   unsigned long id;
+  float xdpi, ydpi;
+  stitch_project *stitch;
 
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error

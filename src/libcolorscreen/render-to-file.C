@@ -31,19 +31,7 @@ print_time ()
   double time =
     end_time.tv_sec + end_time.tv_usec / 1000000.0 - start_time.tv_sec -
     start_time.tv_usec / 1000000.0;
-  printf ("\n  ... done in %.3fs\n", time);
-}
-
-static void
-print_progress (int p, int max)
-{
-  int percent = (p * 100 + max / 2) / max;
-  int pastpercent = ((p - 1) * 100 + max / 2) / max;
-  if (pastpercent != percent)
-    {
-      printf ("[3D%2i%%", percent);
-      fflush (stdout);
-    }
+  printf ("  ... done in %.3fs\n", time);
 }
 
 template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y), rgbdata (T::*sample_scr_data)(coord_t x, coord_t y), bool support_tile>
@@ -60,6 +48,8 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
   tp.icc_profile = p.icc_profile;
   tp.icc_profile_len = p.icc_profile_len;
   tp.tile = p.tile;
+  tp.xdpi = p.xdpi;
+  tp.ydpi = p.ydpi;
   if (p.tile)
     {
       if (!support_tile)
@@ -77,10 +67,22 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
     {
       if (progress)
         progress->pause_stdout ();
-      printf ("Rendering %s in resolution %ix%i: 00%%", p.filename, p.width,
-	      p.height);
+      printf ("Rendering %s in resolution %ix%i and depth %i", p.filename, p.width,
+	      p.height, p.depth);
+      if (p.hdr)
+	printf (", HDR");
+      if (p.xdpi && p.xdpi == p.ydpi)
+	printf (", PPI %f", p.xdpi);
+      else
+	{
+	  if (p.xdpi)
+	    printf (", horisontal PPI %f", p.xdpi);
+	  if (p.ydpi)
+	    printf (", vertical PPI %f", p.ydpi);
+	}
       fflush (stdout);
       record_time ();
+      printf ("\n");
       if (progress)
         progress->resume_stdout ();
     }
@@ -225,8 +227,16 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
 	return "Cancelled";
       if (progress)
 	progress->inc_progress ();
-      if (p.verbose)
-	print_progress (y, p.height);
+    }
+  if (progress)
+    progress->set_task ("Closing tiff file", 1);
+  if (p.verbose)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      print_time ();
+      if (progress)
+	progress->resume_stdout ();
     }
   return NULL;
 }
@@ -234,7 +244,7 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
 }
 
 bool
-get_rendered_file_dimensions (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
+complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
 {
   render_parameters rparam;
   switch (p->mode)
@@ -254,13 +264,11 @@ get_rendered_file_dimensions (scr_to_img_parameters & param, image_data &scan, r
 	if (!p->pixel_size)
 	  p->pixel_size = render.pixel_size ();
 	if (p->mode == interpolated)
-	  p->pixel_size = param.type == Dufay ? 0.5 : 0.25;
+	  p->pixel_size = param.type == Dufay ? 0.5 : 1.0/3;
 	if (!p->xstep)
 	  {
-	    /* For interpolated the pixels are rotated, so it makes
-	       sense to enlarge image somewhat.  */
-	    p->xstep = p->pixel_size / p->scale * 0.5;
-	    p->ystep = p->pixel_size / p->scale * 0.5;
+	    p->xstep = p->pixel_size / p->scale;
+	    p->ystep = p->pixel_size / p->scale;
 	  }
 	if (!p->antialias)
 	  {
@@ -274,6 +282,35 @@ get_rendered_file_dimensions (scr_to_img_parameters & param, image_data &scan, r
 	  {
 	    p->width = render_width / p->xstep;
 	    p->height = render_height / p->ystep;
+	  }
+	if ((!p->xdpi || !p->ydpi) && scan.xdpi && scan.ydpi)
+	  {
+	    coord_t zx, zy, xx, yy;
+	    coord_t cx, cy;
+	    scr_to_img map;
+	    map.set_parameters (param, scan);
+	    map.img_to_final (scan.width / 2, scan.height / 2, &cx, &cy);
+	    map.final_to_img (cx, cy, &zx, &zy);
+	    map.final_to_img (cx + p->xstep, cy, &xx, &yy);
+	    //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
+	    xx = (xx - zx) / scan.xdpi;
+	    yy = (yy - zy) / scan.ydpi;
+	    coord_t len = sqrt (xx * xx + yy * yy);
+	    //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
+	    /* This is approximate for defomated screens, so take average of X and Y resolution.  */
+	    if (len && !p->xdpi)
+	      {
+		coord_t xdpi = 1 / len;
+
+		map.final_to_img (cx, cy + p->ystep, &xx, &yy);
+		xx = (xx - zx) / scan.xdpi;
+		yy = (yy - zy) / scan.ydpi;
+		len = sqrt (xx * xx + yy * yy);
+		if (len && !p->ydpi)
+		  {
+		    p->xdpi = p->ydpi = (xdpi + 1 / len) / 2;
+		  }
+	      }
 	  }
       }
       break;
@@ -299,6 +336,10 @@ get_rendered_file_dimensions (scr_to_img_parameters & param, image_data &scan, r
 	    if (!p->antialias)
 	      p->antialias = 1;
 	  }
+	if (!p->xdpi)
+	  p->xdpi = scan.xdpi / p->xstep;
+	if (!p->ydpi)
+	  p->ydpi = scan.ydpi / p->ystep;
       }
       break;
     }
@@ -314,27 +355,31 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 {
   if (rfparams.verbose)
     {
-      printf ("Precomputing...");
+      if (progress)
+        progress->pause_stdout ();
+      printf ("Precomputing\n");
       fflush (stdout);
       record_time ();
+      if (progress)
+        progress->resume_stdout ();
     }
   void *icc_profile /*= sRGB_icc*/ = NULL;
   size_t icc_profile_len = /*sRGB_icc_len =*/ 0;
 
   if ((int)rfparams.mode >= (int)detect_adjusted && !scan.rgbdata)
     {
-      fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
-      exit (1);
+      *error = "Screen detection is imposible in monochromatic scan";
+      return false;
     }
   if ((int)rfparams.mode == (int)corrected_color && !scan.rgbdata)
     {
-      fprintf (stderr, "Corrected color is imposible in monochromatic scan\n");
-      exit (1);
+      *error = "Corrected color is imposible in monochromatic scan";
+      return false;
     }
   if ((int)rfparams.mode == (int)color_preview_grid && !scan.rgbdata)
     {
-      fprintf (stderr, "Color preview grid is imposible in monochromatic scan\n");
-      exit (1);
+      *error = "color preview grid is imposible in monochromatic scan";
+      return false;
     }
   if (rfparams.hdr)
     {
@@ -346,7 +391,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     icc_profile_len = rparam.get_icc_profile (&icc_profile);
 
   /* Initialize rendering engine.  */
-  if (!get_rendered_file_dimensions (param, scan, &rfparams))
+  if (!complete_rendered_file_parameters (param, scan, &rfparams))
     {
       *error = "Precomputation failed (out of memory)";
       return false;
@@ -374,7 +419,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 
 	if (!icc_profile_set)
 	  {
@@ -402,7 +453,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 
 	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
@@ -422,7 +479,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	/* TODO: Maybe preview_grid and color_preview_grid
 	   should be in the scan profile.  */
 	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, progress);
@@ -439,7 +502,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
@@ -454,7 +523,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
@@ -469,7 +544,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
@@ -484,7 +565,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;
@@ -499,7 +586,13 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    return false;
 	  }
 	if (rfparams.verbose)
-	  print_time ();
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    print_time ();
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
 	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
 	  return false;

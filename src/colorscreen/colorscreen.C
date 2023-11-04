@@ -23,7 +23,7 @@ print_time ()
   struct timeval end_time;
   gettimeofday (&end_time, NULL);
   double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
-  printf ("\n  ... done in %.3fs\n", time);
+  printf ("  ... done in %.3fs\n", time);
 }
 
 static void
@@ -120,6 +120,7 @@ main (int argc, char **argv)
   render_to_file_params rfparams;
   bool force_precise = false;
   bool detect_geometry = false;
+  float scan_dpi = 0;
 
   binname = argv[0];
 
@@ -138,6 +139,8 @@ main (int argc, char **argv)
 	  i++;
 	  rfparams.mode = parse_mode (argv[i]);
 	}
+      else if (!strncmp (argv[i], "--mode=", 7))
+	rfparams.mode = parse_mode (argv[i]+7);
       else if (!strcmp (argv[i], "--hdr"))
 	rfparams.hdr = true;
       else if (!strcmp (argv[i], "--output-profile"))
@@ -147,6 +150,23 @@ main (int argc, char **argv)
 	  i++;
 	  output_profile = parse_output_profile (argv[i]);
 	}
+      else if (!strcmp (argv[i], "--output-profile="))
+	{
+	  output_profile = parse_output_profile (argv[i] + strlen ("--output-profile="));
+	}
+      else if (!strcmp (argv[i], "--scan-ppi"))
+	{
+	  if (i == argc - 1)
+	    print_help ();
+	  i++;
+	  if (!sscanf (argv[i], "%f",&scan_dpi))
+	    print_help ();
+	}
+      else if (!strcmp (argv[i], "--scan-ppi="))
+	{
+	  if (!sscanf (argv[i] + strlen("--scan-ppi="), "%f",&scan_dpi))
+	    print_help ();
+	}
       else if (!strcmp (argv[i], "--age"))
 	{
 	  if (i == argc - 1)
@@ -155,12 +175,21 @@ main (int argc, char **argv)
 	  if (!sscanf (argv[i], "%f",&age))
 	    print_help ();
 	}
+      else if (!strcmp (argv[i], "--age="))
+	{
+	  if (!sscanf (argv[i] + strlen ("--age="), "%f",&age))
+	    print_help ();
+	}
       else if (!strcmp (argv[i], "--color-model"))
 	{
 	  if (i == argc - 1)
 	    print_help ();
 	  i++;
 	  color_model = parse_color_model (argv[i]);
+	}
+      else if (!strcmp (argv[i], "--color-model="))
+	{
+	  color_model = parse_color_model (argv[i] + strlen ("--color-model="));
 	}
       else if (!strcmp (argv[i], "--detect-geometry"))
 	detect_geometry = true;
@@ -173,8 +202,10 @@ main (int argc, char **argv)
 	  i++;
 	  dye_balance = parse_dye_balance (argv[i]);
 	}
-      else if (!strncmp (argv[i], "--mode=", 7))
-	rfparams.mode = parse_mode (argv[i]+7);
+      else if (!strcmp (argv[i], "--dye-balance="))
+	{
+	  dye_balance = parse_dye_balance (argv[i] + strlen ("--dye-balance="));
+	}
       else if (!infname)
 	infname = argv[i];
       else if (!cspname)
@@ -186,27 +217,46 @@ main (int argc, char **argv)
     }
   if (!infname || !cspname || !rfparams.filename)
     print_help ();
+  file_progress_info progress (verbose ? stdout : NULL);
 
   /* Load scan data.  */
   image_data scan;
   if (verbose)
     {
-      printf ("Loading scan %s:", infname);
-      fflush (stdout);
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", infname);
       record_time ();
+      progress.resume_stdout ();
     }
-  if (!scan.load (infname, &error))
+  if (!scan.load (infname, &error, &progress))
     {
+      progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
+  if (scan_dpi)
+    scan.xdpi = scan.ydpi = scan_dpi;
+
   if (verbose)
     {
-      printf (" (resolution %ix%i)", scan.width, scan.height);
+      progress.pause_stdout ();
+      printf ("Scan resolution %ix%i", scan.width, scan.height);
+      if (scan.xdpi && scan.xdpi == scan.ydpi)
+	printf (", PPI %f", scan.xdpi);
+      else
+	{
+	  if (scan.xdpi)
+	    printf (", horisontal PPI %f", scan.xdpi);
+	  if (scan.ydpi)
+	    printf (", vertical PPI %f", scan.ydpi);
+	}
+      printf ("\n");
       print_time ();
+      progress.resume_stdout ();
     }
   if (rfparams.mode == detect_nearest && !scan.rgbdata)
     {
+      progress.pause_stdout ();
       fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
       exit (1);
     }
@@ -217,14 +267,20 @@ main (int argc, char **argv)
   scr_detect_parameters dparam;
   FILE *in = fopen (cspname, "rt");
   if (verbose)
-    printf ("Loading color screen parameters: %s\n", cspname);
+    {
+      progress.pause_stdout ();
+      printf ("Loading color screen parameters: %s\n", cspname);
+      progress.resume_stdout ();
+    }
   if (!in)
     {
+      progress.pause_stdout ();
       perror (cspname);
       exit (1);
     }
   if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
     {
+      progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);
     }
@@ -236,8 +292,10 @@ main (int argc, char **argv)
     {
       if (verbose)
 	{
-	  printf ("Detecting geometry");
+	  progress.pause_stdout ();
+	  printf ("Detecting geometry\n");
 	  record_time ();
+	  progress.resume_stdout ();
 	}
       abort ();
       // TODO update call once it is clear what we want to do.
@@ -249,12 +307,18 @@ main (int argc, char **argv)
     {
       if (verbose)
 	{
-	  printf ("Computing mesh");
+	  progress.pause_stdout ();
+	  printf ("Computing mesh\n");
 	  record_time ();
+	  progress.resume_stdout ();
 	}
       param.mesh_trans = solver_mesh (&param, scan, solver_param);
       if (verbose)
-	print_time ();
+	{
+	  progress.pause_stdout ();
+	  print_time ();
+	  progress.resume_stdout ();
+	}
     }
 
   /* Apply command line parameters.  */
@@ -269,12 +333,11 @@ main (int argc, char **argv)
 
   /* ... and render!  */
   rfparams.verbose = verbose;
-  if (!render_to_file (scan, param, dparam, rparam, rfparams, NULL, &error))
+  if (!render_to_file (scan, param, dparam, rparam, rfparams, &progress, &error))
     {
+      progress.pause_stdout ();
       fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
       exit (1);
     }
-  if (verbose)
-    print_time ();
   return 0;
 }

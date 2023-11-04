@@ -8,6 +8,7 @@
 #include "lru-cache.h"
 #include "include/imagedata.h"
 #include "llc.h"
+#include "include/stitch.h"
 
 #define HAVE_LIBRAW
 
@@ -94,7 +95,7 @@ private:
 
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), loader (NULL), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), loader (NULL), own (false)
 { 
 }
 
@@ -102,6 +103,8 @@ image_data::~image_data ()
 {
   if (loader)
     delete loader;
+  if (stitch)
+    delete stitch;
   if (!own)
     return;
   if (data)
@@ -119,6 +122,8 @@ image_data::~image_data ()
 bool
 image_data::allocate_grayscale ()
 {
+  if (stitch)
+    return false;
   assert (loader != NULL);
   return loader->grayscale;
 }
@@ -126,6 +131,8 @@ image_data::allocate_grayscale ()
 bool
 image_data::allocate_rgb ()
 {
+  if (stitch)
+    return false;
   assert (loader != NULL);
   return loader->rgb;
 }
@@ -198,10 +205,19 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
     }
   uint32_t w, h;
   uint16_t photometric;
+  float dpi;
   if (debug)
     printf("checking width/height\n");
   TIFFGetField(m_tif, TIFFTAG_IMAGEWIDTH, &w);
   TIFFGetField(m_tif, TIFFTAG_IMAGELENGTH, &h);
+  if (TIFFGetField (m_tif, TIFFTAG_XRESOLUTION, &dpi))
+    m_img->xdpi = dpi;
+  if (TIFFGetField (m_tif, TIFFTAG_YRESOLUTION, &dpi))
+    m_img->ydpi = dpi;
+  if (m_img->xdpi && !m_img->ydpi)
+    m_img->ydpi = m_img->xdpi;
+  else if (!m_img->xdpi && m_img->ydpi)
+    m_img->xdpi = m_img->ydpi;
   if (debug)
     printf("checking bits per sample\n");
   TIFFGetFieldDefaulted(m_tif, TIFFTAG_BITSPERSAMPLE, &m_bitspersample);
@@ -401,6 +417,7 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
       return false;
     }
   int inSubsamp, inColorspace;
+  /* TODO: use Exif to determine DPI.  */
   if (tjDecompressHeader3(m_tj_instance, m_jpeg_buf, jpegSize, &m_img->width, &m_img->height,
 			  &inSubsamp, &inColorspace) < 0)
     {
@@ -505,7 +522,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 	  *error = "can not allocate buffer to decompress RAW file";
 	  return false;
         }
-      if (buffer_size != zip_fread (zip_file, buffer, buffer_size))
+      if (buffer_size != (size_t)zip_fread (zip_file, buffer, buffer_size))
 	{
 	  *error = "can not decompress the RAW file";
 	  return false;
@@ -597,6 +614,41 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
     loader = new raw_image_data_loader (this);
   else if (has_suffix (name, ".eip"))
     loader = new raw_image_data_loader (this);
+  else if (has_suffix (name, ".csprj"))
+    {
+      if (progress)
+	progress->set_task ("opening stich project",1);
+      FILE *f = fopen (name, "rt");
+      if (!f)
+	{
+	  *error = "Can not open file";
+	  return false;
+	}
+      if (progress)
+	progress->set_task ("loading stich project",1);
+      stitch = new stitch_project ();
+      if (!stitch->load (f, error))
+	{
+	  fclose (f);
+	  delete stitch;
+	  stitch = NULL;
+	  return false;
+	}
+      fclose (f);
+      if (!stitch->initialize ())
+	{
+	  *error = "Can not initialize stitch project";
+	  delete stitch;
+	  stitch = NULL;
+	  return false;
+	}
+      stitch->determine_angle ();
+      int xmin, ymin, xmax, ymax;
+      stitch->determine_viewport (xmin, xmax, ymin, ymax);
+      width = xmax - xmin;
+      height = ymax - ymin;
+      return true;
+    }
   if (!loader)
     {
       *error = "Unknown file extension";
@@ -615,6 +667,8 @@ bool
 image_data::load_part (int *permille, const char **error)
 {
   assert (loader);
+  if (stitch)
+    return 1000;
   bool ret = loader->load_part (permille, error);
   if (!ret || *permille == 1000)
     {
@@ -632,6 +686,9 @@ image_data::load (const char *name, const char **error, progress_info *progress)
     progress->set_task ("loading image header",1);
   if (!init_loader (name, error, progress))
     return false;
+  /* If this is stich project, we are done.  */
+  if (stitch)
+    return true;
 
   if (progress)
     progress->set_task ("allocating memory",1);

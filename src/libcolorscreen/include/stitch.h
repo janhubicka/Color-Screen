@@ -50,6 +50,7 @@ struct stitching_params
   coord_t hfov;
   coord_t max_avg_distance;
   coord_t max_max_distance;
+  coord_t scan_dpi;
 
   int width, height;
   std::string filename[max_dim][max_dim];
@@ -68,7 +69,7 @@ struct stitching_params
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
     outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
-    max_avg_distance (2), max_max_distance (10)
+    max_avg_distance (2), max_max_distance (10), scan_dpi (0)
   {}
 };
 
@@ -83,7 +84,8 @@ class stitch_image
   {
     render_demosaiced,
     render_predictive,
-    render_original
+    render_original,
+    render_max
   };
   std::string filename;
   std::string screen_filename;
@@ -203,6 +205,8 @@ private:
   /* Screen used to collect patch density at analysis stage.  */
   screen *my_screen;
   int stitch_info_scale = 0;
+  coord_t xdpi[(int)stitch_image::render_max];
+  coord_t ydpi[(int)stitch_image::render_max];
   friend stitch_image;
 };
 

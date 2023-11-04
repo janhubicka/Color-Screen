@@ -107,6 +107,10 @@ stitch_image::load_img (progress_info *progress)
     }
   img_width = img->width;
   img_height = img->height;
+  if (m_prj->params.scan_dpi && !img->xdpi)
+    img->xdpi = m_prj->params.scan_dpi;
+  if (m_prj->params.scan_dpi && !img->ydpi)
+    img->ydpi = m_prj->params.scan_dpi;
   if (!img->rgbdata)
     {
       progress->pause_stdout ();
@@ -743,6 +747,8 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
       //assert (pixel_known_p (sx, sy));
       render3->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
+    case render_max:
+      abort ();
     }
   return loaded;
 }
@@ -796,6 +802,8 @@ stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters
       //assert (pixel_known_p (sx, sy));
       render3->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
+    case render_max:
+      abort ();
     }
   return loaded;
 }
@@ -1041,7 +1049,6 @@ bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
   std::string suffix;
-  uint16_t *outrow;
   coord_t final_xpos, final_ypos;
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
   int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
@@ -1058,6 +1065,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   case render_demosaiced:
     suffix = "-demosaicedtile";
     rfparams.mode = interpolated;
+    rfparams.hdr = m_prj->params.hdr;
     break;
   case render_original:
     rfparams.mode = corrected_color;
@@ -1066,7 +1074,10 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   case render_predictive:
     suffix = "-predictivetile";
     rfparams.mode = predictive;
+    rfparams.hdr = m_prj->params.hdr;
     break;
+  case render_max:
+    abort ();
   }
 
   load_img (progress);
@@ -1091,6 +1102,16 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   rfparams.width = final_width / xstep;
   rfparams.height = final_height / ystep;
   rfparams.pixel_size = m_prj->pixel_size;
+  rfparams.verbose = true;
+  rfparams.xdpi = m_prj->xdpi [(int)mode];
+  rfparams.ydpi = m_prj->ydpi [(int)mode];
+  if ((!rfparams.xdpi || !rfparams.ydpi) && img->xdpi && img->ydpi)
+    {
+      render_to_file_params rf2 = rfparams;
+      complete_rendered_file_parameters (param, *img, &rf2);
+      m_prj->xdpi[(int)mode] = rfparams.xdpi = rf2.xdpi;
+      m_prj->ydpi[(int)mode] = rfparams.ydpi = rf2.ydpi;
+    }
   if (!render_to_file (*img, param, m_prj->dparam, mode == render_original ? m_prj->passthrough_rparam : m_prj->rparam, rfparams, progress, error))
     {
       release_img ();

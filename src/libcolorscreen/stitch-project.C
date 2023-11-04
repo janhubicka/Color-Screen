@@ -26,6 +26,12 @@ stitch_project::initialize ()
   else
     passthrough_rparam.output_gamma = rparam.gamma;
 
+  for (int i = 0; i < (int)stitch_image::render_max; i++)
+  {
+    xdpi[i] = 0;
+    ydpi[i] = 0;
+  }
+
   image_data data;
   scr_param.type = params.type;
   data.width=1000;
