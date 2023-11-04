@@ -56,8 +56,8 @@ stitch_image::load_img (progress_info *progress)
   lastused = ++current_time;
   if (img)
     return;
-  if (nloaded >= (m_prj->params.produce_stitched_file_p ()
-		  ? m_prj->params.width * 2 : 1))
+  if (/*(nloaded >= (m_prj->params.produce_stitched_file_p ()
+		  ? m_prj->params.width * 2 : 1))*/0)
     {
       int minx = -1, miny = -1;
       long minlast = 0;
@@ -103,6 +103,12 @@ stitch_image::load_img (progress_info *progress)
     {
       progress->pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", filename.c_str (), error);
+      exit (1);
+    }
+  if (img->stitch)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Can not embedd stitch projects in sitch projects \n");
       exit (1);
     }
   img_width = img->width;
@@ -257,8 +263,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
           if (other.img_pixel_known_p (sx + xpos, sy + ypos))
 	   {
 	     int r2 = 0, g2 = 0, b2 = 0;
-	     render_pixel (m_prj->rparam, m_prj->passthrough_rparam, sx + xpos, sy + ypos, render_original, &r, &g, &b, progress);
-	     other.render_pixel (m_prj->rparam, m_prj->passthrough_rparam, sx + xpos, sy + ypos, render_original, &r2, &g2, &b2, progress);
+	     render_pixel (65535, sx + xpos, sy + ypos, render_original, &r, &g, &b, progress);
+	     other.render_pixel (65535, sx + xpos, sy + ypos, render_original, &r2, &g2, &b2, progress);
 	     if (patch_detected_p (sx + xpos, sy + ypos) && other.patch_detected_p (sx + xpos, sy + ypos))
 	       {
 		 sumdiff[0] += abs (r2-r);
@@ -699,7 +705,7 @@ img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 }
 
 bool
-stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *progress)
+stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *progress)
 {
   bool loaded = false;
   switch (mode)
@@ -708,7 +714,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
       if (!render)
 	{
 	  load_img (progress);
-	  render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
+	  render = new render_interpolate (param, *img, m_prj->rparam, maxval, false, false);
 	  render->precompute_all (progress);
 	  release_img ();
 	  loaded = true;
@@ -722,7 +728,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
       if (!render2)
 	{
 	  load_img (progress);
-	  render2 = new render_img (param, *img, passthrough_rparam, 65535);
+	  render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
 	  render2->set_color_display ();
 	  render2->precompute_all (progress);
 	  release_img ();
@@ -737,7 +743,7 @@ stitch_image::render_pixel (render_parameters & my_rparam, render_parameters &pa
       if (!render3)
 	{
 	  load_img (progress);
-	  render3 = new render_interpolate (param, *img, my_rparam, 65535, true, false);
+	  render3 = new render_interpolate (param, *img, m_prj->rparam, maxval, true, false);
 	  render3->precompute_all (progress);
 	  release_img ();
 	  loaded = true;

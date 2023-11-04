@@ -375,7 +375,7 @@ void stitch (progress_info *progress)
 		}
 	      if (iy != prj->params.height)
 		{
-		  if (prj->images[iy][ix].render_pixel (prj->rparam, prj->passthrough_rparam, sx,sy, stitch_image::render_original,&r,&g,&b, progress))
+		  if (prj->images[iy][ix].render_pixel (65535, sx,sy, stitch_image::render_original,&r,&g,&b, progress))
 		    set_p = true;
 		  if (!prj->images[iy][ix].output)
 		    {

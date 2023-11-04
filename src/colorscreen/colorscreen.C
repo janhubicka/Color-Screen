@@ -234,6 +234,12 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
+  if (scan.stitch)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not render stitch projects\n");
+      exit (1);
+    }
   if (scan_dpi)
     scan.xdpi = scan.ydpi = scan_dpi;
 

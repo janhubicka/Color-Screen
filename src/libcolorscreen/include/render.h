@@ -29,6 +29,25 @@ struct DLL_PUBLIC render_parameters
     restore_original_luminosity (true), precise (true)
   {
   }
+#if 0
+  render_parameters(render_parameters &from)
+  : gamma (from.gamma), output_gamma (from.output_gamma), sharpen_radius (from.sharpen_radius), sharpen_amount (from.sharpen_amount), presaturation (from.presaturation), saturation (from.saturation),
+    brightness (from.brightness), collection_threshold (from.collection_threshold), white_balance (from.white_balance),
+    mix_red (from.mix_red), mix_green (from.mix_green), mix_blue (from.mix_blue), backlight_temperature (from.backlight_temperature),
+    age(from.age),
+    dye_balance (from.dye_balance),
+    screen_blur_radius (from.screen_blur_radius),
+    color_model (from.color_model), output_profile (from.output_profile), gray_min (from.gray_min), gray_max (from.gray_max),
+    film_characteristics_curve (from.film_characteristics_curve), output_curve (from.output_curve),
+    restore_original_luminosity (from.restore_original_luminosity), precise (from.precise)
+  {
+  }
+  /* TODO: hack.  */
+  render_parameters &operator=(const render_parameters &from)
+  {
+    memcpy (this, &from, sizeof (*this));
+  }
+#endif
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
@@ -148,7 +167,7 @@ struct DLL_PUBLIC render_parameters
   color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
   size_t get_icc_profile (void **buf);
 private:
-  const bool debug = false;
+  static const bool debug = false;
 };
 
 /* Datastructure used to store information about dye luminosities.  */

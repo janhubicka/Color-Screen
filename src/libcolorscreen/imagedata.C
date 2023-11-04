@@ -643,7 +643,7 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
 	  return false;
 	}
       stitch->determine_angle ();
-      int xmin, ymin, xmax, ymax;
+      int xmax, ymax;
       stitch->determine_viewport (xmin, xmax, ymin, ymax);
       width = xmax - xmin;
       height = ymax - ymin;

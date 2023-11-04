@@ -672,6 +672,8 @@ static void
 previewrender (GdkPixbuf ** pixbuf)
 {
   guint8 *pixels;
+  if (scan.stitch)
+    return;
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);

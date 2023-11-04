@@ -34,6 +34,9 @@ public:
   float xdpi, ydpi;
   stitch_project *stitch;
 
+  /* Begining of the viewport of stitched object.  */
+  int xmin, ymin;
+
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
      message.  */

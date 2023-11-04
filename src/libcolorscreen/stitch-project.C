@@ -440,3 +440,43 @@ std::string stitch_project::adjusted_filename (std::string filename, std::string
   std::string ret = filename.substr (0, lastindex);
   return ret + suffix + extension;
 }
+
+void
+stitch_project::set_render_param (render_parameters &my_rparam)
+{
+  if (rparam != my_rparam)
+    {
+      rparam = my_rparam;
+      for (int y = 0; y < params.width; y++)
+	for (int x = 0; x < params.height; x++)
+	  {
+	    if (images[y][x].render)
+	      {
+		delete images[y][x].render;
+		images[y][x].render = NULL;
+	      }
+	    if (images[y][x].render3)
+	      {
+		delete images[y][x].render3;
+		images[y][x].render = NULL;
+	      }
+	  }
+    }
+}
+void
+stitch_project::set_passthru_render_param (render_parameters &my_rparam)
+{
+  if (passthrough_rparam != my_rparam)
+    {
+      passthrough_rparam = my_rparam;
+      for (int y = 0; y < params.width; y++)
+	for (int x = 0; x < params.height; x++)
+	  {
+	    if (images[y][x].render2)
+	      {
+		delete images[y][x].render2;
+		images[y][x].render2 = NULL;
+	      }
+	  }
+    }
+}

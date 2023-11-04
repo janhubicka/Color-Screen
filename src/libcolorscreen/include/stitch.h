@@ -144,7 +144,7 @@ class stitch_image
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
-  bool render_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
+  bool render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
   bool render_hdr_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
@@ -195,6 +195,8 @@ public:
   bool save (FILE *f);
   bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
+  void set_render_param (render_parameters & rparam);
+  void set_passthru_render_param (render_parameters & rparam);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
