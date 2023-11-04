@@ -68,16 +68,24 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
       tp.yoffset = p.yoffset;
       tp.alpha = true;
     }
+  if (progress)
+    progress->set_task ("Opening tiff file", 1);
   tiff_writer out(tp, &error);
   if (error)
     return error;
   if (p.verbose)
     {
+      if (progress)
+        progress->pause_stdout ();
       printf ("Rendering %s in resolution %ix%i: 00%%", p.filename, p.width,
 	      p.height);
       fflush (stdout);
       record_time ();
+      if (progress)
+        progress->resume_stdout ();
     }
+  if (progress)
+    progress->set_task ("Rendering and saving", p.height);
   for (int y = 0; y < p.height; y++)
     {
       if (p.antialias == 1)
@@ -349,6 +357,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       rfparams.icc_profile = icc_profile;
       rfparams.icc_profile_len = icc_profile_len;
     }
+  if (progress)
+    progress->set_task ("precomputing", 1);
 
   switch (rfparams.mode)
     {

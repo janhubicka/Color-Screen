@@ -30,7 +30,7 @@ stitch_project::initialize ()
   scr_param.type = params.type;
   data.width=1000;
   data.height=1000;
-  common_scr_to_img.set_parameters (scr_param, data);
+  common_scr_to_img.set_parameters (scr_param, data, images[0][0].scr_to_img_map.get_rotation_adjustment ());
 
   if ((params.width == 1 || params.height == 1) && params.outer_tile_border > 40)
     {

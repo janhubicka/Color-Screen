@@ -90,19 +90,62 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio, coord_t final_a
   /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems to be 23.77.
      We organize the grid making red lines horizontal, so rotate by additional 90 degrees
      to get image right.  */
-  coord_t rotate = m_param.final_rotation - (m_param.type == Dufay ? 23 - 90 + 0.77 : 0);
+  coord_t rotate = m_param.final_rotation;
+
+  /* Depending on angle of screen detected we need to either rotate left or right.
+     This makes flipped scans to come out right.  */
+  if (!m_rotation_adjustment && m_param.type == Dufay)
+    {
+      coord_t zx, zy, xx, yy;
+      const coord_t dufay_angle = 23 + 0.77;
+      to_img (0, 0, &zx, &zy);
+      to_img (1, 0, &xx, &yy);
+      xx -= zx;
+      yy -= zy;
+      coord_t angle = -asin (xx / my_sqrt (xx*xx+yy*yy)) * 180 / M_PI;
+      //angle += 23 - 99 + 0.77;
+      for (int b = 0; b < 360; b += 90)
+      {
+	//coord_t error = ((int)fabs (angle - m_rotation_adjustment) + 360) % 360;
+	//printf ("try %f %f %f %f\n", b - dufay_angle, b + dufay_angle, m_rotation_adjustment, error);
+	if (!b || ((int)fabs (angle - b - dufay_angle) + 360) %360 < ((int)fabs (angle - m_rotation_adjustment) + 360) % 360)
+	    m_rotation_adjustment = b + dufay_angle;
+	if (((int)fabs (angle - b + dufay_angle) + 360) % 360 < ((int)fabs (angle - m_rotation_adjustment) + 360) % 360)
+	    m_rotation_adjustment = b - dufay_angle;
+      }
+      //printf ("%f %f\n", m_rotation_adjustment, angle);
+      m_rotation_adjustment += 90;
+      //m_rotation_adjustment -= 90;
+      //printf ("%f\n",angle);
+      //m_rotation_adjustment = angle;
+      //m_rotation_adjustment -= dufay_angle * 2;
+
+#if 0
+      coord_t m_rotation_adjustment = 23 - 90 + 0.77;
+      coord_t zx, zy, xx, yy;
+      to_img (0, 0, &zx, &zy);
+      rotation_2x2matrix (m_rotation_adjustment).apply_to_vector (1, 0, &xx, &yy);
+      to_img (xx, yy, &xx, &yy);
+      xx -= zx;
+      yy -= zy;
+      if (fabs (xx) * 0.5 < fabs (yy) && fabs (yy) < fabs (xx) * 2)
+	m_rotation_adjustment = -m_rotation_adjustment + 180;
+#endif
+    }
+  rotate += m_rotation_adjustment;
   m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }
 
 /* Initilalize the translation matrix to PARAM.  */
 void
-scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img)
+scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment)
 {
   /* We do not need to copy motor corrections since we already constructed the function.  */
   m_param.copy_from_cheap (param);
   m_inverted_projection_distance = 1 / param.projection_distance;
   m_nwarnings = 0;
+  m_rotation_adjustment = rotation_adjustment;
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;

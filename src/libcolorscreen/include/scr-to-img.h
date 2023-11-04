@@ -252,7 +252,7 @@ class image_data;
 class DLL_PUBLIC scr_to_img
 {
 public:
-  void set_parameters (scr_to_img_parameters &param, image_data &img);
+  void set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment = 0);
   void update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle);
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
@@ -268,6 +268,10 @@ public:
 			coord_t x2, coord_t y2,
 			int *final_xshift, int *final_yshift,
 			int *final_width, int *final_height);
+  coord_t get_rotation_adjustment ()
+  {
+    return m_rotation_adjustment;
+  }
 
   scr_to_img ()
   : m_motor_correction (NULL)
@@ -466,6 +470,7 @@ private:
   trans_2d_matrix m_scr_to_final_matrix;
 
   scr_to_img_parameters m_param;
+  coord_t m_rotation_adjustment;
 
   /* Apply spline defining motor correction.  */
   void

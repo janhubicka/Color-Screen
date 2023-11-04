@@ -1037,72 +1037,6 @@ stitch_image::write_stitch_info (progress_info *progress, int x, int y, int xx, 
   TIFFClose (out);
 }
 
-/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
-   File will be 16bit RGB TIFF.
-   Allocate output buffer to hold single row to OUTROW.  */
-static TIFF *
-open_tile_output_file (const char *outfname, 
-		       int xoffset, int yoffset,
-		       int outwidth, int outheight,
-		       uint16_t ** outrow, const char **error,
-		       void *icc_profile, uint32_t icc_profile_size,
-		       stitch_image::render_mode mode,
-		       progress_info *progress)
-{
-  TIFF *out = TIFFOpen (outfname, "wb");
-  double dpi = 300;
-  if (!out)
-    {
-      *error = "can not open output file";
-      return NULL;
-    }
-  uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
-      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 4)
-      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
-      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
-      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
-      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
-      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras)
-      || !TIFFSetField (out, TIFFTAG_XRESOLUTION, dpi)
-      || !TIFFSetField (out, TIFFTAG_YRESOLUTION, dpi)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile && mode == stitch_image::render_original ? icc_profile_size : sRGB_icc_len, icc_profile && mode == stitch_image::render_original ? icc_profile : sRGB_icc))
-    {
-      *error = "write error";
-      return NULL;
-    }
-  if (xoffset || yoffset || 1)
-    {
-      if (!TIFFSetField (out, TIFFTAG_XPOSITION, (double)(xoffset / dpi))
-	  || !TIFFSetField (out, TIFFTAG_YPOSITION, (double)(yoffset / dpi))
-	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLWIDTH, (long)(outwidth + xoffset))
-	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLLENGTH, (long)(outheight + yoffset)))
-	{
-	  *error = "write error";
-	  return NULL;
-	}
-    }
-  *outrow = (uint16_t *) malloc (outwidth * 2 * 4);
-  if (!outrow)
-    {
-      *error = "Out of memory allocating output buffer";
-      return NULL;
-    }
-  if (progress)
-    {
-      progress->set_task ("Rendering and saving", outheight);
-    }
-  //TODO: Add report parameter.
-  //if (m_prj->report_file)
-    //fprintf (m_prj->report_file, "Rendering %s at offset %i,%i (%ix%i pixels)\n", outfname, xoffset, yoffset, outwidth, outheight);
-  progress->pause_stdout ();
-  printf ("Rendering %s at offset %i,%i (%ix%i pixels)\n", outfname, xoffset, yoffset, outwidth, outheight);
-  progress->resume_stdout ();
-  return out;
-}
-
 bool
 stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
 {
@@ -1112,6 +1046,11 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
   map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
   int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
   int ymin = floor ((final_ypos - final_yshift) / ystep) * ystep;
+
+  /* We must arrange whole panorama rotated same way.
+     If this ever breaks, maybe while analyzing later images should get it from first one.  */
+  if (scr_to_img_map.get_rotation_adjustment () != m_prj->common_scr_to_img.get_rotation_adjustment ())
+    abort ();
 
   render_to_file_params rfparams;
   switch(mode)
@@ -1158,57 +1097,6 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
       return false;
     }
   
-#if 0
-  TIFF *out = open_tile_output_file (name.c_str (), (xmin - stitch_xmin) / xstep, (ymin - stitch_ymin) / ystep, final_width / xstep, final_height / ystep, &outrow, error, img->icc_profile, img->icc_profile_size, mode, progress);
-  if (!out)
-    {
-      release_img ();
-      return false;
-    }
-  int j = 0;
-  for (coord_t y = ymin; j < (int)(final_height / ystep); y+=ystep, j++)
-    {
-      int i = 0;
-      for (coord_t x = xmin; i < (int)(final_width / xstep); x+=xstep, i++)
-	{
-	  coord_t sx, sy;
-	  int r = 0,g = 0,b = 0;
-	  map.final_to_scr (x, y, &sx, &sy);
-	  if (mode == render_original /*&& 0*/? img_pixel_known_p (sx, sy) : pixel_known_p (sx, sy))
-	    {
-	      if (render_pixel (m_prj->rparam, m_prj->passthrough_rparam, sx, sy, mode,&r,&g,&b, progress)
-		  && progress)
-		{
-		  progress->set_task ("Rendering and saving tile", (final_height / ystep));
-		  progress->set_progress (j);
-		}
-	      outrow[4 * i] = r;
-	      outrow[4 * i + 1] = g;
-	      outrow[4 * i + 2] = b;
-	      outrow[4 * i + 3] = 65535;
-	    }
-	  else
-	    {
-	      outrow[4 * i] = 0;
-	      outrow[4 * i + 1] = 0;
-	      outrow[4 * i + 2] = 0;
-	      outrow[4 * i + 3] = 0;
-	    }
-	}
-      if (!write_row (out, j, outrow, error, progress))
-	{
-	  *error = "Writting failed";
-	  TIFFClose (out);
-	  free (outrow);
-	  release_img ();
-	  return false;
-	}
-    }
-  progress->set_task ("Closing tile output file", 1);
-  TIFFClose (out);
-  free (outrow);
-  output = true;
-#endif
   release_img ();
   return true;
 }
