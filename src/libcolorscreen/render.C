@@ -232,7 +232,8 @@ free_gray_data_tables (gray_data_tables &t)
   free (t.gtable);
   free (t.btable);
   free (t.out_table);
-  free (t.out_table2);
+  if (t.out_table2)
+    free (t.out_table2);
 }
 
 inline luminosity_t
