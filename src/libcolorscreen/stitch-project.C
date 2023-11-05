@@ -7,8 +7,8 @@
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     passthrough_rparam (), common_scr_to_img (), dparam (), solver_param (),
-    pixel_size (0), my_screen (NULL), stitch_info_scale (0),
-    release_images (true)
+    pixel_size (0), my_screen (NULL), stitch_info_scale (0), 
+    release_images (true), rotation_adjustment (0)
 {}
 
 stitch_project::~stitch_project ()
@@ -38,7 +38,7 @@ stitch_project::initialize ()
   scr_param.type = params.type;
   data.width=1000;
   data.height=1000;
-  common_scr_to_img.set_parameters (scr_param, data, images[0][0].scr_to_img_map.get_rotation_adjustment ());
+  common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment);
 
   if ((params.width == 1 || params.height == 1) && params.outer_tile_border > 40)
     {
@@ -353,7 +353,7 @@ stitch_project::determine_angle ()
   image_data data;
   data.width=1000;
   data.height=1000;
-  common_scr_to_img.set_parameters (scr_param, data);
+  common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment);
 }
 #define HEADER "color_screen_stitch_project_version: 1"
 

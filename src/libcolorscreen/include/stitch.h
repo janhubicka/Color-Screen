@@ -224,6 +224,7 @@ private:
   coord_t xdpi[(int)stitch_image::render_max];
   coord_t ydpi[(int)stitch_image::render_max];
   bool release_images;
+  coord_t rotation_adjustment;
   friend stitch_image;
 };
 

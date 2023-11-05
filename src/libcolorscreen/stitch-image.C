@@ -616,7 +616,8 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       m_prj->pixel_size = detected.pixel_size;
       m_prj->my_screen = render_to_scr::get_screen (m_prj->params.type, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
-  scr_to_img_map.set_parameters (param, *img);
+  scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
+  m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   
   if (!m_prj->stitch_info_scale)
     m_prj->stitch_info_scale = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) + 1;
@@ -1267,7 +1268,8 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   data.height=1000;
   //param.mesh_trans = mesh_trans;
   //param.mesh_trans = NULL;
-  basic_scr_to_img_map.set_parameters (param, data);
+  scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
+  m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   mesh_trans = param.mesh_trans;
   param.mesh_trans = NULL;
   scr_to_img_map.set_parameters (param, data);
