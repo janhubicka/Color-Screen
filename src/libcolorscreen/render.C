@@ -220,7 +220,8 @@ compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, pro
   for (int i = 0; i < 65536; i++)
     {
       ret.out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
-      ret.out_table2[i] = in_table [ret.out_table [i]];
+      if (in_table)
+        ret.out_table2[i] = in_table [ret.out_table [i]];
     }
   return ret;
 }
