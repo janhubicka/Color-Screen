@@ -327,7 +327,8 @@ struct gray_and_sharpen_params
 luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
-  return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
+  return t->out_table[(int)(compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)] / 65536;
+  //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 luminosity_t *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
