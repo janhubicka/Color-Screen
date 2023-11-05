@@ -88,7 +88,7 @@ color_class_map *get_color_class_map(color_class_params &p, progress_info *progr
     }
   return map;
 }
-static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache;
+static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> color_class_cache ("color tables");
 
 /* Lookup table translates raw input data into linear values.  */
 struct precomputed_rgbdata_params
@@ -150,7 +150,7 @@ rgbdata *get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *p
     }
   return precomputed_rgbdata;
 }
-static lru_cache <precomputed_rgbdata_params, rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache;
+static lru_cache <precomputed_rgbdata_params, rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
 
 /* Lookup table translates raw input data into linear values.  */
 struct patches_cache_params
@@ -180,7 +180,7 @@ patches *get_patches(patches_cache_params &p, progress_info *progress)
     }
   return pat;
 }
-static lru_cache <patches_cache_params, patches, get_patches, 1> patches_cache;
+static lru_cache <patches_cache_params, patches, get_patches, 1> patches_cache ("patches");
 
 /* Lookup table translates raw input data into linear values.  */
 struct color_data_params
@@ -302,7 +302,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
     }
   return data;
 }
-static lru_cache <color_data_params, color_data, get_new_color_data, 1> color_data_cache;
+static lru_cache <color_data_params, color_data, get_new_color_data, 1> color_data_cache ("color data");
 }
 class distance_list distance_list;
 

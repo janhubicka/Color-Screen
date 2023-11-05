@@ -52,11 +52,11 @@ public:
   }
   flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
 private:
-  analyze_dufay *m_dufay;
-  analyze_paget *m_paget;
   screen *m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
+  analyze_dufay *m_dufay;
+  analyze_paget *m_paget;
 
 };
 #endif

@@ -47,6 +47,8 @@ stitch_image::release_image_data (progress_info *progress)
   render2 = NULL;
   delete render3;
   render3 = NULL;
+  delete render4;
+  render4 = NULL;
   nloaded--;
 }
 

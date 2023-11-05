@@ -55,8 +55,8 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift, int w
   delete ret;
   return NULL;
 }
-static lru_tile_cache <analyzer_params, analyze_dufay, get_new_dufay_analysis, 1> dufay_analyzer_cache;
-static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1> paget_analyzer_cache;
+static lru_tile_cache <analyzer_params, analyze_dufay, get_new_dufay_analysis, 1> dufay_analyzer_cache ("dufay analyzer");
+static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1> paget_analyzer_cache ("Paget analyzer");
 
 }
 

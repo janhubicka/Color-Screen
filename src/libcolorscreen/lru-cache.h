@@ -25,6 +25,8 @@ extern class lru_caches lru_caches;
 template<typename P, typename T, T *get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache
 {
+  static const bool debug = true;
+  static const bool verbose = false;
 public:
   struct cache_entry
   {
@@ -36,22 +38,40 @@ public:
     int nuses;
   } *entries;
 
-  lru_cache()
-  : entries (NULL), cache_size (base_cache_size)
+  lru_cache(const char *n)
+  : entries (NULL), cache_size (base_cache_size), name (n)
   {
     if (pthread_mutex_init(&lock, NULL) != 0)
       abort ();
   }
 
+  void
+  prune ()
+  {
+    pthread_mutex_lock (&lock);
+    struct cache_entry **e;
+    for (e = &entries; *e;)
+      {
+        if (!(*e)->nuses)
+	  {
+	    if (verbose)
+	      fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)(*e)->id);
+	    delete (*e)->val;
+	    struct cache_entry *next = (*e)->next;
+	    delete (*e);
+	    (*e) = next;
+	  }
+	else
+	 e = &(*e)->next;
+      }
+    pthread_mutex_unlock (&lock);
+  }
+
   ~lru_cache()
   {
-    struct cache_entry *e, *next;
-    for (e = entries; e; e = next)
-      {
-	next = e->next;
-	delete e->val;
-	delete e;
-      }
+    prune ();
+    if (entries)
+      fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
   }
   void
   increase_capacity (int n)
@@ -76,6 +96,8 @@ public:
 	  {
 	    e->last_used = time;
 	    e->nuses++;
+	    if (verbose)
+	      fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name, (int)e->id, e->nuses);
 	    T *ret = e->val;
 	    pthread_mutex_unlock (&lock);
 	    if (id)
@@ -85,16 +107,19 @@ public:
 	if (!e->nuses
 	    && (!longest_unused || longest_unused->last_used < e->last_used))
 	  longest_unused = e;
-	if (!e->nuses)
-	  size++;
+	size++;
       }
-    if (size >= cache_size)
+    if (size >= cache_size && longest_unused)
       {
         e = longest_unused;
+	if (verbose)
+	  fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
 	delete e->val;
       }
     else
       {
+	if (debug && size >= cache_size)
+	  fprintf (stderr, "Cache %s is over capacity: %i %i\n", name, size + 1, cache_size);
 	e = new cache_entry;
 	if (!e)
 	  {
@@ -122,6 +147,8 @@ public:
 	      break;
 	    }
       }
+    if (verbose)
+      fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id, (int)size);
     pthread_mutex_unlock (&lock);
     return ret;
   }
@@ -135,13 +162,17 @@ public:
 	{
 	  e->nuses--;
 	  assert (e->nuses >= 0);
+	  if (verbose)
+	    fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name, (int)e->id, e->nuses);
 	  pthread_mutex_unlock (&lock);
 	  return;
 	}
+    fprintf (stderr, "Released data not found in cache %s\n", name);
   }
 private:
   int cache_size;
   pthread_mutex_t lock;
+  const char *name;
 };
 
 /* LRU cache used keep various data between invocations of renderers.
@@ -151,6 +182,8 @@ private:
 template<typename P, typename T, T *get_new (P &, int xshift, int yshift, int width, int height, progress_info *progress), int base_cache_size>
 class lru_tile_cache
 {
+  static const bool debug = true;
+  static const bool verbose = false;
 public:
   struct cache_entry
   {
@@ -163,22 +196,40 @@ public:
     int nuses;
   } *entries;
 
-  lru_tile_cache()
-  : entries (NULL), cache_size (base_cache_size)
+  lru_tile_cache(const char *n)
+  : entries (NULL), cache_size (base_cache_size), name (n)
   {
     if (pthread_mutex_init(&lock, NULL) != 0)
       abort ();
   }
 
+  void
+  prune ()
+  {
+    pthread_mutex_lock (&lock);
+    struct cache_entry **e;
+    for (e = &entries; *e;)
+      {
+        if (!(*e)->nuses)
+	  {
+	    if (verbose)
+	      fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)(*e)->id);
+	    delete (*e)->val;
+	    struct cache_entry *next = (*e)->next;
+	    delete (*e);
+	    *e = next;
+	  }
+	else
+	 e = &(*e)->next;
+      }
+    pthread_mutex_unlock (&lock);
+  }
+
   ~lru_tile_cache()
   {
-    struct cache_entry *e, *next;
-    for (e = entries; e; e = next)
-      {
-	next = e->next;
-	delete e->val;
-	delete e;
-      }
+    prune ();
+    if (entries)
+      fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
   }
   void
   increase_capacity (int n)
@@ -207,6 +258,8 @@ public:
 	  {
 	    e->last_used = time;
 	    e->nuses++;
+	    if (verbose)
+	      fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name, (int)e->id, (int)e->nuses);
 	    T *ret = e->val;
 	    pthread_mutex_unlock (&lock);
 	    if (id)
@@ -216,16 +269,19 @@ public:
 	if (!e->nuses
 	    && (!longest_unused || longest_unused->last_used < e->last_used))
 	  longest_unused = e;
-	if (!e->nuses)
-	  size++;
+	size++;
       }
-    if (size >= cache_size)
+    if (size >= cache_size && longest_unused)
       {
         e = longest_unused;
+	if (verbose)
+	  fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
 	delete e->val;
       }
     else
       {
+	if (debug && size >= cache_size)
+	  fprintf (stderr, "Cache %s is over capacity: %i %i\n", name, size + 1, cache_size);
 	e = new cache_entry;
 	if (!e)
 	  {
@@ -257,6 +313,8 @@ public:
 	      break;
 	    }
       }
+    if (verbose)
+      fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id, (int)size);
     pthread_mutex_unlock (&lock);
     return ret;
   }
@@ -270,13 +328,17 @@ public:
 	{
 	  e->nuses--;
 	  assert (e->nuses >= 0);
+	  if (verbose)
+	    fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name, (int)e->id, e->nuses);
 	  pthread_mutex_unlock (&lock);
 	  return;
 	}
+    fprintf (stderr, "Released data not found in cache %s\n", name);
   }
 private:
   int cache_size;
   pthread_mutex_t lock;
+  const char *name;
 };
 
 extern DLL_PUBLIC void render_increase_lru_cache_sizes_for_stitch_projects (int n);

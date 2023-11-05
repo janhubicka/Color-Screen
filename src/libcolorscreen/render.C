@@ -150,8 +150,8 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 }
 
 /* To improve interactive response we cache conversion tables.  */
-static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lookup_table_cache;
-static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache;
+static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lookup_table_cache ("in lookup tables");
+static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache ("out lookup tables");
 
 
 struct graydata_params
@@ -268,7 +268,7 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
 
   return data;
 }
-static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache;
+static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache ("gray data");
 
 struct sharpen_params
 {
@@ -311,7 +311,7 @@ get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
     }
   return out;
 }
-static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache;
+static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache ("sharpened data");
 
 struct gray_and_sharpen_params
 {
@@ -344,7 +344,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
   free_gray_data_tables (t);
   return out;
 }
-static lru_cache <gray_and_sharpen_params, luminosity_t, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache;
+static lru_cache <gray_and_sharpen_params, luminosity_t, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
 
 }
 
@@ -365,6 +365,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
     {
       if (!m_gray_data && m_params.sharpen_radius && m_params.sharpen_amount)
 	{
+	  gray_data_cache.prune ();
+	  sharpened_data_cache.prune ();
 	  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
 				       {m_params.sharpen_radius, m_params.sharpen_amount, 0, NULL, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
 	  m_sharpened_data = gray_and_sharpened_data_cache.get (p, progress);
@@ -372,6 +374,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	}
       else
 	{
+	  /* Assume that same setting is used for all renderers and save some memory.  */
+	  gray_and_sharpened_data_cache.prune ();
 	  if (!m_gray_data)
 	    {
 	      graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};

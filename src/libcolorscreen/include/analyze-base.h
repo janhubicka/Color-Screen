@@ -125,6 +125,7 @@ protected:
     m_contrast (NULL)
   {
   }
+  virtual
   ~analyze_base()
   {
     free (m_red);
