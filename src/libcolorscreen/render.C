@@ -379,7 +379,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  sharpened_data_cache.prune ();
 	  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
 				       {m_params.sharpen_radius, m_params.sharpen_amount, 0, NULL, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
-	  m_sharpened_data = gray_and_sharpened_data_cache.get (p, progress);
+	  m_sharpened_data = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
 	  m_gray_and_sharpened = true;
 	}
       else
@@ -399,7 +399,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  if (m_params.sharpen_radius && m_params.sharpen_amount)
 	    {
 	      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
-	      m_sharpened_data = sharpened_data_cache.get (p, progress);
+	      m_sharpened_data = sharpened_data_cache.get (p, progress, &m_gray_data_id);
 	      m_gray_and_sharpened = false;
 	    }
 	}
