@@ -369,6 +369,7 @@ protected:
   luminosity_t *m_out_lookup_table;
   /* Color matrix.  */
   color_matrix m_color_matrix;
+  bool m_gray_and_sharpened;
 
 private:
   const bool debug = false;

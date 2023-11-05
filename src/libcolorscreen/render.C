@@ -172,10 +172,18 @@ struct graydata_params
   }
 };
 
-/* Mix RGB channels into grayscale.  */
-static gray_data *
-get_new_graydata (struct graydata_params &p, progress_info *progress)
+struct gray_data_tables
 {
+  luminosity_t *rtable;
+  luminosity_t *gtable;
+  luminosity_t *btable;
+  unsigned short *out_table ;
+};
+
+inline gray_data_tables
+compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
+{
+  gray_data_tables ret;
   double red = p.red;
   double green = p.green;
   double blue = p.blue;
@@ -191,6 +199,48 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
   green /= sum;
   blue /= sum;
 
+  ret.rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  ret.gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  ret.btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  ret.out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
+  for (int i = 0; i <= p.img->maxval; i++)
+    {
+      luminosity_t l = pow (i / (double)p.img->maxval, p.gamma);
+      if (l < 0 || l > 1)
+	abort ();
+      ret.rtable[i] = l * red;
+      ret.gtable[i] = l * green;
+      ret.btable[i] = l * blue;
+    }
+  for (int i = 0; i < 65536; i++)
+    {
+      ret.out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
+    }
+  return ret;
+}
+
+inline void
+free_gray_data_tables (gray_data_tables &t)
+{
+  free (t.rtable);
+  free (t.gtable);
+  free (t.btable);
+  free (t.out_table);
+}
+
+inline luminosity_t
+compute_gray_data (gray_data_tables &t, int r, int g, int b)
+{
+  luminosity_t val = t.rtable[r] + t.gtable[g] + t.btable[b];
+  return std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+}
+
+
+/* Mix RGB channels into grayscale.  */
+static gray_data *
+get_new_graydata (struct graydata_params &p, progress_info *progress)
+{
+  gray_data_tables t = compute_gray_data_tables (p, progress);
   if (progress)
     progress->set_task ("computing grayscale", p.img->height);
 
@@ -203,45 +253,19 @@ get_new_graydata (struct graydata_params &p, progress_info *progress)
     }
 
 
-  luminosity_t *rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
-  luminosity_t *gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
-  luminosity_t *btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
-  unsigned short *out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
-
-  for (int i = 0; i <= p.img->maxval; i++)
-    {
-      luminosity_t l = pow (i / (double)p.img->maxval, p.gamma);
-      if (l < 0 || l > 1)
-	abort ();
-      rtable[i] = l * red;
-      gtable[i] = l * green;
-      btable[i] = l * blue;
-    }
-  for (int i = 0; i < 65536; i++)
-    {
-      out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
-    }
-#pragma omp parallel for shared(data,rtable,gtable,btable,out_table,p,progress) default(none)
+#pragma omp parallel for shared(data,t,p,progress) default(none)
   for (int y = 0; y < p.img->height; y++)
     {
       for (int x = 0; x < p.img->width; x++)
-	{
-	  luminosity_t val = rtable[p.img->rgbdata[y][x].r]
-			     + gtable[p.img->rgbdata[y][x].g]
-			     + btable[p.img->rgbdata[y][x].b];
-	  val = std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
-	  data->m_gray_data[y][x] = out_table[(int)(val * 65535 + (luminosity_t)0.5)];
-	}
+	data->m_gray_data[y][x]
+	       	= t.out_table[(int)(compute_gray_data (t, p.img->rgbdata[y][x].r, p.img->rgbdata[y][x].g, p.img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
       if (progress)
 	 progress->inc_progress ();
     }
   if (progress)
     progress->set_task ("done", 1);
+  free_gray_data_tables (t);
 
-  free (rtable);
-  free (gtable);
-  free (btable);
-  free (out_table);
   return data;
 }
 static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache;
@@ -289,6 +313,38 @@ get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
 }
 static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache;
 
+struct gray_and_sharpen_params
+{
+  graydata_params gp;
+  sharpen_params sp;
+  bool
+  operator==(gray_and_sharpen_params &o)
+    {
+      return gp == o.gp && sp == o.sp;
+    }
+};
+/* Helper for sharpening template.  */
+luminosity_t
+getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
+{
+  return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
+}
+luminosity_t *
+get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
+{
+  luminosity_t *out = (luminosity_t *)calloc (p.sp.width * p.sp.height, sizeof (luminosity_t));
+  gray_data_tables t = compute_gray_data_tables (p.gp, progress);
+  if (!out)
+    return NULL;
+  if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
+    {
+      free (out);
+      return NULL;
+    }
+  free_gray_data_tables (t);
+  return out;
+}
+static lru_cache <gray_and_sharpen_params, luminosity_t, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache;
 
 }
 
@@ -307,20 +363,31 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 
   if (grayscale_needed)
     {
-      if (!m_gray_data)
+      if (!m_gray_data && m_params.sharpen_radius && m_params.sharpen_amount)
 	{
-	  graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
-	  if (p.gamma < 0.001)
-	    p.gamma = 0.001;
-	  if (p.gamma > 1000)
-	    p.gamma = 1000;
-	  m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
-	  m_gray_data = m_gray_data_holder->m_gray_data;
+	  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
+				       {m_params.sharpen_radius, m_params.sharpen_amount, 0, NULL, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
+	  m_sharpened_data = gray_and_sharpened_data_cache.get (p, progress);
+	  m_gray_and_sharpened = true;
 	}
-      if (m_params.sharpen_radius && m_params.sharpen_amount)
+      else
 	{
-	  sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
-	  m_sharpened_data = sharpened_data_cache.get (p, progress);
+	  if (!m_gray_data)
+	    {
+	      graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
+	      if (p.gamma < 0.001)
+		p.gamma = 0.001;
+	      if (p.gamma > 1000)
+		p.gamma = 1000;
+	      m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
+	      m_gray_data = m_gray_data_holder->m_gray_data;
+	    }
+	  if (m_params.sharpen_radius && m_params.sharpen_amount)
+	    {
+	      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
+	      m_sharpened_data = sharpened_data_cache.get (p, progress);
+	      m_gray_and_sharpened = false;
+	    }
 	}
     }
 
@@ -378,7 +445,12 @@ render::~render ()
   if (m_gray_data_holder)
     gray_data_cache.release (m_gray_data_holder);
   if (m_sharpened_data)
-    sharpened_data_cache.release (m_sharpened_data);
+    {
+      if (m_gray_and_sharpened)
+	gray_and_sharpened_data_cache.release (m_sharpened_data);
+      else
+	sharpened_data_cache.release (m_sharpened_data);
+    }
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
@@ -414,4 +486,5 @@ render_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
   sharpened_data_cache.increase_capacity (n);
   gray_data_cache.increase_capacity (n);
+  gray_and_sharpened_data_cache.increase_capacity (n);
 }

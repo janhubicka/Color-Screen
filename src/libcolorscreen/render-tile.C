@@ -284,8 +284,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  enum stitch_image::render_mode mode2 = stitch_image::render_demosaiced;
 	  if (render_type == render_type_fast)
 	    mode2 = stitch_image::render_fast_stitch;
+#if 0
 	  if (render_type == render_type_original)
 	    mode2 = stitch_image::render_original;
+#endif
 	  if (render_type == render_type_predictive)
 	    mode2 = stitch_image::render_predictive;
 	  if (!progress || !progress->cancel_requested ())

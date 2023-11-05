@@ -298,3 +298,9 @@ render_interpolate::~render_interpolate ()
   if (m_paget)
     paget_analyzer_cache.release (m_paget);
 }
+void
+render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
+{
+  dufay_analyzer_cache.increase_capacity (n);
+  paget_analyzer_cache.increase_capacity (n);
+}
