@@ -177,11 +177,12 @@ struct gray_data_tables
   luminosity_t *rtable;
   luminosity_t *gtable;
   luminosity_t *btable;
-  unsigned short *out_table ;
+  unsigned short *out_table;
+  luminosity_t *out_table2;
 };
 
 inline gray_data_tables
-compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
+compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, progress_info *progress)
 {
   gray_data_tables ret;
   double red = p.red;
@@ -202,7 +203,11 @@ compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
   ret.rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
-  ret.out_table = (unsigned short *)malloc (sizeof (luminosity_t) * 65536);
+  ret.out_table = (unsigned short *)malloc (sizeof (unsigned short) * 65536);
+  if (in_table)
+    ret.out_table2 = (luminosity_t *)malloc (sizeof (luminosity_t) * 65536);
+  else
+    ret.out_table2 = NULL;
   for (int i = 0; i <= p.img->maxval; i++)
     {
       luminosity_t l = pow (i / (double)p.img->maxval, p.gamma);
@@ -215,6 +220,7 @@ compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
   for (int i = 0; i < 65536; i++)
     {
       ret.out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
+      ret.out_table2[i] = in_table [ret.out_table [i]];
     }
   return ret;
 }
@@ -226,6 +232,7 @@ free_gray_data_tables (gray_data_tables &t)
   free (t.gtable);
   free (t.btable);
   free (t.out_table);
+  free (t.out_table2);
 }
 
 inline luminosity_t
@@ -240,7 +247,7 @@ compute_gray_data (gray_data_tables &t, int r, int g, int b)
 static gray_data *
 get_new_graydata (struct graydata_params &p, progress_info *progress)
 {
-  gray_data_tables t = compute_gray_data_tables (p, progress);
+  gray_data_tables t = compute_gray_data_tables (p, NULL, progress);
   if (progress)
     progress->set_task ("computing grayscale", p.img->height);
 
@@ -327,14 +334,14 @@ struct gray_and_sharpen_params
 luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
-  return t->out_table[(int)(compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)] / 65536;
+  return t->out_table2[(int)(compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
   //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 luminosity_t *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
 {
   luminosity_t *out = (luminosity_t *)calloc (p.sp.width * p.sp.height, sizeof (luminosity_t));
-  gray_data_tables t = compute_gray_data_tables (p.gp, progress);
+  gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
   if (!out)
     return NULL;
   if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
