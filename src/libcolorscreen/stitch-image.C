@@ -103,7 +103,7 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (progress)
     progress->resume_stdout ();
   img = new image_data;
-  if (!img->load (filename.c_str (), error, progress))
+  if (!img->load (m_prj->add_path (filename).c_str (), error, progress))
     return false;
   if (img->stitch)
     {

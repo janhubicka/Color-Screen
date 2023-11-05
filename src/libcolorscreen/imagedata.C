@@ -627,6 +627,7 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
       if (progress)
 	progress->set_task ("loading stich project",1);
       stitch = new stitch_project ();
+      stitch->set_path_by_filename (name);
       if (!stitch->load (f, error))
 	{
 	  fclose (f);

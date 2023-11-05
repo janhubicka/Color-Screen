@@ -380,6 +380,49 @@ stitch_project::save (FILE *f)
   return true;
 }
 
+static bool
+is_dir_separator (char c)
+{
+  if (c=='/')
+    return true;
+#ifdef _WIN32
+  if (c=='\\')
+    return true;
+#endif
+  return false;
+}
+
+static bool
+absolute_filename_p (std::string name)
+{
+  if (name.length () == 0)
+    return false;
+  if (is_dir_separator (name[0]))
+    return true;
+#ifdef _WIN32
+  if (name.length () > 1
+      && ((name[0]>='a' && name [0]<'z')
+	  || (name[0]>='A' && name [0]<'Z'))
+      && name[1]==':' && is_dir_separator (name[2]))
+    return true;
+#endif
+  return false;
+}
+
+/* Initialize stitching project path so it can be loaded from
+   different working path.  */
+
+void
+stitch_project::set_path_by_filename (std::string filename)
+{
+  int last = -1;
+  for (unsigned i = 0; i < filename.length (); i++)
+    if (is_dir_separator (filename[i]))
+      last = i;
+  if (last >= 0)
+    params.path = filename.substr (0, last + 1);
+}
+
 bool
 stitch_project::load (FILE *f, const char **error)
 {
@@ -432,6 +475,12 @@ stitch_project::load (FILE *f, const char **error)
   if (stitch_info_scale)
     stitch_info_scale = sqrt (images[0][0].param.coordinate1_x * images[0][0].param.coordinate1_x + images[0][0].param.coordinate1_y * images[0][0].param.coordinate1_y) + 1;
   return true;
+}
+std::string stitch_project::add_path (std::string name)
+{
+  if (absolute_filename_p (name))
+    return name;
+  return params.path + name;
 }
 
 std::string stitch_project::adjusted_filename (std::string filename, std::string suffix, std::string extension)

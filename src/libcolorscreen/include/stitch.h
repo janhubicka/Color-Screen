@@ -54,6 +54,8 @@ struct stitching_params
   coord_t scan_dpi;
 
   int width, height;
+  /* Path to a directory where the stitch project is located.  */
+  std::string path;
   std::string filename[max_dim][max_dim];
   std::string csp_filename;
   std::string hugin_pto_filename;
@@ -70,7 +72,7 @@ struct stitching_params
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
     outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
-    max_avg_distance (2), max_max_distance (10), scan_dpi (0)
+    max_avg_distance (2), max_max_distance (10), scan_dpi (0), width (0), height (0), path("")
   {
   }
 };
@@ -201,6 +203,8 @@ public:
   bool save (FILE *f);
   bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
+  std::string add_path (std::string name);
+  void set_path_by_filename (std::string name);
   void set_render_param (render_parameters & rparam);
   void set_passthru_render_param (render_parameters & rparam);
   void keep_all_images ()
