@@ -99,13 +99,13 @@ public:
   {
     return m_gray_data[y][x] * (long)m_img.maxval / m_maxval;
   }
-  void inline render_pixel (coord_t x, coord_t y, int *r, int *g, int *b)
+  void inline render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
     m_scr_to_img.to_img (x, y, &xx, &yy);
     render_pixel_img (xx, yy, r, g, b);
   }
-  void inline render_hdr_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  void inline render_hdr_pixel_scr (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
     coord_t xx, yy;
     m_scr_to_img.to_img (x, y, &xx, &yy);
@@ -126,14 +126,14 @@ public:
   void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel (xx, yy, r, g, b);
+    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_pixel_img (xx, yy, r, g, b);
   }
   void inline render_hdr_pixel_final (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
     coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_hdr_pixel (xx, yy, r, g, b);
+    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    render_hdr_pixel_img (xx, yy, r, g, b);
   }
 private:
   bool m_color;

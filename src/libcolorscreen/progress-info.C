@@ -34,7 +34,7 @@ file_progress_info::file_progress_info (FILE *f, bool display)
   m_displayed = 0;
   m_last_task = NULL;
   m_last_status = -1;
-  if (!display)
+  if (!f || !display)
     return;
   resume_stdout ();
 }

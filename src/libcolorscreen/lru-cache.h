@@ -26,7 +26,7 @@ template<typename P, typename T, T *get_new (P &, progress_info *progress), int 
 class lru_cache
 {
   static const bool debug = true;
-  static const bool verbose = true;
+  static const bool verbose = false;
 public:
   struct cache_entry
   {
@@ -183,7 +183,7 @@ template<typename P, typename T, T *get_new (P &, int xshift, int yshift, int wi
 class lru_tile_cache
 {
   static const bool debug = true;
-  static const bool verbose = true;
+  static const bool verbose = false;
 public:
   struct cache_entry
   {

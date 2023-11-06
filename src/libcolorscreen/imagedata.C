@@ -105,6 +105,8 @@ image_data::~image_data ()
     delete loader;
   if (stitch)
     delete stitch;
+  if (icc_profile)
+    free (icc_profile);
   if (!own)
     return;
   if (data)
@@ -679,7 +681,39 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
 	  else
 	    {
 	      *permille = n * 1000 / (stitch->params.width * stitch->params.height);
-	      return (stitch->images[y][x].load_img (error, progress));
+	      if (!stitch->images[y][x].load_img (error, progress))
+		return false;
+	      if (!x && !y)
+		{
+		  maxval = stitch->images[0][0].img->maxval;
+		  icc_profile_size = stitch->images[0][0].img->icc_profile_size;
+		  if (stitch->images[0][0].img->icc_profile)
+		    {
+		      icc_profile = malloc (icc_profile_size);
+		      memcpy (icc_profile, stitch->images[0][0].img->icc_profile, icc_profile_size);
+		    }
+		  xdpi = stitch->images[0][0].img->xdpi;
+		  ydpi = stitch->images[0][0].img->ydpi;
+		}
+	      else
+		{
+		  if (maxval != stitch->images[y][x].img->maxval)
+		    {
+		      *error = "images in stitch project must all have the same bit depth";
+		      return false;
+		    }
+		  if (xdpi != stitch->images[y][x].img->xdpi || ydpi != stitch->images[y][x].img->ydpi)
+		    {
+		      *error = "images in stitch project must all have the same DPI";
+		      return false;
+		    }
+		  if (icc_profile_size != stitch->images[y][x].img->icc_profile_size
+		      || memcmp (icc_profile, stitch->images[y][x].img->icc_profile, icc_profile_size))
+		    {
+		      *error = "images in stitch project must all have the same color profile";
+		      return false;
+		    }
+		}
 	    }
       *permille = 1000;
       return true;
@@ -702,9 +736,6 @@ image_data::load (const char *name, const char **error, progress_info *progress)
     progress->set_task ("loading image header",1);
   if (!init_loader (name, error, progress))
     return false;
-  /* If this is stich project, we are done.  */
-  if (stitch)
-    return true;
 
   if (progress)
     progress->set_task ("allocating memory",1);

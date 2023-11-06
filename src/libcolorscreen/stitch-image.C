@@ -749,7 +749,7 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode
       else
 	lastused = ++current_time;
       //assert (pixel_known_p (sx, sy));
-      render2->render_pixel (sx - xpos, sy - ypos, r, g, b);
+      render2->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
      case render_predictive:
       if (!render3)
@@ -824,7 +824,7 @@ stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters
       else
 	lastused = ++current_time;
       //assert (pixel_known_p (sx, sy));
-      render2->render_hdr_pixel (sx - xpos, sy - ypos, r, g, b);
+      render2->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
       break;
      case render_predictive:
       if (!render3)

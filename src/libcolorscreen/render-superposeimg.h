@@ -44,6 +44,15 @@ public:
     m_scr_to_img.to_img (x, y, &ix, &iy);
     return sample_pixel_img (ix, iy, x, y);
   }
+  void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    coord_t ix, iy;
+    m_scr_to_img.to_img (xx, yy, &ix, &iy);
+    rgbdata d = sample_pixel_img (ix, iy, xx, yy);
+    set_color (d.red, d.green, d.blue, r, g, b);
+  }
 private:
   void inline render_pixel_img_antialias_priv (coord_t x, coord_t y, coord_t pixelsize, luminosity_t steps, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline rgbdata sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y);
