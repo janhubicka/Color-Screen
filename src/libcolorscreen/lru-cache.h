@@ -48,7 +48,8 @@ public:
   void
   prune ()
   {
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -72,11 +73,14 @@ public:
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
+    if (pthread_mutex_destroy(&lock) != 0)
+      abort ();
   }
   void
   increase_capacity (int n)
   {
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     cache_size = n * base_cache_size;
     pthread_mutex_unlock (&lock);
   }
@@ -88,7 +92,8 @@ public:
     int size = 0;
     unsigned long time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     time++;
     for (e = entries; e; e = e->next)
       {
@@ -99,7 +104,8 @@ public:
 	    if (verbose)
 	      fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name, (int)e->id, e->nuses);
 	    T *ret = e->val;
-	    pthread_mutex_unlock (&lock);
+	    if (pthread_mutex_unlock (&lock))
+	      abort ();
 	    if (id)
 	      *id = e->id;
 	    return ret;
@@ -156,7 +162,8 @@ public:
   /* Release T but keep it possibly in the cache.  */
   void release(T *val)
   {
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     for (cache_entry *e = entries; ; e = e->next)
       if (e->val == val)
 	{
@@ -206,7 +213,8 @@ public:
   void
   prune ()
   {
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -230,11 +238,14 @@ public:
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
+    if (pthread_mutex_destroy(&lock) != 0)
+      abort ();
   }
   void
   increase_capacity (int n)
   {
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     cache_size = n * base_cache_size;
     pthread_mutex_unlock (&lock);
   }
@@ -246,7 +257,8 @@ public:
     int size = 0;
     unsigned long time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
-    pthread_mutex_lock (&lock);
+    if (pthread_mutex_lock (&lock))
+      abort ();
     time++;
     for (e = entries; e; e = e->next)
       {

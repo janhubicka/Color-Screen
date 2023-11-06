@@ -198,6 +198,26 @@ public:
   {
     release_images = false;
   }
+  bool
+  tile_for_scr (coord_t sx, coord_t sy, int *x, int *y, bool only_loaded)
+  {
+    /* Lookup tile to use. */
+    int ix = 0, iy;
+    for (iy = 0 ; iy < params.height; iy++)
+      {
+	for (ix = 0 ; ix < params.width; ix++)
+	  if ((!only_loaded || images[iy][ix].img)
+	      && images[iy][ix].pixel_known_p (sx, sy))
+	    break;
+	if (ix != params.width)
+	  break;
+      }
+    if (iy == params.height)
+      return false;
+    *x = ix;
+    *y = iy;
+    return true;
+  }
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

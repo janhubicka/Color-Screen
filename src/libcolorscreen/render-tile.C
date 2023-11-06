@@ -36,18 +36,44 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 
   /* We initialize renderes to individual images on demand.  */
   assert (stitch.params.width * stitch.params.height < 256);
-  std::atomic<T *> renders[256];
+  //std::atomic<T *> renders[256];
+  T * renders[256];
   pthread_mutex_t lock[256];
   for (int x = 0; x < stitch.params.width * stitch.params.height; x++)
   {
     renders[x] = NULL;
-    pthread_mutex_init (&lock[x], NULL);
+    if (pthread_mutex_init (&lock[x], NULL) != 0)
+      perror ("lock");
   }
+  //renders[0] = init_render (0, 0);
 
   if (progress)
     progress->set_task ("rendering", height);
   int xmin = img.xmin, ymin = img.ymin;
-//#pragma omp parallel for default(none) shared(progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
+
+  /* HACK: For some reason initializing renderers inside of the loop makes graydata tocome out wrong.
+     So initialize all renderers first.  */
+  const bool hack = true;
+  if (hack)
+    for (int y = 0; y < height; y++)
+      {
+	coord_t py = (y + yoffset) * step + ymin;
+	if (!progress || !progress->cancel_requested ())
+	  for (int x = 0; x < width; x++)
+	    {
+	      int ix, iy;
+	      coord_t sx, sy;
+	      stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
+	      if (stitch.tile_for_scr (sx, sy, &ix, &iy, true)
+		  && !renders[iy * stitch.params.width + ix])
+		{
+		  renders[iy * stitch.params.width + ix]  = init_render (ix, iy);
+		  if (progress && progress->cancel_requested ())
+		    break;
+		}
+	    }
+      }
+#pragma omp parallel for default(none) shared(progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -61,20 +87,10 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 	    coord_t sx, sy;
 	    stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
 
-	    int ix = 0, iy;
-	    /* Lookup tile to use. */
-	    for (iy = 0 ; iy < stitch.params.height; iy++)
-	      {
-		for (ix = 0 ; ix < stitch.params.width; ix++)
-		  if (stitch.images[iy][ix].img
-		      && stitch.images[iy][ix].pixel_known_p (sx, sy))
-		    break;
-		if (ix != stitch.params.width)
-		  break;
-	      }
+	    int ix, iy;
 
 	    /* If no tile was found, just render black pixel. */
-	    if (iy == stitch.params.height)
+	    if (!stitch.tile_for_scr (sx, sy, &ix, &iy, true))
 	      {
 		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;
@@ -90,7 +106,8 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 		lastrender = renders[iy * stitch.params.width + ix];
 		if (!lastrender)
 		  {
-		    pthread_mutex_lock (&lock[iy * stitch.params.width + ix]);
+		    if (hack && pthread_mutex_lock (&lock[iy * stitch.params.width + ix]) != 0)
+		      perror ("lock");
 		    {
 		      /* Now we are in critical section, re-check to see if
 		         someone initialized it in meantime.  */
@@ -98,7 +115,8 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 		      if (!lastrender)
 			renders[iy * stitch.params.width + ix] = lastrender = init_render (ix, iy);
 		    }
-		    pthread_mutex_unlock (&lock[iy * stitch.params.width + ix]);
+		    if (hack)
+		      pthread_mutex_unlock (&lock[iy * stitch.params.width + ix]);
 		    /* We took a time, check for cancelling.  */
 		    if (!lastrender
 			|| (progress && progress->cancel_requested ()))
@@ -113,7 +131,13 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 	progress->inc_progress ();
     }
   for (int x = 0; x < stitch.params.width * stitch.params.height; x++)
-    delete renders[x];
+    {
+      T *r = renders[x];
+      if (pthread_mutex_destroy (&lock[x]) != 0)
+	perror ("lock_destroy");
+      if (r)
+        delete r;
+    }
 }
 
 }
@@ -146,7 +170,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_img> (
-		  [&param,&img,&rparam,color,&progress] (int x, int y) mutable
+		  [&img,&rparam,&progress] (int x, int y) mutable
 		  {
 		    render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
 		    if (!r->precompute_all (progress))
@@ -234,9 +258,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_superpose_img> (
-		  [&param,&img,&rparam,color,&progress] (int x, int y) mutable
+		  [&img,&rparam,color,&progress] (int x, int y) mutable
 		  {
 		    render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, true);
+		    if (color)
+		      r->set_color_display ();
 		    if (!r->precompute_all (progress))
 		      {
 		        delete r;
@@ -300,9 +326,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_superpose_img> (
-		  [&param,&img,&rparam,color,&progress] (int x, int y) mutable
+		  [&img,&rparam,color,&progress] (int x, int y) mutable
 		  {
 		    render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, false);
+		    if (color)
+		      r->set_color_display ();
 		    if (!r->precompute_all (progress))
 		      {
 		        delete r;
@@ -370,7 +398,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_interpolate> (
-		  [&param,&img,&rparam,screen_compensation,adjust_luminosity,&progress] (int x, int y) mutable
+		  [&img,&rparam,screen_compensation,adjust_luminosity,&progress] (int x, int y) mutable
 		  {
 		    render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255,screen_compensation, adjust_luminosity);
 		    if (!r->precompute_all (progress))
