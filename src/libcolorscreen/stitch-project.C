@@ -21,7 +21,6 @@ stitch_project::~stitch_project ()
 bool
 stitch_project::initialize ()
 {
-  pthread_mutex_init (&lock, NULL);
   passthrough_rparam.gamma = rparam.gamma;
   if (params.orig_tile_gamma > 0)
     passthrough_rparam.output_gamma = params.orig_tile_gamma;
@@ -492,47 +491,3 @@ std::string stitch_project::adjusted_filename (std::string filename, std::string
   return ret + suffix + extension;
 }
 
-void
-stitch_project::set_render_param (render_parameters &my_rparam)
-{
-  if (rparam != my_rparam)
-    {
-      rparam = my_rparam;
-      for (int y = 0; y < params.width; y++)
-	for (int x = 0; x < params.height; x++)
-	  {
-	    if (images[y][x].render)
-	      {
-		delete images[y][x].render;
-		images[y][x].render = NULL;
-	      }
-	    if (images[y][x].render3)
-	      {
-		delete images[y][x].render3;
-		images[y][x].render3 = NULL;
-	      }
-	    if (images[y][x].render4)
-	      {
-		delete images[y][x].render4;
-		images[y][x].render4 = NULL;
-	      }
-	  }
-    }
-}
-void
-stitch_project::set_passthru_render_param (render_parameters &my_rparam)
-{
-  if (passthrough_rparam != my_rparam)
-    {
-      passthrough_rparam = my_rparam;
-      for (int y = 0; y < params.width; y++)
-	for (int x = 0; x < params.height; x++)
-	  {
-	    if (images[y][x].render2)
-	      {
-		delete images[y][x].render2;
-		images[y][x].render2 = NULL;
-	      }
-	  }
-    }
-}

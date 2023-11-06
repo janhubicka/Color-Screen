@@ -15,16 +15,13 @@ stitch_image::stitch_image ()
 : filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (NULL), known_pixels (NULL),
-  render (NULL), render2 (NULL), render3 (NULL), render4 (NULL), stitch_info (NULL), refcount (0)
+  render2 (NULL), stitch_info (NULL), refcount (0)
 {
 }
 
 stitch_image::~stitch_image ()
 {
-  delete render;
   delete render2;
-  delete render3;
-  delete render4;
   delete img;
   delete mesh_trans;
   delete known_pixels;
@@ -41,14 +38,8 @@ stitch_image::release_image_data (progress_info *progress)
   assert (!refcount && img);
   delete img;
   img = NULL;
-  delete render;
-  render = NULL;
   delete render2;
   render2 = NULL;
-  delete render3;
-  render3 = NULL;
-  delete render4;
-  render4 = NULL;
   nloaded--;
 }
 
@@ -59,8 +50,8 @@ stitch_image::load_img (const char **error, progress_info *progress)
   lastused = ++current_time;
   if (img)
     return true;
-  if ((nloaded >= (m_prj->params.produce_stitched_file_p ()
-		  ? m_prj->params.width * 2 : 1)) && m_prj->release_images)
+  /* Perhaps make number of cached images user specified.  */
+  if (nloaded >= 1 && m_prj->release_images)
     {
       int minx = -1, miny = -1;
       long minlast = 0;
@@ -264,8 +255,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
           if (other.img_pixel_known_p (sx + xpos, sy + ypos))
 	   {
 	     int r2 = 0, g2 = 0, b2 = 0;
-	     render_pixel (65535, sx + xpos, sy + ypos, render_original, &r, &g, &b, progress);
-	     other.render_pixel (65535, sx + xpos, sy + ypos, render_original, &r2, &g2, &b2, progress);
+	     render_pixel (65535, sx + xpos, sy + ypos, &r, &g, &b, progress);
+	     other.render_pixel (65535, sx + xpos, sy + ypos, &r2, &g2, &b2, progress);
 	     if (patch_detected_p (sx + xpos, sy + ypos) && other.patch_detected_p (sx + xpos, sy + ypos))
 	       {
 		 sumdiff[0] += abs (r2-r);
@@ -713,137 +704,23 @@ img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 }
 
 bool
-stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *progress)
+stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *progress)
 {
   bool loaded = false;
   /* TODO: Ignored. */
   const char *error;
-  switch (mode)
+  if (!render2)
     {
-     case render_demosaiced:
-      if (!render)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render = new render_interpolate (param, *img, m_prj->rparam, maxval, false, false);
-	  render->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-     case render_original:
-      if (!render2)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
-	  render2->set_color_display ();
-	  render2->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render2->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-     case render_predictive:
-      if (!render3)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render3 = new render_interpolate (param, *img, m_prj->rparam, maxval, true, false);
-	  render3->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render3->render_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-     case render_fast_stitch:
-      if (!render4)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render4 = new render_fast (param, *img, m_prj->rparam, maxval);
-	  render4->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render4->render_pixel (sx - xpos, sy - ypos, r, g, b);
-      break;
-    case render_max:
-      abort ();
+      if (!load_img (&error, progress))
+	return false;
+      render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
+      render2->set_color_display ();
+      render2->precompute_all (progress);
+      release_img ();
+      loaded = true;
     }
-  return loaded;
-}
-
-bool
-stitch_image::render_hdr_pixel (render_parameters & my_rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *progress)
-{
-  bool loaded = false;
-  /* TODO: Ignored. */
-  const char *error;
-  switch (mode)
-    {
-     case render_demosaiced:
-      if (!render)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render = new render_interpolate (param, *img, my_rparam, 65535, false, false);
-	  render->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-     case render_original:
-      if (!render2)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render2 = new render_img (param, *img, passthrough_rparam, 65535);
-	  render2->set_color_display ();
-	  render2->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render2->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-     case render_predictive:
-      if (!render3)
-	{
-	  if (!load_img (&error, progress))
-	    return false;
-	  render3 = new render_interpolate (param, *img, my_rparam, 65535, true, false);
-	  render3->precompute_all (progress);
-	  release_img ();
-	  loaded = true;
-	}
-      else
-	lastused = ++current_time;
-      //assert (pixel_known_p (sx, sy));
-      render3->render_hdr_pixel_scr (sx - xpos, sy - ypos, r, g, b);
-      break;
-    case render_max:
-      abort ();
-    }
+  else
+    lastused = ++current_time;
   return loaded;
 }
 

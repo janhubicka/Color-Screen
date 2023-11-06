@@ -60,12 +60,7 @@ struct stitching_params
   std::string csp_filename;
   std::string hugin_pto_filename;
   std::string report_filename;
-  std::string stitched_filename;
 
-  bool produce_stitched_file_p ()
-  {
-    return !stitched_filename.empty ();
-  }
 
   stitching_params ()
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
@@ -90,7 +85,6 @@ class stitch_image
     render_demosaiced,
     render_predictive,
     render_original,
-    render_fast_stitch,
     render_max
   };
   std::string filename;
@@ -116,10 +110,7 @@ class stitch_image
 
   detected_screen detected;
 
-  render_interpolate *render;
   render_img *render2;
-  render_interpolate *render3;
-  render_fast *render4;
   /* Screen angle and ratio.  Used in Dufaycolor analysis since
      the Dufaycolor screens are printed with different ratios and angles
      of the horisontal and vertical lines.
@@ -151,8 +142,6 @@ class stitch_image
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
-  bool render_pixel (int maxval, coord_t sx, coord_t sy, render_mode mode, int *r, int *g, int *b, progress_info *p);
-  bool render_hdr_pixel (render_parameters & rparam, render_parameters &passthrough_rparam, coord_t sx, coord_t sy, render_mode mode, luminosity_t *r, luminosity_t *g, luminosity_t *b, progress_info *p);
   bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
@@ -164,6 +153,7 @@ class stitch_image
   inline analyze_base & get_analyzer ();
   static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
 private:
+  bool render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
   static long current_time;
   static int nloaded;
   long lastused;
@@ -193,7 +183,6 @@ public:
   solver_parameters solver_param;
   /* Used to determine output file size.  */
   coord_t pixel_size;
-  pthread_mutex_t lock;
   DLL_PUBLIC stitch_project ();
   DLL_PUBLIC ~stitch_project ();
   bool initialize();
@@ -205,8 +194,6 @@ public:
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
-  void set_render_param (render_parameters & rparam);
-  void set_passthru_render_param (render_parameters & rparam);
   void keep_all_images ()
   {
     release_images = false;

@@ -47,7 +47,7 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
   if (progress)
     progress->set_task ("rendering", height);
   int xmin = img.xmin, ymin = img.ymin;
-#pragma omp parallel for default(none) shared(progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
+//#pragma omp parallel for default(none) shared(progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
