@@ -343,6 +343,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       int miny = std::max ((int)(shift_y / scale_y), 0);
       int maxy = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
       printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
+      if (!scan.stitch)
       if (minx < maxx && miny < maxy)
 	{
 	  bool inverted = rparams.gray_min > rparams.gray_max;
