@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <functional>
 #include <sys/time.h>
+#include <mutex>
 #include "pthread.h"
 #include "include/colorscreen.h"
 #include "include/render-fast.h"
@@ -11,6 +12,7 @@
 namespace {
 
 static int stats = -1;
+std::mutex global_rendering_lock;
 
 static inline void
 putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
@@ -160,6 +162,9 @@ render_to_scr::render_tile (enum render_type_t render_type,
   struct timeval start_time;
   if (stats)
     gettimeofday (&start_time, NULL);
+  const bool lock_p = false;
+  if (lock_p )
+    global_rendering_lock.lock ();
   if (progress)
     progress->set_task ("precomputing", 1);
   if (!img.stitch ||1)
@@ -187,7 +192,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (color)
 	    render.set_color_display ();
 	  if (!render.precompute_all (progress))
-	    return false;
+	    {
+	      if (lock_p)
+		global_rendering_lock.unlock ();
+	      return false;
+	    }
 
 	  if (!color && step > 1)
 	    {
@@ -278,7 +287,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (color)
 	    render.set_color_display ();
 	  if (!render.precompute_all (progress))
-	    return false;
+	    {
+	      if (lock_p)
+		global_rendering_lock.unlock ();
+	      return false;
+	    }
 	  if (step > 1)
 	    {
 	      rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
@@ -346,7 +359,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (color)
 	    render.set_color_display ();
 	  if (!render.precompute_all (progress))
-	    return false;
+	    {
+	      if (lock_p)
+		global_rendering_lock.unlock ();
+	      return false;
+	    }
 	  if (step > 1)
 	    {
 	      rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
@@ -416,7 +433,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (!render.precompute_img_range (xoffset * step, yoffset * step,
 					    (width + xoffset) * step,
 					    (height + yoffset) * step, progress))
-	    return false;
+	    {
+	      if (lock_p)
+		global_rendering_lock.unlock ();
+	      return false;
+	    }
 
 	  if (progress)
 	    progress->set_task ("rendering", height);
@@ -441,10 +462,28 @@ render_to_scr::render_tile (enum render_type_t render_type,
       case render_type_fast:
 	{
 	  if (img.stitch)
-	    break;
+	    {
+	      render_stitched<render_fast> (
+		  [&img,&rparam,&progress] (int x, int y) mutable
+		  {
+		    render_fast *r = new render_fast (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		    if (!r->precompute_all (progress))
+		      {
+		        delete r;
+			r = NULL;
+		      }
+		    return r;
+		  },
+		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+	      break;
+	    }
 	  render_fast render (param, img, rparam, 255);
 	  if (!render.precompute_all (progress))
-	    return false;
+	    {
+	      if (lock_p)
+		global_rendering_lock.unlock ();
+	      return false;
+	    }
 
 	  if (progress)
 	    progress->set_task ("rendering", height);
@@ -486,5 +525,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
       prev_time_set = true;
       fflush (stdout);
     }
+  if (lock_p)
+    global_rendering_lock.unlock ();
   return !progress || !progress->cancelled ();
 }

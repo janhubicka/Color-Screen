@@ -714,6 +714,7 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
 		      return false;
 		    }
 		}
+	      return true;
 	    }
       *permille = 1000;
       return true;

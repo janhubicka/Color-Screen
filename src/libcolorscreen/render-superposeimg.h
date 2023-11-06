@@ -46,11 +46,9 @@ public:
   }
   void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
     coord_t ix, iy;
-    m_scr_to_img.to_img (xx, yy, &ix, &iy);
-    rgbdata d = sample_pixel_img (ix, iy, xx, yy);
+    m_scr_to_img.to_img (x, y, &ix, &iy);
+    rgbdata d = sample_pixel_img (ix, iy, x, y);
     set_color (d.red, d.green, d.blue, r, g, b);
   }
 private:

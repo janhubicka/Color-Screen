@@ -9,19 +9,25 @@ public:
   {
     return render_to_scr::precompute_all (true, progress);
   }
-  void render_pixel (int x, int y, int *r, int *g, int *b);
+  void render_pixel_scr (int x, int y, int *r, int *g, int *b)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.to_img (x, y, &xx, &yy);
+    render_pixel (x, y, xx, yy, r, g, b);
+  }
   void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);
-    render_pixel (xx, yy, r, g, b);
+    render_pixel (xx, yy, x, y, r, g, b);
   }
   void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel (xx, yy, r, g, b);
+    render_pixel_scr (xx, yy, r, g, b);
   }
 private:
+  void render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g, int *b);
 };
 #endif
