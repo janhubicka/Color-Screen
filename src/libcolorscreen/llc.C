@@ -8,33 +8,33 @@
 
 
 static
-std::string read_string (FILE *f)
+std::string read_string (memory_buffer *f)
 {
   std::string s;
-  unsigned int len = (unsigned char)getc (f);
+  unsigned int len = (unsigned char)f->getc ();
   s.resize (len, ' ');
   for (int i = 0; i < (int)s.length (); i++)
-    s[i]=getc (f);
+    s[i]=f->getc ();
   return s;
 }
 
 static void
-skip (FILE *f, int l)
+skip (memory_buffer *f, int l)
 {
 	for (int i = 0; i < l; i++)
-	  getc(f);
+	  f->getc ();
 }
 
 static uint16_t
-read_uint16 (FILE *f)
+read_uint16 (memory_buffer *f)
 {
-  uint16_t ret = ((uint16_t)(unsigned char)getc (f))
-    		 + (((uint16_t)(unsigned char)getc (f)) << 8);
+  uint16_t ret = ((uint16_t)(unsigned char)f->getc ())
+    		 + (((uint16_t)(unsigned char)f->getc ()) << 8);
   return ret;
 }
 
 static uint16_t
-read_uint32 (FILE *f)
+read_uint32 (memory_buffer *f)
 {
   uint16_t ret = ((uint32_t)(unsigned char)read_uint16 (f))
     		 + (((uint32_t)(unsigned char)read_uint16 (f)) << 16);
@@ -42,7 +42,7 @@ read_uint32 (FILE *f)
 }
 
 llc *
-llc::load(FILE *f, bool verbose)
+llc::load(memory_buffer *f, bool verbose)
 {
 	std::string s = read_string (f);
 	if (s != "XCon")
@@ -79,7 +79,7 @@ llc::load(FILE *f, bool verbose)
 	uint16_t v1 = read_uint16 (f);
 	uint16_t v2 = read_uint16 (f);
 	uint16_t v3 = read_uint16 (f);
-	getc(f);
+	f->getc ();
 	if (verbose)
 	  printf ("VER: %i %i %i\n", v1, v2, v3);
 	s = read_string (f);
@@ -89,7 +89,7 @@ llc::load(FILE *f, bool verbose)
 	    return NULL;
 	  }
 	uint16_t camera = read_uint16 (f);
-	uint8_t val = getc (f);
+	uint8_t val = f->getc ();
 	if (verbose)
 	  printf ("Camera: %i %i\n", camera, val);
 	s = read_string (f);
@@ -282,9 +282,15 @@ llc::load(FILE *f, bool verbose)
 	      {
 		    uint16_t val = read_uint16 (f);
 		    uint16_t val2 = read_uint16 (f);
-		    float weight = ((luminosity_t)val)/32668;
-		    float weight2 = ((luminosity_t)val2)/32668;
-		    llci->set_weight(x, y, /*(((luminosity_t)val) / 0x8000-1)*30 + 1*/ (1/weight)*weight2);
+		    float weight = ((luminosity_t)val)/32768;
+		    float weight2 = ((luminosity_t)val2)/32768;
+		    //llci->set_weight(x, 83-y, 1/((weight-1)*32+1) );
+		    //llci->set_weight(x, 83-y, (1-((weight-1)*32)), (1-weight2)*256 );
+		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)
+		    
+		    
+		    llci->set_weight(110-x, 83-y, (1+((weight2-1)*32)), /*((int)val - 32768)/32.0*/0);
+		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)), -((int)val2 - 32768)/8.0);
 #if 0
 		for (int c = 0; c < 2; c++)
 		  {
@@ -297,7 +303,7 @@ llc::load(FILE *f, bool verbose)
 	      }
 	  }
 #if 0
-	FILE *out = fopen ("test.pnm", "w");
+	memory_buffer *out = fopen ("test.pnm", "w");
 	fprintf (out, "P2\n 111 84\n65535\n");
 	//fprintf (out, "P3\n 37 84\n65535\n");
 	for (int j = 0; j < 84; j++)

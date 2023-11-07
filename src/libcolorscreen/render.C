@@ -4,6 +4,7 @@
 #include "include/sensitivity.h"
 #include "gaussian-blur.h"
 #include "sharpen.h"
+#include "mapalloc.h"
 
 class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
@@ -27,7 +28,7 @@ gray_data::gray_data (int width, int height)
       m_gray_data = NULL;
       return;
     }
-  m_gray_data[0] = (unsigned short *)malloc (width * height * sizeof (**m_gray_data));
+  m_gray_data[0] = (unsigned short *)MapAlloc::Alloc (width * height * sizeof (**m_gray_data));
   if (!m_gray_data [0])
     {
       free (m_gray_data);
@@ -41,9 +42,28 @@ gray_data::~gray_data()
 {
   if (m_gray_data)
     {
-      free (m_gray_data[0]);
+      MapAlloc::Free (m_gray_data[0]);
       free (m_gray_data);
     }
+}
+/* A wrapper class around m_sharpened_data which handles allocation and dealocation.
+   This is needed for the cache.  */
+class sharpened_data
+{
+public:
+  luminosity_t *m_data;
+  sharpened_data (int width, int height);
+  ~sharpened_data();
+};
+sharpened_data::sharpened_data (int width, int height)
+{
+   m_data = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t));
+}
+sharpened_data::~sharpened_data ()
+{
+  if (m_data)
+    MapAlloc::Free (m_data);
+  m_data = NULL;
 }
 
 namespace
@@ -307,20 +327,26 @@ getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *tabl
   return table[graydata[y][x]];
 }
 
-luminosity_t *
+sharpened_data *
 get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
 {
-  luminosity_t *out = (luminosity_t *)calloc (p.width * p.height, sizeof (luminosity_t));
-  if (!out)
+  sharpened_data *ret = new sharpened_data (p.width, p.height);
+  if (!ret)
     return NULL;
-  if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
+  luminosity_t *out = ret->m_data;
+  if (!out)
     {
-      free (out);
+      delete ret;
       return NULL;
     }
-  return out;
+  if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
+    {
+      delete ret;
+      return NULL;
+    }
+  return ret;
 }
-static lru_cache <sharpen_params, luminosity_t, get_new_sharpened_data, 1> sharpened_data_cache ("sharpened data");
+static lru_cache <sharpen_params, sharpened_data, get_new_sharpened_data, 1> sharpened_data_cache ("sharpened data");
 
 struct gray_and_sharpen_params
 {
@@ -339,22 +365,30 @@ getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
   return t->out_table2[(int)(compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
   //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
-luminosity_t *
+sharpened_data *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
 {
-  luminosity_t *out = (luminosity_t *)calloc (p.sp.width * p.sp.height, sizeof (luminosity_t));
+  sharpened_data *ret = new sharpened_data (p.sp.width, p.sp.height);
+  if (!ret)
+    return NULL;
+  luminosity_t *out = ret->m_data;
+  if (!out)
+    {
+      delete ret;
+      return NULL;
+    }
   gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
   if (!out)
     return NULL;
   if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
     {
-      free (out);
+      delete ret;
       return NULL;
     }
   free_gray_data_tables (t);
-  return out;
+  return ret;
 }
-static lru_cache <gray_and_sharpen_params, luminosity_t, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
+static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
 
 }
 
@@ -379,7 +413,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  sharpened_data_cache.prune ();
 	  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
 				       {m_params.sharpen_radius, m_params.sharpen_amount, 0, NULL, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
-	  m_sharpened_data = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+	  m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+	  m_sharpened_data = m_sharpened_data_holder->m_data;
 	  m_gray_and_sharpened = true;
 	}
       else
@@ -399,7 +434,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  if (m_params.sharpen_radius && m_params.sharpen_amount)
 	    {
 	      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
-	      m_sharpened_data = sharpened_data_cache.get (p, progress, &m_gray_data_id);
+	      m_sharpened_data_holder = sharpened_data_cache.get (p, progress, &m_gray_data_id);
+	      m_sharpened_data = m_sharpened_data_holder->m_data;
 	      m_gray_and_sharpened = false;
 	    }
 	}
@@ -461,9 +497,9 @@ render::~render ()
   if (m_sharpened_data)
     {
       if (m_gray_and_sharpened)
-	gray_and_sharpened_data_cache.release (m_sharpened_data);
+	gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
       else
-	sharpened_data_cache.release (m_sharpened_data);
+	sharpened_data_cache.release (m_sharpened_data_holder);
     }
 }
 

@@ -285,7 +285,7 @@ class DLL_PUBLIC render
 {
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+  : m_img (img), m_params (rparam), m_gray_data (img.data), m_gray_data_id (img.id), m_gray_data_holder (NULL), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_lookup_table_id (0), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
     if (m_params.gray_min > m_params.gray_max)
@@ -355,6 +355,8 @@ protected:
   class gray_data *m_gray_data_holder;
   /* Sharpened data we render from.  */
   luminosity_t *m_sharpened_data;
+  /* Wrapping class to cause proper destruction.  */
+  class sharpened_data *m_sharpened_data_holder;
   /* Maximal value in m_data.  */
   int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */

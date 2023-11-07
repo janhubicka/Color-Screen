@@ -30,7 +30,6 @@ print_help (const char *filename)
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --save-project=filename.csprj               store analysis to a project file\n");
   printf ("  --load-project=filename.csprj               store analysis to a project file\n");
-  printf ("  --stitched=filename.tif                     store stitched file (with no blending)\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
   printf ("  --scan-ppi=scan-ppi                         PPI of input scan\n");
   printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
@@ -337,97 +336,19 @@ void stitch (progress_info *progress)
 	    if (x != xx || y != yy)
 	      prj->images[y][x].diff (prj->images[yy][xx], progress);
   const char *error;
-  if (prj->params.produce_stitched_file_p ())
-    {
-      TIFF *out;
-      uint16_t *outrow;
-      if (!prj->images[0][0].load_img (&error, progress))
-	{
-	  progress->pause_stdout ();
-	  fprintf (stderr, "Can not load first image %s\n", error);
-	  exit (1);
-	}
-      out =
-	open_output_file (prj->params.stitched_filename.c_str (), (xmax-xmin) / xstep, (ymax-ymin) / ystep, &outrow, 
-			  &error,
-			  prj->images[0][0].img->icc_profile, prj->images[0][0].img->icc_profile_size,
-			  progress);
-      prj->images[0][0].release_img ();
-      int j = 0;
-      if (!out)
-	{
-	  progress->pause_stdout ();
-	  fprintf (stderr, "Can not open final stitch file %s: %s\n", prj->params.stitched_filename.c_str (), error);
-	  exit (1);
-	}
-      for (coord_t y = ymin; j < (int)((ymax-ymin) / ystep); y+=ystep, j++)
-	{
-	  int i = 0;
-	  bool set_p = false;
-	  for (coord_t x = xmin; i < (int)((xmax-xmin) / xstep); x+=xstep, i++)
-	    {
-	      coord_t sx, sy;
-	      int r = 0,g = 0,b = 0;
-	      int ix = 0, iy = 0;
-	      prj->common_scr_to_img.final_to_scr (x, y, &sx, &sy);
-	      for (iy = 0 ; iy < prj->params.height; iy++)
-		{
-		  for (ix = 0 ; ix < prj->params.width; ix++)
-		    if (prj->images[iy][ix].analyzed && prj->images[iy][ix].pixel_known_p (sx, sy))
-		      break;
-		  if (ix != prj->params.width)
-		    break;
-		}
-	      if (iy != prj->params.height)
-		{
-		  if (prj->images[iy][ix].render_pixel (65535, sx,sy, stitch_image::render_original,&r,&g,&b, progress))
-		    set_p = true;
-		  if (!prj->images[iy][ix].output)
-		    {
-		      if ((prj->params.orig_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
-			  || (prj->params.demosaiced_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, 1, 1, stitch_image::render_demosaiced, progress))
-			  || (prj->params.predictive_tiles && !prj->images[iy][ix].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
-			{
-			  fprintf (stderr, "Writting tile: %s\n", error);
-			  exit (1);
-			}
-		      set_p = true;
-		    }
-		}
-	      outrow[3 * i] = r;
-	      outrow[3 * i + 1] = g;
-	      outrow[3 * i + 2] = b;
-	    }
-	  if (set_p)
-	    {
-	      progress->set_task ("Rendering and saving", (ymax-ymin) / ystep);
-	      progress->set_progress (j);
-	    }
-	  if (!stitch_image::write_row (out, j, outrow, &error, progress))
-	    {
-	      fprintf (stderr, "Writting failed: %s\n", error);
-	      exit (1);
-	    }
-	}
-      progress->set_task ("Closing output file", 1);
 
-      TIFFClose (out);
-      free (outrow);
-      progress->set_task ("Releasing memory", 1);
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+    {
+      coord_t demosaicedstep = prj->params.type == Dufay ? 0.5 : 0.25;
+      if ((prj->params.orig_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
+	  || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
+	  || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
+	{
+	  fprintf (stderr, "Writting tile: %s\n", error);
+	  exit (1);
+	}
     }
-  else
-    for (int y = 0; y < prj->params.height; y++)
-      for (int x = 0; x < prj->params.width; x++)
-      {
-	coord_t demosaicedstep = prj->params.type == Dufay ? 0.5 : 0.25;
-	if ((prj->params.orig_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
-	    || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
-	    || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
-	  {
-	    fprintf (stderr, "Writting tile: %s\n", error);
-	    exit (1);
-	  }
-      }
   for (int y = 0; y < prj->params.height; y++)
     for (int x = 0; x < prj->params.width; x++)
       if (prj->images[y][x].img)
@@ -523,18 +444,6 @@ main (int argc, char **argv)
 	  prj->params.hugin_pto_filename = argv[i] + strlen ("--hugin-pto=");
 	  continue;
 	}
-      if (!strcmp (argv[i], "--stitched"))
-	{
-	  if (i == argc - 1)
-	    {
-	      fprintf (stderr, "Missing stitched filename\n");
-	      print_help (argv[0]);
-	      exit (1);
-	    }
-	  i++;
-	  prj->params.stitched_filename = argv[i];
-	  continue;
-	}
       if (!strcmp (argv[i], "--no-cpfind"))
 	{
 	  prj->params.cpfind = 0;
@@ -548,11 +457,6 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--cpfind-verification"))
 	{
 	  prj->params.cpfind = 2;
-	  continue;
-	}
-      if (!strncmp (argv[i], "--stitched=", strlen ("--stitched=")))
-	{
-	  prj->params.stitched_filename = argv[i] + strlen ("--stitched=");
 	  continue;
 	}
       if (!strcmp (argv[i], "--demosaiced-tiles"))

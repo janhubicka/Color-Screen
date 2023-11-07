@@ -58,17 +58,6 @@ stitch_image::load_img (const char **error, progress_info *progress)
       int nref = 0;
 
 
-#if 0
-      progress->pause_stdout ();
-      for (int y = 0; y < m_prj->params.height; y++)
-      {
-	for (int x = 0; x < m_prj->params.width; x++)
-	  printf (" %i:%5i", images[y][x].img != NULL, (int)images[y][x].lastused);
-        printf ("\n");
-      }
-      progress->resume_stdout ();
-#endif
-
       for (int y = 0; y < m_prj->params.height; y++)
 	for (int x = 0; x < m_prj->params.width; x++)
 	  if (m_prj->images[y][x].refcount)
@@ -82,10 +71,6 @@ stitch_image::load_img (const char **error, progress_info *progress)
 	    }
       if (minx != -1)
 	m_prj->images[miny][minx].release_image_data (progress);
-#if 0
-      else
-	printf ("Too many (%i) images referenced\n", nref);
-#endif
     }
   nloaded++;
   if (progress)
@@ -99,6 +84,8 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (img->stitch)
     {
       *error = "Can not embedd stitch projects in sitch projects";
+      delete img;
+      img = NULL;
       return false;
     }
   img_width = img->width;
@@ -110,6 +97,8 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (!img->rgbdata)
     {
       *error = "source image is not having color channels";
+      delete img;
+      img = NULL;
       return false;
     }
   return true;

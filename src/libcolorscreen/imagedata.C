@@ -9,6 +9,7 @@
 #include "include/imagedata.h"
 #include "llc.h"
 #include "include/stitch.h"
+#include "mapalloc.h"
 
 #define HAVE_LIBRAW
 
@@ -81,14 +82,17 @@ class raw_image_data_loader: public image_data_loader
 {
 public:
   raw_image_data_loader (image_data *img)
-  : m_img (img)
+  : lcc(NULL),m_img (img)
   { }
   virtual bool init_loader (const char *name, const char **error, progress_info *);
   virtual bool load_part (int *permille, const char **error);
   virtual ~raw_image_data_loader ()
   {
+    if (lcc)
+      delete lcc;
   }
 private:
+  llc *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
 };
@@ -111,12 +115,12 @@ image_data::~image_data ()
     return;
   if (data)
     {
-      free (*data);
+      MapAlloc::Free (*data);
       free (data);
     }
   if (rgbdata)
     {
-      free (*rgbdata);
+      MapAlloc::Free (*rgbdata);
       free (rgbdata);
     }
 }
@@ -147,7 +151,7 @@ image_data::allocate ()
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
 	return false;
-      data[0] = (gray *)calloc (width * height, sizeof (**data));
+      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data));
       if (!data [0])
 	{
 	  free (data);
@@ -168,7 +172,7 @@ image_data::allocate ()
 	  data = NULL;
 	  return false;
 	}
-      rgbdata[0] = (pixel *)calloc (width * height, sizeof (**rgbdata));
+      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata));
       if (!rgbdata [0])
 	{
 	  free (*data);
@@ -527,9 +531,60 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       if (buffer_size != (size_t)zip_fread (zip_file, buffer, buffer_size))
 	{
 	  *error = "can not decompress the RAW file";
+	  free (buffer);
 	  return false;
 	}
       zip_fclose (zip_file);
+      int nentries = zip_get_num_entries (zip, 0);
+      for (int i = 0; i < nentries; i++)
+	{
+	  const char *name = zip_get_name (zip, i, 0);
+	  int len = strlen (name);
+	  if (name[len-4]=='.' && name[len-3]=='l' && name[len-2]=='c' && name[len-1]=='c')
+	    {
+	      printf ("Loading lcc %s\n",name);
+	      if (zip_stat (zip, name, 0, &stat))
+		{
+		  *error = "can not determine length of 0.iiq in the eip zip archive";
+		  free (buffer);
+		  return false;
+		}
+	      zip_file = zip_fopen (zip, name, 0);
+	      if (!zip_file)
+		{
+		  *error = "can not find 0.iiq in the eip zip archive";
+		  return false;
+		}
+	      memory_buffer mbuffer = {NULL, 0, 0};
+	      mbuffer.len = stat.size;
+	      mbuffer.data = malloc (mbuffer.len);
+	      if (!mbuffer.data)
+		{
+		  *error = "can not allocate buffer to decompress LCC file";
+		  free (buffer);
+		  free (mbuffer.data);
+		  return false;
+		}
+	      if (mbuffer.len != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
+		{
+		  *error = "can not allocate buffer to decompress LCC file";
+		  free (buffer);
+		  free (mbuffer.data);
+		  return false;
+		}
+	      lcc = llc::load (&mbuffer, true);
+	      if (!lcc)
+		{
+		  *error = "can not read LCC file";
+		  free (buffer);
+		  free (mbuffer.data);
+		  return false;
+		}
+	      free (mbuffer.data);
+	      zip_fclose (zip_file);
+	      break;
+	    }
+	}
       zip_close (zip);
     }
   RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
@@ -543,6 +598,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     ret = RawProcessor.open_file(name);
   if (ret != LIBRAW_SUCCESS)
     {
+      if (buffer)
+	free (buffer);
       *error = libraw_strerror(ret);
       return false;
     }
@@ -550,6 +607,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     progress->set_task ("unpacking RAW data",1);
   if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
     {
+      if (buffer)
+	free (buffer);
       *error = libraw_strerror(ret);
       return false;
     }
@@ -557,6 +616,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     progress->set_task ("demosaicing",1);
   if ((ret = RawProcessor.dcraw_process()) != LIBRAW_SUCCESS)
     {
+      if (buffer)
+	free (buffer);
       *error = libraw_strerror(ret);
       return false;
     }
@@ -573,18 +634,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 bool
 raw_image_data_loader::load_part (int *permille, const char **error)
 {
-  FILE *f = fopen ("/tmp/tmp.llc", "r");
-  llc *llci = NULL;
-  //printf ("LLC\n");
-  //if (f)
-    //llci = llc::load (f);
-  //else
-    //fprintf (stderr, "Missing LLC\n");
   for (int y = 0; y < m_img->height; y++)
     for (int x = 0; x < m_img->width; x++)
       {
 	int i = y * m_img->width + x;
-	if (!llci)
+	if (!lcc)
 	  {
 	    m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
 	    m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
@@ -592,13 +646,11 @@ raw_image_data_loader::load_part (int *permille, const char **error)
 	  }
 	else
 	  {
-	    m_img->rgbdata[y][x].r = llci->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y);
-	    m_img->rgbdata[y][x].g = llci->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y);
-	    m_img->rgbdata[y][x].b = llci->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].r = lcc->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].g = lcc->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].b = lcc->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y);
 	  }
       }
-  if (llci)
-    delete llci;
   *permille = 1000;
   RawProcessor.recycle ();
   return true;
