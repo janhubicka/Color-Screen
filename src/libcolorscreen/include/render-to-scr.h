@@ -95,10 +95,6 @@ public:
       get_img_rgb_pixel (x, y, &rr, &gg, &bb);
     set_color (rr, gg, bb, r, g, b);
   }
-  int inline render_raw_pixel (int x, int y)
-  {
-    return m_gray_data[y][x] * (long)m_img.maxval / m_maxval;
-  }
   void inline render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;

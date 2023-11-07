@@ -342,6 +342,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       int maxx = std::min ((int)((shift_x + pxsize) / scale_x), scan.width);
       int miny = std::max ((int)(shift_y / scale_y), 0);
       int maxy = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
+      /* We no longer have way to access raw graydata.  */
+#if 0
       printf ("%i %i %i %i\n",pxsize, pysize,minx, maxx);
       if (!scan.stitch)
       if (minx < maxx && miny < maxy)
@@ -364,6 +366,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  if (inverted)
 	    std::swap (rparams.gray_min, rparams.gray_max);
 	}
+#endif
      }
   if (k == 'b')
     {

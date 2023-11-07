@@ -10,42 +10,6 @@ class lru_caches lru_caches;
 std::atomic_ulong lru_caches::time;
 
 
-/* A wrapper class around m_gray_data which handles allocation and dealocation.
-   This is needed for the cache.  */
-class gray_data
-{
-public:
-  unsigned short **m_gray_data;
-  gray_data (int width, int height);
-  ~gray_data();
-};
-
-gray_data::gray_data (int width, int height)
-{
-  m_gray_data = (unsigned short **)malloc (sizeof (*m_gray_data) * height);
-  if (!m_gray_data)
-    {
-      m_gray_data = NULL;
-      return;
-    }
-  m_gray_data[0] = (unsigned short *)MapAlloc::Alloc (width * height * sizeof (**m_gray_data));
-  if (!m_gray_data [0])
-    {
-      free (m_gray_data);
-      m_gray_data = NULL;
-      return;
-    }
-  for (int i = 1; i < height; i++)
-    m_gray_data[i] = m_gray_data[0] + i * width;
-}
-gray_data::~gray_data()
-{
-  if (m_gray_data)
-    {
-      MapAlloc::Free (m_gray_data[0]);
-      free (m_gray_data);
-    }
-}
 /* A wrapper class around m_sharpened_data which handles allocation and dealocation.
    This is needed for the cache.  */
 class sharpened_data
@@ -264,41 +228,6 @@ compute_gray_data (gray_data_tables &t, int r, int g, int b)
   return std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
 }
 
-
-/* Mix RGB channels into grayscale.  */
-static gray_data *
-get_new_graydata (struct graydata_params &p, progress_info *progress)
-{
-  gray_data_tables t = compute_gray_data_tables (p, NULL, progress);
-  if (progress)
-    progress->set_task ("computing grayscale", p.img->height);
-
-  gray_data *data = new gray_data (p.img->width, p.img->height);
-  if (!data || !data->m_gray_data)
-    {
-      if (data)
-	delete data;
-      return NULL;
-    }
-
-
-#pragma omp parallel for shared(data,t,p,progress) default(none)
-  for (int y = 0; y < p.img->height; y++)
-    {
-      for (int x = 0; x < p.img->width; x++)
-	data->m_gray_data[y][x]
-	       	= t.out_table[(int)(compute_gray_data (t, p.img->rgbdata[y][x].r, p.img->rgbdata[y][x].g, p.img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
-      if (progress)
-	 progress->inc_progress ();
-    }
-  if (progress)
-    progress->set_task ("done", 1);
-  free_gray_data_tables (t);
-
-  return data;
-}
-static lru_cache <graydata_params, gray_data, get_new_graydata, 1> gray_data_cache ("gray data");
-
 struct sharpen_params
 {
   luminosity_t radius;
@@ -320,34 +249,6 @@ struct sharpen_params
   }
 };
 
-/* Helper for sharpening template.  */
-luminosity_t
-getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
-{
-  return table[graydata[y][x]];
-}
-
-sharpened_data *
-get_new_sharpened_data (struct sharpen_params &p, progress_info *progress)
-{
-  sharpened_data *ret = new sharpened_data (p.width, p.height);
-  if (!ret)
-    return NULL;
-  luminosity_t *out = ret->m_data;
-  if (!out)
-    {
-      delete ret;
-      return NULL;
-    }
-  if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.gray_data, p.lookup_table, p.width, p.height, p.radius, p.amount, progress))
-    {
-      delete ret;
-      return NULL;
-    }
-  return ret;
-}
-static lru_cache <sharpen_params, sharpened_data, get_new_sharpened_data, 1> sharpened_data_cache ("sharpened data");
-
 struct gray_and_sharpen_params
 {
   graydata_params gp;
@@ -358,7 +259,14 @@ struct gray_and_sharpen_params
       return gp == o.gp && sp == o.sp;
     }
 };
-/* Helper for sharpening template.  */
+
+/* Helper for sharpening template for images with gray data.  */
+luminosity_t
+getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
+{
+  return table[graydata[y][x]];
+}
+/* Helper for sharpening template for images with RGB data only.  */
 luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
@@ -377,15 +285,26 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       delete ret;
       return NULL;
     }
-  gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
-  if (!out)
-    return NULL;
-  if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
+
+  if (p.sp.gray_data)
     {
-      delete ret;
-      return NULL;
+      if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.sp.gray_data, p.sp.lookup_table, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
+	{
+	  delete ret;
+	  return NULL;
+	}
     }
-  free_gray_data_tables (t);
+  else
+    {
+      gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
+      if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
+	{
+	  delete ret;
+	  free_gray_data_tables (t);
+	  return NULL;
+	}
+      free_gray_data_tables (t);
+    }
   return ret;
 }
 static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
@@ -405,41 +324,10 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
-  if (grayscale_needed)
-    {
-      if (!m_gray_data && m_params.sharpen_radius && m_params.sharpen_amount)
-	{
-	  gray_data_cache.prune ();
-	  sharpened_data_cache.prune ();
-	  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
-				       {m_params.sharpen_radius, m_params.sharpen_amount, 0, NULL, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
-	  m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
-	  m_sharpened_data = m_sharpened_data_holder->m_data;
-	  m_gray_and_sharpened = true;
-	}
-      else
-	{
-	  /* Assume that same setting is used for all renderers and save some memory.  */
-	  gray_and_sharpened_data_cache.prune ();
-	  if (!m_gray_data)
-	    {
-	      graydata_params p = {m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue};
-	      if (p.gamma < 0.001)
-		p.gamma = 0.001;
-	      if (p.gamma > 1000)
-		p.gamma = 1000;
-	      m_gray_data_holder = gray_data_cache.get (p, progress, &m_gray_data_id);
-	      m_gray_data = m_gray_data_holder->m_gray_data;
-	    }
-	  if (m_params.sharpen_radius && m_params.sharpen_amount)
-	    {
-	      sharpen_params p = {m_params.sharpen_radius, m_params.sharpen_amount, m_gray_data_id, m_gray_data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height};
-	      m_sharpened_data_holder = sharpened_data_cache.get (p, progress, &m_gray_data_id);
-	      m_sharpened_data = m_sharpened_data_holder->m_data;
-	      m_gray_and_sharpened = false;
-	    }
-	}
-    }
+  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
+			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_img.data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
+  m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+  m_sharpened_data = m_sharpened_data_holder->m_data;
 
   color_matrix color;
   if (m_params.presaturation != 1)
@@ -492,15 +380,8 @@ render::~render ()
     out_lookup_table_cache.release (m_out_lookup_table);
   if (m_rgb_lookup_table)
     lookup_table_cache.release (m_rgb_lookup_table);
-  if (m_gray_data_holder)
-    gray_data_cache.release (m_gray_data_holder);
   if (m_sharpened_data)
-    {
-      if (m_gray_and_sharpened)
-	gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
-      else
-	sharpened_data_cache.release (m_sharpened_data_holder);
-    }
+    gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
@@ -534,7 +415,5 @@ render::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int heig
 void
 render_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
-  sharpened_data_cache.increase_capacity (n);
-  gray_data_cache.increase_capacity (n);
   gray_and_sharpened_data_cache.increase_capacity (n);
 }

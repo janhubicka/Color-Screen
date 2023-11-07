@@ -13,6 +13,22 @@ bool
 sharpen(O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
 {
   luminosity_t *cmatrix;
+  /* Fast path if we do no sharpening.  */
+  if (!radius || !amount)
+    {
+      if (progress)
+	progress->set_task ("converting to linear HDR image", height);
+#pragma omp parallel for shared(progress,out,width, height, param, data) default(none)
+      for (int y = 0; y < height; y++)
+        {
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < width; x++)
+	      out[y * width + x] = getdata (data, x, y, width, param);
+	}
+      if (progress && progress->cancelled ())
+	return false;
+      return true;
+    }
   int clen = fir_blur::gen_convolve_matrix (radius, &cmatrix);
   if (!clen)
     return false;
