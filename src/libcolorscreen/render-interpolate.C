@@ -92,6 +92,15 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
      width = width2 - xshift2 + xshift;
   if (height - yshift > height2 - yshift2)
      height = height2 - yshift2 + yshift;
+  /* For UI response, 
+     it is better to compute whole image then significant portion of it.  */
+  if (width * height > width2 * height2 / 2)
+     {
+       xshift = xshift2;
+       yshift = yshift2;
+       width = width2;
+       height = height2;
+     }
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
   xshift += 4;

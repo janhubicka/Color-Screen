@@ -15,7 +15,7 @@ private:
 	~MapAlloc();
 	class MapAllocObject {
 	public:
-		MapAllocObject(size_t _size, int alignment);
+		MapAllocObject(size_t _size, const char *reason, int alignment);
 		~MapAllocObject();
 		void* GetPointer();
 		size_t GetSize() { return size; }
@@ -39,7 +39,7 @@ private:
 	static size_t total_allocated;
 
 public:
-	static void* Alloc(size_t size, int alignment = 128);
+	static void* Alloc(size_t size, const char *reason, int alignment = 128);
 	static void Free(void* p);
 	static size_t GetSize(void* p);
 	static void CacheThreshold(size_t threshold);

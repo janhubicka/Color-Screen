@@ -151,7 +151,7 @@ image_data::allocate ()
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
 	return false;
-      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data));
+      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),"grayscale data");
       if (!data [0])
 	{
 	  free (data);
@@ -172,7 +172,7 @@ image_data::allocate ()
 	  data = NULL;
 	  return false;
 	}
-      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata));
+      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata), "RGB data");
       if (!rgbdata [0])
 	{
 	  free (*data);

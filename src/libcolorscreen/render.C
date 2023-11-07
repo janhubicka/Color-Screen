@@ -21,7 +21,7 @@ public:
 };
 sharpened_data::sharpened_data (int width, int height)
 {
-   m_data = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t));
+   m_data = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t), "HDR data");
 }
 sharpened_data::~sharpened_data ()
 {

@@ -15,6 +15,8 @@
 #define strcpy_s(a,b) strcpy(a,b)
 #endif
 
+const int debug = 1;
+
 std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";
 char MapAlloc::filename[512];
@@ -29,8 +31,8 @@ void MapAlloc::CacheThreshold(size_t limit) {
 	cache_threshold = limit;
 }
 
-void* MapAlloc::Alloc(size_t size, int alignment) {
-	MapAllocObject* m = new MapAllocObject(size, alignment);
+void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
+	MapAllocObject* m = new MapAllocObject(size, reason, alignment);
 	objects.push_back(m);
 	return m->GetPointer();
 }
@@ -64,8 +66,10 @@ void MapAlloc::SetTmpdir(const char* _tmpdir) {
 /***********************************************************************
 * MapAllocObject
 ***********************************************************************/
-MapAlloc::MapAllocObject::MapAllocObject(size_t _size, int alignment) : size(_size) {
+MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int alignment) : size(_size) {
 	if (total_allocated + size < cache_threshold) {
+		if (debug)
+		  printf ("Allocating %li bytes for %s, overall allocation: %i", (long)_size, reason, (long)(total_allocated + size));
 #ifdef _WIN32
 		pointer = _aligned_malloc(size, alignment);
 #else
@@ -134,6 +138,9 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, int alignment) : size(_si
 			throw(filename);
 		}
 
+		if (debug)
+		  printf ("Producing tmp file %s for %s of size %liMB\n", filename, reason, (long)size/1024/1024);
+
 		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, file, 0);
 		if (pointer == MAP_FAILED) {
 			unlink(filename);
@@ -152,17 +159,25 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, int alignment) : size(_si
 MapAlloc::MapAllocObject::~MapAllocObject() {
 #ifdef _WIN32
 	if (!file) {
+		if (debug)
+		  printf ("Freeing %li bytes\n", (long)size);
 		_aligned_free(pointer);
 		total_allocated -= size;
 	} else {
+		if (debug)
+		  printf ("Removing file %s of size %liMB\n", filename, (long)size/1024/1024);
 		UnmapViewOfFile(pointer);
 		CloseHandle(map);
 		CloseHandle(file);
 	}
 #else
 	if (!file) {
+		if (debug)
+		  printf ("Freeing %li bytes\n", (long)size);
 		free(pointer);
 	} else {
+		if (debug)
+		  printf ("Unmapping file %s of size %liMB\n", filename, (long)size/1024/1024);
 		munmap(pointer, size);
 		close(file);
 	}
