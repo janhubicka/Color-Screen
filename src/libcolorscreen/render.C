@@ -286,24 +286,19 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       return NULL;
     }
 
+  bool ok;
   if (p.sp.gray_data)
-    {
-      if (!sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.sp.gray_data, p.sp.lookup_table, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
-	{
-	  delete ret;
-	  return NULL;
-	}
-    }
+    ok = sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.sp.gray_data, p.sp.lookup_table, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress);
   else
     {
       gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
-      if (!sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress))
-	{
-	  delete ret;
-	  free_gray_data_tables (t);
-	  return NULL;
-	}
+      ok = sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress);
       free_gray_data_tables (t);
+    }
+  if (!ok)
+    {
+      delete ret;
+      return NULL;
     }
   return ret;
 }
