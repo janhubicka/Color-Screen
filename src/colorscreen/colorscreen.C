@@ -37,38 +37,12 @@ print_help ()
 static enum output_mode
 parse_mode (const char *mode)
 {
-  if (!strcmp (mode, "none"))
-    return none;
-  if (!strcmp (mode, "corrected-color"))
-    return corrected_color;
-  else if (!strcmp (mode, "realistic"))
-    return realistic;
-  else if (!strcmp (mode, "preview-grid"))
-    return preview_grid;
-  else if (!strcmp (mode, "color-preview-grid"))
-    return color_preview_grid;
-  else if (!strcmp (mode, "interpolated"))
-    return interpolated;
-  else if (!strcmp (mode, "predictive"))
-    return predictive;
-  else if (!strcmp (mode, "combined"))
-    return combined;
-  else if (!strcmp (mode, "detect-realistic"))
-    return detect_realistic;
-  else if (!strcmp (mode, "detect-adjusted"))
-    return detect_adjusted;
-  else if (!strcmp (mode, "detect-nearest"))
-    return detect_nearest;
-  else if (!strcmp (mode, "detect-nearest-scaled"))
-    return detect_nearest_scaled;
-  else if (!strcmp (mode, "detect-relaxation"))
-    return detect_relax;
-  else
-    {
-      fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
-      print_help ();
-      return predictive;
-    }
+  for (int i = 0; i < output_mode_max; i++)
+    if (!strcmp (mode, render_to_file_params::output_mode_properties [i].name))
+      return (output_mode)i;
+  fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
+  print_help ();
+  return output_mode_max;
 }
 /* Parse output mode.  */
 static enum render_parameters::output_profile_t
@@ -228,16 +202,10 @@ main (int argc, char **argv)
       record_time ();
       progress.resume_stdout ();
     }
-  if (!scan.load (infname, &error, &progress))
+  if (!scan.load (infname, false, &error, &progress))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
-      exit (1);
-    }
-  if (scan.stitch)
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Can not render stitch projects\n");
       exit (1);
     }
   if (scan_dpi)

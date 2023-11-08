@@ -8,6 +8,7 @@
 #include "analyze-paget.h"
 #include "solver.h"
 #include "../libcolorscreen/render-interpolate.h"
+#include "colorscreen.h"
 struct tiff;
 typedef struct tiff TIFF;
 
@@ -142,7 +143,8 @@ class stitch_image
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
-  bool write_tile (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
+  bool write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, const char **error, progress_info *progress);
+  bool write_tile_old (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
   void clear_stitch_info ();
@@ -191,7 +193,7 @@ public:
   void determine_angle ();
   bool save (FILE *f);
   bool load (FILE *f, const char **error);
-  std::string adjusted_filename (std::string filename, std::string suffix, std::string extension);
+  std::string adjusted_filename (std::string filename, std::string suffix, std::string extension, int x = -1, int y = -1);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
   void keep_all_images ()
@@ -218,6 +220,7 @@ public:
     *y = iy;
     return true;
   }
+  bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

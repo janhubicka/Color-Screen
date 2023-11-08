@@ -162,7 +162,7 @@ openimage (const char *name)
   bool ret;
   {
     file_progress_info p (stdout, true);
-    ret = scan.load (name, &error, &p);
+    ret = scan.load (name, true, &error, &p);
   }
   if (!ret)
     {

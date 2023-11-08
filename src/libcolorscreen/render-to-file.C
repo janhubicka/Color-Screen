@@ -2,10 +2,28 @@
 #include <sys/time.h>
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
+#include "include/stitch.h"
 #include "include/render-fast.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "icc-srgb.h"
+
+const struct render_to_file_params::output_mode_property render_to_file_params::output_mode_properties[output_mode_max]
+{
+	{"corrected", false},
+	{"corrected-color", true},
+	{"realistic", false},
+	{"preview-grid", false},
+	{"color-preview-grid", true},
+	{"interpolated", false},
+	{"predictive", false},
+	{"combined", false},
+	{"detect-adjusted", true},
+	{"detect-realistic", true},
+	{"detect-nearest", true},
+	{"detect-nearest-scaled", true},
+	{"detect-relaxation", true}
+};
 namespace {
 /* Utilities to report time eneeded for a given operation.
   
@@ -244,12 +262,17 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
 }
 
 bool
-complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
+complete_rendered_file_parameters (scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
 {
   render_parameters rparam;
+  if (scan && scan->stitch)
+    {
+      stitch = scan->stitch;
+      scan = NULL;
+    }
   switch (p->mode)
     {
-    case none:
+    case corrected:
     case corrected_color:
     case interpolated:
     case predictive:
@@ -258,13 +281,30 @@ complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &sc
     case preview_grid:
     case color_preview_grid:
       {
-	render_img render (param, scan, rparam, 65535);
-	coord_t render_width = render.get_final_width ();
-	coord_t render_height = render.get_final_height ();
-	if (!p->pixel_size)
-	  p->pixel_size = render.pixel_size ();
-	if (p->mode == interpolated)
-	  p->pixel_size = param.type == Dufay ? 0.5 : 1.0/3;
+	coord_t render_width, render_height;
+	if (!stitch)
+	  {
+	    render_img render (*param, *scan, rparam, 65535);
+	    render_width = render.get_final_width ();
+	    render_height = render.get_final_height ();
+	    if (!p->pixel_size)
+	      p->pixel_size = render.pixel_size ();
+	    if (p->mode == interpolated)
+	      p->pixel_size = param->type == Dufay ? 0.5 : 1.0/3;
+	  }
+	else
+	  {
+	    int xmin, xmax, ymin, ymax;
+	    stitch->determine_viewport (xmin, xmax, ymin, ymax);
+	    render_width = xmax - xmin;
+	    render_height = ymax - ymin;
+	    p->xpos = xmin;
+	    p->ypos = ymin;
+	    if (!p->pixel_size)
+	      p->pixel_size = stitch->pixel_size;
+	    if (p->mode == interpolated)
+	      p->pixel_size = stitch->params.type == Dufay ? 0.5 : 1.0/3;
+	  }
 	if (!p->xstep)
 	  {
 	    p->xstep = p->pixel_size / p->scale;
@@ -283,18 +323,19 @@ complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &sc
 	    p->width = render_width / p->xstep;
 	    p->height = render_height / p->ystep;
 	  }
-	if ((!p->xdpi || !p->ydpi) && scan.xdpi && scan.ydpi)
+	/* TODO: Make this work with stitched projects.  */
+	if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
 	  {
 	    coord_t zx, zy, xx, yy;
 	    coord_t cx, cy;
 	    scr_to_img map;
-	    map.set_parameters (param, scan);
-	    map.img_to_final (scan.width / 2, scan.height / 2, &cx, &cy);
+	    map.set_parameters (*param, *scan);
+	    map.img_to_final (scan->width / 2, scan->height / 2, &cx, &cy);
 	    map.final_to_img (cx, cy, &zx, &zy);
 	    map.final_to_img (cx + p->xstep, cy, &xx, &yy);
 	    //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
-	    xx = (xx - zx) / scan.xdpi;
-	    yy = (yy - zy) / scan.ydpi;
+	    xx = (xx - zx) / scan->xdpi;
+	    yy = (yy - zy) / scan->ydpi;
 	    coord_t len = sqrt (xx * xx + yy * yy);
 	    //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
 	    /* This is approximate for defomated screens, so take average of X and Y resolution.  */
@@ -303,8 +344,8 @@ complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &sc
 		coord_t xdpi = 1 / len;
 
 		map.final_to_img (cx, cy + p->ystep, &xx, &yy);
-		xx = (xx - zx) / scan.xdpi;
-		yy = (yy - zy) / scan.ydpi;
+		xx = (xx - zx) / scan->xdpi;
+		yy = (yy - zy) / scan->ydpi;
 		len = sqrt (xx * xx + yy * yy);
 		if (len && !p->ydpi)
 		  {
@@ -324,8 +365,8 @@ complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &sc
 	  p->xstep = p->ystep = 1 / p->scale;
 	if (!p->width)
 	  {
-	    p->width = scan.width / p->xstep;
-	    p->height = scan.height / p->ystep;
+	    p->width = scan->width / p->xstep;
+	    p->height = scan->height / p->ystep;
 	  }
 	if (!p->antialias)
 	  {
@@ -337,13 +378,20 @@ complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &sc
 	      p->antialias = 1;
 	  }
 	if (!p->xdpi)
-	  p->xdpi = scan.xdpi / p->xstep;
+	  p->xdpi = scan->xdpi / p->xstep;
 	if (!p->ydpi)
-	  p->ydpi = scan.ydpi / p->ystep;
+	  p->ydpi = scan->ydpi / p->ystep;
       }
       break;
+    default:
+      abort ();
     }
   return true;
+}
+bool
+complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
+{
+  return complete_rendered_file_parameters (&param, &scan, NULL, p);
 }
 
 /* Render image to TIFF file OUTFNAME.  */
@@ -353,6 +401,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 		struct render_to_file_params rfparams /* modified */,
 		progress_info * progress, const char **error)
 {
+  if (scan.stitch)
+    return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
   if (rfparams.verbose)
     {
       if (progress)
@@ -407,7 +457,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 
   switch (rfparams.mode)
     {
-    case none:
+    case corrected:
     case corrected_color:
       {
 	render_img render (param, scan, rparam, 65535);

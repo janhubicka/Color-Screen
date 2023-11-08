@@ -482,12 +482,49 @@ std::string stitch_project::add_path (std::string name)
   return params.path + name;
 }
 
-std::string stitch_project::adjusted_filename (std::string filename, std::string suffix, std::string extension)
+std::string stitch_project::adjusted_filename (std::string filename, std::string suffix, std::string extension, int x, int y)
 {
   size_t lastindex = filename.find_last_of("."); 
+  char buf[256];
   if (lastindex == std::string::npos)
     lastindex = filename.length ();
   std::string ret = filename.substr (0, lastindex);
-  return ret + suffix + extension;
+  if (x == -1)
+    buf[0]=0;
+  else
+    sprintf (buf,"-%i-%i",y, x);
+  return ret + suffix + buf + extension;
 }
 
+/* Render individual tiles of the panorama in N different modes specified by RFPARAMS.
+   We support multiple modes at once since it is more memory effective.  */
+
+bool 
+stitch_project::write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error)
+{
+  for (int i = 0; i < n; i++)
+    if (!complete_rendered_file_parameters (NULL, NULL, this, &rfparams[i]))
+      {
+	*error = "Precomputation failed (out of memory)";
+	return false;
+      }
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      {
+	for (int i = 0; i < n; i++)
+	  {
+	    const char *fname = rfparams[i].filename;
+	    struct render_to_file_params rfparams2 = rfparams[i];
+	    std::string fname2;
+	    if (fname)
+	      fname2 = adjusted_filename (fname, render_to_file_params::output_mode_properties[rfparams2.mode].name,".tif",x,y);
+	    else
+	      fname2 = adjusted_filename (images[y][x].filename, render_to_file_params::output_mode_properties[rfparams2.mode].name,".tif",-1,-1);
+	    rfparams2.filename = fname2.c_str ();
+	      
+	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, error, progress))
+	      return false;
+	  }
+      }
+  return true;
+}

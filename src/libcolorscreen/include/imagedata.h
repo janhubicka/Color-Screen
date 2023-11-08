@@ -40,7 +40,7 @@ public:
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
      message.  */
-  DLL_PUBLIC bool init_loader (const char *name, const char **error, progress_info *progress = NULL);
+  DLL_PUBLIC bool init_loader (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
   /* True if grayscale allocation is needed
      (used after init_loader and before load_part).  */
   DLL_PUBLIC bool allocate_grayscale ();
@@ -55,10 +55,11 @@ public:
   /* Allocate memory.  */
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
-  DLL_PUBLIC bool load (const char *name, const char **error, progress_info *progress = NULL);
+  DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */
   bool own;
+  bool m_preload_all;
 };
 #endif

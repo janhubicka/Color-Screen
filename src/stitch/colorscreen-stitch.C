@@ -26,12 +26,12 @@ print_help (const char *filename)
   printf (" input files:\n");
   printf ("  --csp=filename.par                          load given screen discovery and rendering parameters\n");
   printf ("  --ncols=n                                   number of columns of tiles\n");
+  printf ("  --load-project=filename.csprj               store analysis to a project file\n");
+  printf ("  --scan-ppi=scan-ppi                         PPI of input scan\n");
   printf (" output files:\n");
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --save-project=filename.csprj               store analysis to a project file\n");
-  printf ("  --load-project=filename.csprj               store analysis to a project file\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
-  printf ("  --scan-ppi=scan-ppi                         PPI of input scan\n");
   printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
   printf ("  --downscale=factor                          reduce size of predictive panorama\n");
   printf ("  --hdr                                       output predictive and interpolated panorama in hdr\n");
@@ -341,9 +341,9 @@ void stitch (progress_info *progress)
     for (int x = 0; x < prj->params.width; x++)
     {
       coord_t demosaicedstep = prj->params.type == Dufay ? 0.5 : 0.25;
-      if ((prj->params.orig_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
-	  || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
-	  || (prj->params.predictive_tiles && !prj->images[y][x].write_tile (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
+      if ((prj->params.orig_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
+	  || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
+	  || (prj->params.predictive_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
 	{
 	  fprintf (stderr, "Writting tile: %s\n", error);
 	  exit (1);

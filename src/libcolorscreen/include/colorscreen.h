@@ -7,7 +7,7 @@
 /* Supported output modes.  */
 enum output_mode
 {
-  none,
+  corrected,
   corrected_color,
   realistic,
   preview_grid,
@@ -21,7 +21,10 @@ enum output_mode
   detect_nearest,
   detect_nearest_scaled,
   detect_relax,
+  output_mode_max
 };
+
+
 struct render_to_file_params
 {
   output_mode mode;
@@ -55,8 +58,16 @@ struct render_to_file_params
   render_to_file_params ()
   : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
   {}
+
+  struct output_mode_property
+  {
+    const char *name;
+    bool require_rgb;
+  };
+  const static struct output_mode_property output_mode_properties[output_mode_max];
 };
 DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam,
 			render_to_file_params rfarams, progress_info *progress, const char **error);
 DLL_PUBLIC bool complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p);
+DLL_PUBLIC bool complete_rendered_file_parameters (scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p);
 #endif

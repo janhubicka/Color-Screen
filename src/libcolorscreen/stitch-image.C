@@ -79,7 +79,7 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (progress)
     progress->resume_stdout ();
   img = new image_data;
-  if (!img->load (m_prj->add_path (filename).c_str (), error, progress))
+  if (!img->load (m_prj->add_path (filename).c_str (), false, error, progress))
     return false;
   if (img->stitch)
     {
@@ -954,18 +954,49 @@ stitch_image::write_stitch_info (progress_info *progress, int x, int y, int xx, 
 }
 
 bool
-stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
+stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, const char **error, progress_info *progress)
 {
-  std::string suffix;
-  coord_t final_xpos, final_ypos;
-  map.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
-  int xmin = floor ((final_xpos - final_xshift) / xstep) * xstep;
-  int ymin = floor ((final_ypos - final_yshift) / ystep) * ystep;
-
   /* We must arrange whole panorama rotated same way.
      If this ever breaks, maybe while analyzing later images should get it from first one.  */
-  if (scr_to_img_map.get_rotation_adjustment () != m_prj->common_scr_to_img.get_rotation_adjustment ())
+  if (fabs (scr_to_img_map.get_rotation_adjustment () - m_prj->common_scr_to_img.get_rotation_adjustment ()) > 1)
     abort ();
+
+  coord_t final_xpos, final_ypos;
+  m_prj->common_scr_to_img.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
+  int xmin = floor ((final_xpos - final_xshift) / rfparams.xstep) * rfparams.xstep;
+  int ymin = floor ((final_ypos - final_yshift) / rfparams.ystep) * rfparams.ystep;
+  coord_t xoffset = (xmin - stitch_xmin) / rfparams.xstep;
+  coord_t yoffset = (ymin - stitch_ymin) / rfparams.ystep;
+  rfparams.pixel_size = m_prj->pixel_size;
+  rfparams.tile = true;
+  rfparams.xoffset = floor (xoffset);
+  rfparams.yoffset = floor (yoffset);
+  /* Compensate sub-pixel differences.  */
+  rfparams.xstart = xmin + (xmin - stitch_xmin) - rfparams.xoffset * rfparams.xstep;
+  rfparams.ystart = ymin + (ymin - stitch_ymin) - rfparams.yoffset * rfparams.ystep;
+  rfparams.common_map = &m_prj->common_scr_to_img;
+  rfparams.xpos = xpos;
+  rfparams.ypos = ypos;
+  rfparams.width = final_width / rfparams.xstep;
+  rfparams.height = final_height / rfparams.ystep;
+  rfparams.pixel_known_p = rfparams.mode == corrected || rfparams.mode == corrected_color ? img_pixel_known_p_wrap : pixel_known_p_wrap;
+  rfparams.pixel_known_p_data = (void *)this;
+  if (!load_img (error, progress))
+    return false;
+  if (!render_to_file (*img, param, m_prj->dparam, rparam, rfparams, progress, error))
+    {
+      release_img ();
+      return false;
+    }
+  
+  release_img ();
+  return true;
+}
+
+bool
+stitch_image::write_tile_old (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
+{
+  std::string suffix;
 
   render_to_file_params rfparams;
   switch(mode)
@@ -988,29 +1019,11 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
     abort ();
   }
 
-  if (!load_img (error, progress))
-    return false;
   std::string name = m_prj->adjusted_filename (filename, suffix, ".tif");
 
   rfparams.filename = name.c_str ();
-  rfparams.tile = true;
-  coord_t xoffset = (xmin - stitch_xmin) / xstep;
-  coord_t yoffset = (ymin - stitch_ymin) / ystep;
-  rfparams.xoffset = floor (xoffset);
-  rfparams.yoffset = floor (yoffset);
-  /* Compensate sub-pixel differences.  */
-  rfparams.xstart = xmin + (xmin - stitch_xmin) - rfparams.xoffset * xstep;
-  rfparams.ystart = ymin + (ymin - stitch_ymin) - rfparams.yoffset * ystep;
   rfparams.xstep = xstep;
   rfparams.ystep = ystep;
-  rfparams.pixel_known_p = mode == render_original ? img_pixel_known_p_wrap : pixel_known_p_wrap;
-  rfparams.pixel_known_p_data = (void *)this;
-  rfparams.common_map = &map;
-  rfparams.xpos = xpos;
-  rfparams.ypos = ypos;
-  rfparams.width = final_width / xstep;
-  rfparams.height = final_height / ystep;
-  rfparams.pixel_size = m_prj->pixel_size;
   rfparams.verbose = true;
   rfparams.xdpi = m_prj->xdpi [(int)mode];
   rfparams.ydpi = m_prj->ydpi [(int)mode];
@@ -1021,14 +1034,7 @@ stitch_image::write_tile (const char **error, scr_to_img &map, int stitch_xmin, 
       m_prj->xdpi[(int)mode] = rfparams.xdpi = rf2.xdpi;
       m_prj->ydpi[(int)mode] = rfparams.ydpi = rf2.ydpi;
     }
-  if (!render_to_file (*img, param, m_prj->dparam, mode == render_original ? m_prj->passthrough_rparam : m_prj->rparam, rfparams, progress, error))
-    {
-      release_img ();
-      return false;
-    }
-  
-  release_img ();
-  return true;
+  return stitch_image::write_tile (rfparams.mode == render_original ? m_prj->passthrough_rparam : m_prj->rparam, stitch_xmin, stitch_ymin, rfparams, error, progress);
 }
 
 bool

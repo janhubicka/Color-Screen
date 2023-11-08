@@ -86,7 +86,7 @@ file_progress_info::pause_stdout ()
 void
 file_progress_info::resume_stdout ()
 {
-  if (m_initialized)
+  if (m_initialized || !m_file)
     return;
   if (m_displayed)
     {

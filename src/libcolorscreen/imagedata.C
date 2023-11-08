@@ -565,7 +565,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
-	      if (mbuffer.len != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
+	      if ((size_t)mbuffer.len != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
 		{
 		  *error = "can not allocate buffer to decompress LCC file";
 		  free (buffer);
@@ -657,9 +657,10 @@ raw_image_data_loader::load_part (int *permille, const char **error)
 }
 
 bool
-image_data::init_loader (const char *name, const char **error, progress_info *progress)
+image_data::init_loader (const char *name, bool preload_all, const char **error, progress_info *progress)
 {
   assert (!loader);
+  m_preload_all = preload_all;
   if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
     loader = new tiff_image_data_loader (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
@@ -700,7 +701,8 @@ image_data::init_loader (const char *name, const char **error, progress_info *pr
       stitch->determine_angle ();
       int xmax, ymax;
       stitch->determine_viewport (xmin, xmax, ymin, ymax);
-      stitch->keep_all_images ();
+      if (preload_all)
+        stitch->keep_all_images ();
       width = xmax - xmin;
       height = ymax - ymin;
       increase_lru_cache_sizes_for_stitch_projects (stitch->params.width * stitch->params.height);
@@ -732,7 +734,10 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
 	    n++;
 	  else
 	    {
-	      *permille = n * 1000 / (stitch->params.width * stitch->params.height);
+	      if (m_preload_all)
+	        *permille = n * 1000 / (stitch->params.width * stitch->params.height);
+	      else
+		*permille = 1000;
 	      if (!stitch->images[y][x].load_img (error, progress))
 		return false;
 	      if (!x && !y)
@@ -782,12 +787,12 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
 }
 
 bool
-image_data::load (const char *name, const char **error, progress_info *progress)
+image_data::load (const char *name, bool preload_all, const char **error, progress_info *progress)
 {
   int permille;
   if (progress)
     progress->set_task ("loading image header",1);
-  if (!init_loader (name, error, progress))
+  if (!init_loader (name, preload_all, error, progress))
     return false;
 
   if (progress)
