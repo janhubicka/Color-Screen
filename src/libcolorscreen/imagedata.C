@@ -7,7 +7,7 @@
 #include <zip.h>
 #include "lru-cache.h"
 #include "include/imagedata.h"
-#include "llc.h"
+#include "include/backlight-correction.h"
 #include "include/stitch.h"
 #include "mapalloc.h"
 
@@ -92,7 +92,7 @@ public:
       delete lcc;
   }
 private:
-  llc *lcc;
+  backlight_correction *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
 };
@@ -572,7 +572,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
-	      lcc = llc::load (&mbuffer, true);
+	      lcc = backlight_correction::load_captureone_lcc (&mbuffer, true);
 	      if (!lcc)
 		{
 		  *error = "can not read LCC file";
@@ -638,6 +638,10 @@ raw_image_data_loader::load_part (int *permille, const char **error)
     for (int x = 0; x < m_img->width; x++)
       {
 	int i = y * m_img->width + x;
+	m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
+	m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
+	m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
+#if 0
 	if (!lcc)
 	  {
 	    m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
@@ -646,10 +650,11 @@ raw_image_data_loader::load_part (int *permille, const char **error)
 	  }
 	else
 	  {
-	    m_img->rgbdata[y][x].r = lcc->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y);
-	    m_img->rgbdata[y][x].g = lcc->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y);
-	    m_img->rgbdata[y][x].b = lcc->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y);
+	    m_img->rgbdata[y][x].r = lcc->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y, backlight_correction::red);
+	    m_img->rgbdata[y][x].g = lcc->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y, backlight_correction::green);
+	    m_img->rgbdata[y][x].b = lcc->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y, backlight_correction::blue);
 	  }
+#endif
       }
   *permille = 1000;
   RawProcessor.recycle ();

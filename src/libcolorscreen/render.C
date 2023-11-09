@@ -163,6 +163,7 @@ struct gray_data_tables
   luminosity_t *btable;
   unsigned short *out_table;
   luminosity_t *out_table2;
+  backlight_correction *correction;
 };
 
 inline gray_data_tables
@@ -187,6 +188,7 @@ compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, pro
   ret.rtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
+  ret.correction = NULL;
   ret.out_table = (unsigned short *)malloc (sizeof (unsigned short) * 65536);
   if (in_table)
     ret.out_table2 = (luminosity_t *)malloc (sizeof (luminosity_t) * 65536);
@@ -222,9 +224,19 @@ free_gray_data_tables (gray_data_tables &t)
 }
 
 inline luminosity_t
-compute_gray_data (gray_data_tables &t, int r, int g, int b)
+compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int r, int g, int b)
 {
-  luminosity_t val = t.rtable[r] + t.gtable[g] + t.btable[b];
+  luminosity_t l1 = t.rtable[r];
+  luminosity_t l2 = t.gtable[g];
+  luminosity_t l3 = t.btable[b];
+  /* TODO: We should make specific tables so addition works.  */
+  if (t.correction)
+    {
+      l1 = t.correction->apply (l1, width, height, x, y, backlight_correction::red);
+      l2 = t.correction->apply (l2, width, height, x, y, backlight_correction::green);
+      l3 = t.correction->apply (l3, width, height, x, y, backlight_correction::blue);
+    }
+  luminosity_t val = l1 + l2 + l3;
   return std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
 }
 
@@ -233,6 +245,8 @@ struct sharpen_params
   luminosity_t radius;
   luminosity_t amount;
   unsigned long gray_data_id;
+  /* TODO: Add comparator.  */
+  backlight_correction *backlight;
 
   unsigned short **gray_data;
   luminosity_t *lookup_table;
@@ -270,7 +284,7 @@ getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *tabl
 luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
-  return t->out_table2[(int)(compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
+  return t->out_table2[(int)(compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
   //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 sharpened_data *
@@ -292,6 +306,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
   else
     {
       gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
+      t.correction = p.sp.backlight;
       ok = sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress);
       free_gray_data_tables (t);
     }
@@ -320,7 +335,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
-			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_img.data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
+			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
   m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
   m_sharpened_data = m_sharpened_data_holder->m_data;
 

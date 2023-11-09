@@ -82,8 +82,8 @@ parse_dye_balance (const char *model)
   return render_parameters::dye_balance_max;
 }
 
-int
-main (int argc, char **argv)
+static void
+render (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
   float age = -100;
@@ -96,9 +96,8 @@ main (int argc, char **argv)
   bool detect_geometry = false;
   float scan_dpi = 0;
 
-  binname = argv[0];
 
-  for (int i = 1; i < argc; i++)
+  for (int i = 0; i < argc; i++)
     {
       if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
 	print_help();
@@ -313,5 +312,62 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
       exit (1);
     }
+  exit (0);
+}
+
+void
+analyze_backlight (int argc, char **argv)
+{
+  const char *error = NULL;
+
+  printf ("%i\n",argc);
+  if (argc < 2 || argc > 3)
+    print_help ();
+  file_progress_info progress (verbose ? stdout : NULL);
+  image_data scan;
+  if (!scan.load (argv[0], false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      exit (1);
+    }
+  backlight_correction *cor = backlight_correction::analyze_scan (scan, 1.0);
+  FILE *out = fopen (argv[1], "wt");
+  if (!out)
+    {
+      progress.pause_stdout ();
+      perror ("Can not open output file");
+      exit (1);
+    }
+  if (!cor->save (out))
+    {
+      fprintf (stderr, "Can not write %s\n", argv[1]);
+      exit (1);
+    }
+  fclose (out);
+  if (argc == 3)
+    {
+      error = cor->save_tiff (argv[2]);
+      if (error)
+	{
+	  fprintf (stderr, error);
+	  exit (1);
+	}
+    }
+  delete cor;
+}
+
+int
+main (int argc, char **argv)
+{
+  binname = argv[0];
+  if (argc == 1)
+    print_help ();
+  if (!strcmp (argv[1], "render"))
+    render (argc-2, argv+2);
+  if (!strcmp (argv[1], "analyze-backlight"))
+    analyze_backlight (argc-2, argv+2);
+  else
+    print_help ();
   return 0;
 }

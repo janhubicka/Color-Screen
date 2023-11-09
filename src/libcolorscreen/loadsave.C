@@ -88,6 +88,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
 	return false;
+      if (rparam->backlight_correction)
+	{
+	  if (fprintf (f, "backlight_correction: yes") < 0)
+	    return false;
+	  if (!rparam->backlight_correction->save (f))
+	    return false;
+	}
     }
   if (sparam)
     {
@@ -663,6 +670,25 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    {
 	      *error = "error parsing mix_gamma";
 	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "backlight_correction"))
+	{
+	  bool correction;
+	  if (!parse_bool (f, &correction))
+	    {
+	      *error = "error parsing backlight_correction";
+	      return false;
+	    }
+	  if (correction)
+	    {
+	      backlight_correction *c = new backlight_correction ();
+	      if (!c->load (f, error))
+		return false;
+	      if (rparam)
+		rparam->backlight_correction = c;
+	      else
+		delete c;
 	    }
 	}
       else if (!strcmp (buf, "scr_detect_gamma"))

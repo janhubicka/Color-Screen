@@ -12,6 +12,7 @@
 #include "spectrum-to-xyz.h"
 #include "progress-info.h"
 #include "sensitivity.h"
+#include "backlight-correction.h"
 
 
 /* Parameters of rendering algorithms.  */
@@ -26,6 +27,7 @@ struct DLL_PUBLIC render_parameters
     screen_blur_radius (0.5),
     color_model (color_model_none), output_profile (output_profile_sRGB), gray_min (0), gray_max (255),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
+    backlight_correction (NULL),
     restore_original_luminosity (true), precise (true)
   {
   }
@@ -127,6 +129,7 @@ struct DLL_PUBLIC render_parameters
 
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
+  class backlight_correction *backlight_correction;
 
   /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;

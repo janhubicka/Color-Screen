@@ -1,10 +1,9 @@
 #include <string>
 #include <cstring>
 #include <cstdint>
-#include <iostream>
-#include <stdio.h>
+#include <cassert>
 
-#include "llc.h"
+#include "include/backlight-correction.h"
 
 
 static
@@ -41,8 +40,8 @@ read_uint32 (memory_buffer *f)
   return ret;
 }
 
-llc *
-llc::load(memory_buffer *f, bool verbose)
+backlight_correction *
+backlight_correction::load_captureone_lcc (memory_buffer *f, bool verbose)
 {
 	std::string s = read_string (f);
 	if (s != "XCon")
@@ -67,9 +66,9 @@ llc::load(memory_buffer *f, bool verbose)
 	    fprintf (stderr, "Expected CaptureOne LLC and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	uint16_t llc = read_uint16 (f);
+	uint16_t lcc = read_uint16 (f);
 	if (verbose)
-	  printf ("CaptureOne LLC: %i\n", llc);
+	  printf ("CaptureOne LCC: %i\n", lcc);
 	s = read_string (f);
 	if (s != "VER")
 	  {
@@ -274,8 +273,9 @@ llc::load(memory_buffer *f, bool verbose)
 	//printf ("%i\n", bin3);
 	uint16_t bin4 = read_uint16 (f);
 	//printf ("%i\n", bin4);
-	class llc *llci = new class llc ();
-	llci->alloc (111, 84);
+	class backlight_correction *llci = new class backlight_correction ();
+	bool enabled[4] = {true, true, true, false};
+	llci->alloc (111, 84, enabled);
 	for (int y = 0; y < 84; y++)
 	  {
 	    for (int x = 0; x < 111; x++)
