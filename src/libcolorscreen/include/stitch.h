@@ -7,7 +7,6 @@
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
 #include "solver.h"
-#include "../libcolorscreen/render-interpolate.h"
 #include "colorscreen.h"
 struct tiff;
 typedef struct tiff TIFF;
