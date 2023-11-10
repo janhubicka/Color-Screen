@@ -44,8 +44,8 @@ struct lookup_table_params
   /* Input data are assumed to have gamma.  Inverse of gamma is applied to
      get linear data.  */
   luminosity_t gamma;
-  /* gray_min becomes 0, while gray_max becomes 1.  */
-  int gray_min, gray_max;
+  luminosity_t dark_point, exposure;
+  bool invert;
   /* Characcteristic curve.  */
   hd_curve *film_characteristic_curve;
 
@@ -57,8 +57,9 @@ struct lookup_table_params
     return img_maxval == o.img_maxval
 	   && maxval == o.maxval
 	   && gamma == o.gamma
-	   && gray_min == o.gray_min
-	   && gray_max == o.gray_max
+	   && dark_point == o.dark_point
+	   && exposure == o.exposure
+	   && invert == o.invert
 	   /* TODO: Invent IDs!
 	      Pointer compare may not be safe if curve is released.  */
 	   && film_characteristic_curve == o.film_characteristic_curve
@@ -71,36 +72,32 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
-  bool invert = p.gray_min > p.gray_max;
-  luminosity_t min = pow ((p.gray_min + 0.5) / (luminosity_t)p.img_maxval, gamma);
-  luminosity_t max = pow ((p.gray_max + 0.5) / (luminosity_t)p.img_maxval, gamma);
+  luminosity_t mul = (luminosity_t)1 / p.maxval;
+  printf ("%f %f %i\n", p.dark_point, p.exposure, p.invert);
 
-  if (min == max)
-    max += 0.0001;
-  if (!invert)
+  if (!p.invert)
     {
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma) - min) * (1 / (max-min));
+	lookup_table[i] = (pow ((i + 0.5) * mul, gamma) - p.dark_point) * p.exposure;
     }
   else if (p.restore_original_luminosity)
     {
       film_sensitivity s (p.film_characteristic_curve);
       s.precompute ();
-      min = s.unapply (min);
-      max = s.unapply (max);
+      //luminosity_t dark_point = s.unapply (p.dark_point);
 
+      // TODO: For stitching exposure should be really inside
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.unapply (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma)) - min) * (1 / (max-min));
+	lookup_table[i] = (s.unapply (pow ((i + 0.5) * mul, gamma)) - p.dark_point) * p.exposure;
     }
   else
     {
       film_sensitivity s (p.film_characteristic_curve);
       s.precompute ();
-      min = s.apply (min);
-      max = s.apply (max);
+      //luminosity_t dark_point = s.apply (p.dark_point);
 
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.apply (pow ((i + 0.5) / (luminosity_t)p.maxval, gamma)) - min) * (1 / (max-min));
+	lookup_table[i] = (s.apply (pow ((i + 0.5) * mul, gamma)) - p.dark_point) * p.exposure;
     }
   return lookup_table;
 }
@@ -324,11 +321,11 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 bool
 render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
+  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.dark_point, m_params.exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
   m_lookup_table = lookup_table_cache.get (par, progress, &m_lookup_table_id);
   if (m_img.rgbdata)
     {
-      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.gray_min, m_params.gray_max, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
+      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.dark_point, m_params.exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
@@ -398,7 +395,7 @@ render::~render ()
 luminosity_t *
 render::get_lookup_table (luminosity_t gamma, int maxval)
 {
-  lookup_table_params par = {maxval, maxval, gamma, 0, maxval};
+  lookup_table_params par = {maxval, maxval, gamma, 0, 1, false};
   return lookup_table_cache.get (par, NULL);
 }
 

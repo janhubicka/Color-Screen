@@ -84,7 +84,10 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
-	  || fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
+	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
+	  || fprintf (f, "exposure: %f\n", rparam->exposure) < 0
+	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
+	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
 	return false;
@@ -278,6 +281,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 {
   char buf[256];
   skipwhitespace (f);
+  int gray_min = -1;
+  int gray_max = -1;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -304,9 +309,15 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    {
 	      buf[l]=0;
 	      if (!l && c == EOF)
-		return true;
+		{
+		  l = -1;
+		  break;
+		}
 	      if (!strcmp (buf, "screen_alignment_end"))
-		return true;
+		{
+		  l = -1;
+		  break;
+		}
 	      *error = "file truncated";
 	      return false;
 	    }
@@ -317,6 +328,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  buf[l] = c;
 	}
+      if (l < 0)
+        break;
       if (!strcmp (buf, "screen_type"))
 	{
 	  get_keyword (f, buf2);
@@ -527,11 +540,36 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      /* This is for compatibility with old files; remove it eventually.  */
       else if (!strcmp (buf, "gray_range"))
 	{
-	  if (fscanf (f, "%i %i\n", rparam_check (gray_min), rparam_check (gray_max)) != 2)
+	  if (fscanf (f, "%i %i\n", &gray_min, &gray_max) != 2)
 	    {
 	      *error = "error parsing gray_range";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "exposure"))
+	{
+	  if (!read_luminosity (f, rparam_check (exposure)))
+	    {
+	      *error = "error parsing exposure";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "dark_point"))
+	{
+	  if (!read_luminosity (f, rparam_check (dark_point)))
+	    {
+	      *error = "error parsing dark_point";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "invert"))
+	{
+	  if (!parse_bool (f, rparam_check (invert)))
+	    {
+	      *error = "error parsing invert";
 	      return false;
 	    }
 	}
@@ -750,5 +788,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       skipwhitespace (f);
     }
+  if (rparam && gray_min >=0)
+    rparam->set_gray_range (gray_min, gray_max, 65535);
   return true;
 }

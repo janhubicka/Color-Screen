@@ -25,10 +25,10 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), output_profile (output_profile_sRGB), gray_min (0), gray_max (255),
+    color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), exposure (1),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
-    backlight_correction (NULL),
-    restore_original_luminosity (true), precise (true)
+    backlight_correction (NULL), invert (false),
+    restore_original_luminosity (true), precise (true), tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments ()
   {
   }
 #if 0
@@ -76,6 +76,7 @@ struct DLL_PUBLIC render_parameters
   luminosity_t backlight_temperature;
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
+
   /* Aging simulation (0 new dyes, 1 aged dyes).  */
   luminosity_t age;
   enum dye_balance_t
@@ -124,12 +125,15 @@ struct DLL_PUBLIC render_parameters
   output_profile_t output_profile;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
   /* Gray range to boot to full contrast.  */
-  int gray_min, gray_max;
+  luminosity_t dark_point, exposure;
 
 
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
   class backlight_correction *backlight_correction;
+
+  /* True if negatuve should be inverted to positive.  */
+  bool invert;
 
   /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;
@@ -138,8 +142,43 @@ struct DLL_PUBLIC render_parameters
   /* If true use precise data collection.  */
   bool precise;
 
+  struct tile_adjustment
+  {
+    luminosity_t exposure_adjustment;
+    bool enabled;
+    unsigned char x, y;
+    constexpr tile_adjustment()
+    : exposure_adjustment (0), enabled (true), x(0), y(0)
+    {}
+    bool operator== (tile_adjustment &other) const
+    {
+      return enabled == other.enabled
+	     && exposure_adjustment == other.exposure_adjustment;
+    }
+    bool operator!= (tile_adjustment &other) const
+    {
+      return !(*this == other);
+    }
+  };
+
+  int tile_adjustments_width, tile_adjustments_height;
+  std::vector<tile_adjustment> tile_adjustments;
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
+  size_t get_icc_profile (void **buf);
+  const tile_adjustment&
+  get_tile_adjustment (stitch_project *stitch, int x, int y) const;
+  tile_adjustment&
+  get_tile_adjustment_ref (stitch_project *stitch, int x, int y);
+
   bool operator== (render_parameters &other) const
   {
+    if (tile_adjustments.size () != other.tile_adjustments.size ()
+	|| tile_adjustments_width != other.tile_adjustments_width
+	|| tile_adjustments_height != other.tile_adjustments_height)
+      return false;
+    for (unsigned int i = 0; i < tile_adjustments.size (); i++)
+      if (tile_adjustments[i] != other.tile_adjustments[i])
+        return false;
     return gamma == other.gamma
 	   && output_gamma == other.output_gamma
 	   && sharpen_radius == other.sharpen_radius
@@ -154,8 +193,8 @@ struct DLL_PUBLIC render_parameters
 	   && color_model == other.color_model
 	   && age == other.age
 	   && backlight_temperature == backlight_temperature
-	   && gray_min == other.gray_min
-	   && gray_max == other.gray_max
+	   && dark_point == other.dark_point
+	   && exposure == other.exposure
 	   && screen_blur_radius == other.screen_blur_radius
     	   && dye_balance == other.dye_balance
 	   && precise == other.precise
@@ -167,8 +206,43 @@ struct DLL_PUBLIC render_parameters
   {
     return !(*this == other);
   }
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
-  size_t get_icc_profile (void **buf);
+  /* Set invert, exposure and dark_point for a given range of values
+     in input scan.  Used to interpret old gray_range parameter
+     and can be removed eventually.  */
+  void set_gray_range (int gray_min, int gray_max, int maxval)
+  {
+    if (gray_min < gray_max)
+      {
+	luminosity_t min2 = pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	dark_point = min2;
+	exposure = 1 / (max2 - min2);
+	invert = false;
+      }
+    else if (gray_min > gray_max)
+      {
+	luminosity_t min2 = 1-pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = 1-pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	dark_point = min2;
+	exposure = 1 / (max2 - min2);
+	invert = true;
+      }
+    printf ("gray_range %i %i exp %f dark %f\n", gray_min, gray_max, dark_point, exposure);
+  }
+  void get_gray_range (int *min, int *max, int maxval)
+  {
+    if (!invert)
+      {
+       *min = pow (dark_point, 1 / gamma) * maxval + 0.5;
+       *max = pow (dark_point + 1 / exposure, 1 / gamma) * maxval + 0.5;
+      }
+    else
+      {
+       *min = pow (1-dark_point, 1 / gamma) * maxval + 0.5;
+       *max = pow (1-(dark_point + 1 / exposure), 1 / gamma) * maxval + 0.5;
+      }
+    printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, exposure);
+  }
 private:
   static const bool debug = false;
 };
@@ -291,7 +365,7 @@ public:
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_lookup_table (NULL), m_lookup_table_id (0), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
-    if (m_params.gray_min > m_params.gray_max)
+    if (m_params.invert)
       {
 	static synthetic_hd_curve c (10, safe_output_curve);
 	m_params.output_curve = &c;

@@ -169,8 +169,6 @@ openimage (const char *name)
       fprintf (stderr, "%s\n", error);
       exit (1);
     }
-  rparams.gray_min = 0;
-  rparams.gray_max = scan.maxval;
   current.lens_center_x = scan.width * 0.5;
   current.lens_center_y = scan.height * 0.5;
 }
@@ -270,7 +268,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (k == 'i')
     {
-      std::swap (rparams.gray_min, rparams.gray_max);
+      rparams.invert = !rparams.invert;
       display_scheduled = true;
       preview_display_scheduled = true;
     }

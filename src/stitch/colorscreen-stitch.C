@@ -325,7 +325,6 @@ void stitch (progress_info *progress)
 
   const coord_t xstep = prj->pixel_size, ystep = prj->pixel_size;
   const coord_t pred_xstep = prj->pixel_size * prj->params.downscale, pred_ystep = prj->pixel_size * prj->params.downscale;
-  prj->passthrough_rparam.gray_max = prj->images[0][0].gray_max;
   if (prj->params.hugin_pto_filename.length ())
     produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
   if (prj->params.diffs)

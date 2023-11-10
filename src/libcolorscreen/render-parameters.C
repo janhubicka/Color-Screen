@@ -1,4 +1,5 @@
 #include "include/render.h"
+#include "include/stitch.h"
 #include "icc.h"
 const char * render_parameters::color_model_names [] = {
   "none",
@@ -219,4 +220,33 @@ render_parameters::get_icc_profile (void **buffer)
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
   return create_profile (color_model_names[color_model], r, g, b, output_gamma, buffer);
+}
+
+const render_parameters::tile_adjustment&
+render_parameters::get_tile_adjustment (stitch_project *stitch, int x, int y) const
+{
+  static tile_adjustment default_tile_adjustment;
+  assert (x >= 0 && x < stitch->params.width && y >= 0 && y < stitch->params.height);
+  if (tile_adjustments_width != stitch->params.width || tile_adjustments_height != stitch->params.height)
+    return default_tile_adjustment;
+  return tile_adjustments[y * stitch->params.width + x];
+}
+
+render_parameters::tile_adjustment&
+render_parameters::get_tile_adjustment_ref (stitch_project *stitch, int x, int y)
+{
+  assert (x >= 0 && x < stitch->params.width && y >= 0 && y < stitch->params.height);
+  if (tile_adjustments_width != stitch->params.width || tile_adjustments_height != stitch->params.height)
+    {
+      tile_adjustments.resize (0);
+      tile_adjustments.resize (stitch->params.width * stitch->params.height);
+      tile_adjustments_width = stitch->params.width;
+      tile_adjustments_height = stitch->params.height;
+#if 0
+      for (int yy = 0; yy < stitch->params.height; yy++)
+        for (int xx = 0; xx < stitch->params.width; xx++)
+	  tile_adjustments[yy * stitch->param.width + xx] = default_stitch_adjustments;
+#endif
+    }
+  return tile_adjustments[y * stitch->params.width + x];
 }
