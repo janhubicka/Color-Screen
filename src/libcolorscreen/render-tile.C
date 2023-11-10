@@ -175,9 +175,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_img> (
-		  [&img,&rparam,&progress] (int x, int y) mutable
+		  [&img,&rparam,&progress,color] (int x, int y) mutable
 		  {
 		    render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		    if (color)
+		      r->set_color_display ();
 		    if (!r->precompute_all (progress))
 		      {
 		        delete r;
