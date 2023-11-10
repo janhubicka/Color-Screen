@@ -85,7 +85,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
 	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
-	  || fprintf (f, "exposure: %f\n", rparam->exposure) < 0
+	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
@@ -549,11 +549,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "exposure"))
+      else if (!strcmp (buf, "scan_exposure"))
 	{
-	  if (!read_luminosity (f, rparam_check (exposure)))
+	  if (!read_luminosity (f, rparam_check (scan_exposure)))
 	    {
-	      *error = "error parsing exposure";
+	      *error = "error parsing scan_exposure";
 	      return false;
 	    }
 	}

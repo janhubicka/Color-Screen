@@ -44,7 +44,7 @@ struct lookup_table_params
   /* Input data are assumed to have gamma.  Inverse of gamma is applied to
      get linear data.  */
   luminosity_t gamma;
-  luminosity_t dark_point, exposure;
+  luminosity_t dark_point, scan_exposure;
   bool invert;
   /* Characcteristic curve.  */
   hd_curve *film_characteristic_curve;
@@ -58,7 +58,7 @@ struct lookup_table_params
 	   && maxval == o.maxval
 	   && gamma == o.gamma
 	   && dark_point == o.dark_point
-	   && exposure == o.exposure
+	   && scan_exposure == o.scan_exposure
 	   && invert == o.invert
 	   /* TODO: Invent IDs!
 	      Pointer compare may not be safe if curve is released.  */
@@ -73,31 +73,29 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
   luminosity_t mul = (luminosity_t)1 / p.maxval;
-  printf ("%f %f %i\n", p.dark_point, p.exposure, p.invert);
+  printf ("%f %f %i\n", p.dark_point, p.scan_exposure, p.invert);
 
   if (!p.invert)
     {
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (pow ((i + 0.5) * mul, gamma) - p.dark_point) * p.exposure;
+	lookup_table[i] = pow ((i + 0.5) * mul, gamma) * p.scan_exposure - p.dark_point;
     }
   else if (p.restore_original_luminosity)
     {
       film_sensitivity s (p.film_characteristic_curve);
       s.precompute ();
-      //luminosity_t dark_point = s.unapply (p.dark_point);
 
       // TODO: For stitching exposure should be really inside
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.unapply (pow ((i + 0.5) * mul, gamma)) - p.dark_point) * p.exposure;
+	lookup_table[i] = (s.unapply (pow ((i + 0.5) * mul, gamma) * p.scan_exposure) - p.dark_point);
     }
   else
     {
       film_sensitivity s (p.film_characteristic_curve);
       s.precompute ();
-      //luminosity_t dark_point = s.apply (p.dark_point);
 
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.apply (pow ((i + 0.5) * mul, gamma)) - p.dark_point) * p.exposure;
+	lookup_table[i] = (s.apply (pow ((i + 0.5) * mul, gamma) * p.scan_exposure) - p.dark_point);
     }
   return lookup_table;
 }
@@ -321,11 +319,11 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 bool
 render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.dark_point, m_params.exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
+  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.dark_point, m_params.scan_exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
   m_lookup_table = lookup_table_cache.get (par, progress, &m_lookup_table_id);
   if (m_img.rgbdata)
     {
-      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.dark_point, m_params.exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
+      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.dark_point, m_params.scan_exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};

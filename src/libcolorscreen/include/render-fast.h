@@ -19,7 +19,7 @@ public:
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);
-    render_pixel (xx, yy, x, y, r, g, b);
+    render_pixel_scr (xx, yy, r, g, b);
   }
   void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {

@@ -25,7 +25,7 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), exposure (1),
+    color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), scan_exposure (1),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     backlight_correction (NULL), invert (false),
     restore_original_luminosity (true), precise (true), tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments ()
@@ -125,7 +125,7 @@ struct DLL_PUBLIC render_parameters
   output_profile_t output_profile;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
   /* Gray range to boot to full contrast.  */
-  luminosity_t dark_point, exposure;
+  luminosity_t dark_point, scan_exposure;
 
 
   hd_curve *film_characteristics_curve;
@@ -194,7 +194,7 @@ struct DLL_PUBLIC render_parameters
 	   && age == other.age
 	   && backlight_temperature == backlight_temperature
 	   && dark_point == other.dark_point
-	   && exposure == other.exposure
+	   && scan_exposure == other.scan_exposure
 	   && screen_blur_radius == other.screen_blur_radius
     	   && dye_balance == other.dye_balance
 	   && precise == other.precise
@@ -215,33 +215,33 @@ struct DLL_PUBLIC render_parameters
       {
 	luminosity_t min2 = pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
 	luminosity_t max2 = pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
-	dark_point = min2;
-	exposure = 1 / (max2 - min2);
+	scan_exposure = 1 / (max2 - min2);
+	dark_point = min2 * scan_exposure;
 	invert = false;
       }
     else if (gray_min > gray_max)
       {
 	luminosity_t min2 = 1-pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
 	luminosity_t max2 = 1-pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
-	dark_point = min2;
-	exposure = 1 / (max2 - min2);
+	scan_exposure = 1 / (max2 - min2);
+	dark_point = min2 * scan_exposure;
 	invert = true;
       }
-    printf ("gray_range %i %i exp %f dark %f\n", gray_min, gray_max, dark_point, exposure);
+    printf ("gray_range %i %i exp %f dark %f\n", gray_min, gray_max, dark_point, scan_exposure);
   }
   void get_gray_range (int *min, int *max, int maxval)
   {
     if (!invert)
       {
-       *min = pow (dark_point, 1 / gamma) * maxval + 0.5;
-       *max = pow (dark_point + 1 / exposure, 1 / gamma) * maxval + 0.5;
+       *min = pow (dark_point / scan_exposure, 1 / gamma) * maxval + 0.5;
+       *max = pow ((dark_point + 1) / scan_exposure, 1 / gamma) * maxval + 0.5;
       }
     else
       {
-       *min = pow (1-dark_point, 1 / gamma) * maxval + 0.5;
-       *max = pow (1-(dark_point + 1 / exposure), 1 / gamma) * maxval + 0.5;
+       *min = pow (1-dark_point / scan_exposure, 1 / gamma) * maxval + 0.5;
+       *max = pow (1-((dark_point + 1) / scan_exposure), 1 / gamma) * maxval + 0.5;
       }
-    printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, exposure);
+    printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
   }
 private:
   static const bool debug = false;
