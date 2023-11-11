@@ -66,8 +66,10 @@ public:
       y = height;
     int xx = (x * m_width) / width;
     int yy = (y * m_height) / height;
+#if 0
     if (xx < 0 || xx >= m_width || yy < 0 || yy >= m_height)
       return val;
+#endif
     struct entry &e = m_weights[yy * m_width + xx];
     return val * e.mult[channel]+e.add[channel];
   }

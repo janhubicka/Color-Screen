@@ -273,13 +273,25 @@ struct gray_and_sharpen_params
 luminosity_t
 getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
 {
-  return table[graydata[y][x]];
+  luminosity_t v = table[graydata[y][x]];
+  /* TODO: Implement correction for IR.  */
+#if 0
+  if (t.correction)
+    {
+      v = t.corretion->apply (v, img->width, img->height, x, y, backlight_correction::ir);
+      v = v * m_params.scan_exposure - m_params.dark_point;
+      /* TODO do inversion and film curves if requested.  */
+    }
+#endif
+  return v;
 }
 /* Helper for sharpening template for images with RGB data only.  */
 luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
-  return t->out_table2[(int)(compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
+  //return t->out_table2[(int)(compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
+  luminosity_t val = compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
+  return val;
   //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 sharpened_data *
@@ -319,20 +331,44 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 bool
 render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma, m_params.dark_point, m_params.scan_exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
-  m_lookup_table = lookup_table_cache.get (par, progress, &m_lookup_table_id);
+  bool cor = m_params.backlight_correction;
+  /* When backlight correction is done, we must delay adjustments after it is applied.  */
+  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma,
+			     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
+			     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
+  unsigned long lookup_table_id;
+  luminosity_t *lookup_table = lookup_table_cache.get (par, progress, &lookup_table_id);
+  if (!lookup_table)
+    return false;
   if (m_img.rgbdata)
     {
-      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma, m_params.dark_point, m_params.scan_exposure, m_params.invert, m_params.film_characteristics_curve, m_params.restore_original_luminosity};
+      /* TODO: check if the other maxval is correct: does 256 bit image display well?  */
+      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma,
+				     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
+				     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
+      if (!m_rgb_lookup_table)
+	{
+	  if (lookup_table)
+	    lookup_table_cache.release (lookup_table);
+	  return false;
+	}
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
-			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, m_lookup_table, m_lookup_table_id, m_img.width, m_img.height}};
+			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, lookup_table, lookup_table_id, m_img.width, m_img.height}};
   m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+  if (!m_sharpened_data_holder)
+    {
+      if (lookup_table)
+	lookup_table_cache.release (lookup_table);
+      return false;
+    }
   m_sharpened_data = m_sharpened_data_holder->m_data;
+  if (lookup_table)
+    lookup_table_cache.release (lookup_table);
 
   color_matrix color;
   if (m_params.presaturation != 1)
@@ -379,8 +415,6 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 
 render::~render ()
 {
-  if (m_lookup_table)
-    lookup_table_cache.release (m_lookup_table);
   if (m_out_lookup_table)
     out_lookup_table_cache.release (m_out_lookup_table);
   if (m_rgb_lookup_table)

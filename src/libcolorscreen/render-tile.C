@@ -27,7 +27,8 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 
 /* Render from stitched project.  We do not try todo antialiasing, since it would be slow.  */
 template<typename T>
-void render_stitched(std::function<T *(int x, int y)> init_render, image_data &img,
+void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)> init_render, image_data &img,
+		     render_parameters &rparam,
     		     unsigned char *pixels, int pixelbytes, int rowstride,
 		     int width, int height,
 		     double xoffset, double yoffset,
@@ -40,6 +41,7 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
   assert (stitch.params.width * stitch.params.height < 256);
   //std::atomic<T *> renders[256];
   T * renders[256];
+  std::vector<render_parameters> rparams;
   pthread_mutex_t lock[256];
   for (int x = 0; x < stitch.params.width * stitch.params.height; x++)
   {
@@ -47,6 +49,7 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
     if (pthread_mutex_init (&lock[x], NULL) != 0)
       perror ("lock");
   }
+  rparams.reserve (stitch.params.width * stitch.params.height);
   //renders[0] = init_render (0, 0);
 
   if (progress)
@@ -69,13 +72,19 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 	      if (stitch.tile_for_scr (sx, sy, &ix, &iy, true)
 		  && !renders[iy * stitch.params.width + ix])
 		{
-		  renders[iy * stitch.params.width + ix]  = init_render (ix, iy);
+		  rparams.push_back (rparam);
+		  render_parameters &rparam2 = rparams.back();
+			  //rparams[y * stitch.params.width + ix];
+		  //rparam2 = rparam;
+		  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
+		  rparam2.scan_exposure *= a.exposure;
+		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
 		  if (progress && progress->cancel_requested ())
 		    break;
 		}
 	    }
       }
-#pragma omp parallel for default(none) shared(progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
+#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,rparams)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -115,7 +124,13 @@ void render_stitched(std::function<T *(int x, int y)> init_render, image_data &i
 		         someone initialized it in meantime.  */
 		      lastrender = renders[iy * stitch.params.width + ix];
 		      if (!lastrender)
-			renders[iy * stitch.params.width + ix] = lastrender = init_render (ix, iy);
+			{
+			  rparams.push_back (rparam);
+			  render_parameters &rparam2 = rparams.back();
+			  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
+			  rparam2.scan_exposure *= a.exposure;
+			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
+			}
 		    }
 		    if (hack)
 		      pthread_mutex_unlock (&lock[iy * stitch.params.width + ix]);
@@ -175,7 +190,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_img> (
-		  [&img,&rparam,&progress,color] (int x, int y) mutable
+		  [&img,&progress,color] (render_parameters &rparam, int x, int y) mutable
 		  {
 		    render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
 		    if (color)
@@ -187,7 +202,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	      break;
 	    }
 	  render_img render (param, img, rparam, 255);
@@ -269,7 +284,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_superpose_img> (
-		  [&img,&rparam,color,&progress] (int x, int y) mutable
+		  [&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
 		  {
 		    render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, true);
 		    if (color)
@@ -281,7 +296,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	      break;
 	    }
 	  render_superpose_img render (param, img,
@@ -341,7 +356,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_superpose_img> (
-		  [&img,&rparam,color,&progress] (int x, int y) mutable
+		  [&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
 		  {
 		    render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, false);
 		    if (color)
@@ -353,7 +368,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	      break;
 	    }
 	  render_superpose_img render (param, img,
@@ -417,7 +432,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_interpolate> (
-		  [&img,&rparam,screen_compensation,adjust_luminosity,&progress] (int x, int y) mutable
+		  [&img,screen_compensation,adjust_luminosity,&progress] (render_parameters &rparam, int x, int y) mutable
 		  {
 		    render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255,screen_compensation, adjust_luminosity);
 		    if (!r->precompute_all (progress))
@@ -427,7 +442,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	      break;
 	    }
 	  render_interpolate render (param, img,
@@ -466,7 +481,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  if (img.stitch)
 	    {
 	      render_stitched<render_fast> (
-		  [&img,&rparam,&progress] (int x, int y) mutable
+		  [&img,&progress] (render_parameters &rparam, int x, int y) mutable
 		  {
 		    render_fast *r = new render_fast (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
 		    if (!r->precompute_all (progress))
@@ -476,7 +491,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	      break;
 	    }
 	  render_fast render (param, img, rparam, 255);

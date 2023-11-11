@@ -144,16 +144,16 @@ struct DLL_PUBLIC render_parameters
 
   struct tile_adjustment
   {
-    luminosity_t exposure_adjustment;
+    luminosity_t exposure;
     bool enabled;
     unsigned char x, y;
     constexpr tile_adjustment()
-    : exposure_adjustment (0), enabled (true), x(0), y(0)
+    : exposure (1), enabled (true), x(0), y(0)
     {}
     bool operator== (tile_adjustment &other) const
     {
       return enabled == other.enabled
-	     && exposure_adjustment == other.exposure_adjustment;
+	     && exposure == other.exposure;
     }
     bool operator!= (tile_adjustment &other) const
     {
@@ -169,6 +169,8 @@ struct DLL_PUBLIC render_parameters
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
   tile_adjustment&
   get_tile_adjustment_ref (stitch_project *stitch, int x, int y);
+  tile_adjustment&
+  get_tile_adjustment (int x, int y);
 
   bool operator== (render_parameters &other) const
   {
@@ -243,6 +245,7 @@ struct DLL_PUBLIC render_parameters
       }
     printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
   }
+  void set_tile_adjustments_dimensions (int w, int h);
 private:
   static const bool debug = false;
 };
@@ -363,7 +366,7 @@ class DLL_PUBLIC render
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_lookup_table (NULL), m_lookup_table_id (0), m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
   {
     if (m_params.invert)
       {
@@ -434,10 +437,6 @@ protected:
   int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
-  /* Translates input gray values into normalized range 0...1 gamma 1.  */
-  luminosity_t *m_lookup_table;
-  /* Cached ID of the table.  */
-  unsigned long m_lookup_table_id;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
   luminosity_t *m_rgb_lookup_table;
   /* Translates back to gamma 2.  */
@@ -453,6 +452,16 @@ private:
     rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
+    if (m_params.backlight_correction)
+      {
+	d.red = m_params.backlight_correction->apply (d.red, m_img.width, m_img.height, x, y, backlight_correction::red);
+	d.red = d.red * m_params.scan_exposure - m_params.dark_point;
+	d.green = m_params.backlight_correction->apply (d.green, m_img.width, m_img.height, x, y, backlight_correction::green);
+	d.green = d.green * m_params.scan_exposure - m_params.dark_point;
+	d.blue = m_params.backlight_correction->apply (d.blue, m_img.width, m_img.height, x, y, backlight_correction::blue);
+	d.blue = d.blue * m_params.scan_exposure - m_params.dark_point;
+	/* TODO do inversion and film curves if requested.  */
+      }
     return d;
   }
 };
@@ -489,19 +498,40 @@ render::get_data (int x, int y)
 inline luminosity_t
 render::get_data_red (int x, int y)
 {
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
+  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].r];
+  if (m_params.backlight_correction)
+    {
+      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::red);
+      v = v * m_params.scan_exposure - m_params.dark_point;
+      /* TODO do inversion and film curves if requested.  */
+    }
+  return v;
 }
 
 inline luminosity_t
 render::get_data_green (int x, int y)
 {
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
+  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].g];
+  if (m_params.backlight_correction)
+    {
+      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::green);
+      v = v * m_params.scan_exposure - m_params.dark_point;
+      /* TODO do inversion and film curves if requested.  */
+    }
+  return v;
 }
 
 inline luminosity_t
 render::get_data_blue (int x, int y)
 {
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
+  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].b];
+  if (m_params.backlight_correction)
+    {
+      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::blue);
+      v = v * m_params.scan_exposure - m_params.dark_point;
+      /* TODO do inversion and film curves if requested.  */
+    }
+  return v;
 }
 
 /* Compute color in linear HDR image.  */

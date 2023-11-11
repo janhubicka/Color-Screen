@@ -98,6 +98,15 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!rparam->backlight_correction->save (f))
 	    return false;
 	}
+      if (rparam->tile_adjustments_width)
+	{
+	  if (fprintf (f, "tile_adjustments_dimensions: %i %i\n", rparam->tile_adjustments_width, rparam->tile_adjustments_height) < 0)
+	    return false;
+	  for (int y = 0; y < rparam->tile_adjustments_height; y++)
+	    for (int x = 0; x < rparam->tile_adjustments_width; x++)
+	      if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0)
+		return false;
+	}
     }
   if (sparam)
     {
@@ -291,6 +300,8 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   /* TODO: hack.  */
   setlocale(LC_NUMERIC, "C");
+  if (rparam)
+    rparam->set_tile_adjustments_dimensions (0, 0);
   while (!feof (f))
     {
       char buf[256];
@@ -500,6 +511,42 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    {
 	      *error = "error parsing screen_blur_radius";
 	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "tile_adjustments_dimensions"))
+	{
+	  int w, h;
+	  if (fscanf (f, "%i %i", &w, &h) != 2
+	      || w <= 0
+	      || h <= 0)
+	    {
+	      *error = "error parsing tile_adjustments_dimensions";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->set_tile_adjustments_dimensions (w, h);
+	}
+      else if (!strcmp (buf, "tile_adjustment_exposure"))
+	{
+	  int x, y;
+	  luminosity_t val;
+	  if (fscanf (f, "%i %i", &x, &y) != 2
+	      || x < 0
+	      || y < 0
+	      || !read_luminosity (f, &val))
+	    {
+	      *error = "error parsing tile_adjustment_exposure";
+	      return false;
+	    }
+	  if (rparam)
+	    {
+	      if (x >= rparam->tile_adjustments_width
+		  || y >= rparam->tile_adjustments_height)
+		{
+		  *error = "tile_adjustment_exposure out of range";
+		  return false;
+		}
+	      rparam->get_tile_adjustment (x, y).exposure = val;
 	    }
 	}
       else if (!strcmp (buf, "color_model"))
