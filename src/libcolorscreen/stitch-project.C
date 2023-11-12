@@ -1,5 +1,7 @@
 #include <vector>
 #include <locale>
+#include <gsl/gsl_multifit.h>
+#include <gsl/gsl_linalg.h>
 #include "include/stitch.h"
 #include "render-interpolate.h"
 #include "screen-map.h"
@@ -526,5 +528,280 @@ stitch_project::write_tiles (render_parameters rparam, struct render_to_file_par
 	      return false;
 	  }
       }
+  return true;
+}
+
+namespace {
+int
+print_matrix(FILE *f, const char *name, const gsl_matrix *m)
+{
+        int status, n = 0;
+	printf ("Matrix %s\n", name);
+
+        for (size_t i = 0; i < m->size1; i++) {
+                for (size_t j = 0; j < m->size2; j++) {
+                        if ((status = fprintf(f, "%4.2f ", gsl_matrix_get(m, i, j))) < 0)
+                                return -1;
+                        n += status;
+                }
+
+                if ((status = fprintf(f, "\n")) < 0)
+                        return -1;
+                n += status;
+        }
+
+        return n;
+}
+int
+print_system(FILE *f, const gsl_matrix *m, gsl_vector *v)
+{
+        int status, n = 0;
+
+        for (size_t i = 0; i < m->size1; i++) {
+                for (size_t j = 0; j < m->size2; j++) {
+                        if ((status = fprintf(f, "%4.2f ", gsl_matrix_get(m, i, j))) < 0)
+                                return -1;
+                        n += status;
+                }
+
+                if ((status = fprintf(f, "| %4.2f\n", gsl_vector_get (v, i))) < 0)
+                        return -1;
+                n += status;
+        }
+
+        return n;
+}
+}
+
+bool
+stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
+{
+  int combined_height = 0;
+  /* Set rendering params so we get actual linearized scan data.  */
+  render_parameters rparams;
+  rparams.gamma = in_rparams->gamma;
+  rparams.backlight_correction = in_rparams->backlight_correction;
+  const char *error = NULL;
+
+  struct ratio 
+    {
+      luminosity_t ratio, val1, val2;
+      bool operator < (const struct ratio &other)
+      {
+	return ratio < other.ratio;
+      }
+    };
+
+  struct equation
+    {
+      int x1,y1,x2,y2;
+      luminosity_t s1, s2;
+    };
+  std::vector <equation> eqns;
+		  const int step = 4;
+
+  if (progress)
+    {
+      for (int y = 0; y < params.height; y++)
+	for (int x = 0; x < params.width; x++)
+	  for (int iy = y; iy < params.height; iy++)
+	     for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
+		combined_height += images[y][x].img_height / step;
+      progress->set_task ("analyzing images", combined_height);
+    }
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      {
+	if (progress && progress->cancel_requested ())
+	  break;
+	if (!images[y][x].load_img (&error, progress))
+	  break;
+	render render1 (*images[y][x].img, rparams, 255);
+	if (!render1.precompute_all (images[y][x].img->data != NULL, progress))
+	  {
+	    error = "precomputation failed";
+	    break;
+	  }
+	if ((!progress || !progress->cancel_requested ()) && !error)
+	  //for (int iy = /*y*/0; iy < params.height; iy++)
+	  for (int iy = y; iy < params.height; iy++)
+	    if ((!progress || !progress->cancel_requested ()) && !error)
+	      //for (int ix = /*(iy == y ? x + 1 : 0)*/0; ix < params.width; ix++)
+	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
+		//if (ix != x || iy != y)
+		{
+		  std::vector<ratio> ratios[4];
+		  render *render2 = NULL;
+		  int img_height = images[y][x].img_height;
+		  int img_width = images[y][x].img_width;
+		  if ((!progress || !progress->cancel_requested ()) && !error)
+//#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,img_height,img_width)
+		    for (int yy = 2; yy < img_height - 2; yy+= step)
+		      {
+			if ((!progress || !progress->cancel_requested ()) && !error)
+			  for (int xx = 2; xx < img_width - 2; xx+= step)
+			    {
+			      coord_t common_x, common_y;
+			      images[y][x].img_to_common_scr (xx + 0.5, yy + 0.5, &common_x, &common_y);
+			      if (!images[iy][ix].pixel_known_p (common_x, common_y)
+				  || !images[y][x].pixel_known_p (common_x, common_y))
+				continue;
+//#pragma omp critical
+			      if (!render2)
+				{
+				  if (images[iy][ix].load_img (&error, progress))
+				    {
+				      render2 = new render (*images[iy][ix].img, rparams, 255);
+				      if (!render2->precompute_all (images[y][x].img->data != NULL, progress))
+					{
+					  progress->pause_stdout ();
+					  printf ("Comparing tile %i %i and %i %i\n", x, y, ix, iy);
+					  progress->resume_stdout ();
+					  error = "precomputation failed";
+					  delete render2;
+					}
+				    }
+				}
+			      if (!render2)
+				break;
+			      coord_t iix, iiy;
+			      luminosity_t minv = 16.0 / 65535;
+			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
+#if 0
+			      int border = images[y][x].img_width / 4;
+			      if (xx < border || xx > images[y][x].img_width - border
+			          || yy < border || yy > images[y][x].img_height - border
+			          || iix < border || iix > images[iy][ix].img_width - border
+			          || iiy < border || iiy > images[iy][ix].img_height - border)
+				      continue;
+			      assert (iix > 0 && iiy > 0 && iix < images[iy][ix].img_width && iiy < images[iy][ix].img_height);
+#endif
+			      if (images[y][x].img->rgbdata)
+				{
+				  rgbdata d = render1.get_rgb_pixel (xx, yy);
+				  //rgbdata d;
+				  //render1.get_img_rgb_pixel (xx + 0.5, yy + 0.5, &d.red, &d.green, &d.blue);
+				  luminosity_t red, green, blue;
+				  render2->get_img_rgb_pixel (iix, iiy, &red, &green, &blue);
+
+
+				  if (d.red > minv && red > minv)
+#pragma omp critical
+				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red});
+				  //printf ("%i %i:%f,%f %i %i:%f,%f %f %f %f\n",x,y,xx+0.5,yy+0.5,ix,iy,iix,iiy,red, d.red, red/d.red);
+				  if (d.green > minv && green > minv)
+#pragma omp critical
+				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green});
+				  if (d.blue > minv && blue > minv)
+#pragma omp critical
+				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue});
+				}
+			      if (images[y][x].img->data)
+				abort ();
+			      }
+			    if (progress)
+			      progress->inc_progress ();
+			  }
+		       if (render2)
+			 {
+			   images[iy][ix].release_img ();
+			   delete render2;
+			 }
+		       luminosity_t wsum1=0, wsum2=0;
+		       for (int c = 0; c < 4; c++)
+			 {
+			   const char *channels[] = {"red", "green", "blue", "ir"};
+			   if (ratios[c].size () > 1000)
+			     {
+				std::sort (ratios[c].begin (), ratios[c].end());
+				luminosity_t wsum1b = 0, wsum2b = 0;
+				for (size_t i = ratios[c].size () / 4; i < (size_t)(3 * ratios[c].size () / 4); i++)
+				  {
+				    wsum1b += ratios[c][i].val1;
+				    wsum2b += ratios[c][i].val2;
+				  }
+				wsum1 += wsum1b;
+				wsum2 += wsum2b;
+				progress->pause_stdout ();
+				printf ("Found %i common points of tile %i,%i and %i,%i in channel %s. Ratio %f sums %f %f\n", (int)ratios[c].size (), x, y, ix, iy, channels[c], wsum1b/wsum2b, wsum1b, wsum2b);
+				progress->resume_stdout ();
+			     }
+			 }
+		       if (wsum1 > 0 && wsum2 > 0)
+		         eqns.push_back ({x,y,ix,iy,wsum1, wsum2});
+		  }
+	images[y][x].release_img ();
+      }
+  if ((progress && progress->cancel_requested ()) || error)
+    {
+      *rerror = error;
+      return false;
+    }
+  progress->pause_stdout ();
+  for (int i = 0; i < (int)eqns.size (); i++)
+    {
+      printf ("e%i%i * %f = e%i%i * %f\n", eqns[i].x1, eqns[i].y1, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].s1);
+    }
+  for (int i = 0; i < (int)eqns.size (); i++)
+    {
+      printf ("e%i%i * %f = e%i%i rep %f\n", eqns[i].x1, eqns[i].y1, eqns[i].s2/eqns[i].s1, eqns[i].x2, eqns[i].y2, eqns[i].s1/eqns[i].s2);
+    }
+  progress->resume_stdout ();
+  int nvariables = params.width * params.height;
+  int nequations = eqns.size () + 1;
+  gsl_matrix *A, *cov;
+  gsl_vector *y, *w, *c;
+  gsl_matrix *a = gsl_matrix_alloc (nvariables, nvariables);
+  A = gsl_matrix_alloc (nequations, nvariables);
+  y = gsl_vector_alloc (nequations);
+  w = gsl_vector_alloc (nequations);
+  c = gsl_vector_alloc (nvariables);
+  cov = gsl_matrix_alloc (nvariables, nvariables);
+  int i;
+  luminosity_t sum = 0;
+  for (i = 0; i < (int)eqns.size (); i++)
+    {
+      for (int j = 0; j < nvariables; j++)
+	gsl_matrix_set (A, i, j, 0);
+      gsl_matrix_set (A, i, eqns[i].y1 * params.width + eqns[i].x1, eqns[i].s1);
+      gsl_matrix_set (A, i, eqns[i].y2 * params.width + eqns[i].x2, -eqns[i].s2);
+      gsl_vector_set (y, i, 0);
+      gsl_vector_set (w, i, 1);
+      sum += eqns[i].s1;
+      sum += eqns[i].s2;
+    }
+  for (int j = 0; j < nvariables; j++)
+    gsl_matrix_set (A, i, j, 0);
+  gsl_vector_set (y, i, sum);
+  gsl_vector_set (w, i, 1);
+  gsl_matrix_set (A, i, params.width * params.height / 4, sum);
+
+  progress->pause_stdout ();
+  print_system (stdout, A, y);
+  progress->resume_stdout ();
+
+  gsl_multifit_linear_workspace * work
+    = gsl_multifit_linear_alloc (nequations, nvariables);
+  double chisq;
+  gsl_multifit_wlinear (A, w, y, c, cov,
+			&chisq, work);
+  gsl_multifit_linear_free (work);
+  progress->pause_stdout ();
+  for (int y = 0; y < params.height; y++)
+    {
+      for (int x = 0; x < params.width; x++)
+	printf ("  %4.4f", gsl_vector_get (c, y * params.width + x));
+      printf ("\n");
+    }
+  in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      in_rparams->get_tile_adjustment (y,x).exposure = gsl_vector_get (c, y * params.width + x) / gsl_vector_get (c, params.width * params.height / 4);
+  for (int y = 0; y < params.height; y++)
+  progress->resume_stdout ();
+  gsl_matrix_free (A);
+  gsl_vector_free (y);
+  gsl_vector_free (w);
+  gsl_matrix_free (cov);
   return true;
 }

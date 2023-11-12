@@ -401,9 +401,27 @@ public:
   inline luminosity_t get_data_red (int x, int y);
   inline luminosity_t get_data_green (int x, int y);
   inline luminosity_t get_data_blue (int x, int y);
+  bool precompute_all (bool grayscale_needed, progress_info *progress);
+  inline rgbdata
+  get_rgb_pixel (int x, int y)
+  {
+    rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
+		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
+		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
+    if (m_params.backlight_correction)
+      {
+	d.red = m_params.backlight_correction->apply (d.red, m_img.width, m_img.height, x, y, backlight_correction::red);
+	d.red = d.red * m_params.scan_exposure - m_params.dark_point;
+	d.green = m_params.backlight_correction->apply (d.green, m_img.width, m_img.height, x, y, backlight_correction::green);
+	d.green = d.green * m_params.scan_exposure - m_params.dark_point;
+	d.blue = m_params.backlight_correction->apply (d.blue, m_img.width, m_img.height, x, y, backlight_correction::blue);
+	d.blue = d.blue * m_params.scan_exposure - m_params.dark_point;
+	/* TODO do inversion and film curves if requested.  */
+      }
+    return d;
+  }
 
 protected:
-  bool precompute_all (bool grayscale_needed, progress_info *progress);
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
@@ -446,24 +464,6 @@ protected:
 
 private:
   const bool debug = false;
-  inline rgbdata
-  get_rgb_pixel (int x, int y)
-  {
-    rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
-		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
-		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
-    if (m_params.backlight_correction)
-      {
-	d.red = m_params.backlight_correction->apply (d.red, m_img.width, m_img.height, x, y, backlight_correction::red);
-	d.red = d.red * m_params.scan_exposure - m_params.dark_point;
-	d.green = m_params.backlight_correction->apply (d.green, m_img.width, m_img.height, x, y, backlight_correction::green);
-	d.green = d.green * m_params.scan_exposure - m_params.dark_point;
-	d.blue = m_params.backlight_correction->apply (d.blue, m_img.width, m_img.height, x, y, backlight_correction::blue);
-	d.blue = d.blue * m_params.scan_exposure - m_params.dark_point;
-	/* TODO do inversion and film curves if requested.  */
-      }
-    return d;
-  }
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
@@ -490,7 +490,8 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 inline luminosity_t
 render::get_data (int x, int y)
 {
-  return m_sharpened_data [y * m_img.width + x];
+  /* TODO do inversion and film curves if requested.  */
+  return m_sharpened_data [y * m_img.width + x] * m_params.scan_exposure - m_params.dark_point;
 }
 
 /* Get same for rgb data.  */

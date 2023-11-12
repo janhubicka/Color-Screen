@@ -9,7 +9,7 @@
    For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
 template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
-bool
+flatten_attr bool
 sharpen(O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
 {
   luminosity_t *cmatrix;

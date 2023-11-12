@@ -12,6 +12,7 @@
 #include "gtk-image-viewer.h"
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/screen-map.h"
+#include "../libcolorscreen/include/stitch.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
@@ -384,6 +385,15 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       if (rparams.age < 0)
 	rparams.age = 0;
       printf ("Age: %f\n", rparams.age);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'G' && scan.stitch)
+    {
+      file_progress_info progress (stdout);
+      const char *error;
+      if (!scan.stitch->analyze_exposure_adjustments (&rparams, &error, &progress))
+	fprintf (stderr, "exposure analysis failed: %s\n", error);
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -1357,6 +1367,7 @@ main (int argc, char **argv)
   const char *error;
   if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &current_solver, &error))
     fprintf (stderr, "%s\n", error);
+
   current_mesh = current.mesh_trans;
   if (in)
     fclose (in);

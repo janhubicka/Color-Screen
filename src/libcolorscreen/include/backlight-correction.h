@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cassert>
 #include "color.h"
+#include "base.h"
 #include "imagedata.h"
 struct memory_buffer 
 {
@@ -54,8 +55,10 @@ public:
 	  e.mult[i] = mult;
 	}
   }
+  inline
   luminosity_t apply (float val, int width, int height, int x, int y, enum channel channel)
   {
+#if 0
     if (x < 0)
       x = 0;
     if (x >= width)
@@ -64,14 +67,27 @@ public:
       y = 0;
     if (y >= height)
       y = height;
-    int xx = (x * m_width) / width;
-    int yy = (y * m_height) / height;
-#if 0
     if (xx < 0 || xx >= m_width || yy < 0 || yy >= m_height)
       return val;
 #endif
+#if 0
+    coord_t xx = x * (m_width / (coord_t)width);
+    coord_t yy = y * (m_height / (coord_t)height);
+    int sx, sy;
+    coord_t rx = my_modf (xx, &sx);
+    coord_t ry = my_modf (yx, &sy);
+    struct entry &e00 = m_weights[(yy + 0) * m_width + xx];
+    struct entry &e10 = m_weights[std::max ((yy + 1) * m_width + xx];
+    struct entry &e01 = m_weights[(yy + 0) * m_width + xx];
+    struct entry &e11 = m_weights[(yy + 1) * m_width + xx];
+#endif
+
+#if 1
+    int xx = x * (m_width / (coord_t)width);
+    int yy = y * (m_height / (coord_t)height);
     struct entry &e = m_weights[yy * m_width + xx];
     return val * e.mult[channel]+e.add[channel];
+#endif
   }
   ~backlight_correction ()
   {

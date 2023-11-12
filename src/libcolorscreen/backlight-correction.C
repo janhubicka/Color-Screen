@@ -86,7 +86,7 @@ backlight_correction::save (FILE *f)
 	    if (fprintf (f, " (%f, %f)", m_weights[y * m_width +x].add[i],  m_weights[y * m_width +x].mult[i])<0)
 	      return false;
     }
-  if (fprintf (f, "\n  backlight_correction_end" ) < 0)
+  if (fprintf (f, "\n  backlight_correction_end\n" ) < 0)
     return false;
   return true;
 }

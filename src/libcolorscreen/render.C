@@ -270,7 +270,7 @@ struct gray_and_sharpen_params
 };
 
 /* Helper for sharpening template for images with gray data.  */
-luminosity_t
+inline luminosity_t
 getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
 {
   luminosity_t v = table[graydata[y][x]];
@@ -286,7 +286,7 @@ getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *tabl
   return v;
 }
 /* Helper for sharpening template for images with RGB data only.  */
-luminosity_t
+inline luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
   //return t->out_table2[(int)(compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
@@ -357,16 +357,19 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
-  gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
-			       {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, lookup_table, lookup_table_id, m_img.width, m_img.height}};
-  m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
-  if (!m_sharpened_data_holder)
+  if (grayscale_needed)
     {
-      if (lookup_table)
-	lookup_table_cache.release (lookup_table);
-      return false;
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
+				   {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, lookup_table, lookup_table_id, m_img.width, m_img.height}};
+      m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+      if (!m_sharpened_data_holder)
+	{
+	  if (lookup_table)
+	    lookup_table_cache.release (lookup_table);
+	  return false;
+	}
+      m_sharpened_data = m_sharpened_data_holder->m_data;
     }
-  m_sharpened_data = m_sharpened_data_holder->m_data;
   if (lookup_table)
     lookup_table_cache.release (lookup_table);
 

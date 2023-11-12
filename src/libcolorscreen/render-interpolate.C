@@ -13,6 +13,8 @@ struct analyzer_params
   luminosity_t collection_threshold;
   unsigned long mesh_trans_id;
   scr_to_img_parameters params;
+  /* TODO: We can also do this on computed data.  */
+  luminosity_t dark_point, exposure;
 
   image_data *img;
   screen *scr;
@@ -25,12 +27,10 @@ struct analyzer_params
     return graydata_id == o.graydata_id
 	   && precise == o.precise
 	   && (!precise || screen_id == o.screen_id)
-	   /*&& width == o.width
-	   && height == o.height
-	   && xshift == o.xshift
-	   && yshift == o.yshift*/
 	   /* TODO: Can be more fine grained.  */
 	   && mesh_trans_id == o.mesh_trans_id
+	   && dark_point == o.dark_point
+	   && exposure == o.exposure
 	   && (mesh_trans_id || params == o.params)
 	   && (!precise || collection_threshold == o.collection_threshold);
   };
@@ -116,6 +116,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
+      m_params.dark_point,
+      m_params.scan_exposure,
       &m_img,
       m_screen,
       this,

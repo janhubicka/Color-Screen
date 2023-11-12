@@ -153,6 +153,22 @@ class stitch_image
 
   inline analyze_base & get_analyzer ();
   static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
+  void img_to_common_scr (coord_t ix, coord_t iy, coord_t *sx, coord_t *sy)
+  {
+    coord_t xx, yy;
+    scr_to_img_map.to_scr (ix, iy, &xx, &yy);
+    *sx = xx + xpos;
+    *sy = yy + ypos;
+  }
+  void common_scr_to_img_scr (coord_t sx, coord_t sy, coord_t *isx, coord_t *isy)
+  {
+    *isx = sx - xpos;
+    *isy = sy - ypos;
+  }
+  void common_scr_to_img (coord_t sx, coord_t sy, coord_t *ix, coord_t *iy)
+  {
+    scr_to_img_map.to_img (sx - xpos, sy - ypos, ix, iy);
+  }
 private:
   bool render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
   static long current_time;
@@ -220,6 +236,7 @@ public:
     return true;
   }
   bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
+  bool analyze_exposure_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

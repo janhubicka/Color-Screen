@@ -621,6 +621,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       *error = libraw_strerror(ret);
       return false;
     }
+  //printf ("Black: %i %i %i %i\n", RawProcessor.imgdata.color.black);
   grayscale = false;
   rgb = true;
   m_img->width = RawProcessor.imgdata.sizes.width;

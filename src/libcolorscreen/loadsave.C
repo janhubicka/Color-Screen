@@ -93,7 +93,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	return false;
       if (rparam->backlight_correction)
 	{
-	  if (fprintf (f, "backlight_correction: yes") < 0)
+	  if (fprintf (f, "backlight_correction: yes\n") < 0)
 	    return false;
 	  if (!rparam->backlight_correction->save (f))
 	    return false;
