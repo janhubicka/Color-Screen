@@ -1,7 +1,7 @@
 #include "include/analyze-paget.h"
 #include "include/screen.h"
 #include "include/tiff-writer.h"
-bool
+bool flatten_attr
 analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);

@@ -136,6 +136,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 			  render_parameters &rparam2 = rparams.back();
 			  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
 			  rparam2.scan_exposure *= a.exposure;
+			  rparam2.dark_point += a.exposure;
 			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
 			}
 		    }

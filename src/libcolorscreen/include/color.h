@@ -5,6 +5,56 @@
 
 typedef float luminosity_t;
 struct xyz {luminosity_t x, y, z;};
+
+/* Prevent conversion to wrong data type when doing math.  */
+static inline float
+my_pow (float x, float y)
+{
+return powf (x, y);
+}
+static inline double
+my_pow (double x, double y)
+{
+return pow (x, y);
+}
+
+inline luminosity_t
+srgb_to_linear (luminosity_t c)
+{
+  if (c < (luminosity_t)0.04045)
+    return c / (luminosity_t)12.92;
+  return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
+}
+
+inline luminosity_t
+linear_to_srgb (luminosity_t c)
+{
+  if (c<(luminosity_t)0.0031308)
+    return (luminosity_t)12.92 * c;
+  return ((luminosity_t)1.055)*my_pow (c, 1/(luminosity_t)2.4)-(luminosity_t)0.055;
+}
+
+/* We handle special gama of -1 for sRGB color space curves.  */
+inline luminosity_t
+apply_gamma (luminosity_t val, luminosity_t gamma)
+{
+  if (gamma == 1)
+    return val;
+  if (gamma == -1)
+    return srgb_to_linear (val);
+  return my_pow (val, gamma);
+}
+
+inline luminosity_t
+invert_gamma (luminosity_t val, luminosity_t gamma)
+{
+  if (gamma == 1)
+    return val;
+  if (gamma == -1)
+    return linear_to_srgb (val);
+  return my_pow (val, 1 / gamma);
+}
+
 struct color_t
 {
   luminosity_t red, green, blue;
@@ -53,7 +103,7 @@ struct color_t
   inline color_t
   gamma (luminosity_t g)
   {
-    color_t ret (pow (red, g), pow (green, g), pow (blue, g));
+    color_t ret (apply_gamma (red, g), apply_gamma (green, g), apply_gamma (blue, g));
     return ret;
   }
 
@@ -61,7 +111,7 @@ struct color_t
   inline color_t
   sgngamma (luminosity_t g)
   {
-    color_t ret (pow (fabs (red), g), pow (fabs (green), g), pow (fabs (blue), g));
+    color_t ret (apply_gamma (fabs (red), g), apply_gamma (fabs (green), g), apply_gamma (fabs (blue), g));
     if (red < 0)
       ret.red = -ret.red;
     if (green < 0)
@@ -239,20 +289,6 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
-inline luminosity_t
-srgb_to_linear (luminosity_t c)
-{
-  if (c < 0.04045)
-    return c / 12.92;
-  return pow ((c + 0.055) / 1.055, 2.4);
-}
-inline luminosity_t
-linear_to_srgb (luminosity_t c)
-{
-  if (c<0.0031308)
-    return 12.92 * c;
-  return 1.055*pow (c, 1/2.4)-0.055;
-}
 inline void
 xyz_to_srgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
@@ -288,4 +324,5 @@ xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
   xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
   return ret;
 }
+
 #endif

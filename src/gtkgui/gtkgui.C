@@ -1389,7 +1389,7 @@ main (int argc, char **argv)
 
 
   current.mesh_trans = current_mesh;
-  save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver);
+  //save_csp (stdout, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver);
   window = initgtk (&argc, argv);
   setvals ();
   initialized = 1;

@@ -124,7 +124,7 @@ struct DLL_PUBLIC render_parameters
     };
   output_profile_t output_profile;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
-  /* Gray range to boot to full contrast.  */
+  /* After linearizing we apply (val - dark_point) * scan_exposure  */
   luminosity_t dark_point, scan_exposure;
 
 
@@ -144,7 +144,9 @@ struct DLL_PUBLIC render_parameters
 
   struct tile_adjustment
   {
+    /* Multiplicative correction to stitch-project global scan_exposure.  */
     luminosity_t exposure;
+    /* Additive correction to stitch-project dark point.  */
     luminosity_t dark_point;
     bool enabled;
     unsigned char x, y;
@@ -217,18 +219,18 @@ struct DLL_PUBLIC render_parameters
   {
     if (gray_min < gray_max)
       {
-	luminosity_t min2 = pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
-	luminosity_t max2 = pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t min2 = apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
 	scan_exposure = 1 / (max2 - min2);
-	dark_point = min2 * scan_exposure;
+	dark_point = min2;
 	invert = false;
       }
     else if (gray_min > gray_max)
       {
-	luminosity_t min2 = 1-pow ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
-	luminosity_t max2 = 1-pow ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t min2 = 1-apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = 1-apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
 	scan_exposure = 1 / (max2 - min2);
-	dark_point = min2 * scan_exposure;
+	dark_point = min2;
 	invert = true;
       }
     printf ("gray_range %i %i exp %f dark %f\n", gray_min, gray_max, dark_point, scan_exposure);
@@ -237,13 +239,13 @@ struct DLL_PUBLIC render_parameters
   {
     if (!invert)
       {
-       *min = pow (dark_point / scan_exposure, 1 / gamma) * maxval + 0.5;
-       *max = pow ((dark_point + 1) / scan_exposure, 1 / gamma) * maxval + 0.5;
+       *min = invert_gamma (dark_point, gamma) * maxval + 0.5;
+       *max = invert_gamma ((dark_point + 1) / scan_exposure, gamma) * maxval + 0.5;
       }
     else
       {
-       *min = pow (1-dark_point / scan_exposure, 1 / gamma) * maxval + 0.5;
-       *max = pow (1-((dark_point + 1) / scan_exposure), 1 / gamma) * maxval + 0.5;
+       *min = invert_gamma (1-dark_point, gamma) * maxval + 0.5;
+       *max = invert_gamma (1-((dark_point + 1) / scan_exposure), gamma) * maxval + 0.5;
       }
     printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
   }
@@ -398,6 +400,7 @@ public:
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
+  inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *);
   inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *);
   inline luminosity_t get_data (int x, int y);
   inline luminosity_t get_data_red (int x, int y);
@@ -413,11 +416,11 @@ public:
     if (m_params.backlight_correction)
       {
 	d.red = m_params.backlight_correction->apply (d.red, m_img.width, m_img.height, x, y, backlight_correction::red);
-	d.red = d.red * m_params.scan_exposure - m_params.dark_point;
+	d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
 	d.green = m_params.backlight_correction->apply (d.green, m_img.width, m_img.height, x, y, backlight_correction::green);
-	d.green = d.green * m_params.scan_exposure - m_params.dark_point;
+	d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
 	d.blue = m_params.backlight_correction->apply (d.blue, m_img.width, m_img.height, x, y, backlight_correction::blue);
-	d.blue = d.blue * m_params.scan_exposure - m_params.dark_point;
+	d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
 	/* TODO do inversion and film curves if requested.  */
       }
     return d;
@@ -493,7 +496,7 @@ inline luminosity_t
 render::get_data (int x, int y)
 {
   /* TODO do inversion and film curves if requested.  */
-  return m_sharpened_data [y * m_img.width + x] * m_params.scan_exposure - m_params.dark_point;
+  return (m_sharpened_data [y * m_img.width + x] - m_params.dark_point) * m_params.scan_exposure;
 }
 
 /* Get same for rgb data.  */
@@ -505,7 +508,7 @@ render::get_data_red (int x, int y)
   if (m_params.backlight_correction)
     {
       v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::red);
-      v = v * m_params.scan_exposure - m_params.dark_point;
+      v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }
   return v;
@@ -518,7 +521,7 @@ render::get_data_green (int x, int y)
   if (m_params.backlight_correction)
     {
       v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::green);
-      v = v * m_params.scan_exposure - m_params.dark_point;
+      v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }
   return v;
@@ -531,7 +534,7 @@ render::get_data_blue (int x, int y)
   if (m_params.backlight_correction)
     {
       v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::blue);
-      v = v * m_params.scan_exposure - m_params.dark_point;
+      v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }
   return v;
@@ -539,7 +542,7 @@ render::get_data_blue (int x, int y)
 
 /* Compute color in linear HDR image.  */
 inline void
-render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
 {
   r *= m_params.white_balance.red;
   g *= m_params.white_balance.green;
@@ -583,12 +586,21 @@ render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosit
   *gg = g;
   *bb = b;
 }
+inline void
+render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+{
+  luminosity_t r1, g1, b1;
+  render::set_linear_hdr_color (r, g, b, &r1, &g1, &b1);
+  *rr = invert_gamma (r1, m_params.output_gamma);
+  *gg = invert_gamma (g1, m_params.output_gamma);
+  *bb = invert_gamma (b1, m_params.output_gamma);
+}
 
 /* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
-  set_hdr_color (r, g, b, &r, &g, &b);
+  set_linear_hdr_color (r, g, b, &r, &g, &b);
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));

@@ -37,30 +37,29 @@ namespace
 struct lookup_table_params
 {
   /* image_data are in range 0...img_maxval.  */
-  int img_maxval;
-  /* precomputed gray data (created from mixing r,g,b channles of image_data)
-     have range 0...maxval.  */
   int maxval;
   /* Input data are assumed to have gamma.  Inverse of gamma is applied to
      get linear data.  */
   luminosity_t gamma;
+  /* Dark point is subtracted from linear data and then the result is multiplied by scan_exposure.  */
   luminosity_t dark_point, scan_exposure;
+  /* True if we should invert positive to negative.  */
   bool invert;
-  /* Characcteristic curve.  */
+  /* Characteristic curve.  TODO: Not really implemented  */
   hd_curve *film_characteristic_curve;
 
+  /* True if curve should be inverted.  */
   bool restore_original_luminosity;
 
   bool
   operator==(lookup_table_params &o)
   {
-    return img_maxval == o.img_maxval
-	   && maxval == o.maxval
+    return maxval == o.maxval
 	   && gamma == o.gamma
 	   && dark_point == o.dark_point
 	   && scan_exposure == o.scan_exposure
 	   && invert == o.invert
-	   /* TODO: Invent IDs!
+	   /* TODO: Invent cache IDs for curves!
 	      Pointer compare may not be safe if curve is released.  */
 	   && film_characteristic_curve == o.film_characteristic_curve
 	   && restore_original_luminosity == o.restore_original_luminosity;
@@ -73,12 +72,14 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
   luminosity_t mul = (luminosity_t)1 / p.maxval;
-  printf ("%f %f %i\n", p.dark_point, p.scan_exposure, p.invert);
+
+  luminosity_t dark_point = p.dark_point;
+  luminosity_t scan_exposure = p.scan_exposure;
 
   if (!p.invert)
     {
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = pow ((i + 0.5) * mul, gamma) * p.scan_exposure - p.dark_point;
+	lookup_table[i] = (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {
@@ -87,7 +88,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
       // TODO: For stitching exposure should be really inside
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.unapply (pow ((i + 0.5) * mul, gamma) * p.scan_exposure) - p.dark_point);
+	lookup_table[i] = s.unapply (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   else
     {
@@ -95,7 +96,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
       s.precompute ();
 
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (s.apply (pow ((i + 0.5) * mul, gamma) * p.scan_exposure) - p.dark_point);
+	lookup_table[i] = s.apply (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   return lookup_table;
 }
@@ -119,12 +120,12 @@ luminosity_t *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
-  if (p.output_gamma == -1)
-    for (int i = 0; i < 65536; i++)
-      lookup_table[i] = linear_to_srgb ((i+ 0.5) / 65535) * p.maxval;
-  else
-    for (int i = 0; i < 65536; i++)
-      lookup_table[i] = pow ((i+ 0.5) / 65535, 1/p.output_gamma) * p.maxval;
+  luminosity_t gamma = p.output_gamma;
+  int maxval = p.maxval;
+
+  for (int i = 0; i < 65536; i++)
+    lookup_table[i] = invert_gamma ((i + (luminosity_t)0.5) / 65535, gamma) * maxval;
+
   return lookup_table;
 }
 
@@ -139,6 +140,7 @@ struct graydata_params
      to check cache entries.  */
   unsigned long image_id;
   image_data *img;
+  /* Gamma and weights of individual channels.  */
   luminosity_t gamma, red, green, blue;
   bool
   operator==(graydata_params &o)
@@ -156,8 +158,6 @@ struct gray_data_tables
   luminosity_t *rtable;
   luminosity_t *gtable;
   luminosity_t *btable;
-  unsigned short *out_table;
-  luminosity_t *out_table2;
   backlight_correction *correction;
 };
 
@@ -165,10 +165,12 @@ inline gray_data_tables
 compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, progress_info *progress)
 {
   gray_data_tables ret;
-  double red = p.red;
-  double green = p.green;
-  double blue = p.blue;
-  double sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
+  luminosity_t red = p.red;
+  luminosity_t green = p.green;
+  luminosity_t blue = p.blue;
+  luminosity_t sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
+  luminosity_t gamma = p.gamma;
+  luminosity_t maxval_inv = 1 / (luminosity_t)p.img->maxval;
 
   if (!sum)
     {
@@ -184,25 +186,14 @@ compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, pro
   ret.gtable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.btable = (luminosity_t *)malloc (sizeof (luminosity_t) * (p.img->maxval + 1));
   ret.correction = NULL;
-  ret.out_table = (unsigned short *)malloc (sizeof (unsigned short) * 65536);
-  if (in_table)
-    ret.out_table2 = (luminosity_t *)malloc (sizeof (luminosity_t) * 65536);
-  else
-    ret.out_table2 = NULL;
   for (int i = 0; i <= p.img->maxval; i++)
     {
-      luminosity_t l = pow (i / (double)p.img->maxval, p.gamma);
+      luminosity_t l = apply_gamma (i * maxval_inv, gamma);
       if (l < 0 || l > 1)
 	abort ();
       ret.rtable[i] = l * red;
       ret.gtable[i] = l * green;
       ret.btable[i] = l * blue;
-    }
-  for (int i = 0; i < 65536; i++)
-    {
-      ret.out_table[i] = pow (i / 65535.0, 1 / p.gamma) * 65535;
-      if (in_table)
-        ret.out_table2[i] = in_table [ret.out_table [i]];
     }
   return ret;
 }
@@ -213,9 +204,6 @@ free_gray_data_tables (gray_data_tables &t)
   free (t.rtable);
   free (t.gtable);
   free (t.btable);
-  free (t.out_table);
-  if (t.out_table2)
-    free (t.out_table2);
 }
 
 inline luminosity_t
@@ -232,7 +220,7 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int
       l3 = t.correction->apply (l3, width, height, x, y, backlight_correction::blue);
     }
   luminosity_t val = l1 + l2 + l3;
-  return std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0);
+  return /*std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0)*/ val;
 }
 
 struct sharpen_params
@@ -289,10 +277,8 @@ getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *tabl
 inline luminosity_t
 getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
 {
-  //return t->out_table2[(int)(compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b) * 65535 + (luminosity_t)0.5)];
   luminosity_t val = compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
   return val;
-  //return compute_gray_data (*t, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
 }
 sharpened_data *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
@@ -331,9 +317,9 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 bool
 render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  bool cor = m_params.backlight_correction;
-  /* When backlight correction is done, we must delay adjustments after it is applied.  */
-  lookup_table_params par = {m_img.maxval, m_maxval, m_params.gamma,
+  /* We used to produce data with corrections applied, but we do that now later.  */
+  bool cor = m_params.backlight_correction || 1;
+  lookup_table_params par = {m_img.maxval, m_params.gamma,
 			     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
 			     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
   unsigned long lookup_table_id;
@@ -343,7 +329,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
   if (m_img.rgbdata)
     {
       /* TODO: check if the other maxval is correct: does 256 bit image display well?  */
-      lookup_table_params rgb_par = {m_img.maxval, m_img.maxval, m_params.gamma,
+      lookup_table_params rgb_par = {m_img.maxval, m_params.gamma,
 				     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
 				     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
@@ -430,7 +416,7 @@ render::~render ()
 luminosity_t *
 render::get_lookup_table (luminosity_t gamma, int maxval)
 {
-  lookup_table_params par = {maxval, maxval, gamma, 0, 1, false};
+  lookup_table_params par = {maxval, gamma, 0, 1, false};
   return lookup_table_cache.get (par, NULL);
 }
 

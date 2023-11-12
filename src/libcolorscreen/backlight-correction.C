@@ -16,7 +16,7 @@ backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
   ret->alloc (width, height, enabled);
   luminosity_t table[65536];
   for (int i = 0; i < scan.maxval; i++)
-    table[i] = pow ((i + (luminosity_t)0.5) / scan.maxval, gamma);
+    table[i] = apply_gamma ((i + (luminosity_t)0.5) / scan.maxval, gamma);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
     {
