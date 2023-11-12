@@ -59,7 +59,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
   for (int y = 0; y < stitch.params.height; y++)
     {
       for (int x = 0; x < stitch.params.width; x++)
-	printf ("  %1.3f", rparam.get_tile_adjustment (&stitch, x, y).exposure);
+	printf ("  %1.3f+%1.3f", rparam.get_tile_adjustment (&stitch, x, y).exposure, rparam.get_tile_adjustment (&stitch, x, y).dark_point);
       printf ("\n");
     }
   /* HACK: For some reason initializing renderers inside of the loop makes graydata tocome out wrong.
@@ -84,6 +84,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		  //rparam2 = rparam;
 		  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
 		  rparam2.scan_exposure *= a.exposure;
+		  rparam2.dark_point += a.exposure;
 		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
 		  if (progress && progress->cancel_requested ())
 		    break;

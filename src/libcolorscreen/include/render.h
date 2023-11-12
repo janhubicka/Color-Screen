@@ -145,14 +145,16 @@ struct DLL_PUBLIC render_parameters
   struct tile_adjustment
   {
     luminosity_t exposure;
+    luminosity_t dark_point;
     bool enabled;
     unsigned char x, y;
     constexpr tile_adjustment()
-    : exposure (1), enabled (true), x(0), y(0)
+    : exposure (1), dark_point (0), enabled (true), x(0), y(0)
     {}
     bool operator== (tile_adjustment &other) const
     {
       return enabled == other.enabled
+	     && dark_point == other.dark_point
 	     && exposure == other.exposure;
     }
     bool operator!= (tile_adjustment &other) const

@@ -104,7 +104,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    return false;
 	  for (int y = 0; y < rparam->tile_adjustments_height; y++)
 	    for (int x = 0; x < rparam->tile_adjustments_width; x++)
-	      if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0)
+	      if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0
+	          || fprintf (f, "tile_adjustment_dark_point: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).dark_point) < 0)
 		return false;
 	}
     }
@@ -547,6 +548,29 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		  return false;
 		}
 	      rparam->get_tile_adjustment (x, y).exposure = val;
+	    }
+	}
+      else if (!strcmp (buf, "tile_adjustment_dark_point"))
+	{
+	  int x, y;
+	  luminosity_t val;
+	  if (fscanf (f, "%i %i", &x, &y) != 2
+	      || x < 0
+	      || y < 0
+	      || !read_luminosity (f, &val))
+	    {
+	      *error = "error parsing tile_adjustment_dark_point";
+	      return false;
+	    }
+	  if (rparam)
+	    {
+	      if (x >= rparam->tile_adjustments_width
+		  || y >= rparam->tile_adjustments_height)
+		{
+		  *error = "tile_adjustment_exposure out of range";
+		  return false;
+		}
+	      rparam->get_tile_adjustment (x, y).dark_point = val;
 	    }
 	}
       else if (!strcmp (buf, "color_model"))
