@@ -146,6 +146,9 @@ struct graydata_params
   image_data *img;
   /* Gamma and weights of individual channels.  */
   luminosity_t gamma, red, green, blue;
+  /* Backlight correction.  */
+  backlight_correction *backlight;
+  unsigned long backlight_correction_id;
   bool
   operator==(graydata_params &o)
   {
@@ -153,7 +156,8 @@ struct graydata_params
 	   && gamma == o.gamma
 	   && red == o.red
 	   && green == o.green
-	   && blue == o.blue;
+	   && blue == o.blue
+	   && backlight_correction_id == o.backlight_correction_id;
   }
 };
 
@@ -166,7 +170,7 @@ struct gray_data_tables
 };
 
 inline gray_data_tables
-compute_gray_data_tables (struct graydata_params &p, luminosity_t *in_table, progress_info *progress)
+compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
 {
   gray_data_tables ret;
   luminosity_t red = p.red;
@@ -226,7 +230,6 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int
   luminosity_t l1 = t.rtable[r];
   luminosity_t l2 = t.gtable[g];
   luminosity_t l3 = t.btable[b];
-  /* TODO: We should make specific tables so addition works.  */
   if (t.correction)
     {
       l1 = t.correction->apply (l1, width, height, x, y, backlight_correction::red);
@@ -234,29 +237,18 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int
       l3 = t.correction->apply (l3, width, height, x, y, backlight_correction::blue);
     }
   luminosity_t val = l1 + l2 + l3;
-  return /*std::max (std::min (val, (luminosity_t)1.0), (luminosity_t)0.0)*/ val;
+  return val;
 }
 
 struct sharpen_params
 {
   luminosity_t radius;
   luminosity_t amount;
-  unsigned long gray_data_id;
-  /* TODO: Add comparator.  */
-  backlight_correction *backlight;
-
-  unsigned short **gray_data;
-  luminosity_t *lookup_table;
-  unsigned long lookup_table_id;
-  int width;
-  int height;
   bool
   operator==(sharpen_params &o)
   {
     return radius == o.radius
-	   && amount == o.amount
-	   && gray_data_id == o.gray_data_id
-	   && lookup_table_id == o.lookup_table_id;
+	   && amount == o.amount;
   }
 };
 
@@ -271,33 +263,33 @@ struct gray_and_sharpen_params
     }
 };
 
+struct getdata_params
+{
+  luminosity_t *table;
+  backlight_correction *correction;
+  int width, height;
+};
+
 /* Helper for sharpening template for images with gray data.  */
 inline luminosity_t
-getdata_helper (unsigned short **graydata, int x, int y, int, luminosity_t *table)
+getdata_helper (unsigned short **graydata, int x, int y, int, getdata_params d)
 {
-  luminosity_t v = table[graydata[y][x]];
-  /* TODO: Implement correction for IR.  */
-#if 0
-  if (t.correction)
-    {
-      v = t.corretion->apply (v, img->width, img->height, x, y, backlight_correction::ir);
-      v = v * m_params.scan_exposure - m_params.dark_point;
-      /* TODO do inversion and film curves if requested.  */
-    }
-#endif
+  luminosity_t v = d.table[graydata[y][x]];
+  if (d.correction)
+    v = d.correction->apply (v, d.width, d.height, x, y, backlight_correction::ir);
   return v;
 }
 /* Helper for sharpening template for images with RGB data only.  */
 inline luminosity_t
-getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables *t)
+getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables t)
 {
-  luminosity_t val = compute_gray_data (*t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
+  luminosity_t val = compute_gray_data (t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
   return val;
 }
 sharpened_data *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
 {
-  sharpened_data *ret = new sharpened_data (p.sp.width, p.sp.height);
+  sharpened_data *ret = new sharpened_data (p.gp.img->width, p.gp.img->height);
   if (!ret)
     return NULL;
   luminosity_t *out = ret->m_data;
@@ -308,17 +300,33 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
     }
 
   bool ok;
-  if (p.sp.gray_data)
-    ok = sharpen<luminosity_t, unsigned short **, luminosity_t *, getdata_helper> (out, p.sp.gray_data, p.sp.lookup_table, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress);
+  if (p.gp.img->data)
+    {
+      lookup_table_params par;
+      getdata_params d;
+      par.maxval = p.gp.img->maxval;
+      par.gamma = p.gp.gamma;
+      d.table = lookup_table_cache.get (par, progress);
+      d.correction = p.gp.backlight;
+      d.width = p.gp.img->width;
+      d.height = p.gp.img->height;
+      if (!d.table)
+	{
+	  delete ret;
+	  return NULL;
+	}
+      ok = sharpen<luminosity_t, unsigned short **, getdata_params, getdata_helper> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+      lookup_table_cache.release (d.table);
+    }
   else
     {
-      gray_data_tables t = compute_gray_data_tables (p.gp, p.sp.lookup_table, progress);
+      gray_data_tables t = compute_gray_data_tables (p.gp, progress);
       if (!t.rtable)
 	ok = false;
       else
 	{
-	  t.correction = p.sp.backlight;
-	  ok = sharpen<luminosity_t, image_data *, gray_data_tables *, getdata_helper2> (out, p.gp.img, &t, p.sp.width, p.sp.height, p.sp.radius, p.sp.amount, progress);
+	  t.correction = p.gp.backlight;
+	  ok = sharpen<luminosity_t, image_data *, gray_data_tables, getdata_helper2> (out, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
 	  free_gray_data_tables (t);
 	}
     }
@@ -358,8 +366,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue},
-				   {m_params.sharpen_radius, m_params.sharpen_amount, 0, m_params.backlight_correction, m_img.data, lookup_table, lookup_table_id, m_img.width, m_img.height}};
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.backlight_correction, m_params.backlight_correction ? m_params.backlight_correction->id : 0},
+				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
 	{

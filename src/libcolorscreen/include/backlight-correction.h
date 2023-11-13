@@ -26,9 +26,7 @@ class backlight_correction
   };
 public:
   enum channel {red, green, blue, ir, all_channels};
-  backlight_correction () : m_width (0), m_height (0), m_weights (NULL), m_channel_enabled {true, true, true, false}
-  {
-  }
+  backlight_correction ();
   bool
   alloc (int width, int height, bool enabled[4])
   {
@@ -96,6 +94,8 @@ public:
   }
   static backlight_correction *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   static backlight_correction *analyze_scan (image_data &scan, luminosity_t gamma = 1);
+  /* Unique id of the image (used for caching).  */
+  unsigned long id;
   bool save (FILE *f);
   const char* save_tiff (const char *name);
   bool load (FILE *f, const char **);

@@ -1,7 +1,12 @@
 #include <cctype>
 #include "include/backlight-correction.h"
 #include "loadsave.h"
+#include "lru-cache.h"
 #include "include/tiff-writer.h"
+backlight_correction::backlight_correction () : id (lru_caches::get ()), m_width (0), m_height (0), m_weights (NULL), m_channel_enabled {true, true, true, false}
+{
+}
+
 backlight_correction *
 backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
 {
