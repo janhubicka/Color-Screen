@@ -583,6 +583,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   render_parameters rparams;
   rparams.gamma = in_rparams->gamma;
   rparams.backlight_correction = in_rparams->backlight_correction;
+  rparams.backlight_correction_black = in_rparams->backlight_correction_black;
   const char *error = NULL;
 
   struct ratio 
@@ -917,7 +918,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
     }
   /* Convert into our datastructure.  */
   in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
-  printf ("Final solutoin:\n");
+  printf ("Final solution:\n");
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)

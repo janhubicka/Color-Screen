@@ -229,7 +229,7 @@ render_parameters::set_tile_adjustments_dimensions (int w, int h)
   tile_adjustments.resize (0);
   tile_adjustments.resize (w * h, default_tile_adjustment);
   tile_adjustments_width = w;
-  tile_adjustments_height = w;
+  tile_adjustments_height = h;
 }
 
 const render_parameters::tile_adjustment&
