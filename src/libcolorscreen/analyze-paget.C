@@ -10,66 +10,69 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
 #pragma omp for 
-      for (int y = miny ; y < maxy; y++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int x = minx; x < maxx; x++)
-	      {
-		coord_t scr_x, scr_y;
-		scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
-		scr_x += m_xshift;
-		scr_y += m_yshift;
-		if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
-		  continue;
+    for (int y = miny ; y < maxy; y++)
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int x = minx; x < maxx; x++)
+	    {
+	      coord_t scr_x, scr_y;
+	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+	      scr_x += m_xshift;
+	      scr_y += m_yshift;
+	      if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		continue;
 
-		luminosity_t l = render->fast_get_img_pixel (x, y);
-		int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
-		int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
-		if (screen->mult[iy][ix][0] > collection_threshold)
-		  {
-		    coord_t xd, yd;
-		    to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
-		    xd = nearest_int (xd);
-		    yd = nearest_int (yd);
-		    int xx = ((int)xd + (int)yd) / 2;
-		    int yy = -(int)xd + (int)yd;
-		    if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
-		      {
+	      luminosity_t l = render->fast_get_img_pixel (x, y);
+	      int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+	      int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	      if (screen->mult[iy][ix][0] > collection_threshold)
+		{
+		  coord_t xd, yd;
+		  to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
+		  xd = nearest_int (xd);
+		  yd = nearest_int (yd);
+		  int xx = ((int)xd + (int)yd) / 2;
+		  int yy = -(int)xd + (int)yd;
+		  if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		    {
+		      red_atomic_add (xx, yy, (screen->mult[iy][ix][0] - collection_threshold) * l);
+		      luminosity_t &l = w_red [yy * m_width + xx];
+		      luminosity_t val = screen->mult[iy][ix][0] - collection_threshold;
 #pragma omp atomic
-			red (xx, yy) += (screen->mult[iy][ix][0] - collection_threshold) * l;
+		      l+=val;
+		    }
+		}
+	      if (screen->mult[iy][ix][1] > collection_threshold)
+		{
+		  coord_t xd, yd;
+		  to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
+		  xd = nearest_int (xd);
+		  yd = nearest_int (yd);
+		  int xx = ((int)xd + (int)yd) / 2;
+		  int yy = -(int)xd + (int)yd;
+		  if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		    {
+		      green_atomic_add (xx, yy, (screen->mult[iy][ix][1] - collection_threshold) * l);
+		      luminosity_t &l = w_green [yy * m_width + xx];
+		      luminosity_t val = screen->mult[iy][ix][1] - collection_threshold;
 #pragma omp atomic
-			w_red [yy * m_width + xx] += screen->mult[iy][ix][0] - collection_threshold;
-		      }
-		  }
-		if (screen->mult[iy][ix][1] > collection_threshold)
-		  {
-		    coord_t xd, yd;
-		    to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
-		    xd = nearest_int (xd);
-		    yd = nearest_int (yd);
-		    int xx = ((int)xd + (int)yd) / 2;
-		    int yy = -(int)xd + (int)yd;
-		    if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
-		      {
+		      l+=val;
+		    }
+		}
+	      if (screen->mult[iy][ix][2] > collection_threshold)
+		{
+		  int xx = nearest_int (2*(scr_x-(coord_t)0.25));
+		  int yy = nearest_int (2*(scr_y-(coord_t)0.25));
+		  blue_atomic_add (xx, yy, (screen->mult[iy][ix][2] - collection_threshold) * l);
+		  luminosity_t &l = w_blue [yy * m_width * 2 + xx];
+		  luminosity_t val = screen->mult[iy][ix][2] - collection_threshold;
 #pragma omp atomic
-			green (xx, yy) += (screen->mult[iy][ix][1] - collection_threshold) * l;
-#pragma omp atomic
-			w_green [yy * m_width + xx] += (screen->mult[iy][ix][1] - collection_threshold);
-		      }
-		  }
-		if (screen->mult[iy][ix][2] > collection_threshold)
-		  {
-		    int xx = nearest_int (2*(scr_x-(coord_t)0.25));
-		    int yy = nearest_int (2*(scr_y-(coord_t)0.25));
-#pragma omp atomic
-		    blue (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-		    w_blue [yy * m_width * 2 + xx] += (screen->mult[iy][ix][2] - collection_threshold);
-		  }
-	      }
-	  if (progress)
-	    progress->inc_progress ();
-	}
+		  l+=val;
+		}
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
   if (!progress || !progress->cancel_requested ())
     {
 #pragma omp for nowait

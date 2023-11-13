@@ -31,6 +31,24 @@ public:
       y = std::min (std::max (y, 0), m_height * 2 - 1);
       return m_green [y * m_width + x];
     }
+  inline void red_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = red(x, y);
+#pragma omp atomic
+    addr += val;
+  }
+  inline void green_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = green(x, y);
+#pragma omp atomic
+    addr += val;
+  }
+  inline void blue_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = blue(x, y);
+#pragma omp atomic
+    addr += val;
+  }
   /* Diagonal cooredinates have coordiate vectors (0.5,0.5) and (-0.5,0.5)  */
   inline static void to_diagonal_coordinates (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
   {
