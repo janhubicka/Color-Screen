@@ -33,6 +33,25 @@ public:
       return m_green [y * m_width + x];
     }
 
+  inline void red_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = red(x, y);
+#pragma omp atomic
+    addr += val;
+  }
+  inline void green_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = green(x, y);
+#pragma omp atomic
+    addr += val;
+  }
+  inline void blue_atomic_add (int x, int y, luminosity_t val)
+  {
+    luminosity_t &addr = blue(x, y);
+#pragma omp atomic
+    addr += val;
+  }
+
   bool analyze(render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress = NULL);
   bool analyze_contrast (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, progress_info *progress = NULL);
   luminosity_t compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress);

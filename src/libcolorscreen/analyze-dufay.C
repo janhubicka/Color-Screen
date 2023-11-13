@@ -18,7 +18,7 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
 		scr_x += m_xshift;
 		scr_y += m_yshift;
-		if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
 		  continue;
 
 		luminosity_t l = render->fast_get_img_pixel (x, y);
@@ -28,28 +28,31 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		  {
 		    int xx = nearest_int (scr_x * 2 - 0.5);
 		    int yy = nearest_int (scr_y - 0.5);
-#pragma omp atomic
-		    red (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-		    w_red [yy * m_width * 2 + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		    red_atomic_add (xx, yy, (screen->mult[iy][ix][0] - collection_threshold) * l);
+		    luminosity_t &l = w_red [yy * m_width * 2 + xx];
+		    luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
+//#pragma omp patomic
+		    l += val;
 		  }
 		if (screen->mult[iy][ix][1] > collection_threshold)
 		  {
 		    int xx = nearest_int (scr_x);
 		    int yy = nearest_int (scr_y);
-#pragma omp atomic
-		    green (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-		    w_green [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		    green_atomic_add (xx, yy, (screen->mult[iy][ix][1] - collection_threshold) * l);
+		    luminosity_t &l = w_green [yy * m_width + xx];
+		    luminosity_t val = (screen->mult[iy][ix][1] - collection_threshold);
+//#pragma omp patomic
+		    l += val;
 		  }
 		if (screen->mult[iy][ix][2] > collection_threshold)
 		  {
 		    int xx = nearest_int (scr_x-(coord_t)0.5);
 		    int yy = nearest_int (scr_y);
-#pragma omp atomic
-		    blue (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-		    w_blue [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		    blue_atomic_add (xx, yy, (screen->mult[iy][ix][2] - collection_threshold) * l);
+		    luminosity_t &l = w_blue [yy * m_width + xx];
+		    luminosity_t val = (screen->mult[iy][ix][2] - collection_threshold);
+//#pragma omp patomic
+		    l += val;
 		  }
 	      }
 	  if (progress)
