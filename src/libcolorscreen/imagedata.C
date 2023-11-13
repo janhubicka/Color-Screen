@@ -734,8 +734,8 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
   if (stitch)
     {
       int n = 0;
-      for (int y = 0; y < stitch->params.width; y++)
-	for (int x = 0; x < stitch->params.height; x++)
+      for (int y = 0; y < stitch->params.height; y++)
+	for (int x = 0; x < stitch->params.width; x++)
 	  if (stitch->images[y][x].img)
 	    n++;
 	  else

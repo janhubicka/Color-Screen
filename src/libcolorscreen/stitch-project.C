@@ -450,8 +450,8 @@ stitch_project::load (FILE *f, const char **error)
       *error ="error parsing pixel_size";
       return false;
     }
-  for (int y = 0; y < params.width; y++)
-    for (int x = 0; x < params.height; x++)
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
     {
       if (!expect_keyword (f, "color_screen_stitch_image:"))
 	{
@@ -710,14 +710,14 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				  blue = d2.blue;
 
 
-				  if (d.red >= minv && red >= minv)
+				  if (d.red > minv && red > minv)
 #pragma omp critical
 				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red});
 				  //printf ("%i %i:%f,%f %i %i:%f,%f %f %f %f\n",x,y,xx+0.5,yy+0.5,ix,iy,iix,iiy,red, d.red, red/d.red);
-				  if (d.green >= minv && green >= minv)
+				  if (d.green > minv && green > minv)
 #pragma omp critical
 				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green});
-				  if (d.blue >= minv && blue >= minv)
+				  if (d.blue > minv && blue > minv)
 #pragma omp critical
 				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue});
 				}
