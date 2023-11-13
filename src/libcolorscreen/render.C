@@ -320,8 +320,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
   /* We used to produce data with corrections applied, but we do that now later.  */
   bool cor = m_params.backlight_correction || 1;
   lookup_table_params par = {m_img.maxval, m_params.gamma,
-			     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
-			     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
+			     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : false,
+			     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : false};
   unsigned long lookup_table_id;
   luminosity_t *lookup_table = lookup_table_cache.get (par, progress, &lookup_table_id);
   if (!lookup_table)
@@ -330,8 +330,8 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
     {
       /* TODO: check if the other maxval is correct: does 256 bit image display well?  */
       lookup_table_params rgb_par = {m_img.maxval, m_params.gamma,
-				     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : 0,
-				     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : 0};
+				     !cor ? m_params.dark_point : 0, !cor ? m_params.scan_exposure : 1, !cor ? m_params.invert : false,
+				     !cor ? m_params.film_characteristics_curve : 0, !cor ? m_params.restore_original_luminosity : false};
       m_rgb_lookup_table = lookup_table_cache.get (rgb_par, progress);
       if (!m_rgb_lookup_table)
 	{

@@ -122,7 +122,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 
 		/* Check if render is initialized.  */
 		lastrender = renders[iy * stitch.params.width + ix];
-		if (!lastrender)
+		if (!hack && !lastrender)
 		  {
 		    if (hack && pthread_mutex_lock (&lock[iy * stitch.params.width + ix]) != 0)
 		      perror ("lock");

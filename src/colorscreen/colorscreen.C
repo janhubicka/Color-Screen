@@ -350,7 +350,7 @@ analyze_backlight (int argc, char **argv)
       error = cor->save_tiff (argv[2]);
       if (error)
 	{
-	  fprintf (stderr, error);
+	  fprintf (stderr, "Failed to save output file: %s\n", error);
 	  exit (1);
 	}
     }
