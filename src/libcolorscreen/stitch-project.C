@@ -595,8 +595,11 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   struct equation
     {
       int x1,y1,x2,y2;
+      int channel;
+      unsigned long n;
       luminosity_t s1, s2;
     };
+  const int buckets = 8;
   std::vector <equation> eqns;
 		  const int step = 4;
 
@@ -707,6 +710,62 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			   images[iy][ix].release_img ();
 			   delete render2;
 			 }
+		       for (int c = 0; c < 4; c++)
+			 {
+			   const char *channels[] = {"red", "green", "blue", "ir"};
+			   if (ratios[c].size () > 1000)
+			     {
+			       unsigned long vals[65536];
+			       memset (vals, 0, sizeof (vals));
+			       long int crop0 = 0,cropmax = 0;
+			       /* Compute histograms.  */
+			       for (auto r:ratios[c])
+			         {
+				   int idx = (r.val1 * 65535 + 0.5);
+				   if (idx < 0)
+				     idx = 0, crop0++;
+				   if (idx > 65535)
+				     idx = 65535, cropmax++;
+				   vals[idx]++;
+			         }
+			       luminosity_t cutoffs[buckets];
+			       unsigned long csum = 0;
+			       int pos = 0;
+			       for (int bucket = 0; bucket < buckets; bucket++)
+				 {
+				   for (;csum <= (bucket * ratios[c].size ()) / buckets && pos < 65535;pos++)
+				     csum += vals[pos];
+				   cutoffs[bucket]=(pos - 0.5) / 65535;
+				 }
+			       std::vector<ratio> ratios_buckets[buckets];
+			       for (auto r:ratios[c])
+				 {
+				   int b;
+				   for (b = 0; b < buckets - 1; b++)
+				     if (cutoffs[b]>r.val1)
+				       break;
+				   ratios_buckets[b].push_back (r);
+				 }
+			       for (int b =0; b < buckets; b++)
+				 {
+				    std::sort (ratios_buckets[b].begin (), ratios_buckets[b].end());
+				    unsigned long int n = 0;
+				    luminosity_t wsum1b = 0, wsum2b = 0;
+				    for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
+				      {
+					wsum1b += ratios_buckets[b][i].val1;
+					wsum2b += ratios_buckets[b][i].val2;
+					n++;
+				      }
+				     if (n)
+				       eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b});
+				    progress->pause_stdout ();
+				    printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
+				    progress->resume_stdout ();
+				 }
+			     }
+			 }
+#if 0
 		       luminosity_t wsum1=0, wsum2=0;
 		       for (int c = 0; c < 4; c++)
 			 {
@@ -729,6 +788,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			 }
 		       if (wsum1 > 0 && wsum2 > 0)
 		         eqns.push_back ({x,y,ix,iy,wsum1, wsum2});
+#endif
 		  }
 	images[y][x].release_img ();
       }
@@ -740,14 +800,16 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   progress->pause_stdout ();
   for (int i = 0; i < (int)eqns.size (); i++)
     {
-      printf ("e%i%i * %f = e%i%i * %f\n", eqns[i].x1, eqns[i].y1, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].s1);
+      printf ("e%i%i * %f + b%i%i*%lu = e%i%i * %f + b%i%i*%lu\n", eqns[i].x1, eqns[i].y1, eqns[i].s1, eqns[i].x1, eqns[i].y1, eqns[i].n, eqns[i].x2, eqns[i].y2, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].n);
     }
+#if 0
   for (int i = 0; i < (int)eqns.size (); i++)
     {
       printf ("e%i%i * %f = e%i%i rep %f\n", eqns[i].x1, eqns[i].y1, eqns[i].s2/eqns[i].s1, eqns[i].x2, eqns[i].y2, eqns[i].s1/eqns[i].s2);
     }
+#endif
   progress->resume_stdout ();
-  int nvariables = params.width * params.height;
+  int nvariables = params.width * params.height * 2;
   int nequations = eqns.size () + 1;
   gsl_matrix *A, *cov;
   gsl_vector *y, *w, *c;
@@ -765,16 +827,28 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 	gsl_matrix_set (A, i, j, 0);
       gsl_matrix_set (A, i, eqns[i].y1 * params.width + eqns[i].x1, eqns[i].s1);
       gsl_matrix_set (A, i, eqns[i].y2 * params.width + eqns[i].x2, -eqns[i].s2);
+      gsl_matrix_set (A, i, nvariables / 2 + eqns[i].y1 * params.width + eqns[i].x1, eqns[i].n);
+      gsl_matrix_set (A, i, nvariables / 2 + eqns[i].y2 * params.width + eqns[i].x2, -(double)eqns[i].n);
       gsl_vector_set (y, i, 0);
       gsl_vector_set (w, i, 1);
       sum += eqns[i].s1;
       sum += eqns[i].s2;
     }
+  /* Set one exposition to be 1.  */
   for (int j = 0; j < nvariables; j++)
     gsl_matrix_set (A, i, j, 0);
   gsl_vector_set (y, i, sum);
   gsl_vector_set (w, i, 1);
   gsl_matrix_set (A, i, params.width * params.height / 4, sum);
+#if 0
+  /* Set one blackpoint to be 0.  */
+  i++;
+  for (int j = 0; j < nvariables; j++)
+    gsl_matrix_set (A, i, j, 0);
+  gsl_vector_set (y, i, 0);
+  gsl_vector_set (w, i, 1);
+  gsl_matrix_set (A, i, nvariables / 2 + params.width * params.height / 4, sum);
+#endif
 
   progress->pause_stdout ();
   print_system (stdout, A, y);
@@ -790,13 +864,16 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
-	printf ("  %4.4f", gsl_vector_get (c, y * params.width + x));
+	printf ("  +%4.4f*%4.4f", gsl_vector_get (c, nvariables / 2 + y * params.width + x), gsl_vector_get (c, y * params.width + x));
       printf ("\n");
     }
   in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
-      in_rparams->get_tile_adjustment (y,x).exposure = gsl_vector_get (c, y * params.width + x) / gsl_vector_get (c, params.width * params.height / 4);
+      {
+	in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, y * params.width + x) / gsl_vector_get (c, params.width * params.height / 4);
+	in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, nvariables / 2 + y * params.width + x) / gsl_vector_get (c, y * params.width + x);
+      }
   for (int y = 0; y < params.height; y++)
   progress->resume_stdout ();
   gsl_matrix_free (A);

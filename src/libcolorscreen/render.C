@@ -344,22 +344,14 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 bool
 render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
-  lookup_table_params par;
-  unsigned long lookup_table_id;
-  par.maxval = m_img.maxval;
-  par.gamma = m_params.gamma;
-  luminosity_t *lookup_table = lookup_table_cache.get (par, progress, &lookup_table_id);
-  if (!lookup_table)
-    return false;
   if (m_img.rgbdata)
     {
+      lookup_table_params par;
+      par.maxval = m_img.maxval;
+      par.gamma = m_params.gamma;
       m_rgb_lookup_table = lookup_table_cache.get (par, progress);
       if (!m_rgb_lookup_table)
-	{
-	  if (lookup_table)
-	    lookup_table_cache.release (lookup_table);
-	  return false;
-	}
+	return false;
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
@@ -370,15 +362,9 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
-	{
-	  if (lookup_table)
-	    lookup_table_cache.release (lookup_table);
-	  return false;
-	}
+	return false;
       m_sharpened_data = m_sharpened_data_holder->m_data;
     }
-  if (lookup_table)
-    lookup_table_cache.release (lookup_table);
 
   color_matrix color;
   if (m_params.presaturation != 1)
