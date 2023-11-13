@@ -1,7 +1,121 @@
 #include "include/analyze-dufay.h"
 #include "include/screen.h"
 
+/* Collect luminosity of individual color patches.
+   Function is flattened so it should do only necessary work.  */
 bool flatten_attr
+analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+{
+#pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  {
+#pragma omp for 
+      for (int y = miny ; y < maxy; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = minx; x < maxx; x++)
+	      {
+		coord_t scr_x, scr_y;
+		scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+		scr_x += m_xshift;
+		scr_y += m_yshift;
+		if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		  continue;
+
+		luminosity_t l = render->fast_get_img_pixel (x, y);
+		int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+		int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+		if (screen->mult[iy][ix][0] > collection_threshold)
+		  {
+		    int xx = nearest_int (scr_x * 2 - 0.5);
+		    int yy = nearest_int (scr_y - 0.5);
+#pragma omp atomic
+		    red (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
+#pragma omp atomic
+		    w_red [yy * m_width * 2 + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		  }
+		if (screen->mult[iy][ix][1] > collection_threshold)
+		  {
+		    int xx = nearest_int (scr_x);
+		    int yy = nearest_int (scr_y);
+#pragma omp atomic
+		    green (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
+#pragma omp atomic
+		    w_green [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		  }
+		if (screen->mult[iy][ix][2] > collection_threshold)
+		  {
+		    int xx = nearest_int (scr_x-(coord_t)0.5);
+		    int yy = nearest_int (scr_y);
+#pragma omp atomic
+		    blue (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
+#pragma omp atomic
+		    w_blue [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
+		  }
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+  if (!progress || !progress->cancel_requested ())
+    {
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width * 2; x++)
+	      if (w_red [y * m_width * 2 + x] != 0)
+		red (x,y) /= w_red [y * m_width * 2 + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_green [y * m_width + x] != 0)
+		green (x,y) /= w_green [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_blue [y * m_width + x] != 0)
+		blue (x,y) /= w_blue [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  }
+  return !progress || !progress->cancelled ();
+}
+bool flatten_attr
+analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
+{
+  /* Old precise code is always disabled.  */
+  const bool precise = false;
+#define pixel(xo,yo,width,height) precise ? render->sample_scr_square ((x - m_xshift) + xo, (y - m_yshift) + yo, width, height)\
+		     : render->get_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
+#pragma omp parallel for default (none) shared (precise,render,progress)
+  for (int x = 0; x < m_width; x++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int y = 0 ; y < m_height; y++)
+	  {
+	    red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
+	    red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
+	    green (x, y) = pixel (0, 0, 0.5, 0.5);
+	    blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
+	  }
+      if (progress)
+	progress->inc_progress ();
+    }
+  return !progress || !progress->cancelled ();
+}
+
+bool
 analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
@@ -60,90 +174,8 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
       if (progress)
 	progress->set_task ("determining intensities of Dufay screen patches (precise mode)", maxy - miny + m_height * 2 * 3);
 
-      /* Collect luminosity of individual color patches.  */
-#pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
-      {
-#pragma omp for 
-	  for (int y = miny ; y < maxy; y++)
-	    {
-	      if (!progress || !progress->cancel_requested ())
-		for (int x = minx; x < maxx; x++)
-		  {
-		    coord_t scr_x, scr_y;
-		    scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
-		    scr_x += m_xshift;
-		    scr_y += m_yshift;
-		    if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
-		      continue;
+      analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 
-		    luminosity_t l = render->fast_get_img_pixel (x, y);
-		    int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
-		    int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
-		    if (screen->mult[iy][ix][0] > collection_threshold)
-		      {
-			int xx = nearest_int (scr_x * 2 - 0.5);
-			int yy = nearest_int (scr_y - 0.5);
-#pragma omp atomic
-			red (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-			w_red [yy * m_width * 2 + xx] += (screen->mult[iy][ix][2] - collection_threshold);
-		      }
-		    if (screen->mult[iy][ix][1] > collection_threshold)
-		      {
-			int xx = nearest_int (scr_x);
-			int yy = nearest_int (scr_y);
-#pragma omp atomic
-			green (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-			w_green [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
-		      }
-		    if (screen->mult[iy][ix][2] > collection_threshold)
-		      {
-			int xx = nearest_int (scr_x-(coord_t)0.5);
-			int yy = nearest_int (scr_y);
-#pragma omp atomic
-			blue (xx, yy) += (screen->mult[iy][ix][2] - collection_threshold) * l;
-#pragma omp atomic
-			w_blue [yy * m_width + xx] += (screen->mult[iy][ix][2] - collection_threshold);
-		      }
-		  }
-	      if (progress)
-		progress->inc_progress ();
-	    }
-      if (!progress || !progress->cancel_requested ())
-	{
-#pragma omp for nowait
-	  for (int y = 0; y < m_height; y++)
-	    {
-	      if (!progress || !progress->cancel_requested ())
-		for (int x = 0; x < m_width * 2; x++)
-		  if (w_red [y * m_width * 2 + x] != 0)
-		    red (x,y) /= w_red [y * m_width * 2 + x];
-	      if (progress)
-		progress->inc_progress ();
-	    }
-#pragma omp for nowait
-	  for (int y = 0; y < m_height; y++)
-	    {
-	      if (!progress || !progress->cancel_requested ())
-		for (int x = 0; x < m_width; x++)
-		  if (w_green [y * m_width + x] != 0)
-		    green (x,y) /= w_green [y * m_width + x];
-	      if (progress)
-		progress->inc_progress ();
-	    }
-#pragma omp for nowait
-	  for (int y = 0; y < m_height; y++)
-	    {
-	      if (!progress || !progress->cancel_requested ())
-		for (int x = 0; x < m_width; x++)
-		  if (w_blue [y * m_width + x] != 0)
-		    blue (x,y) /= w_blue [y * m_width + x];
-	      if (progress)
-		progress->inc_progress ();
-	    }
-	}
-      }
       free (w_red);
       free (w_green);
       free (w_blue);
@@ -152,22 +184,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
     {
       if (progress)
 	progress->set_task ("determining intensities of Dufay screen patches (fast mode)", m_height);
-#define pixel(xo,yo,width,height) precise ? render->sample_scr_square ((x - m_xshift) + xo, (y - m_yshift) + yo, width, height)\
-		     : render->get_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
-#pragma omp parallel for default (none) shared (precise,render,progress)
-      for (int x = 0; x < m_width; x++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int y = 0 ; y < m_height; y++)
-	      {
-		red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
-		red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
-		green (x, y) = pixel (0, 0, 0.5, 0.5);
-		blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
-	      }
-	  if (progress)
-	    progress->inc_progress ();
-	}
+      analyze_fast (render, progress);
     }
 #undef pixel
   return !progress || !progress->cancelled ();
