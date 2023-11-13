@@ -60,7 +60,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	printf ("  %1.3f+%1.3f", rparam.get_tile_adjustment (&stitch, x, y).exposure, rparam.get_tile_adjustment (&stitch, x, y).dark_point);
       printf ("\n");
     }
-  /* HACK: For some reason initializing renderers inside of the loop makes graydata tocome out wrong.
+  /* HACK: For some reason initializing renderers inside of the loop makes graydata to come out wrong.
      So initialize all renderers first.  */
   const bool hack = true;
   if (hack)

@@ -112,6 +112,7 @@ analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
       if (progress)
 	progress->inc_progress ();
     }
+#undef pixel
   return !progress || !progress->cancelled ();
 }
 
@@ -186,7 +187,6 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 	progress->set_task ("determining intensities of Dufay screen patches (fast mode)", m_height);
       analyze_fast (render, progress);
     }
-#undef pixel
   return !progress || !progress->cancelled ();
 }
 
