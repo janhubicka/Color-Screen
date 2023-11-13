@@ -368,8 +368,8 @@ stitch_project::save (FILE *f)
   if (fprintf (f, "num_images: %i %i\n", params.width, params.height) < 0
       || fprintf (f, "pixel_size: %f\n", pixel_size) < 0)
     return false;
-  for (int y = 0; y < params.width; y++)
-    for (int x = 0; x < params.height; x++)
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
       {
 	if (fprintf (f, "color_screen_stitch_image: %i %i\n", x, y) < 0)
 	  return false;
