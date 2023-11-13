@@ -1366,7 +1366,10 @@ main (int argc, char **argv)
   FILE *in = fopen (paroname, "rt");
   const char *error;
   if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &current_solver, &error))
-    fprintf (stderr, "%s\n", error);
+    {
+      fprintf (stderr, "Can not load parametrs: %s\n", error);
+      exit (1);
+    }
 
   current_mesh = current.mesh_trans;
   if (in)
@@ -1375,6 +1378,7 @@ main (int argc, char **argv)
     {
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
+      exit (1);
     }
   save_parameters ();
   //current.mesh_trans = solver_mesh (&current, scan, current_solver);

@@ -3,12 +3,12 @@
 #include "loadsave.h"
 #include "lru-cache.h"
 #include "include/tiff-writer.h"
-backlight_correction::backlight_correction () : id (lru_caches::get ()), m_width (0), m_height (0), m_weights (NULL), m_channel_enabled {true, true, true, false}
+backlight_correction_parameters::backlight_correction_parameters () : id (lru_caches::get ()), m_width (0), m_height (0), m_luminosities (NULL), m_channel_enabled {true, true, true, false}
 {
 }
 
-backlight_correction *
-backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
+backlight_correction_parameters *
+backlight_correction_parameters::analyze_scan (image_data &scan, luminosity_t gamma)
 {
   const int width = 111;
   const int height = 84;
@@ -17,7 +17,7 @@ backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
     enabled[(int)ir] = true;
   if (scan.rgbdata)
     enabled[(int)red] = enabled[(int)green] = enabled[(int)blue] = true;
-  backlight_correction *ret = new backlight_correction ();
+  backlight_correction_parameters *ret = new backlight_correction_parameters ();
   ret->alloc (width, height, enabled);
   luminosity_t table[65536];
   for (int i = 0; i < scan.maxval; i++)
@@ -49,14 +49,19 @@ backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
 	if (enabled[i])
 	  {
 	    std::sort (values[i].begin (), values[i].end ());
-	    int len = xsize * ysize;
+	    long len = xsize * (long)ysize;
+	    int n = 0;
 	    luminosity_t sum = 0;
-	    for (int j = len / 4; j < 3 * len /4; j++)
-	      sum += table[values[i][j]];
-	    sum /= len / 2;
-	    ret->set_weight (x, y, 1/sum, 0, (channel)i);
+	    for (long j = len / 4; j < 3 * len /4; j++)
+	      {
+		sum += table[values[i][j]];
+		n++;
+	      }
+	    sum /= n;
+	    ret->set_luminosity (x, y, sum, (channel)i);
 	  }
     }
+#if 0
   luminosity_t sum[4] = {0,0,0,0};
   for (int x = 0; x < width * height; x++)
     for (int i = 0;i < 4; i++)
@@ -70,16 +75,17 @@ backlight_correction::analyze_scan (image_data &scan, luminosity_t gamma)
   for (int x = 0; x < width * height; x++)
     for (int i = 0;i < 4; i++)
       ret->m_weights[x].mult[i] *= correct[i];
+#endif
   return ret;
 }
 bool
-backlight_correction::save (FILE *f)
+backlight_correction_parameters::save (FILE *f)
 {
   if (fprintf (f, "  backlight_correction_dimensions: %i %i\n", m_width, m_height) < 0)
     return false;
   if (fprintf (f, "  backlight_correction_channels:%s%s%s%s\n", m_channel_enabled[0]?" red":"", m_channel_enabled[1]?" green":"", m_channel_enabled[2]?" blue":"", m_channel_enabled[3]?" ir":"") < 0)
     return false;
-  if (fprintf (f, "  backlight_correction_data:" ) < 0)
+  if (fprintf (f, "  backlight_correction_lums:" ) < 0)
     return false;
   for (int y = 0; y < m_height; y++)
     {
@@ -88,7 +94,7 @@ backlight_correction::save (FILE *f)
       for (int x = 0; x < m_width; x++)
 	for (int i = 0; i < 4; i++)
 	  if (m_channel_enabled[i])
-	    if (fprintf (f, " (%f, %f)", m_weights[y * m_width +x].add[i],  m_weights[y * m_width +x].mult[i])<0)
+	    if (fprintf (f, " %f", m_luminosities[y * m_width +x].lum[i])<0)
 	      return false;
     }
   if (fprintf (f, "\n  backlight_correction_end\n" ) < 0)
@@ -96,7 +102,7 @@ backlight_correction::save (FILE *f)
   return true;
 }
 const char *
-backlight_correction::save_tiff (const char *filename)
+backlight_correction_parameters::save_tiff (const char *filename)
 {
   tiff_writer_params tp;
   tp.filename = filename;
@@ -113,9 +119,9 @@ backlight_correction::save_tiff (const char *filename)
 	      printf ("%i\n",y);
       for (int x = 0; x < m_width; x++)
       {
-        out.put_hdr_pixel (x, m_weights[y * m_width +x].mult[0] * 0.5,
-			      m_weights[y * m_width +x].mult[1] * 0.5,
-			      m_weights[y * m_width +x].mult[2] * 0.5);
+        out.put_hdr_pixel (x, m_luminosities[y * m_width +x].lum[0] * 0.5,
+			      m_luminosities[y * m_width +x].lum[1] * 0.5,
+			      m_luminosities[y * m_width +x].lum[2] * 0.5);
       }
       if (!out.write_row ())
 	return "Write error";
@@ -123,7 +129,7 @@ backlight_correction::save_tiff (const char *filename)
   return NULL;
 }
 bool
-backlight_correction::load (FILE *f, const char **error)
+backlight_correction_parameters::load (FILE *f, const char **error)
 {
    if (!expect_keyword (f, "backlight_correction_dimensions:"))
      {
@@ -189,9 +195,9 @@ backlight_correction::load (FILE *f, const char **error)
 	 return false;
        }
    }
-   if (!expect_keyword (f, "backlight_correction_data:"))
+   if (!expect_keyword (f, "backlight_correction_lums:"))
      {
-       *error = "expected backlight_correction_data";
+       *error = "expected backlight_correction_lums";
        return false;
      }
   alloc (width, height, enabled);
@@ -201,6 +207,14 @@ backlight_correction::load (FILE *f, const char **error)
 	for (int i = 0; i < 4; i++)
 	  if (m_channel_enabled[i])
 	    {
+	      float sx;
+	      if (fscanf (f, "%f", &sx) != 1)
+		{
+		  *error = "failed to parse backlight correction luminosities";
+		  return false;
+		}
+	      m_luminosities[y * m_width +x].lum[i] = sx;
+#if 0
 	      float sx, sy;
 	      if (!expect_keyword (f, "(")
 		  || fscanf (f, "%f", &sx) != 1
@@ -213,6 +227,7 @@ backlight_correction::load (FILE *f, const char **error)
 		}
 	      m_weights[y * m_width +x].add[i] = sx;
 	      m_weights[y * m_width +x].mult[i] = sy;
+#endif
 	    }
     }
    if (!expect_keyword (f, "backlight_correction_end"))
@@ -221,4 +236,26 @@ backlight_correction::load (FILE *f, const char **error)
        return false;
      }
    return true;
+}
+backlight_correction::backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, progress_info *progress)
+ : m_params (params), m_img_width (width), m_img_height (height), m_width (params.m_width), m_height (params.m_height), m_img_width_rec (params.m_width / (coord_t)width), m_img_height_rec (params.m_height / (coord_t)height), m_weights (NULL)
+{
+  if (progress)
+    progress->set_task ("computing backlight correction", 1);
+  m_weights = (entry *)malloc (m_width * m_height * sizeof (entry));
+  if (!m_weights)
+    return;
+  luminosity_t sum[4] = {0,0,0,0};
+  for (int x = 0; x < m_width * m_height; x++)
+    for (int i = 0;i < 4; i++)
+      sum[i] += m_params.m_luminosities[x].lum[i] - black;
+  luminosity_t correct[4];
+  for (int i = 0;i < 4; i++)
+    if (sum[i])
+      correct[i] = m_width*m_height / sum[i];
+    else
+      correct[i] = 1;
+  for (int x = 0; x < m_width * m_height; x++)
+    for (int i = 0;i < 4; i++)
+      m_weights[x].mult[i] = 1 / ((m_params.m_luminosities [x].lum[i] - black) * correct[i]);
 }

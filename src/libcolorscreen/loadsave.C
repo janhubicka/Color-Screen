@@ -87,6 +87,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
+	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0)
@@ -781,6 +782,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      else if (!strcmp (buf, "backlight_correction_black"))
+	{
+	  if (!read_luminosity (f, rparam_check (backlight_correction_black)))
+	    {
+	      *error = "error parsing mix_gamma";
+	      return false;
+	    }
+	}
       else if (!strcmp (buf, "backlight_correction"))
 	{
 	  bool correction;
@@ -791,7 +800,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (correction)
 	    {
-	      backlight_correction *c = new backlight_correction ();
+	      backlight_correction_parameters *c = new backlight_correction_parameters ();
 	      if (!c->load (f, error))
 		return false;
 	      if (rparam)

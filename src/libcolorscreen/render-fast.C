@@ -5,8 +5,8 @@ render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_
 {
 }
 
-flatten_attr void
-render_fast::render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g, int *b)
+pure_attr flatten_attr rgbdata
+render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 {
   coord_t dx = x, dy = y;
 
@@ -56,5 +56,5 @@ render_fast::render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g,
       blue = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
     }
 #undef getpixel
-  set_color (red, green, blue, r, g, b);
+  return {red, green, blue};
 }

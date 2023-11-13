@@ -33,9 +33,14 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		     int width, int height,
 		     double xoffset, double yoffset,
 		     double step,
+		     bool do_antialias,
 		     progress_info *progress)
 {
   stitch_project &stitch = *img.stitch;
+  int antialias = 1;
+
+  if (do_antialias)
+    antialias = ceil (step / stitch.pixel_size);
 
   /* We initialize renderes to individual images on demand.  */
   assert (stitch.params.width * stitch.params.height < 256);
@@ -54,12 +59,14 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
     progress->set_task ("rendering", height);
   int xmin = img.xmin, ymin = img.ymin;
 
+#if 0
   for (int y = 0; y < stitch.params.height; y++)
     {
       for (int x = 0; x < stitch.params.width; x++)
 	printf ("  %1.7f+%1.7f", rparam.get_tile_adjustment (&stitch, x, y).exposure, rparam.get_tile_adjustment (&stitch, x, y).dark_point);
       printf ("\n");
     }
+#endif
   /* HACK: For some reason initializing renderers inside of the loop makes graydata to come out wrong.
      So initialize all renderers first.  */
   const bool hack = true;
@@ -88,7 +95,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		}
 	    }
       }
-#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
+#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,antialias)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -144,8 +151,25 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		      break;
 		  }
 	      }
+	    rgbdata d;
+	    if (antialias == 1)
+	      {
+	        d = lastrender->sample_pixel_scr (sx - stitch.images[lasty][lastx].xpos, sy - stitch.images[lasty][lastx].ypos);
+	      }
+	    else
+	      {
+		coord_t substep = step / antialias;
+		d = {0,0,0};
+		for (int ax = 0; ax < antialias; ax++)
+		  for (int ay = 0; ay < antialias; ay++)
+		    d += lastrender->sample_pixel_scr (sx - stitch.images[lasty][lastx].xpos + ax * substep, sy - stitch.images[lasty][lastx].ypos + ay * substep);
+		luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
+		d.red *= ainv;
+		d.green *= ainv;
+		d.blue *= ainv;
+	      }
 	    int r, g, b;
-	    lastrender->render_pixel_scr (sx - stitch.images[lasty][lastx].xpos, sy - stitch.images[lasty][lastx].ypos, &r, &g, &b);
+	    lastrender->set_color (d.red, d.green, d.blue, &r, &g, &b);
 	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	}
       if (progress)
@@ -206,7 +230,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
 	      break;
 	    }
 	  render_img render (param, img, rparam, 255);
@@ -300,7 +324,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, false, progress);
 	      break;
 	    }
 	  render_superpose_img render (param, img,
@@ -372,7 +396,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
 	      break;
 	    }
 	  render_superpose_img render (param, img,
@@ -446,7 +470,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, render_type != render_type_interpolated, progress);
 	      break;
 	    }
 	  render_interpolate render (param, img,
@@ -495,7 +519,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		      }
 		    return r;
 		  },
-		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+		  img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, false, progress);
 	      break;
 	    }
 	  render_fast render (param, img, rparam, 255);

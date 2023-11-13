@@ -533,27 +533,7 @@ stitch_project::write_tiles (render_parameters rparam, struct render_to_file_par
 
 namespace {
 int
-print_matrix(FILE *f, const char *name, const gsl_matrix *m)
-{
-        int status, n = 0;
-	printf ("Matrix %s\n", name);
-
-        for (size_t i = 0; i < m->size1; i++) {
-                for (size_t j = 0; j < m->size2; j++) {
-                        if ((status = fprintf(f, "%4.2f ", gsl_matrix_get(m, i, j))) < 0)
-                                return -1;
-                        n += status;
-                }
-
-                if ((status = fprintf(f, "\n")) < 0)
-                        return -1;
-                n += status;
-        }
-
-        return n;
-}
-int
-print_system(FILE *f, const gsl_matrix *m, gsl_vector *v)
+print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w)
 {
         int status, n = 0;
 
@@ -564,19 +544,41 @@ print_system(FILE *f, const gsl_matrix *m, gsl_vector *v)
                         n += status;
                 }
 
-                if ((status = fprintf(f, "| %4.2f\n", gsl_vector_get (v, i))) < 0)
+                if ((status = fprintf(f, "| %4.2f weight:%4.2f\n", gsl_vector_get (v, i), gsl_vector_get (w, i))) < 0)
                         return -1;
                 n += status;
         }
 
         return n;
 }
+}
+
+inline rgbdata
+sample_image_area (image_data *img, render *render, int x, int y, int range)
+{
+  int xmin = x - range;
+  int xmax = x + range;
+  int ymin = y - range;
+  int ymax = y + range;
+  if (xmin < 0)
+    xmin = 0;
+  if (xmax > img->width)
+    xmax = 0;
+  if (ymin < 0)
+    ymin = 0;
+  if (ymax > img->height)
+    ymax = 0;
+  rgbdata sum = {0,0,0};
+  for (y = ymin ; y < ymax; y++)
+    for (x = xmin ; x < xmax; x++)
+      sum += render->get_rgb_pixel (x, y);
+  int c = (xmax - xmin) * (ymax - ymin);
+  return {sum.red / c, sum.green / c, sum.blue / c};
 }
 
 bool
 stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
 {
-  int combined_height = 0;
   /* Set rendering params so we get actual linearized scan data.  */
   render_parameters rparams;
   rparams.gamma = in_rparams->gamma;
@@ -599,22 +601,37 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       unsigned long n;
       luminosity_t s1, s2;
     };
-  const int buckets = 8;
   std::vector <equation> eqns;
-		  const int step = 4;
 
+  /* How many different grayscale values we want to collect.  */
+  const int buckets = 128;
+  /* Every sample taken is square 2*range x 2xrange of pixels.  */
+  const int range = 3;
+  /* Make step big enough so samples does not overlap.  */
+  const int step = 2 * range;
+
+  /* Do not analyze 30% across the stitch border to not be bothered by lens flare.  */
   const int outerborder = 30;
+  /* Ignore 5% of inner borders.  */
   const int innerborder = 5;
 
+  /* Determine how many scanlines we will inspect.  */
+  int combined_height = 0;
   if (progress)
     {
       for (int y = 0; y < params.height; y++)
 	for (int x = 0; x < params.width; x++)
-	  for (int iy = y; iy < params.height; iy++)
-	     for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
-		combined_height += images[y][x].img_height / step;
+	  {
+	    int ymin = images[y][x].img_height * (!y ? outerborder : innerborder) / 100;
+	    int ymax = images[y][x].img_height * (y == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
+	    for (int iy = y; iy < params.height; iy++)
+	       for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
+		  combined_height += (ymax - ymin) / step;
+	  }
       progress->set_task ("analyzing images", combined_height);
     }
+
+  /* For every stitched image.  */
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
       {
@@ -632,13 +649,12 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 	int ymin = images[y][x].img_height * (!y ? outerborder : innerborder) / 100;
 	int xmax = images[y][x].img_width * (x == params.width - 1 ? 100-outerborder : 100-innerborder) / 100;
 	int ymax = images[y][x].img_height * (y == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
+
+	/* Check for possible overlaps.  */
 	if ((!progress || !progress->cancel_requested ()) && !error)
-	  //for (int iy = /*y*/0; iy < params.height; iy++)
 	  for (int iy = y; iy < params.height; iy++)
 	    if ((!progress || !progress->cancel_requested ()) && !error)
-	      //for (int ix = /*(iy == y ? x + 1 : 0)*/0; ix < params.width; ix++)
 	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
-		//if (ix != x || iy != y)
 		{
 		  int xmin2 = images[iy][ix].img_width * (!ix ? outerborder : innerborder) / 100;
 		  int ymin2 = images[iy][ix].img_height * (!iy ? outerborder : innerborder) / 100;
@@ -658,6 +674,10 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			      if (!images[iy][ix].pixel_known_p (common_x, common_y)
 				  || !images[y][x].pixel_known_p (common_x, common_y))
 				continue;
+			      coord_t iix, iiy;
+			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
+			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
+				continue;
 //#pragma omp critical
 			      if (!render2)
 				{
@@ -676,31 +696,32 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				}
 			      if (!render2)
 				break;
-			      coord_t iix, iiy;
-			      luminosity_t minv = 16.0 / 65535;
-			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
-			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
-				continue;
+			      luminosity_t minv = 0;
 			      if (images[y][x].img->rgbdata)
 				{
-				  rgbdata d = render1.get_rgb_pixel (xx, yy);
+				  rgbdata d = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[y][x].img, &render1, xx, yy, range);
 				  //rgbdata d;
 				  //render1.get_img_rgb_pixel (xx + 0.5, yy + 0.5, &d.red, &d.green, &d.blue);
 				  luminosity_t red, green, blue;
-				  render2->get_img_rgb_pixel (iix, iiy, &red, &green, &blue);
+				  //render2->get_img_rgb_pixel (iix, iiy, &red, &green, &blue);
+				  rgbdata d2 = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[iy][ix].img, render2, iix+0.5, iiy+0.5, range);
+				  red = d2.red;
+				  green = d2.green;
+				  blue = d2.blue;
 
 
-				  if (d.red > minv && red > minv)
+				  if (d.red >= minv && red >= minv)
 #pragma omp critical
 				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red});
 				  //printf ("%i %i:%f,%f %i %i:%f,%f %f %f %f\n",x,y,xx+0.5,yy+0.5,ix,iy,iix,iiy,red, d.red, red/d.red);
-				  if (d.green > minv && green > minv)
+				  if (d.green >= minv && green >= minv)
 #pragma omp critical
 				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green});
-				  if (d.blue > minv && blue > minv)
+				  if (d.blue >= minv && blue >= minv)
 #pragma omp critical
 				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue});
 				}
+			      /* Implement collection of IR channel.  */
 			      if (images[y][x].img->data)
 				abort ();
 			      }
@@ -720,7 +741,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			       unsigned long vals[65536];
 			       memset (vals, 0, sizeof (vals));
 			       long int crop0 = 0,cropmax = 0;
-			       /* Compute histograms.  */
+
+			       /* Compute histogram.  */
 			       for (auto r:ratios[c])
 			         {
 				   int idx = (r.val1 * 65535 + 0.5);
@@ -730,15 +752,19 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				     idx = 65535, cropmax++;
 				   vals[idx]++;
 			         }
+
+			       /* Determine cutoffs between buckets so they are about of the same size.  */
 			       luminosity_t cutoffs[buckets];
 			       unsigned long csum = 0;
 			       int pos = 0;
 			       for (int bucket = 0; bucket < buckets; bucket++)
 				 {
-				   for (;csum <= (bucket * ratios[c].size ()) / buckets && pos < 65535;pos++)
+				   for (;csum <= ((bucket + 1) * ratios[c].size ()) / buckets && pos < 65535;pos++)
 				     csum += vals[pos];
 				   cutoffs[bucket]=(pos - 0.5) / 65535;
 				 }
+
+			       /* Distribute samples to buckets.  */
 			       std::vector<ratio> ratios_buckets[buckets];
 			       for (auto r:ratios[c])
 				 {
@@ -748,6 +774,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				       break;
 				   ratios_buckets[b].push_back (r);
 				 }
+
+			       /* Sort every bucket and eliminate samples that seems off.  */
 			       for (int b =0; b < buckets; b++)
 				 {
 				    std::sort (ratios_buckets[b].begin (), ratios_buckets[b].end());
@@ -759,7 +787,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 					wsum2b += ratios_buckets[b][i].val2;
 					n++;
 				      }
-				     if (n)
+				    /* Record equation.  */
+				    if (n)
 				       eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b});
 				    progress->pause_stdout ();
 				    printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
@@ -800,6 +829,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       return false;
     }
   progress->pause_stdout ();
+
+  /* Print equaltions.  */
   for (int i = 0; i < (int)eqns.size (); i++)
     {
       printf ("e%i%i * %f + b%i%i*%lu = e%i%i * %f + b%i%i*%lu\n", eqns[i].x1, eqns[i].y1, eqns[i].s1, eqns[i].x1, eqns[i].y1, eqns[i].n, eqns[i].x2, eqns[i].y2, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].n);
@@ -811,11 +842,18 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
     }
 #endif
   progress->resume_stdout ();
+
+  /* Feed to GSL.  */
   int nvariables = params.width * params.height * 2;
-  int nequations = eqns.size () + 1;
+  int nequations = eqns.size () + 2;
+
+  if (nvariables >= nequations)
+    {
+      error = "Did not collect enough samples.";
+      return false;
+    }
   gsl_matrix *A, *cov;
   gsl_vector *y, *w, *c;
-  gsl_matrix *a = gsl_matrix_alloc (nvariables, nvariables);
   A = gsl_matrix_alloc (nequations, nvariables);
   y = gsl_vector_alloc (nequations);
   w = gsl_vector_alloc (nequations);
@@ -832,7 +870,14 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       gsl_matrix_set (A, i, nvariables / 2 + eqns[i].y1 * params.width + eqns[i].x1, eqns[i].n);
       gsl_matrix_set (A, i, nvariables / 2 + eqns[i].y2 * params.width + eqns[i].x2, -(double)eqns[i].n);
       gsl_vector_set (y, i, 0);
-      gsl_vector_set (w, i, 1);
+      /* The darker point is, more we care.  */
+      if (eqns[i].s1>0)
+	{
+	  luminosity_t avg_density = eqns[i].s1/eqns[i].n;
+	  gsl_vector_set (w, i, 1/avg_density * (invert_gamma (avg_density, 2.4)/avg_density));
+	}
+      else
+        gsl_vector_set (w, i, 1);
       sum += eqns[i].s1;
       sum += eqns[i].s2;
     }
@@ -842,7 +887,6 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   gsl_vector_set (y, i, sum);
   gsl_vector_set (w, i, 1);
   gsl_matrix_set (A, i, params.width * params.height / 4, sum);
-#if 0
   /* Set one blackpoint to be 0.  */
   i++;
   for (int j = 0; j < nvariables; j++)
@@ -850,33 +894,40 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   gsl_vector_set (y, i, 0);
   gsl_vector_set (w, i, 1);
   gsl_matrix_set (A, i, nvariables / 2 + params.width * params.height / 4, sum);
-#endif
 
   progress->pause_stdout ();
-  print_system (stdout, A, y);
+  print_system (stdout, A, y, w);
   progress->resume_stdout ();
 
+  gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_multifit_linear_workspace * work
     = gsl_multifit_linear_alloc (nequations, nvariables);
   double chisq;
   gsl_multifit_wlinear (A, w, y, c, cov,
 			&chisq, work);
+  gsl_set_error_handler (old_handler);
   gsl_multifit_linear_free (work);
   progress->pause_stdout ();
+  /* Print solution.  */
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
-	printf ("  +%4.4f*%4.4f", gsl_vector_get (c, nvariables / 2 + y * params.width + x), gsl_vector_get (c, y * params.width + x));
+	printf ("  +%4.8f*%4.8f", gsl_vector_get (c, nvariables / 2 + y * params.width + x), gsl_vector_get (c, y * params.width + x));
       printf ("\n");
     }
+  /* Convert into our datastructure.  */
   in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
+  printf ("Final solutoin:\n");
   for (int y = 0; y < params.height; y++)
-    for (int x = 0; x < params.width; x++)
-      {
-	in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, y * params.width + x) / gsl_vector_get (c, params.width * params.height / 4);
-	in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, nvariables / 2 + y * params.width + x) / gsl_vector_get (c, y * params.width + x);
-      }
-  for (int y = 0; y < params.height; y++)
+    {
+      for (int x = 0; x < params.width; x++)
+	{
+	  in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, y * params.width + x) / gsl_vector_get (c, params.width * params.height / 4);
+	  in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, nvariables / 2 + y * params.width + x) / gsl_vector_get (c, y * params.width + x);
+	  printf ("  +%4.8f*%4.8f", in_rparams->get_tile_adjustment (x,y).dark_point, in_rparams->get_tile_adjustment (x,y).exposure);
+	}
+      printf ("\n");
+    }
   progress->resume_stdout ();
   gsl_matrix_free (A);
   gsl_vector_free (y);

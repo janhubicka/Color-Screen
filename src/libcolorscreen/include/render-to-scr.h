@@ -116,7 +116,7 @@ public:
   inline rgbdata sample_pixel_scr (coord_t x, coord_t y)
   {
     coord_t xx, yy;
-    m_scr_to_img.to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    m_scr_to_img.to_img (x, y, &xx, &yy);
     return sample_pixel_img (xx, yy);
   }
   void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)

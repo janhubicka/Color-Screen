@@ -92,7 +92,7 @@ public:
       delete lcc;
   }
 private:
-  backlight_correction *lcc;
+  backlight_correction_parameters *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
 };
@@ -572,7 +572,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
-	      lcc = backlight_correction::load_captureone_lcc (&mbuffer, true);
+	      lcc = backlight_correction_parameters::load_captureone_lcc (&mbuffer, true);
 	      if (!lcc)
 		{
 		  *error = "can not read LCC file";

@@ -331,7 +331,7 @@ analyze_backlight (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
       exit (1);
     }
-  backlight_correction *cor = backlight_correction::analyze_scan (scan, 1.0);
+  backlight_correction_parameters *cor = backlight_correction_parameters::analyze_scan (scan, 1.0);
   FILE *out = fopen (argv[1], "wt");
   if (!out)
     {

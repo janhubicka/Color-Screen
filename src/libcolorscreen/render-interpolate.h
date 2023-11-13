@@ -50,7 +50,7 @@ public:
     rgbdata d = sample_pixel_scr (x, y);
     set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
-  flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
+  pure_attr flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
 private:
   screen *m_screen;
   bool m_screen_compensation;

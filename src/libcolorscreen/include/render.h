@@ -27,7 +27,7 @@ struct DLL_PUBLIC render_parameters
     screen_blur_radius (0.5),
     color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), scan_exposure (1),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
-    backlight_correction (NULL), invert (false),
+    backlight_correction (NULL), backlight_correction_black (0), invert (false),
     restore_original_luminosity (true), precise (true), tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments ()
   {
   }
@@ -130,7 +130,8 @@ struct DLL_PUBLIC render_parameters
 
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
-  class backlight_correction *backlight_correction;
+  class backlight_correction_parameters *backlight_correction;
+  luminosity_t backlight_correction_black;
 
   /* True if negatuve should be inverted to positive.  */
   bool invert;
@@ -206,7 +207,9 @@ struct DLL_PUBLIC render_parameters
 	   && precise == other.precise
  	   && film_characteristics_curve == other.film_characteristics_curve
 	   && restore_original_luminosity == other.restore_original_luminosity
- 	   && output_curve == other.output_curve;
+ 	   && output_curve == other.output_curve
+	   && backlight_correction == other.backlight_correction
+	   && backlight_correction_black == other.backlight_correction_black;
   }
   bool operator!= (render_parameters &other) const
   {
@@ -370,7 +373,7 @@ class DLL_PUBLIC render
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL)
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_backlight_correction (NULL)
   {
     if (m_params.invert)
       {
@@ -413,16 +416,16 @@ public:
     rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
-    if (m_params.backlight_correction)
+    if (m_backlight_correction)
       {
-	d.red = m_params.backlight_correction->apply (d.red, m_img.width, m_img.height, x, y, backlight_correction::red);
-	d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
-	d.green = m_params.backlight_correction->apply (d.green, m_img.width, m_img.height, x, y, backlight_correction::green);
-	d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
-	d.blue = m_params.backlight_correction->apply (d.blue, m_img.width, m_img.height, x, y, backlight_correction::blue);
-	d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
+	d.red = m_backlight_correction->apply (d.red, x, y, backlight_correction_parameters::red);
+	d.green = m_backlight_correction->apply (d.green, x, y, backlight_correction_parameters::green);
+	d.blue = m_backlight_correction->apply (d.blue, x, y, backlight_correction_parameters::blue);
 	/* TODO do inversion and film curves if requested.  */
       }
+    d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
+    d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
+    d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
     return d;
   }
 
@@ -469,6 +472,8 @@ protected:
   /* Color matrix.  */
   color_matrix m_color_matrix;
 
+  backlight_correction *m_backlight_correction;
+
 private:
   const bool debug = false;
 };
@@ -507,9 +512,9 @@ inline luminosity_t
 render::get_data_red (int x, int y)
 {
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].r];
-  if (m_params.backlight_correction)
+  if (m_backlight_correction)
     {
-      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::red);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red);
       v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }
@@ -520,9 +525,9 @@ inline luminosity_t
 render::get_data_green (int x, int y)
 {
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].g];
-  if (m_params.backlight_correction)
+  if (m_backlight_correction)
     {
-      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::green);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green);
       v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }
@@ -533,9 +538,9 @@ inline luminosity_t
 render::get_data_blue (int x, int y)
 {
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].b];
-  if (m_params.backlight_correction)
+  if (m_backlight_correction)
     {
-      v = m_params.backlight_correction->apply (v, m_img.width, m_img.height, x, y, backlight_correction::blue);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue);
       v = (v - m_params.dark_point) * m_params.scan_exposure;
       /* TODO do inversion and film curves if requested.  */
     }

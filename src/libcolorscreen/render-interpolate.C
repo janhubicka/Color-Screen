@@ -138,7 +138,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   return !progress || !progress->cancelled ();
 }
 
-flatten_attr rgbdata
+pure_attr flatten_attr rgbdata
 render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 {
   luminosity_t red, green, blue;

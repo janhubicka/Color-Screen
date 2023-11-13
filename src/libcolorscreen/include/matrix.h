@@ -6,9 +6,6 @@
 #include <stdio.h>
 
 
-
-#define flatten_attr __attribute__ ((__flatten__))
-
 /* Square matrix template.  */
 template <typename T, size_t dim>
 class matrix

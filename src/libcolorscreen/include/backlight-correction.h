@@ -17,57 +17,80 @@ struct memory_buffer
     return *((char *)data+pos++);
   }
 };
-class backlight_correction
+class backlight_correction;
+class backlight_correction_parameters
 {
   struct entry
   {
-    luminosity_t add[4];
-    luminosity_t mult[4];
+    //luminosity_t add[4];
+    luminosity_t lum[4];
   };
 public:
   enum channel {red, green, blue, ir, all_channels};
-  backlight_correction ();
+  backlight_correction_parameters ();
   bool
   alloc (int width, int height, bool enabled[4])
   {
-    m_weights = (entry *)calloc (2*width * height, sizeof (entry));
+    m_luminosities = (entry *)calloc (width * height, sizeof (entry));
     m_width = width;
     m_height = height;
     for (int i = 0; i < 4;i++)
       m_channel_enabled[i] = enabled[i];
-    return (m_weights != NULL);
+    return (m_luminosities != NULL);
   }
   void
-  set_weight (int x, int y, luminosity_t mult, luminosity_t add, enum channel channel = all_channels)
+  set_luminosity (int x, int y, luminosity_t lum, enum channel channel = all_channels)
   {
-    struct entry &e = m_weights[y * m_width + x];
+    struct entry &e = m_luminosities[y * m_width + x];
     if (channel != all_channels)
       {
-	e.add[(int)channel] = add;
-	e.mult[(int)channel] = mult;
+	//e.add[(int)channel] = add;
+	e.lum[(int)channel] = lum;
       }
     else
       for (int i = 0; i < 4; i++)
 	{
-	  e.add[i] = add;
-	  e.mult[i] = mult;
+	  //e.add[i] = add;
+	  e.lum[i] = lum;
 	}
   }
-  inline
-  luminosity_t apply (float val, int width, int height, int x, int y, enum channel channel)
+  ~backlight_correction_parameters ()
   {
-#if 0
-    if (x < 0)
-      x = 0;
-    if (x >= width)
-      x = width;
-    if (y < 0)
-      y = 0;
-    if (y >= height)
-      y = height;
-    if (xx < 0 || xx >= m_width || yy < 0 || yy >= m_height)
-      return val;
-#endif
+    if (m_luminosities)
+      free (m_luminosities);
+  }
+  static backlight_correction_parameters *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
+  static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
+  /* Unique id of the image (used for caching).  */
+  unsigned long id;
+  bool save (FILE *f);
+  const char* save_tiff (const char *name);
+  bool load (FILE *f, const char **);
+  friend backlight_correction;
+private:
+  int m_width, m_height;
+  entry *m_luminosities;
+  bool m_channel_enabled[4];
+};
+
+
+class
+backlight_correction
+{
+  struct entry
+  {
+    //luminosity_t add[4];
+    luminosity_t mult[4];
+  };
+public:
+  backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, progress_info *progress);
+  ~backlight_correction ()
+  {
+    free (m_weights);
+  }
+  inline
+  luminosity_t apply (float val, int x, int y, enum backlight_correction_parameters::channel channel)
+  {
 #if 0
     coord_t xx = x * (m_width / (coord_t)width);
     coord_t yy = y * (m_height / (coord_t)height);
@@ -81,28 +104,25 @@ public:
 #endif
 
 #if 1
-    int xx = x * (m_width / (coord_t)width);
-    int yy = y * (m_height / (coord_t)height);
+    int xx = x * m_img_width_rec;
+    int yy = y * m_img_height_rec;
     struct entry &e = m_weights[yy * m_width + xx];
-    return val * e.mult[channel]+e.add[channel];
+    //printf ("%i %i %i %i %f\n",x,y,xx,yy,e.mult[channel]);
+    return val * e.mult[channel]/*+e.add[channel]*/;
 #endif
   }
-  ~backlight_correction ()
+  bool initialized_p ()
   {
-    if (m_weights)
-      free (m_weights);
+    return m_weights != NULL;
   }
-  static backlight_correction *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
-  static backlight_correction *analyze_scan (image_data &scan, luminosity_t gamma = 1);
-  /* Unique id of the image (used for caching).  */
-  unsigned long id;
-  bool save (FILE *f);
-  const char* save_tiff (const char *name);
-  bool load (FILE *f, const char **);
+  int id;
 private:
+  backlight_correction_parameters &m_params;
+  int m_img_width, m_img_height;
   int m_width, m_height;
+  coord_t m_img_width_rec;
+  coord_t m_img_height_rec;
   entry *m_weights;
-  bool m_channel_enabled[4];
 };
 
 #endif

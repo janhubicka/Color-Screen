@@ -40,8 +40,8 @@ read_uint32 (memory_buffer *f)
   return ret;
 }
 
-backlight_correction *
-backlight_correction::load_captureone_lcc (memory_buffer *f, bool verbose)
+backlight_correction_parameters *
+backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool verbose)
 {
 	std::string s = read_string (f);
 	if (s != "XCon")
@@ -273,7 +273,7 @@ backlight_correction::load_captureone_lcc (memory_buffer *f, bool verbose)
 	//printf ("%i\n", bin3);
 	uint16_t bin4 = read_uint16 (f);
 	//printf ("%i\n", bin4);
-	class backlight_correction *llci = new class backlight_correction ();
+	class backlight_correction_parameters *llci = new class backlight_correction_parameters ();
 	bool enabled[4] = {true, true, true, false};
 	llci->alloc (111, 84, enabled);
 	for (int y = 0; y < 84; y++)
@@ -289,7 +289,7 @@ backlight_correction::load_captureone_lcc (memory_buffer *f, bool verbose)
 		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)
 		    
 		    
-		    llci->set_weight(110-x, 83-y, (1+((weight2-1)*32)), /*((int)val - 32768)/32.0*/0);
+		    llci->set_luminosity(110-x, 83-y, (1+((weight2-1)*32)) /*((int)val - 32768)/32.0*/);
 		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)), -((int)val2 - 32768)/8.0);
 #if 0
 		for (int c = 0; c < 2; c++)

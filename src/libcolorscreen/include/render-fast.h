@@ -15,6 +15,12 @@ public:
     m_scr_to_img.to_img (x, y, &xx, &yy);
     render_pixel (x, y, xx, yy, r, g, b);
   }
+  rgbdata sample_pixel_scr (int x, int y)
+  {
+    coord_t xx, yy;
+    m_scr_to_img.to_img (x, y, &xx, &yy);
+    return sample_pixel (x, y, xx, yy);
+  }
   void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     coord_t xx, yy;
@@ -28,6 +34,12 @@ public:
     render_pixel_scr (xx, yy, r, g, b);
   }
 private:
-  void render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g, int *b);
+  void render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g, int *b)
+  {
+    rgbdata d = sample_pixel (x, y, zx, zy);
+    set_color (d.red, d.green, d.blue, r, g, b);
+  }
+  pure_attr flatten_attr
+  rgbdata sample_pixel (int x, int y, coord_t zx, coord_t zy);
 };
 #endif
