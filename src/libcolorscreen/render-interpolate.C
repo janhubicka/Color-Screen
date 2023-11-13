@@ -65,7 +65,7 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data
 {
 }
 
-flatten_attr bool
+bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   unsigned long screen_id = 0;

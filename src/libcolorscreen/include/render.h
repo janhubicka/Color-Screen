@@ -448,8 +448,10 @@ protected:
 
   /* Scanned image.  */
   image_data &m_img;
-  /* Rendering parameters.  */
-  render_parameters &m_params;
+  /* Rendering parameters.
+     Make local copy for performance reasons and also because render-tile releases rparam
+     after constructing renderer.  */
+  render_parameters m_params;
   /* ID of graydata computed.  */
   unsigned long m_gray_data_id;
   /* Sharpened data we render from.  */

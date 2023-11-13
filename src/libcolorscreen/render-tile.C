@@ -41,7 +41,6 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
   assert (stitch.params.width * stitch.params.height < 256);
   //std::atomic<T *> renders[256];
   T * renders[256];
-  std::vector<render_parameters> rparams;
   pthread_mutex_t lock[256];
   for (int x = 0; x < stitch.params.width * stitch.params.height; x++)
   {
@@ -49,7 +48,6 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
     if (pthread_mutex_init (&lock[x], NULL) != 0)
       perror ("lock");
   }
-  rparams.reserve (stitch.params.width * stitch.params.height);
   //renders[0] = init_render (0, 0);
 
   if (progress)
@@ -78,20 +76,19 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	      if (stitch.tile_for_scr (sx, sy, &ix, &iy, true)
 		  && !renders[iy * stitch.params.width + ix])
 		{
-		  rparams.push_back (rparam);
-		  render_parameters &rparam2 = rparams.back();
+		  render_parameters rparam2 = rparam;
 			  //rparams[y * stitch.params.width + ix];
 		  //rparam2 = rparam;
 		  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
 		  rparam2.scan_exposure *= a.exposure;
-		  rparam2.dark_point += a.exposure;
+		  rparam2.dark_point += a.dark_point;
 		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
 		  if (progress && progress->cancel_requested ())
 		    break;
 		}
 	    }
       }
-#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,rparams)
+#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -132,11 +129,10 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		      lastrender = renders[iy * stitch.params.width + ix];
 		      if (!lastrender)
 			{
-			  rparams.push_back (rparam);
-			  render_parameters &rparam2 = rparams.back();
+			  render_parameters rparam2 = rparam;
 			  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
 			  rparam2.scan_exposure *= a.exposure;
-			  rparam2.dark_point += a.exposure;
+			  rparam2.dark_point += a.dark_point;
 			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
 			}
 		    }
