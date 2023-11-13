@@ -603,6 +603,9 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   std::vector <equation> eqns;
 		  const int step = 4;
 
+  const int outerborder = 30;
+  const int innerborder = 5;
+
   if (progress)
     {
       for (int y = 0; y < params.height; y++)
@@ -625,6 +628,10 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 	    error = "precomputation failed";
 	    break;
 	  }
+	int xmin = images[y][x].img_width * (!x ? outerborder : innerborder) / 100;
+	int ymin = images[y][x].img_height * (!y ? outerborder : innerborder) / 100;
+	int xmax = images[y][x].img_width * (x == params.width - 1 ? 100-outerborder : 100-innerborder) / 100;
+	int ymax = images[y][x].img_height * (y == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
 	if ((!progress || !progress->cancel_requested ()) && !error)
 	  //for (int iy = /*y*/0; iy < params.height; iy++)
 	  for (int iy = y; iy < params.height; iy++)
@@ -633,16 +640,18 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
 		//if (ix != x || iy != y)
 		{
+		  int xmin2 = images[iy][ix].img_width * (!ix ? outerborder : innerborder) / 100;
+		  int ymin2 = images[iy][ix].img_height * (!iy ? outerborder : innerborder) / 100;
+		  int xmax2 = images[iy][ix].img_width * (ix == params.width - 1 ? 100-outerborder : 100-innerborder) / 100;
+		  int ymax2 = images[iy][ix].img_height * (iy == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
 		  std::vector<ratio> ratios[4];
 		  render *render2 = NULL;
-		  int img_height = images[y][x].img_height;
-		  int img_width = images[y][x].img_width;
 		  if ((!progress || !progress->cancel_requested ()) && !error)
 //#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,img_height,img_width)
-		    for (int yy = 2; yy < img_height - 2; yy+= step)
+		    for (int yy = ymin; yy < ymax; yy+= step)
 		      {
 			if ((!progress || !progress->cancel_requested ()) && !error)
-			  for (int xx = 2; xx < img_width - 2; xx+= step)
+			  for (int xx = xmin; xx < xmax; xx+= step)
 			    {
 			      coord_t common_x, common_y;
 			      images[y][x].img_to_common_scr (xx + 0.5, yy + 0.5, &common_x, &common_y);
@@ -670,15 +679,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			      coord_t iix, iiy;
 			      luminosity_t minv = 16.0 / 65535;
 			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
-#if 0
-			      int border = images[y][x].img_width / 4;
-			      if (xx < border || xx > images[y][x].img_width - border
-			          || yy < border || yy > images[y][x].img_height - border
-			          || iix < border || iix > images[iy][ix].img_width - border
-			          || iiy < border || iiy > images[iy][ix].img_height - border)
-				      continue;
-			      assert (iix > 0 && iiy > 0 && iix < images[iy][ix].img_width && iiy < images[iy][ix].img_height);
-#endif
+			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
+				continue;
 			      if (images[y][x].img->rgbdata)
 				{
 				  rgbdata d = render1.get_rgb_pixel (xx, yy);
