@@ -369,7 +369,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
