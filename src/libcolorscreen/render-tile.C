@@ -243,7 +243,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	      return false;
 	    }
 
-	  if (!color && step > 1)
+	  if ((!color || !img.rgbdata) && step > 1)
 	    {
 	      luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
 	      render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);

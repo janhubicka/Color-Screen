@@ -52,7 +52,7 @@ static render_parameters rparams;
 /* Status of the main window.  */
 static int offsetx = 8, offsety = 8;
 static int bigscale = 4;
-static bool color_display = false;
+static bool color_display = true;
 
 static int display_type = 0;
 static int scr_detect_display_type = 0;
@@ -390,7 +390,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'G' && scan.stitch)
+  if (k == 'G' && scan.stitch && (event->state & GDK_CONTROL_MASK))
+    {
+      rparams.set_tile_adjustments_dimensions (0, 0);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  else if (k == 'G' && scan.stitch)
     {
       file_progress_info progress (stdout);
       const char *error;
@@ -522,7 +528,21 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    preview_display_scheduled = true;
 	  }
       }
-      if (k >= '1' && k <='7')
+      if ((event->state & GDK_CONTROL_MASK)&& scan.stitch && k >= '1' && k <= '9')
+        {
+	  int idx = k - '1';
+	  int y = idx / scan.stitch->params.width;
+	  int x = idx % scan.stitch->params.width;
+	  if (rparams.tile_adjustments_width != scan.stitch->params.width
+	      || rparams.tile_adjustments_height != scan.stitch->params.height)
+		  rparams.set_tile_adjustments_dimensions (scan.stitch->params.width, scan.stitch->params.height);
+	  if (y < scan.stitch->params.height)
+	    {
+		  rparams.get_tile_adjustment (x,y).enabled ^= 1;
+		  display_scheduled = true;
+	    }
+        }
+      else if (k >= '1' && k <='7')
 	{
 	  display_type = k - '1';
 	  display_scheduled = true;
