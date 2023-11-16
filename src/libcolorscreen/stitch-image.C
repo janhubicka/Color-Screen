@@ -979,9 +979,7 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
     }
   assert (iy != m_prj->params.height);
 
-  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (m_prj, ix, iy);
-  rparam.scan_exposure *= a.exposure;
-  rparam.dark_point += a.dark_point;
+  rparam.get_tile_adjustment (m_prj, ix, iy).apply (&rparam);
   rfparams.pixel_size = m_prj->pixel_size;
   rfparams.tile = true;
   rfparams.xoffset = floor (xoffset);

@@ -216,7 +216,7 @@ public:
     release_images = false;
   }
   bool
-  tile_for_scr (coord_t sx, coord_t sy, int *x, int *y, bool only_loaded)
+  tile_for_scr (render_parameters *rparams, coord_t sx, coord_t sy, int *x, int *y, bool only_loaded)
   {
     /* Lookup tile to use. */
     int ix = 0, iy;
@@ -224,6 +224,7 @@ public:
       {
 	for (ix = 0 ; ix < params.width; ix++)
 	  if ((!only_loaded || images[iy][ix].img)
+	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
 	      && images[iy][ix].pixel_known_p (sx, sy))
 	    break;
 	if (ix != params.width)

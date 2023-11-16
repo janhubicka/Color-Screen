@@ -40,7 +40,11 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
   int antialias = 1;
 
   if (do_antialias)
+  {
     antialias = ceil (step / stitch.pixel_size);
+    if (antialias > 4)
+	    antialias = 4;
+  }
 
   /* We initialize renderes to individual images on demand.  */
   assert (stitch.params.width * stitch.params.height < 256);
@@ -80,15 +84,13 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	      int ix, iy;
 	      coord_t sx, sy;
 	      stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
-	      if (stitch.tile_for_scr (sx, sy, &ix, &iy, true)
+	      if (stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true)
 		  && !renders[iy * stitch.params.width + ix])
 		{
 		  render_parameters rparam2 = rparam;
 			  //rparams[y * stitch.params.width + ix];
 		  //rparam2 = rparam;
-		  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
-		  rparam2.scan_exposure *= a.exposure;
-		  rparam2.dark_point += a.dark_point;
+		  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
 		  if (progress && progress->cancel_requested ())
 		    break;
@@ -112,7 +114,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	    int ix, iy;
 
 	    /* If no tile was found, just render black pixel. */
-	    if (!stitch.tile_for_scr (sx, sy, &ix, &iy, true))
+	    if (!stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
 	      {
 		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;
@@ -137,9 +139,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		      if (!lastrender)
 			{
 			  render_parameters rparam2 = rparam;
-			  const render_parameters::tile_adjustment &a = rparam.get_tile_adjustment (&stitch, ix, iy);
-			  rparam2.scan_exposure *= a.exposure;
-			  rparam2.dark_point += a.dark_point;
+			  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
 			}
 		    }
@@ -265,7 +265,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	      free (data);
 	      break;
 	    }
-	  if (step > 1)
+	  else if (step > 1)
 	    {
 	      rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
 	      render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);

@@ -164,6 +164,11 @@ struct DLL_PUBLIC render_parameters
     {
       return !(*this == other);
     }
+    void apply (render_parameters *p) const
+    {
+      p->dark_point = dark_point + exposure * p->dark_point;
+      p->scan_exposure *= exposure;
+    }
   };
 
   int tile_adjustments_width, tile_adjustments_height;
@@ -515,9 +520,9 @@ render::get_data_red (int x, int y)
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red);
-      v = (v - m_params.dark_point) * m_params.scan_exposure;
-      /* TODO do inversion and film curves if requested.  */
     }
+  v = (v - m_params.dark_point) * m_params.scan_exposure;
+  /* TODO do inversion and film curves if requested.  */
   return v;
 }
 
@@ -528,9 +533,9 @@ render::get_data_green (int x, int y)
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green);
-      v = (v - m_params.dark_point) * m_params.scan_exposure;
-      /* TODO do inversion and film curves if requested.  */
     }
+  v = (v - m_params.dark_point) * m_params.scan_exposure;
+  /* TODO do inversion and film curves if requested.  */
   return v;
 }
 
@@ -541,9 +546,9 @@ render::get_data_blue (int x, int y)
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue);
-      v = (v - m_params.dark_point) * m_params.scan_exposure;
-      /* TODO do inversion and film curves if requested.  */
     }
+  v = (v - m_params.dark_point) * m_params.scan_exposure;
+  /* TODO do inversion and film curves if requested.  */
   return v;
 }
 

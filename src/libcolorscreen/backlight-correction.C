@@ -237,25 +237,29 @@ backlight_correction_parameters::load (FILE *f, const char **error)
      }
    return true;
 }
-backlight_correction::backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, progress_info *progress)
+backlight_correction::backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, bool white_balance, progress_info *progress)
  : m_params (params), m_img_width (width), m_img_height (height), m_width (params.m_width), m_height (params.m_height), m_img_width_rec (params.m_width / (coord_t)width), m_img_height_rec (params.m_height / (coord_t)height), m_weights (NULL)
 {
   if (progress)
     progress->set_task ("computing backlight correction", 1);
   m_weights = (entry *)malloc (m_width * m_height * sizeof (entry));
+  m_black = black;
+  black = 0;
   if (!m_weights)
     return;
   luminosity_t sum[4] = {0,0,0,0};
   for (int x = 0; x < m_width * m_height; x++)
     for (int i = 0;i < 4; i++)
       sum[i] += m_params.m_luminosities[x].lum[i] - black;
+  if (white_balance)
+    sum[0] = sum[1] = sum[2] = (sum[0] + sum[1] + sum[2]) / 3;
   luminosity_t correct[4];
   for (int i = 0;i < 4; i++)
     if (sum[i])
-      correct[i] = m_width*m_height / sum[i];
+      correct[i] = sum[i] / (m_width*m_height);
     else
       correct[i] = 1;
   for (int x = 0; x < m_width * m_height; x++)
     for (int i = 0;i < 4; i++)
-      m_weights[x].mult[i] = 1 / ((m_params.m_luminosities [x].lum[i] - black) * correct[i]);
+      m_weights[x].mult[i] = correct[i] / (m_params.m_luminosities [x].lum[i] - black);
 }

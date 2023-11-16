@@ -83,7 +83,7 @@ backlight_correction
     luminosity_t mult[4];
   };
 public:
-  backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, progress_info *progress);
+  backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, bool white_balance, progress_info *progress);
   ~backlight_correction ()
   {
     free (m_weights);
@@ -108,7 +108,7 @@ public:
     int yy = y * m_img_height_rec;
     struct entry &e = m_weights[yy * m_width + xx];
     //printf ("%i %i %i %i %f\n",x,y,xx,yy,e.mult[channel]);
-    return val * e.mult[channel]/*+e.add[channel]*/;
+    return (val - m_black) * e.mult[channel] + m_black/*+e.add[channel]*/;
 #endif
   }
   bool initialized_p ()
@@ -118,6 +118,7 @@ public:
   int id;
 private:
   backlight_correction_parameters &m_params;
+  luminosity_t m_black;
   int m_img_width, m_img_height;
   int m_width, m_height;
   coord_t m_img_width_rec;

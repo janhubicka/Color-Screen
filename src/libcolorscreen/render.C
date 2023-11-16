@@ -348,7 +348,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
-      m_backlight_correction = new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, progress);
+      m_backlight_correction = new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, !grayscale_needed, progress);
       if (!m_backlight_correction->initialized_p ())
 	{
 	  delete m_backlight_correction;
