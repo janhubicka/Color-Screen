@@ -194,9 +194,15 @@ stitch_project::print_status (FILE *out)
 bool
 stitch_project::analyze_images (progress_info *progress)
 {
+  if (progress)
+    progress->set_task ("analyzing tiles", params.width * params.height);
   if (params.width == 1 && params.height == 1)
     {
-      return analyze (0, 0, progress);
+      if (progress)
+	progress->push ();
+      bool ret = analyze (0, 0, progress);
+      progress->pop ();
+      return ret;
     }
   for (int y = 0; y < params.height; y++)
     {
@@ -209,24 +215,36 @@ stitch_project::analyze_images (progress_info *progress)
 	{
 	  coord_t xs;
 	  coord_t ys;
-	  analyze (0, y-1, progress);
+	  analyze (0, y - 1, progress);
 	  analyze (0, y, progress);
-	  if (!images[y-1][0].get_analyzer().find_best_match (params.min_overlap_percentage, params.max_overlap_percentage, images[y][0].get_analyzer(), params.cpfind, &xs, &ys, params.limit_directions ? 1 : -1, images[y-1][0].basic_scr_to_img_map, images[y][0].basic_scr_to_img_map, report_file, progress))
+	  if (!images[y - 1][0].get_analyzer ().
+	      find_best_match (params.min_overlap_percentage,
+			       params.max_overlap_percentage,
+			       images[y][0].get_analyzer (), params.cpfind,
+			       &xs, &ys, params.limit_directions ? 1 : -1,
+			       images[y - 1][0].basic_scr_to_img_map,
+			       images[y][0].basic_scr_to_img_map, report_file,
+			       progress))
 	    {
 	      progress->pause_stdout ();
-	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y-1][0].filename.c_str (), images[y][0].filename.c_str ());
-	      exit (1);
+	      fprintf (stderr, "Can not find good overlap of %s and %s\n",
+		       images[y - 1][0].filename.c_str (),
+		       images[y][0].filename.c_str ());
+	      progress->resume_stdout ();
+	      return false;
 	    }
-	  images[y][0].xpos = images[y-1][0].xpos + xs;
-	  images[y][0].ypos = images[y-1][0].ypos + ys;
-	  images[y-1][0].compare_contrast_with (images[y][0], progress);
+	  images[y][0].xpos = images[y - 1][0].xpos + xs;
+	  images[y][0].ypos = images[y - 1][0].ypos + ys;
+	  images[y - 1][0].compare_contrast_with (images[y][0], progress);
 	  if (params.geometry_info || params.individual_geometry_info)
-	    images[y-1][0].output_common_points (NULL, images[y][0], 0, 0, true, progress);
+	    images[y - 1][0].output_common_points (NULL, images[y][0], 0, 0,
+						   true, progress);
 	  if (params.width)
 	    {
-	      images[y-1][1].compare_contrast_with (images[y][0], progress);
+	      images[y - 1][1].compare_contrast_with (images[y][0], progress);
 	      if (params.geometry_info || params.individual_geometry_info)
-	        images[y-1][1].output_common_points (NULL, images[y][0], 0, 0, true, progress);
+		images[y - 1][1].output_common_points (NULL, images[y][0], 0,
+						       0, true, progress);
 	    }
 	  if (params.panorama_map)
 	    {
@@ -239,20 +257,38 @@ stitch_project::analyze_images (progress_info *progress)
 	{
 	  coord_t xs;
 	  coord_t ys;
-	  if (!analyze (x, y, progress))
-	    return false;
-	  if (!analyze (x + 1,y, progress))
-	    return false;
-	  if (!images[y][x].get_analyzer().find_best_match (params.min_overlap_percentage, params.max_overlap_percentage, images[y][x+1].get_analyzer(), params.cpfind, &xs, &ys, params.limit_directions ? 0 : -1, images[y][x].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
+	  if (progress)
+	    progress->push ();
+	  if (!analyze (x, y, progress)
+	      || !analyze (x + 1, y, progress))
+	    {
+	      if (progress)
+		progress->pop ();
+	      return false;
+	    }
+	  if (!images[y][x].get_analyzer ().
+	      find_best_match (params.min_overlap_percentage,
+			       params.max_overlap_percentage,
+			       images[y][x + 1].get_analyzer (),
+			       params.cpfind, &xs, &ys,
+			       params.limit_directions ? 0 : -1,
+			       images[y][x].basic_scr_to_img_map,
+			       images[y][x + 1].basic_scr_to_img_map,
+			       report_file, progress))
 	    {
 	      progress->pause_stdout ();
-	      fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
+	      fprintf (stderr, "Can not find good overlap of %s and %s\n",
+		       images[y][x].filename.c_str (),
+		       images[y][x + 1].filename.c_str ());
 	      if (report_file)
 		print_status (report_file);
-	      exit (1);
+	      if (progress)
+		progress->pop ();
+	      progress->resume_stdout ();
+	      return false;
 	    }
-	  images[y][x+1].xpos = images[y][x].xpos + xs;
-	  images[y][x+1].ypos = images[y][x].ypos + ys;
+	  images[y][x + 1].xpos = images[y][x].xpos + xs;
+	  images[y][x + 1].ypos = images[y][x].ypos + ys;
 	  if (params.panorama_map)
 	    {
 	      progress->pause_stdout ();
@@ -262,48 +298,93 @@ stitch_project::analyze_images (progress_info *progress)
 	  /* Confirm position.  */
 	  if (y)
 	    {
-	      if (!images[y-1][x+1].get_analyzer().find_best_match (params.min_overlap_percentage, params.max_overlap_percentage, images[y][x+1].get_analyzer(), params.cpfind, &xs, &ys, params.limit_directions ? 1 : -1, images[y-1][x+1].basic_scr_to_img_map, images[y][x+1].basic_scr_to_img_map, report_file, progress))
+	      if (!images[y - 1][x + 1].get_analyzer ().
+		  find_best_match (params.min_overlap_percentage,
+				   params.max_overlap_percentage,
+				   images[y][x + 1].get_analyzer (),
+				   params.cpfind, &xs, &ys,
+				   params.limit_directions ? 1 : -1,
+				   images[y - 1][x + 1].basic_scr_to_img_map,
+				   images[y][x + 1].basic_scr_to_img_map,
+				   report_file, progress))
 		{
 		  progress->pause_stdout ();
-		  fprintf (stderr, "Can not find good overlap of %s and %s\n", images[y][x].filename.c_str (), images[y][x + 1].filename.c_str ());
+		  fprintf (stderr, "Can not find good overlap of %s and %s\n",
+			   images[y][x].filename.c_str (),
+			   images[y][x + 1].filename.c_str ());
 		  if (report_file)
 		    print_status (report_file);
-		  exit (1);
+		  if (progress)
+		    progress->pop ();
+		  progress->resume_stdout ();
+		  return false;
 		}
-	      if (images[y][x+1].xpos != images[y-1][x+1].xpos + xs
-		  || images[y][x+1].ypos != images[y-1][x+1].ypos + ys)
+	      if (images[y][x + 1].xpos != images[y - 1][x + 1].xpos + xs
+		  || images[y][x + 1].ypos != images[y - 1][x + 1].ypos + ys)
 		{
 		  progress->pause_stdout ();
-		  fprintf (stderr, "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
+		  fprintf (stderr,
+			   "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n",
+			   images[y][x + 1].filename.c_str (),
+			   images[y][x + 1].xpos, images[y][x + 1].ypos,
+			   images[y - 1][x + 1].xpos + xs,
+			   images[y - 1][x + 1].ypos + ys);
 		  if (report_file)
-		  {
-		    fprintf (report_file, "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n", images[y][x + 1].filename.c_str (), images[y][x+1].xpos, images[y][x+1].ypos, images[y-1][x+1].xpos + xs, images[y-1][x+1].ypos + ys);
-		    print_status (report_file);
-		  }
-		  exit (1);
+		    {
+		      fprintf (report_file,
+			       "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n",
+			       images[y][x + 1].filename.c_str (),
+			       images[y][x + 1].xpos, images[y][x + 1].ypos,
+			       images[y - 1][x + 1].xpos + xs,
+			       images[y - 1][x + 1].ypos + ys);
+		      print_status (report_file);
+		    }
 		}
 
 	    }
 	  if (y)
 	    {
-	      images[y-1][x+1].compare_contrast_with (images[y][x], progress);
+	      images[y - 1][x + 1].compare_contrast_with (images[y][x],
+							  progress);
 	      if (params.geometry_info || params.individual_geometry_info)
-	        images[y-1][x+1].output_common_points (NULL, images[y][x], 0, 0, true, progress);
-	      images[y-1][x+1].compare_contrast_with (images[y][x+1], progress);
+		images[y - 1][x + 1].output_common_points (NULL, images[y][x],
+							   0, 0, true,
+							   progress);
+	      images[y - 1][x + 1].compare_contrast_with (images[y][x + 1],
+							  progress);
 	      if (params.geometry_info || params.individual_geometry_info)
-	        images[y-1][x+1].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
+		images[y - 1][x + 1].output_common_points (NULL,
+							   images[y][x + 1],
+							   0, 0, true,
+							   progress);
 	      if (x + 2 < params.width)
-	      {
-	         images[y-1][x+1].compare_contrast_with (images[y][x+2], progress);
-		 if (params.geometry_info || params.individual_geometry_info)
-		   images[y-1][x+1].output_common_points (NULL, images[y][x+2], 0, 0, true, progress);
-	      }
+		{
+		  images[y - 1][x +
+				1].compare_contrast_with (images[y][x + 2],
+							  progress);
+		  if (params.geometry_info || params.individual_geometry_info)
+		    images[y - 1][x + 1].output_common_points (NULL,
+							       images[y][x +
+									 2],
+							       0, 0, true,
+							       progress);
+		}
 	    }
-	  images[y][x].compare_contrast_with (images[y][x+1], progress);
-	 if (params.geometry_info || params.individual_geometry_info)
-            images[y][x].output_common_points (NULL, images[y][x+1], 0, 0, true, progress);
+	  images[y][x].compare_contrast_with (images[y][x + 1], progress);
+	  if (params.geometry_info || params.individual_geometry_info)
+	    images[y][x].output_common_points (NULL, images[y][x + 1], 0, 0,
+					       true, progress);
 	  if (report_file)
 	    fflush (report_file);
+	  if (progress)
+	    progress->pop ();
+	  if (progress)
+	    {
+	      progress->pop ();
+	      progress->inc_progress ();
+	      if (progress->cancel_requested ())
+		return false;
+	    }
 	}
     }
   if (report_file)

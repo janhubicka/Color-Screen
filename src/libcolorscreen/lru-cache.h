@@ -92,6 +92,8 @@ public:
     int size = 0;
     unsigned long time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
+    if (progress)
+      progress->set_task ("unlocking cache", 1);
     if (pthread_mutex_lock (&lock))
       abort ();
     time++;
