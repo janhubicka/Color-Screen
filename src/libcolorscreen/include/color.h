@@ -5,6 +5,7 @@
 
 typedef float luminosity_t;
 struct xyz {luminosity_t x, y, z;};
+struct xyY {luminosity_t x, y, Y;};
 
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float

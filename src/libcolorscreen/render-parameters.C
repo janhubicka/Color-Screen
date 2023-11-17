@@ -3,6 +3,7 @@
 #include "icc.h"
 const char * render_parameters::color_model_names [] = {
   "none",
+  "scan",
   "red",
   "green",
   "blue",
@@ -43,6 +44,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */
       case render_parameters::color_model_none:
+      case render_parameters::color_model_scan:
 	*is_srgb = true;
 	break;
       case render_parameters::color_model_red:

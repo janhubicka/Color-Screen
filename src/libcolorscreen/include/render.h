@@ -94,6 +94,7 @@ struct DLL_PUBLIC render_parameters
   enum color_model_t
     {
       color_model_none,
+      color_model_scan,
       color_model_red,
       color_model_green,
       color_model_blue,

@@ -208,12 +208,26 @@ render_to_scr::render_tile (enum render_type_t render_type,
   const bool lock_p = false;
   if (lock_p )
     global_rendering_lock.lock ();
+  if (color && !img.rgbdata && (!img.stitch || !img.stitch->images[0][0].img->rgbdata))
+    color = false;
   if (progress)
     progress->set_task ("precomputing", 1);
   switch (render_type)
     {
     case render_type_original:
       {
+	render_parameters my_rparam;
+	my_rparam.backlight_correction = rparam.backlight_correction;
+	my_rparam.gamma = rparam.gamma;
+	my_rparam.scan_exposure = rparam.scan_exposure;
+	my_rparam.dark_point = rparam.dark_point;
+	my_rparam.brightness = rparam.brightness;
+	my_rparam.color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+	my_rparam.mix_red = rparam.mix_red;
+	my_rparam.mix_green = rparam.mix_green;
+	my_rparam.mix_blue = rparam.mix_blue;
+	my_rparam.sharpen_amount = rparam.sharpen_amount;
+	my_rparam.sharpen_radius = rparam.sharpen_radius;
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
@@ -242,7 +256,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	    return false;
 	  }
 
-	if ((!color || !img.rgbdata) && step > 1)
+	if (!color && step > 1)
 	  {
 	    luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
 	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);

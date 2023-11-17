@@ -56,6 +56,11 @@ public:
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
+
+  xyY primary_red;
+  xyY primary_green;
+  xyY primary_blue;
+  xyz whitepoint;
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */
