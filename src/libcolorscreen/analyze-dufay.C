@@ -176,7 +176,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
       maxy = std::min (maxy, img->height);
 
       if (progress)
-	progress->set_task ("determining intensities of Dufay screen patches (precise mode)", maxy - miny + m_height * 2 * 3);
+	progress->set_task ("determining intensities of Dufay screen patches (precise mode)", maxy - miny + m_height * 3);
 
       analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 

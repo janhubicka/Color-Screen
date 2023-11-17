@@ -66,5 +66,7 @@ private:
   /* True of the data is owned by the structure.  */
   bool own;
   bool m_preload_all;
+
+  bool parse_icc_profile();
 };
 #endif

@@ -748,12 +748,27 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, 
   const char *error;
   if (!render2)
     {
+      if (progress)
+	progress->push ();
       if (!load_img (&error, progress))
-	return false;
+	{
+	  if (progress)
+	    progress->pop ();
+	  return false;
+	}
       render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
       render2->set_color_display ();
-      render2->precompute_all (progress);
+      if (!render2->precompute_all (progress))
+	{
+	  delete render2;
+	  render2 = NULL;
+	  if (progress)
+	    progress->pop ();
+	  return false;
+	}
       release_img ();
+      if (progress)
+	progress->pop ();
       loaded = true;
     }
   else

@@ -734,8 +734,12 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
   stitch_image &simg = m_img->stitch->images[y][x];
   if (!simg.img)
     {
+      if (progress)
+	progress->push();
       if (!simg.init_loader (error, progress))
 	return false;
+      if (progress)
+	progress->pop();
       *permille = 1000 * m_curr_img / (m_max_img + 1);
       if (!simg.img->allocate ())
 	{
@@ -747,12 +751,16 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
       return true;
     }
   int permille2;
+  if (progress)
+    progress->push();
   if (!simg.load_part (&permille2, error, progress))
     {
       delete simg.img;
       simg.img = NULL;
       return false;
     }
+  if (progress)
+    progress->pop();
   *permille = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
   if (permille2 == 1000)
     {
@@ -837,6 +845,14 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
       loader = NULL;
     }
   return ret;
+}
+
+bool
+image_data::parse_icc_profile ()
+{
+  if (!icc_profile)
+    return true;
+  return false;
 }
 
 bool

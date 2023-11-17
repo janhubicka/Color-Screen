@@ -91,7 +91,11 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 			  //rparams[y * stitch.params.width + ix];
 		  //rparam2 = rparam;
 		  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
+		  if (progress)
+		    progress->push ();
 		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
+		  if (progress)
+		    progress->pop ();
 		  if (progress && progress->cancel_requested ())
 		    break;
 		}
@@ -140,7 +144,11 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 			{
 			  render_parameters rparam2 = rparam;
 			  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
+			  if (progress)
+			    progress->push ();
 			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
+			  if (progress)
+			    progress->pop ();
 			}
 		    }
 		    if (hack)
