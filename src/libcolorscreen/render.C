@@ -388,7 +388,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
       /* Matrix converting dyes either to XYZ or sRGB.  */
       bool spectrum_based;
       bool is_srgb;
-      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based);
+      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img);
       if (is_srgb)
 	color = dyes * color;
       else

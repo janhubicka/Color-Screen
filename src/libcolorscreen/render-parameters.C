@@ -34,7 +34,7 @@ const char * render_parameters::output_profile_names [] = {
 
 /* Return matrix which contains the color of dyes either as rgb or xyz.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based)
+render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img)
 {
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
@@ -44,8 +44,17 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */
       case render_parameters::color_model_none:
-      case render_parameters::color_model_scan:
 	*is_srgb = true;
+	break;
+      case render_parameters::color_model_scan:
+	if (!img)
+	  {
+	    *is_srgb = true;
+	    break;
+	  }
+	  dyes = matrix_by_dye_xyY (img->primary_red.x, img->primary_red.y, img->primary_red.Y,
+				    img->primary_green.x, img->primary_green.y, img->primary_green.Y,
+				    img->primary_blue.x, img->primary_blue.y, img->primary_blue.Y);
 	break;
       case render_parameters::color_model_red:
 	{
@@ -213,11 +222,11 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based)
 }
 
 size_t
-render_parameters::get_icc_profile (void **buffer)
+render_parameters::get_icc_profile (void **buffer, image_data *img)
 {
   bool is_rgb;
   bool spectrum_based;
-  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based);
+  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based, img);
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};

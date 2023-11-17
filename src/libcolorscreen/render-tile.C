@@ -239,9 +239,9 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
-		[&img,&progress,color] (render_parameters &rparam, int x, int y) mutable
+		[&img,&progress,color] (render_parameters &my_rparam, int x, int y) mutable
 		{
-		  render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		  render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255);
 		  if (color)
 		    r->set_color_display ();
 		  if (!r->precompute_all (progress))
@@ -251,10 +251,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		    }
 		  return r;
 		},
-		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
+		img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
 	    break;
 	  }
-	render_img render (param, img, rparam, 255);
+	render_img render (param, img, my_rparam, 255);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))

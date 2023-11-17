@@ -29,9 +29,9 @@ matrix_by_dye_xyY (luminosity_t rx, luminosity_t ry, luminosity_t rY,
 		  r.y, g.y, b.y, 0,
 		  r.z, g.z, b.z, 0,
 		  0,   0,   0,   1);
-  xyz white;
-  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
-  m.normalize_grayscale (white.x, white.y, white.z);
+  //xyz white;
+  //srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+  //m.normalize_grayscale (white.x, white.y, white.z);
   return m;
 }
 

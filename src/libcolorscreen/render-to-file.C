@@ -438,7 +438,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     }
 
   if (rparam.output_profile == render_parameters::output_profile_original)
-    icc_profile_len = rparam.get_icc_profile (&icc_profile);
+    icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan);
 
   /* Initialize rendering engine.  */
   if (!complete_rendered_file_parameters (param, scan, &rfparams))

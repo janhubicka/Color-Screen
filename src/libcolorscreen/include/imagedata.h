@@ -61,6 +61,7 @@ public:
   xyY primary_green;
   xyY primary_blue;
   xyz whitepoint;
+  class backlight_correction_parameters *lcc;
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */

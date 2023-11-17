@@ -5,6 +5,7 @@
 #include <tiffio.h>
 #include <turbojpeg.h>
 #include <zip.h>
+#include <lcms2.h>
 #include "lru-cache.h"
 #include "include/imagedata.h"
 #include "include/backlight-correction.h"
@@ -88,8 +89,8 @@ public:
   virtual bool load_part (int *permille, const char **error, progress_info *progress);
   virtual ~raw_image_data_loader ()
   {
-    if (lcc)
-      delete lcc;
+    /*if (lcc)
+      delete lcc;*/
   }
 private:
   backlight_correction_parameters *lcc;
@@ -117,7 +118,7 @@ private:
 
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, loader (NULL), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), loader (NULL), own (false)
 { 
 }
 
@@ -141,6 +142,8 @@ image_data::~image_data ()
       MapAlloc::Free (*rgbdata);
       free (rgbdata);
     }
+  if (lcc)
+    delete lcc;
 }
 
 bool
@@ -598,6 +601,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
+	      m_img->lcc = lcc;
 	      free (mbuffer.data);
 	      zip_fclose (zip_file);
 	      break;
@@ -737,6 +741,8 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
     {
       if (progress)
 	progress->push();
+      if (progress)
+	progress->set_task ("loading image header",1);
       if (!simg.init_loader (error, progress))
 	return false;
       if (progress)
@@ -798,7 +804,10 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
 	    }
 	}
       if (m_curr_img == m_max_img)
-	return 1000;
+	{
+	  *permille = 1000;
+	  return true;
+	}
       else
 	m_curr_img++;
       return true;
@@ -844,6 +853,9 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
     {
       delete loader;
       loader = NULL;
+      /* If color profile is available, parse it.  */
+      if (icc_profile)
+	parse_icc_profile ();
     }
   return ret;
 }
@@ -853,6 +865,33 @@ image_data::parse_icc_profile ()
 {
   if (!icc_profile)
     return true;
+  cmsHPROFILE hInProfile = cmsOpenProfileFromMem (icc_profile, icc_profile_size);
+  if (!hInProfile)
+    return false;
+  cmsHTRANSFORM hTransform = cmsCreateTransform(hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT, INTENT_ABSOLUTE_COLORIMETRIC, 0);
+  float rgb_buffer[] = {0,0,0,
+			1,0,0,
+			0,1,0,
+			0,0,1};
+  float xyz_buffer[4*3];
+  cmsDoTransform (hTransform, rgb_buffer, xyz_buffer, 4);
+  xyz_to_xyY (xyz_buffer[3]-xyz_buffer[0], xyz_buffer[4]-xyz_buffer[1], xyz_buffer[5]-xyz_buffer[2],
+	      &primary_red.x, &primary_red.y, &primary_red.Y);
+  xyz_to_xyY (xyz_buffer[6]-xyz_buffer[0], xyz_buffer[7]-xyz_buffer[1], xyz_buffer[8]-xyz_buffer[2],
+	      &primary_green.x, &primary_green.y, &primary_green.Y);
+  xyz_to_xyY (xyz_buffer[9]-xyz_buffer[0], xyz_buffer[10]-xyz_buffer[1], xyz_buffer[11]-xyz_buffer[2],
+	      &primary_blue.x, &primary_blue.y, &primary_blue.Y);
+#if 0
+  xyz r = xyY_to_xyz (primary_red.x, primary_red.y, primary_red.Y);
+  printf ("%f %f %f   %f %f %f\n", primary_red.x, primary_red.y, primary_red.Y, r.x, r.y, r.z);
+  r = xyY_to_xyz (primary_green.x, primary_green.y, primary_green.Y);
+  printf ("%f %f %f   %f %f %f\n", primary_green.x, primary_green.y, primary_green.Y, r.x, r.y, r.z);
+  r = xyY_to_xyz (primary_blue.x, primary_blue.y, primary_blue.Y);
+  printf ("%f %f %f   %f %f %f\n", primary_blue.x, primary_blue.y, primary_blue.Y, r.x, r.y, r.z);
+#endif
+
+  cmsDeleteTransform (hTransform);
+  cmsCloseProfile (hInProfile);
   return false;
 }
 

@@ -18,10 +18,16 @@ std::string read_string (memory_buffer *f)
 }
 
 static void
-skip (memory_buffer *f, int l)
+skip (memory_buffer *f, int l, bool verbose)
 {
 	for (int i = 0; i < l; i++)
-	  f->getc ();
+	{
+	  unsigned char c = f->getc ();
+	  if (verbose)
+	    printf (" 0x%x", c);
+	}
+	if (verbose)
+	  printf ("\n");
 }
 
 static uint16_t
@@ -50,7 +56,9 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	    return NULL;
 	  }
 	/* Unknown stuff.  */
-	skip (f, 9);
+	if (verbose)
+	  printf ("XCon: ");
+	skip (f, 9, verbose);
 	s = read_string (f);
 	if (s != "TYPE")
 	  {
@@ -124,42 +132,52 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	uint16_t sn2 = read_uint16 (f);
 	if (verbose)
 	  printf ("S/N: %i %s %i\n", sn, s.c_str (), sn2);
-	skip (f, 5);
+	skip (f, 5, verbose);
 	s = read_string (f);
 	if (s != "RAW")
 	  {
 	    fprintf (stderr, "Expected RAW and got %s %li\n", s.c_str (), s.length ());
 	    return NULL;
 	  }
-	skip (f, 20);
+	if (verbose)
+	  printf ("RAW: ");
+	skip (f, 20, verbose);
 	s = read_string (f);
 	if (s != "hash")
 	  {
 	    fprintf (stderr, "Expected hash and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 23);
+	if (verbose)
+	  printf ("hash: ");
+	skip (f, 23, verbose);
 	s = read_string (f);
 	if (s != "Lens")
 	  {
 	    fprintf (stderr, "Expected Lens and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 3);
+	if (verbose)
+	  printf ("lens: ");
+	skip (f, 3, verbose);
 	s = read_string (f);
 	if (s != "Par")
 	  {
 	    fprintf (stderr, "Expected Par and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 20);
+	if (verbose)
+	  printf ("par: ");
+	skip (f, 20, verbose);
 	s = read_string (f);
 	if (s != "Shift")
 	  {
 	    fprintf (stderr, "Expected Shift and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 18);
+	if (verbose)
+	  printf ("Shift: ");
+	skip (f, 18, verbose);
 	s = read_string (f);
 	if (s != "Chroma")
 	  {
@@ -175,14 +193,18 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	    fprintf (stderr, "Expected REF and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 7);
+	if (verbose)
+	  printf ("REF: ");
+	skip (f, 7, verbose);
 	s = read_string (f);
 	if (s != "Hdr")
 	  {
 	    fprintf (stderr, "Expected Hdr and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 20);
+	if (verbose)
+	  printf ("Hdr: ");
+	skip (f, 20, verbose);
 	s = read_string (f);
 	if (s != "RGBMean")
 	  {
@@ -209,7 +231,9 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	    fprintf (stderr, "Expected REF and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 11);
+	if (verbose)
+	  printf ("REF: ");
+	skip (f, 11, verbose);
 	s = read_string (f);
 	if (s != "LightFalloff")
 	  {
@@ -225,14 +249,18 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	    fprintf (stderr, "Expected REF and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 9);
+	if (verbose)
+	  printf ("REF: ");
+	skip (f, 9, verbose);
 	s = read_string (f);
 	if (s != "Hdr")
 	  {
 	    fprintf (stderr, "Expected Hdr and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 22);
+	if (verbose)
+	  printf ("Hdr: ");
+	skip (f, 22, verbose);
 	s = read_string (f);
 	if (s != "Model")
 	  {
@@ -248,7 +276,9 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	    fprintf (stderr, "Expected REF and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
-	skip (f, 13);
+	if (verbose)
+	  printf ("REF: ");
+	skip (f, 13, verbose);
 	s = read_string (f);
 	if (s != "DAT")
 	  {
@@ -291,7 +321,9 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)
 		    
 		    
-		    llci->set_luminosity(110-x, 83-y, (1+((weight2-1)*32)) /*((int)val - 32768)/32.0*/);
+		    //llci->set_luminosity (110-x, 83-y, (weight-1)*16 + 1);
+		    llci->set_luminosity (110-x, 83-y, 1/((weight2-1)*32 + 1));
+		    //llci->set_luminosity(110-x, 83-y, (1+((weight2-1)*32)) /*((int)val - 32768)/32.0*/);
 		    //llci->set_weight(110-x, 83-y, 1/(1+((weight-1)*32)), -((int)val2 - 32768)/8.0);
 #if 0
 		for (int c = 0; c < 2; c++)

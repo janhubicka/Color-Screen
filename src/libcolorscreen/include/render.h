@@ -174,8 +174,8 @@ struct DLL_PUBLIC render_parameters
 
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based);
-  size_t get_icc_profile (void **buf);
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img);
+  size_t get_icc_profile (void **buf, image_data *img);
   const tile_adjustment&
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
   tile_adjustment&
