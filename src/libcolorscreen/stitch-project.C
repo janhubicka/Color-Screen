@@ -510,11 +510,15 @@ stitch_project::write_tiles (render_parameters rparam, struct render_to_file_par
 	*error = "Precomputation failed (out of memory)";
 	return false;
       }
+  if (progress)
+    progress->set_task ("rendering tiles", params.height * params.width);
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
       {
 	for (int i = 0; i < n; i++)
 	  {
+	    if (progress && progress->cancel_requested ())
+	      return false;
 	    const char *fname = rfparams[i].filename;
 	    struct render_to_file_params rfparams2 = rfparams[i];
 	    std::string fname2;
@@ -523,10 +527,17 @@ stitch_project::write_tiles (render_parameters rparam, struct render_to_file_par
 	    else
 	      fname2 = adjusted_filename (images[y][x].filename, render_to_file_params::output_mode_properties[rfparams2.mode].name,".tif",-1,-1);
 	    rfparams2.filename = fname2.c_str ();
+
+	    if (progress)
+	      progress->push ();
 	      
 	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, error, progress))
 	      return false;
+	    if (progress)
+	      progress->pop ();
 	  }
+	if (progress)
+	  progress->inc_progress ();
       }
   return true;
 }

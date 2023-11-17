@@ -653,6 +653,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 bool
 raw_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
+#pragma omp parallel for default(none) shared(m_img,RawProcessor)
   for (int y = 0; y < m_img->height; y++)
     for (int x = 0; x < m_img->width; x++)
       {
