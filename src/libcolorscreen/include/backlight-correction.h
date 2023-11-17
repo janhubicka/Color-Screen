@@ -91,25 +91,17 @@ public:
   inline
   luminosity_t apply (float val, int x, int y, enum backlight_correction_parameters::channel channel)
   {
-#if 0
-    coord_t xx = x * (m_width / (coord_t)width);
-    coord_t yy = y * (m_height / (coord_t)height);
-    int sx, sy;
-    coord_t rx = my_modf (xx, &sx);
-    coord_t ry = my_modf (yx, &sy);
-    struct entry &e00 = m_weights[(yy + 0) * m_width + xx];
-    struct entry &e10 = m_weights[std::max ((yy + 1) * m_width + xx];
-    struct entry &e01 = m_weights[(yy + 0) * m_width + xx];
-    struct entry &e11 = m_weights[(yy + 1) * m_width + xx];
-#endif
-
-#if 1
-    int xx = x * m_img_width_rec;
-    int yy = y * m_img_height_rec;
-    struct entry &e = m_weights[yy * m_width + xx];
-    //printf ("%i %i %i %i %f\n",x,y,xx,yy,e.mult[channel]);
-    return (val - m_black) * e.mult[channel] + m_black/*+e.add[channel]*/;
-#endif
+    int xx, yy;
+    coord_t rx = my_modf (x * m_img_width_rec, &xx);
+    coord_t ry = my_modf (y * m_img_height_rec, &yy);
+    struct entry &e00 = m_weights[yy * m_width + xx];
+    struct entry &e10 = m_weights[yy * m_width + xx + (xx == m_width - 1 ? 0 : 1)];
+    luminosity_t mult0 = e00.mult[channel] * (1 - rx) + e10.mult[channel] * rx;;
+    struct entry &e01 = m_weights[yy * m_width + (yy == m_height - 1 ? 0 : m_width) + xx];
+    struct entry &e11 = m_weights[yy * m_width + (yy == m_height - 1 ? 0 : m_width) + xx + (xx == m_width - 1 ? 0 : 1)];
+    luminosity_t mult1 = e01.mult[channel] * (1 - rx) + e11.mult[channel] * rx;;
+    luminosity_t mult = mult0 * (1 - ry) + mult1 * ry;
+    return (val - m_black) * mult + m_black;
   }
   bool initialized_p ()
   {

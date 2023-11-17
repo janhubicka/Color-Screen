@@ -241,7 +241,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	  }
 	uint16_t model3 = read_uint16 (f);
 	if (verbose)
-	  printf ("Model: %i\n", model);
+	  printf ("Model: %i\n", model3);
 	s = read_string (f);
 	if (s != "REF")
 	  {
@@ -273,6 +273,8 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	//printf ("%i\n", bin3);
 	uint16_t bin4 = read_uint16 (f);
 	//printf ("%i\n", bin4);
+	if (verbose)
+	  printf ("Bin %i %i %i %i\n",bin, bin2, bin3, bin4);
 	class backlight_correction_parameters *llci = new class backlight_correction_parameters ();
 	bool enabled[4] = {true, true, true, false};
 	llci->alloc (111, 84, enabled);

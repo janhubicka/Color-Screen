@@ -968,7 +968,7 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   coord_t yoffset = (ymin - stitch_ymin) / rfparams.ystep;
 
   /* Lame: we need to find our indexes to figure out what adjustment applies.  */
-  int iy, ix;
+  int iy, ix = 0;
   for (iy = 0; iy < m_prj->params.height; iy++)
     {
       for (ix = 0; ix < m_prj->params.width; ix++)
