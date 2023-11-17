@@ -22,7 +22,7 @@ class image_data_loader
 {
 public:
   virtual bool init_loader (const char *name, const char **error, progress_info *progress) = 0;
-  virtual bool load_part (int *permille, const char **error) = 0;
+  virtual bool load_part (int *permille, const char **error, progress_info *progress) = 0;
   virtual ~image_data_loader ()
   { }
   bool grayscale;
@@ -36,7 +36,7 @@ public:
   : m_img (img), m_jpeg_buf (NULL), m_tj_instance (NULL), m_img_buf (NULL)
   { }
   virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error);
+  virtual bool load_part (int *permille, const char **error, progress_info *progress);
   virtual ~jpg_image_data_loader ()
   {
     if (m_jpeg_buf)
@@ -60,7 +60,7 @@ public:
   : m_tif (NULL), m_img (img), m_buf (NULL)
   { }
   virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error);
+  virtual bool load_part (int *permille, const char **error, progress_info *progress);
   virtual ~tiff_image_data_loader ()
   {
     if (m_tif)
@@ -85,7 +85,7 @@ public:
   : lcc(NULL),m_img (img)
   { }
   virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error);
+  virtual bool load_part (int *permille, const char **error, progress_info *progress);
   virtual ~raw_image_data_loader ()
   {
     if (lcc)
@@ -95,6 +95,24 @@ private:
   backlight_correction_parameters *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
+};
+
+class stitch_image_data_loader: public image_data_loader
+{
+public:
+  stitch_image_data_loader (image_data *img, bool preload)
+  : m_img (img), m_preload_all (preload)
+  { }
+  virtual bool init_loader (const char *name, const char **error, progress_info *);
+  virtual bool load_part (int *permille, const char **error, progress_info *progress);
+  virtual ~stitch_image_data_loader ()
+  {
+  }
+private:
+  image_data *m_img;
+  bool m_preload_all;
+  int m_curr_img;
+  int m_max_img;
 };
 
 
@@ -290,7 +308,7 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
 }
 
 bool
-tiff_image_data_loader::load_part (int *permille, const char **error)
+tiff_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
   if ((int)m_row < m_img->height)
     {
@@ -461,7 +479,7 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
 }
 
 bool
-jpg_image_data_loader::load_part (int *permille, const char **error)
+jpg_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
   int width = m_img->width;
   int height = m_img->height;
@@ -633,7 +651,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 }
 
 bool
-raw_image_data_loader::load_part (int *permille, const char **error)
+raw_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
   for (int y = 0; y < m_img->height; y++)
     for (int x = 0; x < m_img->width; x++)
@@ -663,6 +681,123 @@ raw_image_data_loader::load_part (int *permille, const char **error)
 }
 
 bool
+stitch_image_data_loader::init_loader (const char *name, const char **error, progress_info *progress)
+{
+  if (progress)
+    progress->set_task ("opening stich project",1);
+  FILE *f = fopen (name, "rt");
+  if (!f)
+    {
+      *error = "Can not open file";
+      return false;
+    }
+  if (progress)
+    progress->set_task ("loading stich project",1);
+  m_img->stitch = new stitch_project ();
+  m_img->stitch->set_path_by_filename (name);
+  if (!m_img->stitch->load (f, error))
+    {
+      fclose (f);
+      delete m_img->stitch;
+      m_img->stitch = NULL;
+      return false;
+    }
+  fclose (f);
+  if (!m_img->stitch->initialize ())
+    {
+      *error = "Can not initialize stitch project";
+      delete m_img->stitch;
+      m_img->stitch = NULL;
+      return false;
+    }
+  m_img->stitch->determine_angle ();
+  int xmax, ymax;
+  m_img->stitch->determine_viewport (m_img->xmin, xmax, m_img->ymin, ymax);
+  if (m_preload_all)
+    {
+      m_img->stitch->keep_all_images ();
+      increase_lru_cache_sizes_for_stitch_projects (m_img->stitch->params.width * m_img->stitch->params.height);
+    }
+  m_img->width = xmax - m_img->xmin;
+  m_img->height = ymax - m_img->ymin;
+  m_curr_img = 0;
+  m_max_img = m_preload_all ? m_img->stitch->params.width * m_img->stitch->params.height - 1 : 0;
+  
+  return true;
+}
+
+bool
+stitch_image_data_loader::load_part (int *permille, const char **error, progress_info *progress)
+{
+  int y = m_curr_img / m_img->stitch->params.width;
+  int x = m_curr_img % m_img->stitch->params.width;
+  stitch_image &simg = m_img->stitch->images[y][x];
+  if (!simg.img)
+    {
+      if (!simg.init_loader (error, progress))
+	return false;
+      *permille = 1000 * m_curr_img / (m_max_img + 1);
+      if (!simg.img->allocate ())
+	{
+	  *error = "out of memory";
+	  delete simg.img;
+	  simg.img = NULL;
+	  return false;
+	}
+      return true;
+    }
+  int permille2;
+  if (!simg.load_part (&permille2, error, progress))
+    {
+      delete simg.img;
+      simg.img = NULL;
+      return false;
+    }
+  *permille = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
+  if (permille2 == 1000)
+    {
+      if (!x && !y)
+	{
+	  m_img->maxval = simg.img->maxval;
+	  m_img->icc_profile_size = simg.img->icc_profile_size;
+	  if (simg.img->icc_profile)
+	    {
+	      m_img->icc_profile = malloc (simg.img->icc_profile_size);
+	      m_img->icc_profile_size = simg.img->icc_profile_size;
+	      memcpy (m_img->icc_profile, simg.img->icc_profile, m_img->icc_profile_size);
+	    }
+	  m_img->xdpi = simg.img->xdpi;
+	  m_img->ydpi =simg .img->ydpi;
+	}
+      else
+	{
+	  if (m_img->maxval != simg.img->maxval)
+	    {
+	      *error = "images in stitch project must all have the same bit depth";
+	      return false;
+	    }
+	  if (m_img->xdpi != simg.img->xdpi || m_img->ydpi != simg.img->ydpi)
+	    {
+	      *error = "images in stitch project must all have the same DPI";
+	      return false;
+	    }
+	  if (m_img->icc_profile_size != simg.img->icc_profile_size
+	      || memcmp (m_img->icc_profile, simg.img->icc_profile, m_img->icc_profile_size))
+	    {
+	      *error = "images in stitch project must all have the same color profile";
+	      return false;
+	    }
+	}
+      if (m_curr_img == m_max_img)
+	return 1000;
+      else
+	m_curr_img++;
+      return true;
+    }
+  return true;
+}
+
+bool
 image_data::init_loader (const char *name, bool preload_all, const char **error, progress_info *progress)
 {
   assert (!loader);
@@ -676,44 +811,7 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
   else if (has_suffix (name, ".eip"))
     loader = new raw_image_data_loader (this);
   else if (has_suffix (name, ".csprj"))
-    {
-      if (progress)
-	progress->set_task ("opening stich project",1);
-      FILE *f = fopen (name, "rt");
-      if (!f)
-	{
-	  *error = "Can not open file";
-	  return false;
-	}
-      if (progress)
-	progress->set_task ("loading stich project",1);
-      stitch = new stitch_project ();
-      stitch->set_path_by_filename (name);
-      if (!stitch->load (f, error))
-	{
-	  fclose (f);
-	  delete stitch;
-	  stitch = NULL;
-	  return false;
-	}
-      fclose (f);
-      if (!stitch->initialize ())
-	{
-	  *error = "Can not initialize stitch project";
-	  delete stitch;
-	  stitch = NULL;
-	  return false;
-	}
-      stitch->determine_angle ();
-      int xmax, ymax;
-      stitch->determine_viewport (xmin, xmax, ymin, ymax);
-      if (preload_all)
-        stitch->keep_all_images ();
-      width = xmax - xmin;
-      height = ymax - ymin;
-      increase_lru_cache_sizes_for_stitch_projects (stitch->params.width * stitch->params.height);
-      return true;
-    }
+    loader = new stitch_image_data_loader (this, preload_all);
   if (!loader)
     {
       *error = "Unknown file extension";
@@ -731,59 +829,8 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
 bool
 image_data::load_part (int *permille, const char **error, progress_info *progress)
 {
-  if (stitch)
-    {
-      int n = 0;
-      for (int y = 0; y < stitch->params.height; y++)
-	for (int x = 0; x < stitch->params.width; x++)
-	  if (stitch->images[y][x].img)
-	    n++;
-	  else
-	    {
-	      if (m_preload_all)
-	        *permille = n * 1000 / (stitch->params.width * stitch->params.height);
-	      else
-		*permille = 1000;
-	      if (!stitch->images[y][x].load_img (error, progress))
-		return false;
-	      if (!x && !y)
-		{
-		  maxval = stitch->images[0][0].img->maxval;
-		  icc_profile_size = stitch->images[0][0].img->icc_profile_size;
-		  if (stitch->images[0][0].img->icc_profile)
-		    {
-		      icc_profile = malloc (icc_profile_size);
-		      memcpy (icc_profile, stitch->images[0][0].img->icc_profile, icc_profile_size);
-		    }
-		  xdpi = stitch->images[0][0].img->xdpi;
-		  ydpi = stitch->images[0][0].img->ydpi;
-		}
-	      else
-		{
-		  if (maxval != stitch->images[y][x].img->maxval)
-		    {
-		      *error = "images in stitch project must all have the same bit depth";
-		      return false;
-		    }
-		  if (xdpi != stitch->images[y][x].img->xdpi || ydpi != stitch->images[y][x].img->ydpi)
-		    {
-		      *error = "images in stitch project must all have the same DPI";
-		      return false;
-		    }
-		  if (icc_profile_size != stitch->images[y][x].img->icc_profile_size
-		      || memcmp (icc_profile, stitch->images[y][x].img->icc_profile, icc_profile_size))
-		    {
-		      *error = "images in stitch project must all have the same color profile";
-		      return false;
-		    }
-		}
-	      return true;
-	    }
-      *permille = 1000;
-      return true;
-    }
   assert (loader);
-  bool ret = loader->load_part (permille, error);
+  bool ret = loader->load_part (permille, error, progress);
   if (!ret || *permille == 1000)
     {
       delete loader;

@@ -44,6 +44,50 @@ stitch_image::release_image_data (progress_info *progress)
 }
 
 bool
+stitch_image::init_loader (const char **error, progress_info *progress)
+{
+  assert (!img);
+  img = new image_data;
+  if (!img->init_loader (m_prj->add_path (filename).c_str (), false, error, progress))
+    return false;
+  if (img->stitch)
+    {
+      *error = "Can not embedd stitch projects in sitch projects";
+      delete img;
+      img = NULL;
+      return false;
+    }
+  return true;
+}
+bool
+stitch_image::load_part (int *permille, const char **error, progress_info *progress)
+{
+  if (!img->load_part (permille, error, progress))
+    {
+      delete img;
+      img = NULL;
+      return false;
+    }
+  if (*permille == 1000)
+    {
+      img_width = img->width;
+      img_height = img->height;
+      if (m_prj->params.scan_dpi && !img->xdpi)
+	img->xdpi = m_prj->params.scan_dpi;
+      if (m_prj->params.scan_dpi && !img->ydpi)
+	img->ydpi = m_prj->params.scan_dpi;
+      if (!img->rgbdata)
+	{
+	  *error = "source image is not having color channels";
+	  delete img;
+	  img = NULL;
+	  return false;
+	}
+    }
+  return true;
+}
+
+bool
 stitch_image::load_img (const char **error, progress_info *progress)
 {
   refcount++;
@@ -78,30 +122,35 @@ stitch_image::load_img (const char **error, progress_info *progress)
   printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
   if (progress)
     progress->resume_stdout ();
-  img = new image_data;
-  if (!img->load (m_prj->add_path (filename).c_str (), false, error, progress))
+  if (progress)
+    progress->set_task ("loading image header",1);
+  if (!init_loader (error, progress))
     return false;
-  if (img->stitch)
+  if (progress)
+    progress->set_task ("loading",1000);
+  if (!img->allocate ())
     {
-      *error = "Can not embedd stitch projects in sitch projects";
+      *error = "out of memory";
       delete img;
       img = NULL;
       return false;
     }
-  img_width = img->width;
-  img_height = img->height;
-  if (m_prj->params.scan_dpi && !img->xdpi)
-    img->xdpi = m_prj->params.scan_dpi;
-  if (m_prj->params.scan_dpi && !img->ydpi)
-    img->ydpi = m_prj->params.scan_dpi;
-  if (!img->rgbdata)
+  int permille = 0;
+  while (load_part (&permille, error, progress))
     {
-      *error = "source image is not having color channels";
-      delete img;
-      img = NULL;
-      return false;
+      if (permille == 1000)
+	return true;
+      if (progress)
+	progress->set_progress (permille);
+      if (progress && progress->cancel_requested ())
+	{
+	  *error = "cancelled";
+	  delete img;
+	  img = NULL;
+	  return false;
+	}
     }
-  return true;
+  return false;
 }
 
 void

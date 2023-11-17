@@ -132,7 +132,9 @@ class stitch_image
 
   DLL_PUBLIC stitch_image ();
   DLL_PUBLIC ~stitch_image ();
+  bool init_loader (const char **error, progress_info *progress);
   bool load_img (const char **error, progress_info *);
+  bool load_part (int *permille, const char **error, progress_info *progress);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
   bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
