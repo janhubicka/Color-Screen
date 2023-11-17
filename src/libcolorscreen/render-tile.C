@@ -231,6 +231,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	my_rparam.dark_point = rparam.dark_point;
 	my_rparam.brightness = rparam.brightness;
 	my_rparam.color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+	if (color)
+		my_rparam.white_balance = rparam.white_balance;
 	my_rparam.mix_red = rparam.mix_red;
 	my_rparam.mix_green = rparam.mix_green;
 	my_rparam.mix_blue = rparam.mix_blue;
