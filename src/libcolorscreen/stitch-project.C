@@ -666,14 +666,15 @@ sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
   int ymax2 = ymax;
   if (xmin < 0)
     xmin = 0;
-  if (xmax > img->width)
-    xmax = img->width;
+  if (xmax >= img->width)
+    xmax = img->width - 1;
   if (ymin < 0)
     ymin = 0;
-  if (ymax > img->height)
-    ymax = img->height;
+  if (ymax >= img->height)
+    ymax = img->height - 1;
   rgbdata sum = { 0, 0, 0 };
   luminosity_t sumweight = 0;
+  //printf ("Sampling %f %f\n",fx,fy);
   for (y = ymin; y < ymax; y++)
     {
       coord_t yweight = 1;
@@ -702,6 +703,13 @@ sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
 	}
       //printf ("%\n");
     }
+  //printf ("Weight %f\n",sumweight);
+  if (!sumweight)
+  {
+  printf ("Sampling %f %f\n",fx,fy);
+  printf ("Weight %f\n",sumweight);
+	  sumweight = 1;
+  }
   assert (sumweight > 0);
       //printf ("%f\n", sumweight);
   return {sum.red / sumweight, sum.green / sumweight, sum.blue / sumweight};
@@ -732,7 +740,7 @@ black_index (stitch_project *p, int fx, int fy, int x, int y)
 }
 
 bool
-stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
+stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
 {
   /* Set rendering params so we get actual linearized scan data.  */
   render_parameters rparams;
@@ -762,7 +770,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   std::vector <equation> eqns;
 
   /* How many different grayscale values we want to collect.  */
-  const int buckets = 128;
+  const int buckets = 16;
   /* Every sample taken is square 2*range x 2xrange of pixels.  */
   const int range = 3;
   /* Make step big enough so samples does not overlap.  */
@@ -833,7 +841,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 		  std::vector<ratio> ratios[4];
 		  render *render2 = NULL;
 		  if ((!progress || !progress->cancel_requested ()) && !error)
-#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
+//#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
 		    for (int yy = ymin; yy < ymax; yy+= step)
 		      {
 			if ((!progress || !progress->cancel_requested ()) && !error)
@@ -859,7 +867,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 					       std::min (iiy, images[iy][ix].img_height - iiy)));
 			      if (!(weight > 0))
 				continue;
-#pragma omp critical
+//#pragma omp critical
 			      if (!render2)
 				{
 				  if (progress)
@@ -896,13 +904,13 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 #endif
 
 				  if (d.red > minv && red > minv)
-#pragma omp critical
+//#pragma omp critical
 				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red, weight});
 				  if (d.green > minv && green > minv)
-#pragma omp critical
+//#pragma omp critical
 				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green, weight});
 				  if (d.blue > minv && blue > minv)
-#pragma omp critical
+//#pragma omp critical
 				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue, weight});
 				}
 			      /* Implement collection of IR channel.  */
@@ -921,8 +929,9 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 			 {
 			   if (ratios[c].size () > 1000)
 			     {
-			       unsigned long vals[65536*2];
-			       memset (vals, 0, sizeof (vals));
+			       std::vector<unsigned long> vals (6556*2);
+			       for (auto &v:vals)
+				 v = 0;
 			       long int crop0 = 0,cropmax = 0;
 
 			       /* Compute histogram.  */

@@ -285,7 +285,7 @@ public:
 #endif
   }
   bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
-  bool analyze_exposure_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);
+  DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

@@ -400,7 +400,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       file_progress_info progress (stdout);
       const char *error;
-      if (!scan.stitch->analyze_exposure_adjustments (&rparams, &error, &progress))
+      if (!scan.stitch->optimize_tile_adjustments (&rparams, &error, &progress))
 	fprintf (stderr, "exposure analysis failed: %s\n", error);
       display_scheduled = true;
       preview_display_scheduled = true;
