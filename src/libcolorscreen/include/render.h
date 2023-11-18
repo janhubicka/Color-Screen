@@ -734,13 +734,6 @@ render::get_unadjusted_img_pixel (coord_t xp, coord_t yp)
       vec_luminosity_t v4 = {get_unadjusted_data (sx-1, sy+2), get_unadjusted_data (sx, sy+2), get_unadjusted_data (sx+1, sy+2), get_unadjusted_data (sx+2, sy+2)};
       vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
       val = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
-#if 0
-  val = cubic_interpolate (cubic_interpolate (get_data ( sx-1, sy-1), get_data (sx-1, sy), get_data (sx-1, sy+1), get_data (sx-1, sy+2), ry),
-			   cubic_interpolate (get_data ( sx-0, sy-1), get_data (sx-0, sy), get_data (sx-0, sy+1), get_data (sx-0, sy+2), ry),
-			   cubic_interpolate (get_data ( sx+1, sy-1), get_data (sx+1, sy), get_data (sx+1, sy+1), get_data (sx+1, sy+2), ry),
-			   cubic_interpolate (get_data ( sx+2, sy-1), get_data (sx+2, sy), get_data (sx+2, sy+1), get_data (sx+2, sy+2), ry),
-			   rx);
-#endif
       return val;
     }
     return 0;
@@ -794,8 +787,8 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
     }
   else
     {
-      *r = 1;
-      *g = 1;
+      *r = 0;
+      *g = 0;
       *b = 0;
       return;
     }

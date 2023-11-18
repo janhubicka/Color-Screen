@@ -846,10 +846,6 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				continue;
 			      coord_t iix, iiy;
 			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
-#if 0
-			      if (x == 0 && y ==0 && ix == 0 && iy == 1)
-				      printf ("%i-%i %i-%i %i-%i %i-%i i1 %i %i i2 %i %i %i %i \n",xmin,xmax, ymin,ymax,xmin2,xmax2,ymin2,ymax2,xx,yy,(int)iix,(int)iiy, xx-(int)iix, yy - (int)iiy);
-#endif
 			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
 				continue;
 			      /* Watch overflows.  */
@@ -970,8 +966,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				      unsigned long int n = 0;
 				      luminosity_t wsum1b = 0, wsum2b = 0;
 				      luminosity_t wsum3b = 0;
-				      //for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
-				      for (size_t i = 0; i < ratios_buckets[b].size (); i++)
+				      for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
+				      //for (size_t i = 0; i < ratios_buckets[b].size (); i++)
 					{
 					  wsum1b += ratios_buckets[b][i].val1 * ratios_buckets[b][i].weight;
 					  wsum2b += ratios_buckets[b][i].val2 * ratios_buckets[b][i].weight;
@@ -981,7 +977,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				      /* Record equation.  */
 				      if (n)
 					 eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b, wsum3b});
-				      if (verbose || 1)
+				      if (verbose)
 					{
 					  progress->pause_stdout ();
 					  printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
@@ -989,7 +985,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 					}
 				   }
 			     }
-			   else if (verbose || 1)
+			   else if (verbose)
 			      {
 				progress->pause_stdout ();
 				printf ("Found only %li common points of tile %i,%i and %i,%i in channel %s. Ignoring. Search range in image 1 %i..%i,%i..%i image2 %i..%i,%i..%i\n", (long int)ratios[c].size(), x, y, ix, iy, channels[c],xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2);
@@ -1082,24 +1078,15 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       progress->resume_stdout ();
     }
 
-  //gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
+  gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_multifit_linear_workspace * work
     = gsl_multifit_linear_alloc (nequations, nvariables);
   double chisq;
   gsl_multifit_wlinear (A, w, y, c, cov,
 			&chisq, work);
-  //gsl_set_error_handler (old_handler);
+  gsl_set_error_handler (old_handler);
   gsl_multifit_linear_free (work);
   progress->pause_stdout ();
-#if 0
-  /* Print solution.  */
-  for (int y = 0; y < params.height; y++)
-    {
-      for (int x = 0; x < params.width; x++)
-	printf ("  +%4.8f*%4.8f", gsl_vector_get (c, nvariables / 2 + y * params.width + x), gsl_vector_get (c, y * params.width + x));
-      printf ("\n");
-    }
-#endif
   /* Convert into our datastructure.  */
   if (in_rparams->tile_adjustments_width != params.width
       || in_rparams->tile_adjustments_height != params.height)
@@ -1158,7 +1145,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
-	printf ("  +%4.8f*%4.8f", in_rparams->get_tile_adjustment (x,y).dark_point, in_rparams->get_tile_adjustment (x,y).exposure);
+	printf ("  %+4.2f*%1.8f", in_rparams->get_tile_adjustment (x,y).dark_point*65535, in_rparams->get_tile_adjustment (x,y).exposure);
       printf ("\n");
     }
   progress->resume_stdout ();

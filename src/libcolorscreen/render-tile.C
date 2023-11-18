@@ -137,7 +137,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	    /* If no tile was found, just render black pixel. */
 	    if (!stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
 	      {
-		putpixel (pixels, pixelbytes, rowstride, x, y, 255, 0, 0);
+		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;
 	      }
 
@@ -174,7 +174,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		if (!lastrender)
 		  {
 		    lastx = -1;
-		    putpixel (pixels, pixelbytes, rowstride, x, y, 0, 255, 0);
+		    putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		    continue;
 		  }
 		lastx = ix;
