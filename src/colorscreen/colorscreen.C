@@ -331,7 +331,13 @@ analyze_backlight (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
       exit (1);
     }
-  backlight_correction_parameters *cor = backlight_correction_parameters::analyze_scan (scan, 1.0);
+  if (!scan.lcc)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "No PhaseOne LCC in scan: %s\n", argv[0], error);
+      exit (1);
+    }
+  backlight_correction_parameters *cor = scan.lcc;
   FILE *out = fopen (argv[1], "wt");
   if (!out)
     {
@@ -366,6 +372,8 @@ main (int argc, char **argv)
   if (!strcmp (argv[1], "render"))
     render (argc-2, argv+2);
   if (!strcmp (argv[1], "analyze-backlight"))
+    analyze_backlight (argc-2, argv+2);
+  if (!strcmp (argv[1], "export-lcc"))
     analyze_backlight (argc-2, argv+2);
   else
     print_help ();
