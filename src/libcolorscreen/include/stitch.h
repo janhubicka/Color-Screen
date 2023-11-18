@@ -66,7 +66,7 @@ struct stitching_params
   : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
-    outer_tile_border (30), inner_tile_border (2), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10), scan_dpi (0), width (0), height (0), path("")
   {
   }
@@ -155,6 +155,16 @@ class stitch_image
 
   inline analyze_base & get_analyzer ();
   static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
+  bool pixel_maybe_in_range_p (coord_t sx, coord_t sy)
+  {
+    coord_t ax = sx + xshift - xpos;
+    if (ax < 0 || ax >= width)
+      return false;
+    coord_t ay = sy + yshift - ypos;
+    if (ay < 0 || ay >= height)
+      return false;
+    return scr_to_img_map.to_img_in_mesh_range (sx - xpos, sy - ypos);
+  }
   void img_to_common_scr (coord_t ix, coord_t iy, coord_t *sx, coord_t *sy)
   {
     coord_t xx, yy;
@@ -220,6 +230,7 @@ public:
   bool
   tile_for_scr (render_parameters *rparams, coord_t sx, coord_t sy, int *x, int *y, bool only_loaded)
   {
+#if 0
     /* Lookup tile to use. */
     int ix = 0, iy;
     for (iy = 0 ; iy < params.height; iy++)
@@ -237,6 +248,41 @@ public:
     *x = ix;
     *y = iy;
     return true;
+#else
+    bool found = false;
+    int bx = 0, by = 0;
+    int bdist = 0;
+    /* Lookup tile to use. */
+    int ix = 0, iy;
+    for (iy = 0 ; iy < params.height; iy++)
+      {
+	for (ix = 0 ; ix < params.width; ix++)
+	  if ((!only_loaded || images[iy][ix].img)
+	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
+	      && images[iy][ix].pixel_maybe_in_range_p (sx, sy))
+	    {
+	      coord_t xx, yy;
+	      /* Compute image coordinates.  */
+	      images[iy][ix].common_scr_to_img (sx, sy, &xx, &yy);
+	      /* Shortest distance from the edge.  */
+	      int dd = std::min (std::min ((int)xx, images[iy][ix].img_width - (int)xx),
+				 std::min ((int)yy, images[iy][ix].img_height - (int)yy));
+	      /* Try to minimize distances to edges.  */
+	      if (dd>0 && (!found || dd > bdist))
+	        {
+		  bx = ix;
+		  by = iy;
+		  bdist = dd;
+		  found = true;
+	        }
+	    }
+      }
+    if (!found)
+      return false;
+    *x = bx;
+    *y = by;
+    return true;
+#endif
   }
   bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
   bool analyze_exposure_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);

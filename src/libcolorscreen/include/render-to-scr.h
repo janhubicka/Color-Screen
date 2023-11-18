@@ -17,6 +17,7 @@ public:
     m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift, &m_final_yshift, &m_final_width, &m_final_height);
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
+  inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
   DLL_PUBLIC bool precompute_all (bool grayscale_needed, progress_info *progress);
   DLL_PUBLIC bool precompute (bool grayscale_needed, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
@@ -167,6 +168,16 @@ render_to_scr::get_img_pixel_scr (coord_t x, coord_t y)
   coord_t xp, yp;
   m_scr_to_img.to_img (x, y, &xp, &yp);
   return get_img_pixel (xp, yp);
+}
+
+/* Determine grayscale value at a given position in the image.
+   The position is in the screen coordinates.  */
+inline luminosity_t
+render_to_scr::get_unadjusted_img_pixel_scr (coord_t x, coord_t y)
+{
+  coord_t xp, yp;
+  m_scr_to_img.to_img (x, y, &xp, &yp);
+  return get_unadjusted_img_pixel (xp, yp);
 }
 
 struct scr_detect_parameters;

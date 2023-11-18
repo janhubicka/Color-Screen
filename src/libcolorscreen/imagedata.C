@@ -563,7 +563,6 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 	  int len = strlen (name);
 	  if (name[len-4]=='.' && name[len-3]=='l' && name[len-2]=='c' && name[len-1]=='c')
 	    {
-	      printf ("Loading lcc %s\n",name);
 	      if (zip_stat (zip, name, 0, &stat))
 		{
 		  *error = "can not determine length of 0.iiq in the eip zip archive";
@@ -593,7 +592,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
-	      lcc = backlight_correction_parameters::load_captureone_lcc (&mbuffer, true);
+	      lcc = backlight_correction_parameters::load_captureone_lcc (&mbuffer, false);
 	      if (!lcc)
 		{
 		  *error = "can not read LCC file";
@@ -613,6 +612,13 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.params.output_color = 0;
   RawProcessor.imgdata.params.user_qual = 0;
+  RawProcessor.imgdata.params.use_auto_wb = 0;
+  RawProcessor.imgdata.params.use_camera_wb = 0;
+  RawProcessor.imgdata.params.use_camera_matrix = 0;
+  RawProcessor.imgdata.params.no_auto_bright = 1;
+  RawProcessor.imgdata.params.fbdd_noiserd = 0;
+  /* TODO figure out threshold.  */
+  RawProcessor.imgdata.params.threshold = 0;
   int ret;
   if (buffer)
     ret = RawProcessor.open_buffer (buffer, buffer_size);
@@ -643,30 +649,19 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       *error = libraw_strerror(ret);
       return false;
     }
-  //printf ("Black: %i %i %i %i\n", RawProcessor.imgdata.color.black);
   grayscale = false;
   rgb = true;
   m_img->width = RawProcessor.imgdata.sizes.width;
   m_img->height = RawProcessor.imgdata.sizes.height;
   m_img->maxval = 65535;
-  printf ("Red %f %f %f\n", RawProcessor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[0][2]);
-  printf ("Orig\n");
   color_matrix m(RawProcessor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[1][0], RawProcessor.imgdata.color.cam_xyz[2][0], 0,
 		 RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[2][1], 0,
 		 RawProcessor.imgdata.color.cam_xyz[0][2], RawProcessor.imgdata.color.cam_xyz[1][2], RawProcessor.imgdata.color.cam_xyz[2][2], 0,
 		 0, 0, 0, 1);
-  //m.transpose ();
-  m.print (stdout);
-  printf ("Inverse\n");
   m = m.invert ();
-  m.print (stdout);
-  printf ("Done\n");
   xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
   xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
   xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
-  //xyz_to_xyY (Processor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[0][2], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
-  //xyz_to_xyY (RawProcessor.imgdata.color.cam_xyz[1][0], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[1][2], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
-  //xyz_to_xyY (RawProcessor.imgdata.color.cam_xyz[2][0], RawProcessor.imgdata.color.cam_xyz[2][1], RawProcessor.imgdata.color.cam_xyz[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
   if (buffer)
     free (buffer);
   return true;

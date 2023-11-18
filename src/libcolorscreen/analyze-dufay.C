@@ -21,7 +21,7 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	      if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
 		continue;
 
-	      luminosity_t l = render->fast_get_img_pixel (x, y);
+	      luminosity_t l = render->get_unadjusted_data (x, y);
 	      int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
 	      int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 	      if (screen->mult[iy][ix][0] > collection_threshold)
@@ -100,7 +100,7 @@ analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
   /* Old precise code is always disabled.  */
   const bool precise = false;
 #define pixel(xo,yo,width,height) precise ? render->sample_scr_square ((x - m_xshift) + xo, (y - m_yshift) + yo, width, height)\
-		     : render->get_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
+		     : render->get_unadjusted_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
 #pragma omp parallel for default (none) shared (precise,render,progress)
   for (int x = 0; x < m_width; x++)
     {

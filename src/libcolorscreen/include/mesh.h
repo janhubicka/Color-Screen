@@ -71,6 +71,14 @@ public:
     *xx = p.x;
     *yy = p.y;
   }
+  /* Return true if x, y are in the range covered by mesh.  */
+  bool
+  in_range_p (coord_t x, coord_t y)
+  {
+    x= (x + m_xshift) * m_xstepinv;
+    y= (y + m_yshift) * m_ystepinv;
+    return (x >= 0 && y >= 0 && x < m_width && y < m_height);
+  }
   void
   invert (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
   {

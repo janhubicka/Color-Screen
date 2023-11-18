@@ -22,7 +22,7 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	      if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
 		continue;
 
-	      luminosity_t l = render->fast_get_img_pixel (x, y);
+	      luminosity_t l = render->get_unadjusted_data (x, y);
 	      int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
 	      int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 	      if (screen->mult[iy][ix][0] > collection_threshold)
@@ -112,7 +112,8 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 bool flatten_attr
 analyze_paget::analyze_fast (render_to_scr *render,progress_info *progress)
 {
-#define pixel(xo,yo,diag) render->get_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
+	/* TODO: Use unadjusted data  */
+#define pixel(xo,yo,diag) render->get_unadjusted_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
 #pragma omp parallel for default (none) shared (progress, render)
   for (int x = 0; x < m_width; x++)
     {

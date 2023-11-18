@@ -59,8 +59,6 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
   }
   //renders[0] = init_render (0, 0);
 
-  if (progress)
-    progress->set_task ("rendering", height);
   int xmin = img.xmin, ymin = img.ymin;
 
 #if 0
@@ -75,6 +73,10 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
      So initialize all renderers first.  */
   const bool hack = true;
   if (hack)
+  {
+    if (progress)
+      progress->set_task ("checking visible tiles", height);
+//#pragma omp parallel for default(none) shared(progress,renders,height, width,step,yoffset,xoffset,xmin,ymin,stitch,rparam)
     for (int y = 0; y < height; y++)
       {
 	coord_t py = (y + yoffset) * step + ymin;
@@ -84,23 +86,38 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	      int ix, iy;
 	      coord_t sx, sy;
 	      stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
-	      if (stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true)
-		  && !renders[iy * stitch.params.width + ix])
-		{
-		  render_parameters rparam2 = rparam;
-			  //rparams[y * stitch.params.width + ix];
-		  //rparam2 = rparam;
-		  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
-		  if (progress)
-		    progress->push ();
-		  renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
-		  if (progress)
-		    progress->pop ();
-		  if (progress && progress->cancel_requested ())
-		    break;
-		}
+	      if (stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
+		renders[iy * stitch.params.width + ix] = (T *)(size_t)1;
 	    }
+	if (progress)
+	  progress->inc_progress ();
       }
+    int n = 0;
+    for (int y = 0; y < stitch.params.height; y++)
+      for (int x = 0; x < stitch.params.width; x++)
+	if (renders[y * stitch.params.width + x])
+	  n++;
+    if (progress)
+      progress->set_task ("precomputing tiles", n);
+    for (int iy = 0; iy < stitch.params.height; iy++)
+      for (int ix = 0; ix < stitch.params.width; ix++)
+	if (renders[iy * stitch.params.width + ix]
+	    && (!progress || !progress->cancel_requested ()))
+	  {
+	    render_parameters rparam2 = rparam;
+	    rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
+	    if (progress)
+	      progress->push ();
+	    renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
+	    if (progress)
+	      {
+		progress->pop ();
+		progress->inc_progress ();
+	      }
+	  }
+  }
+  if (progress)
+    progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,antialias)
   for (int y = 0; y < height; y++)
     {
@@ -120,16 +137,13 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	    /* If no tile was found, just render black pixel. */
 	    if (!stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
 	      {
-		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
+		putpixel (pixels, pixelbytes, rowstride, x, y, 255, 0, 0);
 		continue;
 	      }
 
 	    /* If we are passing to new image, obtain new renderer.  */
 	    if (ix != lastx || iy != lasty)
 	      {
-		lastx = ix;
-		lasty = iy;
-
 		/* Check if render is initialized.  */
 		lastrender = renders[iy * stitch.params.width + ix];
 		if (!hack && !lastrender)
@@ -154,10 +168,17 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 		    if (hack)
 		      pthread_mutex_unlock (&lock[iy * stitch.params.width + ix]);
 		    /* We took a time, check for cancelling.  */
-		    if (!lastrender
-			|| (progress && progress->cancel_requested ()))
+		    if (progress && progress->cancel_requested ())
 		      break;
 		  }
+		if (!lastrender)
+		  {
+		    lastx = -1;
+		    putpixel (pixels, pixelbytes, rowstride, x, y, 0, 255, 0);
+		    continue;
+		  }
+		lastx = ix;
+		lasty = iy;
 	      }
 	    rgbdata d;
 	    if (antialias == 1)
@@ -188,7 +209,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
       T *r = renders[x];
       if (pthread_mutex_destroy (&lock[x]) != 0)
 	perror ("lock_destroy");
-      if (r)
+      if (r && r != (T *)(size_t)1)
         delete r;
     }
 }
@@ -226,11 +247,15 @@ render_to_scr::render_tile (enum render_type_t render_type,
       {
 	render_parameters my_rparam;
 	my_rparam.backlight_correction = rparam.backlight_correction;
+	my_rparam.backlight_correction_black = rparam.backlight_correction_black;
 	my_rparam.gamma = rparam.gamma;
 	my_rparam.scan_exposure = rparam.scan_exposure;
 	my_rparam.dark_point = rparam.dark_point;
 	my_rparam.brightness = rparam.brightness;
 	my_rparam.color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+	my_rparam.tile_adjustments = rparam.tile_adjustments;
+	my_rparam.tile_adjustments_width = rparam.tile_adjustments_width;
+	my_rparam.tile_adjustments_height = rparam.tile_adjustments_height;
 	if (color)
 		my_rparam.white_balance = rparam.white_balance;
 	my_rparam.mix_red = rparam.mix_red;

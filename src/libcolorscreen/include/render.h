@@ -391,6 +391,7 @@ public:
   }
   ~render ();
   inline luminosity_t get_img_pixel (coord_t x, coord_t y);
+  inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y);
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline luminosity_t sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2);
   inline luminosity_t fast_get_img_pixel (int x, int y);
@@ -412,9 +413,14 @@ public:
   inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *);
   inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *);
   inline luminosity_t get_data (int x, int y);
+  inline luminosity_t get_unadjusted_data (int x, int y);
+  inline luminosity_t adjust_luminosity_ir (luminosity_t);
   inline luminosity_t get_data_red (int x, int y);
   inline luminosity_t get_data_green (int x, int y);
   inline luminosity_t get_data_blue (int x, int y);
+  inline luminosity_t get_unadjusted_data_red (int x, int y);
+  inline luminosity_t get_unadjusted_data_green (int x, int y);
+  inline luminosity_t get_unadjusted_data_blue (int x, int y);
   bool precompute_all (bool grayscale_needed, progress_info *progress);
   inline rgbdata
   get_rgb_pixel (int x, int y)
@@ -506,10 +512,46 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 /* Get image data in normalized range 0...1.  */
 
 inline luminosity_t
-render::get_data (int x, int y)
+render::get_unadjusted_data (int x, int y)
 {
   /* TODO do inversion and film curves if requested.  */
-  return (m_sharpened_data [y * m_img.width + x] - m_params.dark_point) * m_params.scan_exposure;
+  return m_sharpened_data [y * m_img.width + x];
+}
+
+inline luminosity_t
+render::adjust_luminosity_ir (luminosity_t lum)
+{
+  return (lum - m_params.dark_point) * m_params.scan_exposure;
+}
+
+/* Get image data in normalized range 0...1.  */
+
+inline luminosity_t
+render::get_data (int x, int y)
+{
+  return adjust_luminosity_ir (get_unadjusted_data (x, y));
+}
+
+/* Get same for rgb data.  */
+
+inline luminosity_t
+render::get_unadjusted_data_red (int x, int y)
+{
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
+  /* TODO do inversion and film curves if requested.  */
+}
+
+inline luminosity_t
+render::get_unadjusted_data_green (int x, int y)
+{
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
+  /* TODO do inversion and film curves if requested.  */
+}
+inline luminosity_t
+render::get_unadjusted_data_blue (int x, int y)
+{
+  return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
+  /* TODO do inversion and film curves if requested.  */
 }
 
 /* Get same for rgb data.  */
@@ -671,7 +713,7 @@ render::fast_get_img_pixel (int x, int y)
    Use bicubic interpolation.  */
 
 inline luminosity_t
-render::get_img_pixel (coord_t xp, coord_t yp)
+render::get_unadjusted_img_pixel (coord_t xp, coord_t yp)
 {
   luminosity_t val;
 
@@ -686,10 +728,10 @@ render::get_img_pixel (coord_t xp, coord_t yp)
 
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
-      vec_luminosity_t v1 = {get_data (sx-1, sy-1), get_data (sx, sy-1), get_data (sx+1, sy-1), get_data (sx+2, sy-1)};
-      vec_luminosity_t v2 = {get_data (sx-1, sy-0), get_data (sx, sy-0), get_data (sx+1, sy-0), get_data (sx+2, sy-0)};
-      vec_luminosity_t v3 = {get_data (sx-1, sy+1), get_data (sx, sy+1), get_data (sx+1, sy+1), get_data (sx+2, sy+1)};
-      vec_luminosity_t v4 = {get_data (sx-1, sy+2), get_data (sx, sy+2), get_data (sx+1, sy+2), get_data (sx+2, sy+2)};
+      vec_luminosity_t v1 = {get_unadjusted_data (sx-1, sy-1), get_unadjusted_data (sx, sy-1), get_unadjusted_data (sx+1, sy-1), get_unadjusted_data (sx+2, sy-1)};
+      vec_luminosity_t v2 = {get_unadjusted_data (sx-1, sy-0), get_unadjusted_data (sx, sy-0), get_unadjusted_data (sx+1, sy-0), get_unadjusted_data (sx+2, sy-0)};
+      vec_luminosity_t v3 = {get_unadjusted_data (sx-1, sy+1), get_unadjusted_data (sx, sy+1), get_unadjusted_data (sx+1, sy+1), get_unadjusted_data (sx+2, sy+1)};
+      vec_luminosity_t v4 = {get_unadjusted_data (sx-1, sy+2), get_unadjusted_data (sx, sy+2), get_unadjusted_data (sx+1, sy+2), get_unadjusted_data (sx+2, sy+2)};
       vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
       val = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
 #if 0
@@ -705,10 +747,16 @@ render::get_img_pixel (coord_t xp, coord_t yp)
   return val;
 }
 
+inline luminosity_t
+render::get_img_pixel (coord_t xp, coord_t yp)
+{
+  return adjust_luminosity_ir (get_unadjusted_img_pixel (xp, yp));
+}
+
 /* Determine grayscale value at a given position in the image.
    Use bicubic interpolation.  */
 
-inline void
+inline flatten_attr void
 render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
@@ -720,26 +768,34 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
 
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
-      *r = cubic_interpolate (cubic_interpolate (get_data_red ( sx-1, sy-1), get_data_red (sx-1, sy), get_data_red (sx-1, sy+1), get_data_red (sx-1, sy+2), ry),
-			      cubic_interpolate (get_data_red ( sx-0, sy-1), get_data_red (sx-0, sy), get_data_red (sx-0, sy+1), get_data_red (sx-0, sy+2), ry),
-			      cubic_interpolate (get_data_red ( sx+1, sy-1), get_data_red (sx+1, sy), get_data_red (sx+1, sy+1), get_data_red (sx+1, sy+2), ry),
-			      cubic_interpolate (get_data_red ( sx+2, sy-1), get_data_red (sx+2, sy), get_data_red (sx+2, sy+1), get_data_red (sx+2, sy+2), ry),
+      luminosity_t rr, gg, bb;
+      rr = cubic_interpolate (cubic_interpolate (get_unadjusted_data_red ( sx-1, sy-1), get_unadjusted_data_red (sx-1, sy), get_unadjusted_data_red (sx-1, sy+1), get_unadjusted_data_red (sx-1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_red ( sx-0, sy-1), get_unadjusted_data_red (sx-0, sy), get_unadjusted_data_red (sx-0, sy+1), get_unadjusted_data_red (sx-0, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_red ( sx+1, sy-1), get_unadjusted_data_red (sx+1, sy), get_unadjusted_data_red (sx+1, sy+1), get_unadjusted_data_red (sx+1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_red ( sx+2, sy-1), get_unadjusted_data_red (sx+2, sy), get_unadjusted_data_red (sx+2, sy+1), get_unadjusted_data_red (sx+2, sy+2), ry),
 			      rx);
-      *g = cubic_interpolate (cubic_interpolate (get_data_green ( sx-1, sy-1), get_data_green (sx-1, sy), get_data_green (sx-1, sy+1), get_data_green (sx-1, sy+2), ry),
-			      cubic_interpolate (get_data_green ( sx-0, sy-1), get_data_green (sx-0, sy), get_data_green (sx-0, sy+1), get_data_green (sx-0, sy+2), ry),
-			      cubic_interpolate (get_data_green ( sx+1, sy-1), get_data_green (sx+1, sy), get_data_green (sx+1, sy+1), get_data_green (sx+1, sy+2), ry),
-			      cubic_interpolate (get_data_green ( sx+2, sy-1), get_data_green (sx+2, sy), get_data_green (sx+2, sy+1), get_data_green (sx+2, sy+2), ry),
+      gg = cubic_interpolate (cubic_interpolate (get_unadjusted_data_green ( sx-1, sy-1), get_unadjusted_data_green (sx-1, sy), get_unadjusted_data_green (sx-1, sy+1), get_unadjusted_data_green (sx-1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_green ( sx-0, sy-1), get_unadjusted_data_green (sx-0, sy), get_unadjusted_data_green (sx-0, sy+1), get_unadjusted_data_green (sx-0, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_green ( sx+1, sy-1), get_unadjusted_data_green (sx+1, sy), get_unadjusted_data_green (sx+1, sy+1), get_unadjusted_data_green (sx+1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_green ( sx+2, sy-1), get_unadjusted_data_green (sx+2, sy), get_unadjusted_data_green (sx+2, sy+1), get_unadjusted_data_green (sx+2, sy+2), ry),
 			      rx);
-      *b = cubic_interpolate (cubic_interpolate (get_data_blue ( sx-1, sy-1), get_data_blue (sx-1, sy), get_data_blue (sx-1, sy+1), get_data_blue (sx-1, sy+2), ry),
-			      cubic_interpolate (get_data_blue ( sx-0, sy-1), get_data_blue (sx-0, sy), get_data_blue (sx-0, sy+1), get_data_blue (sx-0, sy+2), ry),
-			      cubic_interpolate (get_data_blue ( sx+1, sy-1), get_data_blue (sx+1, sy), get_data_blue (sx+1, sy+1), get_data_blue (sx+1, sy+2), ry),
-			      cubic_interpolate (get_data_blue ( sx+2, sy-1), get_data_blue (sx+2, sy), get_data_blue (sx+2, sy+1), get_data_blue (sx+2, sy+2), ry),
+      bb = cubic_interpolate (cubic_interpolate (get_unadjusted_data_blue ( sx-1, sy-1), get_unadjusted_data_blue (sx-1, sy), get_unadjusted_data_blue (sx-1, sy+1), get_unadjusted_data_blue (sx-1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_blue ( sx-0, sy-1), get_unadjusted_data_blue (sx-0, sy), get_unadjusted_data_blue (sx-0, sy+1), get_unadjusted_data_blue (sx-0, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_blue ( sx+1, sy-1), get_unadjusted_data_blue (sx+1, sy), get_unadjusted_data_blue (sx+1, sy+1), get_unadjusted_data_blue (sx+1, sy+2), ry),
+			      cubic_interpolate (get_unadjusted_data_blue ( sx+2, sy-1), get_unadjusted_data_blue (sx+2, sy), get_unadjusted_data_blue (sx+2, sy+1), get_unadjusted_data_blue (sx+2, sy+2), ry),
 			      rx);
+      rr = m_backlight_correction->apply (rr, xp, yp, backlight_correction_parameters::red);
+      gg = m_backlight_correction->apply (gg, xp, yp, backlight_correction_parameters::green);
+      bb = m_backlight_correction->apply (bb, xp, yp, backlight_correction_parameters::blue);
+      *r = (rr - m_params.dark_point) * m_params.scan_exposure;
+      *g = (gg - m_params.dark_point) * m_params.scan_exposure;
+      *b = (bb - m_params.dark_point) * m_params.scan_exposure;
+      /* TODO do inversion and film curves if requested.  */
     }
   else
     {
-      *r = 0;
-      *g = 0;
+      *r = 1;
+      *g = 1;
       *b = 0;
       return;
     }

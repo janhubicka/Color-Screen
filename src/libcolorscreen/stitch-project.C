@@ -552,6 +552,10 @@ stitch_project::load (FILE *f, const char **error)
 	}
       if (!images[y][x].load (this, f, error))
 	return false;
+      images[y][x].left = !y;
+      images[y][x].top = !x;
+      images[y][x].right = x == params.width - 1;
+      images[y][x].bottom = y == params.height - 1;
       params.type = images[y][x].param.type;
     }
   if (stitch_info_scale)
@@ -646,26 +650,61 @@ print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w)
 }
 
 inline rgbdata
-sample_image_area (image_data *img, render *render, int x, int y, int range)
+sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
+		   int range)
 {
+  int x, y;
+  coord_t rx = my_modf (fx, &x);
+  coord_t ry = my_modf (fy, &y);
   int xmin = x - range;
-  int xmax = x + range;
+  int xmin2 = xmin;
+  int xmax = x + range + 1;
+  int xmax2 = xmax;
   int ymin = y - range;
-  int ymax = y + range;
+  int ymin2 = ymin;
+  int ymax = y + range + 1;
+  int ymax2 = ymax;
   if (xmin < 0)
     xmin = 0;
   if (xmax > img->width)
-    xmax = 0;
+    xmax = img->width;
   if (ymin < 0)
     ymin = 0;
   if (ymax > img->height)
-    ymax = 0;
-  rgbdata sum = {0,0,0};
-  for (y = ymin ; y < ymax; y++)
-    for (x = xmin ; x < xmax; x++)
-      sum += render->get_rgb_pixel (x, y);
-  int c = (xmax - xmin) * (ymax - ymin);
-  return {sum.red / c, sum.green / c, sum.blue / c};
+    ymax = img->height;
+  rgbdata sum = { 0, 0, 0 };
+  luminosity_t sumweight = 0;
+  for (y = ymin; y < ymax; y++)
+    {
+      coord_t yweight = 1;
+      if (y == ymin2)
+	yweight = 1 - ry;
+      if (y == ymax2 - 1)
+	yweight = ry;
+
+      if (xmin2 >= 0)
+	{
+	  sum += render->get_rgb_pixel (xmin2, y) * yweight * (1 - rx);
+	  sumweight += yweight * (1 - rx);
+	  //printf ("%f ", yweight * (1 - rx));
+	}
+      for (x = xmin + 1; x < xmax - 1; x++)
+	{
+	  sum += render->get_rgb_pixel (x, y) * yweight;
+	  sumweight += yweight;
+	  //printf ("%f ", yweight);
+	}
+      if (xmax2 < img->width)
+	{
+	  sum += render->get_rgb_pixel (xmax2 - 1, y) * yweight * rx;
+	  sumweight += yweight * rx;
+	  //printf ("%f ", yweight * rx);
+	}
+      //printf ("%\n");
+    }
+  assert (sumweight > 0);
+      //printf ("%f\n", sumweight);
+  return {sum.red / sumweight, sum.green / sumweight, sum.blue / sumweight};
 }
 
 static inline int
@@ -704,7 +743,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 
   struct ratio 
     {
-      luminosity_t ratio, val1, val2;
+      luminosity_t ratio, val1, val2, weight;
       bool operator < (const struct ratio &other)
       {
 	return ratio < other.ratio;
@@ -718,20 +757,23 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       int channel;
       unsigned long n;
       luminosity_t s1, s2;
+      luminosity_t weight;
     };
   std::vector <equation> eqns;
 
   /* How many different grayscale values we want to collect.  */
   const int buckets = 128;
   /* Every sample taken is square 2*range x 2xrange of pixels.  */
-  const int range = 5;
+  const int range = 3;
   /* Make step big enough so samples does not overlap.  */
   const int step = 2 * range;
 
   /* Do not analyze 30% across the stitch border to not be bothered by lens flare.  */
-  const int outerborder = 40;
+  const int outerborder = 20;
   /* Ignore 5% of inner borders.  */
-  const int innerborder = 0;
+  const int innerborder = 3;
+
+  const bool verbose = false;
 
   /* Determine how many scanlines we will inspect.  */
   int combined_height = 0;
@@ -740,8 +782,8 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       for (int y = 0; y < params.height; y++)
 	for (int x = 0; x < params.width; x++)
 	  {
-	    int ymin = images[y][x].img_height * (!y ? outerborder : innerborder) / 100;
-	    int ymax = images[y][x].img_height * (y == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
+	    int ymin = images[y][x].img_height * (images[y][x].top ? outerborder : innerborder) / 100;
+	    int ymax = images[y][x].img_height * (images[y][x].bottom ? 100-outerborder : 100-innerborder) / 100;
 	    for (int iy = y; iy < params.height; iy++)
 	       for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
 		  combined_height += (ymax - ymin) / step;
@@ -755,18 +797,28 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       {
 	if (progress && progress->cancel_requested ())
 	  break;
+	if (progress)
+	  progress->push ();
 	if (!images[y][x].load_img (&error, progress))
-	  break;
+	  {
+	    if (progress)
+	      progress->pop ();
+	    break;
+	  }
 	render render1 (*images[y][x].img, rparams, 255);
 	if (!render1.precompute_all (images[y][x].img->data != NULL, progress))
 	  {
 	    error = "precomputation failed";
+	    if (progress)
+	      progress->pop ();
 	    break;
 	  }
-	int xmin = images[y][x].img_width * (!x ? outerborder : innerborder) / 100;
-	int ymin = images[y][x].img_height * (!y ? outerborder : innerborder) / 100;
-	int xmax = images[y][x].img_width * (x == params.width - 1 ? 100-outerborder : 100-innerborder) / 100;
-	int ymax = images[y][x].img_height * (y == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
+	if (progress)
+	  progress->pop ();
+	int xmin = images[y][x].img_width * (images[y][x].left ? outerborder : innerborder) / 100;
+	int ymin = images[y][x].img_height * (images[y][x].top ? outerborder : innerborder) / 100;
+	int xmax = images[y][x].img_width * (images[y][x].right ? 100-outerborder : 100-innerborder) / 100;
+	int ymax = images[y][x].img_height * (images[y][x].bottom ? 100-outerborder : 100-innerborder) / 100;
 
 	/* Check for possible overlaps.  */
 	if ((!progress || !progress->cancel_requested ()) && !error)
@@ -774,43 +826,60 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 	    if ((!progress || !progress->cancel_requested ()) && !error)
 	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
 		{
-		  int xmin2 = images[iy][ix].img_width * (!ix ? outerborder : innerborder) / 100;
-		  int ymin2 = images[iy][ix].img_height * (!iy ? outerborder : innerborder) / 100;
-		  int xmax2 = images[iy][ix].img_width * (ix == params.width - 1 ? 100-outerborder : 100-innerborder) / 100;
-		  int ymax2 = images[iy][ix].img_height * (iy == params.height - 1 ? 100-outerborder : 100-innerborder) / 100;
+		  int xmin2 = images[iy][ix].img_width * (images[iy][ix].left ? outerborder : innerborder) / 100;
+		  int ymin2 = images[iy][ix].img_height * (images[iy][ix].top ? outerborder : innerborder) / 100;
+		  int xmax2 = images[iy][ix].img_width * (images[iy][ix].right ? 100-outerborder : 100-innerborder) / 100;
+		  int ymax2 = images[iy][ix].img_height * (images[iy][ix].bottom ? 100-outerborder : 100-innerborder) / 100;
 		  std::vector<ratio> ratios[4];
 		  render *render2 = NULL;
 		  if ((!progress || !progress->cancel_requested ()) && !error)
-//#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,img_height,img_width)
+#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
 		    for (int yy = ymin; yy < ymax; yy+= step)
 		      {
 			if ((!progress || !progress->cancel_requested ()) && !error)
 			  for (int xx = xmin; xx < xmax; xx+= step)
 			    {
 			      coord_t common_x, common_y;
-			      images[y][x].img_to_common_scr (xx + 0.5, yy + 0.5, &common_x, &common_y);
-			      if (!images[iy][ix].pixel_known_p (common_x, common_y)
-				  || !images[y][x].pixel_known_p (common_x, common_y))
+			      images[y][x].img_to_common_scr (xx, yy, &common_x, &common_y);
+
+			      if (!images[iy][ix].pixel_maybe_in_range_p (common_x, common_y))
 				continue;
 			      coord_t iix, iiy;
 			      images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
+#if 0
+			      if (x == 0 && y ==0 && ix == 0 && iy == 1)
+				      printf ("%i-%i %i-%i %i-%i %i-%i i1 %i %i i2 %i %i %i %i \n",xmin,xmax, ymin,ymax,xmin2,xmax2,ymin2,ymax2,xx,yy,(int)iix,(int)iiy, xx-(int)iix, yy - (int)iiy);
+#endif
 			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
 				continue;
-//#pragma omp critical
+			      /* Watch overflows.  */
+			      if (!images[iy][ix].pixel_known_p (common_x, common_y)
+				  || !images[y][x].pixel_known_p (common_x, common_y))
+				continue;
+			      luminosity_t weight = (luminosity_t)
+				std::min ((coord_t)std::min (std::min (xx, images[y][x].img_width - xx),
+								  std::min (yy, images[y][x].img_height - yy)),
+					  std::min (std::min (iix, images[iy][ix].img_width - iix),
+					       std::min (iiy, images[iy][ix].img_height - iiy)));
+			      if (!(weight > 0))
+				continue;
+#pragma omp critical
 			      if (!render2)
 				{
+				  if (progress)
+				    progress->push ();
 				  if (images[iy][ix].load_img (&error, progress))
 				    {
 				      render2 = new render (*images[iy][ix].img, rparams, 255);
 				      if (!render2->precompute_all (images[y][x].img->data != NULL, progress))
 					{
-					  progress->pause_stdout ();
-					  printf ("Comparing tile %i %i and %i %i\n", x, y, ix, iy);
-					  progress->resume_stdout ();
 					  error = "precomputation failed";
 					  delete render2;
+					  render2 = 0;
 					}
 				    }
+				  if (progress)
+				    progress->pop ();
 				}
 			      if (!render2)
 				break;
@@ -820,7 +889,7 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 				  luminosity_t red, green, blue;
 #if 1
 				  rgbdata d = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[y][x].img, &render1, xx, yy, range);
-				  rgbdata d2 = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[iy][ix].img, render2, iix+0.5, iiy+0.5, range);
+				  rgbdata d2 = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[iy][ix].img, render2, iix, iiy, range);
 				  red = d2.red;
 				  green = d2.green;
 				  blue = d2.blue;
@@ -832,14 +901,13 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 
 				  if (d.red > minv && red > minv)
 #pragma omp critical
-				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red});
-				  //printf ("%i %i:%f,%f %i %i:%f,%f %f %f %f\n",x,y,xx+0.5,yy+0.5,ix,iy,iix,iiy,red, d.red, red/d.red);
+				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red, weight});
 				  if (d.green > minv && green > minv)
 #pragma omp critical
-				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green});
+				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green, weight});
 				  if (d.blue > minv && blue > minv)
 #pragma omp critical
-				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue});
+				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue, weight});
 				}
 			      /* Implement collection of IR channel.  */
 			      if (images[y][x].img->data)
@@ -896,55 +964,38 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
 
 			       /* Sort every bucket and eliminate samples that seems off.  */
 			       for (int b =0; b < buckets; b++)
-				 {
-				    std::sort (ratios_buckets[b].begin (), ratios_buckets[b].end());
-				    unsigned long int n = 0;
-				    luminosity_t wsum1b = 0, wsum2b = 0;
-				    for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
-				      {
-					wsum1b += ratios_buckets[b][i].val1;
-					wsum2b += ratios_buckets[b][i].val2;
-					n++;
-				      }
-				    /* Record equation.  */
-				    if (n)
-				       eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b});
-				    progress->pause_stdout ();
-				    printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
-				    progress->resume_stdout ();
-				 }
+				 if (ratios_buckets[b].size ())
+				   {
+				      std::sort (ratios_buckets[b].begin (), ratios_buckets[b].end());
+				      unsigned long int n = 0;
+				      luminosity_t wsum1b = 0, wsum2b = 0;
+				      luminosity_t wsum3b = 0;
+				      //for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
+				      for (size_t i = 0; i < ratios_buckets[b].size (); i++)
+					{
+					  wsum1b += ratios_buckets[b][i].val1 * ratios_buckets[b][i].weight;
+					  wsum2b += ratios_buckets[b][i].val2 * ratios_buckets[b][i].weight;
+					  wsum3b += ratios_buckets[b][i].weight;
+					  n++;
+					}
+				      /* Record equation.  */
+				      if (n)
+					 eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b, wsum3b});
+				      if (verbose || 1)
+					{
+					  progress->pause_stdout ();
+					  printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
+					  progress->resume_stdout ();
+					}
+				   }
 			     }
-			   else
+			   else if (verbose || 1)
 			      {
 				progress->pause_stdout ();
 				printf ("Found only %li common points of tile %i,%i and %i,%i in channel %s. Ignoring. Search range in image 1 %i..%i,%i..%i image2 %i..%i,%i..%i\n", (long int)ratios[c].size(), x, y, ix, iy, channels[c],xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2);
 				progress->resume_stdout ();
 			      }
 			 }
-#if 0
-		       luminosity_t wsum1=0, wsum2=0;
-		       for (int c = 0; c < 4; c++)
-			 {
-			   const char *channels[] = {"red", "green", "blue", "ir"};
-			   if (ratios[c].size () > 1000)
-			     {
-				std::sort (ratios[c].begin (), ratios[c].end());
-				luminosity_t wsum1b = 0, wsum2b = 0;
-				for (size_t i = ratios[c].size () / 4; i < (size_t)(3 * ratios[c].size () / 4); i++)
-				  {
-				    wsum1b += ratios[c][i].val1;
-				    wsum2b += ratios[c][i].val2;
-				  }
-				wsum1 += wsum1b;
-				wsum2 += wsum2b;
-				progress->pause_stdout ();
-				printf ("Found %i common points of tile %i,%i and %i,%i in channel %s. Ratio %f sums %f %f\n", (int)ratios[c].size (), x, y, ix, iy, channels[c], wsum1b/wsum2b, wsum1b, wsum2b);
-				progress->resume_stdout ();
-			     }
-			 }
-		       if (wsum1 > 0 && wsum2 > 0)
-		         eqns.push_back ({x,y,ix,iy,wsum1, wsum2});
-#endif
 		  }
 	images[y][x].release_img ();
       }
@@ -953,20 +1004,16 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       *rerror = error;
       return false;
     }
-  progress->pause_stdout ();
 
-  /* Print equaltions.  */
-  for (int i = 0; i < (int)eqns.size (); i++)
+  if (verbose)
     {
-      printf ("e%i%i * %f + b%i%i*%lu = e%i%i * %f + b%i%i*%lu\n", eqns[i].x1, eqns[i].y1, eqns[i].s1, eqns[i].x1, eqns[i].y1, eqns[i].n, eqns[i].x2, eqns[i].y2, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].n);
+      progress->pause_stdout ();
+
+      /* Print equaltions.  */
+      for (int i = 0; i < (int)eqns.size (); i++)
+	printf ("e%i%i * %f + b%i%i*%lu = e%i%i * %f + b%i%i*%lu\n", eqns[i].x1, eqns[i].y1, eqns[i].s1, eqns[i].x1, eqns[i].y1, eqns[i].n, eqns[i].x2, eqns[i].y2, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].n);
+      progress->resume_stdout ();
     }
-#if 0
-  for (int i = 0; i < (int)eqns.size (); i++)
-    {
-      printf ("e%i%i * %f = e%i%i rep %f\n", eqns[i].x1, eqns[i].y1, eqns[i].s2/eqns[i].s1, eqns[i].x2, eqns[i].y2, eqns[i].s1/eqns[i].s2);
-    }
-#endif
-  progress->resume_stdout ();
 
   /* Feed to GSL.  */
   int nvariables = 2 * params.width * params.height - 2;
@@ -987,17 +1034,18 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
   c = gsl_vector_alloc (nvariables);
   cov = gsl_matrix_alloc (nvariables, nvariables);
   int i;
-  luminosity_t sum = 0;
   for (i = 0; i < (int)eqns.size (); i++)
     {
       for (int j = 0; j < nvariables; j++)
 	gsl_matrix_set (A, i, j, 0);
       double rhs = 0;
+
       int idx = exp_index (this, fx, fy, eqns[i].x1, eqns[i].y1);
       if (idx == -1)
 	rhs -= eqns[i].s1;
       else
         gsl_matrix_set (A, i, idx, eqns[i].s1);
+
       idx = exp_index (this, fx, fy, eqns[i].x2, eqns[i].y2);
       if (idx == -1)
 	rhs += eqns[i].s2;
@@ -1008,47 +1056,31 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       if (idx == -1)
         ;
       else
-        gsl_matrix_set (A, i, idx, eqns[i].n);
+        gsl_matrix_set (A, i, idx, eqns[i].weight);
 
       idx = black_index (this, fx, fy, eqns[i].x2, eqns[i].y2);
       if (idx == -1)
         ;
       else
-        gsl_matrix_set (A, i, idx, eqns[i].n);
+        gsl_matrix_set (A, i, idx, -eqns[i].weight);
 
       gsl_vector_set (y, i, rhs);
-#if 1
       /* The darker point is, more we care.  */
       if (eqns[i].s1>0)
 	{
-	  luminosity_t avg_density = eqns[i].s1/eqns[i].n;
+	  luminosity_t avg_density = eqns[i].s1/eqns[i].weight;
 	  gsl_vector_set (w, i, /*1/avg_density **/ (invert_gamma (avg_density, 2.4)/avg_density));
 	}
       else
-#endif
         gsl_vector_set (w, i, 1);
-      sum += eqns[i].s1;
-      sum += eqns[i].s2;
     }
-#if 0
-  /* Set one exposition to be 1.  */
-  for (int j = 0; j < nvariables; j++)
-    gsl_matrix_set (A, i, j, 0);
-  gsl_vector_set (y, i, sum);
-  gsl_vector_set (w, i, 1);
-  gsl_matrix_set (A, i, params.width * params.height / 4, sum);
-  /* Set one blackpoint to be 0.  */
-  i++;
-  for (int j = 0; j < nvariables; j++)
-    gsl_matrix_set (A, i, j, 0);
-  gsl_vector_set (y, i, 0);
-  gsl_vector_set (w, i, 1);
-  gsl_matrix_set (A, i, nvariables / 2 + params.width * params.height / 4, sum);
-#endif
 
-  progress->pause_stdout ();
-  print_system (stdout, A, y, w);
-  progress->resume_stdout ();
+  if (verbose)
+    {
+      progress->pause_stdout ();
+      print_system (stdout, A, y, w);
+      progress->resume_stdout ();
+    }
 
   //gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_multifit_linear_workspace * work
@@ -1104,23 +1136,24 @@ stitch_project::analyze_exposure_adjustments (render_parameters *in_rparams, con
       double b2 = idx == -1 ? 0 : gsl_vector_get (c, idx);
       auto &a1 = in_rparams->get_tile_adjustment (eqn.x1, eqn.y1);
       auto &a2 = in_rparams->get_tile_adjustment (eqn.x2, eqn.y2);
-      luminosity_t cor_diff = (eqn.s1/eqn.n - a1.dark_point) * a1.exposure - (eqn.s2/eqn.n - a2.dark_point) * a2.exposure;
-      //luminosity_t cor_diff = (eqn.s1/eqn.n) * e1 + b1/eqn.n - eqn.s2/eqn.n*e2 - b2/eqn.n;
-      luminosity_t uncor_diff = eqn.s1/eqn.n - eqn.s2/eqn.n;
-      n += eqn.n;
+      luminosity_t cor_diff = (eqn.s1/eqn.weight - a1.dark_point) * a1.exposure - (eqn.s2/eqn.weight - a2.dark_point) * a2.exposure;
+      //luminosity_t cor_diff = (eqn.s1/eqn.n) * e1 + b1 - eqn.s2/eqn.n*e2 - b2;
+      luminosity_t uncor_diff = (eqn.s1 - eqn.s2)/eqn.weight;
+      n += eqn.weight;
       if (fabs (cor_diff) > max_cor)
 	max_cor = fabs (cor_diff);
-      avg_cor += fabs (cor_diff) * eqn.n;
-      cor_sq = cor_diff * eqn.n * cor_diff * eqn.n * gsl_vector_get (w, i);
-      uncor_sq = uncor_diff * eqn.n * uncor_diff * eqn.n;
+      avg_cor += fabs (cor_diff) * eqn.weight;
+      cor_sq   +=   cor_diff * eqn.weight *   cor_diff * eqn.weight * gsl_vector_get (w, i);
+      uncor_sq += uncor_diff * eqn.weight * uncor_diff * eqn.weight * gsl_vector_get (w, i);
       if (fabs (uncor_diff) > max_uncor)
 	max_uncor = fabs (uncor_diff);
-      avg_uncor += fabs (uncor_diff) * eqn.n;
-      printf ("images %i,%i and %i,%i %s avg %f/%f=%f difference %f uncorected %f samples %lu e1 %f b1 %f e2 %f b2 %f weight %f\n",
-	      eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.n, eqn.s2/eqn.n, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, e1, b1, e2, b2, gsl_vector_get (w, i));
+      avg_uncor += fabs (uncor_diff) * eqn.weight;
+      if (verbose)
+	printf ("images %i,%i and %i,%i %s avg %f/%f=%f difference %f uncorected %f samples %lu e1 %f b1 %f e2 %f b2 %f weight %f\n",
+		eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.weight, e1, b1, e2, b2, gsl_vector_get (w, i));
       i++;
     }
-  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f (avg) %f (max) %f (sq)\n", avg_cor / n, max_cor, cor_sq, avg_uncor /n, max_uncor, uncor_sq);
+  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f (avg) %f (max) %f (sq), chisq %f\n", avg_cor / n, max_cor, cor_sq, avg_uncor /n, max_uncor, uncor_sq, chisq);
   printf ("Final solution:\n");
   for (int y = 0; y < params.height; y++)
     {

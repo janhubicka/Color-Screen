@@ -380,6 +380,13 @@ public:
 #endif
     inverse_early_correction (x, y, xp, yp);
   }
+  bool
+  to_img_in_mesh_range (coord_t x, coord_t y)
+  {
+    if (!m_param.mesh_trans)
+      return true;
+    return m_param.mesh_trans->in_range_p (x, y);
+  }
   /* Map image coordinats to screen.  */
   void
   to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)

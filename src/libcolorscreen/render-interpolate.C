@@ -116,8 +116,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
-      m_params.dark_point,
-      m_params.scan_exposure,
+      /* We use unadjusted data.  TODO: Implement also in fast.  */
+      /*m_params.dark_point*/0,
+      /*m_params.scan_exposure*/1,
       &m_img,
       m_screen,
       this,
@@ -155,7 +156,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) m_paget->blue (xp + (xx), yp + (yy))
+#define get_blue(xx, yy) adjust_luminosity_ir (m_paget->blue (xp + (xx), yp + (yy)))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
@@ -167,7 +168,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
 
-#define get_green(xx, yy) m_paget->diag_green (xp + (xx), yp + (yy))
+#define get_green(xx, yy) adjust_luminosity_ir (m_paget->diag_green (xp + (xx), yp + (yy)))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
@@ -176,7 +177,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       analyze_paget::to_diagonal_coordinates (x + 0.5, y, &xd, &yd);
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
-#define get_red(xx, yy) m_paget->diag_red (xp + (xx), yp + (yy))
+#define get_red(xx, yy) adjust_luminosity_ir (m_paget->diag_red (xp + (xx), yp + (yy)))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
@@ -194,7 +195,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
-#define get_red(xx, yy) m_dufay->red (xp + (xx), yp + (yy))
+#define get_red(xx, yy) adjust_luminosity_ir (m_dufay->red (xp + (xx), yp + (yy)))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
@@ -204,7 +205,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       yy = y;
       xo = my_modf (xx, &xp);
       yo = my_modf (yy, &yp);
-#define get_green(xx, yy) m_dufay->green (xp + (xx), yp + (yy))
+#define get_green(xx, yy) adjust_luminosity_ir (m_dufay->green (xp + (xx), yp + (yy)))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
@@ -214,7 +215,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       yy = y;
       xo = my_modf (xx, &xp);
       yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) m_dufay->blue (xp + (xx), yp + (yy))
+#define get_blue(xx, yy) adjust_luminosity_ir (m_dufay->blue (xp + (xx), yp + (yy)))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
