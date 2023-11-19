@@ -6,6 +6,7 @@
 #include <malloc.h>
 #endif
 #include <cstring>
+#include <cstdio>
 
 #ifndef _WIN32
 #include <cstdlib>
