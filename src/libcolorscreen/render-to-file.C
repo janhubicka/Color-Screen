@@ -7,6 +7,7 @@
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "icc-srgb.h"
+#include "icc.h"
 
 const struct render_to_file_params::output_mode_property render_to_file_params::output_mode_properties[output_mode_max]
 {
@@ -401,6 +402,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 		struct render_to_file_params rfparams /* modified */,
 		progress_info * progress, const char **error)
 {
+  bool free_profile = false;
   if (scan.stitch)
     return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
   if (rfparams.verbose)
@@ -432,13 +434,30 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       return false;
     }
   if (rfparams.hdr)
-    {
-      rparam.output_gamma = 1;
-      rparam.output_profile = render_parameters::output_profile_original;
-    }
+    rparam.output_profile = render_parameters::output_profile_original;
 
   if (rparam.output_profile == render_parameters::output_profile_original)
-    icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan);
+    {
+      if (rfparams.mode == corrected_color)
+        {
+	  if (scan.icc_profile
+	      && rparam.gamma == rparam.output_gamma)
+	    {
+	      rfparams.icc_profile = scan.icc_profile;
+	      rfparams.icc_profile_len = scan.icc_profile_size;
+	    }
+	  else
+	    {
+	      xyz red = xyY_to_xyz (scan.primary_red.x, scan.primary_red.y, scan.primary_red.Y);
+	      xyz green = xyY_to_xyz (scan.primary_green.x, scan.primary_green.y, scan.primary_green.Y);
+	      xyz blue = xyY_to_xyz (scan.primary_blue.x, scan.primary_blue.y, scan.primary_blue.Y);
+	      icc_profile_len = create_profile ("ColorScreen produced profile based on original scan", red, green, blue, rparam.output_gamma, &icc_profile);
+	      free_profile = true;
+	    }
+        }
+      else
+        icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan);
+    }
 
   /* Initialize rendering engine.  */
   if (!complete_rendered_file_parameters (param, scan, &rfparams))
@@ -477,11 +496,6 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	      progress->resume_stdout ();
 	  }
 
-	if (!icc_profile_set)
-	  {
-	    rfparams.icc_profile = scan.icc_profile;
-	    rfparams.icc_profile_len = scan.icc_profile_size;
-	  }
 	// TODO: For HDR output we want to linearize the ICC profile.
 	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)

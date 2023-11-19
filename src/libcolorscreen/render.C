@@ -142,7 +142,7 @@ struct graydata_params
 {
   /* Pointers in image_data may become stale if image is freed. Use ID
      to check cache entries.  */
-  unsigned long image_id;
+  uint64_t image_id;
   image_data *img;
   /* Gamma and weights of individual channels.  */
   luminosity_t gamma, red, green, blue;

@@ -49,10 +49,10 @@ backlight_correction_parameters::analyze_scan (image_data &scan, luminosity_t ga
 	if (enabled[i])
 	  {
 	    std::sort (values[i].begin (), values[i].end ());
-	    long len = xsize * (long)ysize;
+	    size_t len = xsize * (size_t)ysize;
 	    int n = 0;
 	    luminosity_t sum = 0;
-	    for (long j = len / 4; j < 3 * len /4; j++)
+	    for (size_t j = len / 4; j < 3 * len /4; j++)
 	      {
 		sum += table[values[i][j]];
 		n++;

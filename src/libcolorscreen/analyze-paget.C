@@ -23,8 +23,8 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		continue;
 
 	      luminosity_t l = render->get_unadjusted_data (x, y);
-	      int ix = (unsigned long long) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
-	      int iy = (unsigned long long) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	      int ix = (uint64_t) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+	      int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 	      if (screen->mult[iy][ix][0] > collection_threshold)
 		{
 		  coord_t xd, yd;

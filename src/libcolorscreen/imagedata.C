@@ -660,8 +660,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		 0, 0, 0, 1);
   m = m.invert ();
   xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
+  printf ("red %f %f\n",  m_img->primary_red.x, m_img->primary_red.y);
   xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
+  printf ("green %f %f\n",  m_img->primary_green.x, m_img->primary_green.y);
   xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
+  printf ("blue %f %f\n",  m_img->primary_blue.x, m_img->primary_blue.y);
   if (buffer)
     free (buffer);
   return true;
