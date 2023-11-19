@@ -770,7 +770,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   std::vector <equation> eqns;
 
   /* How many different grayscale values we want to collect.  */
-  const int buckets = 16;
+  const int buckets = 256;
   /* Every sample taken is square 2*range x 2xrange of pixels.  */
   const int range = 3;
   /* Make step big enough so samples does not overlap.  */
@@ -841,7 +841,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 		  std::vector<ratio> ratios[4];
 		  render *render2 = NULL;
 		  if ((!progress || !progress->cancel_requested ()) && !error)
-//#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
+#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
 		    for (int yy = ymin; yy < ymax; yy+= step)
 		      {
 			if ((!progress || !progress->cancel_requested ()) && !error)
@@ -867,7 +867,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 					       std::min (iiy, images[iy][ix].img_height - iiy)));
 			      if (!(weight > 0))
 				continue;
-//#pragma omp critical
+#pragma omp critical
 			      if (!render2)
 				{
 				  if (progress)
@@ -904,13 +904,13 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 #endif
 
 				  if (d.red > minv && red > minv)
-//#pragma omp critical
+#pragma omp critical
 				      ratios[0].push_back ((struct ratio){d.red / red, d.red, red, weight});
 				  if (d.green > minv && green > minv)
-//#pragma omp critical
+#pragma omp critical
 				      ratios[1].push_back ((struct ratio){d.green / green, d.green, green, weight});
 				  if (d.blue > minv && blue > minv)
-//#pragma omp critical
+#pragma omp critical
 				      ratios[2].push_back ((struct ratio){d.blue / blue, d.blue, blue, weight});
 				}
 			      /* Implement collection of IR channel.  */
@@ -1095,12 +1095,10 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			&chisq, work);
   gsl_set_error_handler (old_handler);
   gsl_multifit_linear_free (work);
-  progress->pause_stdout ();
   /* Convert into our datastructure.  */
   if (in_rparams->tile_adjustments_width != params.width
       || in_rparams->tile_adjustments_height != params.height)
     in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
-  printf ("Final solution:\n");
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
@@ -1120,6 +1118,9 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
   long int n = 0;
   i=0;
+
+  progress->pause_stdout ();
+  printf ("Final solution:\n");
   for (auto eqn : eqns)
     {
       int idx = exp_index (this, fx, fy, eqn.x1, eqn.y1);
@@ -1145,18 +1146,18 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	max_uncor = fabs (uncor_diff);
       avg_uncor += fabs (uncor_diff) * eqn.weight;
       if (verbose)
-	printf ("images %i,%i and %i,%i %s avg %f/%f=%f difference %f uncorected %f samples %lu e1 %f b1 %f e2 %f b2 %f weight %f\n",
-		eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.weight, e1, b1, e2, b2, gsl_vector_get (w, i));
+	printf ("images %i,%i and %i,%i %s avg %f/%f=%f difference %f uncorected %f samples %lu weight %f e1 %f b1 %f e2 %f b2 %f weight %f\n",
+		eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, eqn.weight, e1, b1, e2, b2, gsl_vector_get (w, i));
       i++;
     }
-  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f (avg) %f (max) %f (sq), chisq %f\n", avg_cor / n, max_cor, cor_sq, avg_uncor /n, max_uncor, uncor_sq, chisq);
   printf ("Final solution:\n");
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
-	printf ("  %+4.2f*%1.8f", in_rparams->get_tile_adjustment (x,y).dark_point*65535, in_rparams->get_tile_adjustment (x,y).exposure);
+	printf ("  %+6.2f*%1.8f", in_rparams->get_tile_adjustment (x,y).dark_point*65535, in_rparams->get_tile_adjustment (x,y).exposure);
       printf ("\n");
     }
+  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / n * 65535, max_cor * 65535, cor_sq, avg_uncor /n * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
   progress->resume_stdout ();
   gsl_matrix_free (A);
   gsl_vector_free (y);
