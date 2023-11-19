@@ -780,6 +780,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   const int outerborder = 20;
   /* Ignore 5% of inner borders.  */
   const int innerborder = 3;
+  const int histogram_size = 6556*2;
 
   const bool verbose = false;
 
@@ -841,6 +842,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 		  std::vector<ratio> ratios[4];
 		  render *render2 = NULL;
 		  if ((!progress || !progress->cancel_requested ()) && !error)
+//??? Causes memory corruption
 #pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
 		    for (int yy = ymin; yy < ymax; yy+= step)
 		      {
@@ -857,8 +859,8 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			      if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
 				continue;
 			      /* Watch overflows.  */
-			      if (!images[iy][ix].pixel_known_p (common_x, common_y)
-				  || !images[y][x].pixel_known_p (common_x, common_y))
+			      if (!images[iy][ix].pixel_maybe_in_range_p (common_x, common_y)
+				  /*|| !images[y][x].pixel_maybe_in_range_p (common_x, common_y)*/)
 				continue;
 			      luminosity_t weight = (luminosity_t)
 				std::min ((coord_t)std::min (std::min (xx, images[y][x].img_width - xx),
@@ -929,7 +931,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			 {
 			   if (ratios[c].size () > 1000)
 			     {
-			       std::vector<unsigned long> vals (6556*2);
+			       std::vector<unsigned long> vals (histogram_size);
 			       for (auto &v:vals)
 				 v = 0;
 			       long int crop0 = 0,cropmax = 0;
@@ -937,11 +939,11 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			       /* Compute histogram.  */
 			       for (auto r:ratios[c])
 			         {
-				   int idx = ((r.val1 + r.val2) * 65535 + 0.5);
+				   int idx = ((r.val1 + r.val2) * (histogram_size - 1) + 0.5);
 				   if (idx < 0)
 				     idx = 0, crop0++;
-				   if (idx > 65535*2)
-				     idx = 65535*2, cropmax++;
+				   if (idx >= histogram_size)
+				     idx = histogram_size - 1, cropmax++;
 				   vals[idx]++;
 			         }
 
@@ -951,9 +953,9 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			       int pos = 0;
 			       for (int bucket = 0; bucket < buckets; bucket++)
 				 {
-				   for (;csum <= ((bucket + 1) * ratios[c].size ()) / buckets && pos < 65535*2;pos++)
+				   for (;csum <= ((bucket + 1) * ratios[c].size ()) / buckets && pos < histogram_size;pos++)
 				     csum += vals[pos];
-				   cutoffs[bucket]=(pos - 0.5) / 65535;
+				   cutoffs[bucket]=(pos - 0.5) / (histogram_size - 1);
 				 }
 
 			       /* Distribute samples to buckets.  */

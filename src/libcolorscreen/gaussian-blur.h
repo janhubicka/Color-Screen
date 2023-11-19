@@ -3,6 +3,9 @@
 #include <functional>
 
 #define BLUR_EPSILON 0.000001
+#ifndef M_PI
+#define M_PI            3.14159265358979323846
+#enif
 
 /* Finite Impulse Response (FIR)  */
 
