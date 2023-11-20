@@ -752,7 +752,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   struct ratio 
     {
       luminosity_t ratio, val1, val2, weight;
-      bool operator < (const struct ratio &other)
+      bool operator < (const struct ratio &other) const
       {
 	return ratio < other.ratio;
       }
