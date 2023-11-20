@@ -51,7 +51,7 @@ struct stitching_params
   coord_t hfov;
   coord_t max_avg_distance;
   coord_t max_max_distance;
-  coord_t scan_dpi;
+  coord_t scan_xdpi, scan_ydpi;
 
   int width, height;
   /* Path to a directory where the stitch project is located.  */
@@ -67,7 +67,7 @@ struct stitching_params
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false),
     outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
-    max_avg_distance (2), max_max_distance (10), scan_dpi (0), width (0), height (0), path("")
+    max_avg_distance (2), max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0), height (0), path("")
   {
   }
 };
@@ -286,6 +286,16 @@ public:
   }
   bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
   DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);
+  void set_dpi (coord_t new_xdpi, coord_t new_ydpi)
+  {
+    params.scan_xdpi = new_xdpi;
+    params.scan_ydpi = new_ydpi;
+    for (int iy = 0 ; iy < params.height; iy++)
+      for (int ix = 0 ; ix < params.width; ix++)
+	if (images[iy][ix].img)
+	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
+
+  }
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

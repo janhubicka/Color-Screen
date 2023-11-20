@@ -1,6 +1,7 @@
 #ifndef IMAGEDATA_H
 #define IMAGEDATA_H
 #include "dllpublic.h"
+#include "base.h"
 #include "color.h"
 #include "progress-info.h"
 
@@ -31,7 +32,7 @@ public:
   uint32_t icc_profile_size;
   /* Unique id of the image (used for caching).  */
   uint64_t id;
-  float xdpi, ydpi;
+  coord_t xdpi, ydpi;
   stitch_project *stitch;
 
   /* Begining of the viewport of stitched object.  */
@@ -62,6 +63,7 @@ public:
   xyY primary_blue;
   xyz whitepoint;
   class backlight_correction_parameters *lcc;
+  void set_dpi (coord_t xdpi, coord_t ydpi);
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */

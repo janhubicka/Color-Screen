@@ -656,6 +656,9 @@ inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb)
 {
   set_linear_hdr_color (r, g, b, &r, &g, &b);
+  // Show gammut warnings
+  //if ( r < 0 || r > 1 || g < 0 || g >1 || b < 0 || b > 1)
+	  //r = g = b = 0.5;
   r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
   g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
   b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));

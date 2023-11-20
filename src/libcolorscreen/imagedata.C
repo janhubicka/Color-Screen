@@ -954,3 +954,12 @@ image_data::load (const char *name, bool preload_all, const char **error, progre
     }
   return false;
 }
+
+void
+image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
+{
+  xdpi = new_xdpi;
+  ydpi = new_ydpi;
+  if (stitch)
+    stitch->set_dpi (new_xdpi, new_ydpi);
+}

@@ -208,7 +208,7 @@ render (int argc, char **argv)
       exit (1);
     }
   if (scan_dpi)
-    scan.xdpi = scan.ydpi = scan_dpi;
+    scan.set_dpi (scan_dpi, scan_dpi);
 
   if (verbose)
     {
