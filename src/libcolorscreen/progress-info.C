@@ -24,7 +24,11 @@ thread_start (void *arg)
       struct timespec ts, now;
       int timev = first ? 300000 : 100000;
 
+#ifdef __APPLE__
+      clock_gettime(CLOCK_REALTIME, &now);
+#else
       clock_gettime(CLOCK_MONOTONIC, &now);
+#endif
       ts.tv_sec = now.tv_sec;
       ts.tv_nsec = now.tv_nsec+timev * 1000;
       if (ts.tv_nsec>=1000000000)
@@ -60,7 +64,9 @@ file_progress_info::file_progress_info (FILE *f, bool display)
   pthread_mutex_init (&m_exit_lock, NULL);
   pthread_condattr_t condattr;
   pthread_condattr_init(&condattr);
+#ifndef __APPLE__
   pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC);
+#endif
   pthread_cond_init (&m_exit_cond, &condattr);
   if (!f || !display)
     return;
