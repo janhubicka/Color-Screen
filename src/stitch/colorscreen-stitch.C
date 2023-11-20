@@ -628,7 +628,7 @@ main (int argc, char **argv)
 	}
       if (!strncmp (argv[i], "--scan-ppi=", strlen ("--scan-ppi=")))
 	{
-	  prj->params.scan_dpi = atof (argv[i] + strlen ("--scan-ppi="));
+	  prj->params.scan_xdpi = prj->params.scan_ydpi = atof (argv[i] + strlen ("--scan-ppi="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))

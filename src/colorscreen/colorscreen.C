@@ -82,6 +82,71 @@ parse_dye_balance (const char *model)
   return render_parameters::dye_balance_max;
 }
 
+#if 0
+static bool
+arg_with_param (int argc, char **argv, int *i, const char *arg, const char **param)
+{
+  if (arg[0]=='-' || arg[1]=='-')
+    return false;
+  if (!strcmp (arg + 2, par))
+    {
+      if (*i == argc - 1)
+	print_help ();
+      (*i)++;
+      if (!sscanf (argv[*i], "%f",&val))
+	print_help ();
+      if (val < min || val > max)
+	{
+	  fprintf (stderr, "parameter %f out of range\n", par);
+	  print_help ();
+	}
+      return true;
+    }
+  len = strlen (par);
+  if (!strncmp (arg + 2, par, len)
+      && par[arg + 2 + len]=='=')
+    {
+      if (!sscanf (arg+2+len+1, "%f",&val))
+	print_help ();
+      return true;
+    }
+}
+#endif
+
+static bool
+parse_float_param (int argc, char **argv, int *i, const char *arg, float &val, float min, float max)
+{
+#if 0
+  const char *arg = argv[*i];
+  if (arg[0]=='-' || arg[1]=='-')
+    return false;
+  if (!strcmp (arg + 2, par))
+    {
+      if (*i == argc - 1)
+	print_help ();
+      (*i)++;
+      if (!sscanf (argv[*i], "%f",&val))
+	print_help ();
+      if (val < min || val > max)
+	{
+	  fprintf (stderr, "parameter %f out of range\n", par);
+	  print_help ();
+	}
+      return true;
+    }
+  len = strlen (par);
+  if (!strncmp (arg + 2, par, len)
+      && par[arg + 2 + len]=='=')
+    {
+      if (!sscanf (arg+2+len+1, "%f",&val))
+	print_help ();
+      return true;
+    }
+  return false;
+#endif
+  return false;
+}
+
 static void
 render (int argc, char **argv)
 {
@@ -95,6 +160,7 @@ render (int argc, char **argv)
   bool force_precise = false;
   bool detect_geometry = false;
   float scan_dpi = 0;
+  float scale;
 
 
   for (int i = 0; i < argc; i++)
@@ -127,32 +193,10 @@ render (int argc, char **argv)
 	{
 	  output_profile = parse_output_profile (argv[i] + strlen ("--output-profile="));
 	}
-      else if (!strcmp (argv[i], "--scan-ppi"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  if (!sscanf (argv[i], "%f",&scan_dpi))
-	    print_help ();
-	}
-      else if (!strcmp (argv[i], "--scan-ppi="))
-	{
-	  if (!sscanf (argv[i] + strlen("--scan-ppi="), "%f",&scan_dpi))
-	    print_help ();
-	}
-      else if (!strcmp (argv[i], "--age"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  if (!sscanf (argv[i], "%f",&age))
-	    print_help ();
-	}
-      else if (!strcmp (argv[i], "--age="))
-	{
-	  if (!sscanf (argv[i] + strlen ("--age="), "%f",&age))
-	    print_help ();
-	}
+      else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000))
+	;
+      else if (parse_float_param (argc, argv, &i, "age", age, -1000, 1000))
+	;
       else if (!strcmp (argv[i], "--color-model"))
 	{
 	  if (i == argc - 1)

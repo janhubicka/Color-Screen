@@ -72,10 +72,10 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
     {
       img_width = img->width;
       img_height = img->height;
-      if (m_prj->params.scan_dpi && !img->xdpi)
-	img->xdpi = m_prj->params.scan_dpi;
-      if (m_prj->params.scan_dpi && !img->ydpi)
-	img->ydpi = m_prj->params.scan_dpi;
+      if (m_prj->params.scan_xdpi && !img->xdpi)
+	img->xdpi = m_prj->params.scan_xdpi;
+      if (m_prj->params.scan_ydpi && !img->ydpi)
+	img->ydpi = m_prj->params.scan_ydpi;
       if (!img->rgbdata)
 	{
 	  *error = "source image is not having color channels";
