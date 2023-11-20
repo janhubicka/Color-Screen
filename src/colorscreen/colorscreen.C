@@ -38,6 +38,14 @@ print_help ()
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --mode=mode               select one of output modes:");
+  for (int j = 0; j < output_mode_max; j++)
+  {
+    if (!(j % 4))
+      fprintf (stderr, "\n                                 ");
+    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[j].name);
+  }
+  fprintf (stderr, "\n");
   fprintf (stderr, "      --hdr                     output HDR tiff\n");
   fprintf (stderr, "      --output-profile=profile  specify output profile\n");
   fprintf (stderr, "                                suported profiles:");
@@ -47,7 +55,7 @@ print_help ()
   fprintf (stderr, "      --precise                 force precise collection of patch density\n");
   fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
   fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
-  fprintf (stderr, "                                suported modes");
+  fprintf (stderr, "                                suported modes:");
   for (int j = 0; j < render_parameters::dye_balance_max; j++)
     fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
   fprintf (stderr, "\n");
@@ -346,6 +354,48 @@ analyze_backlight (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
       exit (1);
     }
+  backlight_correction_parameters *cor = backlight_correction_parameters::analyze_scan (scan, 1.0);
+  FILE *out = fopen (argv[1], "wt");
+  if (!out)
+    {
+      progress.pause_stdout ();
+      perror ("Can not open output file");
+      exit (1);
+    }
+  if (!cor->save (out))
+    {
+      fprintf (stderr, "Can not write %s\n", argv[1]);
+      exit (1);
+    }
+  fclose (out);
+  if (argc == 3)
+    {
+      error = cor->save_tiff (argv[2]);
+      if (error)
+	{
+	  fprintf (stderr, "Failed to save output file: %s\n", error);
+	  exit (1);
+	}
+    }
+  delete cor;
+}
+
+void
+export_lcc (int argc, char **argv)
+{
+  const char *error = NULL;
+
+  printf ("%i\n",argc);
+  if (argc < 2 || argc > 3)
+    print_help ();
+  file_progress_info progress (verbose ? stdout : NULL);
+  image_data scan;
+  if (!scan.load (argv[0], false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      exit (1);
+    }
   if (!scan.lcc)
     {
       progress.pause_stdout ();
@@ -389,7 +439,7 @@ main (int argc, char **argv)
   if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
   if (!strcmp (argv[1], "export-lcc"))
-    analyze_backlight (argc-2, argv+2);
+    export_lcc (argc-2, argv+2);
   else
     print_help ();
   return 0;

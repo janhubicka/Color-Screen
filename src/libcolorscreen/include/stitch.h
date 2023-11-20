@@ -296,6 +296,19 @@ public:
 	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
 
   }
+
+  struct ratio 
+    {
+      luminosity_t ratio, val1, val2, weight;
+      bool operator < (const struct ratio &other) const
+      {
+	return ratio < other.ratio;
+      }
+    };
+  struct ratios
+  {
+    std::vector<ratio> channel[4];
+  };
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
@@ -311,6 +324,8 @@ private:
   bool release_images;
   coord_t rotation_adjustment;
   friend stitch_image;
+
+  struct ratios find_common_points (int x, int y, int ix, int iy, int outerborder, int innerborder, render_parameters &rparams, render &render1, progress_info *progress, const char **error);
 };
 
 
