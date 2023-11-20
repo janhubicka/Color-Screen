@@ -8,7 +8,7 @@
 #include "loadsave.h"
 extern unsigned char sRGB_icc[];
 extern unsigned int sRGB_icc_len;
-long stitch_image::current_time;
+uint64_t stitch_image::current_time;
 int stitch_image::nloaded;
 
 stitch_image::stitch_image ()
@@ -98,7 +98,7 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (nloaded >= 1 && m_prj->release_images)
     {
       int minx = -1, miny = -1;
-      long minlast = 0;
+      uint64_t minlast = 0;
       int nref = 0;
 
 

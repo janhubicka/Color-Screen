@@ -62,7 +62,7 @@ public:
   static backlight_correction_parameters *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
   /* Unique id of the image (used for caching).  */
-  unsigned long id;
+  uint64_t id;
   bool save (FILE *f);
   const char* save_tiff (const char *name);
   bool load (FILE *f, const char **);

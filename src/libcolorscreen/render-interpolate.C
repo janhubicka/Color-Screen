@@ -6,12 +6,12 @@ namespace {
 
 struct analyzer_params
 {
-  unsigned long graydata_id;
-  unsigned long screen_id;
+  uint64_t graydata_id;
+  uint64_t screen_id;
   //int width, height, xshift, yshift;
   bool precise;
   luminosity_t collection_threshold;
-  unsigned long mesh_trans_id;
+  uint64_t mesh_trans_id;
   scr_to_img_parameters params;
   /* TODO: We can also do this on computed data.  */
   luminosity_t dark_point, exposure;
@@ -68,7 +68,7 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data
 bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
-  unsigned long screen_id = 0;
+  uint64_t screen_id = 0;
   if (!render_to_scr::precompute (true, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)
@@ -225,8 +225,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
   if (m_screen_compensation)
     {
       coord_t lum = get_img_pixel_scr (x - xshift, y - yshift);
-      int ix = (long long) nearest_int ((x - xshift) * screen::size) & (screen::size - 1);
-      int iy = (long long) nearest_int ((y - yshift) * screen::size) & (screen::size - 1);
+      int ix = (uint64_t) nearest_int ((x - xshift) * screen::size) & (unsigned)(screen::size - 1);
+      int iy = (uint64_t) nearest_int ((y - yshift) * screen::size) & (unsigned)(screen::size - 1);
       luminosity_t sr = m_screen->mult[iy][ix][0];
       luminosity_t sg = m_screen->mult[iy][ix][1];
       luminosity_t sb = m_screen->mult[iy][ix][2];

@@ -23,12 +23,12 @@ my_modf (double x, int *ptr)
   return ret;
 }
 
-static inline long long
+static inline int64_t
 nearest_int (float x)
 {
   return roundf (x);
 }
-static inline long long
+static inline int64_t
 nearest_int (double x)
 {
   return round (x);

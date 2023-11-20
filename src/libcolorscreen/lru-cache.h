@@ -9,12 +9,12 @@ public:
    constexpr lru_caches ()
    {
    }
-   static unsigned long get ()
+   static uint64_t get ()
    {
       return std::atomic_fetch_add(&time, 1);
    }
 private:
-   static std::atomic_ulong time;
+   static std::atomic_uint64_t time;
 };
 extern class lru_caches lru_caches;
 
@@ -33,8 +33,8 @@ public:
     P params;
     T *val;
     cache_entry *next;
-    unsigned long id;
-    unsigned long last_used;
+    uint64_t id;
+    uint64_t last_used;
     int nuses;
   } *entries;
 
@@ -87,10 +87,10 @@ public:
 
   /* Get T for parameters P; do caching.
      If ID is non-NULL initialize it to the unique identifier of the cached data.  */
-  T *get(P &p, progress_info *progress, unsigned long *id = NULL)
+  T *get(P &p, progress_info *progress, uint64_t *id = NULL)
   {
     int size = 0;
-    unsigned long time = lru_caches::get ();
+    uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
     if (progress)
       progress->set_task ("unlocking cache", 1);
@@ -200,8 +200,8 @@ public:
     T *val;
     cache_entry *next;
     int xshift, yshift, width, height;
-    unsigned long id;
-    unsigned long last_used;
+    uint64_t id;
+    uint64_t last_used;
     int nuses;
   } *entries;
 
@@ -254,10 +254,10 @@ public:
 
   /* Get T for parameters P; do caching.
      If ID is non-NULL initialize it to the unique identifier of the cached data.  */
-  T *get(P &p, int xshift, int yshift, int width, int height, progress_info *progress, unsigned long *id = NULL)
+  T *get(P &p, int xshift, int yshift, int width, int height, progress_info *progress, uint64_t *id = NULL)
   {
     int size = 0;
-    unsigned long time = lru_caches::get ();
+    uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
     if (pthread_mutex_lock (&lock))
       abort ();

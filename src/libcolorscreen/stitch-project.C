@@ -763,7 +763,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
     {
       int x1,y1,x2,y2;
       int channel;
-      unsigned long n;
+      uint64_t n;
       luminosity_t s1, s2;
       luminosity_t weight;
     };
@@ -931,10 +931,10 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			 {
 			   if (ratios[c].size () > 1000)
 			     {
-			       std::vector<unsigned long> vals (histogram_size);
+			       std::vector<uint64_t> vals (histogram_size);
 			       for (auto &v:vals)
 				 v = 0;
-			       long int crop0 = 0,cropmax = 0;
+			       uint64_t crop0 = 0,cropmax = 0;
 
 			       /* Compute histogram.  */
 			       for (auto r:ratios[c])
@@ -949,7 +949,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 
 			       /* Determine cutoffs between buckets so they are about of the same size.  */
 			       luminosity_t cutoffs[buckets];
-			       unsigned long csum = 0;
+			       uint64_t csum = 0;
 			       int pos = 0;
 			       for (int bucket = 0; bucket < buckets; bucket++)
 				 {
@@ -974,7 +974,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 				 if (ratios_buckets[b].size ())
 				   {
 				      std::sort (ratios_buckets[b].begin (), ratios_buckets[b].end());
-				      unsigned long int n = 0;
+				      uint64_t n = 0;
 				      luminosity_t wsum1b = 0, wsum2b = 0;
 				      luminosity_t wsum3b = 0;
 				      for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
@@ -1118,7 +1118,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	}
     }
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
-  long int n = 0;
+  uint64_t n = 0;
   i=0;
 
   progress->pause_stdout ();

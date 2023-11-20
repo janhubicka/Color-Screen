@@ -66,11 +66,11 @@ render_superpose_img::fast_sample_pixel_img (int x, int y)
   luminosity_t rs, gs, bs;
   luminosity_t ra, ga, ba;
 
-  unsigned long ix, iy;
+  int ix, iy;
   m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
 
-  ix = (unsigned long long) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
-  iy = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
+  ix = (uint64_t) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
+  iy = (uint64_t) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
   rs = m_screen->mult[iy][ix][0];
   gs = m_screen->mult[iy][ix][1];
   bs = m_screen->mult[iy][ix][2];
@@ -110,8 +110,8 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
 {
   int ix, iy;
 
-  ix = (unsigned long long) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
-  iy = (unsigned long long) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
+  ix = (uint64_t) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
+  iy = (uint64_t) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
   if (!m_color)
     {
       luminosity_t graydata = get_img_pixel (x, y);
@@ -210,8 +210,8 @@ render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int
 	luminosity_t l = fast_get_img_pixel (x, y);
 
 	m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
-	int ix = (unsigned long long) round (scr_x * screen::size) & (unsigned)(screen::size - 1);
- 	int iy = (unsigned long long) round (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	int ix = (uint64_t) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+ 	int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 	rr += m_screen->mult[iy][ix][0] * l;
 	rw += m_screen->mult[iy][ix][0];
 	gg += m_screen->mult[iy][ix][1] * l;

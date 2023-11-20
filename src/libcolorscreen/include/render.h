@@ -468,7 +468,7 @@ protected:
      after constructing renderer.  */
   render_parameters m_params;
   /* ID of graydata computed.  */
-  unsigned long m_gray_data_id;
+  uint64_t m_gray_data_id;
   /* Sharpened data we render from.  */
   luminosity_t *m_sharpened_data;
   /* Wrapping class to cause proper destruction.  */

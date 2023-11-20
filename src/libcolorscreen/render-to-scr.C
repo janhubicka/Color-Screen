@@ -70,7 +70,7 @@ render_to_scr::precompute_img_range (bool grayscale_needed, coord_t, coord_t, co
 }
 
 screen *
-render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress, unsigned long *id)
+render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress, uint64_t *id)
 {
   screen_params p = {t, preview, radius};
   return screen_cache.get (p, progress, id);

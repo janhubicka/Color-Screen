@@ -264,8 +264,8 @@ protected:
   rgbdata *m_precomputed_rgbdata;
   color_class_map *m_color_class_map;
   scr_detect m_scr_detect;
-  unsigned long m_color_class_map_id;
-  unsigned long m_precomputed_rgbdata_id;
+  uint64_t m_color_class_map_id;
+  uint64_t m_precomputed_rgbdata_id;
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_normalized_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);

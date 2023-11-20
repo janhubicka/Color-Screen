@@ -183,9 +183,9 @@ class stitch_image
   }
 private:
   bool render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
-  static long current_time;
+  static uint64_t current_time;
   static int nloaded;
-  long lastused;
+  uint64_t lastused;
   int refcount;
   stitch_project *m_prj;
 };

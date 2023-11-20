@@ -236,7 +236,7 @@ public:
   bool save (FILE *f);
   static mesh *load (FILE *f, const char **error);
   /* Unique id of the mesh (used for caching).  */
-  unsigned long id;
+  uint64_t id;
 private:
   struct mesh_inverse
     {

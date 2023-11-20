@@ -7,7 +7,7 @@
 #include "mapalloc.h"
 
 class lru_caches lru_caches;
-std::atomic_ulong lru_caches::time;
+std::atomic_uint64_t lru_caches::time;
 
 
 /* A wrapper class around m_sharpened_data which handles allocation and dealocation.
@@ -148,7 +148,7 @@ struct graydata_params
   luminosity_t gamma, red, green, blue;
   /* Backlight correction.  */
   backlight_correction *backlight;
-  unsigned long backlight_correction_id;
+  uint64_t backlight_correction_id;
   luminosity_t backlight_correction_black;
   bool
   operator==(graydata_params &o)

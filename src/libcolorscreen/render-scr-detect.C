@@ -35,7 +35,7 @@ static int stats = -1;
 /* Lookup table translates raw input data into linear values.  */
 struct color_class_params
 {
-  unsigned long image_id;
+  uint64_t image_id;
   image_data *img;
   rgbdata *precomputed_rgbdata;
   scr_detect_parameters p;
@@ -93,7 +93,7 @@ static lru_cache <color_class_params, color_class_map, get_color_class_map, 1> c
 /* Lookup table translates raw input data into linear values.  */
 struct precomputed_rgbdata_params
 {
-  unsigned long image_id;
+  uint64_t image_id;
   scr_detect_parameters p;
   luminosity_t gamma;
 
@@ -155,8 +155,8 @@ static lru_cache <precomputed_rgbdata_params, rgbdata, get_precomputed_rgbdata, 
 /* Lookup table translates raw input data into linear values.  */
 struct patches_cache_params
 {
-  unsigned long scr_map_id;
-  unsigned long gray_data_id;
+  uint64_t scr_map_id;
+  uint64_t gray_data_id;
   color_class_map *map;
   image_data *img;
   render *r;
@@ -185,8 +185,8 @@ static lru_cache <patches_cache_params, patches, get_patches, 1> patches_cache (
 /* Lookup table translates raw input data into linear values.  */
 struct color_data_params
 {
-  unsigned long color_class_map_id;
-  unsigned long graydata_id;
+  uint64_t color_class_map_id;
+  uint64_t graydata_id;
   image_data *img;
   color_class_map *map;
   render *r;

@@ -30,7 +30,7 @@ public:
   int maxval;
   uint32_t icc_profile_size;
   /* Unique id of the image (used for caching).  */
-  unsigned long id;
+  uint64_t id;
   float xdpi, ydpi;
   stitch_project *stitch;
 

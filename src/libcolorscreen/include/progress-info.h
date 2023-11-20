@@ -20,7 +20,7 @@ public:
     if (debug && m_task)
       {
 	const char *t = m_task;
-	unsigned long current = m_current;
+	uint64_t current = m_current;
 	printf ("\nlast task %s: finished with %lu steps\n", t, current);
       }
   }
@@ -92,12 +92,12 @@ public:
   }
 
   void
-  set_task (const char *name, unsigned long max)
+  set_task (const char *name, uint64_t max)
   {
     if (debug && m_task)
       {
 	const char *t = m_task;
-	unsigned long current = m_current;
+	uint64_t current = m_current;
 	printf ("\ntask %s: finished with %lu steps\n", t, current);
       }
     m_current = 0;
@@ -116,7 +116,7 @@ public:
   }
 
   void
-  set_progress (unsigned long p)
+  set_progress (uint64_t p)
   {
     m_current = p;
   }
@@ -151,12 +151,12 @@ public:
 private:
   const static int debug = false;
   std::atomic<const char *>m_task;
-  std::atomic_ulong m_max, m_current;
+  std::atomic_uint64_t m_max, m_current;
   std::atomic_bool m_cancel;
   std::atomic_bool m_cancelled;
   struct task
     {
-      unsigned long max, current;
+      uint64_t max, current;
       const char *task;
     };
   std::vector <task> stack;
@@ -179,7 +179,7 @@ private:
   void pause_stdout (bool final);
   FILE *m_file;
   pthread_t m_thread;
-  std::atomic_ulong m_displayed;
+  std::atomic_uint64_t m_displayed;
   //std::atomic<const char *>m_last_task;
   std::atomic<int> m_last_printed_len;
   std::vector<status> m_last_status;
