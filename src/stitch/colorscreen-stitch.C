@@ -137,52 +137,6 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
   fclose (f);
 }
 
-/* Start writting output file to OUTFNAME with dimensions OUTWIDTHxOUTHEIGHT.
-   File will be 16bit RGB TIFF.
-   Allocate output buffer to hold single row to OUTROW.  */
-static TIFF *
-open_output_file (const char *outfname, int outwidth, int outheight,
-		  uint16_t ** outrow, const char **error,
-		  void *icc_profile, uint32_t icc_profile_size,
-		  progress_info *progress)
-{
-  TIFF *out = TIFFOpen (outfname, "wb8");
-  if (!out)
-    {
-      *error = "can not open output file";
-      return NULL;
-    }
-  if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, outwidth)
-      || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, outheight)
-      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, 3)
-      || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, 16)
-      || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_UINT)
-      || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
-      || !TIFFSetField (out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG)
-      || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, icc_profile ? icc_profile_size : sRGB_icc_len, icc_profile ? icc_profile : sRGB_icc))
-    {
-      *error = "write error";
-      return NULL;
-    }
-  *outrow = (uint16_t *) malloc (outwidth * 2 * 3);
-  if (!outrow)
-    {
-      *error = "Out of memory allocating output buffer";
-      return NULL;
-    }
-  if (progress)
-    {
-      progress->set_task ("Rendering and saving tile", outheight);
-    }
-  if (prj->report_file)
-    fprintf (prj->report_file, "Rendering %s in resolution %ix%i\n", outfname, outwidth, outheight);
-  progress->pause_stdout ();
-  printf ("Rendering %s in resolution %ix%i\n", outfname, outwidth, outheight);
-  progress->resume_stdout ();
-  return out;
-}
-
 void stitch (progress_info *progress)
 {
   if (!prj->initialize ())

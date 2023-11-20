@@ -463,6 +463,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   if (!complete_rendered_file_parameters (param, scan, &rfparams))
     {
       *error = "Precomputation failed (out of memory)";
+      if (free_profile)
+	free (icc_profile);
       return false;
     }
   bool icc_profile_set = rfparams.icc_profile;
@@ -485,6 +487,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -499,7 +503,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	// TODO: For HDR output we want to linearize the ICC profile.
 	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     case interpolated:
@@ -514,6 +522,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -527,7 +537,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 
 	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     case realistic:
@@ -540,6 +554,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -554,7 +570,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	   should be in the scan profile.  */
 	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     case detect_realistic:
@@ -562,8 +582,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	render_scr_detect_superpose_img render (dparam, scan, rparam, 65535);
 	if (!render.precompute_all (progress))
 	  {
-	    *error = "Precomputation failed (out of memory)";
-	    return false;
+	    if (free_profile)
+	      free (icc_profile);
 	  }
 	if (rfparams.verbose)
 	  {
@@ -575,7 +595,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
 	break;
       }
     case detect_adjusted:
@@ -584,6 +608,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (false, progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -596,7 +622,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
 	break;
       }
     case detect_nearest:
@@ -605,6 +635,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -617,7 +649,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     case detect_nearest_scaled:
@@ -626,6 +662,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -638,7 +676,11 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     case detect_relax:
@@ -647,6 +689,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
+	    if (free_profile)
+	      free (icc_profile);
 	    return false;
 	  }
 	if (rfparams.verbose)
@@ -659,11 +703,17 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, progress);
 	if (*error)
-	  return false;
+	  {
+	    if (free_profile)
+	      free (icc_profile);
+	    return false;
+	  }
       }
       break;
     default:
       abort ();
     }
+  if (free_profile)
+    free (icc_profile);
   return true;
 }

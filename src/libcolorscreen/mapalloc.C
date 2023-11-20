@@ -61,7 +61,7 @@ size_t MapAlloc::GetSize(void* p) {
 void MapAlloc::SetTmpdir(const char* _tmpdir) {
 	strcpy_s(tmpdir, _tmpdir);
 	size_t l = strlen(tmpdir);
-	while (tmpdir[l - 1] == '\\' || tmpdir[l - 1] == '/' && l > 0) tmpdir[--l] = 0;
+	while ((tmpdir[l - 1] == '\\' || tmpdir[l - 1] == '/') && l > 0) tmpdir[--l] = 0;
 }
 
 /***********************************************************************
@@ -70,7 +70,7 @@ void MapAlloc::SetTmpdir(const char* _tmpdir) {
 MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int alignment) : size(_size) {
 	if (total_allocated + size < cache_threshold) {
 		if (debug)
-		  printf ("Allocating %li bytes for %s, overall allocation: %i", (long)_size, reason, (long)(total_allocated + size));
+		  printf ("Allocating %li bytes for %s, overall allocation: %li", (long)_size, reason, (long)(total_allocated + size));
 #ifdef _WIN32
 		pointer = _aligned_malloc(size, alignment);
 #else

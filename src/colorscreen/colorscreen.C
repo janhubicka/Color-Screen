@@ -29,7 +29,34 @@ print_time ()
 static void
 print_help ()
 {
-  fprintf (stderr, "%s <scan> <config>.csp <out>.tif\n", binname);
+  fprintf (stderr, "%s <command> [<args>]\n", binname);
+  fprintf (stderr, "Supporteds command and parametrs are:\n\n");
+  fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
+  fprintf (stderr, "    render scan into tiff\n");
+  fprintf (stderr, "    <scan> is image, <parametrs> is the ColorScreen parametr file\n");
+  fprintf (stderr, "    <output> is tiff file to be produced\n");
+  fprintf (stderr, "    Supported args:\n");
+  fprintf (stderr, "      --help                    print help\n");
+  fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --hdr                     output HDR tiff\n");
+  fprintf (stderr, "      --output-profile=profile  specify output profile\n");
+  fprintf (stderr, "                                suported profiles:");
+  for (int j = 0; j < render_parameters::output_profile_max; j++)
+    fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
+  fprintf (stderr, "\n");
+  fprintf (stderr, "      --precise                 force precise collection of patch density\n");
+  fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
+  fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
+  fprintf (stderr, "                                suported modes");
+  for (int j = 0; j < render_parameters::dye_balance_max; j++)
+    fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
+  fprintf (stderr, "    produce backlight correction table from photo of empty backlight\n");
+  fprintf (stderr, "    Supported args:\n");
+  fprintf (stderr, "      --help                    print help\n");
+  fprintf (stderr, "      --verbose                 enable verbose output\n");
   exit (1);
 }
 
@@ -82,69 +109,47 @@ parse_dye_balance (const char *model)
   return render_parameters::dye_balance_max;
 }
 
-#if 0
-static bool
-arg_with_param (int argc, char **argv, int *i, const char *arg, const char **param)
+/* If there is --arg param or --arg=param at the command line
+   position *i, return non-NULL and in the first case increment
+   *i.  */
+
+static char *
+arg_with_param (int argc, char **argv, int *i, const char *arg)
 {
-  if (arg[0]=='-' || arg[1]=='-')
-    return false;
-  if (!strcmp (arg + 2, par))
+  char *cargv=argv[*i];
+  if (cargv[0]!='-' || cargv[1]!='-')
+    return NULL;
+  if (!strcmp (cargv + 2, arg))
     {
       if (*i == argc - 1)
 	print_help ();
       (*i)++;
-      if (!sscanf (argv[*i], "%f",&val))
-	print_help ();
-      if (val < min || val > max)
-	{
-	  fprintf (stderr, "parameter %f out of range\n", par);
-	  print_help ();
-	}
-      return true;
+      return argv[*i];
     }
-  len = strlen (par);
-  if (!strncmp (arg + 2, par, len)
-      && par[arg + 2 + len]=='=')
-    {
-      if (!sscanf (arg+2+len+1, "%f",&val))
-	print_help ();
-      return true;
-    }
+  size_t len = strlen (arg);
+  if (!strncmp (cargv + 2, arg, len)
+      && cargv[len + 2]=='=')
+    return cargv + len + 3;
+  return NULL;
 }
-#endif
 
 static bool
 parse_float_param (int argc, char **argv, int *i, const char *arg, float &val, float min, float max)
 {
-#if 0
-  const char *arg = argv[*i];
-  if (arg[0]=='-' || arg[1]=='-')
+  const char *param = arg_with_param (argc, argv, i, arg);
+  if (!param)
     return false;
-  if (!strcmp (arg + 2, par))
+  if (!sscanf (param, "%f",&val))
     {
-      if (*i == argc - 1)
-	print_help ();
-      (*i)++;
-      if (!sscanf (argv[*i], "%f",&val))
-	print_help ();
-      if (val < min || val > max)
-	{
-	  fprintf (stderr, "parameter %f out of range\n", par);
-	  print_help ();
-	}
-      return true;
+      fprintf (stderr, "invalid parameter of %s\n", param);
+      print_help ();
     }
-  len = strlen (par);
-  if (!strncmp (arg + 2, par, len)
-      && par[arg + 2 + len]=='=')
+  if (val < min || val > max)
     {
-      if (!sscanf (arg+2+len+1, "%f",&val))
-	print_help ();
-      return true;
+      fprintf (stderr, "parameter %s=%f is out of range %f...%f\n", arg, val, min, max);
+      print_help ();
     }
-  return false;
-#endif
-  return false;
+  return true;
 }
 
 static void
@@ -160,7 +165,7 @@ render (int argc, char **argv)
   bool force_precise = false;
   bool detect_geometry = false;
   float scan_dpi = 0;
-  float scale;
+  float scale = 0;
 
 
   for (int i = 0; i < argc; i++)
@@ -168,61 +173,25 @@ render (int argc, char **argv)
       if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
 	print_help();
       else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
-	{
-	  verbose = true;
-	}
-      else if (!strcmp (argv[i], "--mode"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  rfparams.mode = parse_mode (argv[i]);
-	}
-      else if (!strncmp (argv[i], "--mode=", 7))
-	rfparams.mode = parse_mode (argv[i]+7);
+	verbose = true;
+      else if (const char *str = arg_with_param (argc, argv, &i, "mode"))
+	rfparams.mode = parse_mode (str);
       else if (!strcmp (argv[i], "--hdr"))
 	rfparams.hdr = true;
-      else if (!strcmp (argv[i], "--output-profile"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  output_profile = parse_output_profile (argv[i]);
-	}
-      else if (!strcmp (argv[i], "--output-profile="))
-	{
-	  output_profile = parse_output_profile (argv[i] + strlen ("--output-profile="));
-	}
-      else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000))
+      else if (const char *str = arg_with_param (argc, argv, &i, "output-profile"))
+	output_profile = parse_output_profile (str);
+      else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000)
+	       || parse_float_param (argc, argv, &i, "age", age, -1000, 1000)
+	       || parse_float_param (argc, argv, &i, "scale", scale, 0.0000001, 100))
 	;
-      else if (parse_float_param (argc, argv, &i, "age", age, -1000, 1000))
-	;
-      else if (!strcmp (argv[i], "--color-model"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  color_model = parse_color_model (argv[i]);
-	}
-      else if (!strcmp (argv[i], "--color-model="))
-	{
-	  color_model = parse_color_model (argv[i] + strlen ("--color-model="));
-	}
+      else if (const char *str = arg_with_param (argc, argv, &i, "color-model"))
+	color_model = parse_color_model (str);
       else if (!strcmp (argv[i], "--detect-geometry"))
 	detect_geometry = true;
       else if (!strcmp (argv[i], "--precise"))
 	force_precise = true;
-      else if (!strcmp (argv[i], "--dye-balance"))
-	{
-	  if (i == argc - 1)
-	    print_help ();
-	  i++;
-	  dye_balance = parse_dye_balance (argv[i]);
-	}
-      else if (!strcmp (argv[i], "--dye-balance="))
-	{
-	  dye_balance = parse_dye_balance (argv[i] + strlen ("--dye-balance="));
-	}
+      else if (const char *str = arg_with_param (argc, argv, &i, "dye-balance"))
+	dye_balance = parse_dye_balance (str);
       else if (!infname)
 	infname = argv[i];
       else if (!cspname)
@@ -347,6 +316,8 @@ render (int argc, char **argv)
     rparam.dye_balance = dye_balance;
   if (output_profile != render_parameters::output_profile_max)
     rparam.output_profile = output_profile;
+  if (scale)
+    rfparams.scale = scale;
 
   /* ... and render!  */
   rfparams.verbose = verbose;
@@ -378,7 +349,7 @@ analyze_backlight (int argc, char **argv)
   if (!scan.lcc)
     {
       progress.pause_stdout ();
-      fprintf (stderr, "No PhaseOne LCC in scan: %s\n", argv[0], error);
+      fprintf (stderr, "No PhaseOne LCC in scan: %s\n", argv[0]);
       exit (1);
     }
   backlight_correction_parameters *cor = scan.lcc;

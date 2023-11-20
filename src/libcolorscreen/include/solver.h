@@ -152,7 +152,7 @@ struct detected_screen
   int xshift, yshift;
   bitmap_2d *known_patches;
 
-  struct screen_map *smap;
+  class screen_map *smap;
 };
 
 /* Parameters for reglar screen detection.  */
