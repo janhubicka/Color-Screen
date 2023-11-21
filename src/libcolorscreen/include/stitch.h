@@ -323,7 +323,13 @@ private:
   coord_t rotation_adjustment;
   friend stitch_image;
 
-  struct ratios find_common_points (int x, int y, int ix, int iy, int outerborder, int innerborder, render_parameters &rparams, render &render1, progress_info *progress, const char **error);
+  struct overlap
+  {
+    int x1, y1, x2, y2;
+    stitch_image::common_samples samples;
+    luminosity_t add, mul, weight;
+  };
+  double solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, bool verbose, progress_info *progress, bool finished, const char **error);
 };
 
 

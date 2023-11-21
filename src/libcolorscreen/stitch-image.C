@@ -1264,17 +1264,17 @@ sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
 
       if (xmin2 >= 0)
 	{
-	  sum += render->get_rgb_pixel (xmin2, y) * yweight * (1 - rx);
+	  sum += render->get_linearized_rgb_pixel (xmin2, y) * yweight * (1 - rx);
 	  sumweight += yweight * (1 - rx);
 	}
       for (x = xmin + 1; x < xmax - 1; x++)
 	{
-	  sum += render->get_rgb_pixel (x, y) * yweight;
+	  sum += render->get_linearized_rgb_pixel (x, y) * yweight;
 	  sumweight += yweight;
 	}
       if (xmax2 < img->width)
 	{
-	  sum += render->get_rgb_pixel (xmax2 - 1, y) * yweight * rx;
+	  sum += render->get_linearized_rgb_pixel (xmax2 - 1, y) * yweight * rx;
 	  sumweight += yweight * rx;
 	}
     }

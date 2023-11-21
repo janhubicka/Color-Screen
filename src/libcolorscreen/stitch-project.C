@@ -704,27 +704,35 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
   /* Apply backlight correction and produce array sof ratios.  */
   if (rparams.backlight_correction)
     {
-      backlight_correction correction1 (*rparams.backlight_correction, i1.img_width, i1.img_height, rparams.backlight_correction_black, false, progress);
-      backlight_correction correction2 (*rparams.backlight_correction, i2.img_width, i2.img_height, rparams.backlight_correction_black, false, progress);
+      backlight_correction correction1 (*rparams.backlight_correction, i1.img_width, i1.img_height, rparams.backlight_correction_black, true, progress);
+      backlight_correction correction2 (*rparams.backlight_correction, i2.img_width, i2.img_height, rparams.backlight_correction_black, true, progress);
 
-
+      if (progress)
+	progress->set_task ("Applying backlight correction", 1);
       for (auto s: samples)
        for (int c = 0; c < 4; c++)
-	 {
-	   luminosity_t val1 = correction1.apply (s.channel1[c], s.x1, s.x2, (backlight_correction_parameters::channel)c, true);
-	   luminosity_t val2 = correction1.apply (s.channel2[c], s.x1, s.x2, (backlight_correction_parameters::channel)c, true);
-	   if (val1 > 0)
-	     ratios.channel[c].push_back ({val2 / val1, val1, val2, s.weight});
-	 }
+	 if (s.channel1[c] > 0 && s.channel2[c] > 0)
+	   {
+	     luminosity_t val1 = correction1.apply (s.channel1[c], s.x1, s.y1, (backlight_correction_parameters::channel)c, true);
+	     luminosity_t val2 = correction2.apply (s.channel2[c], s.x2, s.y2, (backlight_correction_parameters::channel)c, true);
+	     if (val1 > 0 && val2 > 0)
+	       ratios.channel[c].push_back ({val2 / val1, val1, val2, s.weight});
+	   }
      }
   else
-    for (auto s: samples)
-      for (int c = 0; c < 4; c++)
-	if (s.channel1[c] > 0)
-	  ratios.channel[c].push_back ({s.channel2[c] / s.channel1[c], s.channel1[c], s.channel2[c], s.weight});
+    {
+      if (progress)
+	progress->set_task ("computing ratios", 1);
+      for (auto s: samples)
+	for (int c = 0; c < 4; c++)
+	  if (s.channel1[c] > 0 && s.channel2[c] > 0)
+	    ratios.channel[c].push_back ({s.channel2[c] / s.channel1[c], s.channel1[c], s.channel2[c], s.weight});
+    }
   /* How many different grayscale values we want to collect.  */
-  const int buckets = 256;
+  const int buckets = 32;
   const int histogram_size = 6556*2;
+  if (progress)
+    progress->set_task ("determining equations", 1);
   for (int c = 0; c < 4; c++)
     {
       if (ratios.channel[c].size () > 1000)
@@ -737,7 +745,7 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
 	  /* Compute histogram.  */
 	  for (auto r:ratios.channel[c])
 	    {
-	      int idx = ((r.val1 + r.val2) * (histogram_size - 1) + 0.5);
+	      int idx = ((r.val1 + r.val2) * (histogram_size / 2 - 1) + 0.5);
 	      if (idx < 0)
 		idx = 0, crop0++;
 	      if (idx >= histogram_size)
@@ -753,7 +761,7 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
 	    {
 	      for (;csum <= ((bucket + 1) * ratios.channel[c].size ()) / buckets && pos < histogram_size;pos++)
 		csum += vals[pos];
-	      cutoffs[bucket]=(pos - 0.5) / (histogram_size - 1);
+	      cutoffs[bucket]=(pos - 0.5) / (histogram_size / 2 - 1);
 	    }
 
 	  /* Distribute samples to buckets.  */
@@ -817,9 +825,9 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
   w = gsl_vector_alloc (nequations);
   c = gsl_vector_alloc (nvariables);
   cov = gsl_matrix_alloc (nvariables, nvariables);
-  int i;
+  size_t i;
   luminosity_t wsum = 0;
-  for (i = 0; i < (int)eqns.size () - from; i++)
+  for (i = 0; i < (size_t)(eqns.size () - from); i++)
     {
       gsl_matrix_set (A, i, 0, eqns[i + from].s1);
       gsl_matrix_set (A, i, 1, eqns[i + from].weight);
@@ -849,7 +857,7 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
   printf ("Fitting images: Mul %f add %f weight %f\n", *mul, *add * 65535, *weight);
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
   uint64_t n = 0;
-  for (i = from; i < (int)eqns.size (); i++)
+  for (i = from; i < (size_t)eqns.size (); i++)
     {
       auto eqn = eqns[i];
       luminosity_t cor_diff = (eqn.s1/eqn.weight) * *mul + *add - eqn.s2/eqn.weight;
@@ -868,7 +876,7 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
 		channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, eqn.weight, gsl_vector_get (w, i - from));
       i++;
     }
-  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / n * 65535, max_cor * 65535, cor_sq, avg_uncor /n * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
+  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
   progress->resume_stdout ();
 
   gsl_matrix_free (A);
@@ -879,88 +887,21 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
 
 }
 
-bool
-stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
+double
+stitch_project::solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, bool verbose, progress_info *progress, bool finished, const char **error)
 {
-  /* Set rendering params so we get actual linearized scan data.  */
-  render_parameters rparams;
-  rparams.gamma = in_rparams->gamma;
-  rparams.backlight_correction = in_rparams->backlight_correction;
-  rparams.backlight_correction_black = in_rparams->backlight_correction_black;
-  const char *error = NULL;
-
-  /* Do not analyze 30% across the stitch border to not be bothered by lens flare.  */
-  const int outerborder = 20;
-  /* Ignore 5% of inner borders.  */
-  const int innerborder = 3;
-
-  const bool verbose = false;
-
-  /* Determine how many scanlines we will inspect.  */
-  int combined_height = 0;
-  if (progress)
-    {
-      for (int y = 0; y < params.height; y++)
-	for (int x = 0; x < params.width; x++)
-	  {
-	    int ymin = images[y][x].img_height * (images[y][x].top ? outerborder : innerborder) / 100;
-	    int ymax = images[y][x].img_height * (images[y][x].bottom ? 100-outerborder : 100-innerborder) / 100;
-	    for (int iy = y; iy < params.height; iy++)
-	       for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
-		  combined_height += (ymax - ymin);
-	  }
-      progress->set_task ("analyzing images", combined_height);
-    }
-
   std::vector <equation> eqns;
-
-  /* For every stitched image.  */
-  for (int y = 0; y < params.height; y++)
-    for (int x = 0; x < params.width; x++)
-      {
-	if (progress && progress->cancel_requested ())
-	  break;
-	if (progress)
-	  progress->push ();
-	if (!images[y][x].load_img (&error, progress))
-	  {
-	    if (progress)
-	      progress->pop ();
-	    break;
-	  }
-	render render1 (*images[y][x].img, rparams, 255);
-	if (!render1.precompute_all (images[y][x].img->data != NULL, progress))
-	  {
-	    error = "precomputation failed";
-	    if (progress)
-	      progress->pop ();
-	    break;
-	  }
-	if (progress)
-	  progress->pop ();
-
-	/* Check for possible overlaps.  */
-	if ((!progress || !progress->cancel_requested ()) && !error)
-	  for (int iy = y; iy < params.height; iy++)
-	    if ((!progress || !progress->cancel_requested ()) && !error)
-	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width && (!progress || !progress->cancel_requested ()) && !error; ix++)
-		{
-		  stitch_image::common_samples samples = images[y][x].find_common_points (images[iy][ix], outerborder, innerborder, rparams, progress, &error);
-		  if ((!progress || !progress->cancel_requested ()) && !error && samples.size () > 10)
-		    {
-		      size_t first = eqns.size ();
-		      add_equations (eqns, images[y][x], images[iy][ix], x, y, ix, iy, samples, rparams, verbose, progress);
-		      luminosity_t add, mul, weight;
-		      match_pair (eqns, first, &add, &mul, &weight, verbose, progress);
-		    }
-		}
-	images[y][x].release_img ();
-      }
-  if ((progress && progress->cancel_requested ()) || error)
+  if (progress)
+    progress->set_task ("analyzing overlaps", overlaps.size ());
+  for (auto o: overlaps)
     {
-      *rerror = error;
-      return false;
+      size_t first = eqns.size ();
+      add_equations (eqns, images[o.y1][o.x1], images[o.y2][o.x2], o.x1, o.y1, o.x2, o.y2, o.samples, *in_rparams, verbose, progress);
+      if (finished)
+        match_pair (eqns, first, &o.add, &o.mul, &o.weight, verbose, progress);
     }
+  if (progress)
+    progress->set_task ("solving equations", 1);
 
   if (verbose)
     {
@@ -980,8 +921,8 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 
   if (nvariables >= nequations)
     {
-      *rerror = "Did not collect enough samples.";
-      return false;
+      *error = "Did not collect enough samples.";
+      return -1;
     }
   gsl_matrix *A, *cov;
   gsl_vector *y, *w, *c;
@@ -1047,6 +988,14 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 			&chisq, work);
   gsl_set_error_handler (old_handler);
   gsl_multifit_linear_free (work);
+  if (!finished)
+    {
+      gsl_matrix_free (A);
+      gsl_vector_free (y);
+      gsl_vector_free (w);
+      gsl_matrix_free (cov);
+      return chisq;
+    }
   /* Convert into our datastructure.  */
   if (in_rparams->tile_adjustments_width != params.width
       || in_rparams->tile_adjustments_height != params.height)
@@ -1072,7 +1021,8 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   i=0;
 
   progress->pause_stdout ();
-  printf ("Final solution:\n");
+  printf ("Final solution with backlight black %f %i:\n", in_rparams->backlight_correction_black, (int)(in_rparams->backlight_correction_black * 65535));
+  luminosity_t wsum = 0;
   for (auto eqn : eqns)
     {
       int idx = exp_index (this, fx, fy, eqn.x1, eqn.y1);
@@ -1089,6 +1039,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
       //luminosity_t cor_diff = (eqn.s1/eqn.n) * e1 + b1 - eqn.s2/eqn.n*e2 - b2;
       luminosity_t uncor_diff = (eqn.s1 - eqn.s2)/eqn.weight;
       n += eqn.n;
+      wsum+= eqn.weight;
       if (fabs (cor_diff) > max_cor)
 	max_cor = fabs (cor_diff);
       avg_cor += fabs (cor_diff) * eqn.weight;
@@ -1108,11 +1059,129 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	printf ("  %+6.2f*%1.8f", in_rparams->get_tile_adjustment (x,y).dark_point*65535, in_rparams->get_tile_adjustment (x,y).exposure);
       printf ("\n");
     }
-  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / n * 65535, max_cor * 65535, cor_sq, avg_uncor /n * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
+  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
   progress->resume_stdout ();
   gsl_matrix_free (A);
   gsl_vector_free (y);
   gsl_vector_free (w);
   gsl_matrix_free (cov);
+  return chisq;
+}
+
+bool
+stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
+{
+  /* Set rendering params so we get actual linearized scan data.  */
+  render_parameters rparams;
+  rparams.gamma = in_rparams->gamma;
+  rparams.backlight_correction = in_rparams->backlight_correction;
+  rparams.backlight_correction_black = in_rparams->backlight_correction_black;
+  const char *error = NULL;
+
+  /* Do not analyze 30% across the stitch border to not be bothered by lens flare.  */
+  const int outerborder = 20;
+  /* Ignore 5% of inner borders.  */
+  const int innerborder = 3;
+
+  const bool verbose = false;
+
+  /* Determine how many scanlines we will inspect.  */
+  int combined_height = 0;
+  if (progress)
+    {
+      for (int y = 0; y < params.height; y++)
+	for (int x = 0; x < params.width; x++)
+	  {
+	    int ymin = images[y][x].img_height * (images[y][x].top ? outerborder : innerborder) / 100;
+	    int ymax = images[y][x].img_height * (images[y][x].bottom ? 100-outerborder : 100-innerborder) / 100;
+	    for (int iy = y; iy < params.height; iy++)
+	       for (int ix = (iy == y ? x + 1 : 0); ix < params.width; ix++)
+		  combined_height += (ymax - ymin);
+	  }
+      progress->set_task ("analyzing images", combined_height);
+    }
+
+  std::vector <overlap> overlaps;
+
+  /* For every stitched image.  */
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      {
+	if (progress && progress->cancel_requested ())
+	  break;
+
+	/* Check for possible overlaps.  */
+	if ((!progress || !progress->cancel_requested ()) && !error)
+	  for (int iy = y; iy < params.height; iy++)
+	    if ((!progress || !progress->cancel_requested ()) && !error)
+	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width && (!progress || !progress->cancel_requested ()) && !error; ix++)
+		{
+		  overlaps.push_back({x,y,ix,iy,
+				      images[y][x].find_common_points (images[iy][ix], outerborder, innerborder, rparams, progress, &error)});
+		  if (overlaps.back ().samples.size () < 10)
+		    {
+		      overlaps.pop_back ();
+		      continue;
+		    }
+		}
+      }
+  if ((progress && progress->cancel_requested ()) || error)
+    {
+      *rerror = error;
+      return false;
+    }
+  if (overlaps.size () < params.width * params.height - 1)
+    {
+      *rerror = "there are not enough overlaps between tiles";
+      return false;
+    }
+  double min_chisq = 0;
+
+  const int backlightmin = -256, backlightmax = 256;
+  bool found = false;
+  int bestb;
+  if (in_rparams->backlight_correction)
+    {
+      if (progress)
+	progress->set_task ("optimizing backlight correction", backlightmax - backlightmin + 1);
+#pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,found,min_chisq,bestb)
+      for (int b = backlightmin ; b < backlightmax; b++)
+	{
+	  double chisq;
+	  if (0 && progress)
+	    progress->push ();
+	  in_rparams->backlight_correction_black = b / 65536.0;
+	  const char *lerror = NULL;
+	  if (!error)
+	    /* TODO: progress can not handle nested tasks in multiple threads.  */
+	  chisq = solve_equations (in_rparams, overlaps, verbose, /*progress*/NULL, false, &lerror);
+	  if (0 && progress)
+	    progress->pop ();
+	  if (lerror)
+#pragma omp critical
+	    error = lerror;
+	  else
+	    {
+#pragma omp critical
+	      if (!found || chisq < min_chisq)
+		{
+		  bestb = b;
+		  min_chisq = chisq;
+		  found = true;
+		}
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+      if (error)
+	{
+	  *rerror = error;
+	  return false;
+	}
+      in_rparams->backlight_correction_black = bestb / 65536.0;
+      solve_equations (in_rparams, overlaps, verbose, progress, true, &error);
+    }
+  else
+    solve_equations (in_rparams, overlaps, verbose, progress, true, &error);
   return true;
 }
