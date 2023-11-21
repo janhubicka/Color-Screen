@@ -1227,3 +1227,168 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   analyzed = true;
   return true;
 }
+
+static inline rgbdata
+sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
+		   int range)
+{
+  int x, y;
+  coord_t rx = my_modf (fx, &x);
+  coord_t ry = my_modf (fy, &y);
+  int xmin = x - range;
+  int xmin2 = xmin;
+  int xmax = x + range + 1;
+  int xmax2 = xmax;
+  int ymin = y - range;
+  int ymin2 = ymin;
+  int ymax = y + range + 1;
+  int ymax2 = ymax;
+  if (xmin < 0)
+    xmin = 0;
+  if (xmax >= img->width)
+    xmax = img->width - 1;
+  if (ymin < 0)
+    ymin = 0;
+  if (ymax >= img->height)
+    ymax = img->height - 1;
+  rgbdata sum = { 0, 0, 0 };
+  luminosity_t sumweight = 0;
+  //printf ("Sampling %f %f\n",fx,fy);
+  for (y = ymin; y < ymax; y++)
+    {
+      coord_t yweight = 1;
+      if (y == ymin2)
+	yweight = 1 - ry;
+      if (y == ymax2 - 1)
+	yweight = ry;
+
+      if (xmin2 >= 0)
+	{
+	  sum += render->get_rgb_pixel (xmin2, y) * yweight * (1 - rx);
+	  sumweight += yweight * (1 - rx);
+	}
+      for (x = xmin + 1; x < xmax - 1; x++)
+	{
+	  sum += render->get_rgb_pixel (x, y) * yweight;
+	  sumweight += yweight;
+	}
+      if (xmax2 < img->width)
+	{
+	  sum += render->get_rgb_pixel (xmax2 - 1, y) * yweight * rx;
+	  sumweight += yweight * rx;
+	}
+    }
+  if (!sumweight)
+  {
+    printf ("Sampling %f %f\n",fx,fy);
+    printf ("Weight %f\n",sumweight);
+    abort ();
+  }
+  return {sum.red / sumweight, sum.green / sumweight, sum.blue / sumweight};
+}
+
+/* Return samples of common points between image[y][x] and image[ix][iy].  */
+stitch_image::common_samples
+stitch_image::find_common_points (stitch_image &other, int outerborder, int innerborder, render_parameters &rparams, progress_info *progress, const char **error)
+{
+  /* Every sample taken is square 2*range x 2xrange of pixels.  */
+  const int range = 5;
+  /* Make step big enough so samples does not overlap.  */
+  const int step = 2 * range;
+  int xmin = img_width * (left ? outerborder : innerborder) / 100;
+  int ymin = img_height * (top ? outerborder : innerborder) / 100;
+  int xmax = img_width * (right ? 100-outerborder : 100-innerborder) / 100;
+  int ymax = img_height * (bottom ? 100-outerborder : 100-innerborder) / 100;
+
+  int xmin2 = other.img_width * (other.left ? outerborder : innerborder) / 100;
+  int ymin2 = other.img_height * (other.top ? outerborder : innerborder) / 100;
+  int xmax2 = other.img_width * (other.right ? 100-outerborder : 100-innerborder) / 100;
+  int ymax2 = other.img_height * (other.bottom ? 100-outerborder : 100-innerborder) / 100;
+
+  common_samples samples;
+  render *render1 = NULL;
+  render *render2 = NULL;
+
+#pragma omp parallel for default(none) shared(other,rparams,render1,render2,progress,error,samples,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
+  for (int yy = ymin; yy < ymax; yy+= step)
+    {
+      if ((!progress || !progress->cancel_requested ()) && !*error)
+	for (int xx = xmin; xx < xmax; xx+= step)
+	  {
+	    coord_t common_x, common_y;
+	    img_to_common_scr (xx, yy, &common_x, &common_y);
+
+	    if (!other.pixel_maybe_in_range_p (common_x, common_y))
+	      continue;
+	    coord_t iix, iiy;
+	    other.common_scr_to_img (common_x, common_y, &iix, &iiy);
+	    if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
+	      continue;
+	    luminosity_t weight = (luminosity_t)
+	      std::min ((coord_t)std::min (std::min (xx, img_width - xx),
+						std::min (yy, img_height - yy)),
+			std::min (std::min (iix, other.img_width - iix),
+			     std::min (iiy, other.img_height - iiy)));
+	    if (!(weight > 0))
+	      continue;
+#pragma omp critical
+	    if (!render1)
+	      {
+		if (progress)
+		  progress->push ();
+		if (load_img (error, progress)
+		    && other.load_img (error, progress))
+		  {
+		    render1 = new render (*img, rparams, 255);
+		    if (!render1->precompute_all (img->data != NULL, progress))
+		      {
+			*error = "precomputation failed";
+			delete render1;
+			render1 = 0;
+		      }
+		    render2 = new render (*other.img, rparams, 255);
+		    if (!render2->precompute_all (img->data != NULL, progress))
+		      {
+			*error = "precomputation failed";
+			delete render1;
+			delete render2;
+			render2 = 0;
+		      }
+		  }
+		if (progress)
+		  progress->pop ();
+	      }
+	    if (!render2)
+	      break;
+	    struct common_sample sample = {(coord_t)xx,(coord_t)yy,iix,iiy,{0,0,0,0},{0,0,0,0},weight};
+	    if (img->rgbdata)
+	      {
+		rgbdata d1 =  sample_image_area (img, render1, xx, yy, range);
+		rgbdata d2 =  sample_image_area (other.img, render2, iix, iiy, range);
+
+		sample.channel1[0] = d1.red;
+		sample.channel2[0] = d2.red;
+		sample.channel1[1] = d1.green;
+		sample.channel2[1] = d2.green;
+		sample.channel1[2] = d1.blue;
+		sample.channel2[2] = d2.blue;
+	      }
+	    /* Implement collection of IR channel.  */
+	    if (img->data)
+	      abort ();
+#pragma omp critical
+	     samples.push_back (sample);
+	  }
+	if (progress)
+	  for (int i = 0; i < step; i++)
+	    progress->inc_progress ();
+      }
+   if (render2)
+     {
+       other.release_img ();
+       delete render2;
+       release_img ();
+       delete render1;
+     }
+   return samples;
+}

@@ -423,16 +423,22 @@ public:
   inline luminosity_t get_unadjusted_data_blue (int x, int y);
   bool precompute_all (bool grayscale_needed, progress_info *progress);
   inline rgbdata
-  get_rgb_pixel (int x, int y)
+  get_linearized_rgb_pixel (int x, int y)
   {
     rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
+    return d;
+  }
+  inline rgbdata
+  get_rgb_pixel (int x, int y)
+  {
+    rgbdata d = get_linearized_rgb_pixel (x, y);
     if (m_backlight_correction)
       {
-	d.red = m_backlight_correction->apply (d.red, x, y, backlight_correction_parameters::red);
-	d.green = m_backlight_correction->apply (d.green, x, y, backlight_correction_parameters::green);
-	d.blue = m_backlight_correction->apply (d.blue, x, y, backlight_correction_parameters::blue);
+	d.red = m_backlight_correction->apply (d.red, x, y, backlight_correction_parameters::red, true);
+	d.green = m_backlight_correction->apply (d.green, x, y, backlight_correction_parameters::green, true);
+	d.blue = m_backlight_correction->apply (d.blue, x, y, backlight_correction_parameters::blue, true);
 	/* TODO do inversion and film curves if requested.  */
       }
     d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
@@ -562,7 +568,7 @@ render::get_data_red (int x, int y)
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].r];
   if (m_backlight_correction)
     {
-      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red, true);
     }
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   /* TODO do inversion and film curves if requested.  */
@@ -575,7 +581,7 @@ render::get_data_green (int x, int y)
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].g];
   if (m_backlight_correction)
     {
-      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green, true);
     }
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   /* TODO do inversion and film curves if requested.  */
@@ -588,7 +594,7 @@ render::get_data_blue (int x, int y)
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].b];
   if (m_backlight_correction)
     {
-      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue);
+      v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue, true);
     }
   v = (v - m_params.dark_point) * m_params.scan_exposure;
   /* TODO do inversion and film curves if requested.  */
@@ -780,9 +786,12 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
 			      cubic_interpolate (get_unadjusted_data_blue ( sx+1, sy-1), get_unadjusted_data_blue (sx+1, sy), get_unadjusted_data_blue (sx+1, sy+1), get_unadjusted_data_blue (sx+1, sy+2), ry),
 			      cubic_interpolate (get_unadjusted_data_blue ( sx+2, sy-1), get_unadjusted_data_blue (sx+2, sy), get_unadjusted_data_blue (sx+2, sy+1), get_unadjusted_data_blue (sx+2, sy+2), ry),
 			      rx);
-      rr = m_backlight_correction->apply (rr, xp, yp, backlight_correction_parameters::red);
-      gg = m_backlight_correction->apply (gg, xp, yp, backlight_correction_parameters::green);
-      bb = m_backlight_correction->apply (bb, xp, yp, backlight_correction_parameters::blue);
+      if (m_backlight_correction)
+	{
+	  rr = m_backlight_correction->apply (rr, xp, yp, backlight_correction_parameters::red, true);
+	  gg = m_backlight_correction->apply (gg, xp, yp, backlight_correction_parameters::green, true);
+	  bb = m_backlight_correction->apply (bb, xp, yp, backlight_correction_parameters::blue, true);
+	}
       *r = (rr - m_params.dark_point) * m_params.scan_exposure;
       *g = (gg - m_params.dark_point) * m_params.scan_exposure;
       *b = (bb - m_params.dark_point) * m_params.scan_exposure;

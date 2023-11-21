@@ -181,6 +181,15 @@ class stitch_image
   {
     scr_to_img_map.to_img (sx - xpos, sy - ypos, ix, iy);
   }
+  struct common_sample
+  {
+    coord_t x1, y1, x2, y2;
+    luminosity_t channel1[4];
+    luminosity_t channel2[4];
+    luminosity_t weight;
+  };
+  typedef std::vector<common_sample> common_samples;
+  common_samples find_common_points (stitch_image &other, int outerborder, int innerborder, render_parameters &rparams, progress_info *progress, const char **error);
 private:
   bool render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
   static uint64_t current_time;
@@ -265,8 +274,10 @@ public:
 	      /* Compute image coordinates.  */
 	      images[iy][ix].common_scr_to_img (sx, sy, &xx, &yy);
 	      /* Shortest distance from the edge.  */
-	      int dd = std::min (std::min ((int)xx, images[iy][ix].img_width - (int)xx),
-				 std::min ((int)yy, images[iy][ix].img_height - (int)yy));
+	      if (xx < 0 || xx >= images[iy][ix].img_width || yy < 0 || yy >= images[iy][ix].img_height)
+		continue;
+	      int dd = (std::min ((int)xx, images[iy][ix].img_width - (int)xx)
+		        +  std::min ((int)yy, images[iy][ix].img_height - (int)yy));
 	      /* Try to minimize distances to edges.  */
 	      if (dd>0 && (!found || dd > bdist))
 	        {
@@ -296,19 +307,6 @@ public:
 	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
 
   }
-
-  struct ratio 
-    {
-      luminosity_t ratio, val1, val2, weight;
-      bool operator < (const struct ratio &other) const
-      {
-	return ratio < other.ratio;
-      }
-    };
-  struct ratios
-  {
-    std::vector<ratio> channel[4];
-  };
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

@@ -648,65 +648,6 @@ print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w)
         return n;
 }
 
-static inline rgbdata
-sample_image_area (image_data *img, render *render, coord_t fx, coord_t fy,
-		   int range)
-{
-  int x, y;
-  coord_t rx = my_modf (fx, &x);
-  coord_t ry = my_modf (fy, &y);
-  int xmin = x - range;
-  int xmin2 = xmin;
-  int xmax = x + range + 1;
-  int xmax2 = xmax;
-  int ymin = y - range;
-  int ymin2 = ymin;
-  int ymax = y + range + 1;
-  int ymax2 = ymax;
-  if (xmin < 0)
-    xmin = 0;
-  if (xmax >= img->width)
-    xmax = img->width - 1;
-  if (ymin < 0)
-    ymin = 0;
-  if (ymax >= img->height)
-    ymax = img->height - 1;
-  rgbdata sum = { 0, 0, 0 };
-  luminosity_t sumweight = 0;
-  //printf ("Sampling %f %f\n",fx,fy);
-  for (y = ymin; y < ymax; y++)
-    {
-      coord_t yweight = 1;
-      if (y == ymin2)
-	yweight = 1 - ry;
-      if (y == ymax2 - 1)
-	yweight = ry;
-
-      if (xmin2 >= 0)
-	{
-	  sum += render->get_rgb_pixel (xmin2, y) * yweight * (1 - rx);
-	  sumweight += yweight * (1 - rx);
-	}
-      for (x = xmin + 1; x < xmax - 1; x++)
-	{
-	  sum += render->get_rgb_pixel (x, y) * yweight;
-	  sumweight += yweight;
-	}
-      if (xmax2 < img->width)
-	{
-	  sum += render->get_rgb_pixel (xmax2 - 1, y) * yweight * rx;
-	  sumweight += yweight * rx;
-	}
-    }
-  if (!sumweight)
-  {
-    printf ("Sampling %f %f\n",fx,fy);
-    printf ("Weight %f\n",sumweight);
-    abort ();
-  }
-  return {sum.red / sumweight, sum.green / sumweight, sum.blue / sumweight};
-}
-
 static inline int
 exp_index (stitch_project *p, int fx, int fy, int x, int y)
 {
@@ -718,6 +659,7 @@ exp_index (stitch_project *p, int fx, int fy, int x, int y)
     return i;
   return i-1;
 }
+
 static inline int
 black_index (stitch_project *p, int fx, int fy, int x, int y)
 {
@@ -731,120 +673,6 @@ black_index (stitch_project *p, int fx, int fy, int x, int y)
   return i-1 + o;
 }
 
-}
-
-/* Return samples of common points between image[y][x] and image[ix][iy].  */
-struct stitch_project::ratios 
-stitch_project::find_common_points (int x, int y, int ix, int iy, int outerborder, int innerborder, render_parameters &rparams, render &render1, progress_info *progress, const char **error)
-{
-  int xmin = images[y][x].img_width * (images[y][x].left ? outerborder : innerborder) / 100;
-  int ymin = images[y][x].img_height * (images[y][x].top ? outerborder : innerborder) / 100;
-  int xmax = images[y][x].img_width * (images[y][x].right ? 100-outerborder : 100-innerborder) / 100;
-  int ymax = images[y][x].img_height * (images[y][x].bottom ? 100-outerborder : 100-innerborder) / 100;
-
-  int xmin2 = images[iy][ix].img_width * (images[iy][ix].left ? outerborder : innerborder) / 100;
-  int ymin2 = images[iy][ix].img_height * (images[iy][ix].top ? outerborder : innerborder) / 100;
-  int xmax2 = images[iy][ix].img_width * (images[iy][ix].right ? 100-outerborder : 100-innerborder) / 100;
-  int ymax2 = images[iy][ix].img_height * (images[iy][ix].bottom ? 100-outerborder : 100-innerborder) / 100;
-
-  /* Every sample taken is square 2*range x 2xrange of pixels.  */
-  const int range = 5;
-  /* Make step big enough so samples does not overlap.  */
-  const int step = 2 * range;
-  struct ratios ratios;
-  render *render2 = NULL;
-  if ((progress && progress->cancel_requested ()) || *error)
-    return ratios;
-
-#pragma omp parallel for default(none) shared(y,x,ix,iy,rparams,render1,render2,progress,error,ratios,xmin,xmax,ymin,ymax,xmin2,xmax2,ymin2,ymax2)
-  for (int yy = ymin; yy < ymax; yy+= step)
-    {
-      if ((!progress || !progress->cancel_requested ()) && !*error)
-	for (int xx = xmin; xx < xmax; xx+= step)
-	  {
-	    coord_t common_x, common_y;
-	    images[y][x].img_to_common_scr (xx, yy, &common_x, &common_y);
-
-	    if (!images[iy][ix].pixel_maybe_in_range_p (common_x, common_y))
-	      continue;
-	    coord_t iix, iiy;
-	    images[iy][ix].common_scr_to_img (common_x, common_y, &iix, &iiy);
-	    if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
-	      continue;
-	    luminosity_t weight = (luminosity_t)
-	      std::min ((coord_t)std::min (std::min (xx, images[y][x].img_width - xx),
-						std::min (yy, images[y][x].img_height - yy)),
-			std::min (std::min (iix, images[iy][ix].img_width - iix),
-			     std::min (iiy, images[iy][ix].img_height - iiy)));
-	    if (!(weight > 0))
-	      continue;
-#pragma omp critical
-	    if (!render2)
-	      {
-		if (progress)
-		  progress->push ();
-		if (images[iy][ix].load_img (error, progress))
-		  {
-		    render2 = new render (*images[iy][ix].img, rparams, 255);
-		    if (!render2->precompute_all (images[y][x].img->data != NULL, progress))
-		      {
-			*error = "precomputation failed";
-			delete render2;
-			render2 = 0;
-		      }
-		  }
-		if (progress)
-		  progress->pop ();
-	      }
-	    if (!render2)
-	      break;
-	    luminosity_t minv = 0;
-	    if (images[y][x].img->rgbdata)
-	      {
-		luminosity_t red, green, blue;
-#if 1
-		rgbdata d = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[y][x].img, &render1, xx, yy, range);
-		rgbdata d2 = /*= render1.get_rgb_pixel (xx, yy)*/ sample_image_area (images[iy][ix].img, render2, iix, iiy, range);
-		red = d2.red;
-		green = d2.green;
-		blue = d2.blue;
-#else
-		rgbdata d;
-		render1.get_img_rgb_pixel (xx + 0.5, yy + 0.5, &d.red, &d.green, &d.blue);
-		render2->get_img_rgb_pixel (iix, iiy, &red, &green, &blue);
-#endif
-
-		if (d.red > minv && red > minv)
-#pragma omp critical
-		    ratios.channel[0].push_back ((struct ratio){d.red / red, d.red, red, weight});
-		if (d.green > minv && green > minv)
-#pragma omp critical
-		    ratios.channel[1].push_back ((struct ratio){d.green / green, d.green, green, weight});
-		if (d.blue > minv && blue > minv)
-#pragma omp critical
-		    ratios.channel[2].push_back ((struct ratio){d.blue / blue, d.blue, blue, weight});
-	      }
-	    /* Implement collection of IR channel.  */
-	    if (images[y][x].img->data)
-	      abort ();
-	    }
-	  if (progress)
-	   {
-	     for (int i = 0; i < step; i++)
-	       progress->inc_progress ();
-	   }
-      }
-   if (render2)
-     {
-       images[iy][ix].release_img ();
-       delete render2;
-     }
-   return ratios;
-}
-
-namespace {
-
-
 const char *channels[] = {"red", "green", "blue", "ir"};
 
 struct equation
@@ -856,9 +684,44 @@ struct equation
   luminosity_t weight;
 };
 
-void
-add_equations (std::vector <equation> &eqns, int x, int y, int ix, int iy, struct stitch_project::ratios &ratios, bool verbose, progress_info *progress)
+struct ratio 
+  {
+    luminosity_t ratio, val1, val2, weight;
+    bool operator < (const struct ratio &other) const
+    {
+      return ratio < other.ratio;
+    }
+  };
+struct ratios
 {
+  std::vector<ratio> channel[4];
+};
+
+void
+add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2, int x, int y, int ix, int iy, stitch_image::common_samples &samples, render_parameters &rparams, bool verbose, progress_info *progress)
+{
+  struct ratios ratios;
+  /* Apply backlight correction and produce array sof ratios.  */
+  if (rparams.backlight_correction)
+    {
+      backlight_correction correction1 (*rparams.backlight_correction, i1.img_width, i1.img_height, rparams.backlight_correction_black, false, progress);
+      backlight_correction correction2 (*rparams.backlight_correction, i2.img_width, i2.img_height, rparams.backlight_correction_black, false, progress);
+
+
+      for (auto s: samples)
+       for (int c = 0; c < 4; c++)
+	 {
+	   luminosity_t val1 = correction1.apply (s.channel1[c], s.x1, s.x2, (backlight_correction_parameters::channel)c, true);
+	   luminosity_t val2 = correction1.apply (s.channel2[c], s.x1, s.x2, (backlight_correction_parameters::channel)c, true);
+	   if (val1 > 0)
+	     ratios.channel[c].push_back ({val2 / val1, val1, val2, s.weight});
+	 }
+     }
+  else
+    for (auto s: samples)
+      for (int c = 0; c < 4; c++)
+	if (s.channel1[c] > 0)
+	  ratios.channel[c].push_back ({s.channel2[c] / s.channel1[c], s.channel1[c], s.channel2[c], s.weight});
   /* How many different grayscale values we want to collect.  */
   const int buckets = 256;
   const int histogram_size = 6556*2;
@@ -894,7 +757,7 @@ add_equations (std::vector <equation> &eqns, int x, int y, int ix, int iy, struc
 	    }
 
 	  /* Distribute samples to buckets.  */
-	  std::vector<stitch_project::ratio> ratios_buckets[buckets];
+	  std::vector<ratio> ratios_buckets[buckets];
 	  for (auto r:ratios.channel[c])
 	    {
 	      int b;
@@ -983,7 +846,7 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
   *mul = gsl_vector_get (c, 0);
   *add = gsl_vector_get (c, 1);
   *weight = wsum;
-  printf ("Fitting images: Mul %f add %f weight %f\n", *mul * 65535, *add, *weight);
+  printf ("Fitting images: Mul %f add %f weight %f\n", *mul, *add * 65535, *weight);
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
   uint64_t n = 0;
   for (i = from; i < (int)eqns.size (); i++)
@@ -1082,11 +945,11 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	    if ((!progress || !progress->cancel_requested ()) && !error)
 	      for (int ix = (iy == y ? x + 1 : 0); ix < params.width && (!progress || !progress->cancel_requested ()) && !error; ix++)
 		{
-		  struct ratios ratios = find_common_points (x, y, ix, iy, outerborder, innerborder, rparams, render1, progress, &error);
-		  if ((!progress || !progress->cancel_requested ()) && !error)
+		  stitch_image::common_samples samples = images[y][x].find_common_points (images[iy][ix], outerborder, innerborder, rparams, progress, &error);
+		  if ((!progress || !progress->cancel_requested ()) && !error && samples.size () > 10)
 		    {
 		      size_t first = eqns.size ();
-		      add_equations (eqns, x, y, ix, iy, ratios, verbose, progress);
+		      add_equations (eqns, images[y][x], images[iy][ix], x, y, ix, iy, samples, rparams, verbose, progress);
 		      luminosity_t add, mul, weight;
 		      match_pair (eqns, first, &add, &mul, &weight, verbose, progress);
 		    }
@@ -1199,8 +1062,8 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	    }
 	  else
 	    {
-	       in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, exp_index (this, fx, fy, x, y)) ;
-	       in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, black_index (this, fx, fy, x, y)) / in_rparams->get_tile_adjustment (x,y).exposure;
+	      in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, exp_index (this, fx, fy, x, y)) ;
+	      in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, black_index (this, fx, fy, x, y)) / in_rparams->get_tile_adjustment (x,y).exposure;
 	    }
 	}
     }
@@ -1239,7 +1102,6 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 		eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, eqn.weight, e1, b1, e2, b2, gsl_vector_get (w, i));
       i++;
     }
-  printf ("Final solution:\n");
   for (int y = 0; y < params.height; y++)
     {
       for (int x = 0; x < params.width; x++)
