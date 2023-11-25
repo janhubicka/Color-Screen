@@ -2180,6 +2180,7 @@ spectrum_dyes_to_xyz::normalize_xyz_to_backlight_whitepoint ()
 void
 spectrum_dyes_to_xyz::set_daylight_backlight (luminosity_t temperature)
 {
+  //compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
   daylight_il (backlight, temperature);
 }
 
@@ -2512,15 +2513,72 @@ spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
   return dyes.whitepoint_xyz ();
 }
 
+/* Compute XYZ values.  */
+static inline struct xyz
+get_xyz_no_backlight (spectrum s)
+{
+  struct xyz ret = { 0, 0, 0 };
+  luminosity_t sum = 0;
+  /* TODO: CIE recommends going by 1nm bands and interpolate.
+     We can implement that easily if that makes difference.  */
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      ret.x += (cie_cmf_x[i] * s[i]);
+      ret.y += (cie_cmf_y[i] * s[i]);
+      ret.z += (cie_cmf_z[i] * s[i]);
+      sum += cie_cmf_y[i];
+    }
+  luminosity_t scale = 1 / sum;
+  ret.x *= scale;
+  ret.y *= scale;
+  ret.z *= scale;
+  /* Argyll scales by backlight.  */
+  return ret;
+}
+
 color_matrix
 dufaycolor_correction_matrix ()
 {
-  spectrum new_red, new_green, new_blue;
-  compute_spectrum (new_red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false);
-  compute_spectrum (new_green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false);
-  compute_spectrum (new_blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false);
-  spectrum response;
+  spectrum red, green, blue;
+  spectrum il_A_red, il_A_green, il_A_blue;
+  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false);
+  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false);
+  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false);
   spectrum backlight;
+  //compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
+  //compute_spectrum (backlight, 320, 780, sizeof (old_daylight_data)/sizeof (luminosity_t), old_daylight_data, false);
+  daylight_il (backlight, 5000);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      il_A_red[i] = red[i] * backlight[i];
+      il_A_green[i] = green[i] * backlight[i];
+      il_A_blue[i] = blue[i] * backlight[i];
+    }
+
+  xyz filter_red = get_xyz_no_backlight (il_A_red);
+  xyz filter_green = get_xyz_no_backlight (il_A_green);
+  xyz filter_blue = get_xyz_no_backlight (il_A_blue);
+  luminosity_t red_scale = 0.177 / filter_red.y;
+  luminosity_t green_scale = 0.43 / filter_green.y;
+  luminosity_t blue_scale = 0.037 / filter_blue.y;
+  luminosity_t x,y,Y,z;
+  filter_red *= red_scale;
+  filter_green *= green_scale;
+  filter_blue *= blue_scale;
+  xyz_to_xyY (filter_red.x, filter_red.y, filter_red.z, &x, &y, &Y);
+  printf ("Red filter xyY:   %f %f %f scaled by:%f\n", x, y, Y, red_scale);
+  xyz_to_xyY (filter_green.x, filter_green.y, filter_green.z, &x, &y, &Y);
+  printf ("Green filter xyY: %f %f %f scaled by:%f\n", x, y, Y, green_scale);
+  xyz_to_xyY (filter_blue.x, filter_blue.y, filter_blue.z, &x, &y, &Y);
+  printf ("Blue filter xyY:  %f %f %f scaled by:%f\n", x, y, Y, blue_scale);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      red[i] *= red_scale;
+      green[i] *= green_scale;
+      blue[i] *= blue_scale;
+    }
+
+  spectrum response;
   /* This should be 1/log(t), we want linear respnse.  */
   compute_spectrum (response, sizeof (wedge_thungsten_panchromatic) / sizeof (spectra_entry), wedge_thungsten_panchromatic, false);
   //compute_spectrum (response, sizeof (absolute_panchromatic) / sizeof (spectra_entry), absolute_panchromatic, false);
@@ -2533,57 +2591,80 @@ dufaycolor_correction_matrix ()
     //response[i]=1;
     printf ("%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, response[i]);
   }
-  //compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
-  daylight_il (backlight, 6500);
+  //daylight_il (backlight, 6500);
 
   rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0};
+  luminosity_t sum = 0;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
-      //backlight[i]=1;
-      dred.red += new_red[i] * backlight[i] * response[i] * new_red[i];
-      dred.green += new_green[i] * backlight[i] * response[i] * new_red[i];
-      dred.blue += new_blue[i] * backlight[i] * response[i] * new_red[i];
+      luminosity_t w = backlight[i] * response[i];
+      dred.red += red[i] * w * red[i];
+      dred.green += green[i] * w * red[i];
+      dred.blue += blue[i] * w * red[i];
 
-      dgreen.red += new_red[i] * backlight[i] * response[i] * new_green[i];
-      dgreen.green += new_green[i] * backlight[i] * response[i] * new_green[i];
-      dgreen.blue += new_blue[i] * backlight[i] * response[i] * new_green[i];
+      dgreen.red += red[i] * w * green[i];
+      dgreen.green += green[i] * w * green[i];
+      dgreen.blue += blue[i] * w * green[i];
 
-      dblue.red += new_red[i] * backlight[i] * response[i] * new_blue[i];
-      dblue.green += new_green[i] * backlight[i] * response[i] * new_blue[i];
-      dblue.blue += new_blue[i] * backlight[i] * response[i] * new_blue[i];
+      dblue.red += red[i] * w * blue[i];
+      dblue.green += green[i] * w * blue[i];
+      dblue.blue += blue[i] * w * blue[i];
+      sum += w;
     }
+  dred *= 1 / sum;
+  dgreen *= 1 / sum;
+  dblue *= 1 / sum;
+#if 0
   double m = std::max (std::max (std::max (std::max (dred.red, dred.green), dred.blue),
 				 std::max (std::max (dgreen.red, dgreen.green), dgreen.blue)),
 				 std::max (std::max (dblue.red, dblue.green), dblue.blue));
   dred = dred * (1/m);
   dgreen = dgreen * (1/m);
   dblue = dblue * (1/m);
+#endif
   printf ("red: %f %f %f\n", dred.red, dred.green, dred.blue);
   printf ("green: %f %f %f\n", dgreen.red, dgreen.green, dgreen.blue);
   printf ("blue: %f %f %f\n", dblue.red, dblue.green, dblue.blue);
+#if 0
   spectrum_dyes_to_xyz spec;
   spec.set_dyes_to_dufay_color_cinematography ();
   spec.set_daylight_backlight (6500);
   spec.normalize_brightness ();
   color_matrix m1 = spec.xyz_matrix ();
+#endif
+  printf ("Filter matrix\n");
+  color_matrix m1 (filter_red.x,  filter_green.x, filter_blue.x,  0,
+		   filter_red.y,  filter_green.y, filter_blue.y,  0,
+		   filter_red.z,  filter_green.z, filter_blue.z,  0,
+		   0  , 0  , 0  , 1);
+  m1.print (stdout);
+#if 0
   xyz r, g, b;
   r = spec.dyes_rgb_to_xyz (dred.red, dred.green, dred.blue);
   g = spec.dyes_rgb_to_xyz (dgreen.red, dgreen.green, dgreen.blue);
   b = spec.dyes_rgb_to_xyz (dblue.red, dblue.green, dblue.blue);
-#if 0
   color_matrix m2 (r.x, g.x, b.x, 0,
 		   r.y, g.y, b.y, 0,
 		   r.z, g.z, b.z, 0,
 		   0  , 0  , 0  , 1);
 #endif
+  printf ("Density matrix\n");
   color_matrix m2 (dred.red,   dgreen.red,   dblue.red,   0,
 		   dred.green, dgreen.green, dblue.green, 0,
 		   dred.blue,  dgreen.blue,  dblue.blue,  0,
 		   0  , 0  , 0  , 1);
-  m2.normalize_grayscale (1,1,1);
-  m2 = m2.invert ();
-  m2.normalize_grayscale (1,1,1);
   m2.print (stdout);
-  m1 = m2 * m1;
+  //m2.normalize_grayscale (1,1,1);
+  m2 = m2.invert ();
+  //m2.normalize_grayscale (1,1,1);
+  printf ("Invered density matrix\n");
+  m2.print (stdout);
+  m1 = m1 * m2;
+  m1.apply_to_rgb (dred.red, dred.green, dred.blue, &x, &y, &z);
+  printf ("Oriignal red filter xyz:   %f %f %f\n", filter_red.x, filter_red.y, filter_red.z);
+  printf ("Reconstructed red filter xyz:   %f %f %f\n", x, y, z, red_scale);
+  xyz white;
+  srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+  m1.normalize_grayscale (white.x, white.y, white.z);
   return m1;
 }

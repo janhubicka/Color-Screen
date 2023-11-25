@@ -4,7 +4,61 @@
 #include "matrix.h"
 
 typedef float luminosity_t;
-struct xyz {luminosity_t x, y, z;};
+struct xyz {
+  luminosity_t x, y, z;
+  xyz &operator+=(const luminosity_t other)
+  {
+    x += other;
+    y += other;
+    z += other;
+    return *this;
+  }
+  xyz &operator-=(const luminosity_t other)
+  {
+    x -= other;
+    y -= other;
+    z -= other;
+    return *this;
+  }
+  xyz &operator*=(const luminosity_t other)
+  {
+    x *= other;
+    y *= other;
+    z *= other;
+    return *this;
+  }
+  xyz &operator+=(const xyz other)
+  {
+    x += other.x;
+    y += other.y;
+    z += other.z;
+    return *this;
+  }
+  xyz &operator-=(const xyz other)
+  {
+    x -= other.x;
+    y -= other.y;
+    z -= other.z;
+    return *this;
+  }
+  xyz &operator*=(const xyz other)
+  {
+    x *= other.x;
+    y *= other.y;
+    z *= other.z;
+    return *this;
+  }
+  luminosity_t &operator[](const int index)
+  {
+    switch (index)
+    {
+      case 0: return x;
+      case 1: return y;
+      case 2: return z;
+      default: __builtin_unreachable ();
+    }
+  }
+};
 struct xyY {luminosity_t x, y, Y;};
 
 /* Prevent conversion to wrong data type when doing math.  */
