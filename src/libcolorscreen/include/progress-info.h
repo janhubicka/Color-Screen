@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <cstdlib>
+#include <cinttypes>
 #include <atomic>
 #include <vector>
 #include "dllpublic.h"
@@ -21,7 +22,7 @@ public:
       {
 	const char *t = m_task;
 	uint64_t current = m_current;
-	printf ("\nlast task %s: finished with %lu steps\n", t, current);
+	printf ("\nlast task %s: finished with %" PRIu64 " steps\n", t, current);
       }
   }
 
@@ -98,13 +99,13 @@ public:
       {
 	const char *t = m_task;
 	uint64_t current = m_current;
-	printf ("\ntask %s: finished with %lu steps\n", t, current);
+	printf ("\ntask %s: finished with %" PRIu64 " steps\n", t, current);
       }
     m_current = 0;
     m_max = max;
     m_task = name;
     if (debug)
-      printf ("\ntask %s: %lu steps\n", name, max);
+      printf ("\ntask %s: %" PRIu64 " steps\n", name, max);
   }
 
   void
