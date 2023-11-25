@@ -276,8 +276,8 @@ public:
 	      /* Shortest distance from the edge.  */
 	      if (xx < 0 || xx >= images[iy][ix].img_width || yy < 0 || yy >= images[iy][ix].img_height)
 		continue;
-	      int dd = (std::min ((int)xx, images[iy][ix].img_width - (int)xx)
-		        +  std::min ((int)yy, images[iy][ix].img_height - (int)yy));
+	      int dd = std::min (std::min ((int)xx, images[iy][ix].img_width - (int)xx),
+				 std::min ((int)yy, images[iy][ix].img_height - (int)yy));
 	      /* Try to minimize distances to edges.  */
 	      if (dd>0 && (!found || dd > bdist))
 	        {
@@ -296,7 +296,15 @@ public:
 #endif
   }
   bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
-  DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams, const char **rerror, progress_info *info = NULL);
+  enum optimize_tile_adjustments_flags
+  {
+    OPTIMIZE_BACKLIGHT_BLACK = 1,
+    OPTIMIZE_EXPOSURE = 2,
+    OPTIMIZE_DARK_POINT = 4,
+    VERBOSE = 8,
+    OPTIMIZE_ALL = -1 & ~VERBOSE
+  };
+  DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams, int flags, const char **rerror, progress_info *info = NULL);
   void set_dpi (coord_t new_xdpi, coord_t new_ydpi)
   {
     params.scan_xdpi = new_xdpi;
@@ -329,7 +337,7 @@ private:
     stitch_image::common_samples samples;
     luminosity_t add, mul, weight;
   };
-  double solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, bool verbose, progress_info *progress, bool finished, const char **error);
+  double solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, int flags, progress_info *progress, bool finished, const char **error);
 };
 
 

@@ -168,11 +168,12 @@ struct gray_data_tables
   luminosity_t *rtable;
   luminosity_t *gtable;
   luminosity_t *btable;
+  luminosity_t red, green, blue;
   backlight_correction *correction;
 };
 
 inline gray_data_tables
-compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
+compute_gray_data_tables (struct graydata_params &p, bool correction, progress_info *progress)
 {
   gray_data_tables ret;
   luminosity_t red = p.red;
@@ -190,14 +191,22 @@ compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
   green /= sum;
   blue /= sum;
 
+  /* Normally the lookup tables contains red, green, blue weights.
+     However with backlight correction we need to apply them only after
+     correcting the input.  */
+  ret.red = red;
+  ret.green = green;
+  ret.blue = blue;
+
+
   lookup_table_params par;
   par.gamma = p.gamma;
   par.maxval = p.img->maxval;
-  par.scan_exposure = red;
+  par.scan_exposure = correction ? 1 : red;
   ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
-  par.scan_exposure = green;
+  par.scan_exposure = correction ? 1 : green;
   ret.gtable = lookup_table_cache.get (par, progress);
   if (!ret.gtable)
     {
@@ -205,7 +214,7 @@ compute_gray_data_tables (struct graydata_params &p, progress_info *progress)
       ret.rtable = NULL;
       return ret;
     }
-  par.scan_exposure = blue;
+  par.scan_exposure = correction ? 1 : blue;
   ret.btable = lookup_table_cache.get (par, progress);
   if (!ret.btable)
     {
@@ -234,9 +243,9 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int
   luminosity_t l3 = t.btable[b];
   if (t.correction)
     {
-      l1 = t.correction->apply (l1, x, y, backlight_correction_parameters::red);
-      l2 = t.correction->apply (l2, x, y, backlight_correction_parameters::green);
-      l3 = t.correction->apply (l3, x, y, backlight_correction_parameters::blue);
+      l1 = t.correction->apply (l1, x, y, backlight_correction_parameters::red) * t.red;
+      l2 = t.correction->apply (l2, x, y, backlight_correction_parameters::green) * t.green;
+      l3 = t.correction->apply (l3, x, y, backlight_correction_parameters::blue) * t.blue;
     }
   luminosity_t val = l1 + l2 + l3;
   return val;
@@ -322,7 +331,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
     }
   else
     {
-      gray_data_tables t = compute_gray_data_tables (p.gp, progress);
+      gray_data_tables t = compute_gray_data_tables (p.gp, p.gp.backlight != NULL, progress);
       if (!t.rtable)
 	ok = false;
       else
@@ -348,7 +357,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
-      m_backlight_correction = new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, !grayscale_needed, progress);
+      m_backlight_correction = new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, /*!grayscale_needed*/true, progress);
       if (!m_backlight_correction->initialized_p ())
 	{
 	  delete m_backlight_correction;

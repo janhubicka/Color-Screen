@@ -244,6 +244,7 @@ backlight_correction::backlight_correction (backlight_correction_parameters &par
     progress->set_task ("computing backlight correction", 1);
   m_weights = (entry *)malloc (m_width * m_height * sizeof (entry));
   m_black = black;
+
   if (!m_weights)
     return;
   luminosity_t sum[4] = {0,0,0,0};

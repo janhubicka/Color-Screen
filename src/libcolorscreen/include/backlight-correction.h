@@ -89,7 +89,7 @@ public:
     free (m_weights);
   }
   inline
-  luminosity_t apply (float val, int x, int y, enum backlight_correction_parameters::channel channel, bool safe = false)
+  luminosity_t apply (float val, int x, int y, enum backlight_correction_parameters::channel channel, bool safe = false, luminosity_t *mul = NULL)
   {
     int xx, yy;
     coord_t rx = my_modf (x * m_img_width_rec, &xx);
@@ -103,6 +103,8 @@ public:
     struct entry &e11 = m_weights[yy * m_width + (yy == m_height - 1 ? 0 : m_width) + xx + (xx == m_width - 1 ? 0 : 1)];
     luminosity_t mult1 = e01.mult[channel] * (1 - rx) + e11.mult[channel] * rx;;
     luminosity_t mult = mult0 * (1 - ry) + mult1 * ry;
+    if (mul)
+      *mul = mult;
     return (val - m_black) * mult + m_black;
   }
   bool initialized_p ()

@@ -1292,18 +1292,18 @@ stitch_image::common_samples
 stitch_image::find_common_points (stitch_image &other, int outerborder, int innerborder, render_parameters &rparams, progress_info *progress, const char **error)
 {
   /* Every sample taken is square 2*range x 2xrange of pixels.  */
-  const int range = 5;
+  const int range = 50;
   /* Make step big enough so samples does not overlap.  */
   const int step = 2 * range;
-  int xmin = img_width * (left ? outerborder : innerborder) / 100;
-  int ymin = img_height * (top ? outerborder : innerborder) / 100;
-  int xmax = img_width * (right ? 100-outerborder : 100-innerborder) / 100;
-  int ymax = img_height * (bottom ? 100-outerborder : 100-innerborder) / 100;
+  int xmin = img_width * (left ? outerborder : innerborder) / 100 + range;
+  int ymin = img_height * (top ? outerborder : innerborder) / 100 + range;
+  int xmax = img_width * (right ? 100-outerborder : 100-innerborder) / 100 - range;
+  int ymax = img_height * (bottom ? 100-outerborder : 100-innerborder) / 100 - range;
 
-  int xmin2 = other.img_width * (other.left ? outerborder : innerborder) / 100;
-  int ymin2 = other.img_height * (other.top ? outerborder : innerborder) / 100;
-  int xmax2 = other.img_width * (other.right ? 100-outerborder : 100-innerborder) / 100;
-  int ymax2 = other.img_height * (other.bottom ? 100-outerborder : 100-innerborder) / 100;
+  int xmin2 = other.img_width * (other.left ? outerborder : innerborder) / 100 + range;
+  int ymin2 = other.img_height * (other.top ? outerborder : innerborder) / 100 + range;
+  int xmax2 = other.img_width * (other.right ? 100-outerborder : 100-innerborder) / 100 - range;
+  int ymax2 = other.img_height * (other.bottom ? 100-outerborder : 100-innerborder) / 100 - range;
 
   common_samples samples;
   render *render1 = NULL;

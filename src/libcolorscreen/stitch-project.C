@@ -1,5 +1,6 @@
 #include <vector>
-#include <locale>
+#include <climits>
+#include <limits>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "include/stitch.h"
@@ -649,10 +650,12 @@ print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w)
 }
 
 static inline int
-exp_index (stitch_project *p, int fx, int fy, int x, int y)
+exp_index (stitch_project *p, int flags, int fx, int fy, int x, int y)
 {
   int f = fy * p->params.width + fx;
   int i = y * p->params.width + x;
+  if (!(flags & stitch_project::OPTIMIZE_EXPOSURE))
+    return -1;
   if (f == i)
     return -1;
   if (i < f)
@@ -661,11 +664,13 @@ exp_index (stitch_project *p, int fx, int fy, int x, int y)
 }
 
 static inline int
-black_index (stitch_project *p, int fx, int fy, int x, int y)
+black_index (stitch_project *p, int flags, int fx, int fy, int x, int y)
 {
   int f = fy * p->params.width + fx;
   int i = y * p->params.width + x;
-  int o = p->params.width * p->params.height - 1;
+  if (!(flags & stitch_project::OPTIMIZE_DARK_POINT))
+    return -1;
+  int o = (flags & stitch_project::OPTIMIZE_EXPOSURE) ? p->params.width * p->params.height - 1 : 0;
   if (f == i)
     return -1;
   if (i < f)
@@ -700,6 +705,12 @@ struct ratios
 void
 add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2, int x, int y, int ix, int iy, stitch_image::common_samples &samples, render_parameters &rparams, bool verbose, progress_info *progress)
 {
+  const bool do_buckets = true;
+  const bool combine_eqns = false;
+  /* How many different grayscale values we want to collect.  */
+  const int buckets = 32;
+  const int histogram_size = 6556*2;
+  const int skip_percents = 10;
   struct ratios ratios;
   /* Apply backlight correction and produce array sof ratios.  */
   if (rparams.backlight_correction)
@@ -713,10 +724,17 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
        for (int c = 0; c < 4; c++)
 	 if (s.channel1[c] > 0 && s.channel2[c] > 0)
 	   {
-	     luminosity_t val1 = correction1.apply (s.channel1[c], s.x1, s.y1, (backlight_correction_parameters::channel)c, true);
-	     luminosity_t val2 = correction2.apply (s.channel2[c], s.x2, s.y2, (backlight_correction_parameters::channel)c, true);
-	     if (val1 > 0 && val2 > 0)
+	     luminosity_t mul1, mul2;
+	     luminosity_t val1 = correction1.apply (s.channel1[c], s.x1, s.y1, (backlight_correction_parameters::channel)c, true, &mul1);
+	     luminosity_t val2 = correction2.apply (s.channel2[c], s.x2, s.y2, (backlight_correction_parameters::channel)c, true, &mul2);
+
+	     /* Normalize values so lower contrast is not preferred. */
+	     s.weight /= (mul1 + mul2) * 0.5;
+	     assert (s.weight > 0);
+	     if (do_buckets && val1 > 0 && val2 > 0)
 	       ratios.channel[c].push_back ({val2 / val1, val1, val2, s.weight});
+	     if (!do_buckets)
+	       eqns.push_back ({x,y,ix,iy,c,1,val1 * s.weight, val2 * s.weight, s.weight});
 	   }
      }
   else
@@ -726,16 +744,21 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
       for (auto s: samples)
 	for (int c = 0; c < 4; c++)
 	  if (s.channel1[c] > 0 && s.channel2[c] > 0)
-	    ratios.channel[c].push_back ({s.channel2[c] / s.channel1[c], s.channel1[c], s.channel2[c], s.weight});
+	    {
+	      if (do_buckets && s.channel2[c] > 0 && s.channel1[c] > 0)
+	        ratios.channel[c].push_back ({s.channel2[c] / s.channel1[c], s.channel1[c], s.channel2[c], s.weight});
+	     assert (s.weight > 0);
+	      if (!do_buckets)
+	        eqns.push_back ({x,y,ix,iy,c,1,s.channel1[c] * s.weight, s.channel2[c] * s.weight, s.weight});
+	    }
     }
-  /* How many different grayscale values we want to collect.  */
-  const int buckets = 32;
-  const int histogram_size = 6556*2;
+  if (!do_buckets)
+    return;
   if (progress)
     progress->set_task ("determining equations", 1);
   for (int c = 0; c < 4; c++)
     {
-      if (ratios.channel[c].size () > 1000)
+      if (ratios.channel[c].size () > 10)
 	{
 	  std::vector<uint64_t> vals (histogram_size);
 	  for (auto &v:vals)
@@ -783,30 +806,37 @@ add_equations (std::vector <equation> &eqns, stitch_image &i1, stitch_image &i2,
 		 uint64_t n = 0;
 		 luminosity_t wsum1b = 0, wsum2b = 0;
 		 luminosity_t wsum3b = 0;
-		 for (size_t i = ratios_buckets[b].size () / 4; i < (size_t)(3 * ratios_buckets[b].size () / 4); i++)
+		 for (size_t i = ratios_buckets[b].size () * skip_percents / 200; i <= std::min ((size_t)(ratios_buckets[b].size () - 1), (size_t)((ratios_buckets[b].size () * (200 - skip_percents) + 199) / 200)); i++)
 		 //for (size_t i = 0; i < ratios_buckets[b].size (); i++)
 		   {
 		     wsum1b += ratios_buckets[b][i].val1 * ratios_buckets[b][i].weight;
 		     wsum2b += ratios_buckets[b][i].val2 * ratios_buckets[b][i].weight;
+		     assert (ratios_buckets[b][i].weight > 0);
 		     wsum3b += ratios_buckets[b][i].weight;
 		     n++;
+		     if (!combine_eqns)
+		       eqns.push_back ({x, y, ix, iy, c, 1, ratios_buckets[b][i].val1 * ratios_buckets[b][i].weight, ratios_buckets[b][i].val2 * ratios_buckets[b][i].weight, ratios_buckets[b][i].weight});
 		   }
 		 /* Record equation.  */
-		 if (n)
+		 if (n && combine_eqns)
 		    eqns.push_back ({x,y,ix,iy,c,n,wsum1b, wsum2b, wsum3b});
 		 if (verbose)
 		   {
-		     progress->pause_stdout ();
+		     if (progress)
+		       progress->pause_stdout ();
 		     printf ("Found %li common points of tile %i,%i and %i,%i in channel %s. Bucket %i cutoff %f  Used samples %lu Ratio %f Sums %f %f Crops %li %li\n", (long int)ratios_buckets[b].size(), x, y, ix, iy, channels[c], b, cutoffs[b], n, wsum1b/wsum2b, wsum1b, wsum2b, crop0, cropmax);
-		     progress->resume_stdout ();
+		     if (progress)
+		       progress->resume_stdout ();
 		   }
 	      }
 	}
       else if (verbose)
 	 {
-	   progress->pause_stdout ();
+	   if (progress)
+	     progress->pause_stdout ();
 	   printf ("Found only %li common points of tile %i,%i and %i,%i in channel %s. Ignoring.\n", (long int)ratios.channel[c].size(), x, y, ix, iy, channels[c]);
-	   progress->resume_stdout ();
+	   if (progress)
+	     progress->resume_stdout ();
 	 }
     }
 }
@@ -829,6 +859,7 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
   luminosity_t wsum = 0;
   for (i = 0; i < (size_t)(eqns.size () - from); i++)
     {
+      assert (eqns[i + from].weight > 0);
       gsl_matrix_set (A, i, 0, eqns[i + from].s1);
       gsl_matrix_set (A, i, 1, eqns[i + from].weight);
       gsl_vector_set (y, i, eqns[i + from].s2);
@@ -888,9 +919,10 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
 }
 
 double
-stitch_project::solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, bool verbose, progress_info *progress, bool finished, const char **error)
+stitch_project::solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, int flags, progress_info *progress, bool finished, const char **error)
 {
   std::vector <equation> eqns;
+  const bool verbose = flags & VERBOSE;
   if (progress)
     progress->set_task ("analyzing overlaps", overlaps.size ());
   for (auto o: overlaps)
@@ -900,138 +932,198 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
       if (finished)
         match_pair (eqns, first, &o.add, &o.mul, &o.weight, verbose, progress);
     }
-  if (progress)
-    progress->set_task ("solving equations", 1);
 
   if (verbose)
     {
-      progress->pause_stdout ();
+      if (progress)
+        progress->pause_stdout ();
 
       /* Print equaltions.  */
       for (int i = 0; i < (int)eqns.size (); i++)
 	printf ("e%i%i * %f + b%i%i*%lu = e%i%i * %f + b%i%i*%lu\n", eqns[i].x1, eqns[i].y1, eqns[i].s1, eqns[i].x1, eqns[i].y1, eqns[i].n, eqns[i].x2, eqns[i].y2, eqns[i].s2, eqns[i].x2, eqns[i].y2, eqns[i].n);
-      progress->resume_stdout ();
+      if (progress)
+        progress->resume_stdout ();
     }
 
   /* Feed to GSL.  */
-  int nvariables = 2 * params.width * params.height - 2;
-  int nequations = eqns.size ();
+  int nvariables = ((flags & OPTIMIZE_EXPOSURE) ? (params.width * params.height - 1) : 0)
+		   + (flags & OPTIMIZE_DARK_POINT) ? (params.width * params.height - 1) : 0;
   int fx = params.width / 2;
   int fy = params.height / 2;
-
-  if (nvariables >= nequations)
-    {
-      *error = "Did not collect enough samples.";
-      return -1;
-    }
-  gsl_matrix *A, *cov;
-  gsl_vector *y, *w, *c;
-  A = gsl_matrix_alloc (nequations, nvariables);
-  y = gsl_vector_alloc (nequations);
-  w = gsl_vector_alloc (nequations);
-  c = gsl_vector_alloc (nvariables);
-  cov = gsl_matrix_alloc (nvariables, nvariables);
-  int i;
-  for (i = 0; i < (int)eqns.size (); i++)
-    {
-      for (int j = 0; j < nvariables; j++)
-	gsl_matrix_set (A, i, j, 0);
-      double rhs = 0;
-
-      int idx = exp_index (this, fx, fy, eqns[i].x1, eqns[i].y1);
-      if (idx == -1)
-	rhs -= eqns[i].s1;
-      else
-        gsl_matrix_set (A, i, idx, eqns[i].s1);
-
-      idx = exp_index (this, fx, fy, eqns[i].x2, eqns[i].y2);
-      if (idx == -1)
-	rhs += eqns[i].s2;
-      else
-        gsl_matrix_set (A, i, idx, -eqns[i].s2);
-
-      idx = black_index (this, fx, fy, eqns[i].x1, eqns[i].y1);
-      if (idx == -1)
-        ;
-      else
-        gsl_matrix_set (A, i, idx, eqns[i].weight);
-
-      idx = black_index (this, fx, fy, eqns[i].x2, eqns[i].y2);
-      if (idx == -1)
-        ;
-      else
-        gsl_matrix_set (A, i, idx, -eqns[i].weight);
-
-      gsl_vector_set (y, i, rhs);
-      /* The darker point is, more we care.  */
-      if (eqns[i].s1>0)
-	{
-	  luminosity_t avg_density = eqns[i].s1/eqns[i].weight;
-	  gsl_vector_set (w, i, /*1/avg_density **/ (invert_gamma (avg_density, 2.4)/avg_density));
+  gsl_vector *c = NULL, *w = NULL;
+  double chisq = std::numeric_limits<double>::max ();
+  if (nvariables)
+   {
+      if (progress)
+	progress->set_task ("solving equations", 1);
+      int nequations = eqns.size ();
+      if (nequations > 300000)
+        {
+	  *error = "too many equations to solve";
+	  return std::numeric_limits<double>::max ();
 	}
-      else
-        gsl_vector_set (w, i, 1);
-    }
 
-  if (verbose)
-    {
-      progress->pause_stdout ();
-      print_system (stdout, A, y, w);
-      progress->resume_stdout ();
-    }
-
-  gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
-  gsl_multifit_linear_workspace * work
-    = gsl_multifit_linear_alloc (nequations, nvariables);
-  double chisq;
-  gsl_multifit_wlinear (A, w, y, c, cov,
-			&chisq, work);
-  gsl_set_error_handler (old_handler);
-  gsl_multifit_linear_free (work);
-  if (!finished)
-    {
-      gsl_matrix_free (A);
-      gsl_vector_free (y);
-      gsl_vector_free (w);
-      gsl_matrix_free (cov);
-      return chisq;
-    }
-  /* Convert into our datastructure.  */
-  if (in_rparams->tile_adjustments_width != params.width
-      || in_rparams->tile_adjustments_height != params.height)
-    in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
-  for (int y = 0; y < params.height; y++)
-    {
-      for (int x = 0; x < params.width; x++)
+      if (nvariables >= nequations)
 	{
-	  if (x == fx && y == fy)
+	  *error = "Did not collect enough samples.";
+	  return std::numeric_limits<double>::max ();
+	}
+      gsl_matrix *A = gsl_matrix_alloc (nequations, nvariables);
+      gsl_vector *y = gsl_vector_alloc (nequations);
+      gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
+      w = gsl_vector_alloc (nequations);
+      c = gsl_vector_alloc (nvariables);
+      int i;
+      for (i = 0; i < (int)eqns.size (); i++)
+	{
+	  for (int j = 0; j < nvariables; j++)
+	    gsl_matrix_set (A, i, j, 0);
+	  double rhs = 0;
+
+	  int idx = exp_index (this, flags, fx, fy, eqns[i].x1, eqns[i].y1);
+	  if (idx == -1)
+	    rhs -= eqns[i].s1;
+	  else
+	    gsl_matrix_set (A, i, idx, eqns[i].s1);
+
+	  idx = exp_index (this, flags, fx, fy, eqns[i].x2, eqns[i].y2);
+	  if (idx == -1)
+	    rhs += eqns[i].s2;
+	  else
+	    gsl_matrix_set (A, i, idx, -eqns[i].s2);
+
+	  idx = black_index (this, flags, fx, fy, eqns[i].x1, eqns[i].y1);
+	  if (idx == -1)
+	    ;
+	  else
+	    gsl_matrix_set (A, i, idx, eqns[i].weight);
+
+	  idx = black_index (this, flags, fx, fy, eqns[i].x2, eqns[i].y2);
+	  if (idx == -1)
+	    ;
+	  else
+	    gsl_matrix_set (A, i, idx, -eqns[i].weight);
+	  assert (eqns[i].weight > 0);
+
+	  gsl_vector_set (y, i, rhs);
+	  /* The darker point is, more we care.  */
+	  if (eqns[i].s1>0)
 	    {
-	      in_rparams->get_tile_adjustment (x,y).exposure = 1;
-	      in_rparams->get_tile_adjustment (x,y).dark_point = 0;
+	      luminosity_t avg_density = eqns[i].s1/eqns[i].weight;
+	      gsl_vector_set (w, i, /*1/avg_density **/ (invert_gamma (avg_density, 2.4)/avg_density));
 	    }
 	  else
+	    gsl_vector_set (w, i, 1);
+	}
+
+      if (verbose)
+	{
+	  if (progress)
+	    progress->pause_stdout ();
+	  print_system (stdout, A, y, w);
+	  if (progress)
+	    progress->resume_stdout ();
+	}
+
+      gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
+      gsl_multifit_linear_workspace * work
+	= gsl_multifit_linear_alloc (nequations, nvariables);
+      chisq = 0;
+      gsl_multifit_wlinear (A, w, y, c, cov,
+			    &chisq, work);
+      gsl_set_error_handler (old_handler);
+      gsl_multifit_linear_free (work);
+      gsl_matrix_free (A);
+      gsl_vector_free (y);
+      gsl_matrix_free (cov);
+
+      /* Sanity check the solution.  */
+      for (int y = 0; y < params.height; y++)
+	for (int x = 0; x < params.width; x++)
+	  {
+	    int idx = exp_index (this, flags, fx, fy, x, y);
+	    if (idx != -1)
+	      {
+		double e = gsl_vector_get (c, idx);
+		if (!e)
+		  {
+		    gsl_vector_free (c);
+		    gsl_vector_free (w);
+		    *error = "did not collect enough samples to have overlap across whole stitch project";
+		    return std::numeric_limits<double>::max ();
+		  }
+		if (!(e > 0 && e < 2))
+		  {
+		    gsl_vector_free (c);
+		    gsl_vector_free (w);
+		    *error = "exposure adjustment out of range";
+		    return std::numeric_limits<double>::max ();
+		  }
+	      }
+	     idx = black_index (this, flags, fx, fy, x, y);
+	     if (idx != -1)
+	       {
+		  double b = gsl_vector_get (c, idx);
+		  if (!(b > -1 && b < 1))
+		    {
+		      gsl_vector_free (c);
+		      gsl_vector_free (w);
+		      *error = "black point adjustment out of range";
+		      return std::numeric_limits<double>::max ();
+		    }
+		}
+	  }
+
+      /* If we are just searching best blackpoint correction, return quality of match.  */
+      if (!finished)
+	{
+	  gsl_vector_free (c);
+	  gsl_vector_free (w);
+	  return chisq;
+	}
+   }
+
+  /* Write solution to rparams.  */
+  if (finished)
+    {
+      if (in_rparams->tile_adjustments_width != params.width
+	  || in_rparams->tile_adjustments_height != params.height)
+	in_rparams->set_tile_adjustments_dimensions (params.width, params.height);
+      for (int y = 0; y < params.height; y++)
+	{
+	  for (int x = 0; x < params.width; x++)
 	    {
-	      in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, exp_index (this, fx, fy, x, y)) ;
-	      in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, black_index (this, fx, fy, x, y)) / in_rparams->get_tile_adjustment (x,y).exposure;
+	      int idx = exp_index (this, flags, fx, fy, x, y);
+	      if (idx >= 0)
+		in_rparams->get_tile_adjustment (x,y).exposure = gsl_vector_get (c, idx);
+	      else
+		in_rparams->get_tile_adjustment (x,y).exposure = 1;
+	      idx = black_index (this, flags, fx, fy, x, y);
+	      if (idx >= 0)
+		in_rparams->get_tile_adjustment (x,y).dark_point = -gsl_vector_get (c, idx) / in_rparams->get_tile_adjustment (x,y).exposure;
+	      else
+		in_rparams->get_tile_adjustment (x,y).dark_point = 0;
 	    }
 	}
+      if (progress)
+        progress->pause_stdout ();
+      printf ("Final solution with backlight black %f %i:\n", in_rparams->backlight_correction_black, (int)(in_rparams->backlight_correction_black * 65535));
     }
+
+  /* Ouptut equations and compute data on the quality of output.  */
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
   uint64_t n = 0;
-  i=0;
-
-  progress->pause_stdout ();
-  printf ("Final solution with backlight black %f %i:\n", in_rparams->backlight_correction_black, (int)(in_rparams->backlight_correction_black * 65535));
+  int i=0;
   luminosity_t wsum = 0;
   for (auto eqn : eqns)
     {
-      int idx = exp_index (this, fx, fy, eqn.x1, eqn.y1);
+      int idx = exp_index (this, flags, fx, fy, eqn.x1, eqn.y1);
       double e1 = idx == -1 ? 1 : gsl_vector_get (c, idx);
-      idx = black_index (this, fx, fy, eqn.x1, eqn.y1);
+      idx = black_index (this, flags, fx, fy, eqn.x1, eqn.y1);
       double b1 = idx == -1 ? 0 : gsl_vector_get (c, idx);
-      idx = exp_index (this, fx, fy, eqn.x2, eqn.y2);
+      idx = exp_index (this, flags, fx, fy, eqn.x2, eqn.y2);
       double e2 = idx == -1 ? 1 : gsl_vector_get (c, idx);
-      idx = black_index (this, fx, fy, eqn.x2, eqn.y2);
+      idx = black_index (this, flags, fx, fy, eqn.x2, eqn.y2);
       double b2 = idx == -1 ? 0 : gsl_vector_get (c, idx);
       auto &a1 = in_rparams->get_tile_adjustment (eqn.x1, eqn.y1);
       auto &a2 = in_rparams->get_tile_adjustment (eqn.x2, eqn.y2);
@@ -1043,33 +1135,49 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
       if (fabs (cor_diff) > max_cor)
 	max_cor = fabs (cor_diff);
       avg_cor += fabs (cor_diff) * eqn.weight;
-      cor_sq   +=   cor_diff * eqn.weight *   cor_diff * eqn.weight * gsl_vector_get (w, i);
-      uncor_sq += uncor_diff * eqn.weight * uncor_diff * eqn.weight * gsl_vector_get (w, i);
+      /* TODO: weights makes always sense; compute them separately.  */
+      cor_sq   +=   cor_diff * eqn.weight *   cor_diff * eqn.weight * (nvariables ? gsl_vector_get (w, i) : 1);
+      uncor_sq += uncor_diff * eqn.weight * uncor_diff * eqn.weight * (nvariables ? gsl_vector_get (w, i) : 1);
       if (fabs (uncor_diff) > max_uncor)
 	max_uncor = fabs (uncor_diff);
       avg_uncor += fabs (uncor_diff) * eqn.weight;
-      if (verbose)
+      if (verbose && finished)
 	printf ("images %i,%i and %i,%i %s avg %f/%f=%f difference %f uncorected %f samples %lu weight %f e1 %f b1 %f e2 %f b2 %f weight %f\n",
 		eqn.x1, eqn.y1, eqn.x2, eqn.y2, channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, eqn.weight, e1, b1, e2, b2, gsl_vector_get (w, i));
       i++;
     }
-  for (int y = 0; y < params.height; y++)
+  if (!nvariables)
+    chisq = uncor_sq;
+  else
+   {
+     gsl_vector_free (c);
+     gsl_vector_free (w);
+   }
+  if (finished)
     {
-      for (int x = 0; x < params.width; x++)
-	printf ("  %+6.2f*%1.8f", in_rparams->get_tile_adjustment (x,y).dark_point*65535, in_rparams->get_tile_adjustment (x,y).exposure);
-      printf ("\n");
+      for (int y = 0; y < params.height; y++)
+	{
+	  for (int x = 0; x < params.width; x++)
+	    printf ("  i%i%i*%1.8f%+6.2f", x, y, in_rparams->get_tile_adjustment (x,y).exposure, -in_rparams->get_tile_adjustment (x,y).dark_point*65535);
+	  printf ("\n");
+	}
+      printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
+      if (progress)
+        progress->resume_stdout ();
     }
-  printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
-  progress->resume_stdout ();
-  gsl_matrix_free (A);
-  gsl_vector_free (y);
-  gsl_vector_free (w);
-  gsl_matrix_free (cov);
   return chisq;
 }
 
+struct compare_chi {double chisq; int b;};
+
+compare_chi my_min(compare_chi a, compare_chi b){
+    return a.chisq < b.chisq ? a : b;
+}
+
+
+
 bool
-stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const char **rerror, progress_info *progress)
+stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int flags, const char **rerror, progress_info *progress)
 {
   /* Set rendering params so we get actual linearized scan data.  */
   render_parameters rparams;
@@ -1083,7 +1191,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
   /* Ignore 5% of inner borders.  */
   const int innerborder = 3;
 
-  const bool verbose = false;
+  const bool verbose = flags & VERBOSE;
 
   /* Determine how many scanlines we will inspect.  */
   int combined_height = 0;
@@ -1118,7 +1226,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 		{
 		  overlaps.push_back({x,y,ix,iy,
 				      images[y][x].find_common_points (images[iy][ix], outerborder, innerborder, rparams, progress, &error)});
-		  if (overlaps.back ().samples.size () < 10)
+		  if (overlaps.back ().samples.size () < 2)
 		    {
 		      overlaps.pop_back ();
 		      continue;
@@ -1135,26 +1243,25 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
       *rerror = "there are not enough overlaps between tiles";
       return false;
     }
-  double min_chisq = 0;
-
-  const int backlightmin = -256, backlightmax = 256;
-  bool found = false;
-  int bestb;
-  if (in_rparams->backlight_correction)
+#pragma omp declare reduction (min_chi:compare_chi:omp_out=my_min(omp_out, omp_in)) initializer(omp_priv = {std::numeric_limits<double>::max (), -1})
+  if (in_rparams->backlight_correction && (flags & OPTIMIZE_BACKLIGHT_BLACK))
     {
+      const int backlightmin = -50, backlightmax = 50;
       if (progress)
 	progress->set_task ("optimizing backlight correction", backlightmax - backlightmin + 1);
-#pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,found,min_chisq,bestb)
+      compare_chi min_correction = {std::numeric_limits<double>::max (), -1};
+#pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,flags) reduction(min_chi:min_correction)
       for (int b = backlightmin ; b < backlightmax; b++)
 	{
 	  double chisq;
+	  render_parameters rparams2 = *in_rparams;
 	  if (0 && progress)
 	    progress->push ();
-	  in_rparams->backlight_correction_black = b / 65536.0;
+	  rparams2.backlight_correction_black = b / 65536.0;
 	  const char *lerror = NULL;
 	  if (!error)
 	    /* TODO: progress can not handle nested tasks in multiple threads.  */
-	  chisq = solve_equations (in_rparams, overlaps, verbose, /*progress*/NULL, false, &lerror);
+	  chisq = solve_equations (&rparams2, overlaps, flags, /*progress*/NULL, false, &lerror);
 	  if (0 && progress)
 	    progress->pop ();
 	  if (lerror)
@@ -1162,14 +1269,12 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	    error = lerror;
 	  else
 	    {
-#pragma omp critical
-	      if (!found || chisq < min_chisq)
+	      if (chisq < min_correction.chisq)
 		{
-		  bestb = b;
-		  min_chisq = chisq;
-		  found = true;
+		  min_correction.b = b;
+		  min_correction.chisq = chisq;
 		}
-	      }
+	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -1178,10 +1283,27 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, const 
 	  *rerror = error;
 	  return false;
 	}
-      in_rparams->backlight_correction_black = bestb / 65536.0;
-      solve_equations (in_rparams, overlaps, verbose, progress, true, &error);
+      if (min_correction.chisq == std::numeric_limits<double>::max ())
+	{
+	  *rerror = "failed to find a solution";
+	  return false;
+	}
+      in_rparams->backlight_correction_black = min_correction.b / 65536.0;
+      solve_equations (in_rparams, overlaps, flags, progress, true, &error);
     }
   else
-    solve_equations (in_rparams, overlaps, verbose, progress, true, &error);
+    {
+      double chisq = solve_equations (in_rparams, overlaps, flags, progress, true, &error);
+      if (error)
+	{
+	  *rerror = error;
+	  return false;
+	}
+      if (chisq == std::numeric_limits<double>::max ())
+	{
+	  *rerror = "failed to find a solution";
+	  return false;
+	}
+    }
   return true;
 }

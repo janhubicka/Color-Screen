@@ -400,8 +400,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       file_progress_info progress (stdout);
       const char *error;
-      if (!scan.stitch->optimize_tile_adjustments (&rparams, &error, &progress))
+      if (!scan.stitch->optimize_tile_adjustments (&rparams,
+			      stitch_project::OPTIMIZE_ALL /*& (~stitch_project::OPTIMIZE_EXPOSURE)*/
+			      & ((event->state & GDK_MOD1_MASK) ? ~stitch_project::OPTIMIZE_BACKLIGHT_BLACK : ~0),
+			      &error, &progress))
 	fprintf (stderr, "exposure analysis failed: %s\n", error);
+      setvals ();
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -1401,7 +1405,8 @@ main (int argc, char **argv)
     {
       fprintf (stderr, "Can not open param file \"%s\": ", paroname);
       perror ("");
-      exit (1);
+      if (in)
+        exit (1);
     }
   save_parameters ();
   //current.mesh_trans = solver_mesh (&current, scan, current_solver);

@@ -1,6 +1,7 @@
 #ifndef BASE_H
 #define BASE_H
 #include <cmath>
+#include <cstdint>
 typedef double coord_t;
 #define flatten_attr __attribute__ ((__flatten__))
 #define pure_attr __attribute__ ((__pure__))
