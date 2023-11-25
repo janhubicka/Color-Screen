@@ -112,5 +112,6 @@ public:
     }
 };
 
+color_matrix dufaycolor_correction_matrix ();
 
 #endif
