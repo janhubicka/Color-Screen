@@ -12,6 +12,9 @@ typedef luminosity_t spectrum[SPECTRUM_SIZE];
 extern const DLL_PUBLIC spectrum cie_cmf_x;
 extern const DLL_PUBLIC spectrum cie_cmf_y;
 extern const DLL_PUBLIC spectrum cie_cmf_z;
+extern const DLL_PUBLIC spectrum cie_cmf1964_x;
+extern const DLL_PUBLIC spectrum cie_cmf1964_y;
+extern const DLL_PUBLIC spectrum cie_cmf1964_z;
 
 class DLL_PUBLIC spectrum_dyes_to_xyz
 {
@@ -98,10 +101,10 @@ public:
 	 We can implement that easily if that makes difference.  */
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	{
-	  ret.x += (cie_cmf_x[i] * s[i]) * backlight[i];
-	  ret.y += (cie_cmf_y[i] * s[i]) * backlight[i];
-	  ret.z += (cie_cmf_z[i] * s[i]) * backlight[i];
-	  sum += cie_cmf_y[i] * backlight[i];
+	  ret.x += (cie_cmf1964_x[i] * s[i]) * backlight[i];
+	  ret.y += (cie_cmf1964_y[i] * s[i]) * backlight[i];
+	  ret.z += (cie_cmf1964_z[i] * s[i]) * backlight[i];
+	  sum += cie_cmf1964_y[i] * backlight[i];
 	}
       luminosity_t scale = 1 / sum;
       ret.x *= scale;

@@ -34,6 +34,14 @@ struct xyz {
     z += other.z;
     return *this;
   }
+  xyz operator+(const xyz b)
+  {
+    return {x + b.x, y + b.y, z + b.z};
+  }
+  xyz operator*(const luminosity_t b)
+  {
+    return {x * b, y * b, z * b};
+  }
   xyz &operator-=(const xyz other)
   {
     x -= other.x;
@@ -344,6 +352,18 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
+/* XYZ->wide gammut RGB conversion matrix.  */
+class xyz_wide_gammut_rgb_matrix : public color_matrix
+{
+public:
+  inline
+  xyz_wide_gammut_rgb_matrix ()
+  : color_matrix ( 1.4628067, -0.1840623, -0.2743606, 0,
+		  -0.5217933,  1.4472381,  0.0677227, 0,
+		   0.0349342, -0.0968930,  1.2884099, 0,
+		  0,             0,              0,                  1)
+  {}
+};
 inline void
 xyz_to_srgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
@@ -352,6 +372,17 @@ xyz_to_srgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, l
   *r = linear_to_srgb (*r);
   *g = linear_to_srgb (*g);
   *b = linear_to_srgb (*b);
+}
+inline void
+xyz_to_wide_gammut_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  xyz_wide_gammut_rgb_matrix m;
+  m.apply_to_rgb (x, y, z, r, g, b);
+#if 0
+  *r = apply_gamma (*r, 1.8);
+  *g = apply_gamma (*g, 1.8);
+  *b = apply_gamma (*b, 1.8);
+#endif
 }
 inline void
 xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)

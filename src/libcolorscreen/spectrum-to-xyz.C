@@ -1,43 +1,79 @@
 #include "include/spectrum-to-xyz.h"
 #include "include/scr-to-img.h"
 #include "include/render.h"
+#include "include/tiff-writer.h"
 
-/* https://scipython.com/static/media/blog/colours/cie-cmf.txt
+/*    https://law.resource.org/pub/us/cfr/ibr/003/cie.15.2004.tables.xls
+   CIE 1931 standard coloriometric observer
    bands from 380 to 780 by 5nm steps.  */
 const spectrum cie_cmf_x = {
-	0.0014, 0.0022, 0.0042, 0.0076, 0.0143, 0.0232, 0.0435, 0.0776, 0.1344, 0.2148,
-	0.2839, 0.3285, 0.3483, 0.3481, 0.3362, 0.3187, 0.2908, 0.2511, 0.1954, 0.1421,
-	0.0956, 0.0580, 0.0320, 0.0147, 0.0049, 0.0024, 0.0093, 0.0291, 0.0633, 0.1096,
-	0.1655, 0.2257, 0.2904, 0.3597, 0.4334, 0.5121, 0.5945, 0.6784, 0.7621, 0.8425,
-	0.9163, 0.9786, 1.0263, 1.0567, 1.0622, 1.0456, 1.0026, 0.9384, 0.8544, 0.7514,
-	0.6424, 0.5419, 0.4479, 0.3608, 0.2835, 0.2187, 0.1649, 0.1212, 0.0874, 0.0636,
-	0.0468, 0.0329, 0.0227, 0.0158, 0.0114, 0.0081, 0.0058, 0.0041, 0.0029, 0.0020,
-	0.0014, 0.0010, 0.0007, 0.0005, 0.0003, 0.0002, 0.0002, 0.0001, 0.0001, 0.0001,
-	0.0000
-} ;
+  0.001368, 0.002236, 0.004243, 0.007650, 0.014310, 0.023190, 0.043510, 0.077630, 0.134380,
+  0.214770, 0.283900, 0.328500, 0.348280, 0.348060, 0.336200, 0.318700, 0.290800, 0.251100,
+  0.195360, 0.142100, 0.095640, 0.057950, 0.032010, 0.014700, 0.004900, 0.002400, 0.009300,
+  0.029100, 0.063270, 0.109600, 0.165500, 0.225750, 0.290400, 0.359700, 0.433450, 0.512050,
+  0.594500, 0.678400, 0.762100, 0.842500, 0.916300, 0.978600, 1.026300, 1.056700, 1.062200,
+  1.045600, 1.002600, 0.938400, 0.854450, 0.751400, 0.642400, 0.541900, 0.447900, 0.360800,
+  0.283500, 0.218700, 0.164900, 0.121200, 0.087400, 0.063600, 0.046770, 0.032900, 0.022700,
+  0.015840, 0.011359, 0.008111, 0.005790, 0.004109, 0.002899, 0.002049, 0.001440, 0.001000,
+  0.000690, 0.000476, 0.000332, 0.000235, 0.000166, 0.000117, 0.000083, 0.000059, 0.000042,
+};
 const spectrum cie_cmf_y = {
-	0.0000, 0.0001, 0.0001, 0.0002, 0.0004, 0.0006, 0.0012, 0.0022, 0.0040, 0.0073,
-	0.0116, 0.0168, 0.0230, 0.0298, 0.0380, 0.0480, 0.0600, 0.0739, 0.0910, 0.1126,
-	0.1390, 0.1693, 0.2080, 0.2586, 0.3230, 0.4073, 0.5030, 0.6082, 0.7100, 0.7932,
-	0.8620, 0.9149, 0.9540, 0.9803, 0.9950, 1.0000, 0.9950, 0.9786, 0.9520, 0.9154,
-	0.8700, 0.8163, 0.7570, 0.6949, 0.6310, 0.5668, 0.5030, 0.4412, 0.3810, 0.3210,
-	0.2650, 0.2170, 0.1750, 0.1382, 0.1070, 0.0816, 0.0610, 0.0446, 0.0320, 0.0232,
-	0.0170, 0.0119, 0.0082, 0.0057, 0.0041, 0.0029, 0.0021, 0.0015, 0.0010, 0.0007,
-	0.0005, 0.0004, 0.0002, 0.0002, 0.0001, 0.0001, 0.0001, 0.0000, 0.0000, 0.0000,
-	0.0000
+  0.000039, 0.000064, 0.000120, 0.000217, 0.000396, 0.000640, 0.001210, 0.002180, 0.004000,
+0.007300, 0.011600, 0.016840, 0.023000, 0.029800, 0.038000, 0.048000, 0.060000, 0.073900,
+0.090980, 0.112600, 0.139020, 0.169300, 0.208020, 0.258600, 0.323000, 0.407300, 0.503000,
+0.608200, 0.710000, 0.793200, 0.862000, 0.914850, 0.954000, 0.980300, 0.994950, 1.000000,
+0.995000, 0.978600, 0.952000, 0.915400, 0.870000, 0.816300, 0.757000, 0.694900, 0.631000,
+0.566800, 0.503000, 0.441200, 0.381000, 0.321000, 0.265000, 0.217000, 0.175000, 0.138200,
+0.107000, 0.081600, 0.061000, 0.044580, 0.032000, 0.023200, 0.017000, 0.011920, 0.008210,
+0.005723, 0.004102, 0.002929, 0.002091, 0.001484, 0.001047, 0.000740, 0.000520, 0.000361,
+0.000249, 0.000172, 0.000120, 0.000085, 0.000060, 0.000042, 0.000030, 0.000021, 0.000015,
+
 };
 const spectrum cie_cmf_z = {
-	0.0065, 0.0105, 0.0201, 0.0362, 0.0679, 0.1102, 0.2074, 0.3713, 0.6456, 1.0391,
-	1.3856, 1.6230, 1.7471, 1.7826, 1.7721, 1.7441, 1.6692, 1.5281, 1.2876, 1.0419,
-	0.8130, 0.6162, 0.4652, 0.3533, 0.2720, 0.2123, 0.1582, 0.1117, 0.0782, 0.0573,
-	0.0422, 0.0298, 0.0203, 0.0134, 0.0087, 0.0057, 0.0039, 0.0027, 0.0021, 0.0018,
-	0.0017, 0.0014, 0.0011, 0.0010, 0.0008, 0.0006, 0.0003, 0.0002, 0.0002, 0.0001,
-	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
-	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
-	0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
-	0.0000
+  0.006450, 0.010550, 0.020050, 0.036210, 0.067850, 0.110200, 0.207400, 0.371300, 0.645600,
+1.039050, 1.385600, 1.622960, 1.747060, 1.782600, 1.772110, 1.744100, 1.669200, 1.528100,
+1.287640, 1.041900, 0.812950, 0.616200, 0.465180, 0.353300, 0.272000, 0.212300, 0.158200,
+0.111700, 0.078250, 0.057250, 0.042160, 0.029840, 0.020300, 0.013400, 0.008750, 0.005750,
+0.003900, 0.002750, 0.002100, 0.001800, 0.001650, 0.001400, 0.001100, 0.001000, 0.000800,
+0.000600, 0.000340, 0.000240, 0.000190, 0.000100, 0.000050, 0.000030, 0.000020, 0.000010,
+0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
 };
 
+const spectrum cie_cmf1964_x = {
+  0.000160, 0.000662, 0.002362, 0.007242, 0.019110, 0.043400, 0.084736, 0.140638, 0.204492,
+  0.264737, 0.314679, 0.357719, 0.383734, 0.386726, 0.370702, 0.342957, 0.302273, 0.254085,
+  0.195618, 0.132349, 0.080507, 0.041072, 0.016172, 0.005132, 0.003816, 0.015444, 0.037465,
+  0.071358, 0.117749, 0.172953, 0.236491, 0.304213, 0.376772, 0.451584, 0.529826, 0.616053,
+  0.705224, 0.793832, 0.878655, 0.951162, 1.014160, 1.074300, 1.118520, 1.134300, 1.123990,
+  1.089100, 1.030480, 0.950740, 0.856297, 0.754930, 0.647467, 0.535110, 0.431567, 0.343690,
+  0.268329, 0.204300, 0.152568, 0.112210, 0.081261, 0.057930, 0.040851, 0.028623, 0.019941,
+  0.013842, 0.009577, 0.006605, 0.004553, 0.003145, 0.002175, 0.001506, 0.001045, 0.000727,
+  0.000508, 0.000356, 0.000251, 0.000178, 0.000126, 0.000090, 0.000065, 0.000046, 0.000033,
+};
+const spectrum cie_cmf1964_y = {
+  0.000017, 0.000072, 0.000253, 0.000769, 0.002004, 0.004509, 0.008756, 0.014456, 0.021391,
+  0.029497, 0.038676, 0.049602, 0.062077, 0.074704, 0.089456, 0.106256, 0.128201, 0.152761,
+  0.185190, 0.219940, 0.253589, 0.297665, 0.339133, 0.395379, 0.460777, 0.531360, 0.606741,
+  0.685660, 0.761757, 0.823330, 0.875211, 0.923810, 0.961988, 0.982200, 0.991761, 0.999110,
+  0.997340, 0.982380, 0.955552, 0.915175, 0.868934, 0.825623, 0.777405, 0.720353, 0.658341,
+  0.593878, 0.527963, 0.461834, 0.398057, 0.339554, 0.283493, 0.228254, 0.179828, 0.140211,
+  0.107633, 0.081187, 0.060281, 0.044096, 0.031800, 0.022602, 0.015905, 0.011130, 0.007749,
+  0.005375, 0.003718, 0.002565, 0.001768, 0.001222, 0.000846, 0.000586, 0.000407, 0.000284,
+  0.000199, 0.000140, 0.000098, 0.000070, 0.000050, 0.000036, 0.000025, 0.000018, 0.000013,
+};
+const spectrum cie_cmf1964_z = {
+  0.000705, 0.002928, 0.010482, 0.032344, 0.086011, 0.197120, 0.389366, 0.656760, 0.972542,
+  1.282500, 1.553480, 1.798500, 1.967280, 2.027300, 1.994800, 1.900700, 1.745370, 1.554900,
+  1.317560, 1.030200, 0.772125, 0.570060, 0.415254, 0.302356, 0.218502, 0.159249, 0.112044,
+  0.082248, 0.060709, 0.043050, 0.030451, 0.020584, 0.013676, 0.007918, 0.003988, 0.001091,
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+};
 
 namespace {
 
@@ -47,31 +83,46 @@ namespace {
    This is a 2848K tungsten filament lamp (Acording to the old temperature scale)
    and 2856 according to the newer temerature scale. */
 
-static const luminosity_t il_A[] =
-{
-	0.930483, 1.128210, 1.357690, 1.622190, 1.925080,
-	2.269800, 2.659810, 3.098610, 3.589680, 4.136480,
-	4.742380, 5.410700, 6.144620, 6.947200, 7.821350,
-	8.769800, 9.795100, 10.899600, 12.085300, 13.354300,
-	14.708000, 16.148000, 17.675300, 19.290700, 20.995000,
-	22.788300, 24.670900, 26.642500, 28.702700, 30.850800,
-	33.085900, 35.406800, 37.812100, 40.300200, 42.869300,
-	45.517400, 48.242300, 51.041800, 53.913200, 56.853900,
-	59.861100, 62.932000, 66.063500, 69.252500, 72.495900,
-	75.790300, 79.132600, 82.519300, 85.947000, 89.412400,
-	92.912000, 96.442300, 100.000000, 103.582000, 107.184000,
-	110.803000, 114.436000, 118.080000, 121.731000, 125.386000,
-	129.043000, 132.697000, 136.346000, 139.988000, 143.618000,
-	147.235000, 150.836000, 154.418000, 157.979000, 161.516000,
-	165.028000, 168.510000, 171.963000, 175.383000, 178.769000,
-	182.118000, 185.429000, 188.701000, 191.931000, 195.118000,
-	198.261000, 201.359000, 204.409000, 207.411000, 210.365000,
-	213.268000, 216.120000, 218.920000, 221.667000, 224.361000,
-	227.000000, 229.585000, 232.115000, 234.589000, 237.008000,
-	239.370000, 241.675000, 243.924000, 246.116000, 248.251000,
-	250.329000, 252.350000, 254.314000, 256.221000, 258.071000,
-	259.865000, 261.602000
+static const luminosity_t il_A[] = {
+  0.930483, 1.128210, 1.357690, 1.622190, 1.925080,
+  2.269800, 2.659810, 3.098610, 3.589680, 4.136480,
+  4.742380, 5.410700, 6.144620, 6.947200, 7.821350,
+  8.769800, 9.795100, 10.899600, 12.085300, 13.354300,
+  14.708000, 16.148000, 17.675300, 19.290700, 20.995000,
+  22.788300, 24.670900, 26.642500, 28.702700, 30.850800,
+  33.085900, 35.406800, 37.812100, 40.300200, 42.869300,
+  45.517400, 48.242300, 51.041800, 53.913200, 56.853900,
+  59.861100, 62.932000, 66.063500, 69.252500, 72.495900,
+  75.790300, 79.132600, 82.519300, 85.947000, 89.412400,
+  92.912000, 96.442300, 100.000000, 103.582000, 107.184000,
+  110.803000, 114.436000, 118.080000, 121.731000, 125.386000,
+  129.043000, 132.697000, 136.346000, 139.988000, 143.618000,
+  147.235000, 150.836000, 154.418000, 157.979000, 161.516000,
+  165.028000, 168.510000, 171.963000, 175.383000, 178.769000,
+  182.118000, 185.429000, 188.701000, 191.931000, 195.118000,
+  198.261000, 201.359000, 204.409000, 207.411000, 210.365000,
+  213.268000, 216.120000, 218.920000, 221.667000, 224.361000,
+  227.000000, 229.585000, 232.115000, 234.589000, 237.008000,
+  239.370000, 241.675000, 243.924000, 246.116000, 248.251000,
+  250.329000, 252.350000, 254.314000, 256.221000, 258.071000,
+  259.865000, 261.602000
 };
+//   Illuminant B at 5nm interval Wyszecki & Stiles Color Science, 2nd edition.  Table II(3.3.4)  pp. 759.
+//   Simulated direct sunlight, obsolette.
+static const luminosity_t il_B[] = {
+  0.02, 0.26, 0.50, 1.45, 2.40, 4.00, 5.60, 7.60, 9.6,
+  12.4, 15.2, 18.8, 22.4, 26.85, 31.3, 36.18, 41.3, 46.62,
+  52.1, 57.7, 63.2, 68.37, 73.1, 77.31, 80.8, 83.44, 85.4,
+  86.88, 88.3, 90.08, 92, 93.75, 95.2, 96.23, 96.5, 95.71,
+  94.2, 92.37, 90.7, 89.65, 89.5, 90.43, 92.2, 94.46, 96.9,
+  99.16, 101, 102.2, 102.8, 102.92, 102.6, 101.9, 101, 100.07,
+  99.2, 98.44, 98, 98.08, 98.5, 99.06, 99.7, 100.36, 101,
+  101.56, 102.2, 103.05, 103.9, 104.59, 105, 105.08, 104.9, 104.55,
+  103.9, 102.84, 101.6, 100.38, 99.1, 97.7, 96.2, 94.6, 92.9,
+  91.1, 89.4, 88, 86.9, 85.9, 85.2, 84.8, 84.7, 84.9,
+  85.4, 86.1, 87.0,
+};
+
 
 /* From Argyll. 93 bands from 320.0 to 780.0 */
 /* CIE 15.2-1986 Table 1.1 */
@@ -802,21 +853,21 @@ const static spectra_entry color_cinematography_dufay_blue[] = {
   {716.9945596445255, 91.00988378717102},
   {721.2205195397061, 94.00688589495272},
 };
-#endif
+#else
 /* Chart from Color Cinematography, third edition (1951)  */
 const static spectra_entry color_cinematography_dufay_red[] = {
-  {400.2745059092264, 0.018075280564147533},
-  {406.1070612771874, -0.032128314629034094},
-  {412.48942298142816, -0.027808123944751628},
-  {418.43162180951435, -0.02378587744557592},
-  {424.37382063760055, -0.019763630946414423},
-  {429.87585658953225, -0.016039328632388106},
-  {435.3786870592909, -0.12061773761044492},
-  {440.22047869699077, -0.11734035157410005},
-  {444.6221074585361, -0.11436090972284774},
-  {449.464693614063, -0.21938623497860021},
-  {453.8663223756083, -0.21640679312740474},
-  {458.26715661932667, -0.10512463998406929},
+  {400.2745059092264,  0},
+  {406.1070612771874,  0},
+  {412.48942298142816, 0},
+  {418.43162180951435, 0},
+  {424.37382063760055, 0},
+  {429.87585658953225, 0},
+  {435.3786870592909,  0},
+  {440.22047869699077, 0},
+  {444.6221074585361,  0},
+  {449.464693614063,   0},
+  {453.8663223756083,  0},
+  {458.26715661932667, 0},
   {461.783692521601, 0.5470751812494115},
   {465.74078855894334, 1.1454215910220285},
   {470.1412255437482, 1.3108550998113486},
@@ -896,6 +947,9 @@ const static spectra_entry color_cinematography_dufay_red[] = {
   {720.1477803158209, 77.2923577316516},
 };
 
+/* Charts published in book are ambigous on what represent green and blue sensitivity.
+   consider both posibilities.  */
+#undef MORE_RED_IN_BLUE
 const static spectra_entry color_cinematography_dufay_green[] = {
   {400, 0},
   {440, 0},
@@ -968,6 +1022,7 @@ const static spectra_entry color_cinematography_dufay_green[] = {
   {631.6758367265866, 2.124168239149924},
   {637.8440758764525, 1.3160691230509656},
   {643.1284139437878, 0.9947363193961962},
+#ifdef MORE_RED_IN_BLUE
   {649.0733935842685, 0.6196990763730668},
   {654.1380474724401, 0.24406594497969536},
   {659.8605621213626, 0.19378786374022638},
@@ -985,6 +1040,46 @@ const static spectra_entry color_cinematography_dufay_green[] = {
   {711.9181646638197, 14.091841295064057},
   {715.6472340848147, 15.773065845664917},
   {720, 17.021228523189976},
+#else
+  {647.0807428741682, 2.2428989969212836},
+  {651.4764127520111, 3.0581487734631594},
+  {655.8681100407192, 4.414912106465451},
+  {659.5971794617142, 6.096136657066253},
+  {663.2126328334491, 8.264648922435214},
+  {666.3855397755486, 10.757771377495288},
+  {669.007448604628, 13.358824113616066},
+  {670.97189393187, 15.580370443936829},
+  {672.7154633032078, 17.91007051345717},
+  {674.3485946965934, 20.293847452577225},
+  {675.980931572152, 22.78592710298939},
+  {677.6116794120567, 25.494612175985722},
+  {679.1347700864037, 27.878314629059503},
+  {680.5462310060582, 30.47854801867119},
+  {682.1730062568279, 33.728746648127924},
+  {683.364385738405, 36.32883106564705},
+  {684.6642169033668, 39.145595391796604},
+  {686.0724997517132, 42.17903962657664},
+  {687.2630847154633, 44.887426755387835},
+  {688.3452179958288, 47.37913397556858},
+  {689.5350084417519, 50.19582381567187},
+  {691.053332009137, 53.22934253649817},
+  {692.3539576919258, 55.93780415135565},
+  {693.9799384248684, 59.29630549210449},
+  {695.7183434303306, 62.32997318502334},
+  {697.2366669977157, 65.36349190584964},
+  {698.8666203197934, 68.18047969013804},
+  {700.496573641871, 70.99746747442646},
+  {702.4542655675835, 74.13958685072997},
+  {704.0866024431423, 76.63166650114212},
+  {706.0450888866819, 79.66548316615354},
+  {708.1144105670869, 82.59107160591915},
+  {710.2945674843579, 85.40843182043898},
+  {712.694011321879, 88.33424371834343},
+  {714.5480186711688, 90.60986691826398},
+  {716.8421888966134, 92.88578806236964},
+  {719.4640977256927, 95.48684079849042},
+  {720, 95.81219584864435},
+#endif
 };
 
 const static spectra_entry color_cinematography_dufay_blue[] = {
@@ -1059,6 +1154,7 @@ const static spectra_entry color_cinematography_dufay_blue[] = {
   {633.6665011421194, 0.7717250968319149},
   {637.8456649121065, 1.0994637004668277},
   {642.6838812195849, 1.5901032873175467},
+#ifdef MORE_RED_IN_BLUE
   {647.0807428741682, 2.2428989969212836},
   {651.4764127520111, 3.0581487734631594},
   {655.8681100407192, 4.414912106465451},
@@ -1097,7 +1193,27 @@ const static spectra_entry color_cinematography_dufay_blue[] = {
   {716.8421888966134, 92.88578806236964},
   {719.4640977256927, 95.48684079849042},
   {720, 95.81219584864435},
+#else
+  {649.0733935842685, 0.6196990763730668},
+  {654.1380474724401, 0.24406594497969536},
+  {659.8605621213626, 0.19378786374022638},
+  {664.702751017976, 0.1429138941305581},
+  {669.9847055318304, 0.14648922435202394},
+  {675.2634819743768, 0.5832753997418223},
+  {680.5402721223558, 1.2908183533618427},
+  {685.8158704935942, 2.160815373919988},
+  {690.2095540768696, 3.2468219286920714},
+  {694.1622802661634, 4.440833250571075},
+  {698.5504022246499, 6.284958784387769},
+  {701.6184328135862, 8.074039130002987},
+  {704.9025722514648, 10.404782004171224},
+  {708.190287019565, 12.248162677525087},
+  {711.9181646638197, 14.091841295064057},
+  {715.6472340848147, 15.773065845664917},
+  {720, 17.021228523189976},
+#endif
 };
+#endif
 
 
 /* 400 to 700 10nm bands.  */
@@ -1872,6 +1988,66 @@ const static spectra_entry wedge_thungsten_panchromatic[] = {
   {655.6213504016353, 0.02212685460477326},
 };
 
+/* Panchromatic emulsion wedge sensitivity to thungsten light.  */
+const static spectra_entry wedge_Neopan_100_acros_daylight_5400k [] = {
+  {380.1729818452725, 1.5732847620784898},
+  {385.81266010382103, 1.5310698897253516},
+  {391.61046018270264, 1.543692036238022},
+  {397.62787390093587, 1.5757761441660834},
+  {403.2060603404659, 1.5699302283904912},
+  {409.0038604193476, 1.5370814898371168},
+  {414.8016604982292, 1.534298199879324},
+  {420.5994605771108, 1.5392176281567633},
+  {426.39726065599245, 1.5426462077435126},
+  {432.1950607348741, 1.543590039512445},
+  {437.9928608137557, 1.5415521738999973},
+  {443.79066089263733, 1.5340478630883534},
+  {449.588460971519, 1.5185923592596957},
+  {455.3862610504006, 1.4909615911237357},
+  {461.1840611292822, 1.4526464073711645},
+  {466.9818612081639, 1.4098586775465227},
+  {472.77966128704554, 1.364834674685846},
+  {478.57746136592715, 1.3205560961705145},
+  {484.37526144480876, 1.2802531141636897},
+  {490.1730615236904, 1.2479013251738782},
+  {495.9708616025721, 1.2344336195994736},
+  {501.5659413989753, 1.2578948398937064},
+  {507.5664617603353, 1.292476583819997},
+  {513.364261839217, 1.3359096032735946},
+  {519.1620619180986, 1.3813304209814463},
+  {524.9598619969802, 1.42699971347108},
+  {530.7576620758618, 1.470184258142897},
+  {536.5554621547435, 1.5101386306515514},
+  {542.3532622336252, 1.5433841840521012},
+  {548.1510623125067, 1.5587395531643709},
+  {553.9488623913884, 1.5688769518592252},
+  {559.7466624702699, 1.5879594426982198},
+  {565.5444625491516, 1.6174778743720448},
+  {571.3422626280333, 1.6452569825733976},
+  {577.1400627069149, 1.6640909986306105},
+  {582.9378627857966, 1.6610592338910364},
+  {588.7356628646781, 1.62647117186519},
+  {594.5334629435598, 1.5886529376761818},
+  {600.2907189659458, 1.5551738055673625},
+  {606.4218812871252, 1.5171827953158257},
+  {611.9268631802047, 1.497064015905944},
+  {617.7246632590864, 1.5191282041263188},
+  {623.522463337968, 1.5660398705248606},
+  {629.3202634168497, 1.582140663982475},
+  {633.4489998366593, 1.5295525936078467},
+  {634.8545271285093, 1.4730538556747668},
+  {636.1722089646188, 1.4133671166384905},
+  {637.602834958109, 1.3411195936516283},
+  {638.5440362696158, 1.2762299674575592},
+  {639.3346453712816, 1.2187343580789802},
+  {640.4766362959097, 1.1586847065554307},
+  {641.5307817647972, 1.0912561126093014},
+  {643.6566417937206, 0.9619563256169599},
+  {644.5300766107989, 0.8838306780362957},
+  {645.6595181846069, 0.7975291825817941},
+  {646.7136636534945, 0.7228640564195863},
+  {647.9654613977984, 0.6462546830680491},
+};
 /* Process chart with regular step to a spectrum.
    cubically interpolate for missing data.  */
 
@@ -2536,32 +2712,88 @@ get_xyz_no_backlight (spectrum s)
   return ret;
 }
 
+xyz combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight)
+{
+  spectrum tmp;
+  luminosity_t add;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      tmp [i] = (dye1 ? dye1[i] : 1) * (dye2 ? dye2[i] : 1) * backlight[i];
+    }
+
+  xyz ret = get_xyz_no_backlight (tmp);
+  return ret;
+}
+
 color_matrix
 dufaycolor_correction_matrix ()
 {
+  const bool output_tiffs = false;
+  if (output_tiffs)
+    {
+      tiff_writer_params par;
+      par.filename="/tmp/f0.tif";
+      par.width = par.height = 4;
+      par.depth = 16;
+      par.hdr = true;
+      const char *error;
+      tiff_writer tiff (par, &error);
+      luminosity_t r,g,b;
+      for (int i = 0; i < 4; i++)
+	{
+	  tiff.put_hdr_pixel (0, 1, 1, 1);
+	  luminosity_t br = 1;
+	  int mul = 1;
+	  xyz f = xyY_to_xyz (0.633, 0.365, 0.177);
+	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (1, r*mul, g*mul, b*mul);
+	  f = xyY_to_xyz (0.233, 0.647, 0.43);
+	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (2, r*mul, g*mul, b*mul);
+	  f = xyY_to_xyz (0.140, 0.089, 0.037);
+	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (3, r*mul, g*mul, b*mul);
+	  tiff.write_row ();
+	}
+    }
   spectrum red, green, blue;
   spectrum il_A_red, il_A_green, il_A_blue;
   compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false);
   compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false);
   compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false);
-  spectrum backlight;
-  //compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
-  //compute_spectrum (backlight, 320, 780, sizeof (old_daylight_data)/sizeof (luminosity_t), old_daylight_data, false);
-  daylight_il (backlight, 5000);
+  //compute_spectrum (blue, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false);
+  spectrum il_A_backlight, backlight;
+  //compute_spectrum (il_A_backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
+  //
+  /* It is not specified what backlight was used to determine XYZ coordinates.
+   * However it seems closer to old daylight rantehr than il_A.  */
+  //compute_spectrum (il_A_backlight, 320, 780, sizeof (old_daylight_data)/sizeof (luminosity_t), old_daylight_data, false);
+  compute_spectrum (il_A_backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false);
+  daylight_il (backlight, 5400);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
-      il_A_red[i] = red[i] * backlight[i];
-      il_A_green[i] = green[i] * backlight[i];
-      il_A_blue[i] = blue[i] * backlight[i];
+      il_A_red[i] = red[i] * il_A_backlight[i];
+      il_A_green[i] = green[i] * il_A_backlight[i];
+      il_A_blue[i] = blue[i] * il_A_backlight[i];
     }
 
+  xyz filter_white = get_xyz_no_backlight (il_A_backlight);
   xyz filter_red = get_xyz_no_backlight (il_A_red);
   xyz filter_green = get_xyz_no_backlight (il_A_green);
   xyz filter_blue = get_xyz_no_backlight (il_A_blue);
+#if 0
+  luminosity_t white_scale = 1 / filter_red.y;
+  luminosity_t red_scale = /*0.177 / filter_red.y*/ 1/filter_red.y;
+  luminosity_t green_scale = /*0.43 / filter_green.y*/ 1/filter_red.y;
+  luminosity_t blue_scale = /*0.037 / filter_blue.y*/ 1/filter_red.y;
+#else
+  luminosity_t white_scale = 1 / filter_white.y;
   luminosity_t red_scale = 0.177 / filter_red.y;
   luminosity_t green_scale = 0.43 / filter_green.y;
   luminosity_t blue_scale = 0.037 / filter_blue.y;
+#endif
   luminosity_t x,y,Y,z;
+  filter_white *= white_scale;
   filter_red *= red_scale;
   filter_green *= green_scale;
   filter_blue *= blue_scale;
@@ -2576,28 +2808,102 @@ dufaycolor_correction_matrix ()
       red[i] *= red_scale;
       green[i] *= green_scale;
       blue[i] *= blue_scale;
+      //printf ("%f %f %f\n",red[i],green[i],blue[i]);
+      assert (red[i]>=0 && green[i]>=0 && blue[i]>=0);
+    }
+
+  if (output_tiffs)
+    {
+      tiff_writer_params par;
+      par.filename="/tmp/f1.tif";
+      par.width = par.height = 4;
+      par.depth = 32;
+      par.hdr = true;
+      const char *error;
+      tiff_writer tiff (par, &error);
+      luminosity_t r,g,b;
+      for (int i = 0; i < 4; i++)
+	{
+	  luminosity_t br = 1;
+	  int mul = 1;
+	  xyz_to_wide_gammut_rgb (filter_white.x * br, filter_white.y * br, filter_white.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (0, r*mul, g*mul, b*mul);
+	  xyz_to_wide_gammut_rgb (filter_red.x * br, filter_red.y * br, filter_red.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (1, r*mul, g*mul, b*mul);
+	  xyz_to_wide_gammut_rgb (filter_green.x * br, filter_green.y * br, filter_green.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (2, r*mul, g*mul, b*mul);
+	  xyz_to_wide_gammut_rgb (filter_blue.x * br, filter_blue.y * br, filter_blue.z * br, &r, &g, &b);
+	  tiff.put_hdr_pixel (3, r*mul, g*mul, b*mul);
+	  tiff.write_row ();
+	}
+    }
+  if (output_tiffs)
+    {
+      tiff_writer_params par;
+      par.filename="/tmp/f2.tif";
+      par.width = par.height = 4;
+      par.depth = 32;
+      par.hdr = true;
+      const char *error;
+      tiff_writer tiff (par, &error);
+      luminosity_t r,g,b;
+      for (int i = 0; i < 4; i++)
+	{
+	  int br = /*200*/1;
+	  for (int j = 0; j < 4; j++)
+	    {
+	      int mul = 1;
+	      xyz f = combined_xyz (i == 0 ? NULL : i == 1 ? red : i == 2 ? green : blue,
+				    j == 0 ? NULL : j == 1 ? red : j == 2 ? green : blue,
+				    il_A_backlight);
+	      int br2 = (i && j) ? br : 1;
+	      xyz_to_wide_gammut_rgb (f.x * br2, f.y * br2, f.z * br2, &r, &g, &b);
+	      tiff.put_hdr_pixel (j, r*mul, g*mul, b*mul);
+	    }
+	  tiff.write_row ();
+	}
     }
 
   spectrum response;
   /* This should be 1/log(t), we want linear respnse.  */
   compute_spectrum (response, sizeof (wedge_thungsten_panchromatic) / sizeof (spectra_entry), wedge_thungsten_panchromatic, false);
+  //compute_spectrum (response, sizeof (wedge_Neopan_100_acros_daylight_5400k) / sizeof (spectra_entry), wedge_Neopan_100_acros_daylight_5400k, false);
   //compute_spectrum (response, sizeof (absolute_panchromatic) / sizeof (spectra_entry), absolute_panchromatic, false);
+  daylight_il (backlight, 6500);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
   {
     if (response[i]>0)
-      response[i] = 1/ (pow(2,1/response[i]));
+      response[i] = 1/ (pow(10,1/response[i]));
     else
       response[i]=0;
     //response[i]=1;
-    printf ("%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, response[i]);
+    //printf ("%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, response[i]);
   }
   //daylight_il (backlight, 6500);
 
-  rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0};
-  luminosity_t sum = 0;
+  rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0}, dwhite = {0,0,0};
+  //luminosity_t sum = 0;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
-      luminosity_t w = backlight[i] * response[i];
+#if 1
+      //luminosity_t w = backlight[i] * response[i];
+#if 1
+      assert (il_A_backlight[i]>=0);
+      //if (il_A_backlight[i]<=0)
+	//continue;
+      //luminosity_t w = backlight[i] * response[i] / il_A_backlight[i];
+      //luminosity_t w = backlight[i] * response[i];
+      luminosity_t w = response[i];
+      //printf ("%i %f %f %f %f\n", i * SPECTRUM_STEP + SPECTRUM_START, response[i], backlight[i], il_A_backlight[i],w);
+      //luminosity_t w = response[i];
+#endif
+#else
+      luminosity_t w=1;
+#endif
+      dwhite.red += red[i] * w;
+      dwhite.green += green[i] * w;
+      dwhite.blue += blue[i] * w;
+
       dred.red += red[i] * w * red[i];
       dred.green += green[i] * w * red[i];
       dred.blue += blue[i] * w * red[i];
@@ -2609,22 +2915,94 @@ dufaycolor_correction_matrix ()
       dblue.red += red[i] * w * blue[i];
       dblue.green += green[i] * w * blue[i];
       dblue.blue += blue[i] * w * blue[i];
-      sum += w;
+      //sum += w;
     }
-  dred *= 1 / sum;
-  dgreen *= 1 / sum;
-  dblue *= 1 / sum;
+  //dred *= 1 / sum;
+  //dgreen *= 1 / sum;
+  //dblue *= 1 / sum;
+  /* Simulate scan that should have white close to 1.  */
 #if 0
   double m = std::max (std::max (std::max (std::max (dred.red, dred.green), dred.blue),
 				 std::max (std::max (dgreen.red, dgreen.green), dgreen.blue)),
 				 std::max (std::max (dblue.red, dblue.green), dblue.blue));
+#endif
+  double m = std::max (dwhite.red, std::max (dwhite.green, dwhite.blue));
   dred = dred * (1/m);
   dgreen = dgreen * (1/m);
   dblue = dblue * (1/m);
-#endif
+  dwhite = dwhite * (1/m);
+  printf ("white: %f %f %f\n", dwhite.red, dwhite.green, dwhite.blue);
   printf ("red: %f %f %f\n", dred.red, dred.green, dred.blue);
   printf ("green: %f %f %f\n", dgreen.red, dgreen.green, dgreen.blue);
   printf ("blue: %f %f %f\n", dblue.red, dblue.green, dblue.blue);
+  if (output_tiffs)
+    {
+      tiff_writer_params par;
+      par.filename="/tmp/f3.tif";
+      par.width = 5;
+      par.height = 4;
+      par.depth = 16;
+      par.hdr = true;
+      const char *error;
+      tiff_writer tiff (par, &error);
+      luminosity_t gamma = 1.8;
+
+      int mul = 1;
+      tiff.put_hdr_pixel (0, mul, mul, mul);
+      luminosity_t val = invert_gamma (dwhite.red, gamma) * mul;
+      tiff.put_hdr_pixel (1, val, val, val);
+      val = invert_gamma (dwhite.green, gamma) * mul;
+      tiff.put_hdr_pixel (2, val, val, val);
+      val = invert_gamma (dwhite.blue, gamma) * mul;
+      tiff.put_hdr_pixel (3, val, val, val);
+      xyz c = (filter_red* dwhite.red) + (filter_green * dwhite.green) + (filter_blue * dwhite.blue);
+      luminosity_t r,g,b;
+      xyz_to_wide_gammut_rgb (c.x, c.y, c.z, &r, &g, &b);
+      r = invert_gamma (r, gamma);
+      g = invert_gamma (g, gamma);
+      b = invert_gamma (b, gamma);
+      tiff.put_hdr_pixel (4, r*mul, g*mul, b*mul);
+      tiff.write_row ();
+      for (int i = 0; i < 3; i++)
+      {
+	luminosity_t v = i == 0 ? dwhite.red : i == 1 ? dwhite.green : dwhite.blue;
+	val = invert_gamma (v, gamma) * mul;
+	tiff.put_hdr_pixel (0, val, val, val);
+	rgbdata &f = i == 0 ? dred : i == 1 ? dgreen : dblue;
+	val = invert_gamma (f.red, gamma) * mul;
+	tiff.put_hdr_pixel (1, val, val, val);
+	val = invert_gamma (f.green, gamma) * mul;
+	tiff.put_hdr_pixel (2, val, val, val);
+	val = invert_gamma (f.blue, gamma) * mul;
+	tiff.put_hdr_pixel (3, val, val, val);
+	xyz c = (filter_red * f.red) + (filter_green * f.green) + (filter_blue * f.blue);
+	xyz_to_wide_gammut_rgb (c.x, c.y, c.z, &r, &g, &b);
+	//printf ("RGB %f %f %f %f %f %f\n", f.red, f.green, f.blue,r,g,b);
+	tiff.put_hdr_pixel (4, r*mul, g*mul, b*mul);
+	tiff.write_row ();
+      }
+#if 0
+      for (int i = 0; i < 4; i++)
+	{
+	  int br = 200;
+	  for (int j = 0; j < 4; j++)
+	    {
+	      int mul = 255;
+	      xyz f = combined_xyz (i == 0 ? NULL : i == 1 ? red : i == 2 ? green : blue,
+				    j == 0 ? NULL : j == 1 ? red : j == 2 ? green : blue,
+				    backlight);
+	      int br2 = (i && j) ? br : 1;
+	      xyz_to_wide_gammut_rgb (f.x * br2, f.y * br2, f.z * br2, &r, &g, &b);
+	      r = apply_gamma (std::min ((luminosity_t)1, std::max ((luminosity_t)0, r)), -1);
+	      g = apply_gamma (std::min ((luminosity_t)1, std::max ((luminosity_t)0, g)), -1);
+	      b = apply_gamma (std::min ((luminosity_t)1, std::max ((luminosity_t)0, b)), -1);
+	      tiff.put_hdr_pixel (j, r*mul, g*mul, b*mul);
+	    }
+	  tiff.write_row ();
+	  tiff.write_row ();
+	}
+#endif
+    }
 #if 0
   spectrum_dyes_to_xyz spec;
   spec.set_dyes_to_dufay_color_cinematography ();
@@ -2660,11 +3038,16 @@ dufaycolor_correction_matrix ()
   printf ("Invered density matrix\n");
   m2.print (stdout);
   m1 = m1 * m2;
-  m1.apply_to_rgb (dred.red, dred.green, dred.blue, &x, &y, &z);
-  printf ("Oriignal red filter xyz:   %f %f %f\n", filter_red.x, filter_red.y, filter_red.z);
-  printf ("Reconstructed red filter xyz:   %f %f %f\n", x, y, z, red_scale);
+  //m1.apply_to_rgb (dred.red, dred.green, dred.blue, &x, &y, &z);
+  //printf ("Original red filter xyz:   %f %f %f\n", filter_red.x, filter_red.y, filter_red.z);
+  //printf ("Reconstructed red filter xyz:   %f %f %f\n", x, y, z);
   xyz white;
   srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
   m1.normalize_grayscale (white.x, white.y, white.z);
+  printf ("Dyes to XYZ matrix\n");
+  m1.print (stdout);
+  printf ("Camera to xyz\n");
+  m1.invert().print (stdout);
+  
   return m1;
 }
