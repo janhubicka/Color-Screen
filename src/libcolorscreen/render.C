@@ -79,11 +79,17 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
   luminosity_t dark_point = p.dark_point;
   luminosity_t scan_exposure = p.scan_exposure;
+  printf ("%i\n",p.invert);
 
   if (!p.invert)
     {
       for (int i = 0; i <= p.maxval; i++)
 	lookup_table[i] = (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+    }
+  else if (!p.film_characteristic_curve)
+    {
+      for (int i = 0; i <= p.maxval; i++)
+	lookup_table[i] = (1-apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {
@@ -92,7 +98,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
       // TODO: For stitching exposure should be really inside
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = s.unapply (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	lookup_table[i] = s.unapply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   else
     {
@@ -100,7 +106,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
       s.precompute ();
 
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = s.apply (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	lookup_table[i] = s.apply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   return lookup_table;
 }
@@ -146,6 +152,7 @@ struct graydata_params
   image_data *img;
   /* Gamma and weights of individual channels.  */
   luminosity_t gamma, red, green, blue;
+  bool invert;
   /* Backlight correction.  */
   backlight_correction *backlight;
   uint64_t backlight_correction_id;
@@ -155,6 +162,7 @@ struct graydata_params
   {
     return image_id == o.image_id
 	   && gamma == o.gamma
+	   && invert == o.invert
 	   && red == o.red
 	   && green == o.green
 	   && blue == o.blue
@@ -170,6 +178,7 @@ struct gray_data_tables
   luminosity_t *btable;
   luminosity_t red, green, blue;
   backlight_correction *correction;
+  bool invert;
 };
 
 inline gray_data_tables
@@ -203,6 +212,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   par.gamma = p.gamma;
   par.maxval = p.img->maxval;
   par.scan_exposure = correction ? 1 : red;
+  par.invert = p.invert;
   ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
@@ -317,6 +327,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       getdata_params d;
       par.maxval = p.gp.img->maxval;
       par.gamma = p.gp.gamma;
+      par.invert = p.gp.invert;
       d.table = lookup_table_cache.get (par, progress);
       d.correction = p.gp.backlight;
       d.width = p.gp.img->width;
@@ -369,6 +380,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
       lookup_table_params par;
       par.maxval = m_img.maxval;
       par.gamma = m_params.gamma;
+      par.invert = m_params.invert;
       m_rgb_lookup_table = lookup_table_cache.get (par, progress);
       if (!m_rgb_lookup_table)
 	return false;
@@ -378,7 +390,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

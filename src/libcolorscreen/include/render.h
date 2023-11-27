@@ -209,6 +209,7 @@ struct DLL_PUBLIC render_parameters
 	   && backlight_temperature == backlight_temperature
 	   && dark_point == other.dark_point
 	   && scan_exposure == other.scan_exposure
+	   && invert == other.invert
 	   && screen_blur_radius == other.screen_blur_radius
     	   && dye_balance == other.dye_balance
 	   && precise == other.precise
@@ -243,7 +244,7 @@ struct DLL_PUBLIC render_parameters
 	dark_point = min2;
 	invert = true;
       }
-    printf ("gray_range %i %i exp %f dark %f\n", gray_min, gray_max, dark_point, scan_exposure);
+    printf ("gray_range %i %i dark %f exp %f invert %i\n", gray_min, gray_max, dark_point, scan_exposure, invert);
   }
   void get_gray_range (int *min, int *max, int maxval)
   {
