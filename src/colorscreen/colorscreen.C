@@ -55,6 +55,7 @@ print_help ()
   fprintf (stderr, "      --precise                 force precise collection of patch density\n");
   fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
   fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
+  fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
   fprintf (stderr, "                                suported modes:");
   for (int j = 0; j < render_parameters::dye_balance_max; j++)
     fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
@@ -174,6 +175,7 @@ render (int argc, char **argv)
   bool detect_geometry = false;
   float scan_dpi = 0;
   float scale = 0;
+  float output_gamma = -4;
 
 
   for (int i = 0; i < argc; i++)
@@ -190,7 +192,8 @@ render (int argc, char **argv)
 	output_profile = parse_output_profile (str);
       else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000)
 	       || parse_float_param (argc, argv, &i, "age", age, -1000, 1000)
-	       || parse_float_param (argc, argv, &i, "scale", scale, 0.0000001, 100))
+	       || parse_float_param (argc, argv, &i, "scale", scale, 0.0000001, 100)
+	       || parse_float_param (argc, argv, &i, "output-gamma", output_gamma, 0.000001, 100))
 	;
       else if (const char *str = arg_with_param (argc, argv, &i, "color-model"))
 	color_model = parse_color_model (str);
@@ -324,6 +327,8 @@ render (int argc, char **argv)
     rparam.dye_balance = dye_balance;
   if (output_profile != render_parameters::output_profile_max)
     rparam.output_profile = output_profile;
+  if (output_gamma != -4)
+    rparam.output_gamma = output_gamma;
   if (scale)
     rfparams.scale = scale;
 

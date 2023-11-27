@@ -3690,14 +3690,13 @@ dufaycolor_correction_matrix ()
 	      simulated_response (checker_backlight, response, tile, green),
 	      simulated_response (checker_backlight, response, tile, blue)
 	    };
-	  color.red /= dwhite.red / 3.8;
-	  color.green /= dwhite.green / 3.8;
-	  color.blue /= dwhite.blue / 3.8;
+#if 0
+	  color.red /= dwhite.red / 2;
+	  color.green /= dwhite.green / 2;
+	  color.blue /= dwhite.blue / 2;
+#endif
 	  xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
-	  luminosity_t r,g,b;
-	  xyz_to_wide_gammut_rgb (real_color.x, real_color.y, real_color.z, &r, &g, &b);
-	  xyz_to_wide_gammut_rgb (dufay_color.x, dufay_color.y, dufay_color.z, &r, &g, &b);
-	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n", 'A'+y,x+1, real_color.x * 100, real_color.y * 100, real_color.z * 100, dufay_color.x * 100, dufay_color.y * 100, dufay_color.z * 100, 0.0, 0.0, 0.0);
+	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n", 'A'+y,x+1, real_color.x * 100, real_color.y * 100, real_color.z * 100, color.red * 100, color.green * 100, color.blue * 100, 0.0, 0.0, 0.0);
 	}
     }
   fprintf (f, "END_DATA\n");
