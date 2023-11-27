@@ -1243,14 +1243,14 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int fl
       *rerror = "there are not enough overlaps between tiles";
       return false;
     }
-  const int backlightmin = -50, backlightmax = 50;
 #pragma omp declare reduction (min_chi:compare_chi:omp_out=my_min(omp_out, omp_in)) initializer(omp_priv = {std::numeric_limits<double>::max (), -1})
   if (in_rparams->backlight_correction && (flags & OPTIMIZE_BACKLIGHT_BLACK))
     {
+      const int backlightmin = -50, backlightmax = 50;
       if (progress)
 	progress->set_task ("optimizing backlight correction", backlightmax - backlightmin + 1);
       compare_chi min_correction = {std::numeric_limits<double>::max (), -1};
-#pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,flags) reduction(min_chi:min_correction)
+#pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,flags,backlightmin,backlightmax) reduction(min_chi:min_correction)
       for (int b = backlightmin ; b < backlightmax; b++)
 	{
 	  double chisq;
