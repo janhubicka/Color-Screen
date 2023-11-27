@@ -244,21 +244,22 @@ struct DLL_PUBLIC render_parameters
 	dark_point = min2;
 	invert = true;
       }
-    printf ("gray_range %i %i dark %f exp %f invert %i\n", gray_min, gray_max, dark_point, scan_exposure, invert);
+    fprintf (stderr, "gray_range %i %i dark %f exp %f invert %i\n", gray_min, gray_max, dark_point, scan_exposure, invert);
+    fprintf (stderr, "%f %f\n", (invert_gamma (1/dark_point, gamma) * maxval) - 0.5, (invert_gamma (1/(((dark_point + 1 / scan_exposure))), gamma) * maxval) - 0.5);
   }
   void get_gray_range (int *min, int *max, int maxval)
   {
     if (!invert)
       {
-       *min = invert_gamma (dark_point, gamma) * maxval + 0.5;
-       *max = invert_gamma ((dark_point + 1) / scan_exposure, gamma) * maxval + 0.5;
+       *min = invert_gamma (dark_point, gamma) * maxval - 0.5;
+       *max = invert_gamma (dark_point + 1 / scan_exposure, gamma) * maxval - 0.5;
       }
     else
       {
-       *min = invert_gamma (1-dark_point, gamma) * maxval + 0.5;
-       *max = invert_gamma (1-((dark_point + 1) / scan_exposure), gamma) * maxval + 0.5;
+       *min = (invert_gamma (1/dark_point, gamma) * maxval) - 0.5;
+       *max = (invert_gamma (1/(((dark_point + 1 / scan_exposure))), gamma) * maxval) - 0.5;
       }
-    printf ("gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
+    fprintf (stderr, "gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
   }
   void set_tile_adjustments_dimensions (int w, int h);
 private:
