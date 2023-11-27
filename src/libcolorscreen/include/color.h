@@ -378,11 +378,9 @@ xyz_to_wide_gammut_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminos
 {
   xyz_wide_gammut_rgb_matrix m;
   m.apply_to_rgb (x, y, z, r, g, b);
-#if 0
-  *r = apply_gamma (*r, 1.8);
-  *g = apply_gamma (*g, 1.8);
-  *b = apply_gamma (*b, 1.8);
-#endif
+  *r = invert_gamma (*r, 2.2);
+  *g = invert_gamma (*g, 2.2);
+  *b = invert_gamma (*b, 2.2);
 }
 inline void
 xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)

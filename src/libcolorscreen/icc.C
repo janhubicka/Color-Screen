@@ -58,7 +58,7 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, luminosity_t gamma, void 
   float x, y, Y;
   cmsFloat64Number srgb_parameters[5] =
     { 2.4, 1.0 / 1.055,  0.055 / 1.055, 1.0 / 12.92, 0.04045 };
-  cmsToneCurve *trc = gamma == -1 ? cmsBuildParametricToneCurve(NULL, 4, srgb_parameters): cmsBuildGamma(NULL, 1);
+  cmsToneCurve *trc = gamma == -1 ? cmsBuildParametricToneCurve(NULL, 4, srgb_parameters): cmsBuildGamma(NULL, gamma);
   xyz_to_xyY (r.x, r.y, r.z, &x, &y, &Y);
   primaries.Red.x = x;
   primaries.Red.y = y;
@@ -90,4 +90,8 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, luminosity_t gamma, void 
   cmsFreeToneCurve (trc);
   return len;
 }
-			    
+size_t
+create_wide_gammut_rgb_profile (void **buffer)
+{
+  return create_profile ("Colorscreen wide gammut RGB", {0.7161046, 0.2581874, 0.0000000}, {0.1009296, 0.7249378, 0.0517813}, {0.1471858, 0.0168748, 0.7734287}, 2.2, buffer);
+}
