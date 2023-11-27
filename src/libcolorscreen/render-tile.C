@@ -249,6 +249,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	my_rparam.backlight_correction = rparam.backlight_correction;
 	my_rparam.backlight_correction_black = rparam.backlight_correction_black;
 	my_rparam.gamma = rparam.gamma;
+	my_rparam.invert = rparam.invert;
 	my_rparam.scan_exposure = rparam.scan_exposure;
 	my_rparam.dark_point = rparam.dark_point;
 	my_rparam.brightness = rparam.brightness;

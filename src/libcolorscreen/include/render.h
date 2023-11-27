@@ -238,8 +238,8 @@ struct DLL_PUBLIC render_parameters
       }
     else if (gray_min > gray_max)
       {
-	luminosity_t min2 = 1-apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
-	luminosity_t max2 = 1-apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t min2 = 1/apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = 1/apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
 	scan_exposure = 1 / (max2 - min2);
 	dark_point = min2;
 	invert = true;

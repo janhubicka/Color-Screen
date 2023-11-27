@@ -79,7 +79,6 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
   luminosity_t dark_point = p.dark_point;
   luminosity_t scan_exposure = p.scan_exposure;
-  printf ("%i\n",p.invert);
 
   if (!p.invert)
     {
@@ -89,7 +88,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   else if (!p.film_characteristic_curve)
     {
       for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (1-apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	lookup_table[i] = (1/apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {
