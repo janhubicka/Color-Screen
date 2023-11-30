@@ -68,6 +68,12 @@ struct xyz {
   }
 };
 struct xyY {luminosity_t x, y, Y;};
+struct cie_lab
+{
+   luminosity_t l, a, b;
+
+   cie_lab (xyz c);
+};
 
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
@@ -408,5 +414,8 @@ xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
   xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
   return ret;
 }
+
+luminosity_t deltaE(cie_lab c1, cie_lab c2);
+luminosity_t deltaE(xyz c1, xyz c2);
 
 #endif

@@ -13,6 +13,7 @@ const char * render_parameters::color_model_names [] = {
   "Miethe_Goerz_mesured_by_Wagner",
   "dufaycolor_reseau_by_dufaycolor_manual",
   "dufaycolor_reseau_by_color_cinematography_xyY",
+  "dufaycolor_reseau_by_color_cinematography_wavelength",
   "dufaycolor_reseau_by_color_cinematography_spectra",
   "dufaycolor_reseau_by_color_cinematography_spectra_correction",
   "dufaycolor_NSMM_Bradford_11948",
@@ -152,6 +153,12 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 				    0.140, 0.089, 0.037 /* dominating wavelength 466.0*/);
 #endif
 	}
+	break;
+      case render_parameters::color_model_dufay_color_cinematography_wavelength:
+	// https://www.luxalight.eu/en/cie-convertor
+	dyes = matrix_by_dye_xyY (0.6345861569, 0.3649735847, 0.177, /* dominating wavelength 601.7*/
+				  0.2987423914, 0.6949214652, 0.43, /* dominating wavelength 549.6*/
+				  0.133509341, 0.04269239, 0.037 /* dominating wavelength 466.0*/);
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{

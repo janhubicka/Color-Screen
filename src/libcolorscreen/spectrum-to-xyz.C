@@ -1,3 +1,4 @@
+#include <string>
 #include "include/spectrum-to-xyz.h"
 #include "include/scr-to-img.h"
 #include "include/render.h"
@@ -726,7 +727,10 @@ static void
 print_transmitance_spectrum (FILE * out, const spectrum spec)
 {
   for (int i = 0; i < SPECTRUM_SIZE; i++)
+  {
     fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, spec[i]);
+    assert (spec[i] > -100 && spec [i] < 100);
+  }
 }
 
 static void
@@ -1516,7 +1520,7 @@ const static spectra_entry color_cinematography_dufay_red[] = {
 
 /* Charts published in book are ambigous on what represent green and blue sensitivity.
    consider both posibilities.  */
-#undef MORE_RED_IN_BLUE
+#define MORE_RED_IN_BLUE
 const static spectra_entry color_cinematography_dufay_green[] = {
   {400, 0},
   {440, 0},
@@ -3250,10 +3254,13 @@ spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
 
 /* Compute XYZ values.  */
 static inline struct xyz
-get_xyz_old_observer (spectrum backlight, spectrum s)
+get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NULL)
 {
   struct xyz ret = { 0, 0, 0 };
   luminosity_t sum = 0;
+  FILE *f = NULL;
+  if (filename)
+     f = fopen(filename, "wt");
   /* TODO: CIE recommends going by 1nm bands and interpolate.
      We can implement that easily if that makes difference.  */
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -3262,7 +3269,11 @@ get_xyz_old_observer (spectrum backlight, spectrum s)
       ret.y += (cie_cmf_y[i] * s[i] * backlight[i]);
       ret.z += (cie_cmf_z[i] * s[i] * backlight[i]);
       sum += cie_cmf_y[i] * backlight[i];
+      if (f)
+        fprintf (f, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, s[i] * backlight[i]);
     }
+  if (f)
+    fclose (f);
   luminosity_t scale = 1 / sum;
   ret.x *= scale;
   ret.y *= scale;
@@ -3271,15 +3282,21 @@ get_xyz_old_observer (spectrum backlight, spectrum s)
   return ret;
 }
 
-xyz combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight)
+xyz combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = NULL, const char *filename2 = NULL)
 {
   spectrum tmp;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
       tmp [i] = (dye1 ? dye1[i] : 1) * (dye2 ? dye2[i] : 1);
     }
+  if (filename)
+    {
+      FILE *f = fopen (filename, "wt");
+      print_transmitance_spectrum (f, tmp);
+      fclose (f);
+    }
 
-  xyz ret = get_xyz_old_observer (backlight, tmp);
+  xyz ret = get_xyz_old_observer (backlight, tmp, filename2);
   return ret;
 }
 
@@ -3293,7 +3310,7 @@ xyz combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backligh
    FILTER2 may be NULL if filter is missing.  */
 
 luminosity_t
-simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1, luminosity_t *filter2 = NULL)
+simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1 = NULL, luminosity_t *filter2 = NULL)
 {
   luminosity_t sum = 0;
   luminosity_t rsum = 0;
@@ -3307,8 +3324,11 @@ simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_
 	   val *= backlight[i];
 	}
       rsum += val;
-      val *= filter1[i];
-      assert (filter1[i] >= 0 && filter1[i] <= 1);
+      if (filter1)
+	{
+	  val *= filter1[i];
+	  assert (filter1[i] >= 0 && filter1[i] <= 1);
+	}
       if (filter2)
         {
           assert (filter2[i] >= 0 && filter2[i] <= 1);
@@ -3336,13 +3356,48 @@ log_sensitivity_to_reversal_transmitance(spectrum response)
   }
 }
 
+luminosity_t
+adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, luminosity_t norm = 1)
+{
+  luminosity_t bestc = 0, bestc_y = 1;
+  luminosity_t sum = 0;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    sum += cie_cmf_y[i] * backlight[i];
+  for (luminosity_t c = 0.001 ; c < 10; c+=0.001)
+    {
+      luminosity_t ysum = 0;
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	ysum += (cie_cmf_y[i] * my_pow (s[i] / norm, c) * norm * backlight[i]) ;
+      ysum /= sum;
+      //printf ("%f %f %f\n",y, ysum, bestc_y);
+      if (fabs (ysum - y) < fabs (bestc_y - y))
+	{
+	  bestc_y = ysum;
+	  bestc = c;
+	}
+    }
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    s[i] = my_pow (s[i]/norm, bestc) * norm;
+  return bestc;
+}
+
 color_matrix
 dufaycolor_correction_matrix ()
 {
   const bool output_tiffs = true;
+  const bool output_spectra = true;
   const bool verbose = true;
   void *buffer;
   size_t len;
+#if 0
+  xyz target_red_xyz = xyY_to_xyz (0.633, 0.365, 0.177);
+  xyz target_green_xyz = xyY_to_xyz (0.233, 0.647, 0.43);
+  xyz target_blue_xyz = xyY_to_xyz (0.140, 0.089, 0.037);
+#else
+  xyz target_red_xyz = xyY_to_xyz (0.6345861569, 0.3649735847, 0.177);
+  xyz target_green_xyz = xyY_to_xyz (0.2987423914, 0.6949214652, 0.43);
+  xyz target_blue_xyz = xyY_to_xyz (0.133509341, 0.04269239, 0.037);
+#endif
 
   /* f0 contains the primaries as specified in Color Cinematography book using xyY values.  */
   if (output_tiffs)
@@ -3350,7 +3405,9 @@ dufaycolor_correction_matrix ()
       len = create_wide_gammut_rgb_profile (&buffer);
       tiff_writer_params par;
       par.filename="/tmp/f0.tif";
-      par.width = par.height = 4;
+      par.width = par.height = 19;
+      par.height = 19;
+      par.height = 19;
       par.depth = 32;
       par.hdr = true;
       par.icc_profile = buffer;
@@ -3358,29 +3415,60 @@ dufaycolor_correction_matrix ()
       const char *error;
       tiff_writer tiff (par, &error);
       luminosity_t r,g,b;
-      for (int i = 0; i < 4; i++)
+      for (int i = 0; i < 19; i++)
 	{
-	  tiff.put_hdr_pixel (0, 1, 1, 1);
+	  for (int j = 0; j < 19; j++)
+	    tiff.put_hdr_pixel (j, 0, 0, 0);
 	  luminosity_t br = 1;
 	  int mul = 1;
-	  xyz f = xyY_to_xyz (0.633, 0.365, 0.177);
+	  xyz f = target_red_xyz;
 	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (1, r*mul, g*mul, b*mul);
-	  f = xyY_to_xyz (0.233, 0.647, 0.43);
+	  tiff.put_hdr_pixel (4, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (5, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (6, r*mul, g*mul, b*mul);
+	  f = target_green_xyz;
 	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (2, r*mul, g*mul, b*mul);
-	  f = xyY_to_xyz (0.140, 0.089, 0.037);
+	  tiff.put_hdr_pixel (8, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (9, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (10, r*mul, g*mul, b*mul);
+	  f = target_blue_xyz;
 	  xyz_to_wide_gammut_rgb (f.x * br, f.y * br, f.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (3, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (12, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (13, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (14, r*mul, g*mul, b*mul);
 	  tiff.write_row ();
 	}
     }
 
   /* Compute red, green, blue and transparent filters using spectra in Color Cinematography.   */
   spectrum red, green, blue, white;
-  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 96);
-  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 96);
-  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 96);
+  luminosity_t lmax = 96;
+  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, lmax);
+  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, lmax);
+  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, lmax);
+  bool cut = false;
+  if (cut)
+    {
+      for (int i = 0 ; SPECTRUM_START + i * SPECTRUM_STEP < 400; i++)
+	red[i] = green[i] = blue[i] = 0;
+      for (int i = SPECTRUM_SIZE - 1 ; SPECTRUM_START + i * SPECTRUM_STEP > 720; i--)
+	red[i] = green[i] = blue[i] = 0;
+    }
+
+#if 0
+  if (output_spectra)
+    {
+      FILE *f = fopen ("/tmp/dufay-filter-red.dat", "wt");
+      print_transmitance_spectrum (f, red);
+      fclose (f);
+      f = fopen ("/tmp/dufay-filter-green.dat", "wt");
+      print_transmitance_spectrum (f, green);
+      fclose (f);
+      f = fopen ("/tmp/dufay-filter-blue.dat", "wt");
+      print_transmitance_spectrum (f, blue);
+      fclose (f);
+    }
+#endif
   for (int i = 0; i < SPECTRUM_SIZE; i++)
 	  white[i]=1;
 
@@ -3392,12 +3480,23 @@ dufaycolor_correction_matrix ()
   //compute_spectrum (dufay_backlight, 320, 780, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
   //compute_spectrum (dufay_backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false);
   compute_spectrum (dufay_backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false);
+  //
+  const bool concentrations = true;
+  if (concentrations)
+    {
+      luminosity_t a = adjust_concentration_to_y (dufay_backlight, red, 0.177, lmax/100);
+      printf ("Red filter concentration adjustment: %f\n",a);
+      a = adjust_concentration_to_y (dufay_backlight, green, 0.43, lmax/100);
+      printf ("Green filter concentration adjustment: %f\n",a);
+      a = adjust_concentration_to_y (dufay_backlight, blue, 0.037, lmax/100);
+      printf ("Blue filter concentration adjustment: %f\n",a);
+    }
 
   /* Compute XYZ values using 1931 CIE observer.  */
-  xyz filter_white = get_xyz_old_observer (dufay_backlight, white);
-  xyz filter_red = get_xyz_old_observer (dufay_backlight, red);
-  xyz filter_green = get_xyz_old_observer (dufay_backlight, green);
-  xyz filter_blue = get_xyz_old_observer (dufay_backlight, blue);
+  xyz filter_white = get_xyz_old_observer (dufay_backlight, white, output_spectra ? "/tmp/dufay-backlight.dat" : NULL);
+  xyz filter_red = get_xyz_old_observer (dufay_backlight, red, output_spectra ? "/tmp/dufay-red-backlight.dat" : NULL);
+  xyz filter_green = get_xyz_old_observer (dufay_backlight, green, output_spectra ? "/tmp/dufay-green-backlight.dat" : NULL);
+  xyz filter_blue = get_xyz_old_observer (dufay_backlight, blue, output_spectra ? "/tmp/dufay-blue-backlight.dat" : NULL);
 
   /* Optionally scale to values as given in the book.  */
   const bool scale = false;
@@ -3434,24 +3533,24 @@ dufaycolor_correction_matrix ()
   luminosity_t x,y,Y;
   xyz_to_xyY (filter_white.x, filter_white.y, filter_white.z, &x, &y, &Y);
   if (verbose)
-    printf ("no filter xyY:   %f %f %f scaled by:%f\n", x, y, Y, red_scale);
+    printf ("no filter xyY:   %f %f %f scaled by:%f\n", x, y, Y, white_scale);
   xyz_to_xyY (filter_red.x, filter_red.y, filter_red.z, &x, &y, &Y);
   if (verbose)
-    printf ("Red filter xyY:   %f %f %f scaled by:%f\n", x, y, Y, red_scale);
+    printf ("Red filter xyY:   %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_red_xyz, filter_red), red_scale);
   xyz_to_xyY (filter_green.x, filter_green.y, filter_green.z, &x, &y, &Y);
   if (verbose)
-    printf ("Green filter xyY: %f %f %f scaled by:%f\n", x, y, Y, green_scale);
+    printf ("Green filter xyY: %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_green_xyz, filter_green), green_scale);
   xyz_to_xyY (filter_blue.x, filter_blue.y, filter_blue.z, &x, &y, &Y);
   if (verbose)
-    printf ("Blue filter xyY:  %f %f %f scaled by:%f\n", x, y, Y, blue_scale);
+    printf ("Blue filter xyY:  %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_blue_xyz, filter_blue), blue_scale);
 
 
   /* Output tiff with simulated filters.  */
   if (output_tiffs)
     {
       tiff_writer_params par;
-      par.filename="/tmp/f1.tif";
-      par.width = par.height = 4;
+      par.filename="/tmp/f1b.tif";
+      par.width = par.height = 19;
       par.depth = 32;
       par.hdr = true;
       par.icc_profile = buffer;
@@ -3459,18 +3558,48 @@ dufaycolor_correction_matrix ()
       const char *error;
       tiff_writer tiff (par, &error);
       luminosity_t r,g,b;
-      for (int i = 0; i < 4; i++)
+      for (int i = 0; i < 19; i++)
 	{
 	  luminosity_t br = 1;
 	  int mul = 1;
 	  xyz_to_wide_gammut_rgb (filter_white.x * br, filter_white.y * br, filter_white.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (0, r*mul, g*mul, b*mul);
+	  for (int j = 0; j < 19; j++)
+	    tiff.put_hdr_pixel (j, r*mul, g*mul, b*mul);
+	  tiff.write_row ();
+	}
+    }
+  if (output_tiffs)
+    {
+      tiff_writer_params par;
+      par.filename="/tmp/f1.tif";
+      par.width = 19;
+      par.height = 19;
+      par.depth = 32;
+      par.hdr = true;
+      par.icc_profile = buffer;
+      par.icc_profile_len = len;
+      const char *error;
+      tiff_writer tiff (par, &error);
+      luminosity_t r,g,b;
+      for (int i = 0; i < 19; i++)
+	{
+	  luminosity_t br = 1;
+	  int mul = 1;
+	  xyz_to_wide_gammut_rgb (filter_white.x * br, filter_white.y * br, filter_white.z * br, &r, &g, &b);
+	  for (int j = 0; j < 19; j++)
+	    tiff.put_hdr_pixel (j, r*mul, g*mul, b*mul);
 	  xyz_to_wide_gammut_rgb (filter_red.x * br, filter_red.y * br, filter_red.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (1, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (4, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (5, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (6, r*mul, g*mul, b*mul);
 	  xyz_to_wide_gammut_rgb (filter_green.x * br, filter_green.y * br, filter_green.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (2, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (8, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (9, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (10, r*mul, g*mul, b*mul);
 	  xyz_to_wide_gammut_rgb (filter_blue.x * br, filter_blue.y * br, filter_blue.z * br, &r, &g, &b);
-	  tiff.put_hdr_pixel (3, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (12, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (13, r*mul, g*mul, b*mul);
+	  tiff.put_hdr_pixel (14, r*mul, g*mul, b*mul);
 	  tiff.write_row ();
 	}
     }
@@ -3480,7 +3609,8 @@ dufaycolor_correction_matrix ()
     {
       tiff_writer_params par;
       par.filename="/tmp/f2.tif";
-      par.width = par.height = 4;
+      par.width = 19;
+      par.height = 19;
       par.depth = 32;
       par.hdr = true;
       par.icc_profile = buffer;
@@ -3488,20 +3618,55 @@ dufaycolor_correction_matrix ()
       const char *error;
       tiff_writer tiff (par, &error);
       luminosity_t r,g,b;
-      for (int i = 0; i < 4; i++)
+      for (int i = 0; i < 5; i++)
 	{
 	  int br = /*200*/1;
-	  for (int j = 0; j < 4; j++)
+	  for (int d = 0; d < (i == 4 ? 3 : 4); d++)
 	    {
-	      int mul = 1;
-	      xyz f = combined_xyz (i == 0 ? NULL : i == 1 ? red : i == 2 ? green : blue,
-				    j == 0 ? NULL : j == 1 ? red : j == 2 ? green : blue,
-				    dufay_backlight);
-	      int br2 = (i && j) ? br : 1;
-	      xyz_to_wide_gammut_rgb (f.x * br2, f.y * br2, f.z * br2, &r, &g, &b);
-	      tiff.put_hdr_pixel (j, r*mul, g*mul, b*mul);
+	      xyz_to_wide_gammut_rgb (filter_white.x * br, filter_white.y * br, filter_white.z * br, &r, &g, &b);
+	      int i1 = i == 0 || i == 4 || d == 3 ? -1 : i-1;
+	      for (int j = 0; j < 19; j++)
+		tiff.put_hdr_pixel (j, r, g, b);
+	      for (int j = 0; j < 5; j++)
+		{
+		  xyz_to_wide_gammut_rgb (filter_white.x * br, filter_white.y * br, filter_white.z * br, &r, &g, &b);
+		  for (int d2 = 0; d2 < (j == 4 ? 3 : 4); d2++)
+		    {
+		      int mul = 1;
+		      const char *filename = NULL;
+		      const char *filename2 = NULL;
+		      std::string sfile, sfile2;
+		      int i2 = j == 0 || j == 4 || d2 == 3 ? -1 : j-1;
+		      if (output_spectra)
+			{
+			  const char *name[3]={"red","green","blue"};
+			  sfile = std::string ("/tmp/");
+			  sfile2 = std::string ("/tmp/");
+			  if (i1 >= 0)
+			    {
+			      sfile = sfile + std::string (name[i1]);
+			      sfile2 = sfile2 + std::string (name[i1]);
+			    }
+			  if (i2 >= 0)
+			    {
+			      sfile = sfile + std::string (name[i2]);
+			      sfile2 = sfile2 + std::string (name[i2]);
+			    }
+			  sfile = sfile + ".dat";
+			  sfile2 = sfile2 + "-backlight.dat";
+			  filename = sfile.c_str ();
+			  filename2 = sfile2.c_str ();
+			}
+		      xyz f = combined_xyz (i1 < 0 ? NULL : i1 == 0 ? red : i1 == 1 ? green : blue,
+					    i2 < 0 ? NULL : i2 == 0 ? red : i2 == 1 ? green : blue,
+					    dufay_backlight, filename, filename2);
+		      int br2 = (i && j) ? br : 1;
+		      xyz_to_wide_gammut_rgb (f.x * br2, f.y * br2, f.z * br2, &r, &g, &b);
+		      tiff.put_hdr_pixel (j*4+d2, r*mul, g*mul, b*mul);
+		    }
+		}
+	      tiff.write_row ();
 	    }
-	  tiff.write_row ();
 	}
     }
 
@@ -3538,12 +3703,23 @@ dufaycolor_correction_matrix ()
   dwhite.red   = simulated_response (backlight, response, red);
   dwhite.green = simulated_response (backlight, response, green);
   dwhite.blue  = simulated_response (backlight, response, blue);
+  luminosity_t dglass = simulated_response (backlight, response);
 
-  double m = std::max (dwhite.red, std::max (dwhite.green, dwhite.blue));
-  dred = dred * (1/m);
-  dgreen = dgreen * (1/m);
-  dblue = dblue * (1/m);
-  dwhite = dwhite * (1/m);
+  //double m = std::max (dwhite.red, std::max (dwhite.green, dwhite.blue));
+  dred = dred * (1/dglass);
+  dgreen = dgreen * (1/dglass);
+  dblue = dblue * (1/dglass);
+  dwhite = dwhite * (1/dglass);
+
+  color_matrix m (filter_red.x, filter_green.x, filter_blue.x, 0,
+		  filter_red.y, filter_green.y, filter_blue.y, 0,
+		  filter_red.z, filter_green.z, filter_blue.z, 0,
+		  0, 0, 0, 1);
+  xyz whitepp;
+  srgb_to_xyz (1, 1, 1, &whitepp.x, &whitepp.y, &whitepp.z);
+  m.normalize_grayscale (whitepp.x, whitepp.y, whitepp.z);
+
+
   printf ("white: %f %f %f\n", dwhite.red, dwhite.green, dwhite.blue);
   printf ("red: %f %f %f\n", dred.red, dred.green, dred.blue);
   printf ("green: %f %f %f\n", dgreen.red, dgreen.green, dgreen.blue);
@@ -3552,8 +3728,8 @@ dufaycolor_correction_matrix ()
     {
       tiff_writer_params par;
       par.filename="/tmp/f3.tif";
-      par.width = 5;
-      par.height = 4;
+      par.width = 23;
+      par.height = 19;
       par.depth = 32;
       par.hdr = true;
       par.icc_profile = buffer;
@@ -3562,6 +3738,7 @@ dufaycolor_correction_matrix ()
       tiff_writer tiff (par, &error);
       luminosity_t gamma = 2.8;
 
+#if 0
       int mul = 1;
       tiff.put_hdr_pixel (0, mul, mul, mul);
       luminosity_t val = invert_gamma (dwhite.red, gamma) * mul;
@@ -3595,7 +3772,56 @@ dufaycolor_correction_matrix ()
 	//printf ("RGB %f %f %f %f %f %f\n", f.red, f.green, f.blue,r,g,b);
 	tiff.put_hdr_pixel (4, r*mul, g*mul, b*mul);
 	tiff.write_row ();
-      }
+#endif
+      for (int i = 0; i < 5; i++)
+	{
+	  for (int d = 0; d < (i == 4 ? 3 : 4); d++)
+	    {
+	      int i1 = i == 0 || i == 4 || d == 3 ? -1 : i-1;
+	      luminosity_t g = invert_gamma (dglass, gamma);
+	      for (int j = 0; j < 19; j++)
+		tiff.put_hdr_pixel (j, g, g, g);
+	      for (int j = 0; j < 5; j++)
+		{
+		  for (int d2 = 0; d2 < (j == 4 ? 3 : 4); d2++)
+		    {
+		      luminosity_t dd;
+
+		      int i2 = j == 0 || j == 4 || d2 == 3 ? -1 : j-1;
+		      if (i1 == -1 && i2 == -1)
+			dd = dglass;
+		      else if (i1 == -1 || i2 == -1)
+			{
+			  int c = i1 == -1 ? i2 : i1;
+			  dd = dwhite[c];
+			}
+		      else if (i1 == 0)
+			dd = dred[i2];
+		      else if (i1 == 1)
+			dd = dgreen[i2];
+		      else 
+			dd = dblue[i2];
+		      g = invert_gamma (dd, gamma);
+		      tiff.put_hdr_pixel (j*4+d2, g,g,g);
+		    }
+		}
+	      luminosity_t r=1, b=1;
+	      g=1;
+	      if (i1 != -1 || (i == 0 && d < 3))
+		{
+		  rgbdata &f = i == 0 ? dwhite : (i1 == 0) ? dred : (i1 == 1) ? dgreen : dblue;
+		  //xyz c = (filter_red * f.red) + (filter_green * f.green) + (filter_blue * f.blue);
+		  xyz c;
+		  m.apply_to_rgb (f.red, f.green, f.blue, &c.x, &c.y, &c.z);
+		  xyz_to_wide_gammut_rgb (c.x, c.y, c.z, &r, &g, &b);
+		}
+	      tiff.put_hdr_pixel (19, 0, 0, 0);
+	      tiff.put_hdr_pixel (20, r, g, b);
+	      tiff.put_hdr_pixel (21, r, g, b);
+	      tiff.put_hdr_pixel (22, r, g, b);
+	      tiff.write_row ();
+	    }
+	}
 #if 0
       for (int i = 0; i < 4; i++)
 	{
@@ -3621,9 +3847,20 @@ dufaycolor_correction_matrix ()
 
   spectrum checker_backlight;
   daylight_il (checker_backlight, 5400);
+  rgbdata dwhite2;
+  dwhite2.red   = simulated_response (checker_backlight, response, red);
+  dwhite2.green = simulated_response (checker_backlight, response, green);
+  dwhite2.blue  = simulated_response (checker_backlight, response, blue);
   if (output_tiffs)
     {
       tiff_writer_params par;
+      color_matrix m (filter_red.x, filter_green.x, filter_blue.x, 0,
+		      filter_red.y, filter_green.y, filter_blue.y, 0,
+		      filter_red.z, filter_green.z, filter_blue.z, 0,
+		      0, 0, 0, 1);
+      xyz whitepp = combined_xyz (NULL, NULL, checker_backlight);
+      srgb_to_xyz (1, 1, 1, &whitepp.x, &whitepp.y, &whitepp.z);
+      m.normalize_grayscale (whitepp.x, whitepp.y, whitepp.z);
       par.filename="/tmp/f4.tif";
       par.width = 12;
       par.height = 8;
@@ -3649,10 +3886,15 @@ dufaycolor_correction_matrix ()
 		      simulated_response (checker_backlight, response, tile, green),
 		      simulated_response (checker_backlight, response, tile, blue)
 		    };
-		  color.red /= dwhite.red / 3.8;
-		  color.green /= dwhite.green / 3.8;
-		  color.blue /= dwhite.blue / 3.8;
-		  xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
+		  //double mm = 3.8 * std::max (dwhite.red, std::max (dwhite.green, dwhite.blue)) / dglass;
+		  //double mm = 1/std::max (dwhite.red, std::max (dwhite.green, dwhite.blue));
+		  color.red /= dwhite2.red;
+		  color.green /= dwhite2.green; 
+		  color.blue /= dwhite2.blue;
+		  //color *= mm;
+		  //xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
+		  xyz dufay_color;
+		  m.apply_to_rgb (color.red, color.green, color.blue, &dufay_color.x, &dufay_color.y, &dufay_color.z);
 		  luminosity_t r,g,b;
 		  xyz_to_wide_gammut_rgb (real_color.x, real_color.y, real_color.z, &r, &g, &b);
 		  tiff.put_hdr_pixel (x * 2, r, g, b);
@@ -3694,8 +3936,11 @@ dufaycolor_correction_matrix ()
 	  color.red /= dwhite.red / 2;
 	  color.green /= dwhite.green / 2;
 	  color.blue /= dwhite.blue / 2;
-#endif
 	  xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
+#endif
+	  color.red /= dwhite2.red;
+	  color.green /= dwhite2.green; 
+	  color.blue /= dwhite2.blue;
 	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n", 'A'+y,x+1, real_color.x * 100, real_color.y * 100, real_color.z * 100, color.red * 100, color.green * 100, color.blue * 100, 0.0, 0.0, 0.0);
 	}
     }

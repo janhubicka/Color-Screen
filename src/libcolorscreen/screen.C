@@ -133,17 +133,40 @@ screen::paget_finlay ()
 void
 screen::dufay ()
 {
+  /* Based on microscopic scan.  */
+
+  const coord_t red_width = 21.0;
+  const coord_t green_blue_width = 28.6;
+  const coord_t blue_height = 22.7;
+  const coord_t green_height = 26.9;
+#if 0
+#if 1
+  const coord_t red_width = 21.0;
+  const coord_t green_blue_width = 28.6+70/*+28*/;
+#if 1
+  const coord_t green_height = 22.7;
+  const coord_t blue_height = 26.9+5;
+#else
+  const coord_t blue_height = 22.7;
+  const coord_t green_height = 26.9;
+#endif
+#else
+  /* Sort of OK-ysh for color cinematography data.  */
+  const coord_t red_width = 21.0;
+  const coord_t green_blue_width = 28.6+60;
+  const coord_t green_height = 22.7;
+  const coord_t blue_height = 26.9+60;
+#endif
+#endif
   int xx, yy;
-  int strip_height = size / 3;
+  int strip_width = size / 2 * green_blue_width / (red_width + green_blue_width) + 0.5;
+  int strip_height = size / 2 * green_height / (green_height + blue_height) + 0.5;
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {
-	if (yy < strip_height || yy > size-strip_height)
+	if (yy <= strip_width || yy > size - strip_width)
 	  {
-	    /* 4 makes green patch equal size as blue patch.
-	       however based on test scans of dufays the green
-	       patches are smaller.  */
-	    if (xx < size / 3.7 || xx > size - size / 3.7)
+	    if (xx <= strip_height || xx > size - strip_height)
 	      {
 		mult[yy][xx][0] = 0;
 		mult[yy][xx][1] = 1;
