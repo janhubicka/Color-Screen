@@ -3282,7 +3282,8 @@ get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NUL
   return ret;
 }
 
-xyz combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = NULL, const char *filename2 = NULL)
+xyz
+combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = NULL, const char *filename2 = NULL)
 {
   spectrum tmp;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -3344,17 +3345,24 @@ simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_
    I assume that it is reciprocal of time needed to get maximal brightness.  So to translate
    this to linear data and assuming that iflm is linear it should be 1/time, where time is
    10^{1/response}.  */
+
 void
 log_sensitivity_to_reversal_transmitance(spectrum response)
 {
   for (int i = 0; i < SPECTRUM_SIZE; i++)
   {
     if (response[i]>0)
-      response[i] = 1/ (pow(10,1/response[i]));
+      //response[i] = 1/ (pow(10,1/response[i]));
+      // We do flipping positive to negative by 1/density.  This should be done by
+      // characteristic curve.
+      response[i] = pow(10,response[i]);
     else
       response[i]=0;
   }
 }
+
+/* Increase/decrease concentration of filter S to reach luminosity Y.
+   NORM is base for no filter, i.e. estimated density of film base.  */
 
 luminosity_t
 adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, luminosity_t norm = 1)
@@ -3381,6 +3389,55 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
   return bestc;
 }
 
+/* Compute intersection vector (x1, y1)->(x2, y2) and line segment (x3,y3)-(x4,y4).
+   Return true if it lies on the line sergment and in positive direction of the vector.
+   If true is returned, t is initialized to position of the point in the line.  */
+static bool
+intersect (luminosity_t x1, luminosity_t y1, luminosity_t x2, luminosity_t y2,
+	   luminosity_t x3, luminosity_t y3, luminosity_t x4, luminosity_t y4, luminosity_t *t)
+{
+  luminosity_t a = x1;
+  luminosity_t b = x2-x1;
+  luminosity_t c = x3;
+  luminosity_t d = x4-x3;
+  luminosity_t e = y1;
+  luminosity_t f = y2-y1;
+  luminosity_t g = y3;
+  luminosity_t h = y4-y3;
+
+  luminosity_t rec = 1/(d*f-b*h);
+  if (d == 0)
+    return false;
+  luminosity_t p1 = (a*h-c*h-d*e+d*g) * rec;
+  luminosity_t p2 = (e*f - b*e + b*g - c*f) * rec;
+  if (p1 < 0 || p2 < 0 || p2 > 1)
+    return false;
+  *t = p2;
+
+  return true;
+}
+
+/* Dominant wavelength is computed as intersection of the line from whitepoint to a given
+   color with the horsehoe of CIE1931.
+   Not all colors have dominant wavelengths; return 0 if they does not  */
+
+static luminosity_t
+dominant_wavelength (xy_t color, xy_t whitepoint = xy_t(0.33,0.33))
+{
+  for (int i = 0; i < SPECTRUM_SIZE - 1; i++)
+    {
+      /* Compute points of the horsehose observer.  */
+      xy_t c1 ((xyz){cie_cmf_x[i], cie_cmf_y[i], cie_cmf_z[i]});
+      xy_t c2 ((xyz){cie_cmf_x[i+1], cie_cmf_y[i+1], cie_cmf_z[i+1]});
+      luminosity_t t;
+      /* Compute the intersection.  */
+      if (intersect (whitepoint.x, whitepoint.y, color.x, color.y,
+		     c1.x, c1.y, c2.x, c2.y, &t))
+	return SPECTRUM_START + (i + t) * SPECTRUM_STEP;
+    }
+  return 0;
+}
+
 color_matrix
 dufaycolor_correction_matrix ()
 {
@@ -3389,7 +3446,7 @@ dufaycolor_correction_matrix ()
   const bool verbose = true;
   void *buffer;
   size_t len;
-#if 0
+#if 1
   xyz target_red_xyz = xyY_to_xyz (0.633, 0.365, 0.177);
   xyz target_green_xyz = xyY_to_xyz (0.233, 0.647, 0.43);
   xyz target_blue_xyz = xyY_to_xyz (0.140, 0.089, 0.037);
@@ -3398,6 +3455,33 @@ dufaycolor_correction_matrix ()
   xyz target_green_xyz = xyY_to_xyz (0.2987423914, 0.6949214652, 0.43);
   xyz target_blue_xyz = xyY_to_xyz (0.133509341, 0.04269239, 0.037);
 #endif
+  xy_t best_white(0,0);
+  bool best_white_found = 0;
+  luminosity_t best_white_dist = 0;
+  for (luminosity_t x = 0.01; x < 1; x += 0.01)
+    for (luminosity_t y = 0.01; y < 1; y += 0.01)
+      {
+	xy_t w (x, y);
+	luminosity_t d1 = dominant_wavelength (target_red_xyz, w);
+	luminosity_t d2 = dominant_wavelength (target_green_xyz, w);
+        luminosity_t d3 = dominant_wavelength (target_blue_xyz, w);
+	if (!d1 || !d2 || !d3)
+	  continue;
+	luminosity_t d = abs (601.7 - d1) + abs (549.6 - d2) + abs (466 - d3);
+	if (!best_white_found || d < best_white_dist)
+	{
+	  best_white = w;
+	  best_white_dist = d;
+	  best_white_found = true;
+	}
+
+      }
+  //xy_t ilc_white = {0.31006, 0.31616};
+  //xy_t ilc_white = {0.33, 0.33};
+  printf ("Best white %f %f\n", best_white.x, best_white.y);
+  printf ("Target red %f %f %f, dominant wavelength %f\n", target_red_xyz.x, target_red_xyz.y, target_red_xyz.z, dominant_wavelength (target_red_xyz, best_white));
+  printf ("Target green %f %f %f, dominant wavelength %f\n", target_green_xyz.x, target_green_xyz.y, target_green_xyz.z, dominant_wavelength (target_green_xyz, best_white));
+  printf ("Target blue %f %f %f, dominant wavelength %f\n", target_blue_xyz.x, target_blue_xyz.y, target_blue_xyz.z, dominant_wavelength (target_blue_xyz, best_white));
 
   /* f0 contains the primaries as specified in Color Cinematography book using xyY values.  */
   if (output_tiffs)
@@ -3446,7 +3530,7 @@ dufaycolor_correction_matrix ()
   compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, lmax);
   compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, lmax);
   compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, lmax);
-  bool cut = false;
+  bool cut = true;
   if (cut)
     {
       for (int i = 0 ; SPECTRUM_START + i * SPECTRUM_STEP < 400; i++)
@@ -3536,13 +3620,13 @@ dufaycolor_correction_matrix ()
     printf ("no filter xyY:   %f %f %f scaled by:%f\n", x, y, Y, white_scale);
   xyz_to_xyY (filter_red.x, filter_red.y, filter_red.z, &x, &y, &Y);
   if (verbose)
-    printf ("Red filter xyY:   %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_red_xyz, filter_red), red_scale);
+    printf ("Red filter xyY:   %f %f %f deltaE %f scaled by:%f wavelength:%f\n", x, y, Y, deltaE (target_red_xyz, filter_red), red_scale, dominant_wavelength (filter_red, best_white));
   xyz_to_xyY (filter_green.x, filter_green.y, filter_green.z, &x, &y, &Y);
   if (verbose)
-    printf ("Green filter xyY: %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_green_xyz, filter_green), green_scale);
+    printf ("Green filter xyY: %f %f %f deltaE %f scaled by:%f wavelength:%f\n", x, y, Y, deltaE (target_green_xyz, filter_green), green_scale, dominant_wavelength (filter_green, best_white));
   xyz_to_xyY (filter_blue.x, filter_blue.y, filter_blue.z, &x, &y, &Y);
   if (verbose)
-    printf ("Blue filter xyY:  %f %f %f deltaE %f scaled by:%f\n", x, y, Y, deltaE (target_blue_xyz, filter_blue), blue_scale);
+    printf ("Blue filter xyY:  %f %f %f deltaE %f scaled by:%f wavelength:%f\n", x, y, Y, deltaE (target_blue_xyz, filter_blue), blue_scale, dominant_wavelength (filter_blue, best_white));
 
 
   /* Output tiff with simulated filters.  */

@@ -67,6 +67,17 @@ struct xyz {
     }
   }
 };
+struct xy_t
+{
+  luminosity_t x, y;
+  constexpr xy_t (luminosity_t xx, luminosity_t yy)
+  : x (xx), y (yy)
+  { }
+  constexpr xy_t (xyz c)
+  : x (c.x / (c.x + c.y + c.z)), y (c.y / (c.x + c.y + c.z))
+  {
+  }
+};
 struct xyY {luminosity_t x, y, Y;};
 struct cie_lab
 {
@@ -388,13 +399,6 @@ xyz_to_wide_gammut_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminos
   *g = invert_gamma (*g, 2.2);
   *b = invert_gamma (*b, 2.2);
 }
-inline void
-xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)
-{
-	*rx = x / (x + y + z);
-	*ry = y / (x + y + z);
-	*rY = y;
-}
 
 inline void
 srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, luminosity_t *y, luminosity_t *z)
@@ -413,6 +417,13 @@ xyY_to_xyz (luminosity_t x, luminosity_t y, luminosity_t Y)
     return (xyz){0,0,0};
   xyz ret = {x * Y / y, Y, (1 - x - y) * Y / y};
   return ret;
+}
+inline void
+xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, luminosity_t *ry, luminosity_t *rY)
+{
+	*rx = x / (x + y + z);
+	*ry = y / (x + y + z);
+	*rY = y;
 }
 
 luminosity_t deltaE(cie_lab c1, cie_lab c2);
