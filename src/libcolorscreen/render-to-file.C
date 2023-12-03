@@ -456,7 +456,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    }
         }
       else
-        icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan);
+        icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/);
     }
 
   /* Initialize rendering engine.  */
@@ -605,7 +605,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     case detect_adjusted:
       {
 	render_scr_detect render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (false, progress))
+	if (!render.precompute_all (false, false, progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
 	    if (free_profile)

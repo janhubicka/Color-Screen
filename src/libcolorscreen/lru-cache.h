@@ -1,5 +1,5 @@
-#ifndef LRU_CACHE
-#define LRU_CACHE
+#ifndef LRU_CACHE_H
+#define LRU_CACHE_H
 #include <pthread.h>
 #include <atomic>
 #include <include/progress-info.h>

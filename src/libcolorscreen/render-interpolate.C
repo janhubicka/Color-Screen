@@ -70,7 +70,7 @@ bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
-  if (!render_to_scr::precompute (true, xmin, ymin, xmax, ymax, progress))
+  if (!render_to_scr::precompute (true, true, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)
     {
@@ -223,9 +223,6 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
     }
-  red *= dufaycolor::red_portion;
-  green *= dufaycolor::green_portion;
-  blue *= dufaycolor::blue_portion;
   if (m_screen_compensation)
     {
       coord_t lum = get_img_pixel_scr (x - xshift, y - yshift);

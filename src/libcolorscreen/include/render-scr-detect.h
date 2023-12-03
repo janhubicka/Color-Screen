@@ -69,7 +69,7 @@ public:
 	return;
       }
   }
-  bool precompute_all (bool grayscale_needed, progress_info *);
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *);
   bool precompute_rgbdata (progress_info *progress);
   enum render_scr_detect_type_t
   {
@@ -283,7 +283,7 @@ public:
   inline rgbdata sample_pixel_img (coord_t x, coord_t y);
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, progress);
+    return render_scr_detect::precompute_all (true, false, progress);
   }
 private:
 };
@@ -417,7 +417,7 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
-    return render_scr_detect::precompute_all (true, progress);
+    return render_scr_detect::precompute_all (true, true, progress);
   }
 private:
 };

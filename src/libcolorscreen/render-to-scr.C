@@ -54,19 +54,19 @@ render_to_scr::pixel_size ()
 }
 
 bool
-render_to_scr::precompute_all(bool grayscale_needed, progress_info *progress)
+render_to_scr::precompute_all(bool grayscale_needed, bool normalized_patches, progress_info *progress)
 {
-  return render::precompute_all (grayscale_needed, progress);
+  return render::precompute_all (grayscale_needed, normalized_patches, progress);
 }
 bool
-render_to_scr::precompute (bool grayscale_needed, coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+render_to_scr::precompute (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress)
 {
-  return precompute_all (grayscale_needed, progress);
+  return precompute_all (grayscale_needed, normalized_patches, progress);
 }
 bool
-render_to_scr::precompute_img_range (bool grayscale_needed, coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress)
 {
-  return precompute_all (grayscale_needed, progress);
+  return precompute_all (grayscale_needed, normalized_patches, progress);
 }
 
 screen *

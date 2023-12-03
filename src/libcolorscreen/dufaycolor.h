@@ -1,5 +1,9 @@
+#ifndef DUFAYCOLOR_H
+#define DUFAYCOLOR_H
 #include "include/base.h"
 #include "include/color.h"
+
+/* Class expressing all knowledge on dufaycolor we have so far.  */
 class dufaycolor
 {
 public:
@@ -9,28 +13,41 @@ public:
      Credit: David Pfluger, ERC Advanced Grant FilmColors.
      Imaging was performed with support of the Center for Microscopy and Image Analysis, University of Zurich  */
   static constexpr const coord_t red_width = 21.0;
-  static constexpr const coord_t green_blue_width = /*28.6*/49.6-red_width;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t green_blue_width = /*28.6*/49.3-red_width;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height = 22.7;
   static constexpr const coord_t green_height = 26.9;
 
-  /* Size of the screen.  */
+  /* Size of the individual patches within screen.  */
   static constexpr const coord_t red_size = red_width * (blue_height + green_height);
   static constexpr const coord_t green_size = green_blue_width * green_height;
   static constexpr const coord_t blue_size = green_blue_width * blue_height;
   static constexpr const coord_t screen_size = red_size + green_size + blue_size;
 
-  /* Proportio of the color in screen.  Interpolated rendering needs these correction
+  /* Proportions of the color in screen.  Interpolated rendering needs these correction
      factors to match realistic rendering.  */
-  static constexpr const coord_t red_portion = red_size * 3 / screen_size ;
-  static constexpr const coord_t green_portion = red_size * 3 / screen_size ;
-  static constexpr const coord_t blue_portion = red_size * 3 / screen_size ;
+  static constexpr const coord_t red_portion = red_size * 3 / screen_size;
+  static constexpr const coord_t green_portion = green_size * 3 / screen_size;
+  static constexpr const coord_t blue_portion = blue_size * 3 / screen_size;
 
   /* This is based on table in Color Cinematography.
-     There seems to be missprint in the book, since dominating wavelengths does not match
-     specified xy coordinates.
-     Comparing with the spectra, also Y of blue seems to be wrong and it should be 0.087
-     instead of 0.037.  This makes screen more white balanced.  */
+     One problem with the book is that dominant wavelengths does not correspond to the
+     values.
+
+     While density of red and green dye mostly corresponds to what can be calculated
+     from the spectral information, blue dye is a lot darker.*/
   static constexpr xyY red_dye = xyY (0.633, 0.365, 0.177);  /* dominating wavelength 601.7*/
   static constexpr xyY green_dye = xyY (0.233, 0.647, 0.43); /* dominating wavelength 549.6*/
-  static constexpr xyY blue_dye = xyY (0.140, 0.089, /*0.037*/ 0.087 ); /* dominating wavelength 466.0*/
+  static constexpr xyY blue_dye = xyY (0.140, 0.089, 0.037 ); /* dominating wavelength 466.0*/
+  /* An attempt to correct possible misprint in blue dye Y specification.  */
+  static constexpr xyY correctedY_blue_dye = xyY (0.140, 0.089, 0.087 ); /* dominating wavelength 466.0*/
+
+  inline static color_matrix dye_matrix()
+  {
+    return matrix_by_dye_xyY (red_dye, green_dye, blue_dye);
+  }
+  inline static color_matrix correctedY_dye_matrix()
+  {
+    return matrix_by_dye_xyY (red_dye, green_dye, correctedY_blue_dye);
+  }
 };
+#endif

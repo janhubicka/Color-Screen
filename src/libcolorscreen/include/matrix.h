@@ -13,7 +13,8 @@ class matrix
 {
 public:
   static const int m_dim = dim;
-  T m_elements[m_dim][m_dim];
+  typedef T Te[dim][dim];
+  Te m_elements;
 
   /* Default constructor: build identity matrix.  */
   inline
@@ -96,6 +97,11 @@ public:
 	  fprintf (f, " %f", (double) m_elements[i][j]);
 	fprintf (f, "\n");
       }
+  }
+protected:
+  constexpr matrix (Te elts)
+  : m_elements (elts)
+  {
   }
 };
 /* 2x2 matrix with inverse opration.  */
@@ -205,6 +211,7 @@ class matrix4x4 : public matrix<T, 4>
 public:
   matrix4x4<T> () { }
 
+#if 0
   inline
   matrix4x4<T> (T e00, T e10, T e20, T e30,
 	        T e01, T e11, T e21, T e31,
@@ -216,6 +223,19 @@ public:
     B::m_elements[0][2]=e02; B::m_elements[1][2]=e12; B::m_elements[2][2]=e22; B::m_elements[3][2]=e32;
     B::m_elements[0][3]=e03; B::m_elements[1][3]=e13; B::m_elements[2][3]=e23; B::m_elements[3][3]=e33;
   }
+#else
+  inline
+  matrix4x4<T> (T e00, T e10, T e20, T e30,
+	        T e01, T e11, T e21, T e31,
+	        T e02, T e12, T e22, T e32,
+	        T e03, T e13, T e23, T e33)
+  {
+    B::m_elements[0][0]=e00; B::m_elements[1][0]=e10; B::m_elements[2][0]=e20; B::m_elements[3][0]=e30;
+    B::m_elements[0][1]=e01; B::m_elements[1][1]=e11; B::m_elements[2][1]=e21; B::m_elements[3][1]=e31;
+    B::m_elements[0][2]=e02; B::m_elements[1][2]=e12; B::m_elements[2][2]=e22; B::m_elements[3][2]=e32;
+    B::m_elements[0][3]=e03; B::m_elements[1][3]=e13; B::m_elements[2][3]=e23; B::m_elements[3][3]=e33;
+  }
+#endif
 
   inline
   matrix4x4<T>& operator=(const matrix<T, 4>rhs)
@@ -256,6 +276,17 @@ public:
     if (fabs (ix-x) + fabs (iy-y) > 1)
 	    printf ("Inverse broken\n");
 #endif
+  }
+
+  inline void
+  scale_channels (T r, T g, T b)
+  {
+    for (int j = 0; j < 4; j++)
+    {
+      B::m_elements[0][j] *= r;
+      B::m_elements[1][j] *= g;
+      B::m_elements[2][j] *= b;
+    }
   }
 
   /* Matrix-vector multiplication used for RGB values.  */

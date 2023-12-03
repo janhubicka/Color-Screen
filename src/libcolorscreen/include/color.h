@@ -154,6 +154,50 @@ struct xyY
   {}
 };
 
+class bradford_xyz_to_rgb_matrix : public color_matrix
+{
+public:
+  inline
+  bradford_xyz_to_rgb_matrix ()
+  : color_matrix ( 0.8951,  0.2664, -0.1614, 0,
+		  -0.7502,  1.7135,  0.0367, 0,
+		   0.0389, -0.0685,  1.0296, 0,
+		  0,        0,       0,      1)
+  {}
+};
+/* Inverse of the above.  */
+class bradford_rgb_to_xyz_matrix : public color_matrix
+{
+public:
+  inline
+  bradford_rgb_to_xyz_matrix ()
+  : color_matrix (0.986993,   -0.147054,  0.159963,  0,
+		  0.432305,    0.51836,   0.0492912, 0,
+		  -0.00852866, 0.0400428, 0.968487,  0,
+		  0, 0, 0, 1)
+  {}
+};
+
+/* The Bradford transform, so named since it resulted from
+   work carried outat the University of Leeds under the sponsorship of the UK
+   Society of Dyers and Colouristsbased in the nearby city of Bradford, has
+   become accepted as a sound basis for predicting theeffects of adaptation to
+   a reasonable degree of accuracy.  */
+class bradford_whitepoint_adaptation_matrix : public color_matrix
+{
+  bradford_whitepoint_adaptation_matrix (xyz from, xyz to)
+  {
+    color_matrix Mbfdinv = bradford_rgb_to_xyz_matrix ();
+    color_matrix Mbfd    = bradford_xyz_to_rgb_matrix ();
+    color_matrix correction (to.x/from.x, 0, 0, 0,
+			     0, to.y/from.y, 0, 0,
+			     0, 0, to.z/from.z, 0,
+			     0, 0, 0, 1);
+    matrix<float,4> ret = Mbfdinv * correction * Mbfd;
+    memcpy (m_elements, ret.m_elements, sizeof (m_elements));
+  }
+};
+
 
 constexpr xyz::xyz (xyY c)
  : x (!c.Y ? 0 : c.x * c.Y / c.y), y (c.Y), z (!c.Y ? 0 : (1 - c.x - c.y) * c.Y / c.y)

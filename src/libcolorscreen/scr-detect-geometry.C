@@ -1405,7 +1405,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       if (!render)
 	{
 	  render = new render_scr_detect (dparam, img, empty, 256);
-	  render->precompute_all (false, progress);
+	  render->precompute_all (false, false, progress);
 	  render->precompute_rgbdata (progress);
 	}
       /* In Finlay/Paget screen the blue patches touches by borders.

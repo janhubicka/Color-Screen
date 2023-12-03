@@ -104,6 +104,7 @@ struct DLL_PUBLIC render_parameters
       color_model_miethe_goerz_original_wager,
       color_model_dufay_manual,
       color_model_dufay_color_cinematography_xyY,
+      color_model_dufay_color_cinematography_xyY_correctedY,
       color_model_dufay_color_cinematography_wavelength,
       color_model_dufay_color_cinematography_spectra,
       color_model_dufay_color_cinematography_spectra_correction,
@@ -176,8 +177,8 @@ struct DLL_PUBLIC render_parameters
 
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img);
-  size_t get_icc_profile (void **buf, image_data *img);
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_patches);
+  size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   const tile_adjustment&
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
   tile_adjustment&
@@ -425,7 +426,7 @@ public:
   inline luminosity_t get_unadjusted_data_red (int x, int y);
   inline luminosity_t get_unadjusted_data_green (int x, int y);
   inline luminosity_t get_unadjusted_data_blue (int x, int y);
-  bool precompute_all (bool grayscale_needed, progress_info *progress);
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
   inline rgbdata
   get_linearized_rgb_pixel (int x, int y)
   {

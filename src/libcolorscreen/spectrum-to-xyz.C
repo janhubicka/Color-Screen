@@ -4,6 +4,7 @@
 #include "include/render.h"
 #include "include/tiff-writer.h"
 #include "icc.h"
+#include "dufaycolor.h"
 
 #define XSPECT_MAX_BANDS 77		/* Enought for 5nm from 380 to 760 */
 typedef struct {
@@ -805,7 +806,7 @@ const static spectra_entry autochrome_green[] =
   {729  , 0.64265   }
 };
 
-const static spectra_entry autochrome_orrange[] =
+const static spectra_entry autochrome_orange[] =
 {
   {393.5, 0.020332 }, 
   {405.5, 0.0154836}, 
@@ -3059,8 +3060,8 @@ spectrum_dyes_to_xyz::set_dyes_to_autochrome ()
   if (debug)
     printf ("Setting dyes to autochrome\n");
   compute_spectrum (red,
-		    sizeof (autochrome_orrange) / sizeof (spectra_entry),
-		    autochrome_orrange, false, 1);
+		    sizeof (autochrome_orange) / sizeof (spectra_entry),
+		    autochrome_orange, false, 1);
   compute_spectrum (green,
 		    sizeof (autochrome_green) / sizeof (spectra_entry),
 		    autochrome_green, false, 1);
@@ -3450,13 +3451,11 @@ dufaycolor_correction_matrix ()
   //xyz target_red_xyz = xyY_to_xyz (0.633, 0.365, 0.177);
   //xyz target_green_xyz = xyY_to_xyz (0.233, 0.647, 0.43);
   //xyz target_blue_xyz = xyY_to_xyz (0.140, 0.089, 0.037);
-  xyz target_red_xyz = xyY_to_xyz (0.633, 0.365, 0.177);
-  xyz target_green_xyz = xyY_to_xyz (0.233, 0.647, 0.53);
-  xyz target_blue_xyz = xyY_to_xyz (0.140, 0.089, /*0.037*/ 0.087);
+  xyz target_red_xyz = dufaycolor::red_dye;
+  xyz target_green_xyz = dufaycolor::green_dye;
+  xyz target_blue_xyz = dufaycolor::correctedY_blue_dye;
 
-  color_matrix cm = matrix_by_dye_xyY (xyY (0.633, 0.365, 0.177),
-				       xyY (0.243, 0.647, 0.43),
-				       xyY (0.140, 0.089, /*0.037*/0.087));
+  color_matrix cm = dufaycolor::correctedY_dye_matrix ();
   luminosity_t rw, gw,bw;
   cm.normalize_grayscale (whitep.x, whitep.y, whitep.z, &rw, &gw, &bw);
   printf ("Scaling weights %f %f %f\n",rw,gw,bw);

@@ -363,7 +363,7 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 }
 
 bool
-render::precompute_all (bool grayscale_needed, progress_info *progress)
+render::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
@@ -408,7 +408,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
       /* Matrix converting dyes either to XYZ or sRGB.  */
       bool spectrum_based;
       bool is_srgb;
-      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img);
+      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img, normalized_patches);
       if (is_srgb)
 	color = dyes * color;
       else

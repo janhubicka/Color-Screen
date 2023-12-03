@@ -1,6 +1,7 @@
 #include "include/render.h"
 #include "include/stitch.h"
 #include "icc.h"
+#include "dufaycolor.h"
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
@@ -13,6 +14,7 @@ const char * render_parameters::color_model_names [] = {
   "Miethe_Goerz_mesured_by_Wagner",
   "dufaycolor_reseau_by_dufaycolor_manual",
   "dufaycolor_reseau_by_color_cinematography_xyY",
+  "dufaycolor_reseau_by_color_cinematography_xyY_correctedY",
   "dufaycolor_reseau_by_color_cinematography_wavelength",
   "dufaycolor_reseau_by_color_cinematography_spectra",
   "dufaycolor_reseau_by_color_cinematography_spectra_correction",
@@ -34,9 +36,11 @@ const char * render_parameters::output_profile_names [] = {
   "original"
 };
 
-/* Return matrix which contains the color of dyes either as rgb or xyz.  */
+/* Return matrix which contains the color of dyes either as rgb or xyz.
+   If REALISTIC is true, use actual dye colors. Otheriwse re-scale them so white balance is
+   corrected for interpolated rendering.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img)
+render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_dyes)
 {
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
@@ -141,26 +145,30 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	}
       case render_parameters::color_model_dufay_color_cinematography_xyY:
 	{
-#if 0
-	  dyes = matrix_by_dye_xy (0.633, 0.365, /*Y 17.7% dominating wavelength 601.7*/
-				   0.233, 0.647, /*Y 43% dominating wavelength 549.6*/
-				   0.140, 0.089 /*Y 3.7% dominating wavelength 466.0*/);
-#else
-	  dyes = matrix_by_dye_xyY (xyY(0.633, 0.365, 0.177), /* dominating wavelength 601.7*/
-				    xyY(0.233, 0.647, 0.43), /* dominating wavelength 549.6*/
-				    xyY(0.140, 0.089, /*0.037*/ 0.087) /* dominating wavelength 466.0*/);
-	  /* There seems to be missprint in the book, since dominating wavelengths does not match
-	     specified xy coordinates.
-	     Comparing with the spectra, also Y of blue seems to be wrong and it should be 0.087
-	     instead of 0.037.  This makes screen more white balanced.  */
-#endif
+	  dyes = dufaycolor::dye_matrix ();
+	  printf ("Normalized: %i\n", normalized_dyes);
+	  if (normalized_dyes)
+	    dyes.scale_channels (dufaycolor::red_portion / 3, dufaycolor::green_portion / 3, dufaycolor::blue_portion / 3);
+	}
+	break;
+      case render_parameters::color_model_dufay_color_cinematography_xyY_correctedY:
+	{
+	  dyes = dufaycolor::correctedY_dye_matrix ();
+	  printf ("Normalized: %i\n", normalized_dyes);
+	  if (normalized_dyes)
+	    dyes.scale_channels (dufaycolor::red_portion / 3, dufaycolor::green_portion / 3, dufaycolor::blue_portion / 3);
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_wavelength:
+	{
 	// https://www.luxalight.eu/en/cie-convertor
-	dyes = matrix_by_dye_xyY (xyY(0.6345861569, 0.3649735847, 0.177), /* dominating wavelength 601.7*/
-				  xyY(0.2987423914, 0.6949214652, 0.43), /* dominating wavelength 549.6*/
-				  xyY(0.133509341, 0.04269239, 0.087) /* dominating wavelength 466.0*/);
+	  dyes = matrix_by_dye_xyY (xyY(0.6345861569, 0.3649735847, 0.177), /* dominating wavelength 601.7*/
+				    xyY(0.2987423914, 0.6949214652, 0.43), /* dominating wavelength 549.6*/
+				    xyY(0.133509341, 0.04269239, 0.087) /* dominating wavelength 466.0*/);
+	  printf ("Normalized: %i\n", normalized_dyes);
+	  if (normalized_dyes)
+	    dyes.scale_channels (dufaycolor::red_portion / 3, dufaycolor::green_portion / 3, dufaycolor::blue_portion / 3);
+	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
@@ -237,11 +245,11 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 }
 
 size_t
-render_parameters::get_icc_profile (void **buffer, image_data *img)
+render_parameters::get_icc_profile (void **buffer, image_data *img, bool normalized_dyes)
 {
   bool is_rgb;
   bool spectrum_based;
-  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based, img);
+  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based, img, normalized_dyes);
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};

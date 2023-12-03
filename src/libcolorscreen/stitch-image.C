@@ -638,7 +638,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   param.mesh_trans = mesh_trans;
   param.type = m_prj->params.type;
   render_to_scr render (param, *img, my_rparam, 256);
-  render.precompute_all (true, progress);
+  render.precompute_all (true, false, progress);
   if (!m_prj->my_screen)
     {
       m_prj->pixel_size = detected.pixel_size;
@@ -1340,14 +1340,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		    && other.load_img (error, progress))
 		  {
 		    render1 = new render (*img, rparams, 255);
-		    if (!render1->precompute_all (img->data != NULL, progress))
+		    if (!render1->precompute_all (img->data != NULL, false, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
 			render1 = 0;
 		      }
 		    render2 = new render (*other.img, rparams, 255);
-		    if (!render2->precompute_all (img->data != NULL, progress))
+		    if (!render2->precompute_all (img->data != NULL, false, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
