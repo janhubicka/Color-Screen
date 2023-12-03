@@ -1,5 +1,6 @@
 #include <assert.h>
 #include "lru-cache.h"
+#include "dufaycolor.h"
 #include "render-interpolate.h"
 
 namespace {
@@ -222,6 +223,9 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
     }
+  red *= dufaycolor::red_portion;
+  green *= dufaycolor::green_portion;
+  blue *= dufaycolor::blue_portion;
   if (m_screen_compensation)
     {
       coord_t lum = get_img_pixel_scr (x - xshift, y - yshift);

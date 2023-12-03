@@ -4,8 +4,55 @@
 #include "matrix.h"
 
 typedef float luminosity_t;
+/* Prevent conversion to wrong data type when doing math.  */
+static inline float
+my_pow (float x, float y)
+{
+  return powf (x, y);
+}
+
+static inline double
+my_pow (double x, double y)
+{
+  return pow (x, y);
+}
+
+/* sRGB->XYZ conversion matrix.  */
+typedef matrix4x4<luminosity_t> color_matrix;
+class srgb_xyz_matrix : public color_matrix
+{
+public:
+  inline
+  srgb_xyz_matrix ()
+  : color_matrix (0.4124564,  0.3575761,  0.1804375, 0,
+		  0.2126729,  0.7151522,  0.0721750, 0,
+		  0.0193339,  0.1191920,  0.9503041, 0,
+		  0,             0,              0,                  1)
+  {}
+};
+
+inline luminosity_t
+srgb_to_linear (luminosity_t c)
+{
+  if (c < (luminosity_t)0.04045)
+    return c / (luminosity_t)12.92;
+  return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
+}
+
+inline luminosity_t
+linear_to_srgb (luminosity_t c)
+{
+  if (c<(luminosity_t)0.0031308)
+    return (luminosity_t)12.92 * c;
+  return ((luminosity_t)1.055)*my_pow (c, 1/(luminosity_t)2.4)-(luminosity_t)0.055;
+}
+
 struct xyz {
   luminosity_t x, y, z;
+  constexpr xyz (luminosity_t xx, luminosity_t yy, luminosity_t zz)
+  : x (xx), y (yy), z (zz)
+  { }
+  inline constexpr xyz (struct xyY);
   xyz &operator+=(const luminosity_t other)
   {
     x += other;
@@ -66,6 +113,25 @@ struct xyz {
       default: __builtin_unreachable ();
     }
   }
+  static inline xyz
+  from_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
+  {
+    srgb_xyz_matrix m;
+    luminosity_t x,y,z;
+    r = srgb_to_linear (r);
+    g = srgb_to_linear (g);
+    b = srgb_to_linear (b);
+    m.apply_to_rgb (r, g, b, &x, &y, &z);
+    return xyz (x, y, z);
+  }
+  static inline xyz
+  from_linear_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
+  {
+    srgb_xyz_matrix m;
+    luminosity_t x,y,z;
+    m.apply_to_rgb (r, g, b, &x, &y, &z);
+    return xyz (x, y, z);
+  }
 };
 struct xy_t
 {
@@ -75,44 +141,31 @@ struct xy_t
   { }
   constexpr xy_t (xyz c)
   : x (c.x / (c.x + c.y + c.z)), y (c.y / (c.x + c.y + c.z))
-  {
-  }
+  { }
 };
-struct xyY {luminosity_t x, y, Y;};
+struct xyY
+{
+  luminosity_t x, y, Y;
+  constexpr xyY (luminosity_t xx, luminosity_t yy, luminosity_t YY)
+  : x (xx), y (yy), Y (YY)
+  {}
+  constexpr xyY (xyz c)
+  : x (c.x + c.y + c.z ? c.x / (c.x + c.y + c.z) : 0), y (c.x + c.y + c.z ? c.y / (c.x + c.y + c.z) : 0), Y (c.y)
+  {}
+};
+
+
+constexpr xyz::xyz (xyY c)
+ : x (!c.Y ? 0 : c.x * c.Y / c.y), y (c.Y), z (!c.Y ? 0 : (1 - c.x - c.y) * c.Y / c.y)
+{
+}
+
 struct cie_lab
 {
    luminosity_t l, a, b;
 
    cie_lab (xyz c);
 };
-
-/* Prevent conversion to wrong data type when doing math.  */
-static inline float
-my_pow (float x, float y)
-{
-return powf (x, y);
-}
-static inline double
-my_pow (double x, double y)
-{
-return pow (x, y);
-}
-
-inline luminosity_t
-srgb_to_linear (luminosity_t c)
-{
-  if (c < (luminosity_t)0.04045)
-    return c / (luminosity_t)12.92;
-  return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
-}
-
-inline luminosity_t
-linear_to_srgb (luminosity_t c)
-{
-  if (c<(luminosity_t)0.0031308)
-    return (luminosity_t)12.92 * c;
-  return ((luminosity_t)1.055)*my_pow (c, 1/(luminosity_t)2.4)-(luminosity_t)0.055;
-}
 
 /* We handle special gama of -1 for sRGB color space curves.  */
 inline luminosity_t
@@ -201,13 +254,10 @@ struct color_t
     return ret;
   }
 };
-typedef matrix4x4<luminosity_t> color_matrix;
 color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 			       luminosity_t gx, luminosity_t gy,
 			       luminosity_t bx, luminosity_t by);
-color_matrix matrix_by_dye_xyY (luminosity_t rx, luminosity_t ry, luminosity_t rY,
-			        luminosity_t gx, luminosity_t gy, luminosity_t gY,
-			        luminosity_t bx, luminosity_t by, luminosity_t bY);
+color_matrix matrix_by_dye_xyY (xyY red, xyY green, xyY blue);
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 
@@ -345,18 +395,6 @@ public:
 		  0,             0,              0,                  1)
   { normalize_grayscale (); }
 };
-/* sRGB->XYZ conversion matrix.  */
-class srgb_xyz_matrix : public color_matrix
-{
-public:
-  inline
-  srgb_xyz_matrix ()
-  : color_matrix (0.4124564,  0.3575761,  0.1804375, 0,
-		  0.2126729,  0.7151522,  0.0721750, 0,
-		  0.0193339,  0.1191920,  0.9503041, 0,
-		  0,             0,              0,                  1)
-  {}
-};
 /* XYZ->sRGB conversion matrix.  */
 class xyz_srgb_matrix : public color_matrix
 {
@@ -398,16 +436,6 @@ xyz_to_wide_gammut_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminos
   *r = invert_gamma (*r, 2.2);
   *g = invert_gamma (*g, 2.2);
   *b = invert_gamma (*b, 2.2);
-}
-
-inline void
-srgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b,  luminosity_t *x, luminosity_t *y, luminosity_t *z)
-{
-  srgb_xyz_matrix m;
-  r = srgb_to_linear (r);
-  g = srgb_to_linear (g);
-  b = srgb_to_linear (b);
-  m.apply_to_rgb (r, g, b, x, y, z);
 }
 
 inline xyz

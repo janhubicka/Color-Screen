@@ -1,6 +1,7 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 /* Basic template for square matrix.  */
+#include <cassert>
 #include <algorithm>
 #include <cstring>
 #include <stdio.h>
@@ -265,9 +266,10 @@ public:
     *gg = r * B::m_elements[0][1] + g * B::m_elements[1][1] + b * B::m_elements[2][1] + B::m_elements[3][1];
     *bb = r * B::m_elements[0][2] + g * B::m_elements[1][2] + b * B::m_elements[2][2] + B::m_elements[3][2];
   }
-  /* This adjust the profile so grayscale has given r,g,b values.  */
+  /* This adjust the profile so grayscale has given r,g,b values.
+     If RW is non-null return scale weights for individual columns of the matrix.  */
   inline void
-  normalize_grayscale (T r = 1, T g = 1, T b = 1)
+  normalize_grayscale (T r = 1, T g = 1, T b = 1, T *rw = NULL, T *gw = NULL, T *bw = NULL)
   {
     matrix4x4 inv = invert ();
     T ivec[4] = {r, g, b, 1};
@@ -275,9 +277,16 @@ public:
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++)
 	vec[i] += ivec[j] * inv.m_elements[j][i];
+    //assert (vec[3]==1);
     for (int i = 0; i < 4; i++)
       for (int j = 0; j < 4; j++)
 	B::m_elements[i][j] *= vec[i];
+    if (rw != NULL)
+      {
+	*rw = vec[0];
+	*gw = vec[1];
+	*bw = vec[2];
+      }
   }
   /* Compute inversion.  */
   inline matrix4x4

@@ -1,4 +1,5 @@
 #include <math.h>
+#include "dufaycolor.h"
 #include "include/screen.h"
 #include "gaussian-blur.h"
 
@@ -135,10 +136,6 @@ screen::dufay ()
 {
   /* Based on microscopic scan.  */
 
-  const coord_t red_width = 21.0;
-  const coord_t green_blue_width = 28.6;
-  const coord_t blue_height = 22.7;
-  const coord_t green_height = 26.9;
 #if 0
 #if 1
   const coord_t red_width = 21.0;
@@ -159,8 +156,8 @@ screen::dufay ()
 #endif
 #endif
   int xx, yy;
-  int strip_width = size / 2 * green_blue_width / (red_width + green_blue_width) + 0.5;
-  int strip_height = size / 2 * green_height / (green_height + blue_height) + 0.5;
+  int strip_width = size / 2 * dufaycolor::green_blue_width / (dufaycolor::red_width + dufaycolor::green_blue_width) + 0.5;
+  int strip_height = size / 2 * dufaycolor::green_height / (dufaycolor::green_height + dufaycolor::blue_height) + 0.5;
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {

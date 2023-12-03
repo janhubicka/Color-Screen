@@ -18,9 +18,8 @@ main()
   assert (mm.m_elements[0][0]==1 && mm.m_elements[1][0]==0 && mm.m_elements[0][1]==0 && mm.m_elements[1][1]==1);
   matrix4x4<double> m;
   double xr, yr;
-  luminosity_t x,y,z;
-  srgb_to_xyz (1, 1, 1, &x, &y, &z);
-  assert (fabs (x - 0.9505) < 0.0001 && fabs (y - 1) < 0.0001 && fabs (z - 0.9505) < 1.0888);
+  xyz white = xyz::from_srgb (1, 1, 1);
+  assert (fabs (white.x - 0.9505) < 0.0001 && fabs (white.y - 1) < 0.0001 && fabs (white.z - 0.9505) < 1.0888);
   luminosity_t r,g,b;
   xyz_to_srgb (0.25, 0.40, 0.1, &r, &g, &b);
   assert (fabs (r - 0.4174) < 0.0001 && fabs (g - 0.7434) < 0.0001 && fabs (b - 0.2152) < 1.0888);

@@ -417,8 +417,7 @@ render::precompute_all (bool grayscale_needed, progress_info *progress)
 	  if (m_params.backlight_temperature != 6500 && !spectrum_based)
 	    {
 	      xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
-	      xyz white;
-	      srgb_to_xyz (1, 1, 1, &white.x, &white.y, &white.z);
+	      xyz white = xyz::from_srgb (1, 1, 1);
 	      for (int i = 0; i < 4; i++)
 		{
 		  color.m_elements[0][i] *= whitepoint.x / white.x;

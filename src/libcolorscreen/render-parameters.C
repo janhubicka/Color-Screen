@@ -54,9 +54,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	    *is_srgb = true;
 	    break;
 	  }
-	  dyes = matrix_by_dye_xyY (img->primary_red.x, img->primary_red.y, img->primary_red.Y,
-				    img->primary_green.x, img->primary_green.y, img->primary_green.Y,
-				    img->primary_blue.x, img->primary_blue.y, img->primary_blue.Y);
+	  dyes = matrix_by_dye_xyY (img->primary_red, img->primary_green, img->primary_blue);
 	break;
       case render_parameters::color_model_red:
 	{
@@ -148,17 +146,21 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 				   0.233, 0.647, /*Y 43% dominating wavelength 549.6*/
 				   0.140, 0.089 /*Y 3.7% dominating wavelength 466.0*/);
 #else
-	  dyes = matrix_by_dye_xyY (0.633, 0.365, 0.177, /* dominating wavelength 601.7*/
-				    0.233, 0.647, 0.43, /* dominating wavelength 549.6*/
-				    0.140, 0.089, 0.037 /* dominating wavelength 466.0*/);
+	  dyes = matrix_by_dye_xyY (xyY(0.633, 0.365, 0.177), /* dominating wavelength 601.7*/
+				    xyY(0.233, 0.647, 0.43), /* dominating wavelength 549.6*/
+				    xyY(0.140, 0.089, /*0.037*/ 0.087) /* dominating wavelength 466.0*/);
+	  /* There seems to be missprint in the book, since dominating wavelengths does not match
+	     specified xy coordinates.
+	     Comparing with the spectra, also Y of blue seems to be wrong and it should be 0.087
+	     instead of 0.037.  This makes screen more white balanced.  */
 #endif
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_wavelength:
 	// https://www.luxalight.eu/en/cie-convertor
-	dyes = matrix_by_dye_xyY (0.6345861569, 0.3649735847, 0.177, /* dominating wavelength 601.7*/
-				  0.2987423914, 0.6949214652, 0.43, /* dominating wavelength 549.6*/
-				  0.133509341, 0.04269239, 0.037 /* dominating wavelength 466.0*/);
+	dyes = matrix_by_dye_xyY (xyY(0.6345861569, 0.3649735847, 0.177), /* dominating wavelength 601.7*/
+				  xyY(0.2987423914, 0.6949214652, 0.43), /* dominating wavelength 549.6*/
+				  xyY(0.133509341, 0.04269239, 0.087) /* dominating wavelength 466.0*/);
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
