@@ -358,13 +358,15 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     {
     case render_type_original:
       {
+	render_parameters my_rparam;
+	my_rparam.original_render_from (rparam, color);
 	if (render_type == render_type_original && step > 1)
 	  {
 	    scr_to_img_parameters dummy;
-	    return render_to_scr::render_tile (render::render_type_original, dummy, img, rparam, color, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
+	    return render_to_scr::render_tile (render::render_type_original, dummy, img, my_rparam, color, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
 	  }
 	scr_to_img_parameters dummy;
-	render_img render (dummy, img, rparam, 255);
+	render_img render (dummy, img, my_rparam, 255);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
@@ -531,7 +533,10 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       break;
     case render_type_realistic_scr:
       {
-	render_scr_detect_superpose_img render (param, img, rparam, 255);
+	render_parameters my_rparam = rparam;
+	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
+	my_rparam.brightness *= 3;
+	render_scr_detect_superpose_img render (param, img, my_rparam, 255);
 	if (!render.precompute_all (progress))
 	  return false;
 	if (step > 1)

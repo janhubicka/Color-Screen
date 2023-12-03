@@ -417,6 +417,8 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, progress
 	  if (m_params.backlight_temperature != 6500 && !spectrum_based)
 	    {
 	      xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
+	      color = bradford_whitepoint_adaptation_matrix (srgb_white, whitepoint) * color;
+#if 0
 	      xyz white = xyz::from_srgb (1, 1, 1);
 	      for (int i = 0; i < 4; i++)
 		{
@@ -424,6 +426,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, progress
 		  color.m_elements[1][i] *= whitepoint.y / white.y;
 		  color.m_elements[2][i] *= whitepoint.z / white.z;
 		}
+#endif
 	    }
 	  xyz_srgb_matrix m2;
 	  color = m2 * color;

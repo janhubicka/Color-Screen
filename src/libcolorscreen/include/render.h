@@ -240,14 +240,12 @@ struct DLL_PUBLIC render_parameters
       }
     else if (gray_min > gray_max)
       {
-	luminosity_t min2 = 1/apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
-	luminosity_t max2 = 1/apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t min2 = 1 / apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+	luminosity_t max2 = 1 / apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
 	scan_exposure = 1 / (max2 - min2);
 	dark_point = min2;
 	invert = true;
       }
-    fprintf (stderr, "gray_range %i %i dark %f exp %f invert %i\n", gray_min, gray_max, dark_point, scan_exposure, invert);
-    fprintf (stderr, "%f %f\n", (invert_gamma (1/dark_point, gamma) * maxval) - 0.5, (invert_gamma (1/(((dark_point + 1 / scan_exposure))), gamma) * maxval) - 0.5);
   }
   void get_gray_range (int *min, int *max, int maxval)
   {
@@ -261,9 +259,36 @@ struct DLL_PUBLIC render_parameters
        *min = (invert_gamma (1/dark_point, gamma) * maxval) - 0.5;
        *max = (invert_gamma (1/(((dark_point + 1 / scan_exposure))), gamma) * maxval) - 0.5;
       }
-    fprintf (stderr, "gray_range2 %i %i exp %f dark %f\n", *min, *max, dark_point, scan_exposure);
   }
   void set_tile_adjustments_dimensions (int w, int h);
+  /* Initialize render parameters for showing original scan.
+     In this case we do not want to apply color models etc.  */
+  void
+  original_render_from (render_parameters &rparam, bool color)
+  {
+    backlight_correction = rparam.backlight_correction;
+    backlight_correction_black = rparam.backlight_correction_black;
+    gamma = rparam.gamma;
+    invert = rparam.invert;
+    scan_exposure = rparam.scan_exposure;
+    dark_point = rparam.dark_point;
+    brightness = rparam.brightness;
+    color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+    tile_adjustments = rparam.tile_adjustments;
+    tile_adjustments_width = rparam.tile_adjustments_width;
+    tile_adjustments_height = rparam.tile_adjustments_height;
+    if (color)
+      {
+	white_balance = rparam.white_balance;
+	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
+	brightness *= 3;
+      }
+    mix_red = rparam.mix_red;
+    mix_green = rparam.mix_green;
+    mix_blue = rparam.mix_blue;
+    sharpen_amount = rparam.sharpen_amount;
+    sharpen_radius = rparam.sharpen_radius;
+  }
 private:
   static const bool debug = false;
 };

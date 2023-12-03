@@ -246,24 +246,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
     case render_type_original:
       {
 	render_parameters my_rparam;
-	my_rparam.backlight_correction = rparam.backlight_correction;
-	my_rparam.backlight_correction_black = rparam.backlight_correction_black;
-	my_rparam.gamma = rparam.gamma;
-	my_rparam.invert = rparam.invert;
-	my_rparam.scan_exposure = rparam.scan_exposure;
-	my_rparam.dark_point = rparam.dark_point;
-	my_rparam.brightness = rparam.brightness;
-	my_rparam.color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
-	my_rparam.tile_adjustments = rparam.tile_adjustments;
-	my_rparam.tile_adjustments_width = rparam.tile_adjustments_width;
-	my_rparam.tile_adjustments_height = rparam.tile_adjustments_height;
-	if (color)
-		my_rparam.white_balance = rparam.white_balance;
-	my_rparam.mix_red = rparam.mix_red;
-	my_rparam.mix_green = rparam.mix_green;
-	my_rparam.mix_blue = rparam.mix_blue;
-	my_rparam.sharpen_amount = rparam.sharpen_amount;
-	my_rparam.sharpen_radius = rparam.sharpen_radius;
+	my_rparam.original_render_from (rparam, color);
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
@@ -430,12 +413,15 @@ render_to_scr::render_tile (enum render_type_t render_type,
       break;
     case render_type_realistic:
       {
+	render_parameters my_rparam = rparam;
+	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
+	my_rparam.brightness *= 3;
 	if (img.stitch)
 	  {
 	    render_stitched<render_superpose_img> (
-		[&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
+		[&img,color,&progress] (render_parameters &my_rparam, int x, int y) mutable
 		{
-		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, false);
+		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255, false);
 		  if (color)
 		    r->set_color_display ();
 		  if (!r->precompute_all (progress))
@@ -445,11 +431,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		    }
 		  return r;
 		},
-		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
+		img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
 	    break;
 	  }
 	render_superpose_img render (param, img,
-				     rparam, 255, false);
+				     my_rparam, 255, false);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))

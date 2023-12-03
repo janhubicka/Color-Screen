@@ -139,6 +139,7 @@ struct xy_t
   constexpr xy_t (luminosity_t xx, luminosity_t yy)
   : x (xx), y (yy)
   { }
+  inline constexpr xy_t (struct xyY c);
   constexpr xy_t (xyz c)
   : x (c.x / (c.x + c.y + c.z)), y (c.y / (c.x + c.y + c.z))
   { }
@@ -153,6 +154,11 @@ struct xyY
   : x (c.x + c.y + c.z ? c.x / (c.x + c.y + c.z) : 0), y (c.x + c.y + c.z ? c.y / (c.x + c.y + c.z) : 0), Y (c.y)
   {}
 };
+
+inline constexpr
+xy_t::xy_t (struct xyY c)
+: x (c.x), y (c.y)
+{ }
 
 class bradford_xyz_to_rgb_matrix : public color_matrix
 {
@@ -185,6 +191,7 @@ public:
    a reasonable degree of accuracy.  */
 class bradford_whitepoint_adaptation_matrix : public color_matrix
 {
+public:
   bradford_whitepoint_adaptation_matrix (xyz from, xyz to)
   {
     color_matrix Mbfdinv = bradford_rgb_to_xyz_matrix ();
@@ -500,5 +507,15 @@ xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, l
 
 luminosity_t deltaE(cie_lab c1, cie_lab c2);
 luminosity_t deltaE(xyz c1, xyz c2);
+luminosity_t dominant_wavelength (xy_t color, xy_t whitepoint = xy_t(0.33,0.33));
+xy_t find_best_whitepoint (xyz red, xyz green, xyz blue,
+			   luminosity_t red_dominating_wavelength,
+			   luminosity_t green_dominating_wavelength,
+			   luminosity_t blue_dominating_wavelength);
 
+static const xyz srgb_white (0.9505, 1, 1.0888);	 // sRGB whitepoint
+static const xyz netural_white = xyY (0.33,0.33, 1);     // neutral white
+static const xyz il_A_white = xyY (0.44757, 0.40745, 1); // Illuminant B white
+static const xyz il_B_white = xyY (0.34842,0.35161, 1);  // Illuminant B white
+static const xyz il_C_white = xyY (0.31006, 0.31616, 1); // Illuminant C white
 #endif

@@ -3386,56 +3386,6 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
     s[i] = my_pow (s[i]/norm, bestc) * norm;
   return bestc;
 }
-
-/* Compute intersection vector (x1, y1)->(x2, y2) and line segment (x3,y3)-(x4,y4).
-   Return true if it lies on the line sergment and in positive direction of the vector.
-   If true is returned, t is initialized to position of the point in the line.  */
-static bool
-intersect (luminosity_t x1, luminosity_t y1, luminosity_t x2, luminosity_t y2,
-	   luminosity_t x3, luminosity_t y3, luminosity_t x4, luminosity_t y4, luminosity_t *t)
-{
-  luminosity_t a = x1;
-  luminosity_t b = x2-x1;
-  luminosity_t c = x3;
-  luminosity_t d = x4-x3;
-  luminosity_t e = y1;
-  luminosity_t f = y2-y1;
-  luminosity_t g = y3;
-  luminosity_t h = y4-y3;
-
-  luminosity_t rec = 1/(d*f-b*h);
-  if (d == 0)
-    return false;
-  luminosity_t p1 = (a*h-c*h-d*e+d*g) * rec;
-  luminosity_t p2 = (e*f - b*e + b*g - c*f) * rec;
-  if (p1 < 0 || p2 < 0 || p2 > 1)
-    return false;
-  *t = p2;
-
-  return true;
-}
-
-/* Dominant wavelength is computed as intersection of the line from whitepoint to a given
-   color with the horsehoe of CIE1931.
-   Not all colors have dominant wavelengths; return 0 if they does not  */
-
-static luminosity_t
-dominant_wavelength (xy_t color, xy_t whitepoint = xy_t(0.33,0.33))
-{
-  for (int i = 0; i < SPECTRUM_SIZE - 1; i++)
-    {
-      /* Compute points of the horsehose observer.  */
-      xy_t c1 ((xyz){cie_cmf_x[i], cie_cmf_y[i], cie_cmf_z[i]});
-      xy_t c2 ((xyz){cie_cmf_x[i+1], cie_cmf_y[i+1], cie_cmf_z[i+1]});
-      luminosity_t t;
-      /* Compute the intersection.  */
-      if (intersect (whitepoint.x, whitepoint.y, color.x, color.y,
-		     c1.x, c1.y, c2.x, c2.y, &t))
-	return SPECTRUM_START + (i + t) * SPECTRUM_STEP;
-    }
-  return 0;
-}
-
 color_matrix
 dufaycolor_correction_matrix ()
 {

@@ -208,3 +208,84 @@ deltaE(xyz c1, xyz c2)
   cie_lab lc2 (c2);
   return deltaE(lc1, lc2);
 }
+
+/* Compute intersection vector (x1, y1)->(x2, y2) and line segment (x3,y3)-(x4,y4).
+   Return true if it lies on the line sergment and in positive direction of the vector.
+   If true is returned, t is initialized to position of the point in the line.  */
+static bool
+intersect (luminosity_t x1, luminosity_t y1, luminosity_t x2, luminosity_t y2,
+	   luminosity_t x3, luminosity_t y3, luminosity_t x4, luminosity_t y4, luminosity_t *t)
+{
+  luminosity_t a = x1;
+  luminosity_t b = x2-x1;
+  luminosity_t c = x3;
+  luminosity_t d = x4-x3;
+  luminosity_t e = y1;
+  luminosity_t f = y2-y1;
+  luminosity_t g = y3;
+  luminosity_t h = y4-y3;
+
+  luminosity_t rec = 1/(d*f-b*h);
+  if (d == 0)
+    return false;
+  luminosity_t p1 = (a*h-c*h-d*e+d*g) * rec;
+  luminosity_t p2 = (e*f - b*e + b*g - c*f) * rec;
+  if (p1 < 0 || p2 < 0 || p2 > 1)
+    return false;
+  *t = p2;
+
+  return true;
+}
+
+/* Dominant wavelength is computed as intersection of the line from whitepoint to a given
+   color with the horsehoe of CIE1931.
+   Not all colors have dominant wavelengths; return 0 if they does not  */
+
+luminosity_t
+dominant_wavelength (xy_t color, xy_t whitepoint)
+{
+  for (int i = 0; i < SPECTRUM_SIZE - 1; i++)
+    {
+      /* Compute points of the horsehose observer.  */
+      xy_t c1 ((xyz){cie_cmf_x[i], cie_cmf_y[i], cie_cmf_z[i]});
+      xy_t c2 ((xyz){cie_cmf_x[i+1], cie_cmf_y[i+1], cie_cmf_z[i+1]});
+      luminosity_t t;
+      /* Compute the intersection.  */
+      if (intersect (whitepoint.x, whitepoint.y, color.x, color.y,
+		     c1.x, c1.y, c2.x, c2.y, &t))
+	return SPECTRUM_START + (i + t) * SPECTRUM_STEP;
+    }
+  return 0;
+}
+
+/* Find whitepoint so that red, green and blue dominant wavelengths matches
+   as well as possible to the specified values. */
+
+xy_t
+find_best_whitepoint (xyz red, xyz green, xyz blue,
+		      luminosity_t red_dominating_wavelength,
+		      luminosity_t green_dominating_wavelength,
+		      luminosity_t blue_dominating_wavelength)
+{
+  xy_t best_white(-1, -1);
+  bool best_white_found = 0;
+  luminosity_t best_white_dist = 0;
+  for (luminosity_t x = 0.01; x < 1; x += 0.01)
+    for (luminosity_t y = 0.01; y < 1; y += 0.01)
+      {
+	xy_t w (x, y);
+	luminosity_t d1 = dominant_wavelength (red, w);
+	luminosity_t d2 = dominant_wavelength (green, w);
+        luminosity_t d3 = dominant_wavelength (blue, w);
+	if (!d1 || !d2 || !d3)
+	  continue;
+	luminosity_t d = abs (red_dominating_wavelength - d1) + abs (green_dominating_wavelength - d2) + abs (blue_dominating_wavelength - d3);
+	if (!best_white_found || d < best_white_dist)
+	{
+	  best_white = w;
+	  best_white_dist = d;
+	  best_white_found = true;
+	}
+      }
+  return best_white;
+}
