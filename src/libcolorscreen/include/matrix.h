@@ -319,6 +319,15 @@ public:
 	*bw = vec[2];
       }
   }
+  inline void
+  normalize_xyz_brightness ()
+  {
+    T sum = B::m_elements[1][0] + B::m_elements[1][1] + B::m_elements[1][2];
+    T mul = 1/sum;
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 3; j++)
+	B::m_elements[i][j] *= mul;
+  }
   /* Compute inversion.  */
   inline matrix4x4
   invert ()

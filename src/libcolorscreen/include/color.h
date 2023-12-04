@@ -30,10 +30,27 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
+/* XYZ->sRGB conversion matrix.  */
+class xyz_srgb_matrix : public color_matrix
+{
+public:
+  inline
+  xyz_srgb_matrix ()
+  : color_matrix (3.2404542, -1.5371385, -0.4985314, 0,
+		 -0.9692660,  1.8760108,  0.0415560, 0,
+		  0.0556434, -0.2040259,  1.0572252, 0,
+		  0,             0,              0,                  1)
+  {}
+};
 
 inline luminosity_t
 srgb_to_linear (luminosity_t c)
 {
+  /* sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
+  if (c < 0)
+    return -my_pow (-c, (luminosity_t)2.2);
+  else if (c > 1)
+    return my_pow (c, (luminosity_t)2.2);
   if (c < (luminosity_t)0.04045)
     return c / (luminosity_t)12.92;
   return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
@@ -42,6 +59,11 @@ srgb_to_linear (luminosity_t c)
 inline luminosity_t
 linear_to_srgb (luminosity_t c)
 {
+  /* sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
+  if (c < 0)
+    return -my_pow (-c, 1/(luminosity_t)2.2);
+  else if (c > 1)
+    return my_pow (c, 1/(luminosity_t)2.2);
   if (c<(luminosity_t)0.0031308)
     return (luminosity_t)12.92 * c;
   return ((luminosity_t)1.055)*my_pow (c, 1/(luminosity_t)2.4)-(luminosity_t)0.055;
@@ -113,6 +135,15 @@ struct xyz {
       default: __builtin_unreachable ();
     }
   }
+  inline void
+  to_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  {
+    xyz_srgb_matrix m;
+    m.apply_to_rgb (x, y, z, r, g, b);
+    *r = linear_to_srgb (*r);
+    *g = linear_to_srgb (*g);
+    *b = linear_to_srgb (*b);
+  }
   static inline xyz
   from_srgb (luminosity_t r, luminosity_t g, luminosity_t b)
   {
@@ -131,6 +162,28 @@ struct xyz {
     luminosity_t x,y,z;
     m.apply_to_rgb (r, g, b, &x, &y, &z);
     return xyz (x, y, z);
+  }
+  void
+  print_sRGB (FILE *f, bool verbose)
+  {
+    luminosity_t r, g, b;
+    to_srgb (&r,&g,&b);
+    r *= 255;
+    g *= 255;
+    b *= 255;
+    if (verbose)
+      fprintf (f, "sRGB r:%f g:%f b:%f " , r, g, b);
+    r = std::min ((luminosity_t)255, std::max ((luminosity_t)0, r));
+    g = std::min ((luminosity_t)255, std::max ((luminosity_t)0, g));
+    b = std::min ((luminosity_t)255, std::max ((luminosity_t)0, b));
+    fprintf (f, "#%02x%02x%02x", (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
+  }
+  void
+  print (FILE *f)
+  {
+    fprintf (f, "x:%f y:%f z:%f ", x, y, z);
+    print_sRGB (f, true);
+    fprintf (f, "\n");
   }
 };
 struct xy_t
@@ -196,9 +249,12 @@ public:
   {
     color_matrix Mbfdinv = bradford_rgb_to_xyz_matrix ();
     color_matrix Mbfd    = bradford_xyz_to_rgb_matrix ();
-    color_matrix correction (to.x/from.x, 0, 0, 0,
-			     0, to.y/from.y, 0, 0,
-			     0, 0, to.z/from.z, 0,
+    luminosity_t tor, tog, tob, fromr, fromg, fromb;
+    Mbfd.apply_to_rgb (to.x, to.y, to.z, &tor, &tog, &tob);
+    Mbfd.apply_to_rgb (from.x, from.y, from.z, &fromr, &fromg, &fromb);
+    color_matrix correction (tor/fromr, 0, 0, 0,
+			     0, tog/fromg, 0, 0,
+			     0, 0, tob/fromb, 0,
 			     0, 0, 0, 1);
     matrix<float,4> ret = Mbfdinv * correction * Mbfd;
     memcpy (m_elements, ret.m_elements, sizeof (m_elements));
@@ -226,7 +282,10 @@ apply_gamma (luminosity_t val, luminosity_t gamma)
     return val;
   if (gamma == -1)
     return srgb_to_linear (val);
-  return my_pow (val, gamma);
+  if (val >= 0)
+    return my_pow (val, gamma);
+  else
+    return -my_pow (-val, gamma);
 }
 
 inline luminosity_t
@@ -236,7 +295,10 @@ invert_gamma (luminosity_t val, luminosity_t gamma)
     return val;
   if (gamma == -1)
     return linear_to_srgb (val);
-  return my_pow (val, 1 / gamma);
+  if (val >= 0)
+    return my_pow (val, 1 / gamma);
+  else
+    return my_pow (-val, 1 / gamma);
 }
 
 struct color_t
@@ -445,18 +507,6 @@ public:
 		  +0.05,-0.55,1.05, 0,
 		  0,             0,              0,                  1)
   { normalize_grayscale (); }
-};
-/* XYZ->sRGB conversion matrix.  */
-class xyz_srgb_matrix : public color_matrix
-{
-public:
-  inline
-  xyz_srgb_matrix ()
-  : color_matrix (3.2404542, -1.5371385, -0.4985314, 0,
-		 -0.9692660,  1.8760108,  0.0415560, 0,
-		  0.0556434, -0.2040259,  1.0572252, 0,
-		  0,             0,              0,                  1)
-  {}
 };
 /* XYZ->wide gammut RGB conversion matrix.  */
 class xyz_wide_gammut_rgb_matrix : public color_matrix

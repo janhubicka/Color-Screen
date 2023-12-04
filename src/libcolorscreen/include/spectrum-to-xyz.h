@@ -42,6 +42,9 @@ public:
       memcpy (blue, b, sizeof (backlight));
     }
   void set_daylight_backlight (luminosity_t temperature);
+  void set_il_A_backlight ();
+  void set_il_B_backlight ();
+  void set_il_C_backlight ();
   /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
      in white in a given temperature of daylight.  */
   void normalize_dyes (luminosity_t temperature);
@@ -65,24 +68,24 @@ public:
 			        luminosity_t violet_crystal, luminosity_t violet_flexo, luminosity_t age);
 
   struct xyz
-  dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b)
+  dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = 1964)
     {
       spectrum s;
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	s[i] = red [i] * r * rscale + green [i] * g * gscale + blue [i] * b * bscale;
-      struct xyz ret = get_xyz (s);
+      struct xyz ret = get_xyz (s, observer);
       ret.x *= xscale;
       ret.y *= yscale;
       ret.z *= zscale;
       return ret;
     }
   /* Return XYZ of white color seen through the dyes.  */
-  xyz whitepoint_xyz ()
+  xyz whitepoint_xyz (int observer = 1964)
     {
       spectrum nofilter;
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	nofilter[i]=1;
-      return get_xyz (nofilter);
+      return get_xyz (nofilter, observer);
     }
   static xyz temperature_xyz (luminosity_t temperature);
   /* Return true if dyes_rgb_to_xyz behaves linearly.  */
@@ -93,18 +96,19 @@ public:
     static const bool debug = false;
     /* Compute XYZ values.  */
     inline struct xyz
-    get_xyz (spectrum s)
+    get_xyz (spectrum s, int observer = 1964)
     {
       struct xyz ret = { 0, 0, 0 };
       luminosity_t sum = 0;
+      assert (observer == 1931 || observer == 1964);
       /* TODO: CIE recommends going by 1nm bands and interpolate.
 	 We can implement that easily if that makes difference.  */
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	{
-	  ret.x += (cie_cmf1964_x[i] * s[i]) * backlight[i];
-	  ret.y += (cie_cmf1964_y[i] * s[i]) * backlight[i];
-	  ret.z += (cie_cmf1964_z[i] * s[i]) * backlight[i];
-	  sum += cie_cmf1964_y[i] * backlight[i];
+	  ret.x += (observer == 1931 ? cie_cmf_x : cie_cmf1964_x)[i] * s[i] * backlight[i];
+	  ret.y += (observer == 1931 ? cie_cmf_y : cie_cmf1964_y)[i] * s[i] * backlight[i];
+	  ret.z += (observer == 1931 ? cie_cmf_z : cie_cmf1964_z)[i] * s[i] * backlight[i];
+	  sum += (observer == 1931 ? cie_cmf_y : cie_cmf1964_y)[i] * backlight[i];
 	}
       luminosity_t scale = 1 / sum;
       ret.x *= scale;

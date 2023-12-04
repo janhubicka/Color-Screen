@@ -3280,6 +3280,22 @@ get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NUL
   return ret;
 }
 
+void
+spectrum_dyes_to_xyz::set_il_A_backlight ()
+{
+  compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
+}
+void
+spectrum_dyes_to_xyz::set_il_B_backlight ()
+{
+  compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false);
+}
+void
+spectrum_dyes_to_xyz::set_il_C_backlight ()
+{
+  compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_C, false);
+}
+
 xyz
 combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, const char *filename = NULL, const char *filename2 = NULL)
 {

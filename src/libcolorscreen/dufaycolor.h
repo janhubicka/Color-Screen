@@ -29,7 +29,8 @@ public:
   static constexpr const coord_t green_portion = green_size * 3 / screen_size;
   static constexpr const coord_t blue_portion = blue_size * 3 / screen_size;
 
-  /* xyY coordinates of the dyes as listed in Color Cinematography table.  */
+  /* xyY coordinates of the dyes as listed in Color Cinematography table.
+     Inspection is done under Illuminant B.  */
   static constexpr xyY red_dye = xyY (0.633, 0.365, 0.177);  /* dominating wavelength 601.7*/
   static constexpr xyY green_dye = xyY (0.233, 0.647, 0.43); /* dominating wavelength 549.6*/
   static constexpr xyY blue_dye = xyY (0.140, 0.089, 0.037 ); /* dominating wavelength 466.0*/

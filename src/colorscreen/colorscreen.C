@@ -1,5 +1,6 @@
 #include <sys/time.h>
 #include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/dufaycolor.h"
 
 static bool verbose = false;
 const char *binname;
@@ -445,6 +446,8 @@ main (int argc, char **argv)
     analyze_backlight (argc-2, argv+2);
   if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
+  if (!strcmp (argv[1], "digital-laboratory"))
+    dufaycolor::print_report ();
   else
     print_help ();
   return 0;
