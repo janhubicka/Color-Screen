@@ -95,3 +95,8 @@ create_wide_gammut_rgb_profile (void **buffer)
 {
   return create_profile ("Colorscreen wide gammut RGB", {0.7161046, 0.2581874, 0.0000000}, {0.1009296, 0.7249378, 0.0517813}, {0.1471858, 0.0168748, 0.7734287}, 2.2, buffer);
 }
+size_t
+create_pro_photo_rgb_profile (void **buffer)
+{
+  return create_profile ("Colorscreen pro photo RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, /*1.8*/1, buffer);
+}

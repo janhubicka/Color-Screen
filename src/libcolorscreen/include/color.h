@@ -527,6 +527,18 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
+/* XYZ->wide gammut RGB conversion matrix.  */
+class xyz_pro_photo_rgb_matrix : public color_matrix
+{
+public:
+  inline
+  xyz_pro_photo_rgb_matrix ()
+  : color_matrix (1.3459433, -0.2556075, -0.0511118, 0,
+		  -0.5445989,  1.5081673,  0.0205351, 0,
+		   0.0000000,  0.0000000,  1.2118128, 0,
+		  0,             0,              0,                  1)
+  {}
+};
 inline void
 xyz_to_srgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
@@ -544,6 +556,16 @@ xyz_to_wide_gammut_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminos
   *r = invert_gamma (*r, 2.2);
   *g = invert_gamma (*g, 2.2);
   *b = invert_gamma (*b, 2.2);
+}
+/* Add gamma function.  */
+inline void
+xyz_to_pro_photo_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  xyz_pro_photo_rgb_matrix m;
+  m.apply_to_rgb (x, y, z, r, g, b);
+  /**r = invert_gamma (*r, 1.8);
+  *g = invert_gamma (*g, 1.8);
+  *b = invert_gamma (*b, 1.8);*/
 }
 
 inline xyz

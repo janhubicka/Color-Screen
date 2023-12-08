@@ -139,37 +139,66 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
   if (!green_strip_width)
     green_strip_width = dufaycolor::green_strip_width;
 
-  int xx, yy;
-  int strip_width = size / 2 * (1-red_strip_width) + 0.5;
-  int strip_height = size / 2 * green_strip_width + 0.5;
-  printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width, strip_height, size);
-  for (yy = 0; yy < size; yy++)
-    for (xx = 0; xx < size; xx++)
+  coord_t strip_width = size / 2 * (1-red_strip_width);
+  coord_t strip_height = size / 2 * green_strip_width;
+
+  luminosity_t red[size];
+  luminosity_t sum = 0;
+  for (int yy = 0; yy < size; yy++)
+    {
+      if (yy >= ceil (strip_width) && yy + 1 <= floor (size - strip_width))
+	red[yy] = 1;
+      else if (yy + 1 <= floor (strip_width) || yy >= ceil (size - strip_width))
+	red[yy] = 0;
+      else if (yy == (int)strip_width)
+	red[yy] = 1-(strip_width - yy);
+      else if (yy == (int) (size - strip_width))
+	red[yy] =  size - strip_width - yy;
+      else
+	{
+	  //printf ("%i %f \n",yy,strip_width);
+	  abort ();
+	}
+      sum += red[yy];
+      assert (red[yy] >= 0 && red[yy] <= 1);
+      assert (yy < size / 2 || red[yy] == red[size - 1 - yy]);
+      //printf (" %f ", red[yy]);
+    }
+  //printf ("scr: %f %f %f", red_strip_width, sum / size, strip_width);
+  assert (fabs (sum / size - red_strip_width) < 0.00001);
+  luminosity_t green[size];
+  sum = 0;
+  for (int xx = 0; xx < size; xx++)
+    {
+      if (xx >= ceil (strip_height) && xx + 1 <= floor (size - strip_height))
+	green[xx] = 0;
+      else if (xx + 1 <= floor (strip_height) || xx >= ceil (size - strip_height))
+	green[xx] = 1;
+      else if (xx == (int)strip_height)
+	green[xx] = (strip_height - xx);
+      else if (xx == (int) (size - strip_height))
+	green[xx] = 1 - (size - strip_height - xx);
+      else
+	{
+	  ////printf ("b %i %f \n",xx,strip_height);
+	  abort ();
+	}
+      sum += green[xx];
+      assert (green[xx] >= 0 && green[xx] <= 1);
+      assert (xx < size / 2 || green[xx] == green[size - 1 - xx]);
+      //printf (" %f \n", green[xx]);
+    }
+  //printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width, strip_height, size);
+  assert (fabs (sum / size - green_strip_width) < 0.00001);
+  for (int yy = 0; yy < size; yy++)
+    for (int xx = 0; xx < size; xx++)
       {
-	if (yy <= strip_width || yy > size - strip_width)
-	  {
-	    if (xx <= strip_height || xx > size - strip_height)
-	      {
-		mult[yy][xx][0] = 0;
-		mult[yy][xx][1] = 1;
-		mult[yy][xx][2] = 0;
-	      }
-	    else
-	      {
-		mult[yy][xx][0] = 0;
-		mult[yy][xx][1] = 0;
-		mult[yy][xx][2] = 1;
-	      }
-	  }
-	else
-	  {
-	    mult[yy][xx][0] = 1;
-	    mult[yy][xx][1] = 0;
-	    mult[yy][xx][2] = 0;
-	  }
 	add[yy][xx][0] = 0;
 	add[yy][xx][1] = 0;
 	add[yy][xx][2] = 0;
+	mult[yy][xx][0] = red[yy];
+	mult[yy][xx][1] = green[xx] * (1 - red[yy]);
+	mult[yy][xx][2] = 1 - mult[yy][xx][0] - mult[yy][xx][1];
       }
 }
 
