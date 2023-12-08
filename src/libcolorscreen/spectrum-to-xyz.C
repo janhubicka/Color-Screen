@@ -6,7 +6,7 @@
 #include "icc.h"
 #include "dufaycolor.h"
 
-#define XSPECT_MAX_BANDS 77		/* Enought for 5nm from 380 to 760 */
+#define XSPECT_MAX_BANDS 77		/* Enough for 5nm from 380 to 760 */
 typedef struct {
 	int    spec_n;				/* Number of spectral bands, 0 if not valid */
 	luminosity_t spec_wl_short;		/* First reading wavelength in nm (shortest) */
@@ -725,13 +725,14 @@ absorbance_to_transmitance (luminosity_t a)
 
 /* Output gnuplottable data.  */
 static void
-print_transmitance_spectrum (FILE * out, const spectrum spec)
+print_transmitance_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_START, int end = SPECTRUM_END)
 {
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-  {
-    fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, spec[i]);
-    //assert (spec[i] > -100 && spec [i] < 100);
-  }
+    if (i * SPECTRUM_STEP + SPECTRUM_START >= start && i * SPECTRUM_STEP + SPECTRUM_START <= end)
+      {
+	fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, spec[i]);
+	//assert (spec[i] > -100 && spec [i] < 100);
+      }
 }
 
 static void
@@ -3419,9 +3420,9 @@ dufaycolor_correction_matrix ()
   //xyz target_blue_xyz = xyY_to_xyz (0.140, 0.089, 0.037);
   xyz target_red_xyz = dufaycolor::red_dye;
   xyz target_green_xyz = dufaycolor::green_dye;
-  xyz target_blue_xyz = dufaycolor::correctedY_blue_dye;
+  xyz target_blue_xyz = dufaycolor::blue_dye;
 
-  color_matrix cm = dufaycolor::correctedY_dye_matrix ();
+  color_matrix cm = dufaycolor::corrected_dye_matrix ();
   luminosity_t rw, gw,bw;
   cm.normalize_grayscale (whitep.x, whitep.y, whitep.z, &rw, &gw, &bw);
   printf ("Scaling weights %f %f %f\n",rw,gw,bw);
@@ -4059,4 +4060,32 @@ dufaycolor_correction_matrix ()
   m1.invert().print (stdout);
   
   return m1;
+}
+void
+spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const char *blues, const char *backlights, int start, int end)
+{
+  if (reds)
+    {
+      FILE *f = fopen (reds, "wt");
+      print_transmitance_spectrum (f, red, start, end);
+      fclose (f);
+    }
+  if (greens)
+    {
+      FILE *f = fopen (greens, "wt");
+      print_transmitance_spectrum (f, green, start, end);
+      fclose (f);
+    }
+  if (blues)
+    {
+      FILE *f = fopen (blues, "wt");
+      print_transmitance_spectrum (f, blue, start, end);
+      fclose (f);
+    }
+  if (backlights)
+    {
+      FILE *f = fopen (backlights, "wt");
+      print_transmitance_spectrum (f, backlight, start, end);
+      fclose (f);
+    }
 }

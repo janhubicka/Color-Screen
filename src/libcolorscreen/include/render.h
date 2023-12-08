@@ -26,6 +26,7 @@ struct DLL_PUBLIC render_parameters
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
     color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), scan_exposure (1),
+    dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     backlight_correction (NULL), backlight_correction_black (0), invert (false),
     restore_original_luminosity (true), precise (true), tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments ()
@@ -131,6 +132,10 @@ struct DLL_PUBLIC render_parameters
   /* After linearizing we apply (val - dark_point) * scan_exposure  */
   luminosity_t dark_point, scan_exposure;
 
+  /* Width of strips used to print Dufaycolor reseau (screen).
+     This is relative portion in range 0..1.
+     0 will give default values.  */
+  coord_t dufay_red_strip_width, dufay_green_strip_width;
 
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
@@ -211,6 +216,8 @@ struct DLL_PUBLIC render_parameters
 	   && backlight_temperature == backlight_temperature
 	   && dark_point == other.dark_point
 	   && scan_exposure == other.scan_exposure
+	   && dufay_red_strip_width == other.dufay_red_strip_width
+	   && dufay_green_strip_width == other.dufay_green_strip_width
 	   && invert == other.invert
 	   && screen_blur_radius == other.screen_blur_radius
     	   && dye_balance == other.dye_balance

@@ -34,6 +34,16 @@ matrix_by_dye_xyY (xyY red, xyY green, xyY blue)
   return m;
 }
 
+color_matrix
+matrix_by_dye_xyz (xyz r, xyz g, xyz b)
+{
+  color_matrix m (r.x, g.x, b.x, 0,
+		  r.y, g.y, b.y, 0,
+		  r.z, g.z, b.z, 0,
+		  0,   0,   0,   1);
+  return m;
+}
+
 cie_lab::cie_lab (xyz c)
 {
   luminosity_t x, y, z;

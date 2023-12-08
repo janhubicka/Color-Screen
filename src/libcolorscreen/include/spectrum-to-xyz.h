@@ -92,6 +92,8 @@ public:
   bool is_linear ();
   color_matrix xyz_matrix ();
 
+  void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END);
+
   private:
     static const bool debug = false;
     /* Compute XYZ values.  */

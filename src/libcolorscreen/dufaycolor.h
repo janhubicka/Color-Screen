@@ -17,6 +17,23 @@ public:
   static constexpr const coord_t blue_height = 22.7;
   static constexpr const coord_t green_height = 26.9;
 
+
+  /* These are measurements from color microscopic photograph of Dufaycolor reseau in Color Cinematography. */
+  static constexpr const coord_t red_width2 = /*4.984845*/ 5.206335;
+  static constexpr const coord_t green_blue_width2 = /*9.140138*/ 8.827431;
+  static constexpr const coord_t blue_height2 = /*8.132923*/ 8.651135;
+  static constexpr const coord_t green_height2 = /*5.850212*/ 5.564918;
+
+  /* These are measurements from b&W microscopic photograph of Dufaycolor reseau in Color Cinematography. */
+  static constexpr const coord_t red_width3 = 6.412904;
+  static constexpr const coord_t green_blue_width3 = 13.327374;
+  static constexpr const coord_t blue_height3 = 11.435067;
+  static constexpr const coord_t green_height3 = 8.406011;
+
+  /* Relative widths of the two strips used to print Dufaycolor reseau.  */
+  static constexpr const coord_t red_strip_width = red_width / (red_width + green_blue_width);
+  static constexpr const coord_t green_strip_width = green_height / (green_height + blue_height);
+
   /* Size of the individual patches within screen.  */
   static constexpr const coord_t red_size = red_width * (blue_height + green_height);
   static constexpr const coord_t green_size = green_blue_width * green_height;
@@ -31,29 +48,58 @@ public:
 
   /* xyY coordinates of the dyes as listed in Color Cinematography table.
      Inspection is done under Illuminant B.  */
-  static constexpr xyY red_dye = xyY (0.633, 0.365, 0.177);  /* dominating wavelength 601.7*/
-  static constexpr xyY green_dye = xyY (0.233, 0.647, 0.43); /* dominating wavelength 549.6*/
-  static constexpr xyY blue_dye = xyY (0.140, 0.089, 0.037 ); /* dominating wavelength 466.0*/
-  /* Table in Color Cinematography lists the following wavelengths.  These does not seem
-     to correspond to real colors with any reasonable choice of whitepoint.  */
+  static constexpr xyY red_dye_color_cinematography_xyY = xyY (0.633, 0.365, 0.177);  /* dominating wavelength 601.7*/
+  static constexpr xyY green_dye_color_cinematography_xyY = xyY (0.233, 0.647, 0.43); /* dominating wavelength 549.6*/
+  static constexpr xyY blue_dye_color_cinematography_xyY = xyY (0.140, 0.089, 0.037 ); /* dominating wavelength 466.0*/
   static constexpr luminosity_t dominant_wavelength_red =  601.7;
   static constexpr luminosity_t dominant_wavelength_green =  549.6;
   static constexpr luminosity_t dominant_wavelength_blue =  466.0;
+
+  /* xy coordinates based on Color Cinematography table.  */
+  static constexpr xy_t red_dye_chromatcity_diagram {0.6325670792971702, 0.3664879168169032};
+  static constexpr xy_t green_dye_chromatcity_diagram {0.23628435113386248, 0.6420773521151741};
+  static constexpr xy_t blue_dye_chromacity_diagram {0.16489656909044215, 0.09082762295884284};
+
+  /* These xyY coordinates are based on table above however with apparent typo
+     in X coordinate of blue dye is corected using xy coordinates printed above.
+     xy coordinates to match documented dominating wavelength.
+     Moreover the Y coordinate of blue dye is adjusted too, to get more neutral
+     screen color.
+
+     Dominating wavelength of green dye is also wrong, however since the xyY data matches
+     xy chart, I believe it is the dominating wavelength that is likely wrong.  */
+
+  static constexpr xyY red_dye = xyY (0.633, 0.365, 0.177);  
+  //static constexpr xyY green_dye = xyY (0.236, 0.642, 0.43); 
+  static constexpr xyY green_dye = xyY (0.233/*0.293*/, 0.647, 0.43);
+  //					  0.293?
+  static constexpr xyY blue_dye = xyY (/*0.14*/ 0.164, 0.089, /*0.37*/ 0.087 ); 
+  //static constexpr xyY blue_dye = xyY (0.1640, 0.089, 0.037 ); /* dominating wavelength 466.0*/
+
+
 
 
   /* An attempt to correct possible misprint in blue dye Y specification.  
      While density of red and green dye mostly corresponds to what can be calculated
      from the spectral information, blue dye is a lot darker.*/
-  static constexpr xyY correctedY_blue_dye = xyY (0.140, 0.089, 0.087 ); /* dominating wavelength 466.0*/
+  //static constexpr xyY correctedY_blue_dye = xyY (0.140, 0.089, 0.087 ); /* dominating wavelength 466.0*/
 
 
-  inline static color_matrix dye_matrix()
+  inline static color_matrix color_cinematography_xyY_dye_matrix()
+  {
+    return matrix_by_dye_xyY (red_dye_color_cinematography_xyY, green_dye_color_cinematography_xyY, blue_dye_color_cinematography_xyY);
+  }
+  inline static color_matrix corrected_dye_matrix()
   {
     return matrix_by_dye_xyY (red_dye, green_dye, blue_dye);
   }
-  inline static color_matrix correctedY_dye_matrix()
+  static xyz get_color_cinematography_xyY_dufay_white ()
   {
-    return matrix_by_dye_xyY (red_dye, green_dye, correctedY_blue_dye);
+    return ((xyz)red_dye_color_cinematography_xyY * (red_size / screen_size)) + ((xyz)green_dye_color_cinematography_xyY * (green_size / screen_size)) + ((xyz)blue_dye_color_cinematography_xyY * (blue_size / screen_size));
+  }
+  static xyz get_corrected_dufay_white ()
+  {
+    return ((xyz)red_dye * (red_size / screen_size)) + ((xyz)green_dye * (green_size / screen_size)) + ((xyz)blue_dye * (blue_size / screen_size));
   }
   static void print_report ();
   static void tiff_with_primaries (const char *, bool);

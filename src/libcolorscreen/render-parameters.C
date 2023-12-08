@@ -145,7 +145,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	}
       case render_parameters::color_model_dufay_color_cinematography_xyY:
 	{
-	  dyes = dufaycolor::dye_matrix ();
+	  dyes = dufaycolor::color_cinematography_xyY_dye_matrix ();
 	  dyes.normalize_xyz_brightness ();
 	  xyz white (0, 0, 0);
 	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
@@ -157,7 +157,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	break;
       case render_parameters::color_model_dufay_color_cinematography_xyY_correctedY:
 	{
-	  dyes = dufaycolor::correctedY_dye_matrix ();
+	  dyes = dufaycolor::corrected_dye_matrix ();
 	  dyes.normalize_xyz_brightness ();
 	  xyz white (0, 0, 0);
 	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);

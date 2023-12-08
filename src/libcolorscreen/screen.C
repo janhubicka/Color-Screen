@@ -132,32 +132,17 @@ screen::paget_finlay ()
 }
 
 void
-screen::dufay ()
+screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
 {
-  /* Based on microscopic scan.  */
+  if (!red_strip_width)
+    red_strip_width = dufaycolor::red_strip_width;
+  if (!green_strip_width)
+    green_strip_width = dufaycolor::green_strip_width;
 
-#if 0
-#if 1
-  const coord_t red_width = 21.0;
-  const coord_t green_blue_width = 28.6+70/*+28*/;
-#if 1
-  const coord_t green_height = 22.7;
-  const coord_t blue_height = 26.9+5;
-#else
-  const coord_t blue_height = 22.7;
-  const coord_t green_height = 26.9;
-#endif
-#else
-  /* Sort of OK-ysh for color cinematography data.  */
-  const coord_t red_width = 21.0;
-  const coord_t green_blue_width = 28.6+60;
-  const coord_t green_height = 22.7;
-  const coord_t blue_height = 26.9+60;
-#endif
-#endif
   int xx, yy;
-  int strip_width = size / 2 * dufaycolor::green_blue_width / (dufaycolor::red_width + dufaycolor::green_blue_width) + 0.5;
-  int strip_height = size / 2 * dufaycolor::green_height / (dufaycolor::green_height + dufaycolor::blue_height) + 0.5;
+  int strip_width = size / 2 * (1-red_strip_width) + 0.5;
+  int strip_height = size / 2 * green_strip_width + 0.5;
+  printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width, strip_height, size);
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {
@@ -391,4 +376,33 @@ screen::initialize_with_blur (screen &scr, coord_t blur_radius)
 	add[y][x][2] = scr.add[y][x][2];
       }
 #endif
+}
+void
+screen::initialize (enum scr_type type, coord_t red_strip_width, coord_t green_strip_width)
+{
+  switch (type)
+  {
+    case Finlay:
+    case Paget:
+      paget_finlay ();
+      break;
+    case Dufay:
+      dufay (red_strip_width, green_strip_width);
+      break;
+    case Thames:
+      thames ();
+      break;
+    default:
+      abort ();
+      break;
+  }
+}
+/* Initialize to a given screen for preview window.  */
+void
+screen::initialize_preview (enum scr_type type)
+{
+if (type == Dufay)
+  preview_dufay ();
+else
+  preview ();
 }

@@ -185,6 +185,12 @@ struct xyz {
     print_sRGB (f, true);
     fprintf (f, "\n");
   }
+  bool almost_equal_p (xyz other, luminosity_t epsilon = 0.001)
+  {
+    return (fabs (x - other.x) < epsilon 
+	    || fabs (y - other.y) > epsilon
+	    || fabs (z - other.z) > epsilon);
+  }
 };
 struct xy_t
 {
@@ -371,6 +377,7 @@ color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 			       luminosity_t gx, luminosity_t gy,
 			       luminosity_t bx, luminosity_t by);
 color_matrix matrix_by_dye_xyY (xyY red, xyY green, xyY blue);
+color_matrix matrix_by_dye_xyz (xyz red, xyz green, xyz blue);
 // http://www.graficaobscura.com/matrix/index.html
 static const luminosity_t rwght = 0.3086, gwght = 0.6094, bwght = 0.0820;
 
@@ -566,6 +573,6 @@ xy_t find_best_whitepoint (xyz red, xyz green, xyz blue,
 static const xyz srgb_white (0.9505, 1, 1.0888);	 // sRGB whitepoint
 static const xyz netural_white = xyY (0.33,0.33, 1);     // neutral white
 static const xyz il_A_white = xyY (0.44757, 0.40745, 1); // Illuminant B white
-static const xyz il_B_white = xyY (0.34842,0.35161, 1);  // Illuminant B white
+static const xyz il_B_white = xyY (0.34842, 0.35161, 1); // Illuminant B white
 static const xyz il_C_white = xyY (0.31006, 0.31616, 1); // Illuminant C white
 #endif
