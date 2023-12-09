@@ -51,7 +51,7 @@ static cmsHPROFILE create_lcms_profile(const char *desc,
   return profile;
 }
 size_t
-create_profile (const char *desc, xyz r, xyz g, xyz b, luminosity_t gamma, void **buffer)
+create_profile (const char *desc, xyz r, xyz g, xyz b, xyz wp, luminosity_t gamma, void **buffer)
 {
   cmsCIExyYTRIPLE primaries;
   cmsCIExyY whitepoint;
@@ -74,7 +74,7 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, luminosity_t gamma, void 
   primaries.Blue.y = y;
   primaries.Blue.Y = Y;
   //fprintf (stderr, "Blue XYZ: %f %f %f, xyY %f %f %f\n", b.x, b.y, b.z, x, y, Y);
-  xyz_to_xyY (r.x + b.x + g.x, r.y + b.y + g.y, r.z + g.z + b.z, &x, &y, &Y);
+  xyz_to_xyY (wp.x, wp.y, wp.z, &x, &y, &Y);
   whitepoint.x = x;
   whitepoint.y = y;
   whitepoint.Y = Y;
@@ -93,10 +93,11 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, luminosity_t gamma, void 
 size_t
 create_wide_gammut_rgb_profile (void **buffer)
 {
-  return create_profile ("Colorscreen wide gammut RGB", {0.7161046, 0.2581874, 0.0000000}, {0.1009296, 0.7249378, 0.0517813}, {0.1471858, 0.0168748, 0.7734287}, 2.2, buffer);
+  return create_profile ("Colorscreen wide gammut RGB", {0.7161046, 0.2581874, 0.0000000}, {0.1009296, 0.7249378, 0.0517813}, {0.1471858, 0.0168748, 0.7734287},
+		  {0.7161046 + 0.1009296 + 0.1471858, 0.2581874 + 0.7249378 + 0.0168748, 0.0517813 + 0.7734287}, 2.2, buffer);
 }
 size_t
-create_pro_photo_rgb_profile (void **buffer)
+create_pro_photo_rgb_profile (void **buffer, xyz whitepoint)
 {
-  return create_profile ("Colorscreen pro photo RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, /*1.8*/1, buffer);
+  return create_profile ("Colorscreen pro photo RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, whitepoint, /*1.8*/1, buffer);
 }

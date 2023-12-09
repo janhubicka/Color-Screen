@@ -265,7 +265,7 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
-  return create_profile (color_model_names[color_model], r, g, b, output_gamma, buffer);
+  return create_profile (color_model_names[color_model], r, g, b, r+g+b, output_gamma, buffer);
 }
 
 void

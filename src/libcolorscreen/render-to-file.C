@@ -451,7 +451,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	      xyz red = xyY_to_xyz (scan.primary_red.x, scan.primary_red.y, scan.primary_red.Y);
 	      xyz green = xyY_to_xyz (scan.primary_green.x, scan.primary_green.y, scan.primary_green.Y);
 	      xyz blue = xyY_to_xyz (scan.primary_blue.x, scan.primary_blue.y, scan.primary_blue.Y);
-	      icc_profile_len = create_profile ("ColorScreen produced profile based on original scan", red, green, blue, rparam.output_gamma, &icc_profile);
+	      icc_profile_len = create_profile ("ColorScreen produced profile based on original scan", red, green, blue, red+green+blue, rparam.output_gamma, &icc_profile);
 	      free_profile = true;
 	    }
         }
