@@ -190,6 +190,7 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
     }
   //printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width, strip_height, size);
   assert (fabs (sum / size - green_strip_width) < 0.00001);
+  luminosity_t rsum = 0, gsum = 0, bsum = 0;
   for (int yy = 0; yy < size; yy++)
     for (int xx = 0; xx < size; xx++)
       {
@@ -199,7 +200,15 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
 	mult[yy][xx][0] = red[yy];
 	mult[yy][xx][1] = green[xx] * (1 - red[yy]);
 	mult[yy][xx][2] = 1 - mult[yy][xx][0] - mult[yy][xx][1];
+	rsum += mult[yy][xx][0];
+	gsum += mult[yy][xx][1];
+	bsum += mult[yy][xx][2];
       }
+  //printf ("%f %f %f\n",rsum, rsum / (size * size), red_strip_width);
+  assert (fabs (rsum / (size * size) - red_strip_width) < 0.00001);
+  //printf ("%f %f %f\n",gsum, gsum / (size * size), (1-red_strip_width) * green_strip_width);
+  assert (fabs (gsum / (size * size) - (1-red_strip_width) * green_strip_width) < 0.00001);
+  assert (fabs (bsum / (size * size) - (1-red_strip_width) * (1-green_strip_width)) < 0.00001);
 }
 
 /* This computes the grid displayed by UI.  */
