@@ -161,8 +161,7 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
 	}
       sum += red[yy];
       assert (red[yy] >= 0 && red[yy] <= 1);
-      assert (yy < size / 2 || red[yy] == red[size - 1 - yy]);
-      //printf (" %f ", red[yy]);
+      assert (yy < size / 2 || fabs (red[yy] - red[size - 1 - yy]) < 0.0000001);
     }
   //printf ("scr: %f %f %f", red_strip_width, sum / size, strip_width);
   assert (fabs (sum / size - red_strip_width) < 0.00001);
@@ -185,7 +184,7 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
 	}
       sum += green[xx];
       assert (green[xx] >= 0 && green[xx] <= 1);
-      assert (xx < size / 2 || green[xx] == green[size - 1 - xx]);
+      assert (xx < size / 2 || fabs (green[xx] - green[size - 1 - xx]) < 0.0000001);
       //printf (" %f \n", green[xx]);
     }
   //printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width, strip_height, size);

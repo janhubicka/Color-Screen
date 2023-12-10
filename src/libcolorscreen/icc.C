@@ -55,7 +55,7 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, xyz wp, luminosity_t gamm
 {
   cmsCIExyYTRIPLE primaries;
   cmsCIExyY whitepoint;
-  float x, y, Y;
+  luminosity_t x, y, Y;
   cmsFloat64Number srgb_parameters[5] =
     { 2.4, 1.0 / 1.055,  0.055 / 1.055, 1.0 / 12.92, 0.04045 };
   cmsToneCurve *trc = gamma == -1 ? cmsBuildParametricToneCurve(NULL, 4, srgb_parameters): cmsBuildGamma(NULL, gamma);

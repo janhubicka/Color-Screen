@@ -7,16 +7,11 @@
 class dufaycolor
 {
 public:
-  /* This is based on microscopic image of the filter structure of a Dufaycolor
-     film. The Emulsion has been removed. The visible structures are not silver
-     grain but the structure of the filter layers. 
-     Credit: David Pfluger, ERC Advanced Grant FilmColors.
-     Imaging was performed with support of the Center for Microscopy and Image Analysis, University of Zurich  */
-  static constexpr const coord_t red_width = 21.0;
-  static constexpr const coord_t green_blue_width = /*28.6*/49.9-red_width;  /* Measured on microscropic image as 49.3.  */
-  static constexpr const coord_t blue_height = 22.7;
-  static constexpr const coord_t green_height = 26.9;
-
+  /* Sizes in percent based on color cinematography screen.  */
+  static constexpr const coord_t red_width = 35.7;
+  static constexpr const coord_t green_blue_width = 100-red_width;
+  static constexpr const coord_t green_height = 34.6;
+  static constexpr const coord_t blue_height = 100-green_height;
 
   /* These are measurements from color microscopic photograph of Dufaycolor reseau in Color Cinematography. */
   static constexpr const coord_t red_width2 = /*4.984845*/ 5.206335;
@@ -29,6 +24,16 @@ public:
   static constexpr const coord_t green_blue_width3 = 13.327374;
   static constexpr const coord_t blue_height3 = 11.435067;
   static constexpr const coord_t green_height3 = 8.406011;
+
+  /* This is based on microscopic image of the filter structure of a Dufaycolor
+     film. The Emulsion has been removed. The visible structures are not silver
+     grain but the structure of the filter layers. 
+     Credit: David Pfluger, ERC Advanced Grant FilmColors.
+     Imaging was performed with support of the Center for Microscopy and Image Analysis, University of Zurich  */
+  static constexpr const coord_t red_width4 = 21.0;
+  static constexpr const coord_t green_blue_width4 = /*28.6*/49.9-red_width;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t blue_height4 = 22.7;
+  static constexpr const coord_t green_height4 = 26.9;
 
   /* Relative widths of the two strips used to print Dufaycolor reseau.  */
   static constexpr const coord_t red_strip_width = red_width / (red_width + green_blue_width);
@@ -73,7 +78,7 @@ public:
   //static constexpr xyY green_dye = xyY (0.236, 0.642, 0.43); 
   static constexpr xyY green_dye = xyY (0.233/*0.293*/, 0.647, 0.43);
   //					  0.293?
-  static constexpr xyY blue_dye = xyY (/*0.14*/ 0.164, 0.089, /*0.37*/ 0.087 ); 
+  static constexpr xyY blue_dye = xyY (/*0.14*/ 0.164, 0.089, /*0.037*/ 0.073 /*0.087*/ ); 
   //static constexpr xyY blue_dye = xyY (0.1640, 0.089, 0.037 ); /* dominating wavelength 466.0*/
 
 

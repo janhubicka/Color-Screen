@@ -3,7 +3,8 @@
 #include <cmath>
 #include "matrix.h"
 
-typedef float luminosity_t;
+typedef double luminosity_t;
+//typedef float luminosity_t;
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)
@@ -262,7 +263,7 @@ public:
 			     0, tog/fromg, 0, 0,
 			     0, 0, tob/fromb, 0,
 			     0, 0, 0, 1);
-    matrix<float,4> ret = Mbfdinv * correction * Mbfd;
+    matrix<luminosity_t,4> ret = Mbfdinv * correction * Mbfd;
     memcpy (m_elements, ret.m_elements, sizeof (m_elements));
   }
 };
