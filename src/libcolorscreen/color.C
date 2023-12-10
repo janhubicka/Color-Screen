@@ -207,8 +207,8 @@ luminosity_t
 deltaE(cie_lab c1, cie_lab c2)
 {
   //printf ("LAB %f %f %f  -  %f %f %f\n",c1.l,c1.a,c1.b, c2.l,c2.a,c2.b);
-  return scr_to_img::my_sqrt (deltaE2000_squared (c1, c2));
-  //return scr_to_img::my_sqrt((c1.l - c2.l) * (c1.l - c2.l) + (c1.a - c2.a) * (c1.a - c2.a) + (c1.b - c2.b) * (c1.b - c2.b));
+  //return scr_to_img::my_sqrt (deltaE2000_squared (c1, c2));
+  return scr_to_img::my_sqrt((c1.l - c2.l) * (c1.l - c2.l) + (c1.a - c2.a) * (c1.a - c2.a) + (c1.b - c2.b) * (c1.b - c2.b));
 }
 luminosity_t
 deltaE(xyz c1, xyz c2)

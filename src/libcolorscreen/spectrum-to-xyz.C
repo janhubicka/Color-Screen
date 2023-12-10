@@ -2932,7 +2932,7 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 {
   luminosity_t step = (end - start) / (luminosity_t) (size - 1);
   luminosity_t repnorm = 1 / norm;
-  printf ("start %f end %f step %f size %i\n",start,end,step,size);
+  //printf ("start %f end %f step %f size %i\n",start,end,step,size);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
       int p = SPECTRUM_START + i * SPECTRUM_STEP;
