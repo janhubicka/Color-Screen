@@ -4399,12 +4399,12 @@ spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
   static spectrum rhodamine_b;
   if (!initialized)
     {
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, 10);
-      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, 10);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, 100);
+      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, 100);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    red[i] = pow (rhodamine_b[i], d1/300) * pow (auramine[i], d2/300);
+    red[i] = pow (rhodamine_b[i], d1/1000) * pow (auramine[i], d2/1000);
 }
 
 void
@@ -4416,13 +4416,13 @@ spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 10);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 100);
       compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, 100);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 10);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 100);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    green[i] = pow (methylene_blue[i], d1/300) * pow (auramine[i], d2/300);
+    green[i] = pow (methylene_blue[i], d1/1000) * pow (auramine[i], d2/1000);
 }
 
 void
@@ -4434,11 +4434,11 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 10);
-      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, 10);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 10);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 100);
+      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, 100);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 100);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/300) * pow (violet[i], d2/300);
+    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/1000) * pow (violet[i], d2/1000);
 }

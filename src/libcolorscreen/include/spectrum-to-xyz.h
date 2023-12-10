@@ -19,6 +19,7 @@ extern const DLL_PUBLIC spectrum cie_cmf1964_z;
 class DLL_PUBLIC spectrum_dyes_to_xyz
 {
 public:
+  static const int default_observer = 1931;
   spectrum_dyes_to_xyz ()
     : rscale (1), gscale (1), bscale (1),
       xscale (1), yscale (1), zscale (1)
@@ -68,7 +69,7 @@ public:
 			        luminosity_t violet_crystal, luminosity_t violet_flexo, luminosity_t age);
 
   struct xyz
-  dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = 1964)
+  dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = default_observer)
     {
       spectrum s;
       for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -80,7 +81,7 @@ public:
       return ret;
     }
   /* Return XYZ of white color seen through the dyes.  */
-  xyz whitepoint_xyz (int observer = 1964)
+  xyz whitepoint_xyz (int observer = default_observer)
     {
       spectrum nofilter;
       for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -102,7 +103,7 @@ public:
     static const bool debug = false;
     /* Compute XYZ values.  */
     inline struct xyz
-    get_xyz (spectrum s, int observer = 1964)
+    get_xyz (spectrum s, int observer = default_observer)
     {
       struct xyz ret = { 0, 0, 0 };
       luminosity_t sum = 0;
