@@ -12,6 +12,8 @@ const char * render_parameters::color_model_names [] = {
   "paget",
   "Miethe_Goerz_reconstructed_by_Wagner",
   "Miethe_Goerz_mesured_by_Wagner",
+  "Wratten_25_58_47_xyz",
+  "Wratten_25_58_47_spectra",
   "dufaycolor_reseau_by_dufaycolor_manual",
   "dufaycolor_reseau_by_color_cinematography_xyY",
   "dufaycolor_reseau_by_color_cinematography_xyY_correctedY",
@@ -114,6 +116,21 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 				   0.182, 0.747,
 				   0.151, 0.041);
 	  break;
+	}
+      case render_parameters::color_model_wratten_25_58_47_xyz:
+	{
+	  /* Color Cinematography table page 158; CIE illuminant C. */
+	  color_matrix m (0.3028, 0.0891,  0.0862, 0,
+			  0.1425, 0.2451,  0.0240, 0,
+			  0.0001, 0.0219,  0.4730, 0,
+			  0, 0, 0, 1);
+	  dyes = m;
+	  break;
+	}
+      case render_parameters::color_model_wratten_25_58_47_spectra:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_dyes_to_wratten_25_58_47 ();
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:

@@ -93,11 +93,12 @@ public:
   bool is_linear ();
   color_matrix xyz_matrix ();
 
-  void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END);
+  void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
+  void set_dyes_to_wratten_25_58_47 ();
 
   private:
     static const bool debug = false;

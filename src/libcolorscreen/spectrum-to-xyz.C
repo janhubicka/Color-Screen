@@ -748,9 +748,10 @@ print_transmitance_spectrum (FILE * out, const spectrum spec, int start = SPECTR
 }
 
 static void
-print_absorbance_spectrum (FILE * out, const spectrum spec)
+print_absorbance_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_START, int end = SPECTRUM_END)
 {
   for (int i = 0; i < SPECTRUM_SIZE; i++)
+    if (i * SPECTRUM_STEP + SPECTRUM_START >= start && i * SPECTRUM_STEP + SPECTRUM_START <= end)
     fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START,
 	     transmitance_to_absorbance (spec[i]));
 }
@@ -2689,6 +2690,7 @@ const static luminosity_t malachite_green_absorption[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0
 #else
+#if 0
   5718.3, 6107.2, 5958.5, 6419.2, 6894.4, 6744.7, 7087.9, 7171.0, 7360.3, 7921.8,
   8130.9, 8327.4, 8594.6, 8812.0, 9259.1, 9251.9, 10035, 10380, 10664, 11157,
   11011, 11191, 11753, 11820, 12389, 12781, 13097, 13334, 13612, 13837,
@@ -2730,6 +2732,17 @@ const static luminosity_t malachite_green_absorption[] = {
   704.00, 166.38, 376.44, 537.62, 120.63, 487.71, 376.44, 327.56, 640.57, 894.30,
   /*-21.838*/0, 350.44, 438.83, 370.20, 493.95, 605.21, 370.20, 354.60, 363.96, /*-88.390*/0,
   612.49
+#else
+  5714.710449, 6882.785156, 8064.250000, 9556.415039, 11162.849609, 12651.099609, 14063.299805, 15344.900391, 16374.000000, 16848.199219, 
+  16122.599609, 14301.549805, 11657.049805, 8980.445312, 6529.435059, 4758.515137, 3444.159912, 2746.590088, 2446.639893, 2309.064941, 
+  2464.064941, 2643.600098, 2823.439941, 3214.024902, 3654.260010, 4145.814941, 4852.984863, 5593.334961, 6596.870117, 7599.415039, 
+  8862.839844, 10317.500000, 12109.099609, 14307.200195, 16943.949219, 20061.400391, 23428.849609, 26756.599609, 30044.449219, 33338.601562, 
+  36689.449219, 40676.750000, 45561.800781, 51820.949219, 59052.500000, 66234.601562, 72624.851562, 76337.898438, 76083.101562, 71255.148438, 
+  62538.148438, 51596.800781, 40586.000000, 31159.900391, 23039.500000, 16792.349609, 11849.509766, 8251.544922, 5805.365234, 4006.100098, 
+  2770.989990, 2101.284912, 1626.385010, 1260.034058, 1003.224976, 848.287476, 738.367004, 616.599487, 585.451965, 563.359009, 
+  517.446472, 468.053009, 438.311493, 350.077850, 422.556702, 443.668243, 408.154938, 382.989410, 372.640289, 285.500000, 
+  287.421448
+#endif
 #endif
 };
 
@@ -2737,6 +2750,7 @@ const static luminosity_t malachite_green_absorption[] = {
    https://www.photochemcad.com/databases/common-compounds/arylmethane-dyes/auramine-o
    380...600 step 1 extended to 380...780.  */
 const static luminosity_t auramine_absorption[] = {
+#if 0
   9025.9, 8841.9, 8713.2, 8650.5, 8552.2, 8563.0, 8652.6, 8787.3, 8880.4, 9083.6,
   9274.0, 9558.3, 9793.7, 10107, 10518, 10831, 11352, 11743, 12169, 12564,
   13001, 13391, 13833, 14373, 14837, 15312, 15771, 16278, 16760, 17332,
@@ -2779,12 +2793,23 @@ const static luminosity_t auramine_absorption[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+#endif
+  9070.205078, 8657.660156, 9303.535156, 10857.150391, 12929.549805, 15225.599609, 17700.800781, 20127.150391, 22403.550781, 24155.949219, 
+  25057.150391, 24937.900391, 23739.750000, 21656.050781, 18725.250000, 15412.400391, 11922.049805, 8683.285156, 6045.535156, 3987.445068, 
+  2521.854980, 1576.045044, 946.416016, 584.485474, 347.091492, 224.826004, 151.973251, 124.607155, 107.565048, 84.402748, 
+  79.390549, 71.909500, 72.717453, 64.016800, 60.051800, 63.489799, 64.031548, 68.086601, 72.403748, 85.249352, 
+  84.987198, 86.827301, 82.742348, 76.832649, 66.079636, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000
 };
 
 /* Crystal violet
    https://www.photochemcad.com/databases/common-compounds/arylmethane-dyes/crystal-violet
    380...700 step 1 extended to 380...780.  */
 const static luminosity_t crystal_violet_absorption[] = {
+#if 0
 1227.6, 1267.8, 971.31, 1084.2, 1067.1, 909.08, 897.49, 754.72, 691.88, 658.32,
 718.11, 810.85, 780.35, 605.24, 617.44, 716.28, 682.12, 668.08, 535.08, 748.62,
 557.65, 664.42, 705.30, 623.54, 628.43, 553.99, 600.97, 667.47, 639.41, 645.51,
@@ -2827,11 +2852,22 @@ const static luminosity_t crystal_violet_absorption[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+#endif
+  1235.365845, 933.183472, 668.357483, 660.151489, 621.073486, 619.455994, 641.633484, 676.014526, 747.124023, 891.176514, 
+  1048.065552, 1300.500000, 1595.984985, 1974.510010, 2446.314941, 3073.139893, 3776.560059, 4657.365234, 5670.160156, 6934.430176, 
+  8454.764648, 10128.695312, 12149.400391, 14342.250000, 16979.900391, 20113.099609, 23626.800781, 27699.699219, 32085.000000, 36463.398438, 
+  40730.500000, 44567.398438, 47733.101562, 50296.898438, 52000.550781, 53479.699219, 55006.050781, 57069.449219, 60310.148438, 64409.550781, 
+  69289.148438, 73673.546875, 75493.046875, 73375.500000, 66916.000000, 57560.300781, 46456.000000, 35952.648438, 26284.550781, 18433.800781, 
+  12697.049805, 8489.924805, 5690.850098, 3783.590088, 2483.495117, 1663.650024, 1077.110962, 702.646484, 432.394012, 318.666992, 
+  244.475647, 172.238342, 127.698601, 98.900139, 48.088692, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000
 };
 /* Methylene blue
    https://www.photochemcad.com/databases/common-compounds/acridines/methylene-blue
    380...780 step 1.  */
 const static luminosity_t methylene_blue_absorption[] = {
+#if 0
 413.20, 428.39, 443.45, 453.64, 477.94, 486.93, 517.16, 527.92, 512.36, 527.49,
 504.37, 513.31, 498.06, 473.54, 452.46, 411.32, 390.06, 360.10, 316.29, 292.16,
 253.19, 230.06, 213.35, 194.98, 179.79, 164.27, 153.26, 135.53, 130.61, 118.77,
@@ -2873,11 +2909,22 @@ const static luminosity_t methylene_blue_absorption[] = {
 16.097, 21.614, 40.706, 5.6204, 25.023, 25.519, 21.386, 13.369, 22.048, 9.8150,
 17.130, 17.894, 27.544, 24.362, 25.602, 24.486, 17.150, 19.671, 22.936, 16.262,
 15.621
+#endif
+  416.822021, 492.717987, 511.117981, 417.496002, 261.010010, 165.565994, 125.589996, 118.251999, 135.619995, 163.496002, 
+  196.804001, 246.472000, 303.605988, 368.895996, 450.838013, 531.005981, 602.890015, 670.078003, 769.612000, 850.000000, 
+  927.669983, 996.997986, 1039.859985, 1014.557983, 967.929993, 903.445984, 884.210022, 897.752014, 943.114014, 1027.265991, 
+  1167.739990, 1359.079956, 1631.200073, 1979.179932, 2398.520020, 2879.939941, 3408.239990, 4043.919922, 4785.799805, 5726.839844, 
+  6932.060059, 8406.700195, 10200.860352, 12137.000000, 13827.599609, 14999.000000, 15777.000000, 16427.400391, 17354.000000, 18976.400391, 
+  21592.599609, 24941.199219, 28790.800781, 33072.199219, 37579.000000, 40303.398438, 37675.398438, 30022.400391, 20697.400391, 13173.400391, 
+  8128.959961, 4858.799805, 2771.820068, 1513.699951, 821.511963, 460.062012, 266.532013, 150.904007, 101.571999, 70.424194, 
+  49.140999, 34.718201, 30.912201, 31.627001, 27.825001, 24.366199, 20.560001, 18.183479, 18.886200, 22.254200, 
+  19.956400
 };
 /* Rhodamine B
    https://www.photochemcad.com/databases/common-compounds/xanthenes/rhodamine-b
    380...780 step 1.  */
 const static luminosity_t  rhodamine_b_absorption[] = {
+#if 0
 2983.4, 3450.8, 3004.8, 2876.1, 3298.9, 3221.1, 3161.2, 3625.1, 3444.6, 3370.4,
 3557.2, 3697.5, 3411.5, 3428.5, 3520.5, 3265.8, 3659.9, 3627.8, 3495.5, 3658.2,
 3534.8, 3210.4, 3298.0, 3477.6, 3216.6, 3286.4, 3287.3, 3095.1, 3063.8, 3025.4,
@@ -2921,7 +2968,119 @@ const static luminosity_t  rhodamine_b_absorption[] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#endif
+  3156.336914, 3252.969971, 3441.300049, 3501.310059, 3423.669922, 3241.004883, 3140.139893, 2984.225098, 2583.514893, 2081.689941, 
+  1545.214966, 1211.983521, 1084.613525, 1209.706543, 1494.959961, 1990.369995, 2837.600098, 3980.445068, 5217.240234, 6819.115234, 
+  8809.570312, 11587.700195, 15590.900391, 20672.900391, 26503.599609, 31867.199219, 36139.101562, 40927.398438, 48158.050781, 59408.398438, 
+  74852.101562, 90990.296875, 103044.648438, 103682.203125, 90223.500000, 66902.703125, 42872.398438, 24423.400391, 12112.785156, 5512.529785, 
+  2178.935059, 698.428528, 154.039246, 31.907211, 51.212009, 10.501052, 74.048698, 117.038101, 92.102478, 116.547104, 
+  78.113998, 85.488548, 106.536140, 56.307148, 75.791481, 96.347198, 76.595177, 107.877327, 81.600075, 108.905434, 
+  93.934601, 80.528145, 132.353455, 88.571838, 67.033180, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 
+  0.000000
 };
+
+/* Table 25 of COlor Cinematography book, page 159.  */
+/* Transmission percents.  */
+/* 400 to 700, step 10  */
+const static luminosity_t  wratten_filter_red_25[] = {
+  /* 400 */ 0,
+  /* 410 */ 0,
+  /* 420 */ 0,
+  /* 430 */ 0,
+  /* 440 */ 0,
+  /* 450 */ 0,
+  /* 460 */ 0,
+  /* 470 */ 0,
+  /* 480 */ 0,
+  /* 490 */ 0,
+  /* 500 */ 0,
+  /* 510 */ 0,
+  /* 520 */ 0,
+  /* 530 */ 0,
+  /* 540 */ 0,
+  /* 550 */ 0,
+  /* 560 */ 0,
+  /* 570 */ 0,
+  /* 580 */ 0.16,
+  /* 590 */ 10.2,
+  /* 600 */ 50.1,
+  /* 610 */ 70.0,
+  /* 620 */ 80.5,
+  /* 630 */ 84.0,
+  /* 640 */ 85.5,
+  /* 650 */ 87.0,
+  /* 660 */ 87.0,
+  /* 670 */ 87.0,
+  /* 680 */ 87.0,
+  /* 690 */ 87.0,
+  /* 700 */ 87.0};
+
+const static luminosity_t  wratten_filter_green_58[] = {
+  /* 400 */ 0,
+  /* 410 */ 0,
+  /* 420 */ 0,
+  /* 430 */ 0,
+  /* 440 */ 0,
+  /* 450 */ 0,
+  /* 460 */ 0,
+  /* 470 */ 0,
+  /* 480 */ 1.97,
+  /* 490 */ 11.5,
+  /* 500 */ 30.3,
+  /* 510 */ 50.1,
+  /* 520 */ 60.2,
+  /* 530 */ 54.7,
+  /* 540 */ 39.0,
+  /* 550 */ 30.2,
+  /* 560 */ 25.1,
+  /* 570 */ 17.0,
+  /* 580 */ 10.0,
+  /* 590 */ 5.63,
+  /* 600 */ 2.82,
+  /* 610 */ 1.35,
+  /* 620 */ 0.57,
+  /* 630 */ 0.21,
+  /* 640 */ 0,
+  /* 650 */ 0,
+  /* 660 */ 0,
+  /* 670 */ 0,
+  /* 680 */ 0,
+  /* 690 */ 0.1,
+  /* 700 */ 1.97};
+
+const static luminosity_t  wratten_filter_blue_47[] = {
+  /* 400 */ 25.1,
+  /* 410 */ 35.4,
+  /* 420 */ 49.0,
+  /* 430 */ 49.5,
+  /* 440 */ 48.0,
+  /* 450 */ 47.8,
+  /* 460 */ 43.7,
+  /* 470 */ 37.4,
+  /* 480 */ 30.3,
+  /* 490 */ 21.8,
+  /* 500 */ 12.5,
+  /* 510 */ 5.42,
+  /* 520 */ 1.30,
+  /* 530 */ 0.15,
+  /* 540 */ 0,
+  /* 550 */ 0,
+  /* 560 */ 0,
+  /* 570 */ 0,
+  /* 580 */ 0,
+  /* 590 */ 0,
+  /* 600 */ 0,
+  /* 610 */ 0,
+  /* 620 */ 0,
+  /* 630 */ 0,
+  /* 640 */ 0,
+  /* 650 */ 0,
+  /* 660 */ 0,
+  /* 670 */ 0,
+  /* 680 */ 0,
+  /* 690 */ 0,
+  /* 700 */ 0};
 
 /* Process chart with regular step to a spectrum.
    cubically interpolate for missing data.  */
@@ -4364,24 +4523,33 @@ dufaycolor_correction_matrix ()
   return m1;
 }
 void
-spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const char *blues, const char *backlights, int start, int end)
+spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const char *blues, const char *backlights, int start, int end, bool absorbance)
 {
   if (reds)
     {
       FILE *f = fopen (reds, "wt");
-      print_transmitance_spectrum (f, red, start, end);
+      if (absorbance)
+        print_absorbance_spectrum (f, red, start, end);
+      else
+        print_transmitance_spectrum (f, red, start, end);
       fclose (f);
     }
   if (greens)
     {
       FILE *f = fopen (greens, "wt");
-      print_transmitance_spectrum (f, green, start, end);
+      if (absorbance)
+        print_absorbance_spectrum (f, green, start, end);
+      else
+        print_transmitance_spectrum (f, green, start, end);
       fclose (f);
     }
   if (blues)
     {
       FILE *f = fopen (blues, "wt");
-      print_transmitance_spectrum (f, blue, start, end);
+      if (absorbance)
+        print_absorbance_spectrum (f, blue, start, end);
+      else
+        print_transmitance_spectrum (f, blue, start, end);
       fclose (f);
     }
   if (backlights)
@@ -4391,6 +4559,9 @@ spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const
       fclose (f);
     }
 }
+
+#define NORM 1000
+#define SCALE 10
 void
 spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
 {
@@ -4399,12 +4570,12 @@ spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
   static spectrum rhodamine_b;
   if (!initialized)
     {
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, 100);
-      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, 100);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
+      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, NORM);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    red[i] = pow (rhodamine_b[i], d1/1000) * pow (auramine[i], d2/1000);
+    red[i] = pow (rhodamine_b[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
 }
 
 void
@@ -4416,13 +4587,13 @@ spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 100);
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, 100);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 100);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    green[i] = pow (methylene_blue[i], d1/1000) * pow (auramine[i], d2/1000);
+    green[i] = pow (methylene_blue[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
 }
 
 void
@@ -4434,11 +4605,19 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
   static bool initialized;
   if (!initialized)
     {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, 100);
-      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, 100);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, 100);
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
+      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, NORM);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
       initialized = true;
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/1000) * pow (violet[i], d2/1000);
+    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/SCALE) * pow (violet[i], d2/SCALE);
+}
+
+void
+spectrum_dyes_to_xyz::set_dyes_to_wratten_25_58_47 ()
+{
+  compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25) / sizeof (luminosity_t), wratten_filter_red_25, false, 100);
+  compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58) / sizeof (luminosity_t), wratten_filter_green_58, false, 100);
+  compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47) / sizeof (luminosity_t), wratten_filter_blue_47, false, 100);
 }

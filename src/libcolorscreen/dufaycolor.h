@@ -106,7 +106,9 @@ public:
   {
     return ((xyz)red_dye * (red_size / screen_size)) + ((xyz)green_dye * (green_size / screen_size)) + ((xyz)blue_dye * (blue_size / screen_size));
   }
-  static void print_report ();
+  static void print_xyY_report ();
+  static void print_spectra_report ();
+  static void print_synthetic_dyes_report ();
   static void tiff_with_primaries (const char *, bool);
 };
 #endif

@@ -434,6 +434,71 @@ export_lcc (int argc, char **argv)
   delete cor;
 }
 
+void
+read_chemcad (int argc, char **argv)
+{
+  FILE *f;
+  spectrum s;
+  spectrum sum;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    s[i] = sum[i] = 0;
+  if (argc == 0)
+    f = stdin;
+  if (argc > 1)
+    print_help ();
+  if (argc == 1)
+    f = fopen (argv[0], "rt");
+  if (!f)
+    {
+      perror ("can not open input file");
+      exit (1);
+    }
+  while (getc (f) != '\n')
+    if (feof (f))
+      {
+        fprintf (stderr, "parse error\n");
+	exit (1);
+      }
+  while (!feof (f))
+    {
+      float b,v;
+      scanf ("%f %f\n",&b,&v);
+      //printf ("%f %f\n",b,v);
+      int band = nearest_int ((b - SPECTRUM_START) / SPECTRUM_STEP);
+      if (band >= 0 && band < SPECTRUM_SIZE)
+        {
+	  s[band] += v;
+	  sum[band]++;
+        }
+    }
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      float v = 0;
+      if (sum[i])
+	v = s[i] / sum[i];
+      if (!(i%10))
+	printf ("\n  ");
+      if (i != SPECTRUM_SIZE - 1)
+        printf ("%f, ", v);
+      else
+	printf ("%f\n", v);
+    }
+}
+void
+digital_laboratory (int argc, char **argv)
+{
+  if (argc != 1)
+    print_help ();
+  if (!strcmp (argv[0], "dufay-xyY"))
+    dufaycolor::print_xyY_report ();
+  if (!strcmp (argv[0], "dufay-spectra"))
+    dufaycolor::print_spectra_report ();
+  if (!strcmp (argv[0], "dufay-synthetic"))
+    dufaycolor::print_synthetic_dyes_report ();
+  else
+    print_help ();
+}
+
 int
 main (int argc, char **argv)
 {
@@ -446,8 +511,11 @@ main (int argc, char **argv)
     analyze_backlight (argc-2, argv+2);
   if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
-  if (!strcmp (argv[1], "digital-laboratory"))
-    dufaycolor::print_report ();
+  if (!strcmp (argv[1], "digital-laboratory")
+      || !strcmp (argv[1], "lab"))
+    digital_laboratory (argc-2, argv+2);
+  if (!strcmp (argv[1], "read-chemcad-spectra"))
+    read_chemcad (argc-2, argv+2);
   else
     print_help ();
   return 0;

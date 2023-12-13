@@ -103,6 +103,8 @@ struct DLL_PUBLIC render_parameters
       color_model_paget,
       color_model_miethe_goerz_reconstructed_wager,
       color_model_miethe_goerz_original_wager,
+      color_model_wratten_25_58_47_xyz,
+      color_model_wratten_25_58_47_spectra,
       color_model_dufay_manual,
       color_model_dufay_color_cinematography_xyY,
       color_model_dufay_color_cinematography_xyY_correctedY,
