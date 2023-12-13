@@ -109,6 +109,7 @@ public:
       struct xyz ret = { 0, 0, 0 };
       luminosity_t sum = 0;
       assert (observer == 1931 || observer == 1964);
+      //printf ("%i\n",observer);
       /* TODO: CIE recommends going by 1nm bands and interpolate.
 	 We can implement that easily if that makes difference.  */
       for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -117,11 +118,16 @@ public:
 	  ret.y += (observer == 1931 ? cie_cmf_y : cie_cmf1964_y)[i] * s[i] * backlight[i];
 	  ret.z += (observer == 1931 ? cie_cmf_z : cie_cmf1964_z)[i] * s[i] * backlight[i];
 	  sum += (observer == 1931 ? cie_cmf_y : cie_cmf1964_y)[i] * backlight[i];
+	  //printf ("x %f y %f z %f light %f data %f\n", cie_cmf_x[i], cie_cmf_y[i], cie_cmf_z[i], backlight[i], s[i]);
 	}
       luminosity_t scale = 1 / sum;
+      //printf ("scale %f ",scale);
+      ret.print (stdout);
       ret.x *= scale;
       ret.y *= scale;
       ret.z *= scale;
+      //printf ("scaled ",scale);
+      ret.print (stdout);
       /* Argyll scales by backlight.  */
       return ret;
     }

@@ -3016,6 +3016,40 @@ const static luminosity_t  wratten_filter_red_25[] = {
   /* 690 */ 87.0,
   /* 700 */ 87.0};
 
+// Table from Wratten light color filters, 1945 edition.
+const static luminosity_t  wratten_filter_red_25_kodak[] = {
+  /* 400 */ 0,
+  /* 410 */ 0,
+  /* 420 */ 0,
+  /* 430 */ 0,
+  /* 440 */ 0,
+  /* 450 */ 0,
+  /* 460 */ 0,
+  /* 470 */ 0,
+  /* 480 */ 0,
+  /* 490 */ 0,
+  /* 500 */ 0,
+  /* 510 */ 0,
+  /* 520 */ 0,
+  /* 530 */ 0,
+  /* 540 */ 0,
+  /* 550 */ 0,
+  /* 560 */ 0,
+  /* 570 */ 0,
+  /* 580 */ 0.16,
+  /* 590 */ 14.7,
+  /* 600 */ 54.8,
+  /* 610 */ 74.8,
+  /* 620 */ 83.1,
+  /* 630 */ 85.0,
+  /* 640 */ 86.3,
+  /* 650 */ 87.0,
+  /* 660 */ 87.6,
+  /* 670 */ 87.3,
+  /* 680 */ 87.7,
+  /* 690 */ 87.2,
+  /* 700 */ 87.5};
+
 const static luminosity_t  wratten_filter_green_58[] = {
   /* 400 */ 0,
   /* 410 */ 0,
@@ -3132,9 +3166,11 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
       else
 	s[i] =
 	  cubic_interpolate (data[ri - 1], data[ri], data[ri + 1],
-			     data[ri + 2], rp) * repnorm;
+			     data[ri + 2], rp);
       if (absorbance)
 	s[i] = absorbance_to_transmitance (s[i] * repnorm);
+      else
+	s[i] *= repnorm;
     }
 }
 
@@ -3755,7 +3791,7 @@ spectrum_dyes_to_xyz::set_il_B_backlight ()
 void
 spectrum_dyes_to_xyz::set_il_C_backlight ()
 {
-  compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_C, false);
+  compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false);
 }
 
 xyz
@@ -4617,7 +4653,7 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
 void
 spectrum_dyes_to_xyz::set_dyes_to_wratten_25_58_47 ()
 {
-  compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25) / sizeof (luminosity_t), wratten_filter_red_25, false, 100);
+  compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
   compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58) / sizeof (luminosity_t), wratten_filter_green_58, false, 100);
   compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47) / sizeof (luminosity_t), wratten_filter_blue_47, false, 100);
 }
