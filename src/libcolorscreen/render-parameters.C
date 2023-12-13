@@ -2,6 +2,7 @@
 #include "include/stitch.h"
 #include "icc.h"
 #include "dufaycolor.h"
+#include "wratten.h"
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
@@ -119,10 +120,9 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	}
       case render_parameters::color_model_wratten_25_58_47_xyz:
 	{
-	  /* Color Cinematography table page 158; CIE illuminant C. */
-	  color_matrix m (0.3028, 0.0891,  0.0862, 0,
-			  0.1425, 0.2451,  0.0240, 0,
-			  0.0001, 0.0219,  0.4730, 0,
+	  color_matrix m (wratten::filter_25_red.x, wratten::filter_58_green.x, wratten::filter_47_blue.x , 0,
+			  wratten::filter_25_red.y, wratten::filter_58_green.y, wratten::filter_47_blue.y , 0,
+			  wratten::filter_25_red.z, wratten::filter_58_green.z, wratten::filter_47_blue.z , 0,
 			  0, 0, 0, 1);
 	  dyes = m;
 	  break;

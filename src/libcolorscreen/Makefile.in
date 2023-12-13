@@ -160,7 +160,7 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-render-parameters.lo \
 	libcolorscreen_la-mapalloc.lo \
 	libcolorscreen_la-parse-captureone-lcc.lo \
-	libcolorscreen_la-dufaycolor.lo
+	libcolorscreen_la-dufaycolor.lo libcolorscreen_la-wratten.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -221,6 +221,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo \
 	./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo \
+	./$(DEPDIR)/libcolorscreen_la-wratten.Plo \
 	./$(DEPDIR)/matrix.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -408,7 +409,7 @@ include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h incl
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -553,6 +554,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-wratten.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -813,6 +815,13 @@ libcolorscreen_la-dufaycolor.lo: dufaycolor.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-dufaycolor.lo `test -f 'dufaycolor.C' || echo '$(srcdir)/'`dufaycolor.C
 
+libcolorscreen_la-wratten.lo: wratten.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-wratten.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-wratten.Tpo -c -o libcolorscreen_la-wratten.lo `test -f 'wratten.C' || echo '$(srcdir)/'`wratten.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-wratten.Tpo $(DEPDIR)/libcolorscreen_la-wratten.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='wratten.C' object='libcolorscreen_la-wratten.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-wratten.lo `test -f 'wratten.C' || echo '$(srcdir)/'`wratten.C
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1000,6 +1009,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -1079,6 +1089,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
 	-rm -f ./$(DEPDIR)/matrix.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

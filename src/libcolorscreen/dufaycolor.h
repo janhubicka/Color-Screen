@@ -111,4 +111,5 @@ public:
   static void print_synthetic_dyes_report ();
   static void tiff_with_primaries (const char *, bool);
 };
+void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename);
 #endif
