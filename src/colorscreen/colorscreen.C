@@ -1,6 +1,7 @@
 #include <sys/time.h>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/dufaycolor.h"
+#include "../libcolorscreen/wratten.h"
 
 static bool verbose = false;
 const char *binname;
@@ -489,12 +490,16 @@ digital_laboratory (int argc, char **argv)
 {
   if (argc != 1)
     print_help ();
-  if (!strcmp (argv[0], "dufay-xyY"))
+  else if (!strcmp (argv[0], "dufay-xyY"))
     dufaycolor::print_xyY_report ();
-  if (!strcmp (argv[0], "dufay-spectra"))
+  else if (!strcmp (argv[0], "dufay-spectra"))
     dufaycolor::print_spectra_report ();
-  if (!strcmp (argv[0], "dufay-synthetic"))
+  else if (!strcmp (argv[0], "dufay-synthetic"))
     dufaycolor::print_synthetic_dyes_report ();
+  else if (!strcmp (argv[0], "wratten-xyz"))
+    wratten::print_xyz_report ();
+  else if (!strcmp (argv[0], "wratten-spectra"))
+    wratten::print_spectra_report ();
   else
     print_help ();
 }
@@ -505,16 +510,16 @@ main (int argc, char **argv)
   binname = argv[0];
   if (argc == 1)
     print_help ();
-  if (!strcmp (argv[1], "render"))
+  else if (!strcmp (argv[1], "render"))
     render (argc-2, argv+2);
-  if (!strcmp (argv[1], "analyze-backlight"))
+  else if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
-  if (!strcmp (argv[1], "export-lcc"))
+  else if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
-  if (!strcmp (argv[1], "digital-laboratory")
-      || !strcmp (argv[1], "lab"))
+  else if (!strcmp (argv[1], "digital-laboratory")
+	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);
-  if (!strcmp (argv[1], "read-chemcad-spectra"))
+  else if (!strcmp (argv[1], "read-chemcad-spectra"))
     read_chemcad (argc-2, argv+2);
   else
     print_help ();

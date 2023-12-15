@@ -1535,7 +1535,7 @@ const static spectra_entry color_cinematography_dufay_red[] = {
 
 /* Charts published in book are ambigous on what represent green and blue sensitivity.
    consider both posibilities.  */
-#define MORE_RED_IN_BLUE
+#undef MORE_RED_IN_BLUE
 const static spectra_entry color_cinematography_dufay_green[] = {
   {400, 0},
   {440, 0},
@@ -3045,10 +3045,10 @@ const static luminosity_t  wratten_filter_red_25_kodak[] = {
   /* 640 */ 86.3,
   /* 650 */ 87.0,
   /* 660 */ 87.6,
-  /* 670 */ 87.3,
-  /* 680 */ 87.7,
-  /* 690 */ 87.2,
-  /* 700 */ 87.5};
+  /* 670 */ 88.3,
+  /* 680 */ 88.7,
+  /* 690 */ 89.2,
+  /* 700 */ 89.5};
 
 const static luminosity_t  wratten_filter_green_58[] = {
   /* 400 */ 0,
@@ -3083,6 +3083,39 @@ const static luminosity_t  wratten_filter_green_58[] = {
   /* 690 */ 0.1,
   /* 700 */ 1.97};
 
+const static luminosity_t  wratten_filter_green_58_kodak[] = {
+  /* 400 */ 0,
+  /* 410 */ 0,
+  /* 420 */ 0,
+  /* 430 */ 0,
+  /* 440 */ 0,
+  /* 450 */ 0,
+  /* 460 */ 0,
+  /* 470 */ 0,
+  /* 480 */ 0.50,
+  /* 490 */ 3.94,
+  /* 500 */ 17.4,
+  /* 510 */ 40.7,
+  /* 520 */ 51.3,
+  /* 530 */ 52.0,
+  /* 540 */ 47.9,
+  /* 550 */ 39.8,
+  /* 560 */ 29.8,
+  /* 570 */ 19.5,
+  /* 580 */ 10.7,
+  /* 590 */ 5.4,
+  /* 600 */ 2.4,
+  /* 610 */ 1.2,
+  /* 620 */ 0.55,
+  /* 630 */ 0.24,
+  /* 640 */ 0,
+  /* 650 */ 0,
+  /* 660 */ 0,
+  /* 670 */ 0,
+  /* 680 */ 0.3,
+  /* 690 */ 1.0,
+  /* 700 */ 2.00};
+
 const static luminosity_t  wratten_filter_blue_47[] = {
   /* 400 */ 25.1,
   /* 410 */ 35.4,
@@ -3098,6 +3131,39 @@ const static luminosity_t  wratten_filter_blue_47[] = {
   /* 510 */ 5.42,
   /* 520 */ 1.30,
   /* 530 */ 0.15,
+  /* 540 */ 0,
+  /* 550 */ 0,
+  /* 560 */ 0,
+  /* 570 */ 0,
+  /* 580 */ 0,
+  /* 590 */ 0,
+  /* 600 */ 0,
+  /* 610 */ 0,
+  /* 620 */ 0,
+  /* 630 */ 0,
+  /* 640 */ 0,
+  /* 650 */ 0,
+  /* 660 */ 0,
+  /* 670 */ 0,
+  /* 680 */ 0,
+  /* 690 */ 0,
+  /* 700 */ 0};
+
+const static luminosity_t  wratten_filter_blue_47_kodak[] = {
+  /* 400 */ 6.03,
+  /* 410 */ 16.2,
+  /* 420 */ 35.5,
+  /* 430 */ 49.0,
+  /* 440 */ 51.3,
+  /* 450 */ 49.0,
+  /* 460 */ 44.7,
+  /* 470 */ 36.3,
+  /* 480 */ 27.5,
+  /* 490 */ 18.6,
+  /* 500 */ 9.85,
+  /* 510 */ 4.17,
+  /* 520 */ 1.02,
+  /* 530 */ 0.16,
   /* 540 */ 0,
   /* 550 */ 0,
   /* 560 */ 0,
@@ -4596,11 +4662,13 @@ spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const
     }
 }
 
-#define NORM 1000
-#define SCALE 10
+#define NORM 100000
+#define SCALE 30
+#define NORM2 9000000
 void
 spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
 {
+#if 0
   static bool initialized;
   static spectrum auramine;
   static spectrum rhodamine_b;
@@ -4612,11 +4680,17 @@ spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     red[i] = pow (rhodamine_b[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
+#endif
+  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (rhodamine_b_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    red[i] = absorbance_to_transmitance (auramine_absorption[i] * d1/NORM2 + rhodamine_b_absorption[i] * d2/NORM2 );
 }
 
 void
 spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
 {
+#if 0
   static spectrum malachite;
   static spectrum auramine;
   static spectrum methylene_blue;
@@ -4630,11 +4704,17 @@ spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     green[i] = pow (methylene_blue[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
+#endif
+  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    green[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + auramine_absorption[i] * d2/NORM2);
 }
 
 void
 spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
 {
+#if 0
   static spectrum malachite;
   static spectrum violet;
   static spectrum methylene_blue;
@@ -4648,12 +4728,17 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
     }
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/SCALE) * pow (violet[i], d2/SCALE);
+#endif
+  assert (sizeof (crystal_violet_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    blue[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + crystal_violet_absorption[i] * d2/NORM2);
 }
 
 void
 spectrum_dyes_to_xyz::set_dyes_to_wratten_25_58_47 ()
 {
   compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
-  compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58) / sizeof (luminosity_t), wratten_filter_green_58, false, 100);
-  compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47) / sizeof (luminosity_t), wratten_filter_blue_47, false, 100);
+  compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
+  compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
 }

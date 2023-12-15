@@ -586,7 +586,9 @@ xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, l
 }
 
 luminosity_t deltaE(cie_lab c1, cie_lab c2);
+luminosity_t deltaE2000(cie_lab c1, cie_lab c2);
 luminosity_t deltaE(xyz c1, xyz c2);
+luminosity_t deltaE2000(xyz c1, xyz c2);
 luminosity_t dominant_wavelength (xy_t color, xy_t whitepoint = xy_t(0.33,0.33));
 xy_t find_best_whitepoint (xyz red, xyz green, xyz blue,
 			   luminosity_t red_dominating_wavelength,

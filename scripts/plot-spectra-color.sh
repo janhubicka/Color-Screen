@@ -1,6 +1,10 @@
 for name in $*
 do
 echo $name
+#min = 380
+#max = 780
+min=400
+max=720
 out=`basename $name .dat`.pdf
 out2=`basename $name .dat`.emf
 out3=`basename $name .dat`.svg
@@ -18,10 +22,10 @@ unset cblabel
 unset cbtics
 set colorbox horizontal user origin graph 0, 0 size graph 1, 1 back
 unset key
-set xtics out
+set xtics 400, 40
 set ytics out
 set grid x,y front
-set xrange [380:780]
+set xrange [$min:$max]
 
 plot FILE u 1:2 w filledcurves x2 lc rgb "white", \
        (NaN) w p palette   # just to get the colorbox
@@ -41,7 +45,7 @@ unset key
 set xtics out
 set ytics out
 set grid x,y front
-set xrange [380:780]
+set xrange [$min:$max]
 
 plot FILE u 1:2 w filledcurves x2 lc rgb "white", \
        (NaN) w p palette   # just to get the colorbox
@@ -61,7 +65,7 @@ unset key
 set xtics out
 set ytics out
 set grid x,y front
-set xrange [380:780]
+set xrange [$min:$max]
 
 plot FILE u 1:2 w filledcurves x2 lc rgb "white", \
        (NaN) w p palette   # just to get the colorbox
@@ -81,7 +85,7 @@ unset key
 set xtics out
 set ytics out
 set grid x,y front
-set xrange [380:780]
+set xrange [$min:$max]
 
 plot FILE u 1:2 w filledcurves x2 lc rgb "white", \
        (NaN) w p palette   # just to get the colorbox

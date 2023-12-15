@@ -122,12 +122,12 @@ public:
 	}
       luminosity_t scale = 1 / sum;
       //printf ("scale %f ",scale);
-      ret.print (stdout);
+      //ret.print (stdout);
       ret.x *= scale;
       ret.y *= scale;
       ret.z *= scale;
       //printf ("scaled ",scale);
-      ret.print (stdout);
+      //ret.print (stdout);
       /* Argyll scales by backlight.  */
       return ret;
     }
