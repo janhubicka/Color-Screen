@@ -3,6 +3,7 @@
 #include "icc.h"
 #include "dufaycolor.h"
 #include "wratten.h"
+#include "include/spectrum-to-xyz.h"
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",

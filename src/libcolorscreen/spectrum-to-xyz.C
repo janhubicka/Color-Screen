@@ -569,7 +569,43 @@ static xspect TLCI_2012_TCS[] = {
 			0.03133, 0.03122, 0.03115, 0.03112, 0.03122,
 			0.03126, 0.03122
 		}
-	}
+	},
+	/* 30 added backlight white.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 1, 1 }
+	},
+	/* 26 added gray.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 4/5.0, 4/5.0 }
+	},
+	/* 27 added gray.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 3/5.0, 3/5.0 }
+	},
+	/* 28 added gray.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 2/5.0, 2/5.0 }
+	},
+	/* 29 added gray.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 1/5.0, 1/5.0 }
+	},
+	/* 25 added black.  */
+	{
+		2, 380.0, 780.0,	/* 77 bands from 380 to 760 nm in 5nm steps */
+		1.0,				/* Scale factor */
+		{ 0, 0 }
+	},
 };
 
 /*    https://law.resource.org/pub/us/cfr/ibr/003/cie.15.2004.tables.xls
@@ -2634,6 +2670,56 @@ const static spectra_entry wedge_Neopan_100_acros_daylight_5400k [] = {
   {646.7136636534945, 0.7228640564195863},
   {647.9654613977984, 0.6462546830680491},
 };
+/* Response to mean moon sunlight (probably between 5000-5500k).  */
+const static spectra_entry ilford_manual_of_photography_panchromatic_emulsion_fig54 [] = {
+  {359.879849627755, 0.31079387699942806},
+  {363.25987243167424, 0.3300672108428788},
+  {367.36514775946716, 0.38326545697272607},
+  {371.5592925471522, 0.46359357433074244},
+  {376.206424720676, 0.5845300976672299},
+  {383.767734599828, 0.799717620411494},
+  {389.9581507736075, 1.0243269516350573},
+  {399.2441864669615, 1.3567151889388605},
+  {411.7937062152416, 1.9597603035362443},
+  {419.07853333028487, 2.202176441353002},
+  {427.4577713865918, 2.462399385762952},
+  {434.5558080627878, 2.7501224908172883},
+  {443.4723772052941, 3.1278670672808335},
+  {450.94111473039175, 3.3566565545808036},
+  {457.5034660511271, 3.508754989455376},
+  {466.6405631126249, 3.470080317094931},
+  {472.59481692539487, 3.2783938292999064},
+  {478.37256611643477, 3.0188703204539227},
+  {484.0655601744294, 2.686959345064354},
+  {488.7501327222596, 2.3960517510305515},
+  {494.34808583009186, 2.1048972973859374},
+  {500.2151159137085, 1.8679779002365802},
+  {508.2639735242129, 1.7436100283098153},
+  {516.6707775703937, 1.7006070841064744},
+  {524.8932597738354, 1.6757565499514655},
+  {532.74545256106, 1.7053138740192786},
+  {540.9638204376549, 1.7257209351796838},
+  {549.362395830142, 1.7732331816071785},
+  {559.0380582758933, 1.8385028627057025},
+  {569.2588690288529, 1.9353047447585308},
+  {577.6664959404031, 1.8832502814921082},
+  {586.079882909539, 1.7678351847841043},
+  {594.4920355806207, 1.6659973666707213},
+  {604.1796295742279, 1.6000200213545384},
+  {612.9505515463555, 1.5704956119015012},
+  {621.5346830796358, 1.5862781696860395},
+  {629.7575767157622, 1.556901875999488},
+  {638.1701408195288, 1.4505382983545658},
+  {645.8569376675097, 1.2900630940197928},
+  {652.6324111189122, 1.1072059516381216},
+  {659.9579700697393, 0.9015718958322623},
+  {666.5573503320963, 0.6463519728680875},
+  {672.0561481629194, 0.4412116362838461},
+  {678.2848275763747, 0.2449253310740378},
+  {685.7004902851478, 0.0528438679017178},
+  {693.4699851027507, 0},
+  {699.6817957761339, 0},
+};
 /* This optical absorption measurement of Malachite Green were made by
    R.-C. A. Fuh in the summer of 1995 using a Cary 3. The absorption values
    were collected using a spectral bandwidth of 1.0 nm, a signal averaging
@@ -3187,7 +3273,7 @@ const static luminosity_t  wratten_filter_blue_47_kodak[] = {
 
 static void
 compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
-		  const luminosity_t data[], bool absorbance, luminosity_t norm = 1)
+		  const luminosity_t data[], bool absorbance, luminosity_t norm = 1, bool limit_range = true)
 {
   luminosity_t step = (end - start) / (luminosity_t) (size - 1);
   luminosity_t repnorm = 1 / norm;
@@ -3207,7 +3293,7 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 	  rp += ri - 1;
 	  ri = 1;
 	  s[i] = data[1] + rp * (data[1] - data[0]);
-#if 1
+#if 0
 	  /* Just clamp when data are missing.  */
 	  if (p < start)
 	    {
@@ -3221,7 +3307,7 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 	  rp += ri - size + 2;
 	  ri = size - 2;
 	  s[i] = data[size - 2] + rp * (data[size - 1] - data[size - 2]);
-#if 1
+#if 0
 	  if (p > end)
 	    {
 	      s[i] = 0;
@@ -3237,6 +3323,10 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 	s[i] = absorbance_to_transmitance (s[i] * repnorm);
       else
 	s[i] *= repnorm;
+      if (limit_range && s[i] < 0)
+	s[i] = 0;
+      if (limit_range && s[i] > 1)
+	s[i] = 1;
     }
 }
 
@@ -3250,7 +3340,7 @@ compute_spectrum (spectrum s, const xspect &in)
    Since I am lazy use linear interpolation.  */
 
 void
-compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorbance = false, luminosity_t norm = 1, luminosity_t max_transmitance = -1, luminosity_t min_transmitance = -1)
+compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorbance = false, luminosity_t norm = 1, luminosity_t min_transmitance = -1, luminosity_t max_transmitance = -1)
 {
   /* Check that data are linearly ordered.  */
   luminosity_t repnorm = 1 / norm;
@@ -3286,9 +3376,9 @@ compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorba
       if (absorbance)
 	s[i] = absorbance_to_transmitance (s[i]);
       if (max_transmitance > 0 && s[i] > max_transmitance * repnorm)
-	      s[i] = max_transmitance * repnorm;
+        s[i] = max_transmitance * repnorm;
       if (min_transmitance >= 0 && s[i] < min_transmitance * repnorm)
-	      s[i] = min_transmitance * repnorm;
+        s[i] = min_transmitance * repnorm;
     }
 }
 
@@ -3554,9 +3644,9 @@ void
 spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement, luminosity_t age)
 {
   spectrum new_red, new_green, new_blue;
-  compute_spectrum (new_red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100);
-  compute_spectrum (new_green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100);
-  compute_spectrum (new_blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100);
+  compute_spectrum (new_red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
+  compute_spectrum (new_green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
+  compute_spectrum (new_blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
   if (debug)
     printf ("Setting dyes to dufay measurement %i\n", measurement);
   if (measurement == 0)
@@ -3613,9 +3703,9 @@ spectrum_dyes_to_xyz::set_dyes_to_dufay_manual ()
 void
 spectrum_dyes_to_xyz::set_dyes_to_dufay_color_cinematography ()
 {
-  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100);
-  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100);
-  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100);
+  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
+  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
+  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
 }
 
 void
@@ -3765,24 +3855,6 @@ spectrum_dyes_to_xyz::debug_write_spectra ()
   fclose (f);
 }
 
-color_matrix
-spectrum_dyes_to_xyz::xyz_matrix ()
-{
-	xyz r = dyes_rgb_to_xyz (1, 0, 0);
-	xyz g = dyes_rgb_to_xyz (0, 1, 0);
-	xyz b = dyes_rgb_to_xyz (0, 0, 1);
-#if 0
-	printf ("red %f %f %f\n",r.x, r.y, r.z);
-	printf ("green %f %f %f\n",g.x, g.y, g.z);
-	printf ("blue %f %f %f\n",b.x, b.y, b.z);
-#endif
-	color_matrix m (r.x, g.x, b.x, 0,
-			r.y, g.y, b.y, 0,
-			r.z, g.z, b.z, 0,
-			0  , 0  , 0  , 1);
-	return m;
-}
-
 bool
 spectrum_dyes_to_xyz::is_linear ()
 {
@@ -3879,45 +3951,6 @@ combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, c
   return ret;
 }
 
-/* Simulate density of recording BACKLIGHT filtred by FILTER1 and FILTER2
-   on film with sensitivity RESPONSE.
-
-   RESPONSE is not wedge histogram, but transmitance loss computed by
-   log_sensitivity_to_reversal_transmitance
-
-   BACKLIGHT may be NULL if film response is already relative to some backlight.
-   FILTER2 may be NULL if filter is missing.  */
-
-luminosity_t
-simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1 = NULL, luminosity_t *filter2 = NULL)
-{
-  luminosity_t sum = 0;
-  luminosity_t rsum = 0;
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    {
-      luminosity_t val = response[i];
-      assert (val >= 0);
-      if (backlight)
-	{
-	   assert (backlight[i]>0);
-	   val *= backlight[i];
-	}
-      rsum += val;
-      if (filter1)
-	{
-	  val *= filter1[i];
-	  assert (filter1[i] >= 0 && filter1[i] <= 1);
-	}
-      if (filter2)
-        {
-          assert (filter2[i] >= 0 && filter2[i] <= 1);
-	  val *= filter2[i];
-        }
-      sum += val;
-    }
-  return sum / rsum;
-}
-
 /* Wedge histograms seems to be log sensitivity.  Lets assume that it is base 10 logarithm.
    Sensitivity is the reciprocal of time needed to obtain given density.  For reversal film
    I assume that it is reciprocal of time needed to get maximal brightness.  So to translate
@@ -3937,6 +3970,96 @@ log_sensitivity_to_reversal_transmitance(spectrum response)
     else
       response[i]=0;
   }
+}
+void
+log2_sensitivity_to_reversal_transmitance(spectrum response)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+  {
+    if (response[i]>0)
+      response[i] = pow(2,response[i]);
+    else
+      response[i]=0;
+  }
+}
+
+void
+spectrum_dyes_to_xyz::set_response_to_neopan_100 ()
+{
+  spectrum dl;
+  daylight_il (dl, 5400);
+  compute_spectrum (film_response, sizeof (wedge_Neopan_100_acros_daylight_5400k) / sizeof (spectra_entry), wedge_Neopan_100_acros_daylight_5400k, false);
+  log_sensitivity_to_reversal_transmitance (film_response);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    if (dl[i])
+      film_response[i] /= dl[i];
+}
+
+void
+spectrum_dyes_to_xyz::set_response_to_ilford_panchromatic ()
+{
+  spectrum dl;
+  daylight_il (dl, 5400);
+  compute_spectrum (film_response, sizeof (ilford_manual_of_photography_panchromatic_emulsion_fig54) / sizeof (spectra_entry), ilford_manual_of_photography_panchromatic_emulsion_fig54, false);
+  //log2_sensitivity_to_reversal_transmitance (film_response);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    if (dl[i])
+      film_response[i] /= dl[i];
+}
+
+void
+spectrum_dyes_to_xyz::set_response_to_equal ()
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    film_response[i] = 1;
+}
+
+/* Simulate density of recording BACKLIGHT filtred by FILTER1 and FILTER2
+   on film with sensitivity RESPONSE.
+
+   RESPONSE is not wedge histogram, but transmitance loss computed by
+   log_sensitivity_to_reversal_transmitance
+
+   BACKLIGHT may be NULL if film response is already relative to some backlight.
+   FILTER2 may be NULL if filter is missing.  */
+
+static luminosity_t
+simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_t *filter1 = NULL, luminosity_t *filter2 = NULL)
+{
+  luminosity_t sum = 0;
+  luminosity_t rsum = 0;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      luminosity_t val = response[i];
+      if (val < 0)
+	 if (backlight[i] < 0)
+	   printf ("Negative response %i %f\n", i, response[i]);
+      assert (val >= 0);
+      if (backlight)
+	{
+	   if (backlight[i] < 0)
+	     printf ("Negative backlight %i %f\n", i, backlight[i]);
+	   assert (backlight[i]>0);
+	   val *= backlight[i];
+	}
+      rsum += val;
+      if (filter1)
+	{
+	  if (filter1[i] < 0 || filter1[i] > 1)
+	     printf ("Wrong filter1 %i %f\n", i, filter1[i]);
+	  assert (filter1[i] >= 0 && filter1[i] <= 1);
+	  val *= filter1[i];
+	}
+      if (filter2)
+        {
+	  if (filter2[i] < 0 || filter2[i] > 1)
+	     printf ("Wrong filter2 %i %f\n", i, filter2[i]);
+          assert (filter2[i] >= 0 && filter2[i] <= 1);
+	  val *= filter2[i];
+        }
+      sum += val;
+    }
+  return sum / rsum;
 }
 
 /* Increase/decrease concentration of filter S to reach luminosity Y.
@@ -3966,12 +4089,155 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
     s[i] = my_pow (s[i]/norm, bestc) * norm;
   return bestc;
 }
+
+rgbdata
+spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observer)
+{
+  xyz whitepoint = whitepoint_xyz (observer);
+  rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
+  rgbdata res =
+    {
+      simulated_response (backlight, film_response, red),
+      simulated_response (backlight, film_response, green),
+      simulated_response (backlight, film_response, blue)
+    };
+  return {white.red / res.red, white.green / res.green, white.blue / res.blue};
+}
+
+bool
+spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
+{
+  rgbdata res =
+    {
+      simulated_response (backlight, film_response, red),
+      simulated_response (backlight, film_response, green),
+      simulated_response (backlight, film_response, blue)
+    };
+  rgbdata scale = {1/res.red, 1/res.green, 1/res.blue};
+  fprintf (f, "CTI3\n\n");
+  fprintf (f, "DESCRIPTOR \"Colorscreen produced Argyll Calibration Target chart information 3\"\n");
+  fprintf (f, "ORIGINATOR \"Argyll target\"\n");
+  fprintf (f, "DEVICE_CLASS \"INPUT\"\n");
+  fprintf (f, "COLOR_REP \"XYZ_RGB\"\n\n");
+  fprintf (f, "NUMBER_OF_FIELDS 10\n");
+  fprintf (f, "BEGIN_DATA_FORMAT\n");
+  fprintf (f, "SAMPLE_ID XYZ_X XYZ_Y XYZ_Z RGB_R RGB_G RGB_B STDEV_R STDEV_G STDEV_B\n");
+  fprintf (f, "END_DATA_FORMAT\n\n");
+  fprintf (f, "NUMBER_OF_SETS 24\n");
+  fprintf (f, "BEGIN_DATA\n");
+
+  for (int y = 0; y < 4; y++)
+    {
+      for (int x = 0; x < 6; x++)
+	{
+	  xspect &xtile = TLCI_2012_TCS [y * 6 + x];
+	  spectrum tile;
+	  compute_spectrum (tile, xtile);
+	  xyz real_color = get_xyz_old_observer (backlight, tile);
+	  rgbdata color =
+	    {
+	      simulated_response (backlight, film_response, tile, red),
+	      simulated_response (backlight, film_response, tile, green),
+	      simulated_response (backlight, film_response, tile, blue)
+	    };
+	  color.red *= scale.red;
+	  color.green *= scale.green; 
+	  color.blue *= scale.blue;
+	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n",
+		   'A'+y, x+1,
+		   real_color.x * 100, real_color.y * 100, real_color.z * 100,
+		   color.red * 100, color.green * 100, color.blue * 100, 0.0, 0.0, 0.0);
+	}
+    }
+  fprintf (f, "END_DATA\n");
+  return true;
+}
+
+rgbdata
+spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
+{
+  return {simulated_response (backlight, film_response, red, s),
+	  simulated_response (backlight, film_response, green, s),
+	  simulated_response (backlight, film_response, blue, s)};
+}
+
+bool
+spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const char **error, bool white_balance)
+{
+  xyz whitepoint = whitepoint_xyz ();
+  rgbdata scale = determine_relative_patch_sizes_by_simulated_response ();
+  printf ("white balance  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
+  //scale = determine_patch_weights_by_simulated_response ();
+  if (white_balance)
+    scale = determine_patch_weights_by_simulated_response ();
+  else
+    {
+      rgbdata film_white = film_rgb_response (NULL);
+      luminosity_t sum = film_white.red + film_white.green + film_white.blue;
+      printf ("response %f %f %f %f\n", film_white.red, film_white.green, film_white.blue, sum);
+      scale = /*determine_relative_patch_sizes_by_whitepoint ();*/
+              xyz_to_dyes_rgb (whitepoint);
+      scale /= sum * 0.3;
+    }
+  printf ("RGB scales  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
+  color_matrix m = xyz_matrix ();
+
+  void *buffer;
+  size_t len = create_pro_photo_rgb_profile (&buffer, whitepoint);
+  tiff_writer_params par;
+  par.filename = filename;
+  par.width = 12;
+  par.height = 8;
+  par.depth = 32;
+  par.hdr = true;
+  par.icc_profile = buffer;
+  par.icc_profile_len = len;
+  tiff_writer tiff (par, error);
+  if (*error)
+    {
+      free (buffer);
+      return false;
+    }
+  for (int y = 0; y < 5; y++)
+    {
+      for (int d = 0; d < 2; d++)
+	{
+	  for (int x = 0; x < 6; x++)
+	    {
+	      xspect &xtile = TLCI_2012_TCS [y * 6 + x];
+	      spectrum tile;
+	      compute_spectrum (tile, xtile);
+	      xyz real_color = get_xyz_old_observer (backlight, tile);
+	      rgbdata color = film_rgb_response (tile);
+	      color.red *= scale.red;
+	      color.green *= scale.green; 
+	      color.blue *= scale.blue;
+	      xyz dufay_color (0,0,0);
+	      m.apply_to_rgb (color.red, color.green, color.blue, &dufay_color.x, &dufay_color.y, &dufay_color.z);
+	      //xyz dufay_color = dyes_rgb_to_xyz (color.red, color.green, color.blue);
+	      luminosity_t r,g,b;
+	      xyz_to_pro_photo_rgb (real_color.x, real_color.y, real_color.z, &r, &g, &b);
+	      tiff.put_hdr_pixel (x * 2, r, g, b);
+	      xyz_to_pro_photo_rgb (dufay_color.x, dufay_color.y, dufay_color.z, &r, &g, &b);
+	      tiff.put_hdr_pixel (x * 2 + 1, r, g, b);
+	    }
+	  if (!tiff.write_row ())
+	    {
+	      *error = "write error";
+	      free (buffer);
+	      return false;
+	    }
+	}
+    }
+  free (buffer);
+  return true;
+}
 color_matrix
 dufaycolor_correction_matrix ()
 {
-  const bool output_tiffs = true;
-  const bool output_spectra = true;
-  const bool verbose = true;
+  const bool output_tiffs = false;
+  const bool output_spectra = false;
+  const bool verbose = false;
   void *buffer;
   size_t len;
 
@@ -4479,105 +4745,7 @@ dufaycolor_correction_matrix ()
 
   spectrum checker_backlight;
   daylight_il (checker_backlight, 5400);
-  rgbdata dwhite2;
-  dwhite2.red   = simulated_response (checker_backlight, response, red);
-  dwhite2.green = simulated_response (checker_backlight, response, green);
-  dwhite2.blue  = simulated_response (checker_backlight, response, blue);
-  if (output_tiffs)
-    {
-      tiff_writer_params par;
-      color_matrix m (filter_red.x, filter_green.x, filter_blue.x, 0,
-		      filter_red.y, filter_green.y, filter_blue.y, 0,
-		      filter_red.z, filter_green.z, filter_blue.z, 0,
-		      0, 0, 0, 1);
-      xyz whitepp = combined_xyz (NULL, NULL, checker_backlight);
-      //srgb_to_xyz (1, 1, 1, &whitepp.x, &whitepp.y, &whitepp.z);
-      m.normalize_grayscale (whitepp.x, whitepp.y, whitepp.z);
-      par.filename="/tmp/f4.tif";
-      par.width = 12;
-      par.height = 8;
-      par.depth = 32;
-      par.hdr = true;
-      par.icc_profile = buffer;
-      par.icc_profile_len = len;
-      const char *error;
-      tiff_writer tiff (par, &error);
-      for (int y = 0; y < 4; y++)
-	{
-	  for (int d = 0; d < 2; d++)
-	    {
-	      for (int x = 0; x < 6; x++)
-		{
-		  xspect &xtile = TLCI_2012_TCS [y * 6 + x];
-		  spectrum tile;
-		  compute_spectrum (tile, xtile);
-		  xyz real_color = get_xyz_old_observer (checker_backlight, tile);
-		  rgbdata color =
-		    {
-		      simulated_response (checker_backlight, response, tile, red),
-		      simulated_response (checker_backlight, response, tile, green),
-		      simulated_response (checker_backlight, response, tile, blue)
-		    };
-		  //double mm = 3.8 * std::max (dwhite.red, std::max (dwhite.green, dwhite.blue)) / dglass;
-		  //double mm = 1/std::max (dwhite.red, std::max (dwhite.green, dwhite.blue));
-		  color.red /= dwhite2.red;
-		  color.green /= dwhite2.green; 
-		  color.blue /= dwhite2.blue;
-		  //color *= mm;
-		  //xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
-		  xyz dufay_color (0,0,0);
-		  m.apply_to_rgb (color.red, color.green, color.blue, &dufay_color.x, &dufay_color.y, &dufay_color.z);
-		  luminosity_t r,g,b;
-		  xyz_to_wide_gammut_rgb (real_color.x, real_color.y, real_color.z, &r, &g, &b);
-		  tiff.put_hdr_pixel (x * 2, r, g, b);
-		  xyz_to_wide_gammut_rgb (dufay_color.x, dufay_color.y, dufay_color.z, &r, &g, &b);
-		  tiff.put_hdr_pixel (x * 2 + 1, r, g, b);
-		}
-	      tiff.write_row ();
-	    }
-	}
-    }
-  FILE *f=fopen("/tmp/dufay.ti3","wt");
-  fprintf (f, "CTI3\n\n");
-  fprintf (f, "DESCRIPTOR \"Colorscreen produced Argyll Calibration Target chart information 3\"\n");
-  fprintf (f, "ORIGINATOR \"Argyll target\"\n");
-  fprintf (f, "DEVICE_CLASS \"INPUT\"\n");
-  fprintf (f, "COLOR_REP \"XYZ_RGB\"\n\n");
-  fprintf (f, "NUMBER_OF_FIELDS 10\n");
-  fprintf (f, "BEGIN_DATA_FORMAT\n");
-  fprintf (f, "SAMPLE_ID XYZ_X XYZ_Y XYZ_Z RGB_R RGB_G RGB_B STDEV_R STDEV_G STDEV_B\n");
-  fprintf (f, "END_DATA_FORMAT\n\n");
-  fprintf (f, "NUMBER_OF_SETS 24\n");
-  fprintf (f, "BEGIN_DATA\n");
 
-  for (int y = 0; y < 4; y++)
-    {
-      for (int x = 0; x < 6; x++)
-	{
-	  xspect &xtile = TLCI_2012_TCS [y * 6 + x];
-	  spectrum tile;
-	  compute_spectrum (tile, xtile);
-	  xyz real_color = get_xyz_old_observer (checker_backlight, tile);
-	  rgbdata color =
-	    {
-	      simulated_response (checker_backlight, response, tile, red),
-	      simulated_response (checker_backlight, response, tile, green),
-	      simulated_response (checker_backlight, response, tile, blue)
-	    };
-#if 0
-	  color.red /= dwhite.red / 2;
-	  color.green /= dwhite.green / 2;
-	  color.blue /= dwhite.blue / 2;
-	  xyz dufay_color = (filter_red * color.red) + (filter_green * color.green) + (filter_blue * color.blue);
-#endif
-	  color.red /= dwhite2.red;
-	  color.green /= dwhite2.green; 
-	  color.blue /= dwhite2.blue;
-	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n", 'A'+y,x+1, real_color.x * 100, real_color.y * 100, real_color.z * 100, color.red * 100, color.green * 100, color.blue * 100, 0.0, 0.0, 0.0);
-	}
-    }
-  fprintf (f, "END_DATA\n");
-  fclose (f);
 #if 0
   spectrum_dyes_to_xyz spec;
   spec.set_dyes_to_dufay_color_cinematography ();
@@ -4741,4 +4909,35 @@ spectrum_dyes_to_xyz::set_dyes_to_wratten_25_58_47 ()
   compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
   compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
   compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
+}
+/* Output gnuplottable data.  */
+static void
+print_response_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_START, int end = SPECTRUM_END)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    if (i * SPECTRUM_STEP + SPECTRUM_START >= start && i * SPECTRUM_STEP + SPECTRUM_START <= end)
+      {
+	if (spec[i])
+	  fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, log10 (spec[i]));
+	//assert (spec[i] > -100 && spec [i] < 100);
+      }
+}
+
+bool
+spectrum_dyes_to_xyz::write_film_response (const char *filename, bool absolute)
+{
+  FILE *f = fopen (filename, "wt");
+  if (!f)
+    return false;
+  if (absolute)
+    print_response_spectrum (f, film_response);
+  else
+    {
+      spectrum s;
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	s[i] = film_response[i] * backlight[i];
+      print_response_spectrum (f, s);
+    }
+  fclose (f);
+  return true;
 }

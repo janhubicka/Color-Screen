@@ -1,5 +1,6 @@
 #ifndef DUFAYCOLOR_H
 #define DUFAYCOLOR_H
+#include <cstdio>
 #include "include/base.h"
 #include "include/color.h"
 
@@ -106,10 +107,14 @@ public:
   {
     return ((xyz)red_dye * (red_size / screen_size)) + ((xyz)green_dye * (green_size / screen_size)) + ((xyz)blue_dye * (blue_size / screen_size));
   }
+  static void determine_relative_patch_sizes_by_whitepoint (luminosity_t *r, luminosity_t *g, luminosity_t *b);
+  static void determine_relative_patch_sizes_by_simulated_response (luminosity_t *r, luminosity_t *g, luminosity_t *b);
   static void print_xyY_report ();
   static void print_spectra_report ();
   static void print_synthetic_dyes_report ();
   static void tiff_with_primaries (const char *, bool);
+  static bool generate_ti3_file (FILE *);
+  static bool generate_color_target_tiff (const char *filename, const char **error);
 };
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename);
 #endif

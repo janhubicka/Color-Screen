@@ -1,6 +1,7 @@
 #include "lcms2.h"
 #include "include/color.h"
 #include "include/scr-to-img.h"
+#include "include/spectrum-to-xyz.h"
 color_matrix
 matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 		  luminosity_t gx, luminosity_t gy,

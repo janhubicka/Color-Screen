@@ -1,5 +1,6 @@
 #include <sys/time.h>
 #include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/spectrum-to-xyz.h"
 #include "../libcolorscreen/dufaycolor.h"
 #include "../libcolorscreen/wratten.h"
 
@@ -519,6 +520,30 @@ main (int argc, char **argv)
   else if (!strcmp (argv[1], "digital-laboratory")
 	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);
+  else if (!strcmp (argv[1], "dufay-ti3"))
+    {
+      if (argc != 3)
+	print_help ();
+      FILE *f = fopen (argv[2], "wt");
+      if (!f)
+	{
+	  perror (argv[2]);
+	  exit (1);
+	}
+      dufaycolor::generate_ti3_file (f);
+      fclose (f);
+    }
+  else if (!strcmp (argv[1], "dufay-color-target"))
+    {
+      if (argc != 3)
+	print_help ();
+      const char *error;
+      if (!dufaycolor::generate_color_target_tiff (argv[2], &error))
+	{
+	  fprintf (stderr, "%s\n", error);
+	  exit (1);
+	}
+    }
   else if (!strcmp (argv[1], "read-chemcad-spectra"))
     read_chemcad (argc-2, argv+2);
   else

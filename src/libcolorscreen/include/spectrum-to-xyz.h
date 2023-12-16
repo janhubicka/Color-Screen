@@ -27,8 +27,10 @@ public:
   }
   spectrum backlight;
   spectrum red, green, blue;
+  spectrum film_response;
   luminosity_t rscale, gscale, bscale;
   luminosity_t xscale, yscale, zscale;
+  rgbdata film_rgb_response (luminosity_t *s);
 
   void
   set_backlight (spectrum s)
@@ -80,6 +82,31 @@ public:
       ret.z *= zscale;
       return ret;
     }
+
+  /* Return color matrix converting dyes rgb to xyz.  */
+  color_matrix
+  xyz_matrix (int observer = default_observer)
+    {
+      xyz r = dyes_rgb_to_xyz (1, 0, 0, observer);
+      xyz g = dyes_rgb_to_xyz (0, 1, 0, observer);
+      xyz b = dyes_rgb_to_xyz (0, 0, 1, observer);
+      color_matrix m (r.x, g.x, b.x, 0,
+		      r.y, g.y, b.y, 0,
+		      r.z, g.z, b.z, 0,
+		      0  , 0  , 0  , 1);
+      return m;
+    }
+
+  /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
+     and backlight.  */
+  rgbdata
+  xyz_to_dyes_rgb (xyz color, int observer = default_observer)
+  {
+    color_matrix m = xyz_matrix (observer);
+    rgbdata ret;
+    m.normalize_grayscale (color.x, color.y, color.z, &ret.red, &ret.green, &ret.blue);
+    return ret;
+  }
   /* Return XYZ of white color seen through the dyes.  */
   xyz whitepoint_xyz (int observer = default_observer)
     {
@@ -91,14 +118,40 @@ public:
   static xyz temperature_xyz (luminosity_t temperature);
   /* Return true if dyes_rgb_to_xyz behaves linearly.  */
   bool is_linear ();
-  color_matrix xyz_matrix ();
 
   void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
+  bool write_film_response (const char *filename, bool absolute);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
   void set_dyes_to_wratten_25_58_47 ();
+  bool generate_simulated_argyll_ti3_file (FILE *f);
+  bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance);
+  void set_response_to_neopan_100 ();
+  void set_response_to_ilford_panchromatic ();
+  void set_response_to_equal ();
+
+  /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
+     and backlight.  */
+  rgbdata
+  determine_relative_patch_sizes_by_whitepoint (int observer = default_observer)
+  {
+    xyz whitepoint = whitepoint_xyz (observer);
+    rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
+    luminosity_t sum = white.red + white.green + white.blue;
+    return white / sum;
+  }
+  rgbdata
+  determine_patch_weights_by_simulated_response (int observer = default_observer);
+
+  rgbdata
+  determine_relative_patch_sizes_by_simulated_response (int observer = default_observer)
+  {
+    rgbdata ret = determine_patch_weights_by_simulated_response (observer);
+    luminosity_t sum = ret.red + ret.green + ret.blue;
+    return ret / sum;
+  }
 
   private:
     static const bool debug = false;

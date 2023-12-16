@@ -281,6 +281,107 @@ struct cie_lab
    cie_lab (xyz c);
 };
 
+/* Datastructure used to store information about dye luminosities.  */
+struct rgbdata
+{
+  luminosity_t red, green, blue;
+  rgbdata &operator+=(const luminosity_t other)
+  {
+    red += other;
+    green += other;
+    blue += other;
+    return *this;
+  }
+  rgbdata &operator-=(const luminosity_t other)
+  {
+    red -= other;
+    green -= other;
+    blue -= other;
+    return *this;
+  }
+  rgbdata &operator*=(const luminosity_t other)
+  {
+    red *= other;
+    green *= other;
+    blue *= other;
+    return *this;
+  }
+  rgbdata &operator/=(const luminosity_t other)
+  {
+    luminosity_t rother = 1 / other;
+    red *= rother;
+    green *= rother;
+    blue *= rother;
+    return *this;
+  }
+  rgbdata &operator+=(const rgbdata other)
+  {
+    red += other.red;
+    green += other.green;
+    blue += other.blue;
+    return *this;
+  }
+  rgbdata &operator-=(const rgbdata other)
+  {
+    red -= other.red;
+    green -= other.green;
+    blue -= other.blue;
+    return *this;
+  }
+  rgbdata &operator*=(const rgbdata other)
+  {
+    red *= other.red;
+    green *= other.green;
+    blue *= other.blue;
+    return *this;
+  }
+  luminosity_t &operator[](const int index)
+  {
+    switch (index)
+    {
+      case 0: return red;
+      case 1: return green;
+      case 2: return blue;
+      default: __builtin_unreachable ();
+    }
+  }
+};
+inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
+{
+  lhs += rhs;
+  return lhs;
+}
+inline rgbdata operator-(rgbdata lhs, luminosity_t rhs)
+{
+  lhs -= rhs;
+  return lhs;
+}
+inline rgbdata operator*(rgbdata lhs, luminosity_t rhs)
+{
+  lhs *= rhs;
+  return lhs;
+}
+inline rgbdata operator/(rgbdata lhs, luminosity_t rhs)
+{
+  lhs /= rhs;
+  return lhs;
+}
+inline rgbdata operator+(rgbdata lhs, rgbdata rhs)
+{
+  lhs += rhs;
+  return lhs;
+}
+inline rgbdata operator-(rgbdata lhs, rgbdata rhs)
+{
+  lhs -= rhs;
+  return lhs;
+}
+inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
+{
+  lhs *= rhs;
+  return lhs;
+}
+
 /* We handle special gama of -1 for sRGB color space curves.  */
 inline luminosity_t
 apply_gamma (luminosity_t val, luminosity_t gamma)

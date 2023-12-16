@@ -9,7 +9,6 @@
 #include "base.h"
 #include "imagedata.h"
 #include "color.h"
-#include "spectrum-to-xyz.h"
 #include "progress-info.h"
 #include "sensitivity.h"
 #include "backlight-correction.h"
@@ -301,94 +300,6 @@ struct DLL_PUBLIC render_parameters
 private:
   static const bool debug = false;
 };
-
-/* Datastructure used to store information about dye luminosities.  */
-struct rgbdata
-{
-  luminosity_t red, green, blue;
-  rgbdata &operator+=(const luminosity_t other)
-  {
-    red += other;
-    green += other;
-    blue += other;
-    return *this;
-  }
-  rgbdata &operator-=(const luminosity_t other)
-  {
-    red -= other;
-    green -= other;
-    blue -= other;
-    return *this;
-  }
-  rgbdata &operator*=(const luminosity_t other)
-  {
-    red *= other;
-    green *= other;
-    blue *= other;
-    return *this;
-  }
-  rgbdata &operator+=(const rgbdata other)
-  {
-    red += other.red;
-    green += other.green;
-    blue += other.blue;
-    return *this;
-  }
-  rgbdata &operator-=(const rgbdata other)
-  {
-    red -= other.red;
-    green -= other.green;
-    blue -= other.blue;
-    return *this;
-  }
-  rgbdata &operator*=(const rgbdata other)
-  {
-    red *= other.red;
-    green *= other.green;
-    blue *= other.blue;
-    return *this;
-  }
-  luminosity_t &operator[](const int index)
-  {
-    switch (index)
-    {
-      case 0: return red;
-      case 1: return green;
-      case 2: return blue;
-      default: __builtin_unreachable ();
-    }
-  }
-};
-inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
-{
-  lhs += rhs;
-  return lhs;
-}
-inline rgbdata operator-(rgbdata lhs, luminosity_t rhs)
-{
-  lhs -= rhs;
-  return lhs;
-}
-inline rgbdata operator*(rgbdata lhs, luminosity_t rhs)
-{
-  lhs *= rhs;
-  return lhs;
-}
-inline rgbdata operator+(rgbdata lhs, rgbdata rhs)
-{
-  lhs += rhs;
-  return lhs;
-}
-inline rgbdata operator-(rgbdata lhs, rgbdata rhs)
-{
-  lhs -= rhs;
-  return lhs;
-}
-inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
-{
-  lhs *= rhs;
-  return lhs;
-}
 
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */

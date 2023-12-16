@@ -5,6 +5,7 @@
 #include "gaussian-blur.h"
 #include "sharpen.h"
 #include "mapalloc.h"
+#include "include/spectrum-to-xyz.h"
 
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;

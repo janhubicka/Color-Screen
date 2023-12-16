@@ -384,21 +384,27 @@ dufaycolor::print_synthetic_dyes_report ()
   luminosity_t best_green_d1=1000, best_green_d2=1000, best_green_l = 1;
   luminosity_t best_cgreen_d1=1000, best_cgreen_d2=1000, best_cgreen_l = 1;
   luminosity_t best_tgreen_d1=1000, best_tgreen_d2=1000, best_tgreen_l = 1;
+  luminosity_t best_sgreen_d1=1000, best_sgreen_d2=1000, best_sgreen_l = 1;
   luminosity_t best_blue_d1=1000, best_blue_d2=1000, best_blue_l = 1;
   luminosity_t best_cblue_d1=1000, best_cblue_d2=1000, best_cblue_l = 1;
   luminosity_t best_tblue_d1=1000, best_tblue_d2=1000, best_tblue_l = 1;
+  luminosity_t best_sblue_d1=1000, best_sblue_d2=1000, best_sblue_l = 1;
   luminosity_t best_red_d1=1000, best_red_d2=1000, best_red_l = 1;
   luminosity_t best_cred_d1=1000, best_cred_d2=1000, best_cred_l = 1;
   luminosity_t best_tred_d1=1000, best_tred_d2=1000, best_tred_l = 1;
+  luminosity_t best_sred_d1=1000, best_sred_d2=1000, best_sred_l = 1;
   xyz best_green (0,0,0);
   xyz best_cgreen (0,0,0);
   xyz best_tgreen (0,0,0);
+  xyz best_sgreen (0,0,0);
   xyz best_blue (0,0,0);
   xyz best_cblue (0,0,0);
   xyz best_tblue (0,0,0);
+  xyz best_sblue (0,0,0);
   xyz best_red (0,0,0);
   xyz best_cred (0,0,0);
   xyz best_tred (0,0,0);
+  xyz best_sred (0,0,0);
   spec.set_il_C_backlight ();
   spec.set_dyes_to_dufay_color_cinematography ();
   xyz target_red = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
@@ -538,4 +544,29 @@ dufaycolor::print_synthetic_dyes_report ()
   spec.synthetic_dufay_blue (best_tblue_d1, best_tblue_d2);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-spectra.dat", NULL, 400, 720);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-spectra.abs.txt", NULL, 400, 720, true);
+}
+
+bool
+dufaycolor::generate_ti3_file (FILE *f)
+{
+  spectrum_dyes_to_xyz spec;
+  spec.set_daylight_backlight (6500);
+  spec.set_dyes_to_dufay_color_cinematography ();
+  spec.set_response_to_ilford_panchromatic ();
+  //spec.set_response_to_equal ();
+  //spec.set_response_to_neopan_100 ();
+  return spec.generate_simulated_argyll_ti3_file (f);
+}
+bool
+dufaycolor::generate_color_target_tiff (const char *filename, const char **error)
+{
+  spectrum_dyes_to_xyz spec;
+  spec.set_daylight_backlight (6500);
+  spec.set_dyes_to_dufay_color_cinematography ();
+  //spec.set_response_to_ilford_panchromatic ();
+  spec.set_response_to_neopan_100 ();
+  //spec.set_response_to_equal ();
+  spec.write_film_response ("absolute-spectral-response.dat", true);
+  spec.write_film_response ("spectral-response.dat", false);
+  return spec.generate_color_target_tiff (filename, error, false);
 }
