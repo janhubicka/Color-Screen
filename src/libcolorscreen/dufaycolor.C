@@ -11,53 +11,15 @@ constexpr xyY dufaycolor::green_dye_color_cinematography_xyY;
 constexpr xyY dufaycolor::blue_dye_color_cinematography_xyY;
 //constexpr xyY dufaycolor::correctedY_blue_dye;
 
-void
+bool
 dufaycolor::tiff_with_primaries (const char *filename, bool corrected)
 {
-  void *buffer;
-  size_t len = create_wide_gammut_rgb_profile (&buffer);
-  tiff_writer_params par;
-  par.filename=filename;
-  par.width = par.height = 19;
-  par.height = 19;
-  par.height = 19;
-  par.depth = 32;
-  par.hdr = true;
-  par.icc_profile = buffer;
-  par.icc_profile_len = len;
-  const char *error;
-  tiff_writer tiff (par, &error);
-  luminosity_t r,g,b;
-  for (int i = 0; i < 19; i++)
-    {
-      for (int j = 0; j < 19; j++)
-	tiff.put_hdr_pixel (j, 0, 0, 0);
-      xyz f = corrected ? red_dye : red_dye_color_cinematography_xyY;
-      xyz white = (xyz)f * (red_size / screen_size);
-      xyz_to_wide_gammut_rgb (f.x, f.y, f.z, &r, &g, &b);
-      tiff.put_hdr_pixel (4, r, g, b);
-      tiff.put_hdr_pixel (5, r, g, b);
-      tiff.put_hdr_pixel (6, r, g, b);
-      f = corrected ? green_dye : green_dye_color_cinematography_xyY;
-      white = white + (xyz)f * (green_size / screen_size);
-      xyz_to_wide_gammut_rgb (f.x, f.y, f.z, &r, &g, &b);
-      tiff.put_hdr_pixel (8, r, g, b);
-      tiff.put_hdr_pixel (9, r, g, b);
-      tiff.put_hdr_pixel (10, r, g, b);
-      f = corrected ? blue_dye : blue_dye_color_cinematography_xyY;
-      white = white + (xyz)f * (blue_size / screen_size);
-      xyz_to_wide_gammut_rgb (f.x, f.y, f.z, &r, &g, &b);
-      tiff.put_hdr_pixel (12, r, g, b);
-      tiff.put_hdr_pixel (13, r, g, b);
-      tiff.put_hdr_pixel (14, r, g, b);
-      f = white;
-      xyz_to_wide_gammut_rgb (f.x, f.y, f.z, &r, &g, &b);
-      tiff.put_hdr_pixel (16, r, g, b);
-      tiff.put_hdr_pixel (17, r, g, b);
-      tiff.put_hdr_pixel (18, r, g, b);
-      tiff.write_row ();
-    }
-  free (buffer);
+  xyz red = corrected ? red_dye : red_dye_color_cinematography_xyY;
+  xyz green = corrected ? green_dye : green_dye_color_cinematography_xyY;
+  xyz blue = corrected ? blue_dye : blue_dye_color_cinematography_xyY;
+  return tiff_with_strips (filename, red, green, blue, (xyz){0, 0, 0},
+			   red * (red_size / screen_size) + green * (green_size / screen_size) + blue * (blue_size / screen_size));
+		       
 }
 
 static void
@@ -117,17 +79,22 @@ tiff_with_screen (const char *filename, coord_t red_strip_width, coord_t green_s
 	}
       tiff.write_row ();
     }
-  printf ("Intended average: ");
-  ((red * red_strip_width) + (green * (green_strip_width * (1-red_strip_width))) + (blue * ((1-red_strip_width)*(1-green_strip_width)))).print (stdout);
+  xyz iavg = ((red * red_strip_width) + (green * (green_strip_width * (1-red_strip_width))) + (blue * ((1-red_strip_width)*(1-green_strip_width))));
   avg.x /= width * height;
   avg.y /= width * height;
   avg.z /= width * height;
-  printf ("Average: ");
-  avg.print (stdout);
-  printf ("%f %f %f\n", avg2.red / (width * height), avg2.green / (width * height), avg2.blue / (width * height));
-  luminosity_t r, g, b;
-  xyz_to_pro_photo_rgb (avg.x, avg.y, avg.z, &r, &g, &b);
-  printf ("%f %f %f\n", r, g, b);
+  if (deltaE (iavg, avg)>1)
+    {
+      printf ("Mismatch between average and intended average (luminosity_t == float?)");
+      printf ("Intended average: ");
+      iavg.print (stdout);
+      printf ("Average: ");
+      avg.print (stdout);
+      printf ("Average prohoto colors %f %f %f\n", avg2.red / (width * height), avg2.green / (width * height), avg2.blue / (width * height));
+      luminosity_t r, g, b;
+      xyz_to_pro_photo_rgb (avg.x, avg.y, avg.z, &r, &g, &b);
+      printf ("Intended prophoto colors %f %f %f\n", r, g, b);
+    }
   free (buffer);
 }
 
@@ -176,7 +143,7 @@ report_xyz_dyes (const char *name, const char *fname, xyz my_red_dye, xyz my_gre
     tiff_with_screen (fname, rw/sum, gw/ (sum - rw),  my_red_dye, my_green_dye, my_blue_dye, white_xyz);
 }
 void
-report_illuminant (spectrum_dyes_to_xyz &spec, const char *name, const char *filename)
+report_illuminant (spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2)
 {
 
   xyz red_xyz = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
@@ -189,6 +156,15 @@ report_illuminant (spectrum_dyes_to_xyz &spec, const char *name, const char *fil
   if (!sim_white_xyz.almost_equal_p (dufay_white_xyz))
     printf ("Nonlinearity in observer model\n");
   report_xyz_dyes (name, filename, red_xyz, green_xyz, blue_xyz, dufay_white_xyz, white_xyz);
+  spec.set_response_to_neopan_100 ();
+  //spec.set_response_to_ilford_panchromatic ();
+  rgbdata scale = spec.determine_relative_patch_sizes_by_simulated_response ();
+  luminosity_t sum = scale.red + scale.green + scale.blue;
+  xyz screen = red_xyz * (scale.red/sum) + green_xyz * (scale.green / sum) + blue_xyz * (scale.blue / sum);
+  printf ("Optimal response %.1f%% green size %.1f%%, blue size %.1f%%;\n red strip width %.1f%%\n green strip width %.1f%%\n screen color", scale.red * 100 / sum, scale.green * 100 / sum, scale.blue * 100 / sum, scale.red*100/sum, scale.green * 100 / (sum - scale.red));
+  screen.print (stdout);
+  if (filename2)
+    tiff_with_screen (filename2, scale.red/sum, scale.green / (sum - scale.red), red_xyz, green_xyz, blue_xyz, white_xyz);
 }
 static void
 render_green_dyes (spectrum_dyes_to_xyz &spec, const char *filename)
@@ -352,15 +328,20 @@ dufaycolor::print_spectra_report ()
   spec.set_il_C_backlight ();
   spec.set_dyes_to_dufay_color_cinematography ();
   spec.set_il_A_backlight ();
-  report_illuminant (spec, "CIE A", "color-cinematography-spectra-ilA-screen.tif");
+  report_illuminant (spec, "CIE A", "color-cinematography-spectra-ilA-screen.tif", "color-cinematography-spectra-ilA-screen-resp.tif");
   spec.set_il_B_backlight ();
-  report_illuminant (spec, "CIE B", "color-cinematography-spectra-ilB-screen.tif");
+  report_illuminant (spec, "CIE B", "color-cinematography-spectra-ilB-screen.tif", "color-cinematography-spectra-ilB-screen-resp.tif");
   spec.set_il_C_backlight ();
-  report_illuminant (spec, "CIE C", "color-cinematography-spectra-ilC-screen.tif");
+  report_illuminant (spec, "CIE C", "color-cinematography-spectra-ilC-screen.tif", "color-cinematography-spectra-ilC-screen-resp.tif");
+  spec.set_daylight_backlight (5000);
+  report_illuminant (spec, "5000K", "color-cinematography-spectra-5000-screen.tif", "color-cinematography-spectra-5000-screen-resp.tif");
   spec.set_daylight_backlight (5500);
-  report_illuminant (spec, "5500K", "color-cinematography-spectra-5500-screen.tif");
+  report_illuminant (spec, "5500K", "color-cinematography-spectra-5500-screen.tif", "color-cinematography-spectra-5500-screen-resp.tif");
   spec.set_daylight_backlight (6500);
-  report_illuminant (spec, "6500K", "color-cinematography-spectra-6500-screen.tif");
+  report_illuminant (spec, "6500K", "color-cinematography-spectra-6500-screen.tif", "color-cinematography-spectra-6500-screen-resp.tif");
+  spec.tiff_with_primaries ("spec-d65-primaries.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
+  spec.tiff_with_overlapping_filters ("spec-d65-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
+  spec.tiff_with_overlapping_filters_response ("spec-d65-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.write_spectra ("dufay-red.dat", "dufay-green.dat", "dufay-blue.dat", NULL, 400, 720, false);
   spec.write_spectra ("dufay-red-absorbance.dat", "dufay-green-absorbance.dat", "dufay-blue-absorbance.dat", NULL, 400, 720, true);
   printf ("spectra by Color Cinematography saved to dufay-red.dat, dufay-green.dat and dufay-blue.dat\n");
@@ -550,7 +531,7 @@ bool
 dufaycolor::generate_ti3_file (FILE *f)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (6500);
+  spec.set_daylight_backlight (5000);
   spec.set_dyes_to_dufay_color_cinematography ();
   spec.set_response_to_ilford_panchromatic ();
   //spec.set_response_to_equal ();
@@ -561,12 +542,21 @@ bool
 dufaycolor::generate_color_target_tiff (const char *filename, const char **error)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (6500);
+  spec.set_daylight_backlight (5000);
   spec.set_dyes_to_dufay_color_cinematography ();
-  //spec.set_response_to_ilford_panchromatic ();
-  spec.set_response_to_neopan_100 ();
+  spec.set_response_to_ilford_panchromatic ();
+  //spec.set_response_to_neopan_100 ();
   //spec.set_response_to_equal ();
   spec.write_film_response ("absolute-spectral-response.dat", true);
   spec.write_film_response ("spectral-response.dat", false);
-  return spec.generate_color_target_tiff (filename, error, false);
+  return spec.generate_color_target_tiff (filename, error, true);
+}
+color_matrix
+dufaycolor_correction_matrix ()
+{
+  spectrum_dyes_to_xyz spec;
+  spec.set_daylight_backlight (6500);
+  spec.set_dyes_to_dufay_color_cinematography ();
+  spec.set_response_to_ilford_panchromatic ();
+  return spec.optimized_xyz_matrix ();
 }

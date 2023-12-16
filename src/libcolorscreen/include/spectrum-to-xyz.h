@@ -96,6 +96,7 @@ public:
 		      0  , 0  , 0  , 1);
       return m;
     }
+  color_matrix optimized_xyz_matrix ();
 
   /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
      and backlight.  */
@@ -153,6 +154,10 @@ public:
     return ret / sum;
   }
 
+  bool tiff_with_primaries (const char *filename, rgbdata white);
+  bool tiff_with_overlapping_filters (const char *filename, rgbdata white, const char *spectra_prefix);
+  bool tiff_with_overlapping_filters_response (const char *filename, rgbdata white);
+
   private:
     static const bool debug = false;
     /* Compute XYZ values.  */
@@ -190,5 +195,6 @@ color_matrix dufaycolor_correction_matrix ();
 void synthetic_dufay_red (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_green (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_blue (spectrum s, luminosity_t d1, luminosity_t d2);
+bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 
 #endif

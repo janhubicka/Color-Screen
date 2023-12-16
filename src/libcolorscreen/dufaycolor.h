@@ -9,9 +9,15 @@ class dufaycolor
 {
 public:
   /* Sizes in percent based on color cinematography screen.  */
+#if 0
   static constexpr const coord_t red_width = 35.7;
   static constexpr const coord_t green_blue_width = 100-red_width;
   static constexpr const coord_t green_height = 34.6;
+  static constexpr const coord_t blue_height = 100-green_height;
+#endif
+  static constexpr const coord_t red_width = 39.9;
+  static constexpr const coord_t green_blue_width = 100-red_width;
+  static constexpr const coord_t green_height = 60.3;
   static constexpr const coord_t blue_height = 100-green_height;
 
   /* These are measurements from color microscopic photograph of Dufaycolor reseau in Color Cinematography. */
@@ -112,9 +118,9 @@ public:
   static void print_xyY_report ();
   static void print_spectra_report ();
   static void print_synthetic_dyes_report ();
-  static void tiff_with_primaries (const char *, bool);
+  static bool tiff_with_primaries (const char *, bool);
   static bool generate_ti3_file (FILE *);
   static bool generate_color_target_tiff (const char *filename, const char **error);
 };
-void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename);
+void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);
 #endif
