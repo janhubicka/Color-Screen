@@ -7,6 +7,7 @@
 #include "dufaycolor.h"
 
 #define XSPECT_MAX_BANDS 77		/* Enough for 5nm from 380 to 760 */
+#define CLAMP -65535
 typedef struct {
 	int    spec_n;				/* Number of spectral bands, 0 if not valid */
 	luminosity_t spec_wl_short;		/* First reading wavelength in nm (shortest) */
@@ -615,7 +616,7 @@ static xspect TLCI_2012_TCS[] = {
 	/* 27 paprika.  */
 	{
 		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
-		12,			/* Scale factor.  */
+		50,			/* Scale factor.  */
 		{1.906835, 1.938999, 1.889491, 1.828394, 1.783566, 1.721460, 1.668272, 1.644804, 1.627632, 1.605743, 1.576768, 1.563838, 1.562760, 1.566539, 1.580958, 1.611949, 1.674046, 1.808827, 2.073560, 2.626282, 3.622958, 5.143784, 6.974639, 8.666264, 9.972983, 10.79505, 11.26441, 11.49941, 11.60748, 11.54034, 11.53023, 11.42045, 11.42383, 11.24037, 10.59212, 9.657345}
 	},
 #if 0
@@ -629,10 +630,41 @@ static xspect TLCI_2012_TCS[] = {
 	/* 26 lemon.  */
 	{
 		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
-		//40,			/* Scale factor.  */
-		100,			/* Scale factor.  */
+		50,			/* Scale factor.  */
+		//100,			/* Scale factor.  */
 		{3.289540, 3.257631, 3.111730, 3.164866, 3.303574, 3.359016, 3.472269, 3.842140, 4.332043, 4.857711, 5.375723, 6.292153, 8.312763, 11.80561, 16.82850, 21.85183, 25.46601, 27.60164, 28.77972, 30.41682, 31.65333, 32.49346, 33.22311, 33.65060, 33.85559, 33.83316, 33.91016, 34.05925, 34.24132, 34.14090, 34.30626, 34.51846, 34.94987, 34.89717, 33.79895, 31.98493}
 	},
+#if 0
+	/* 28 cameraback.  */
+	{
+		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
+		50,			/* Scale factor.  */
+		//100,			/* Scale factor.  */
+		{0.770405, 0.765791, 0.793526, 0.811531, 0.877929, 0.952244, 1.011818, 1.055026, 1.145591, 1.246965, 1.357303, 1.494646, 1.705871, 1.993166, 2.364005, 2.819393, 3.373086, 4.039928, 4.799112, 5.689959, 6.661289, 7.745727, 8.933324, 10.21910, 11.58699, 13.04088, 14.61079, 16.25992, 18.03257, 19.80185, 21.66983, 23.52554, 25.52820, 27.49729, 29.06403, 30.18065}
+	},
+#endif
+	/* 28 dufay red.  */
+	{
+		65, 400, 720,		/* 38 bands from 380 to 730 nm in 10nm steps */
+		1,			/* Scale factor.  */
+		//100,			/* Scale factor.  */
+		{0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.002696, 0.010334, 0.013055, 0.014041, 0.012851, 0.010568, 0.006736, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.004001, 0.013760, 0.033045, 0.083378, 0.190017, 0.367571, 0.516993, 0.618965, 0.689137, 0.732547, 0.755899, 0.756910, 0.745196, 0.729635, 0.717315, 0.712176, 0.718364, 0.728261, 0.737378, 0.746320, 0.753330, 0.759521, 0.764271, 0.768694, 0.770658, 0.772585, 0.773816, 0.774378, 0.774643, 0.774987, 0.774631, 0.774050, 0.772958}
+	},
+	/* 28 dufay green.  */
+	{
+		65, 400, 720,		/* 38 bands from 380 to 730 nm in 10nm steps */
+		1,			/* Scale factor.  */
+		//100,			/* Scale factor.  */
+		{ 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.002439, 0.020093, 0.059809, 0.145953, 0.256214, 0.386163, 0.505990, 0.594740, 0.663598, 0.709551, 0.743586, 0.756088, 0.752206, 0.731717, 0.695169, 0.651583, 0.604720, 0.553163, 0.496591, 0.435238, 0.369605, 0.309213, 0.253598, 0.206198, 0.164608, 0.131160, 0.104012, 0.079996, 0.061624, 0.046459, 0.033809, 0.024319, 0.016887, 0.011850, 0.008767, 0.005510, 0.002365, 0.001923, 0.001431, 0.001478, 0.005615, 0.012184, 0.020263, 0.031950, 0.047929, 0.071303, 0.104594, 0.131432, 0.154813, 0.170212 }
+	},
+	/* 28 dufay blue.  */
+	{
+		65, 400, 720,		/* 38 bands from 380 to 730 nm in 10nm steps */
+		1,			/* Scale factor.  */
+		//100,			/* Scale factor.  */
+		{ 0.832491, 0.832456, 0.831930, 0.831256, 0.829771, 0.827719, 0.824506, 0.819455, 0.812202, 0.801174, 0.787632, 0.770413, 0.749097, 0.722185, 0.687022, 0.644162, 0.598425, 0.548207, 0.494298, 0.435497, 0.374322, 0.311315, 0.242828, 0.180848, 0.127324, 0.083722, 0.051398, 0.029365, 0.016829, 0.008442, 0.002156, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000512, 0.003074, 0.005060, 0.008763, 0.013179, 0.019340, 0.027843, 0.041467, 0.063377, 0.096691, 0.144813, 0.212883, 0.294723, 0.398689, 0.511248, 0.610764, 0.701393, 0.780466, 0.850278, 0.910583, 0.958122}
+	},
+#if 0
 	/* 26 apple - red side.  */
 	{
 		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
@@ -654,13 +686,7 @@ static xspect TLCI_2012_TCS[] = {
 		100,			/* Scale factor.  */
 		{22.33790, 23.18203, 22.87664, 22.51028, 22.86318, 23.18963, 23.67381, 24.72237, 25.90513, 26.54361, 26.78424, 27.59191, 30.46119, 34.59954, 38.69026, 41.35623, 42.38198, 42.54165, 42.20121, 41.80285, 40.99451, 40.38363, 40.04041, 39.51755, 38.75554, 38.15305, 36.91506, 34.75365, 33.19346, 31.01460, 31.57473, 37.57588, 43.73461, 46.06924, 45.86260, 44.34373}
 	},
-	/* 28 cameraback.  */
-	{
-		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
-		//40,			/* Scale factor.  */
-		100,			/* Scale factor.  */
-		{0.770405, 0.765791, 0.793526, 0.811531, 0.877929, 0.952244, 1.011818, 1.055026, 1.145591, 1.246965, 1.357303, 1.494646, 1.705871, 1.993166, 2.364005, 2.819393, 3.373086, 4.039928, 4.799112, 5.689959, 6.661289, 7.745727, 8.933324, 10.21910, 11.58699, 13.04088, 14.61079, 16.25992, 18.03257, 19.80185, 21.66983, 23.52554, 25.52820, 27.49729, 29.06403, 30.18065}
-	},
+#endif
 
 };
 
@@ -2776,6 +2802,209 @@ const static spectra_entry ilford_manual_of_photography_panchromatic_emulsion_fi
   {693.4699851027507, 0},
   {699.6817957761339, 0},
 };
+
+/* Ilford fp4 equal energy spectral sensitivity. (relative log sensitivity)  */
+const static spectra_entry ilford_fp4_absolute[] = {
+  {351.6820562682886, 1.3045820482561394},
+  {353.9149734707438, 1.3033155303535586},
+  {356.83309935292294, 1.301914153848439},
+  {359.3599128953425, 1.3019737953690154},
+  {361.9904098929244, 1.2985745648941263},
+  {364.6206715519246, 1.29582957567652},
+  {367.25081554163387, 1.2934117070875548},
+  {369.8815871008945, 1.2892491951458358},
+  {372.5116134213129, 1.2871584471855122},
+  {375.1420711957979, 1.28386825692017},
+  {377.7725681933798, 1.2804690264452812},
+  {380.40306519096174, 1.2770697959703918},
+  {383.0889331328051, 1.2730830276403413},
+  {385.74363958126474, 1.2705342735882637},
+  {388.2939678372531, 1.2685077076889315},
+  {390.92462172722287, 1.2646723163758538},
+  {393.4068480639676, 1.2581597035509413},
+  {396.29511484216823, 1.252486492457128},
+  {399.0033136664511, 1.2508810135240103},
+  {401.4842991914188, 1.245972053797052},
+  {404.09118780694087, 1.241755194332186},
+  {406.71023166021064, 1.2369712394868617},
+  {409.3406109885017, 1.233899129640614},
+  {411.9005064115567, 1.2313342436552812},
+  {414.60227177631384, 1.2252469851285348},
+  {417.23308255867147, 1.2209754329772684},
+  {419.83169640817164, 1.2176127793477307},
+  {422.34089355031017, 1.2128540217934463},
+  {425.1255541288412, 1.2080517363139232},
+  {427.7576200503015, 1.2002908974571491},
+  {430.3898820872466, 1.1919848575526395},
+  {433.15776288481595, 1.1804339006424533},
+  {435.59179302402396, 1.1722401492736372},
+  {438.20433199584113, 1.1614357408341238},
+  {441.01333419508563, 1.1518905009576452},
+  {443.52514568414745, 1.13980300828699},
+  {446.2133148526324, 1.1255852377137474},
+  {448.9719566497129, 1.1148003529937396},
+  {451.27588797878127, 1.0976702910985079},
+  {453.70163844416516, 1.0855772196984912},
+  {455.92128795171203, 1.070220997394159},
+  {458.17888980529085, 1.0608340783492451},
+  {459.8281229746911, 1.0443298816684128},
+  {462.02544398292264, 1.0358870742856672},
+  {463.88795504928055, 1.017670372965557},
+  {466.0855013019145, 1.0086013861441623},
+  {467.73546255005203, 0.9900731305736113},
+  {469.920493356551, 0.98192115834024},
+  {471.3301400827942, 0.9614405515458319},
+  {473.53504499905165, 0.9514350166880415},
+  {474.6691836492824, 0.931122035962119},
+  {476.89218909090334, 0.9214247976348562},
+  {477.9502827765907, 0.9007564884082326},
+  {480.2192084434653, 0.8802343093550733},
+  {482.5679365182652, 0.8557708864896065},
+  {484.736779971876, 0.8294195528702413},
+  {486.7427875848394, 0.8031585173774989},
+  {488.8620472757911, 0.7747575573898094},
+  {491.840351817069, 0.7458132129221298},
+  {494.3666951492667, 0.7550906258972044},
+  {496.9878766613208, 0.777588445189757},
+  {499.6090581733748, 0.8000862644823091},
+  {502.2318674439527, 0.8180589150786559},
+  {504.8557357381485, 0.8330874800172304},
+  {507.48087878299543, 0.8445722381455235},
+  {510.1065317281029, 0.854639473549704},
+  {512.733439812313, 0.8612174222483763},
+  {515.3611323584623, 0.8656145667561066},
+  {517.9893936395175, 0.8684306282254034},
+  {520.6179883168969, 0.8703198479135498},
+  {523.247387067764, 0.86997374330598},
+  {525.8779625115399, 0.8663564324119967},
+  {528.5081653358945, 0.8637750035087111},
+  {531.134269346617, 0.8725882765030993},
+  {533.7585690948794, 0.8864173991366557},
+  {536.3817902079753, 0.9032451275327574},
+  {539.0060115100437, 0.9172923305854078},
+  {541.6320174630238, 0.9263782041036642},
+  {544.2570624501284, 0.938135562755825},
+  {546.8807542403878, 0.9536548086373616},
+  {549.5036223456111, 0.9714638989193878},
+  {552.1287850020066, 0.9828941369429073},
+  {554.754477170211, 0.9928523321375405},
+  {557.3807576848698, 1.0011749241889671},
+  {560.0074892651435, 1.0082435538306016},
+  {562.6350053073566, 1.013131379281294},
+  {565.2064500646995, 1.0156856359172193},
+  {568.0779857561682, 1.0172355969846874},
+  {570.5223386518246, 1.0144919500686214},
+  {573.1536397228942, 1.0088573952980162},
+  {575.7850388517062, 1.0029502400035433},
+  {578.3603751005976, 0.994686150135115},
+  {580.8691572250149, 0.9815884374004593},
+  {583.2946124849848, 0.9703160370512446},
+  {585.5137169979213, 0.9564748997637775},
+  {587.7901838156084, 0.948039843002038},
+  {588.9240451025106, 0.9284979323293414},
+  {591.1408651606229, 0.9192442287824953},
+  {593.0044929316238, 0.8979230885552788},
+  {595.2217027486615, 0.887585855195076},
+  {596.3571049429444, 0.8637602220044567},
+  {598.448948348333, 0.8579706754852267},
+  {599.03115638805, 0.8342066718658699},
+  {600.2176655305643, 0.8138585240847668},
+  {602.4622842922511, 0.8029797040704231},
+  {603.2800556922414, 0.7786159575749954},
+  {605.7452092331716, 0.7748404750167814},
+  {605.7531322987575, 0.7528143526882628},
+  {608.3809817372946, 0.7567753363578046},
+  {611.0057717742689, 0.7692414563720216},
+  {613.6284829871045, 0.7874867074922363},
+  {616.2508608036158, 0.8066588003936013},
+  {618.8736504626452, 0.8246859710947217},
+  {621.4959106098655, 0.8441851846247281},
+  {624.1192493922524, 0.8606857923921889},
+  {626.7448238911659, 0.8709711082154635},
+  {629.1872940781682, 0.8734613913576594},
+  {631.1853746391461, 0.852516750920739},
+  {632.4134439214802, 0.7830803455567206},
+  {632.5125824781061, 0.7474296316128015},
+  {632.9127561248343, 0.7055130061390095},
+  {633.1294419449257, 0.675325555343152},
+  {633.2884161740633, 0.6209959631858454},
+  {633.3851282625201, 0.5565946068652401},
+  {633.5634847358783, 0.5207946725042005},
+  {634.6185929658091, 0.48007667718659586},
+  {634.7873041956569, 0.44102313013914984},
+  {635.121896824269, 0.37980318335021157},
+  {635.84362702317, 0.35225700321236597},
+  {636.09362383659, 0.32175517306849066},
+  {636.482616659365, 0.2798062625032611},
+  {637.1371324783265, 0.24329860408022186},
+  {637.5783805521908, 0.17579364599053626},
+  {637.7319638180815, 0.1401425389440234},
+  {637.9127697810286, 0.1058087145808202},
+  {638.3041910738355, 0.06660136177254294},
+  {638.5901465018878, 0.035807979625009034},
+  {638.8501222315044, 0.015535580235860325}
+};
+
+/* Tramsission of lens
+   https://www.lensrentals.com/blog/2018/04/looking-at-cine-lens-color-shifts-using-spectrometry/  */
+const static spectra_entry zeiss_contact_prime_cp2_tramsmission[] =
+{
+  {375.42227003765464, 29.687500000000014},
+  {382.3883808499193, 39.613970588235304},
+  {387.76223776223776, 47.70220588235294},
+  {393.1360946745562, 55.422794117647065},
+  {400.6993006993007, 63.143382352941174},
+  {410.25282409897795, 69.94485294117646},
+  {422.19472834857453, 75.45955882352942},
+  {435.33082302313073, 79.50367647058823},
+  {450.85529854760625, 82.62867647058823},
+  {467.17590102205486, 85.20220588235294},
+  {485.08875739644975, 86.94852941176471},
+  {503.39967724583107, 88.78676470588235},
+  {522.108660570199, 90.1654411764706},
+  {545.1963421194191, 91.1764705882353},
+  {570.2743410435719, 91.26838235294117},
+  {594.5562130177515, 90.90073529411765},
+  {614.8574502420656, 90.53308823529412},
+  {635.1586874663799, 90.34926470588235},
+  {653.0715438407747, 89.98161764705883},
+  {674.9650349650351, 89.0625},
+  {692.8778913394299, 87.13235294117646},
+  {708.8004303388919, 84.55882352941177},
+  {722.3345884884347, 81.61764705882354},
+  {735.0726196880044, 78.30882352941177},
+  {749.4029047875204, 74.17279411764706}
+};
+/* Tramsission of lens
+   https://www.lensrentals.com/blog/2018/04/looking-at-cine-lens-color-shifts-using-spectrometry/  */
+const static spectra_entry canon_CN_E_85mm_T1_3_tramsmission[] =
+{
+  {375.23349436392914, 16.337395149854586},
+  {380.3972088030059, 12.567763190735292},
+  {384.170692431562, 14.585618913977129},
+  {388.93719806763283, 24.22615647145173},
+  {391.7176596886742, 31.57196181855494},
+  {394.69672571121845, 38.36652856120733},
+  {396.8813741277509, 44.977990020170424},
+  {399.66183574879227, 51.58900776681438},
+  {403.2367149758454, 58.199433897032854},
+  {406.81159420289856, 64.99355692736614},
+  {412.3725174449812, 72.33729161698012},
+  {420.51529790660226, 78.57692215252241},
+  {433.6231884057971, 84.07806748494613},
+  {455.07246376811594, 88.28712254409854},
+  {471.358024691358, 91.21414480921294},
+  {490.4240472356414, 93.4043088163789},
+  {512.667740203972, 94.67362185726884},
+  {546.8276972624799, 95.5666668515468},
+  {629.447128287708, 96.0562294436402},
+  {658.8405797101449, 94.74846133509338},
+  {683.4675254965109, 92.52575842452545},
+  {699.3558776167472, 90.58510864481013},
+  {716.435856146001, 88.09248074011214},
+  {730.3381642512077, 85.78591620123092},
+  {749.6027911969938, 82.46502530084618},
+};
 /* This optical absorption measurement of Malachite Green were made by
    R.-C. A. Fuh in the summer of 1995 using a Cary 3. The absorption values
    were collected using a spectral bandwidth of 1.0 nm, a signal averaging
@@ -3324,12 +3553,126 @@ const static luminosity_t  wratten_filter_blue_47_kodak[] = {
   /* 690 */ 0,
   /* 700 */ 0};
 
+/* Log sensitivity.  */
+const static spectra_entry kodachrome_25_spectral_response_red[] = {
+  {480.58159801400745, 0.7146799756434878},
+  {492.1948225154755, 0.7295921763332602},
+  {504.8599623805286, 0.7603749374446864},
+  {512.2411196106902, 0.8042419282074544},
+  {519.3599759393157, 0.8415735835381533},
+  {529.6469045288815, 0.8798315505582521},
+  {540.200324917846, 0.9087518273547299},
+  {551.2793332034977, 0.9470079454493012},
+  {556.8127975229328, 0.9890118355886115},
+  {562.608562743904, 1.0375510611599912},
+  {567.3492077970423, 1.082357922399363},
+  {572.0888667565655, 1.1308996132047797},
+  {576.5630200103046, 1.1850441646677727},
+  {579.9835322366329, 1.2298541074496907},
+  {584.4547272095276, 1.2952031476108186},
+  {588.1387729544103, 1.3418798888672496},
+  {594.1988112641474, 1.3894847907386088},
+  {605.0115742738036, 1.4361448916652901},
+  {615.0359554384295, 1.4688012306448313},
+  {621.8897991080784, 1.509868331850084},
+  {628.2133709363699, 1.5593400321959565},
+  {635.5955142601463, 1.5994721933926797},
+  {643.7714629438345, 1.6330665539232967},
+  {651.1627276335479, 1.638651541634105},
+  {655.9250667462115, 1.60129215242049},
+  {661.2218685980954, 1.539655138410565},
+  {664.6670331647935, 1.4910943420413616},
+  {667.3196249885982, 1.4444028093807084},
+  {669.1781649290875, 1.405182784777673},
+  {671.036458346173, 1.3668964675661484},
+  {672.8962309036808, 1.3230079060055564},
+  {674.7587152186292, 1.2688485631383415},
+  {676.8862121925545, 1.2109537743965724},
+  {678.7491895543103, 1.1549270167463348},
+  {680.8761934814281, 1.098899642787588},
+  {683.2667309271005, 1.0447390673033545},
+  {685.6557892323508, 0.9961807361681883},
+  {688.3078880093482, 0.9513566182905575},
+  {691.4909981979139, 0.8953267790977735},
+  {694.6731222928648, 0.8430317694710348},
+  {698.1202590467926, 0.7870013139697418},
+  {699.7098419538459, 0.7664560535054397}
+};
+const static spectra_entry kodachrome_25_spectral_response_green[] = {
+  {440.1303122711954, 0.9239247265439146},
+  {451.99893501889596, 0.9715160696280702},
+  {462.55038322063103, 1.0079060055566373},
+  {470.9898654228739, 1.0433671645617677},
+  {475.7310035228195, 1.086306611018117},
+  {479.94359544523354, 1.1311147048745074},
+  {485.4758271476502, 1.1777871319713737},
+  {492.0631790179, 1.228191923400248},
+  {498.1229708042333, 1.2767305326631182},
+  {504.7103226744831, 1.3271353240919925},
+  {511.2976745447329, 1.3775401155208669},
+  {519.206391858811, 1.4232732884496389},
+  {527.9062027753605, 1.4727394420189281},
+  {535.5516330942878, 1.5156721090816756},
+  {544.2526766278556, 1.5604697256934088},
+  {552.6975823449799, 1.5753893220852921},
+  {561.1523489982521, 1.5529606228167272},
+  {567.4983544562803, 1.517464950535079},
+  {571.9986391908116, 1.4726365184978838},
+  {574.9137784395562, 1.4315466138777886},
+  {577.0353588517926, 1.3960608025322885},
+  {578.8938987922818, 1.3568407779292526},
+  {581.0174513917478, 1.3138853074516628},
+  {582.8794426598889, 1.2615933793674703},
+  {584.2084503292319, 1.2279768317305204},
+  {586.0699485505656, 1.17755231842935},
+  {587.4014214539457, 1.134598696877288},
+  {588.9979070163025, 1.0879096294506718},
+  {590.8594052376362, 1.0374851161495018},
+  {592.7218895525847, 0.9833257732822864},
+  {594.5824016803035, 0.9366360895471613},
+  {596.7098986542287, 0.8787413008053917},
+  {599.3629835248408, 0.8301823533617163},
+  {602.5446145729844, 0.7797547585179998},
+  {605.1967133499818, 0.7349306406403693},
+  {608.6403987762577, 0.6919720886202332}
+};
+const static spectra_entry kodachrome_25_spectral_response_blue[] = {
+  {409.6084961825851, 1.5253031621556992},
+  {411.18032940457203, 1.5719848338802045},
+  {412.49208043565613, 1.6037278036490394},
+  {414.3341033080975, 1.627066174277255},
+  {418.5503930815672, 1.657868657260977},
+  {423.30065254744954, 1.6662609302314115},
+  {429.1112091726428, 1.6587777123121183},
+  {435.45154459238586, 1.6447573100352282},
+  {441.00103293306154, 1.6260702197263097},
+  {448.92971864283936, 1.5961730939426733},
+  {457.38645748334113, 1.5662747355420188},
+  {466.10771593601237, 1.534508346049832},
+  {473.77434726765784, 1.4971421774426155},
+  {479.59427178219164, 1.4541780786458962},
+  {483.56502424557675, 1.4149531235747865},
+  {488.0667881205302, 1.364522447188524},
+  {491.50948745319135, 1.3252987247344326},
+  {494.4231475615137, 1.2898110644634047},
+  {497.8673260345971, 1.2449850976602463},
+  {501.8410367788266, 1.194555653891002},
+  {505.0216817333553, 1.1478628886133304},
+  {508.9973646648144, 1.0899637857119964},
+  {512.7090210309116, 1.0320652991191719},
+  {515.890652079055, 0.9816377042754554},
+  {519.8658419637068, 0.925606016157144},
+  {522.782953399681, 0.8770464524049588},
+  {526.2295971068013, 0.8228834116866885},
+  {529.4119677251559, 0.7696546946684384},
+};
+
 /* Process chart with regular step to a spectrum.
    cubically interpolate for missing data.  */
 
 static void
 compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
-		  const luminosity_t data[], bool absorbance, luminosity_t norm = 1, bool limit_range = true)
+		  const luminosity_t data[], bool absorbance, luminosity_t norm = 1, bool limit_range = true, bool clamp = false)
 {
   luminosity_t step = (end - start) / (luminosity_t) (size - 1);
   luminosity_t repnorm = 1 / norm;
@@ -3349,27 +3692,23 @@ compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int size,
 	  rp += ri - 1;
 	  ri = 1;
 	  s[i] = data[1] + rp * (data[1] - data[0]);
-#if 0
 	  /* Just clamp when data are missing.  */
-	  if (p < start)
+	  if (clamp && p < start)
 	    {
-	      s[i] = 0;
+	      s[i] = CLAMP;
 	      continue;
 	    }
-#endif
 	}
       else if (ri >= size - 2)
 	{
 	  rp += ri - size + 2;
 	  ri = size - 2;
 	  s[i] = data[size - 2] + rp * (data[size - 1] - data[size - 2]);
-#if 0
-	  if (p > end)
+	  if (clamp && p > end)
 	    {
-	      s[i] = 0;
+	      s[i] = CLAMP;
 	      continue;
 	    }
-#endif
 	}
       else
 	s[i] =
@@ -3396,7 +3735,7 @@ compute_spectrum (spectrum s, const xspect &in)
    Since I am lazy use linear interpolation.  */
 
 void
-compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorbance = false, luminosity_t norm = 1, luminosity_t min_transmitance = -1, luminosity_t max_transmitance = -1)
+compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorbance = false, luminosity_t norm = 1, luminosity_t min_transmitance = -1, luminosity_t max_transmitance = -1, bool clamp = false)
 {
   /* Check that data are linearly ordered.  */
   luminosity_t repnorm = 1 / norm;
@@ -3412,6 +3751,11 @@ compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorba
       int first;
       if (data[0].wavelength > p)
 	{
+	  if (clamp)
+	    {
+	      s[i] = CLAMP;
+	      continue;
+	    }
 	  first = 0;
 	  //s[i]=0;continue;
 	}
@@ -3419,6 +3763,11 @@ compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorba
 	{
 	  first = size - 2;
 	  //s[i]=0;continue;
+	  if (clamp)
+	    {
+	      s[i] = CLAMP;
+	      continue;
+	    }
 	}
       else
 	for (first = 0; data[first + 1].wavelength < p; first++)
@@ -3436,6 +3785,12 @@ compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorba
       if (min_transmitance >= 0 && s[i] < min_transmitance * repnorm)
         s[i] = min_transmitance * repnorm;
     }
+}
+
+void
+compute_log_sensitivity (spectrum s, int size, const spectra_entry * data)
+{
+  compute_spectrum (s, size, data, false, 1, -1, -1, true);
 }
 
 /* Taken from Argyll
@@ -3762,8 +4117,10 @@ spectrum_dyes_to_xyz::set_dyes_to_dufay_color_cinematography ()
   compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
   compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
   compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
+#if 0
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (blue[i], 2);
+    blue[i] = pow (blue[i], 1.7);
+#endif
 }
 
 void
@@ -4020,7 +4377,7 @@ log_sensitivity_to_reversal_transmitance(spectrum response)
 {
   for (int i = 0; i < SPECTRUM_SIZE; i++)
   {
-    if (response[i]>0)
+    if (response[i] != CLAMP)
       //response[i] = 1/ (pow(10,1/response[i]));
       // We do flipping positive to negative by 1/density.  This should be done by
       // characteristic curve.
@@ -4040,13 +4397,37 @@ log2_sensitivity_to_reversal_transmitance(spectrum response)
       response[i]=0;
   }
 }
+void
+spectrum_dyes_to_xyz::set_response_to_y ()
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    film_response[i] = cie_cmf_y [i];
+}
+
+void
+spectrum_dyes_to_xyz::adjust_film_response_for_zeiss_contact_prime_cp2_lens ()
+{
+  spectrum s;
+  compute_spectrum (s, sizeof (zeiss_contact_prime_cp2_tramsmission) / sizeof (spectra_entry), zeiss_contact_prime_cp2_tramsmission, false, 100/* norm */, 0/*min*/);
+  for (int i = 0 ; i < SPECTRUM_SIZE; i++)
+    film_response[i] *= s[i];
+}
+
+void
+spectrum_dyes_to_xyz::adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ()
+{
+  spectrum s;
+  compute_spectrum (s, sizeof (canon_CN_E_85mm_T1_3_tramsmission) / sizeof (spectra_entry), canon_CN_E_85mm_T1_3_tramsmission, false, 100/* norm */, 0/*min*/);
+  for (int i = 0 ; i < SPECTRUM_SIZE; i++)
+    film_response[i] *= s[i];
+}
 
 void
 spectrum_dyes_to_xyz::set_response_to_neopan_100 ()
 {
   spectrum dl;
   daylight_il (dl, 5400);
-  compute_spectrum (film_response, sizeof (wedge_Neopan_100_acros_daylight_5400k) / sizeof (spectra_entry), wedge_Neopan_100_acros_daylight_5400k, false);
+  compute_log_sensitivity (film_response, sizeof (wedge_Neopan_100_acros_daylight_5400k) / sizeof (spectra_entry), wedge_Neopan_100_acros_daylight_5400k);
   log_sensitivity_to_reversal_transmitance (film_response);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     if (dl[i])
@@ -4061,13 +4442,41 @@ spectrum_dyes_to_xyz::set_response_to_ilford_panchromatic ()
   compute_spectrum (film_response, sizeof (ilford_manual_of_photography_panchromatic_emulsion_fig54) / sizeof (spectra_entry), ilford_manual_of_photography_panchromatic_emulsion_fig54, false);
   //log2_sensitivity_to_reversal_transmitance (film_response);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
-    if (dl[i])
+  {
+    if (film_response[i] < 0)
+      film_response [i] = 0;
+    else if (dl[i])
       film_response[i] /= dl[i];
+  }
+}
+void
+spectrum_dyes_to_xyz::set_response_to_ilford_panchromatic_fp4 ()
+{
+  /* It is best to clamp missing data to 0 for spectral response.
+     We make sure it remans zero in log_sensitivity_to_reversal_transmiatance  */
+  compute_log_sensitivity (film_response, sizeof (ilford_fp4_absolute) / sizeof (spectra_entry), ilford_fp4_absolute);
+  log_sensitivity_to_reversal_transmitance (film_response);
 }
 
 void
 spectrum_dyes_to_xyz::set_response_to_equal ()
 {
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    film_response[i] = 1;
+}
+void
+spectrum_dyes_to_xyz::set_response_to_kodachrome_25 ()
+{
+  /* It is best to clamp missing data to 0 for spectral response.
+     We make sure it remans zero in log_sensitivity_to_reversal_transmiatance  */
+  compute_log_sensitivity (red, sizeof (kodachrome_25_spectral_response_red) / sizeof (spectra_entry), kodachrome_25_spectral_response_red);
+  compute_log_sensitivity (green, sizeof (kodachrome_25_spectral_response_green) / sizeof (spectra_entry), kodachrome_25_spectral_response_green);
+  compute_log_sensitivity (blue, sizeof (kodachrome_25_spectral_response_blue) / sizeof (spectra_entry), kodachrome_25_spectral_response_blue);
+  print_transmitance_spectrum (stdout, red);
+  log_sensitivity_to_reversal_transmitance (red);
+  print_transmitance_spectrum (stdout, red);
+  log_sensitivity_to_reversal_transmitance (green);
+  log_sensitivity_to_reversal_transmitance (blue);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     film_response[i] = 1;
 }
@@ -4227,14 +4636,26 @@ spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
 }
 
 bool
-spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const char **error, bool white_balance)
+spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized)
 {
   xyz whitepoint = whitepoint_xyz ();
   rgbdata scale = determine_relative_patch_sizes_by_simulated_response ();
   printf ("white balance  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
   //scale = determine_patch_weights_by_simulated_response ();
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
-  if (white_balance)
+  if (optimized)
+    {
+      rgbdata res =
+	{
+	  simulated_response (backlight, film_response, red),
+	  simulated_response (backlight, film_response, green),
+	  simulated_response (backlight, film_response, blue)
+	};
+      scale.red = 1/res.red;
+      scale.green = 1/res.green;
+      scale.blue = 1/res.blue;
+    }
+  else if (white_balance)
     scale = determine_patch_weights_by_simulated_response ();
   else
     {
@@ -4246,7 +4667,9 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
       scale /= sum * 0.3;
     }
   printf ("RGB scales  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
-  color_matrix m = xyz_matrix ();
+  color_matrix m = !optimized ? xyz_matrix () : optimized_xyz_matrix ();
+  luminosity_t deltaEsum = 0;
+  luminosity_t deltaEmax = 0;
 
   void *buffer;
   size_t len = create_pro_photo_rgb_profile (&buffer, whitepoint);
@@ -4286,6 +4709,13 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	      tiff.put_hdr_pixel (x * 2, r, g, b);
 	      xyz_to_pro_photo_rgb (dufay_color.x, dufay_color.y, dufay_color.z, &r, &g, &b);
 	      tiff.put_hdr_pixel (x * 2 + 1, r, g, b);
+	      if (y * 6 + x < nsamples)
+		{
+		  luminosity_t de = deltaE2000 (real_color, dufay_color);
+		  if (de > deltaEmax)
+		    deltaEmax = de;
+		  deltaEsum += de;
+		}
 	    }
 	  if (!tiff.write_row ())
 	    {
@@ -4296,27 +4726,34 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	}
     }
   free (buffer);
+  printf ("Average deltaE 2000 %f, max %f\n", deltaEsum / nsamples, deltaEmax);
   return true;
 }
 color_matrix
 spectrum_dyes_to_xyz::optimized_xyz_matrix ()
 {
-  xyz whitep = srgb_white;
+  xyz whitep = /*srgb_white*/ whitepoint_xyz ();
 
   color_matrix cm = dufaycolor::corrected_dye_matrix ();
   luminosity_t rw, gw,bw;
   cm.normalize_grayscale (whitep.x, whitep.y, whitep.z, &rw, &gw, &bw);
   rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0};
+  rgbdata res =
+    {
+      simulated_response (backlight, film_response, red),
+      simulated_response (backlight, film_response, green),
+      simulated_response (backlight, film_response, blue)
+    };
 
-  dred.red   = simulated_response (backlight, film_response, red, red);
-  dred.green = simulated_response (backlight, film_response, red, green);
-  dred.blue  = simulated_response (backlight, film_response, red, blue);
-  dgreen.red   = simulated_response (backlight, film_response, green, red);
-  dgreen.green = simulated_response (backlight, film_response, green, green);
-  dgreen.blue  = simulated_response (backlight, film_response, green, blue);
-  dblue.red   = simulated_response (backlight, film_response, blue, red);
-  dblue.green = simulated_response (backlight, film_response, blue, green);
-  dblue.blue  = simulated_response (backlight, film_response, blue, blue);
+  dred.red   = simulated_response (backlight, film_response, red, red)/res.red;
+  dred.green = simulated_response (backlight, film_response, red, green)/res.green;
+  dred.blue  = simulated_response (backlight, film_response, red, blue)/res.blue;
+  dgreen.red   = simulated_response (backlight, film_response, green, red)/res.red;
+  dgreen.green = simulated_response (backlight, film_response, green, green)/res.green;
+  dgreen.blue  = simulated_response (backlight, film_response, green, blue)/res.blue;
+  dblue.red   = simulated_response (backlight, film_response, blue, red)/res.red;
+  dblue.green = simulated_response (backlight, film_response, blue, green)/res.green;
+  dblue.blue  = simulated_response (backlight, film_response, blue, blue)/res.blue;
   color_matrix m1 = xyz_matrix ();
   color_matrix m2 (dred.red,   dgreen.red,   dblue.red,   0,
 		   dred.green, dgreen.green, dblue.green, 0,
@@ -4324,7 +4761,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix ()
 		   0  , 0  , 0  , 1);
   m2 = m2.invert ();
   m1 = m1 * m2;
-  m1.normalize_grayscale (whitep.x, whitep.y, whitep.z);
+  //m1.normalize_grayscale (whitep.x, whitep.y, whitep.z);
   
   return m1;
 }
@@ -4453,27 +4890,32 @@ print_response_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_S
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     if (i * SPECTRUM_STEP + SPECTRUM_START >= start && i * SPECTRUM_STEP + SPECTRUM_START <= end)
       {
-	if (spec[i])
+	//if (spec[i])
 	  fprintf (out, "%i %f\n", i * SPECTRUM_STEP + SPECTRUM_START, log10 (spec[i]));
+	//else
+	  //fprintf (out, "%i\n", i * SPECTRUM_STEP + SPECTRUM_START, log10 (spec[i]));
 	//assert (spec[i] > -100 && spec [i] < 100);
       }
 }
 
+/* Write response of the film covered by optional filter specified by F.  */
+
 bool
-spectrum_dyes_to_xyz::write_film_response (const char *filename, bool absolute)
+spectrum_dyes_to_xyz::write_film_response (const char *filename, luminosity_t *fi, bool absolute, bool log)
 {
   FILE *f = fopen (filename, "wt");
   if (!f)
     return false;
-  if (absolute)
-    print_response_spectrum (f, film_response);
+  spectrum s;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+  {
+    s[i] = film_response[i] * (!absolute ? backlight[i] : 1) * (fi ? fi[i] : 1);
+    printf ("%s %f %f %f %f\n", filename, s[i], film_response[i] , (!absolute ? backlight[i] : 1), (fi ? fi[i] : 1));
+  }
+  if (log)
+    print_response_spectrum (f, s);
   else
-    {
-      spectrum s;
-      for (int i = 0; i < SPECTRUM_SIZE; i++)
-	s[i] = film_response[i] * backlight[i];
-      print_response_spectrum (f, s);
-    }
+    print_transmitance_spectrum (f, s);
   fclose (f);
   return true;
 }

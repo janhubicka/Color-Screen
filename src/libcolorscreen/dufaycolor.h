@@ -9,16 +9,17 @@ class dufaycolor
 {
 public:
   /* Sizes in percent based on color cinematography screen.  */
-#if 0
+#if 1
   static constexpr const coord_t red_width = 35.7;
   static constexpr const coord_t green_blue_width = 100-red_width;
   static constexpr const coord_t green_height = 34.6;
   static constexpr const coord_t blue_height = 100-green_height;
-#endif
+#else
   static constexpr const coord_t red_width = 39.9;
   static constexpr const coord_t green_blue_width = 100-red_width;
   static constexpr const coord_t green_height = 60.3;
   static constexpr const coord_t blue_height = 100-green_height;
+#endif
 
   /* These are measurements from color microscopic photograph of Dufaycolor reseau in Color Cinematography. */
   static constexpr const coord_t red_width2 = /*4.984845*/ 5.206335;

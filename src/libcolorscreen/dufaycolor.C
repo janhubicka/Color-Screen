@@ -142,6 +142,22 @@ report_xyz_dyes (const char *name, const char *fname, xyz my_red_dye, xyz my_gre
   if (fname)
     tiff_with_screen (fname, rw/sum, gw/ (sum - rw),  my_red_dye, my_green_dye, my_blue_dye, white_xyz);
 }
+
+static void
+initialize_spec (spectrum_dyes_to_xyz &spec)
+{
+  spec.set_dyes_to_dufay_color_cinematography ();
+
+  //spec.set_response_to_equal ();
+  //spec.set_response_to_neopan_100 ();
+  spec.set_response_to_ilford_panchromatic ();
+  //spec.set_response_to_ilford_panchromatic_fp4 ();
+  //spec.set_response_to_y ();
+  //
+  //spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
+  spec.adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
+}
+
 void
 report_illuminant (spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2)
 {
@@ -155,10 +171,9 @@ report_illuminant (spectrum_dyes_to_xyz &spec, const char *name, const char *fil
 
   if (!sim_white_xyz.almost_equal_p (dufay_white_xyz))
     printf ("Nonlinearity in observer model\n");
-  report_xyz_dyes (name, filename, red_xyz, green_xyz, blue_xyz, dufay_white_xyz, white_xyz);
-  spec.set_response_to_neopan_100 ();
-  //spec.set_response_to_ilford_panchromatic ();
+  initialize_spec (spec);
   rgbdata scale = spec.determine_relative_patch_sizes_by_simulated_response ();
+  report_xyz_dyes (name, filename, red_xyz, green_xyz, blue_xyz, dufay_white_xyz, white_xyz);
   luminosity_t sum = scale.red + scale.green + scale.blue;
   xyz screen = red_xyz * (scale.red/sum) + green_xyz * (scale.green / sum) + blue_xyz * (scale.blue / sum);
   printf ("Optimal response %.1f%% green size %.1f%%, blue size %.1f%%;\n red strip width %.1f%%\n green strip width %.1f%%\n screen color", scale.red * 100 / sum, scale.green * 100 / sum, scale.blue * 100 / sum, scale.red*100/sum, scale.green * 100 / (sum - scale.red));
@@ -527,36 +542,41 @@ dufaycolor::print_synthetic_dyes_report ()
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-spectra.abs.txt", NULL, 400, 720, true);
 }
 
+const int temperature = 6500;
 bool
 dufaycolor::generate_ti3_file (FILE *f)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (5000);
-  spec.set_dyes_to_dufay_color_cinematography ();
-  spec.set_response_to_ilford_panchromatic ();
-  //spec.set_response_to_equal ();
-  //spec.set_response_to_neopan_100 ();
+  spec.set_daylight_backlight (temperature);
+  initialize_spec (spec);
   return spec.generate_simulated_argyll_ti3_file (f);
 }
+
 bool
 dufaycolor::generate_color_target_tiff (const char *filename, const char **error)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (5000);
-  spec.set_dyes_to_dufay_color_cinematography ();
-  spec.set_response_to_ilford_panchromatic ();
-  //spec.set_response_to_neopan_100 ();
-  //spec.set_response_to_equal ();
-  spec.write_film_response ("absolute-spectral-response.dat", true);
-  spec.write_film_response ("spectral-response.dat", false);
-  return spec.generate_color_target_tiff (filename, error, true);
+  spec.set_daylight_backlight (temperature);
+  initialize_spec (spec);
+  spec.write_film_response ("spectral-response.dat", NULL, false, false);
+  spec.write_film_response ("absolute-spectral-response.dat", NULL, true, false);
+  //spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
+  spec.adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
+  spec.write_film_response ("spectral-response-with-lens.dat", NULL, false, false);
+  spec.write_film_response ("absolute-spectral-response-with-lens.dat", NULL, true, false);
+  spec.write_film_response ("absolute-spectral-response-red.dat", spec.red, true, false);
+  spec.write_film_response ("spectral-response-red.dat", spec.red, false, false);
+  spec.write_film_response ("absolute-spectral-response-green.dat", spec.green, true, false);
+  spec.write_film_response ("spectral-response-green.dat", spec.green, false, false);
+  spec.write_film_response ("absolute-spectral-response-blue.dat", spec.blue, true, false);
+  spec.write_film_response ("spectral-response-blue.dat", spec.blue, false, false);
+  return spec.generate_color_target_tiff (filename, error, true, false);
 }
 color_matrix
 dufaycolor_correction_matrix ()
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (6500);
-  spec.set_dyes_to_dufay_color_cinematography ();
-  spec.set_response_to_ilford_panchromatic ();
+  spec.set_daylight_backlight (temperature);
+  initialize_spec (spec);
   return spec.optimized_xyz_matrix ();
 }

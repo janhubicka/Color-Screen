@@ -121,17 +121,22 @@ public:
   bool is_linear ();
 
   void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
-  bool write_film_response (const char *filename, bool absolute);
+  bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
   void set_dyes_to_wratten_25_58_47 ();
   bool generate_simulated_argyll_ti3_file (FILE *f);
-  bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance);
+  bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
   void set_response_to_neopan_100 ();
   void set_response_to_ilford_panchromatic ();
+  void set_response_to_ilford_panchromatic_fp4 ();
   void set_response_to_equal ();
+  void set_response_to_y ();
+  void set_response_to_kodachrome_25 ();
+  void adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
+  void adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
 
   /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
      and backlight.  */
@@ -143,8 +148,7 @@ public:
     luminosity_t sum = white.red + white.green + white.blue;
     return white / sum;
   }
-  rgbdata
-  determine_patch_weights_by_simulated_response (int observer = default_observer);
+  rgbdata determine_patch_weights_by_simulated_response (int observer = default_observer);
 
   rgbdata
   determine_relative_patch_sizes_by_simulated_response (int observer = default_observer)

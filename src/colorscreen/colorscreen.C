@@ -501,6 +501,28 @@ digital_laboratory (int argc, char **argv)
     wratten::print_xyz_report ();
   else if (!strcmp (argv[0], "wratten-spectra"))
     wratten::print_spectra_report ();
+  else if (!strcmp (argv[0], "kodachrome25-color-target"))
+    {
+      spectrum_dyes_to_xyz spec;
+      spec.set_daylight_backlight (5000);
+      spec.set_response_to_kodachrome_25 ();
+      spec.write_film_response ("kodachrome25-absolute-spectral-response-red.dat", spec.red, true, false);
+      spec.write_film_response ("kodachrome25-spectral-response-red.dat", spec.red, false, false);
+      spec.write_film_response ("kodachrome25-absolute-spectral-response-green.dat", spec.green, true, false);
+      spec.write_film_response ("kodachrome25-spectral-response-green.dat", spec.green, false, false);
+      spec.write_film_response ("kodachrome25-absolute-spectral-response-blue.dat", spec.blue, true, false);
+      spec.write_film_response ("kodachrome25-spectral-response-blue.dat", spec.blue, false, false);
+      const char *error;
+      spec.generate_color_target_tiff ("kodachrome25-target.tif", &error, true, true);
+      if (error)
+	{
+	  fprintf (stderr, "%s\n", error);
+	  exit (1);
+	}
+      FILE *f = fopen ("kodachrome25.ti3", "wt");
+      spec.generate_simulated_argyll_ti3_file (f);
+      fclose (f);
+    }
   else
     print_help ();
 }
