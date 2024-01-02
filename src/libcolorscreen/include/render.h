@@ -932,7 +932,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   int pxstart = std::max (0, (int)(-x / pixelsize));
   int pxend = std::min (width - 1, (int)((m_img.width - x) / pixelsize));
 
-  memset (data, 0, sizeof (T) * width * height);
+  memset ((void *)data, 0, sizeof (T) * width * height);
 
   if (pxstart > pxend)
     return true;

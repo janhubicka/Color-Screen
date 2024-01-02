@@ -139,11 +139,11 @@ public:
 #endif
     return c;
   }
-  rgbdata fast_precomputed_get_adjusted_pixel (int x, int y)
+  mem_rgbdata fast_precomputed_get_adjusted_pixel (int x, int y)
   {
     return m_precomputed_rgbdata[y * m_img.width + x];
   }
-  rgbdata fast_precomputed_get_normalized_pixel (int x, int y)
+  mem_rgbdata fast_precomputed_get_normalized_pixel (int x, int y)
   {
     return normalize_color (m_precomputed_rgbdata[y * m_img.width + x]);
   }
@@ -261,7 +261,7 @@ done:
     return m_color_class_map;
   }
 protected:
-  rgbdata *m_precomputed_rgbdata;
+  mem_rgbdata *m_precomputed_rgbdata;
   color_class_map *m_color_class_map;
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;

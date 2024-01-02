@@ -6,7 +6,15 @@
 //typedef double luminosity_t;
 typedef double luminosity_t;
 /* mem_luminosity_t is used for very large temporary data.  */
+
+#ifdef __x86_64__
+typedef _Float16 mem_luminosity_t;
+#elif __aarch64__
+typedef __fp16 mem_luminosity_t;
+#else
+#warning 16bit data type not available
 typedef float mem_luminosity_t;
+#endif
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)
@@ -309,10 +317,19 @@ struct cie_lab
    cie_lab (xyz c);
 };
 
+struct mem_rgbdata;
+
 /* Datastructure used to store information about dye luminosities.  */
 struct rgbdata
 {
   luminosity_t red, green, blue;
+  constexpr inline rgbdata  (mem_rgbdata color);
+  constexpr rgbdata ()
+  : red (-1), green (-1), blue (-1)
+  { }
+  constexpr rgbdata (luminosity_t red1, luminosity_t green1, luminosity_t blue1)
+  : red (red1), green (green1), blue (blue1)
+  { }
   bool operator== (rgbdata &other) const
   {
     return red == other.red
@@ -411,6 +428,19 @@ struct rgbdata
     return ret;
   }
 };
+/* Datastructure used to store information about dye luminosities.  */
+struct mem_rgbdata
+{
+  mem_luminosity_t red, green, blue;
+  constexpr mem_rgbdata(rgbdata c)
+  : red ((mem_luminosity_t)c.red), green ((mem_luminosity_t)c.green), blue ((mem_luminosity_t)c.blue)
+  { }
+};
+
+constexpr inline rgbdata::rgbdata (mem_rgbdata color)
+: red (color.red), green (color.green), blue (color.blue)
+{
+}
 inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
 {
   lhs += rhs;
