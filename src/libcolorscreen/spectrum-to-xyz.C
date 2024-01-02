@@ -616,7 +616,7 @@ static xspect TLCI_2012_TCS[] = {
 	/* 27 paprika.  */
 	{
 		36, 380, 730,		/* 38 bands from 380 to 730 nm in 10nm steps */
-		50,			/* Scale factor.  */
+		20,			/* Scale factor.  */
 		{1.906835, 1.938999, 1.889491, 1.828394, 1.783566, 1.721460, 1.668272, 1.644804, 1.627632, 1.605743, 1.576768, 1.563838, 1.562760, 1.566539, 1.580958, 1.611949, 1.674046, 1.808827, 2.073560, 2.626282, 3.622958, 5.143784, 6.974639, 8.666264, 9.972983, 10.79505, 11.26441, 11.49941, 11.60748, 11.54034, 11.53023, 11.42045, 11.42383, 11.24037, 10.59212, 9.657345}
 	},
 #if 0
@@ -4906,11 +4906,14 @@ spectrum_dyes_to_xyz::write_film_response (const char *filename, luminosity_t *f
   FILE *f = fopen (filename, "wt");
   if (!f)
     return false;
+  luminosity_t sum = 0;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    sum += film_response[i] * (!absolute ? backlight[i] : 1);
   spectrum s;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
   {
-    s[i] = film_response[i] * (!absolute ? backlight[i] : 1) * (fi ? fi[i] : 1);
-    printf ("%s %f %f %f %f\n", filename, s[i], film_response[i] , (!absolute ? backlight[i] : 1), (fi ? fi[i] : 1));
+    s[i] = (film_response[i] * (!absolute ? backlight[i] : 1) * (fi ? fi[i] : 1) * 100) / sum;
+    //printf ("%s %f %f %f %f\n", filename, s[i], film_response[i] , (!absolute ? backlight[i] : 1), (fi ? fi[i] : 1));
   }
   if (log)
     print_response_spectrum (f, s);
@@ -5078,15 +5081,18 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
   par.height = 19;
   par.depth = 32;
   par.hdr = true;
-#if 0
+  void *buffer;
+  size_t len = create_pro_photo_rgb_profile (&buffer, whitepoint_xyz ());
   par.icc_profile = buffer;
   par.icc_profile_len = len;
-#endif
   const char *error;
   tiff_writer tiff (par, &error);
   if (error)
+  {
+    free (buffer);
     return false;
-  luminosity_t gamma = -1;
+  }
+  luminosity_t gamma = 1;
   rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0}, dwhite = {0,0,0};
 
   dred.red   = simulated_response (backlight, film_response, red, red);
@@ -5144,7 +5150,7 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
 	      //xyz c = (filter_red * f.red) + (filter_green * f.green) + (filter_blue * f.blue);
 	      xyz c (0,0,0);
 	      m.apply_to_rgb (f.red * white.red, f.green * white.green, f.blue * white.blue, &c.x, &c.y, &c.z);
-	      xyz_to_wide_gammut_rgb (c.x, c.y, c.z, &r, &g, &b);
+	      xyz_to_pro_photo_rgb (c.x, c.y, c.z, &r, &g, &b);
 	    }
 	  tiff.put_hdr_pixel (19, 0, 0, 0);
 	  tiff.put_hdr_pixel (20, r, g, b);
@@ -5154,5 +5160,41 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
 	    return false;
 	}
     }
+  free (buffer);
+  return true;
+}
+
+bool
+write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw)
+{
+  FILE *redf = fopen (redname, "wt");
+  if (!redf)
+    return NULL;
+  FILE *greenf = fopen (greenname, "wt");
+  if (!greenf)
+    {
+      fclose (redf);
+      return NULL;
+    }
+  FILE *bluef = fopen (bluename, "wt");
+  if (!bluef)
+    {
+      fclose (redf);
+      fclose (greenf);
+      return NULL;
+    }
+  color_matrix im = m.invert ();
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      luminosity_t r, g, b;
+      int freq = i * SPECTRUM_STEP + SPECTRUM_START;
+      im.apply_to_rgb (cie_cmf_x[i], cie_cmf_y[i], cie_cmf_z[i], &r, &g, &b);
+      fprintf (redf, "%f %f\n", (double)freq, r/rw);
+      fprintf (greenf, "%f %f\n", (double)freq, g/gw);
+      fprintf (bluef, "%f %f\n", (double)freq, b/bw);
+    }
+  fclose (redf);
+  fclose (greenf);
+  fclose (bluef);
   return true;
 }

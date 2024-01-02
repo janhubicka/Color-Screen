@@ -200,5 +200,6 @@ void synthetic_dufay_red (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_green (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_blue (spectrum s, luminosity_t d1, luminosity_t d2);
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
+bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
 
 #endif

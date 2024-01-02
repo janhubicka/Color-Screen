@@ -3,8 +3,8 @@
 #include <cmath>
 #include "matrix.h"
 
-typedef double luminosity_t;
-//typedef float luminosity_t;
+//typedef double luminosity_t;
+typedef float luminosity_t;
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)
@@ -665,6 +665,7 @@ xyz_to_pro_photo_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosit
 {
   xyz_pro_photo_rgb_matrix m;
   m.apply_to_rgb (x, y, z, r, g, b);
+  /*TODO: Fix also in spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response.  */
   /**r = invert_gamma (*r, 1.8);
   *g = invert_gamma (*g, 1.8);
   *b = invert_gamma (*b, 1.8);*/

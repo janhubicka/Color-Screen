@@ -150,8 +150,8 @@ initialize_spec (spectrum_dyes_to_xyz &spec)
 
   //spec.set_response_to_equal ();
   //spec.set_response_to_neopan_100 ();
-  spec.set_response_to_ilford_panchromatic ();
-  //spec.set_response_to_ilford_panchromatic_fp4 ();
+  //spec.set_response_to_ilford_panchromatic ();
+  spec.set_response_to_ilford_panchromatic_fp4 ();
   //spec.set_response_to_y ();
   //
   //spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
@@ -348,10 +348,15 @@ dufaycolor::print_spectra_report ()
   report_illuminant (spec, "CIE B", "color-cinematography-spectra-ilB-screen.tif", "color-cinematography-spectra-ilB-screen-resp.tif");
   spec.set_il_C_backlight ();
   report_illuminant (spec, "CIE C", "color-cinematography-spectra-ilC-screen.tif", "color-cinematography-spectra-ilC-screen-resp.tif");
+  spec.tiff_with_primaries ("spec-C-primaries.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.set_daylight_backlight (5000);
   report_illuminant (spec, "5000K", "color-cinematography-spectra-5000-screen.tif", "color-cinematography-spectra-5000-screen-resp.tif");
+  spec.tiff_with_overlapping_filters ("spec-d50-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
+  spec.tiff_with_overlapping_filters_response ("spec-d50-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.set_daylight_backlight (5500);
   report_illuminant (spec, "5500K", "color-cinematography-spectra-5500-screen.tif", "color-cinematography-spectra-5500-screen-resp.tif");
+  spec.tiff_with_overlapping_filters ("spec-d55-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
+  spec.tiff_with_overlapping_filters_response ("spec-d55-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.set_daylight_backlight (6500);
   report_illuminant (spec, "6500K", "color-cinematography-spectra-6500-screen.tif", "color-cinematography-spectra-6500-screen-resp.tif");
   spec.tiff_with_primaries ("spec-d65-primaries.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
@@ -360,6 +365,10 @@ dufaycolor::print_spectra_report ()
   spec.write_spectra ("dufay-red.dat", "dufay-green.dat", "dufay-blue.dat", NULL, 400, 720, false);
   spec.write_spectra ("dufay-red-absorbance.dat", "dufay-green-absorbance.dat", "dufay-blue-absorbance.dat", NULL, 400, 720, true);
   printf ("spectra by Color Cinematography saved to dufay-red.dat, dufay-green.dat and dufay-blue.dat\n");
+  spec.set_il_C_backlight ();
+  spec.set_dyes_to_dufay_color_cinematography ();
+  spec.set_dyes_to_dufay (1, 1);
+  report_illuminant (spec, "CIE C aged", "color-cinematography-spectra-ilC-screen-aged.tif", "color-cinematography-spectra-ilC-screen-resp-aged.tif");
 }
 
 void
@@ -570,7 +579,9 @@ dufaycolor::generate_color_target_tiff (const char *filename, const char **error
   spec.write_film_response ("spectral-response-green.dat", spec.green, false, false);
   spec.write_film_response ("absolute-spectral-response-blue.dat", spec.blue, true, false);
   spec.write_film_response ("spectral-response-blue.dat", spec.blue, false, false);
-  return spec.generate_color_target_tiff (filename, error, true, false);
+  write_optimal_response (spec.xyz_matrix (), "optimal-response-red.dat", "optimal-response-green.dat", "optimal-response-blue.dat", dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
+  write_optimal_response (spec.optimized_xyz_matrix (), "optimal-optimized-response-red.dat", "optimal-optimized-response-green.dat", "optimal-optimized-response-blue.dat", 0.3, 0.3, 0.3);
+  return spec.generate_color_target_tiff (filename, error, false, true);
 }
 color_matrix
 dufaycolor_correction_matrix ()
