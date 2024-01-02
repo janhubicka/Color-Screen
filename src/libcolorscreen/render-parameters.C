@@ -63,6 +63,11 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	    break;
 	  }
 	  dyes = matrix_by_dye_xyY (img->primary_red, img->primary_green, img->primary_blue);
+	  if (backlight_correction)
+	    {
+	      xyz white = xyz::from_linear_srgb (1, 1, 1);
+	      dyes.normalize_grayscale (white.x, white.y, white.z);
+	    }
 	break;
       case render_parameters::color_model_red:
 	{
