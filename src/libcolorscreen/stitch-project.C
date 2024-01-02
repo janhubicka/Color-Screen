@@ -199,10 +199,12 @@ stitch_project::analyze_images (progress_info *progress)
     progress->set_task ("analyzing tiles", params.width * params.height);
   if (params.width == 1 && params.height == 1)
     {
+      int stack = 0;
       if (progress)
-	progress->push ();
+	stack = progress->push ();
       bool ret = analyze (0, 0, progress);
-      progress->pop ();
+      if (progress)
+        progress->pop (stack);
       return ret;
     }
   for (int y = 0; y < params.height; y++)
@@ -216,6 +218,9 @@ stitch_project::analyze_images (progress_info *progress)
 	{
 	  coord_t xs;
 	  coord_t ys;
+	  int stack = 0;
+	  if (progress)
+	    stack = progress->push ();
 	  analyze (0, y - 1, progress);
 	  analyze (0, y, progress);
 	  if (!images[y - 1][0].get_analyzer ().
@@ -253,18 +258,25 @@ stitch_project::analyze_images (progress_info *progress)
 	      print_panorama_map (stdout);
 	      progress->resume_stdout ();
 	    }
+	  if (progress)
+	    {
+	      progress->pop (stack);
+	      if (progress->cancel_requested ())
+		return false;
+	    }
 	}
       for (int x = 0; x < params.width - 1; x++)
 	{
 	  coord_t xs;
 	  coord_t ys;
+	  int stack = 0;
 	  if (progress)
-	    progress->push ();
+	    stack = progress->push ();
 	  if (!analyze (x, y, progress)
 	      || !analyze (x + 1, y, progress))
 	    {
 	      if (progress)
-		progress->pop ();
+		progress->pop (stack);
 	      return false;
 	    }
 	  if (!images[y][x].get_analyzer ().
@@ -284,7 +296,7 @@ stitch_project::analyze_images (progress_info *progress)
 	      if (report_file)
 		print_status (report_file);
 	      if (progress)
-		progress->pop ();
+		progress->pop (stack);
 	      progress->resume_stdout ();
 	      return false;
 	    }
@@ -316,7 +328,7 @@ stitch_project::analyze_images (progress_info *progress)
 		  if (report_file)
 		    print_status (report_file);
 		  if (progress)
-		    progress->pop ();
+		    progress->pop (stack);
 		  progress->resume_stdout ();
 		  return false;
 		}
@@ -378,10 +390,8 @@ stitch_project::analyze_images (progress_info *progress)
 	  if (report_file)
 	    fflush (report_file);
 	  if (progress)
-	    progress->pop ();
-	  if (progress)
 	    {
-	      progress->pop ();
+	      progress->pop (stack);
 	      progress->inc_progress ();
 	      if (progress->cancel_requested ())
 		return false;

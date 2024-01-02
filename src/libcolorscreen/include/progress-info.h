@@ -1,5 +1,6 @@
 #ifndef PROGRESS_INFO_H
 #define PROGRESS_INFO_H
+#include <cassert>
 #include <stdio.h>
 #include <pthread.h>
 #include <cstdlib>
@@ -122,28 +123,34 @@ public:
     m_current = p;
   }
 
-  void
+  int
   push ()
   {
     if (pthread_mutex_lock (&m_lock) != 0)
       perror ("lock");
+    int ret = stack.size ();
+    assert (ret >= 0);
     stack.push_back ({m_max, m_current, m_task});
     m_task=NULL;
     m_current=0;
     m_max = 1;
     pthread_mutex_unlock (&m_lock);
+    return ret;
   }
 
+  /* EXPECTED is return value of push used for sanity checking.  */
   void
-  pop ()
+  pop (int expected = -1)
   {
     if (pthread_mutex_lock (&m_lock) != 0)
       perror ("lock");
+    assert (stack.size () > 0);
     task t = stack.back ();
     m_current = t.current;
     m_max = t.max;
     m_task = t.task;
     stack.pop_back ();
+    assert (expected == -1 || (int)stack.size () == expected);
     pthread_mutex_unlock (&m_lock);
   }
 

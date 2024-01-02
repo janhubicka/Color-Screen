@@ -748,12 +748,13 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, 
   const char *error;
   if (!render2)
     {
+      int stack = 0;
       if (progress)
-	progress->push ();
+	stack = progress->push ();
       if (!load_img (&error, progress))
 	{
 	  if (progress)
-	    progress->pop ();
+	    progress->pop (stack);
 	  return false;
 	}
       render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
@@ -763,12 +764,12 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, 
 	  delete render2;
 	  render2 = NULL;
 	  if (progress)
-	    progress->pop ();
+	    progress->pop (stack);
 	  return false;
 	}
       release_img ();
       if (progress)
-	progress->pop ();
+	progress->pop (stack);
       loaded = true;
     }
   else
@@ -1334,8 +1335,9 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 #pragma omp critical
 	    if (!render1)
 	      {
+		int stack = 0;
 		if (progress)
-		  progress->push ();
+		  stack = progress->push ();
 		if (load_img (error, progress)
 		    && other.load_img (error, progress))
 		  {
@@ -1356,7 +1358,7 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		      }
 		  }
 		if (progress)
-		  progress->pop ();
+		  progress->pop (stack);
 	      }
 	    if (!render2)
 	      break;
