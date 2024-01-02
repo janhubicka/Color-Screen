@@ -14,8 +14,6 @@ struct analyzer_params
   luminosity_t collection_threshold;
   uint64_t mesh_trans_id;
   scr_to_img_parameters params;
-  /* TODO: We can also do this on computed data.  */
-  luminosity_t dark_point, exposure;
 
   image_data *img;
   screen *scr;
@@ -30,8 +28,6 @@ struct analyzer_params
 	   && (!precise || screen_id == o.screen_id)
 	   /* TODO: Can be more fine grained.  */
 	   && mesh_trans_id == o.mesh_trans_id
-	   && dark_point == o.dark_point
-	   && exposure == o.exposure
 	   && (mesh_trans_id || params == o.params)
 	   && (!precise || collection_threshold == o.collection_threshold);
   };
@@ -112,14 +108,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
     {
       m_gray_data_id,
       screen_id,
-      //width, height, xshift, yshift,
       m_params.precise,
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
-      /* We use unadjusted data.  TODO: Implement also in fast.  */
-      /*m_params.dark_point*/0,
-      /*m_params.scan_exposure*/1,
       &m_img,
       m_screen,
       this,
