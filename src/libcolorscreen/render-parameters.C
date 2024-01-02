@@ -172,7 +172,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  dyes.normalize_xyz_brightness ();
 	  xyz white (0, 0, 0);
 	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
-	  printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
+	  //printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
 	  if (normalized_dyes)
 	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
 	  dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
@@ -184,7 +184,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  dyes.normalize_xyz_brightness ();
 	  xyz white (0, 0, 0);
 	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
-	  printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
+	  //printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
 	  if (normalized_dyes)
 	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
 	  dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
@@ -199,7 +199,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  dyes.normalize_xyz_brightness ();
 	  xyz white (0, 0, 0);
 	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
-	  printf ("Normalized: %i\n", normalized_dyes);
+	  //printf ("Normalized: %i\n", normalized_dyes);
 	  if (normalized_dyes)
 	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
 	  dyes = bradford_whitepoint_adaptation_matrix (white, srgb_white) * dyes;

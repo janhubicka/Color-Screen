@@ -634,7 +634,7 @@
                       <object class="GtkLabel" id="label2c">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">tilt y y</property>
+                        <property name="label" translatable="yes">dark point</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -643,7 +643,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="tilt_y_y">
+                      <object class="GtkSpinButton" id="dark_point">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
