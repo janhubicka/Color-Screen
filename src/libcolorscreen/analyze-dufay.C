@@ -26,8 +26,8 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	      int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
 	      if (screen->mult[iy][ix][0] > collection_threshold)
 		{
-		  int xx = nearest_int (scr_x * 2 - 0.5);
-		  int yy = nearest_int (scr_y - 0.5);
+		  int xx = nearest_int (scr_x * 2 - (coord_t)0.5);
+		  int yy = nearest_int (scr_y - (coord_t)0.5);
 		  red_atomic_add (xx, yy, (screen->mult[iy][ix][0] - collection_threshold) * l);
 		  luminosity_t &l = w_red [yy * m_width * 2 + xx];
 		  luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
@@ -138,19 +138,24 @@ analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, lum
 	      scr_y += m_yshift;
 	      if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
 		continue;
-	      int xx = nearest_int (scr_x * 2 - 0.5);
-	      int yy = nearest_int (scr_y - 0.5);
-	      red_atomic_add (xx, yy, d.red);
+
+	      int xx = nearest_int (scr_x * 2 - (coord_t)0.5);
+	      int yy = nearest_int (scr_y - (coord_t)0.5);
 	      luminosity_t &lr = w_red [yy * m_width * 2 + xx];
+	      red_atomic_add (xx, yy, d.red);
 #pragma omp atomic
 	      lr += 1;
-	      xx = nearest_int (scr_x-(coord_t)0.5);
+
+
+	      xx = nearest_int (scr_x);
 	      yy = nearest_int (scr_y);
 	      luminosity_t &lg = w_green [yy * m_width + xx];
-
 	      green_atomic_add (xx, yy, d.green);
 #pragma omp atomic
 	      lg += 1;
+
+
+	      xx = nearest_int (scr_x-(coord_t)0.5);
 	      luminosity_t &lb = w_blue [yy * m_width + xx];
 	      blue_atomic_add (xx, yy, d.blue);
 #pragma omp atomic

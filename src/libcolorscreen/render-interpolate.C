@@ -144,8 +144,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       yshift = m_paget->get_yshift ();
       x += xshift;
       y += yshift;
-      coord_t xx = 2*(x-0.25);
-      coord_t yy = 2*(y-0.25);
+      coord_t xx = 2*(x-(coord_t)0.25);
+      coord_t yy = 2*(y-(coord_t)0.25);
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
@@ -167,7 +167,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
 				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
-      analyze_paget::to_diagonal_coordinates (x + 0.5, y, &xd, &yd);
+      analyze_paget::to_diagonal_coordinates (x + (coord_t)0.5, y, &xd, &yd);
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
 #define get_red(xx, yy) adjust_luminosity_ir (m_paget->diag_red (xp + (xx), yp + (yy)))
@@ -183,8 +183,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       yshift = m_dufay->get_yshift ();
       x += xshift;
       y += yshift;
-      coord_t xx = 2*(x - 0.25);
-      coord_t yy = y-0.5;
+      coord_t xx = 2*(x - (coord_t)0.25);
+      coord_t yy = y-(coord_t)0.5;
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
@@ -204,10 +204,10 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
 				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
-      xx = x-0.5;
-      yy = y;
+      xx = x-(coord_t)0.5;
+      //yy = y;
       xo = my_modf (xx, &xp);
-      yo = my_modf (yy, &yp);
+      //yo = my_modf (yy, &yp);
 #define get_blue(xx, yy) adjust_luminosity_ir (m_dufay->blue (xp + (xx), yp + (yy)))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
