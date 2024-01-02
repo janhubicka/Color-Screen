@@ -18,6 +18,45 @@ my_pow (double x, double y)
   return pow (x, y);
 }
 
+/* Prevent conversion to wrong data type when doing math.  */
+static inline float
+my_sqrt (float x)
+{
+  return sqrtf (x);
+}
+static inline double
+my_sqrt (double x)
+{
+  return sqrt (x);
+}
+
+inline luminosity_t
+srgb_to_linear (luminosity_t c)
+{
+  /* sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
+  if (c < 0)
+    return -my_pow (-c, (luminosity_t)2.2);
+  else if (c > 1)
+    return my_pow (c, (luminosity_t)2.2);
+  if (c < (luminosity_t)0.04045)
+    return c / (luminosity_t)12.92;
+  return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
+}
+
+/* We handle special gama of -1 for sRGB color space curves.  */
+inline luminosity_t
+apply_gamma (luminosity_t val, luminosity_t gamma)
+{
+  if (gamma == 1)
+    return val;
+  if (gamma == -1)
+    return srgb_to_linear (val);
+  if (val >= 0)
+    return my_pow (val, gamma);
+  else
+    return -my_pow (-val, gamma);
+}
+
 /* sRGB->XYZ conversion matrix.  */
 typedef matrix4x4<luminosity_t> color_matrix;
 class srgb_xyz_matrix : public color_matrix
@@ -43,19 +82,6 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
-
-inline luminosity_t
-srgb_to_linear (luminosity_t c)
-{
-  /* sRGB values are undefined outside range 0..1 but give them reasonable meanings.  */
-  if (c < 0)
-    return -my_pow (-c, (luminosity_t)2.2);
-  else if (c > 1)
-    return my_pow (c, (luminosity_t)2.2);
-  if (c < (luminosity_t)0.04045)
-    return c / (luminosity_t)12.92;
-  return my_pow ((c + (luminosity_t)0.055) / (luminosity_t)1.055, (luminosity_t)2.4);
-}
 
 inline luminosity_t
 linear_to_srgb (luminosity_t c)
@@ -285,6 +311,16 @@ struct cie_lab
 struct rgbdata
 {
   luminosity_t red, green, blue;
+  bool operator== (rgbdata &other) const
+  {
+    return red == other.red
+	   && green == other.green
+	   && blue == other.blue;
+  }
+  bool operator!= (rgbdata &other) const
+  {
+    return !(*this == other);
+  }
   rgbdata &operator+=(const luminosity_t other)
   {
     red += other;
@@ -345,6 +381,33 @@ struct rgbdata
       default: __builtin_unreachable ();
     }
   }
+  inline rgbdata
+  gamma (luminosity_t g)
+  {
+    rgbdata ret = {apply_gamma (red, g), apply_gamma (green, g), apply_gamma (blue, g)};
+    return ret;
+  }
+
+  /* Sign preserving gamma.  */
+  inline rgbdata
+  sgngamma (luminosity_t g)
+  {
+    rgbdata ret = {apply_gamma (fabs (red), g), apply_gamma (fabs (green), g), apply_gamma (fabs (blue), g)};
+    if (red < 0)
+      ret.red = -ret.red;
+    if (green < 0)
+      ret.green = -ret.green;
+    if (blue < 0)
+      ret.blue = -ret.blue;
+    return ret;
+  }
+  inline rgbdata
+  normalize ()
+  {
+    luminosity_t coef = 1 / my_sqrt (red * red + blue * blue + green * green);
+    rgbdata ret = {red * coef, green * coef, blue * coef};
+    return ret;
+  }
 };
 inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)
 {
@@ -382,20 +445,6 @@ inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
   return lhs;
 }
 
-/* We handle special gama of -1 for sRGB color space curves.  */
-inline luminosity_t
-apply_gamma (luminosity_t val, luminosity_t gamma)
-{
-  if (gamma == 1)
-    return val;
-  if (gamma == -1)
-    return srgb_to_linear (val);
-  if (val >= 0)
-    return my_pow (val, gamma);
-  else
-    return -my_pow (-val, gamma);
-}
-
 inline luminosity_t
 invert_gamma (luminosity_t val, luminosity_t gamma)
 {
@@ -409,72 +458,7 @@ invert_gamma (luminosity_t val, luminosity_t gamma)
     return my_pow (-val, 1 / gamma);
 }
 
-struct color_t
-{
-  luminosity_t red, green, blue;
-  color_t ()
-  : red(0), green(0), blue(0)
-  { }
-  color_t (luminosity_t rr, luminosity_t gg, luminosity_t bb)
-  : red(rr), green(gg), blue(bb)
-  { }
-  bool operator== (color_t &other) const
-  {
-    return red == other.red
-	   && green == other.green
-	   && blue == other.blue;
-  }
-  bool operator!= (color_t &other) const
-  {
-    return !(*this == other);
-  }
-  inline color_t
-  operator+ (const color_t rhs) const
-  {
-    color_t ret;
-    ret.red = red + rhs.red;
-    ret.green = green + rhs.green;
-    ret.blue = blue + rhs.blue;
-    return ret;
-  }
-  inline color_t
-  operator- (const color_t rhs) const
-  {
-    color_t ret;
-    ret.red = red - rhs.red;
-    ret.green = green - rhs.green;
-    ret.blue = blue - rhs.blue;
-    return ret;
-  }
-  inline color_t
-  normalize ()
-  {
-    /* TODO: Implement right sqrt variant.  */
-    luminosity_t coef = 1 / sqrt (red * red + blue * blue + green * green);
-    color_t ret (red * coef, green * coef, blue * coef);
-    return ret;
-  }
-  inline color_t
-  gamma (luminosity_t g)
-  {
-    color_t ret (apply_gamma (red, g), apply_gamma (green, g), apply_gamma (blue, g));
-    return ret;
-  }
-
-  /* Sign preserving gamma.  */
-  inline color_t
-  sgngamma (luminosity_t g)
-  {
-    color_t ret (apply_gamma (fabs (red), g), apply_gamma (fabs (green), g), apply_gamma (fabs (blue), g));
-    if (red < 0)
-      ret.red = -ret.red;
-    if (green < 0)
-      ret.green = -ret.green;
-    if (blue < 0)
-      ret.blue = -ret.blue;
-    return ret;
-  }
-};
+typedef rgbdata color_t;
 color_matrix matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 			       luminosity_t gx, luminosity_t gy,
 			       luminosity_t bx, luminosity_t by);

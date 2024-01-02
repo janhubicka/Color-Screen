@@ -7,10 +7,10 @@ scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int
 {
   m_param = param;
   lookup_table = render::get_lookup_table (gamma, maxval);
-  color_t black = m_param.black.sgngamma (gamma);
-  color_t red = m_param.red.sgngamma (gamma);
-  color_t green = m_param.green.sgngamma (gamma);
-  color_t blue = m_param.blue.sgngamma (gamma);
+  rgbdata black = m_param.black.sgngamma (gamma);
+  rgbdata red = m_param.red.sgngamma (gamma);
+  rgbdata green = m_param.green.sgngamma (gamma);
+  rgbdata blue = m_param.blue.sgngamma (gamma);
   red = (red - black).normalize ();
   green = (green - black).normalize ();
   blue = (blue - black).normalize ();

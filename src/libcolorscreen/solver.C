@@ -798,9 +798,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	count++;
   const int samples = 1000;
   int nnr = 0, nng = 0, nnb = 0;
-  color_t reds[samples*2];
-  color_t greens[samples];
-  color_t blues[samples];
+  rgbdata reds[samples*2];
+  rgbdata greens[samples];
+  rgbdata blues[samples];
   luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
 
   for (int y = -yshift, nf = 0, next =0, step = count / samples; y < known_patches->height - yshift; y++)
@@ -936,12 +936,12 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
     e.priority = e.sharpened_color.red / std::max (e.sharpened_color.green + e.sharpened_color.blue, (luminosity_t)0.000001);
   sort (pixels.begin (), pixels.end (), compare_priorities);
 
-  std::vector<color_t> reds;
+  std::vector<rgbdata> reds;
   for (entry &e : pixels)
     {
       if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
 	continue;
-      reds.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      reds.push_back ((rgbdata){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
       //printf ("%f %f %f %f\n", e.orig_color.red, e.orig_color.green, e.orig_color.blue, e.priority);
       if (reds.size () > pixels.size () / 1000)
 	break;
@@ -952,12 +952,12 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
     e.priority = e.sharpened_color.green / std::max (e.sharpened_color.red + e.sharpened_color.blue, (luminosity_t)0.000001);
   sort (pixels.begin (), pixels.end (), compare_priorities);
 
-  std::vector<color_t> greens;
+  std::vector<rgbdata> greens;
   for (entry &e : pixels)
     {
       if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
 	continue;
-      greens.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      greens.push_back ((rgbdata){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
       if (greens.size () > pixels.size () / 1000)
 	break;
     }
@@ -967,12 +967,12 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
     e.priority = e.sharpened_color.blue / std::max (e.sharpened_color.red + e.sharpened_color.green, (luminosity_t)0.000001);
   sort (pixels.begin (), pixels.end (), compare_priorities);
 
-  std::vector<color_t> blues;
+  std::vector<rgbdata> blues;
   for (entry &e : pixels)
     {
       if (e.orig_color.red + e.orig_color.green + e.orig_color.blue < min_density)
 	continue;
-      blues.push_back ((color_t){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
+      blues.push_back ((rgbdata){e.orig_color.red, e.orig_color.green, e.orig_color.blue});
       if (blues.size () > pixels.size () / 1000)
 	break;
     }
@@ -992,11 +992,11 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
 void
 optimize_screen_colors (scr_detect_parameters *param,
 			luminosity_t gamma,
-			color_t *reds,
+			rgbdata *reds,
 			int nreds,
-			color_t *greens,
+			rgbdata *greens,
 			int ngreens,
-			color_t *blues,
+			rgbdata *blues,
 			int nblues, progress_info *progress, FILE *report)
 {
   if (!nreds || !ngreens || !nblues)
@@ -1007,7 +1007,7 @@ optimize_screen_colors (scr_detect_parameters *param,
 
   double min_chisq = 0;
   bool found = false;
-  color_t bestdark, bestred, bestgreen, bestblue;
+  rgbdata bestdark, bestred, bestgreen, bestblue;
   luminosity_t bestrlum = 0, bestglum = 0, bestblum = 0;
   /* If true three dimenstional search is made for dark point.  */
   const bool threed = true;

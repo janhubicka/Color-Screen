@@ -8,7 +8,7 @@
 struct scr_detect_parameters
 {
   scr_detect_parameters ()
-  : black (0, 0,0), red(1, 0, 0), green(0, 1, 0), blue(0, 0, 1), min_luminosity (0.000), min_ratio (1), sharpen_radius (3), sharpen_amount (10)
+  : black ({0, 0,0}), red({1, 0, 0}), green({0, 1, 0}), blue({0, 0, 1}), min_luminosity (0.000), min_ratio (1), sharpen_radius (3), sharpen_amount (10)
   { }
 
   /* Typical valus of red, green and blue dyes scaled to range (0,1) in the scan's gamma.  */
