@@ -673,11 +673,11 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   delete detected.known_patches;
   detected.known_patches = NULL;
   if (m_prj->params.type == Dufay)
-    dufay.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, true, 0.7, progress);
+    dufay.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
   else
     {
       assert (detected.param.type != Dufay);
-      paget.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, true, 0.7, progress);
+      paget.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
     }
   if (m_prj->params.max_contrast >= 0)
     dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);

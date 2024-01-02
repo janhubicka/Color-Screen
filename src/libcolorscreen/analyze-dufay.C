@@ -118,9 +118,86 @@ analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
 #undef pixel
   return !progress || !progress->cancelled ();
 }
+/* Collect luminosity of individual color patches.
+   Function is flattened so it should do only necessary work.  */
+bool flatten_attr
+analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+{
+#pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  {
+#pragma omp for 
+    for (int y = miny ; y < maxy; y++)
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int x = minx; x < maxx; x++)
+	    {
+	      rgbdata d = render->get_unadjusted_rgb_pixel (x, y);
+	      coord_t scr_x, scr_y;
+	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+	      scr_x += m_xshift;
+	      scr_y += m_yshift;
+	      if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		continue;
+	      int xx = nearest_int (scr_x * 2 - 0.5);
+	      int yy = nearest_int (scr_y - 0.5);
+	      red_atomic_add (xx, yy, d.red);
+	      luminosity_t &lr = w_red [yy * m_width * 2 + xx];
+#pragma omp atomic
+	      lr += 1;
+	      xx = nearest_int (scr_x-(coord_t)0.5);
+	      yy = nearest_int (scr_y);
+	      luminosity_t &lg = w_green [yy * m_width + xx];
+
+	      green_atomic_add (xx, yy, d.green);
+#pragma omp atomic
+	      lg += 1;
+	      luminosity_t &lb = w_blue [yy * m_width + xx];
+	      blue_atomic_add (xx, yy, d.blue);
+#pragma omp atomic
+	      lb += 1;
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
+  if (!progress || !progress->cancel_requested ())
+    {
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width * 2; x++)
+	      if (w_red [y * m_width * 2 + x] != 0)
+		red (x,y) /= w_red [y * m_width * 2 + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_green [y * m_width + x] != 0)
+		green (x,y) /= w_green [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_blue [y * m_width + x] != 0)
+		blue (x,y) /= w_blue [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  }
+  return !progress || !progress->cancelled ();
+}
 
 bool
-analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress)
+analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
   m_width = width;
@@ -135,7 +212,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
   m_blue = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
   if (!m_red || !m_green || !m_blue)
     return false;
-  if (precise)
+  if (mode == precise || mode == color)
     {
       luminosity_t *w_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
       luminosity_t *w_green = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
@@ -178,7 +255,10 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
       if (progress)
 	progress->set_task ("determining intensities of Dufay screen patches (precise mode)", maxy - miny + m_height * 3);
 
-      analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      if (mode == precise)
+        analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      else
+        analyze_color (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 
       free (w_red);
       free (w_green);

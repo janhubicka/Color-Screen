@@ -43,7 +43,7 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	int yp = ystart + d;
 	int tp = (yp + clen) % clen;
 	if (yp < 0 || yp > height)
-	  memset (hblur + tp * width, 0, sizeof (O) * width);
+	  memset ((void *)(hblur + tp * width), 0, sizeof (O) * width);
 	else
 	  fir_blur::blur_horisontal<O, T, P, getdata> (hblur + tp * width, data, param, yp, width, clen, cmatrix);
       }

@@ -10,7 +10,7 @@ struct analyzer_params
   uint64_t graydata_id;
   uint64_t screen_id;
   //int width, height, xshift, yshift;
-  bool precise;
+  enum analyze_base::mode mode;
   luminosity_t collection_threshold;
   uint64_t mesh_trans_id;
   scr_to_img_parameters params;
@@ -24,12 +24,12 @@ struct analyzer_params
   operator==(analyzer_params &o)
   {
     return graydata_id == o.graydata_id
-	   && precise == o.precise
-	   && (!precise || screen_id == o.screen_id)
+	   && mode == o.mode
+	   && (mode == analyze_base::fast || screen_id == o.screen_id)
 	   /* TODO: Can be more fine grained.  */
 	   && mesh_trans_id == o.mesh_trans_id
 	   && (mesh_trans_id || params == o.params)
-	   && (!precise || collection_threshold == o.collection_threshold);
+	   && (mode == analyze_base::fast || collection_threshold == o.collection_threshold);
   };
 };
 
@@ -37,7 +37,7 @@ static analyze_dufay *
 get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift, int width, int height, progress_info *progress)
 {
   analyze_dufay *ret = new analyze_dufay();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.precise, p.collection_threshold, progress))
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.mode, p.collection_threshold, progress))
     return ret;
   delete ret;
   return NULL;
@@ -47,7 +47,7 @@ static analyze_paget *
 get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift, int width, int height, progress_info *progress)
 {
   analyze_paget *ret = new analyze_paget();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.precise, p.collection_threshold, progress))
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.mode != analyze_base::fast, p.collection_threshold, progress))
     return ret;
   delete ret;
   return NULL;
@@ -58,7 +58,7 @@ static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1
 }
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity), m_dufay (NULL), m_paget (NULL)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity), m_original_color (false), m_dufay (NULL), m_paget (NULL)
 {
 }
 
@@ -66,7 +66,7 @@ bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
-  if (!render_to_scr::precompute (true, true, xmin, ymin, xmax, ymax, progress))
+  if (!render_to_scr::precompute (!m_original_color, !m_original_color, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)
     {
@@ -108,7 +108,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
     {
       m_gray_data_id,
       screen_id,
-      m_params.precise,
+      m_original_color ? analyze_base::color : (m_params.precise ? analyze_base::fast : analyze_base::precise),
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),

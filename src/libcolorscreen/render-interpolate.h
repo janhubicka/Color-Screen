@@ -51,10 +51,15 @@ public:
     set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
   pure_attr flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
+  void original_color ()
+  {
+    m_original_color = true;
+  }
 private:
   screen *m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
+  bool m_original_color;
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
 

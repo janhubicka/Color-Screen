@@ -37,7 +37,7 @@ struct color_class_params
 {
   uint64_t image_id;
   image_data *img;
-  mem_rgbdata *precomputed_rgbdata;
+  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata;
   scr_detect_parameters p;
   scr_detect *d;
   luminosity_t gamma;
@@ -121,15 +121,16 @@ getdata_helper (render_scr_detect &r, int x, int y, int, int)
   return r.fast_get_adjusted_pixel (x, y);
 }
 
-mem_rgbdata *
+
+render_scr_detect::my_mem_rgbdata *
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
-  mem_rgbdata *precomputed_rgbdata = (mem_rgbdata *)malloc (p.img->width * p.img->height * sizeof (mem_rgbdata));
+  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata = (render_scr_detect::my_mem_rgbdata *)malloc (p.img->width * p.img->height * sizeof (render_scr_detect::my_mem_rgbdata));
   bool ok = true;
   if (!precomputed_rgbdata)
     return NULL;
   if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
-    ok = sharpen<rgbdata, mem_rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
+    ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
   else
     {
       if (progress)
@@ -151,7 +152,7 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     }
   return precomputed_rgbdata;
 }
-static lru_cache <precomputed_rgbdata_params, mem_rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
+static lru_cache <precomputed_rgbdata_params, render_scr_detect::my_mem_rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
 
 /* Lookup table translates raw input data into linear values.  */
 struct patches_cache_params

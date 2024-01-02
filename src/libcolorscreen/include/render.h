@@ -350,6 +350,7 @@ public:
   enum render_type_t
   {
     render_type_original,
+    render_type_interpolated_original,
     render_type_preview_grid,
     render_type_realistic,
     render_type_interpolated,
@@ -381,7 +382,7 @@ public:
     return d;
   }
   inline rgbdata
-  get_rgb_pixel (int x, int y)
+  get_unadjusted_rgb_pixel (int x, int y)
   {
     rgbdata d = get_linearized_rgb_pixel (x, y);
     if (m_backlight_correction)
@@ -391,6 +392,12 @@ public:
 	d.blue = m_backlight_correction->apply (d.blue, x, y, backlight_correction_parameters::blue, true);
 	/* TODO do inversion and film curves if requested.  */
       }
+    return d;
+  }
+  inline rgbdata
+  get_rgb_pixel (int x, int y)
+  {
+    rgbdata d = get_unadjusted_rgb_pixel (x, y);
     d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
     d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
     d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;

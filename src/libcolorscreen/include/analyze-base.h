@@ -12,6 +12,12 @@ public:
     luminosity_t min;
     luminosity_t max;
   };
+  enum mode
+  {
+    fast,
+    precise,
+    color
+  };
   void set_known_pixels (bitmap_2d *bitmap)
   {
     assert (!m_known_pixels && !m_n_known_pixels);
