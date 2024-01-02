@@ -5,9 +5,9 @@
 /* Kernel for "sharpening" with with either radius or amount being zero.
    Flattened so avoid doing unnecesary stuff.  */
 
-template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 flatten_attr void
-non_sharpen(O *out, T data, P param, int width, int height, progress_info *progress)
+non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *progress)
 {
 #pragma omp parallel for shared(progress,out,width, height, param, data) default(none)
   for (int y = 0; y < height; y++)
@@ -20,9 +20,9 @@ non_sharpen(O *out, T data, P param, int width, int height, progress_info *progr
 
 /* Kernel for actual shaprening.
    Flattened so avoid doing unnecesary stuff.  */
-template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 flatten_attr void
-do_sharpen(O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress)
+do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress)
 {
 #pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data) default(none)
   {
@@ -78,9 +78,9 @@ do_sharpen(O *out, T data, P param, int width, int height, int clen, luminosity_
 
    For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
-template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 bool
-sharpen(O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
+sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
 {
   luminosity_t *cmatrix;
   /* Fast path if we do no sharpening.  */
@@ -88,7 +88,7 @@ sharpen(O *out, T data, P param, int width, int height, luminosity_t radius, lum
     {
       if (progress)
 	progress->set_task ("converting to linear HDR image", height);
-      non_sharpen<O,T,P,getdata> (out, data, param, width, height, progress);
+      non_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, progress);
       if (progress && progress->cancelled ())
 	return false;
       return true;
@@ -98,7 +98,7 @@ sharpen(O *out, T data, P param, int width, int height, luminosity_t radius, lum
     return false;
   if (progress)
     progress->set_task ("sharpening", height);
-  do_sharpen<O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress);
+  do_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress);
 
   free (cmatrix);
   if (progress && progress->cancelled ())

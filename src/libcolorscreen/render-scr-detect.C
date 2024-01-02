@@ -128,7 +128,8 @@ rgbdata *get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *p
   if (!precomputed_rgbdata)
     return NULL;
   if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
-    ok = sharpen<rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
+    /* TODO: implement mem_rgbdata.  */
+    ok = sharpen<rgbdata, rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
   else
     {
       if (progress)

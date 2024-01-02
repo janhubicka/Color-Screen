@@ -16,13 +16,13 @@ std::atomic_uint64_t lru_caches::time;
 class sharpened_data
 {
 public:
-  luminosity_t *m_data;
+  mem_luminosity_t *m_data;
   sharpened_data (int width, int height);
   ~sharpened_data();
 };
 sharpened_data::sharpened_data (int width, int height)
 {
-   m_data = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t), "HDR data");
+   m_data = (mem_luminosity_t *)MapAlloc::Alloc (width * height * sizeof (mem_luminosity_t), "HDR data");
 }
 sharpened_data::~sharpened_data ()
 {
@@ -313,7 +313,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
   sharpened_data *ret = new sharpened_data (p.gp.img->width, p.gp.img->height);
   if (!ret)
     return NULL;
-  luminosity_t *out = ret->m_data;
+  mem_luminosity_t *out = ret->m_data;
   if (!out)
     {
       delete ret;
@@ -337,7 +337,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
 	  delete ret;
 	  return NULL;
 	}
-      ok = sharpen<luminosity_t, unsigned short **, getdata_params, getdata_helper> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+      ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **, getdata_params, getdata_helper> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
       lookup_table_cache.release (d.table);
     }
   else
@@ -348,7 +348,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       else
 	{
 	  t.correction = p.gp.backlight;
-	  ok = sharpen<luminosity_t, image_data *, gray_data_tables, getdata_helper2> (out, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+	  ok = sharpen<luminosity_t, mem_luminosity_t, image_data *, gray_data_tables, getdata_helper2> (out, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
 	  free_gray_data_tables (t);
 	}
     }

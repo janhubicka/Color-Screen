@@ -426,7 +426,7 @@ protected:
   /* ID of graydata computed.  */
   uint64_t m_gray_data_id;
   /* Sharpened data we render from.  */
-  luminosity_t *m_sharpened_data;
+  mem_luminosity_t *m_sharpened_data;
   /* Wrapping class to cause proper destruction.  */
   class sharpened_data *m_sharpened_data_holder;
   /* Maximal value in m_data.  */

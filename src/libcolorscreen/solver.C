@@ -913,7 +913,8 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
     return false;
   luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
   struct imgtile section = {lookup_table, x - clen / 2, y - clen / 2, img};
-  sharpen<rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
+  /* TODO: implement mem_rgbdata.  */
+  sharpen<rgbdata, rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
   std::vector<entry> pixels;
   for (int yy = y ; yy < y + height; yy++)
     for (int xx = x ; xx < x + width; xx++)

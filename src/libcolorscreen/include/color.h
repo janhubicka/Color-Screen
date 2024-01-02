@@ -4,7 +4,9 @@
 #include "matrix.h"
 
 //typedef double luminosity_t;
-typedef float luminosity_t;
+typedef double luminosity_t;
+/* mem_luminosity_t is used for very large temporary data.  */
+typedef float mem_luminosity_t;
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)
