@@ -7,6 +7,7 @@ namespace {
 
 struct analyzer_params
 {
+  uint64_t img_id;
   uint64_t graydata_id;
   uint64_t screen_id;
   //int width, height, xshift, yshift;
@@ -23,13 +24,19 @@ struct analyzer_params
   bool
   operator==(analyzer_params &o)
   {
-    return graydata_id == o.graydata_id
-	   && mode == o.mode
-	   && (mode == analyze_base::fast || screen_id == o.screen_id)
-	   /* TODO: Can be more fine grained.  */
-	   && mesh_trans_id == o.mesh_trans_id
-	   && (mesh_trans_id || params == o.params)
-	   && (mode == analyze_base::fast || collection_threshold == o.collection_threshold);
+    if (mode != o.mode
+	|| mesh_trans_id != o.mesh_trans_id
+	|| (!mesh_trans_id && params != o.params)
+	|| (params.type == Dufay) != (o.params.type == Dufay))
+      return false;
+    if (mode == analyze_base::color)
+      return img_id == o.img_id;
+    if (graydata_id != o.graydata_id)
+      return false;
+    if (mode == analyze_base::fast)
+      return true;
+    return screen_id == o.screen_id
+	   && collection_threshold == o.collection_threshold;
   };
 };
 
@@ -106,9 +113,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   height += 8;
   struct analyzer_params p
     {
+      m_img.id,
       m_gray_data_id,
       screen_id,
-      m_original_color ? analyze_base::color : (m_params.precise ? analyze_base::fast : analyze_base::precise),
+      m_original_color ? analyze_base::color : (!m_params.precise ? analyze_base::fast : analyze_base::precise),
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
@@ -306,6 +314,7 @@ render_interpolate::~render_interpolate ()
 void
 render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
 {
-  dufay_analyzer_cache.increase_capacity (n);
-  paget_analyzer_cache.increase_capacity (n);
+  /* Triple size, since we have 3 modes.  */
+  dufay_analyzer_cache.increase_capacity (3 * n);
+  paget_analyzer_cache.increase_capacity (3 * n);
 }

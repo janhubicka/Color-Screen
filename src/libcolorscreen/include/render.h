@@ -286,11 +286,7 @@ struct DLL_PUBLIC render_parameters
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
     if (color)
-      {
-	white_balance = rparam.white_balance;
-	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
-	brightness *= 3;
-      }
+      white_balance = rparam.white_balance;
     mix_red = rparam.mix_red;
     mix_green = rparam.mix_green;
     mix_blue = rparam.mix_blue;
