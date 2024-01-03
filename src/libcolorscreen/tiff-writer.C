@@ -52,7 +52,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       || !TIFFSetField (out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)
       || (p.alpha && !TIFFSetField (out, TIFFTAG_EXTRASAMPLES, 1, extras))
       //|| !TIFFSetField (out, TIFFTAG_COMPRESSION, COMPRESSION_LZW)
-      || !TIFFSetField (out, TIFFTAG_ICCPROFILE, p.icc_profile ? (uint32_t)p.icc_profile_len : (uint32_t) sRGB_icc_len, p.icc_profile ? p.icc_profile : sRGB_icc)
+      || !TIFFSetField (out, TIFFTAG_SOFTWARE, "Color-screen")
       || (p.xdpi && !TIFFSetField (out, TIFFTAG_XRESOLUTION, (double)p.xdpi))
       || (p.ydpi && !TIFFSetField (out, TIFFTAG_YRESOLUTION, (double)p.ydpi)))
     {
@@ -61,12 +61,52 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       out = NULL;
       return;
     }
+  if (!p.dng)
+   {
+     if (!TIFFSetField (out, TIFFTAG_ICCPROFILE, p.icc_profile ? (uint32_t)p.icc_profile_len : (uint32_t) sRGB_icc_len, p.icc_profile ? p.icc_profile : sRGB_icc))
+       {
+	 *error = "write error";
+	 TIFFClose (out);
+	 out = NULL;
+	 return;
+       }
+   }
   if (p.tile)
     {
       if (!TIFFSetField (out, TIFFTAG_XPOSITION, ((double)p.xoffset / p.xdpi))
 	  || !TIFFSetField (out, TIFFTAG_YPOSITION, ((double)p.yoffset / p.ydpi))
 	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLWIDTH, (long)(p.width + p.xoffset))
 	  || !TIFFSetField (out, TIFFTAG_PIXAR_IMAGEFULLLENGTH, (long)(p.height + p.yoffset)))
+	{
+	  *error = "write error";
+	  TIFFClose (out);
+	  out = NULL;
+	  return;
+	}
+    }
+  if (p.dng)
+    {
+      long white = 0xffff;
+      color_matrix m = p.dye_to_xyz.invert ();
+      static const float cam_xyz[] = {
+        m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0],
+        m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1],
+        m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2]};
+      ///*= { /*0.807133, 1.0, 0.913289*/ };
+      luminosity_t n0, n1, n2;
+      p.dye_to_xyz.apply_to_rgb (1,1,1, &n0, &n1, &n2);
+      static const float neutral[3] = {n0, n1, n2};
+      /* TODO: Thumbnail should be subfiletype 1.  */
+      if (!TIFFSetField (out, TIFFTAG_SUBFILETYPE, 0)
+	  || !TIFFSetField (out, TIFFTAG_DNGVERSION, "\001\001\0\0")
+	  || !TIFFSetField (out, TIFFTAG_DNGBACKWARDVERSION, "\001\0\0\0")
+	  || !TIFFSetField (out, TIFFTAG_COLORMATRIX1, 9, cam_xyz)
+	  || !TIFFSetField (out, TIFFTAG_ASSHOTNEUTRAL, 3, neutral)
+	  || !TIFFSetField (out, TIFFTAG_MAKE, "Early color photography")
+	  || !TIFFSetField (out, TIFFTAG_MODEL, "Really old camera")
+	  || !TIFFSetField (out, TIFFTAG_UNIQUECAMERAMODEL, "Long forgotten")
+	  || !TIFFSetField (out, TIFFTAG_CALIBRATIONILLUMINANT1, 21)
+	  || !TIFFSetField (out, TIFFTAG_WHITELEVEL, 1, &white))
 	{
 	  *error = "write error";
 	  TIFFClose (out);
@@ -97,6 +137,7 @@ tiff_writer::write_row ()
 tiff_writer::~tiff_writer()
 {
   //progress->set_task ("Closing tile output file", 1);
+  TIFFWriteDirectory(out);
   if (out)
     TIFFClose (out);
   out = NULL;

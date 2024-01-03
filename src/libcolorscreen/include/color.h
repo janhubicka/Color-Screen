@@ -111,6 +111,9 @@ struct xyz {
   constexpr xyz (luminosity_t xx, luminosity_t yy, luminosity_t zz)
   : x (xx), y (yy), z (zz)
   { }
+  constexpr xyz ()
+  : x (0), y (0), z(0)
+  { }
   inline constexpr xyz (struct xyY);
   xyz &operator+=(const luminosity_t other)
   {

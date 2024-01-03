@@ -399,6 +399,26 @@ public:
     d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
     return d;
   }
+  color_matrix get_dye_to_xyz_matrix ()
+  {
+    bool is_rgb;
+    bool spectrum_based;
+    color_matrix dyes = m_params.get_dyes_matrix (&is_rgb, &spectrum_based, &m_img, true);
+    /* TODO: It may make more sense to have presaturation done in DNG file.  */
+#if 0
+    if (m_params.presaturation != 1)
+      {
+        presaturation_matrix m (m_params.presaturation);
+        dyes = dyes * m;
+      }
+#endif
+    if (is_rgb)
+      {
+        xyz_srgb_matrix m;
+        dyes = m.invert () * dyes;
+      }
+    return dyes;
+  }
 
 protected:
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);

@@ -1701,3 +1701,67 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
   gsl_matrix_free (A);
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, invert, ts, td);
 }
+
+/* Determine matrix profile based on colors and targets.
+   TODO: We should not minimize least squares, we want smallest deltaE2000  */
+
+color_matrix
+determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark_point)
+{
+  int nvariables = 9;
+  if (dark_point)
+    nvariables++;
+  int nequations = n * 3;
+  gsl_matrix *X, *cov;
+  gsl_vector *y, *w, *c;
+  X = gsl_matrix_alloc (nequations, nvariables);
+  y = gsl_vector_alloc (nequations);
+  w = gsl_vector_alloc (nequations);
+  c = gsl_vector_alloc (nvariables);
+  cov = gsl_matrix_alloc (nvariables, nvariables);
+  for (int i = 0; i < n; i++)
+    {
+      for (int j = 0; j < 3; j++)
+	{
+	  for (int k = 0; k < 3; k++)
+	    {
+	      gsl_matrix_set (X, i * 3 + j, 3 * k + 0, j == k ? colors[i].red : 0);
+	      gsl_matrix_set (X, i * 3 + j, 3 * k + 1, j == k ? colors[i].green : 0);
+	      gsl_matrix_set (X, i * 3 + j, 3 * k + 2, j == k ? colors[i].blue : 0);
+	    }
+	  if (dark_point)
+	    gsl_matrix_set (X, i * 3 + j, 9, 1);
+	  gsl_vector_set (y, i * 3 + j, targets[i][j]);
+	  gsl_vector_set (w, i * 3 + j, 1);
+	}
+    }
+  double chisq;
+  gsl_multifit_linear_workspace * work
+    = gsl_multifit_linear_alloc (nequations, nvariables);
+  gsl_multifit_wlinear (X, w, y, c, cov,
+			&chisq, work);
+  color_matrix ret (C(0), C(1), C(2), 0,
+		    C(3), C(4), C(5), 0,
+		    C(6), C(7), C(8), 0,
+		    0, 0, 0, 1);
+  if (dark_point)
+    *dark_point = C(9);
+  gsl_multifit_linear_free (work);
+  gsl_matrix_free (X);
+  gsl_vector_free (y);
+  gsl_vector_free (w);
+  gsl_vector_free (c);
+  gsl_matrix_free (cov);
+  luminosity_t desum = 0, demax = 0;
+  for (int i = 0; i < n; i++)
+    {
+      xyz color2;
+      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
+      luminosity_t d = deltaE2000 (targets[i], color2);
+      desum += d;
+      if (demax < d)
+	demax = d;
+    }
+  printf ("DeltaE2000 avg %f, max %f\n", desum / n, demax);
+  return ret;
+}

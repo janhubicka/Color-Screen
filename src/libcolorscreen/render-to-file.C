@@ -62,6 +62,13 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
   tp.filename = p.filename;
   tp.width = p.width;
   tp.height = p.height;
+  if (p.dng)
+    {
+      p.depth=16;
+      p.hdr = false;
+      tp.dng = true; 
+      tp.dye_to_xyz = render.get_dye_to_xyz_matrix ();
+    }
   tp.hdr = p.hdr;
   tp.depth = p.depth;
   tp.icc_profile = p.icc_profile;
@@ -405,6 +412,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   bool free_profile = false;
   if (scan.stitch)
     return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
+  if (rfparams.dng)
+    rparam.output_gamma = 1;
   if (rfparams.verbose)
     {
       if (progress)
@@ -433,7 +442,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       *error = "color preview grid is imposible in monochromatic scan";
       return false;
     }
-  if (rfparams.hdr)
+  if (rfparams.hdr || rfparams.dng)
     rparam.output_profile = render_parameters::output_profile_original;
 
   if (rparam.output_profile == render_parameters::output_profile_original)

@@ -32,6 +32,7 @@ struct render_to_file_params
   int depth;
   bool verbose;
   bool hdr;
+  bool dng;
   coord_t scale;
   void *icc_profile;
   int icc_profile_len;
@@ -56,7 +57,7 @@ struct render_to_file_params
   /* Position of rendered image in the project.  */
   coord_t xpos, ypos;
   render_to_file_params ()
-  : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
+  : mode (interpolated), filename (NULL), depth(16), verbose (false), hdr (false), dng(false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
   {}
 
   struct output_mode_property

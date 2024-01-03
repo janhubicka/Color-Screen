@@ -3,6 +3,7 @@
 #include "include/scr-to-img.h"
 #include "include/render.h"
 #include "include/tiff-writer.h"
+#include "include/solver.h"
 #include "icc.h"
 #include "dufaycolor.h"
 
@@ -4733,8 +4734,28 @@ color_matrix
 spectrum_dyes_to_xyz::optimized_xyz_matrix ()
 {
   xyz whitep = /*srgb_white*/ whitepoint_xyz ();
+  const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
+  rgbdata colors[n];
+  xyz targets[n];
+  rgbdata res =
+    {
+      simulated_response (backlight, film_response, red),
+      simulated_response (backlight, film_response, green),
+      simulated_response (backlight, film_response, blue)
+    };
+  for (int i = 0; i < n; i++)
+    {
+      xspect &xtile = TLCI_2012_TCS [i];
+      spectrum tile;
+      compute_spectrum (tile, xtile);
+      colors[i].red   = simulated_response (backlight, film_response, tile, red)/res.red;
+      colors[i].green = simulated_response (backlight, film_response, tile, green)/res.green;
+      colors[i].blue  = simulated_response (backlight, film_response, tile, blue)/res.blue;
+      targets[i] = get_xyz_old_observer (backlight, tile);
+    }
+  color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
+#if 0
 
-  color_matrix cm = dufaycolor::corrected_dye_matrix ();
   luminosity_t rw, gw,bw;
   cm.normalize_grayscale (whitep.x, whitep.y, whitep.z, &rw, &gw, &bw);
   rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0};
@@ -4762,6 +4783,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix ()
   m2 = m2.invert ();
   m1 = m1 * m2;
   //m1.normalize_grayscale (whitep.x, whitep.y, whitep.z);
+#endif
   
   return m1;
 }

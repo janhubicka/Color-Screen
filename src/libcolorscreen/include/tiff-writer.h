@@ -61,8 +61,10 @@ struct tiff_writer_params
   size_t icc_profile_len;
   /* Offset of the tile.  */
   int xoffset, yoffset;
+  bool dng;
+  color_matrix dye_to_xyz;
   tiff_writer_params ()
-    : filename (NULL), width (0), height (0), depth (16), xdpi(0), ydpi (0), alpha (false), hdr (false), tile (false), icc_profile (NULL), icc_profile_len (0)
+    : filename (NULL), width (0), height (0), depth (16), xdpi(0), ydpi (0), alpha (false), hdr (false), tile (false), icc_profile (NULL), icc_profile_len (0), dng (false)
   {
   }
 };
