@@ -968,7 +968,7 @@ const static spectra_entry autochrome_orange[] =
   {729  , 0.72862  }
 };
 /* Dufay_measuredODs_DC_MSI_NSMM11948.xlsx
- * NSMM, Bradford  - 11948*/
+   NSMM, Bradford  - 11948*/
 const static spectra_entry real_dufay_red[] = {
   {399.8, 1.6927},
   {415, 1.7791},
@@ -1264,29 +1264,6 @@ const static spectra_entry real_dufay_blue4[] = {
   {704  , 0.46989},
   {719.8, 0.37775}
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* Dufay_measuredODs_DC_MSI_NSMM12075.xlsx
    Spicer-Dufay NSMM, Bradford  - 12075 (probably Spicer Dufay) */
@@ -4212,200 +4189,6 @@ change_concentration (spectrum s, luminosity_t concentration)
     s[i] = pow (s[i], concentration);
 }
 
-void
-spectrum_dyes_to_xyz::set_dyes_to_dufay (int measurement, luminosity_t age)
-{
-  spectrum new_red, new_green, new_blue;
-  compute_spectrum (new_red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
-  compute_spectrum (new_green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
-  compute_spectrum (new_blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
-  if (debug)
-    printf ("Setting dyes to dufay measurement %i\n", measurement);
-  if (measurement == 0)
-    {
-      compute_spectrum (red, sizeof (real_dufay_red) / sizeof (spectra_entry), real_dufay_red, true);
-      compute_spectrum (green, sizeof (real_dufay_green) / sizeof (spectra_entry), real_dufay_green, true);
-      compute_spectrum (blue, sizeof (real_dufay_blue) / sizeof (spectra_entry), real_dufay_blue, true);
-    }
-  else if (measurement == 1)
-    {
-      compute_spectrum (red, sizeof (real_dufay_red2) / sizeof (spectra_entry), real_dufay_red2, true);
-      compute_spectrum (green, sizeof (real_dufay_green2) / sizeof (spectra_entry), real_dufay_green2, true);
-      compute_spectrum (blue, sizeof (real_dufay_blue2) / sizeof (spectra_entry), real_dufay_blue2, true);
-    }
-  else if (measurement == 2)
-    {
-      compute_spectrum (red, sizeof (real_dufay_red3) / sizeof (spectra_entry), real_dufay_red3, true);
-      compute_spectrum (green, sizeof (real_dufay_green3) / sizeof (spectra_entry), real_dufay_green3, true);
-      compute_spectrum (blue, sizeof (real_dufay_blue3) / sizeof (spectra_entry), real_dufay_blue3, true);
-    }
-  else if (measurement == 3)
-    {
-      compute_spectrum (red, sizeof (real_dufay_red4) / sizeof (spectra_entry), real_dufay_red4, true);
-      compute_spectrum (green, sizeof (real_dufay_green4) / sizeof (spectra_entry), real_dufay_green4, true);
-      compute_spectrum (blue, sizeof (real_dufay_blue4) / sizeof (spectra_entry), real_dufay_blue4, true);
-    }
-  else if (measurement == 4)
-    {
-      compute_spectrum (red, sizeof (real_dufay_red5) / sizeof (spectra_entry), real_dufay_red5, true);
-      compute_spectrum (green, sizeof (real_dufay_green5) / sizeof (spectra_entry), real_dufay_green5, true);
-      compute_spectrum (blue, sizeof (real_dufay_blue5) / sizeof (spectra_entry), real_dufay_blue5, true);
-    }
-  else
-    abort ();
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    {
-      red[i] = (new_red[i] * (1 - age) + red[i] * age) / 1;
-      green[i] = (new_green[i] * (1 - age) + green[i] * age) / 1;
-      blue[i] = (new_blue[i] * (1 - age) + blue[i] * age) / 1;
-    }
-#if 0
-  change_concentration (red, 1);
-  change_concentration (green, 1);
-  change_concentration (blue, 1);
-#endif
-}
-void
-spectrum_dyes_to_xyz::set_dyes_to_dufay_manual ()
-{
-  compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, false);
-  compute_spectrum (green, sizeof (manual_dufay_green) / sizeof (spectra_entry), manual_dufay_green, false);
-  compute_spectrum (blue, sizeof (manual_dufay_blue) / sizeof (spectra_entry), manual_dufay_blue, false);
-}
-void
-spectrum_dyes_to_xyz::set_dyes_to_dufay_color_cinematography ()
-{
-  compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
-  compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
-  compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
-#if 0
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (blue[i], 1.7);
-#endif
-}
-void
-spectrum_dyes_to_xyz::set_dyes_to_dufay_harrison_horner ()
-{
-  compute_spectrum (red, sizeof (harrison_horner_dufay_red) / sizeof (spectra_entry), harrison_horner_dufay_red, false, 100, 0, 100);
-  compute_spectrum (green, sizeof (harrison_horner_dufay_green) / sizeof (spectra_entry), harrison_horner_dufay_green, false, 100, 0, 100);
-  compute_spectrum (blue, sizeof (harrison_horner_dufay_blue) / sizeof (spectra_entry), harrison_horner_dufay_blue, false, 100, 0, 100);
-#if 0
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (blue[i], 1.7);
-#endif
-}
-
-void
-spectrum_dyes_to_xyz::set_dyes_to_autochrome ()
-{
-  if (debug)
-    printf ("Setting dyes to autochrome\n");
-  compute_spectrum (red,
-		    sizeof (autochrome_orange) / sizeof (spectra_entry),
-		    autochrome_orange, false, 1);
-  compute_spectrum (green,
-		    sizeof (autochrome_green) / sizeof (spectra_entry),
-		    autochrome_green, false, 1);
-  compute_spectrum (blue,
-		    sizeof (autochrome_violet) / sizeof (spectra_entry),
-		    autochrome_violet, false, 1);
-}
-void
-spectrum_dyes_to_xyz::set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
-					       luminosity_t green_patent, luminosity_t green_tartrazine,
-					       luminosity_t violet_crystal, luminosity_t violet_flexo,
-					       luminosity_t age)
-{
-  spectrum tartrazine, rose, erythrosine, patent, flexo, crystal;
-  spectrum o2_rose, o2_erythrosine, o2_patent,  o2_flexo,  o2_crystal;
-  FILE *f;
-  if (debug)
-    printf ("Setting dyes to autochrome by Casella Tsukada age %f\n", age);
-  //compute_spectrum (tartrazine, 400, 700, sizeof tartrazine_data / sizeof (luminosity_t), tartrazine_data, false);
-  compute_spectrum (tartrazine,
-		    sizeof (tartrazine_paper_data) / sizeof (spectra_entry),
-		    tartrazine_paper_data, false, 100);
-  //compute_spectrum (rose, 400, 700, sizeof rose_data / sizeof (luminosity_t), rose_data, false);
-  compute_spectrum (rose,
-		    sizeof (rose_paper_data) / sizeof (spectra_entry),
-		    rose_paper_data, false, 100);
-  compute_spectrum (o2_rose,
-		    sizeof (o2_rose_paper_data) / sizeof (spectra_entry),
-		    o2_rose_paper_data, false, 100);
-  //compute_spectrum (erythrosine, 400, 700, sizeof erythrosine_data / sizeof (luminosity_t), erythrosine_data, false);
-  compute_spectrum (erythrosine,
-		    sizeof (erythrosine_paper_data) / sizeof (spectra_entry),
-		    erythrosine_paper_data, false, 100);
-  compute_spectrum (o2_erythrosine,
-		    sizeof (o2_erythrosine_paper_data) / sizeof (spectra_entry),
-		    o2_erythrosine_paper_data, false, 100);
-  //compute_spectrum (patent, 400, 700, sizeof patent_data / sizeof (luminosity_t), patent_data, false);
-  compute_spectrum (patent,
-		    sizeof (patent_paper_data) / sizeof (spectra_entry),
-		    patent_paper_data, false, 100);
-  compute_spectrum (o2_patent,
-		    sizeof (o2_patent_paper_data) / sizeof (spectra_entry),
-		    o2_patent_paper_data, false, 100);
-  //compute_spectrum (flexo, 400, 700, sizeof flexo_data / sizeof (luminosity_t), flexo_data, false);
-  compute_spectrum (flexo,
-		    sizeof (flexo_paper_data) / sizeof (spectra_entry),
-		    flexo_paper_data, false, 100);
-  compute_spectrum (o2_flexo,
-		    sizeof (o2_flexo_paper_data) / sizeof (spectra_entry),
-		    o2_flexo_paper_data, false, 100);
-  //compute_spectrum (crystal, 400, 700, sizeof crystal_data / sizeof (luminosity_t), crystal_data, false);
-  compute_spectrum (crystal,
-		    sizeof (crystal_paper_data) / sizeof (spectra_entry),
-		    crystal_paper_data, false, 100);
-  compute_spectrum (o2_crystal,
-		    sizeof (o2_crystal_paper_data) / sizeof (spectra_entry),
-		    o2_crystal_paper_data, false, 100);
-  if (debug)
-    {
-      f = fopen ("/tmp/tartrazine-trans.dat", "w");
-      print_transmitance_spectrum (f, tartrazine);
-      fclose (f);
-      f = fopen ("/tmp/rose-trans.dat", "w");
-      print_transmitance_spectrum (f, rose);
-      fclose (f);
-      f = fopen ("/tmp/o2_rose-trans.dat", "w");
-      print_transmitance_spectrum (f, o2_rose);
-      fclose (f);
-      f = fopen ("/tmp/erythrosine-trans.dat", "w");
-      print_transmitance_spectrum (f, erythrosine);
-      fclose (f);
-      f = fopen ("/tmp/o2_erythrosine-trans.dat", "w");
-      print_transmitance_spectrum (f, o2_erythrosine);
-      fclose (f);
-      f = fopen ("/tmp/patent-trans.dat", "w");
-      print_transmitance_spectrum (f, patent);
-      fclose (f);
-      f = fopen ("/tmp/o2_patent-trans.dat", "w");
-      print_transmitance_spectrum (f, o2_patent);
-      fclose (f);
-      f = fopen ("/tmp/flexo-trans.dat", "w");
-      print_transmitance_spectrum (f, flexo);
-      fclose (f);
-      f = fopen ("/tmp/o2_flexo-trans.dat", "w");
-      print_transmitance_spectrum (f, o2_flexo);
-      fclose (f);
-      f = fopen ("/tmp/crystal-trans.dat", "w");
-      print_transmitance_spectrum (f, crystal);
-      fclose (f);
-      f = fopen ("/tmp/o2_crystal-trans.dat", "w");
-      print_transmitance_spectrum (f, o2_crystal);
-      fclose (f);
-      daylight_il (backlight, 6500);
-    }
-#define scale(n,m,w) ((100-(100-((n)+(((m)-(n))*age)))*(w)*1.0)/100)
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    {
-      red[i] = (scale (erythrosine[i], o2_erythrosine[i], orange_erythrosine)* scale (rose[i], o2_rose[i], orange_rose) * scale (tartrazine[i], tartrazine[i], orange_tartrazine));
-      green[i] = (scale (patent[i], o2_patent[i], green_patent) * scale (tartrazine[i], tartrazine[i], green_tartrazine));
-      blue[i] = (scale (crystal[i], o2_crystal[i], violet_crystal) * scale (flexo[i], o2_flexo[i], violet_flexo));
-    }
-  debug_write_spectra ();
-}
 
 void
 spectrum_dyes_to_xyz::debug_write_spectra ()
@@ -4996,86 +4779,6 @@ spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const
     }
 }
 
-#define NORM 100000
-#define SCALE 30
-#define NORM2 9000000
-void
-spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
-{
-#if 0
-  static bool initialized;
-  static spectrum auramine;
-  static spectrum rhodamine_b;
-  if (!initialized)
-    {
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
-      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, NORM);
-      initialized = true;
-    }
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    red[i] = pow (rhodamine_b[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
-#endif
-  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  assert (sizeof (rhodamine_b_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    red[i] = absorbance_to_transmitance (auramine_absorption[i] * d1/NORM2 + rhodamine_b_absorption[i] * d2/NORM2 );
-}
-
-void
-spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
-{
-#if 0
-  static spectrum malachite;
-  static spectrum auramine;
-  static spectrum methylene_blue;
-  static bool initialized;
-  if (!initialized)
-    {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
-      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
-      initialized = true;
-    }
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    green[i] = pow (methylene_blue[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
-#endif
-  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    green[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + auramine_absorption[i] * d2/NORM2);
-}
-
-void
-spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
-{
-#if 0
-  static spectrum malachite;
-  static spectrum violet;
-  static spectrum methylene_blue;
-  static bool initialized;
-  if (!initialized)
-    {
-      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
-      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, NORM);
-      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
-      initialized = true;
-    }
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/SCALE) * pow (violet[i], d2/SCALE);
-#endif
-  assert (sizeof (crystal_violet_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    blue[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + crystal_violet_absorption[i] * d2/NORM2);
-}
-
-void
-spectrum_dyes_to_xyz::set_dyes_to_wratten_25_58_47 ()
-{
-  compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
-  compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
-  compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
-}
 /* Output gnuplottable data.  */
 static void
 print_response_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_START, int end = SPECTRUM_END)
@@ -5390,4 +5093,269 @@ write_optimal_response (color_matrix m, const char *redname, const char *greenna
   fclose (greenf);
   fclose (bluef);
   return true;
+}
+
+/* Based on Casella-Tsukada paper.  */
+static void
+set_dyes_to_autochrome2 (spectrum red, spectrum green, spectrum blue,
+			 luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
+			 luminosity_t green_patent, luminosity_t green_tartrazine,
+			 luminosity_t violet_crystal, luminosity_t violet_flexo,
+			 bool aged)
+{
+  spectrum tartrazine, rose, erythrosine, patent, flexo, crystal;
+  spectrum o2_rose, o2_erythrosine, o2_patent,  o2_flexo,  o2_crystal;
+  //compute_spectrum (tartrazine, 400, 700, sizeof tartrazine_data / sizeof (luminosity_t), tartrazine_data, false);
+  compute_spectrum (tartrazine,
+		    sizeof (tartrazine_paper_data) / sizeof (spectra_entry),
+		    tartrazine_paper_data, false, 100);
+  //compute_spectrum (rose, 400, 700, sizeof rose_data / sizeof (luminosity_t), rose_data, false);
+  compute_spectrum (rose,
+		    sizeof (rose_paper_data) / sizeof (spectra_entry),
+		    rose_paper_data, false, 100);
+  compute_spectrum (o2_rose,
+		    sizeof (o2_rose_paper_data) / sizeof (spectra_entry),
+		    o2_rose_paper_data, false, 100);
+  //compute_spectrum (erythrosine, 400, 700, sizeof erythrosine_data / sizeof (luminosity_t), erythrosine_data, false);
+  compute_spectrum (erythrosine,
+		    sizeof (erythrosine_paper_data) / sizeof (spectra_entry),
+		    erythrosine_paper_data, false, 100);
+  compute_spectrum (o2_erythrosine,
+		    sizeof (o2_erythrosine_paper_data) / sizeof (spectra_entry),
+		    o2_erythrosine_paper_data, false, 100);
+  //compute_spectrum (patent, 400, 700, sizeof patent_data / sizeof (luminosity_t), patent_data, false);
+  compute_spectrum (patent,
+		    sizeof (patent_paper_data) / sizeof (spectra_entry),
+		    patent_paper_data, false, 100);
+  compute_spectrum (o2_patent,
+		    sizeof (o2_patent_paper_data) / sizeof (spectra_entry),
+		    o2_patent_paper_data, false, 100);
+  //compute_spectrum (flexo, 400, 700, sizeof flexo_data / sizeof (luminosity_t), flexo_data, false);
+  compute_spectrum (flexo,
+		    sizeof (flexo_paper_data) / sizeof (spectra_entry),
+		    flexo_paper_data, false, 100);
+  compute_spectrum (o2_flexo,
+		    sizeof (o2_flexo_paper_data) / sizeof (spectra_entry),
+		    o2_flexo_paper_data, false, 100);
+  //compute_spectrum (crystal, 400, 700, sizeof crystal_data / sizeof (luminosity_t), crystal_data, false);
+  compute_spectrum (crystal,
+		    sizeof (crystal_paper_data) / sizeof (spectra_entry),
+		    crystal_paper_data, false, 100);
+  compute_spectrum (o2_crystal,
+		    sizeof (o2_crystal_paper_data) / sizeof (spectra_entry),
+		    o2_crystal_paper_data, false, 100);
+  if (false)
+    {
+      FILE *f;
+      f = fopen ("/tmp/tartrazine-trans.dat", "w");
+      print_transmitance_spectrum (f, tartrazine);
+      fclose (f);
+      f = fopen ("/tmp/rose-trans.dat", "w");
+      print_transmitance_spectrum (f, rose);
+      fclose (f);
+      f = fopen ("/tmp/o2_rose-trans.dat", "w");
+      print_transmitance_spectrum (f, o2_rose);
+      fclose (f);
+      f = fopen ("/tmp/erythrosine-trans.dat", "w");
+      print_transmitance_spectrum (f, erythrosine);
+      fclose (f);
+      f = fopen ("/tmp/o2_erythrosine-trans.dat", "w");
+      print_transmitance_spectrum (f, o2_erythrosine);
+      fclose (f);
+      f = fopen ("/tmp/patent-trans.dat", "w");
+      print_transmitance_spectrum (f, patent);
+      fclose (f);
+      f = fopen ("/tmp/o2_patent-trans.dat", "w");
+      print_transmitance_spectrum (f, o2_patent);
+      fclose (f);
+      f = fopen ("/tmp/flexo-trans.dat", "w");
+      print_transmitance_spectrum (f, flexo);
+      fclose (f);
+      f = fopen ("/tmp/o2_flexo-trans.dat", "w");
+      print_transmitance_spectrum (f, o2_flexo);
+      fclose (f);
+      f = fopen ("/tmp/crystal-trans.dat", "w");
+      print_transmitance_spectrum (f, crystal);
+      fclose (f);
+      f = fopen ("/tmp/o2_crystal-trans.dat", "w");
+      print_transmitance_spectrum (f, o2_crystal);
+      fclose (f);
+    }
+#define choose(n,m,w) ((aged ? m : n) * w)
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      red[i] = (choose (erythrosine[i], o2_erythrosine[i], orange_erythrosine)* choose (rose[i], o2_rose[i], orange_rose) * choose (tartrazine[i], tartrazine[i], orange_tartrazine));
+      green[i] = (choose (patent[i], o2_patent[i], green_patent) * choose (tartrazine[i], tartrazine[i], green_tartrazine));
+      blue[i] = (choose (crystal[i], o2_crystal[i], violet_crystal) * choose (flexo[i], o2_flexo[i], violet_flexo));
+    }
+#undef choose
+}
+
+#define NORM 100000
+#define SCALE 30
+#define NORM2 9000000
+void
+spectrum_dyes_to_xyz::synthetic_dufay_red (luminosity_t d1, luminosity_t d2)
+{
+#if 0
+  static bool initialized;
+  static spectrum auramine;
+  static spectrum rhodamine_b;
+  if (!initialized)
+    {
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
+      compute_spectrum (rhodamine_b, 380.0, 780.0, sizeof (rhodamine_b_absorption) / sizeof (luminosity_t), rhodamine_b_absorption, true, NORM);
+      initialized = true;
+    }
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    red[i] = pow (rhodamine_b[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
+#endif
+  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (rhodamine_b_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    red[i] = absorbance_to_transmitance (auramine_absorption[i] * d1/NORM2 + rhodamine_b_absorption[i] * d2/NORM2 );
+}
+
+void
+spectrum_dyes_to_xyz::synthetic_dufay_green (luminosity_t d1, luminosity_t d2)
+{
+#if 0
+  static spectrum malachite;
+  static spectrum auramine;
+  static spectrum methylene_blue;
+  static bool initialized;
+  if (!initialized)
+    {
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
+      compute_spectrum (auramine, 380.0, 780.0, sizeof (auramine_absorption) / sizeof (luminosity_t), auramine_absorption, true, NORM);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
+      initialized = true;
+    }
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    green[i] = pow (methylene_blue[i], d1/SCALE) * pow (auramine[i], d2/SCALE);
+#endif
+  assert (sizeof (auramine_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    green[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + auramine_absorption[i] * d2/NORM2);
+}
+
+void
+spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
+{
+#if 0
+  static spectrum malachite;
+  static spectrum violet;
+  static spectrum methylene_blue;
+  static bool initialized;
+  if (!initialized)
+    {
+      compute_spectrum (malachite, 380.0, 780.0, sizeof (malachite_green_absorption) / sizeof (luminosity_t), malachite_green_absorption, true, NORM);
+      compute_spectrum (violet, 380.0, 780.0, sizeof (crystal_violet_absorption) / sizeof (luminosity_t), crystal_violet_absorption, true, NORM);
+      compute_spectrum (methylene_blue, 380.0, 780.0, sizeof (methylene_blue_absorption) / sizeof (luminosity_t), methylene_blue_absorption, true, NORM);
+      initialized = true;
+    }
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    blue[i] = pow (/*malachite[i]*/ methylene_blue[i], d1/SCALE) * pow (violet[i], d2/SCALE);
+#endif
+  assert (sizeof (crystal_violet_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  assert (sizeof (methylene_blue_absorption) / sizeof (luminosity_t) == SPECTRUM_SIZE);
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    blue[i] = absorbance_to_transmitance (methylene_blue_absorption[i] * d1/NORM2 + crystal_violet_absorption[i] * d2/NORM2);
+}
+
+static void
+set_dyes_1 (spectrum red, spectrum green, spectrum blue, enum spectrum_dyes_to_xyz::dyes dyes)
+{
+  switch (dyes)
+    {
+      case spectrum_dyes_to_xyz::dufaycolor_color_cinematography:
+	compute_spectrum (red, sizeof (color_cinematography_dufay_red) / sizeof (spectra_entry), color_cinematography_dufay_red, false, 100, 0, 100);
+	compute_spectrum (green, sizeof (color_cinematography_dufay_green) / sizeof (spectra_entry), color_cinematography_dufay_green, false, 100, 0, 100);
+	compute_spectrum (blue, sizeof (color_cinematography_dufay_blue) / sizeof (spectra_entry), color_cinematography_dufay_blue, false, 100, 0, 100);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_harrison_horner:
+	compute_spectrum (red, sizeof (harrison_horner_dufay_red) / sizeof (spectra_entry), harrison_horner_dufay_red, false, 100, 0, 100);
+	compute_spectrum (green, sizeof (harrison_horner_dufay_green) / sizeof (spectra_entry), harrison_horner_dufay_green, false, 100, 0, 100);
+	compute_spectrum (blue, sizeof (harrison_horner_dufay_blue) / sizeof (spectra_entry), harrison_horner_dufay_blue, false, 100, 0, 100);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual:
+	compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, false);
+	compute_spectrum (green, sizeof (manual_dufay_green) / sizeof (spectra_entry), manual_dufay_green, false);
+	compute_spectrum (blue, sizeof (manual_dufay_blue) / sizeof (spectra_entry), manual_dufay_blue, false);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor:
+	compute_spectrum (red, sizeof (real_dufay_red) / sizeof (spectra_entry), real_dufay_red, true);
+	compute_spectrum (green, sizeof (real_dufay_green) / sizeof (spectra_entry), real_dufay_green, true);
+	compute_spectrum (blue, sizeof (real_dufay_blue) / sizeof (spectra_entry), real_dufay_blue, true);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11951:
+	compute_spectrum (red, sizeof (real_dufay_red2) / sizeof (spectra_entry), real_dufay_red2, true);
+	compute_spectrum (green, sizeof (real_dufay_green2) / sizeof (spectra_entry), real_dufay_green2, true);
+	compute_spectrum (blue, sizeof (real_dufay_blue2) / sizeof (spectra_entry), real_dufay_blue2, true);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11960:
+	compute_spectrum (red, sizeof (real_dufay_red3) / sizeof (spectra_entry), real_dufay_red3, true);
+	compute_spectrum (green, sizeof (real_dufay_green3) / sizeof (spectra_entry), real_dufay_green3, true);
+	compute_spectrum (blue, sizeof (real_dufay_blue3) / sizeof (spectra_entry), real_dufay_blue3, true);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11967:
+	compute_spectrum (red, sizeof (real_dufay_red4) / sizeof (spectra_entry), real_dufay_red4, true);
+	compute_spectrum (green, sizeof (real_dufay_green4) / sizeof (spectra_entry), real_dufay_green4, true);
+	compute_spectrum (blue, sizeof (real_dufay_blue4) / sizeof (spectra_entry), real_dufay_blue4, true);
+	break;
+      case spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM12075:
+	compute_spectrum (red, sizeof (real_dufay_red5) / sizeof (spectra_entry), real_dufay_red5, true);
+	compute_spectrum (green, sizeof (real_dufay_green5) / sizeof (spectra_entry), real_dufay_green5, true);
+	compute_spectrum (blue, sizeof (real_dufay_blue5) / sizeof (spectra_entry), real_dufay_blue5, true);
+	break;
+      case spectrum_dyes_to_xyz::cinecolor:
+	compute_spectrum (red,
+			  sizeof (autochrome_orange) / sizeof (spectra_entry),
+			  autochrome_orange, false, 1);
+	compute_spectrum (green,
+			  sizeof (autochrome_green) / sizeof (spectra_entry),
+			  autochrome_green, false, 1);
+	compute_spectrum (blue,
+			  sizeof (autochrome_violet) / sizeof (spectra_entry),
+			  autochrome_violet, false, 1);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_reconstructed:
+	set_dyes_to_autochrome2 (red, green, blue, 1, 1, 19.7 / (20.35),
+							   1, 21 / (20.35),
+							   1,1, false);
+	break;
+      case spectrum_dyes_to_xyz::autochrome_reconstructed_aged:
+	set_dyes_to_autochrome2 (red, green, blue, 1, 1, 19.7 / (20.35),
+							   1, 21 / (20.35),
+							   1,1, true);
+	break;
+      case spectrum_dyes_to_xyz::wratten_25_58_47_color_cinematography:
+	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
+	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
+	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
+	break;
+      case spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945:
+	compute_spectrum (red, 400.0, 700.0, sizeof (wratten_filter_red_25_kodak) / sizeof (luminosity_t), wratten_filter_red_25_kodak, false, 100);
+	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
+	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
+	break;
+    }
+}
+void
+spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t age)
+{
+  set_dyes_1 (red, green, blue, dyes);
+  age = 0.5;
+  if (age > 0)
+    {
+      spectrum aged_red, aged_green, aged_blue;
+      set_dyes_1 (aged_red, aged_green, aged_blue, dyes2);
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	{
+	  red[i] = red[i] * (1 - age) + aged_red[i] * age;
+	  green[i] = green[i] * (1 - age) + aged_green[i] * age;
+	  blue[i] = blue[i] * (1 - age) + aged_blue[i] * age;
+	}
+    }
 }

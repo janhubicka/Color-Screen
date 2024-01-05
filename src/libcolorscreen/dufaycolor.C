@@ -159,9 +159,9 @@ static void
 initialize_spec (spectrum_dyes_to_xyz &spec, bool color_cinematography = true)
 {
   if (color_cinematography)
-    spec.set_dyes_to_dufay_color_cinematography ();
+    spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   else
-    spec.set_dyes_to_dufay_harrison_horner ();
+    spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
   initialize_spec_response (spec);
 }
 
@@ -349,7 +349,7 @@ dufaycolor::print_spectra_report ()
 {
   spectrum_dyes_to_xyz spec;
   spec.set_il_C_backlight ();
-  spec.set_dyes_to_dufay_color_cinematography ();
+  spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   spec.set_il_A_backlight ();
   initialize_spec (spec, false);
   report_illuminant (spec, "CIE A", "harrison-horner-spectra-ilA-screen.tif", "harrison-horner-spectra-ilA-screen-resp.tif");
@@ -384,8 +384,7 @@ dufaycolor::print_spectra_report ()
   spec.write_spectra ("dufay-red-absorbance.dat", "dufay-green-absorbance.dat", "dufay-blue-absorbance.dat", NULL, 400, 720, true);
   printf ("spectra by Color Cinematography saved to dufay-red.dat, dufay-green.dat and dufay-blue.dat\n");
   spec.set_il_C_backlight ();
-  spec.set_dyes_to_dufay_color_cinematography ();
-  spec.set_dyes_to_dufay (1, 1);
+  spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor);
   report_illuminant (spec, "CIE C aged", "color-cinematography-spectra-ilC-screen-aged.tif", "color-cinematography-spectra-ilC-screen-resp-aged.tif");
 }
 
@@ -398,7 +397,7 @@ dufaycolor::print_synthetic_dyes_report ()
   spectrum_dyes_to_xyz spec;
   spec.set_il_B_backlight ();
   //spec.set_dyes_to_dufay_color_cinematography ();
-  spec.set_dyes_to_dufay_harrison_horner ();
+  spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
 
   
   render_green_dyes (spec, "green.tif");
@@ -430,7 +429,7 @@ dufaycolor::print_synthetic_dyes_report ()
   xyz best_tred (0,0,0);
   xyz best_sred (0,0,0);
   spec.set_il_C_backlight ();
-  spec.set_dyes_to_dufay_color_cinematography ();
+  spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   xyz target_red = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
   xyz target_green = spec.dyes_rgb_to_xyz (0, 1, 0, 1931);
   xyz target_blue = spec.dyes_rgb_to_xyz (0, 0, 1, 1931);

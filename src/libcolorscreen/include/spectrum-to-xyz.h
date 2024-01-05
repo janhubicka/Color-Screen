@@ -19,6 +19,39 @@ extern const DLL_PUBLIC spectrum cie_cmf1964_z;
 class DLL_PUBLIC spectrum_dyes_to_xyz
 {
 public:
+  enum dyes {
+    dufaycolor_color_cinematography,
+    dufaycolor_harrison_horner,
+    dufaycolor_dufaycolor_manual,
+    dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor,
+    dufaycolor_aged_DC_MSI_NSMM11951,
+    dufaycolor_aged_DC_MSI_NSMM11960,
+    dufaycolor_aged_DC_MSI_NSMM11967,
+    dufaycolor_aged_DC_MSI_NSMM12075,
+    cinecolor,
+    autochrome_reconstructed,
+    autochrome_reconstructed_aged,
+    wratten_25_58_47_color_cinematography,
+    wratten_25_58_47_kodak_1945,
+    dyes_max
+  };
+  constexpr static const char *color_model_names[dyes_max] =
+  {
+    "dufaycolor_color_cinematography",
+    "dufaycolor_harrison_horner",
+    "dufaycolor_dufaycolor_manual",
+    "dufaycolor_NSMM_Bradford_11948",
+    "dufaycolor_NSMM_Bradford_11951",
+    "dufaycolor_NSMM_Bradford_11960",
+    "dufaycolor_NSMM_Bradford_11967",
+    "spicer_dufay_NSMM_Bradford_12075",
+    "cinecolor_koshofer",
+    "autochrome_Casella_Tsukada",
+    "autochrome_Casella_Tsukada_aged",
+    "wratten_25_58_47_color_cinematograpjy",
+    "wratten_25_58_47_kodak_1945",
+  };
+
   static const int default_observer = 1931;
   spectrum_dyes_to_xyz ()
     : rscale (1), gscale (1), bscale (1),
@@ -44,6 +77,9 @@ public:
       memcpy (green, g, sizeof (backlight));
       memcpy (blue, b, sizeof (backlight));
     }
+  /* Set dyes to given measured spectra.
+     If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
+  void set_dyes (enum dyes, enum dyes dyes2 = dufaycolor_color_cinematography, luminosity_t age = 0);
   void set_daylight_backlight (luminosity_t temperature);
   void set_il_A_backlight ();
   void set_il_B_backlight ();
@@ -61,15 +97,6 @@ public:
   void debug_write_spectra ();
 
 
-  /* Set dyes to given measured spectra.  */
-  void set_dyes_to_dufay (int measurement, luminosity_t age);
-  void set_dyes_to_dufay_manual ();
-  void set_dyes_to_dufay_color_cinematography ();
-  void set_dyes_to_dufay_harrison_horner ();
-  void set_dyes_to_autochrome ();
-  void set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
-			        luminosity_t green_patent, luminosity_t green_tartrazine,
-			        luminosity_t violet_crystal, luminosity_t violet_flexo, luminosity_t age);
 
   struct xyz
   dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = default_observer)
@@ -127,7 +154,6 @@ public:
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
-  void set_dyes_to_wratten_25_58_47 ();
   bool generate_simulated_argyll_ti3_file (FILE *f);
   bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
   void set_response_to_neopan_100 ();

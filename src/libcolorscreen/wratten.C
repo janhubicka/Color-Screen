@@ -22,6 +22,6 @@ wratten::print_spectra_report ()
 {
   spectrum_dyes_to_xyz spec;
   spec.set_il_C_backlight ();
-  spec.set_dyes_to_wratten_25_58_47 ();
+  spec.set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
   report_illuminant (spec, "CIE C", "wratten-screen.tif");
 }

@@ -138,7 +138,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_wratten_25_58_47_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_wratten_25_58_47 ();
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
@@ -151,21 +151,21 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_autochrome:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome ();
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::cinecolor);
 	  break;
 	}
       case render_parameters::color_model_autochrome2:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_autochrome2 (1, 1, 19.7 / (20.35),
-							   1, 21 / (20.35),
-							   1,1,age);
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::autochrome_reconstructed,
+					    spectrum_dyes_to_xyz::autochrome_reconstructed_aged,
+					    age);
 	  break;
 	}
       case render_parameters::color_model_dufay_manual:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay_manual ();
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual);
 	  break;
 	}
       case render_parameters::color_model_dufay_color_cinematography_xyY:
@@ -210,7 +210,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay_color_cinematography ();
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra_correction:
@@ -221,7 +221,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_dufay_harrison_horner_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay_harrison_horner ();
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
 	}
 	break;
       case render_parameters::color_model_dufay_harrison_horner_spectra_correction:
@@ -236,7 +236,8 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_dufay5:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes_to_dufay ((int)color_model - (int)render_parameters::color_model_dufay1, age);
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography,
+					    (spectrum_dyes_to_xyz::dyes)((int)color_model - (int)render_parameters::color_model_dufay1 + (int)spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor), age);
 	  break;
 	}
       case render_parameters::color_model_max:
