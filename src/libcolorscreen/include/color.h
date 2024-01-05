@@ -3,9 +3,8 @@
 #include <cmath>
 #include "matrix.h"
 
-//typedef double luminosity_t;
-//typedef double luminosity_t;
-typedef float luminosity_t;
+typedef double luminosity_t;
+//typedef float luminosity_t;
 /* mem_luminosity_t is used for very large temporary data.  */
 
 #ifdef __x86_64__

@@ -240,7 +240,6 @@ render_to_scr::render_tile (enum render_type_t render_type,
   bool has_rgbdata = true;
   if ((!img.stitch && !img.rgbdata) || (img.stitch && !img.stitch->images[0][0].img->rgbdata))
     has_rgbdata = false;
-  fprintf (stderr, "Has rgbdata %i %i\n", has_rgbdata, img.rgbdata);
   if (color && !has_rgbdata)
     color = false;
   if (!has_rgbdata && render_type == render_type_interpolated_original)

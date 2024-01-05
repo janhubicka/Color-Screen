@@ -169,6 +169,7 @@ image_data::allocate ()
 {
   if (allocate_grayscale ())
     {
+      assert (!data);
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
 	return false;
@@ -184,6 +185,7 @@ image_data::allocate ()
     }
   if (allocate_rgb ())
     {
+      assert (!rgbdata);
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
 	{
