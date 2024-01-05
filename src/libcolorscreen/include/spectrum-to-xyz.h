@@ -65,6 +65,7 @@ public:
   void set_dyes_to_dufay (int measurement, luminosity_t age);
   void set_dyes_to_dufay_manual ();
   void set_dyes_to_dufay_color_cinematography ();
+  void set_dyes_to_dufay_harrison_horner ();
   void set_dyes_to_autochrome ();
   void set_dyes_to_autochrome2 (luminosity_t orange_erythrosine, luminosity_t orange_rose, luminosity_t orange_tartrazine,
 			        luminosity_t green_patent, luminosity_t green_tartrazine,
@@ -195,7 +196,8 @@ public:
     }
 };
 
-color_matrix dufaycolor_correction_matrix ();
+color_matrix dufaycolor_correction_color_cinematography_matrix ();
+color_matrix dufaycolor_correction_harrison_horner_matrix ();
 void synthetic_dufay_red (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_green (spectrum s, luminosity_t d1, luminosity_t d2);
 void synthetic_dufay_blue (spectrum s, luminosity_t d1, luminosity_t d2);

@@ -88,14 +88,14 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
     {
       long white = 0xffff;
       color_matrix m = p.dye_to_xyz.invert ();
-      static const float cam_xyz[] = {
-        m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0],
-        m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1],
-        m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2]};
+      float cam_xyz[] = {
+        (float)m.m_elements[0][0], (float)m.m_elements[1][0], (float)m.m_elements[2][0],
+        (float)m.m_elements[0][1], (float)m.m_elements[1][1], (float)m.m_elements[2][1],
+        (float)m.m_elements[0][2], (float)m.m_elements[1][2], (float)m.m_elements[2][2]};
       ///*= { /*0.807133, 1.0, 0.913289*/ };
       luminosity_t n0, n1, n2;
       p.dye_to_xyz.apply_to_rgb (1,1,1, &n0, &n1, &n2);
-      static const float neutral[3] = {n0, n1, n2};
+      float neutral[3] = {(float)n0, (float)n1, (float)n2};
       /* TODO: Thumbnail should be subfiletype 1.  */
       if (!TIFFSetField (out, TIFFTAG_SUBFILETYPE, 0)
 	  || !TIFFSetField (out, TIFFTAG_DNGVERSION, "\001\001\0\0")
