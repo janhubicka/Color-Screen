@@ -53,7 +53,8 @@ public:
   pure_attr flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
   void original_color ()
   {
-    m_original_color = true;
+    if (m_img.rgbdata)
+      m_original_color = true;
   }
 private:
   screen *m_screen;
