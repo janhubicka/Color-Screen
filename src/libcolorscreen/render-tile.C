@@ -235,13 +235,17 @@ render_to_scr::render_tile (enum render_type_t render_type,
   if (stats)
     gettimeofday (&start_time, NULL);
   const bool lock_p = false;
-  if (lock_p )
+  if (lock_p)
     global_rendering_lock.lock ();
   bool has_rgbdata = true;
-  if (!img.rgbdata && (!img.stitch || !img.stitch->images[0][0].img->rgbdata))
+  if ((!img.stitch && !img.rgbdata) || (img.stitch && !img.stitch->images[0][0].img->rgbdata))
     has_rgbdata = false;
+  fprintf (stderr, "Has rgbdata %i %i\n", has_rgbdata, img.rgbdata);
   if (color && !has_rgbdata)
     color = false;
+  if (!has_rgbdata && render_type == render_type_interpolated_original)
+    render_type = render_type_original;
+
   if (progress)
     progress->set_task ("precomputing", 1);
   switch (render_type)
@@ -497,9 +501,6 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	bool adjust_luminosity = (render_type == render_type_combined);
 	bool screen_compensation = (render_type == render_type_predictive);
 	render_parameters my_rparam;
-
-	if (!has_rgbdata)
-	  render_type = render_type_interpolated;
 
 	if (render_type == render_type_interpolated_original)
 	  my_rparam.original_render_from (rparam, true);

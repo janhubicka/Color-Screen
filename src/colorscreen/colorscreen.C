@@ -50,6 +50,7 @@ print_help ()
   }
   fprintf (stderr, "\n");
   fprintf (stderr, "      --hdr                     output HDR tiff\n");
+  fprintf (stderr, "      --dng                     output DNG\n");
   fprintf (stderr, "      --output-profile=profile  specify output profile\n");
   fprintf (stderr, "                                suported profiles:");
   for (int j = 0; j < render_parameters::output_profile_max; j++)
@@ -191,6 +192,8 @@ render (int argc, char **argv)
 	rfparams.mode = parse_mode (str);
       else if (!strcmp (argv[i], "--hdr"))
 	rfparams.hdr = true;
+      else if (!strcmp (argv[i], "--dng"))
+	rfparams.dng = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "output-profile"))
 	output_profile = parse_output_profile (str);
       else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000)

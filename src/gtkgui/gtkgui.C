@@ -289,11 +289,21 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'm')
+  if (k == 'm' || k == 'M')
     {
-      rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model + 1);
-      if ((int)rparams.color_model >= render::num_color_models)
-	rparams.color_model = (render_parameters::color_model_t)0;
+      if (k == 'm')
+	{
+	  rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model + 1);
+	  if ((int)rparams.color_model >= render::num_color_models)
+	    rparams.color_model = (render_parameters::color_model_t)0;
+	}
+      else
+	{
+	  if ((int)rparams.color_model == 0)
+	    rparams.color_model = (render_parameters::color_model_t)((int)render::num_color_models - 1);
+	  else
+	    rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model - 1);
+	}
       printf ("Color model: %s\n", render_parameters::color_model_names[(int)rparams.color_model]);
       display_scheduled = true;
       preview_display_scheduled = true;
