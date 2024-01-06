@@ -757,69 +757,6 @@ const spectrum cie_cmf1964_z = {
 
 namespace {
 
-/* from Argyll 107 bands from 300 to 830 nm in 5nm steps
-   CIE 15.2-1986 Table 1.1
-   Part 1: CIE Standard Illuminant A relative spectral power distribution
-   This is a 2848K tungsten filament lamp (Acording to the old temperature scale)
-   and 2856 according to the newer temerature scale. */
-
-static const luminosity_t il_A[] = {
-  0.930483, 1.128210, 1.357690, 1.622190, 1.925080,
-  2.269800, 2.659810, 3.098610, 3.589680, 4.136480,
-  4.742380, 5.410700, 6.144620, 6.947200, 7.821350,
-  8.769800, 9.795100, 10.899600, 12.085300, 13.354300,
-  14.708000, 16.148000, 17.675300, 19.290700, 20.995000,
-  22.788300, 24.670900, 26.642500, 28.702700, 30.850800,
-  33.085900, 35.406800, 37.812100, 40.300200, 42.869300,
-  45.517400, 48.242300, 51.041800, 53.913200, 56.853900,
-  59.861100, 62.932000, 66.063500, 69.252500, 72.495900,
-  75.790300, 79.132600, 82.519300, 85.947000, 89.412400,
-  92.912000, 96.442300, 100.000000, 103.582000, 107.184000,
-  110.803000, 114.436000, 118.080000, 121.731000, 125.386000,
-  129.043000, 132.697000, 136.346000, 139.988000, 143.618000,
-  147.235000, 150.836000, 154.418000, 157.979000, 161.516000,
-  165.028000, 168.510000, 171.963000, 175.383000, 178.769000,
-  182.118000, 185.429000, 188.701000, 191.931000, 195.118000,
-  198.261000, 201.359000, 204.409000, 207.411000, 210.365000,
-  213.268000, 216.120000, 218.920000, 221.667000, 224.361000,
-  227.000000, 229.585000, 232.115000, 234.589000, 237.008000,
-  239.370000, 241.675000, 243.924000, 246.116000, 248.251000,
-  250.329000, 252.350000, 254.314000, 256.221000, 258.071000,
-  259.865000, 261.602000
-};
-//   Illuminant B at 5nm interval Wyszecki & Stiles Color Science, 2nd edition.  Table II(3.3.4)  pp. 759.
-//   Simulated direct sunlight, obsolette.
-static const luminosity_t il_B[] = {
-  0.02, 0.26, 0.50, 1.45, 2.40, 4.00, 5.60, 7.60, 9.6,
-  12.4, 15.2, 18.8, 22.4, 26.85, 31.3, 36.18, 41.3, 46.62,
-  52.1, 57.7, 63.2, 68.37, 73.1, 77.31, 80.8, 83.44, 85.4,
-  86.88, 88.3, 90.08, 92, 93.75, 95.2, 96.23, 96.5, 95.71,
-  94.2, 92.37, 90.7, 89.65, 89.5, 90.43, 92.2, 94.46, 96.9,
-  99.16, 101, 102.2, 102.8, 102.92, 102.6, 101.9, 101, 100.07,
-  99.2, 98.44, 98, 98.08, 98.5, 99.06, 99.7, 100.36, 101,
-  101.56, 102.2, 103.05, 103.9, 104.59, 105, 105.08, 104.9, 104.55,
-  103.9, 102.84, 101.6, 100.38, 99.1, 97.7, 96.2, 94.6, 92.9,
-  91.1, 89.4, 88, 86.9, 85.9, 85.2, 84.8, 84.7, 84.9,
-  85.4, 86.1, 87.0,
-};
-
-
-/* From Argyll. 93 bands from 320.0 to 780.0 */
-/* CIE 15.2-1986 Table 1.1 */
-/* Part 1: CIE Standard Illuminant C relative spectral power distribution */
-/* This is a CIE Illuminant A combined with a filter to simulate daylight. */
-static const luminosity_t il_C[] = {
-	0.01,   0.20,   0.40,   1.55,   2.70,   4.85,   7.00,   9.95,   12.90,  17.20, 
-	21.40,  27.50,  33.00,  39.92,  47.40,  55.17,  63.30,  71.81,  80.60,  89.53,
-	98.10,  105.80, 112.40, 117.75, 121.50, 123.45, 124.00, 123.60, 123.10, 123.30,
-	123.80, 124.09, 123.90, 122.92, 120.70, 116.90, 112.10, 106.98, 102.30, 98.81,
-	96.90,  96.78,  98.00,  99.94,  102.10, 103.95, 105.20, 105.67, 105.30, 104.11,
-	102.30, 100.15, 97.80,  95.43,  93.20,  91.22,  89.70,  88.83,  88.40,  88.19,
-	88.10,  88.06,  88.00,  87.86,  87.80,  87.99,  88.20,  88.20,  87.90,  87.22,
-	86.30,  85.30,  84.00,  82.21,  80.20,  78.24,  76.30,  74.36,  72.40,  70.40,
-	68.30,  66.30,  64.40,  62.80,  61.50,  60.20,  59.20,  58.50,  58.10,  58.00,
-	58.20,  58.50,  59.10
-};
 
 
 
@@ -1312,169 +1249,6 @@ const static spectra_entry canon_CN_E_85mm_T1_3_tramsmission[] =
   {749.6027911969938, 82.46502530084618},
 };
 
-/* Taken from Argyll
-   General temperature Daylight spectra from CIE 15.2004 Appendix C.   
-   ## uses improved interpolation rather than CIE 15.2004 Section 3.1 ##   
-   Assumong 1931 observer & 5 nm spacing. (Need Lagrange interpolated S0, S1 for 1nm)   
-   i.e. 300 - 830nm at 5nm intervals.   
-   Fill in the given xspect with the specified daylight illuminant   
-   Return nz if temperature is out of range */
-static int
-daylight_il (spectrum spec, double ct)
-{
-  static double s0[107] = {
-    0.04000, -0.15625, 6.00000, 16.56625, 29.60000,
-    43.80000, 55.30000, 57.62500, 57.30000, 59.69375,
-    61.80000, 61.47500, 61.50000, 65.46875, 68.80000,
-    66.40625, 63.40000, 62.45000, 65.80000, 79.82500,
-    94.80000, 101.54375, 104.80000, 106.54375, 105.90000,
-    100.35000, 96.80000, 104.05000, 113.90000, 120.82500,
-    125.60000, 126.54375, 125.50000, 123.39375, 121.30000,
-    121.52500, 121.30000, 117.42500, 113.50000, 112.95625,
-    113.10000, 112.19375, 110.80000, 108.36250, 106.50000,
-    107.60000, 108.80000, 107.25000, 105.30000, 104.90625,
-    104.40000, 102.39375, 100.00000, 97.78125, 96.00000,
-    95.67500, 95.10000, 91.95625, 89.10000, 89.43750,
-    90.50000, 90.60625, 90.30000, 89.61250, 88.40000,
-    86.01250, 84.00000, 84.47500, 85.10000, 83.52500,
-    81.90000, 81.90625, 82.60000, 84.01875, 84.90000,
-    83.83125, 81.30000, 76.22500, 71.90000, 72.38125,
-    74.30000, 76.31875, 76.40000, 69.45625, 63.30000,
-    66.35000, 71.70000, 75.61250, 77.00000, 72.52500,
-    65.20000, 54.40625, 47.70000, 57.28125, 68.60000,
-    68.04375, 65.00000, 65.58750, 66.00000, 64.04375,
-    61.00000, 56.48750, 53.30000, 55.43125, 58.90000,
-    61.71875, 61.90000
-  };
-
-  static double s1[107] = {
-    0.02000, -0.15000, 4.50000, 12.50500, 22.40000,
-    33.40625, 42.00000, 42.46250, 40.60000, 41.23750,
-    41.60000, 39.58750, 38.00000, 40.21875, 42.40000,
-    40.94375, 38.50000, 35.98125, 35.00000, 38.80000,
-    43.40000, 45.52500, 46.30000, 45.70625, 43.90000,
-    40.37500, 37.10000, 36.52500, 36.70000, 36.48125,
-    35.90000, 34.49375, 32.60000, 30.26875, 27.90000,
-    26.06875, 24.30000, 22.21875, 20.10000, 18.07500,
-    16.20000, 14.74375, 13.20000, 10.86875, 8.60000,
-    7.18125, 6.10000, 5.13750, 4.20000, 3.05000,
-    1.90000, 0.90625, 0.00000, -0.80000, -1.60000,
-    -2.65000, -3.50000, -3.47500, -3.50000, -4.56250,
-    -5.80000, -6.55625, -7.20000, -7.93125, -8.60000,
-    -9.05000, -9.50000, -10.26875, -10.90000, -10.80625,
-    -10.70000, -11.21250, -12.00000, -13.10625, -14.00000,
-    -14.02500, -13.60000, -12.69375, -12.00000, -12.57500,
-    -13.30000, -13.32500, -12.90000, -11.66250, -10.60000,
-    -10.91875, -11.60000, -12.08750, -12.20000, -11.38750,
-    -10.20000, -8.66250, -7.80000, -9.40000, -11.20000,
-    -11.00000, -10.40000, -10.50625, -10.60000, -10.25000,
-    -9.70000, -8.88125, -8.30000, -8.68125, -9.30000,
-    -9.79375, -9.80000
-  };
-
-  static double s2[107] = {
-    0.00000, 1.15625, 2.00000, 2.84375, 4.00000,
-    6.41875, 8.50000, 8.50000, 7.80000, 7.29375,
-    6.70000, 5.88125, 5.30000, 5.80625, 6.10000,
-    4.71250, 3.00000, 2.05000, 1.20000, -0.10000,
-    -1.10000, -0.93125, -0.50000, -0.53125, -0.70000,
-    -0.87500, -1.20000, -1.91250, -2.60000, -2.84375,
-    -2.90000, -2.88125, -2.80000, -2.69375, -2.60000,
-    -2.63750, -2.60000, -2.21875, -1.80000, -1.61250,
-    -1.50000, -1.38750, -1.30000, -1.25000, -1.20000,
-    -1.12500, -1.00000, -0.75000, -0.50000, -0.38750,
-    -0.30000, -0.15000, 0.00000, 0.10000, 0.20000,
-    0.26250, 0.50000, 1.25000, 2.10000, 2.69375,
-    3.20000, 3.68125, 4.10000, 4.43125, 4.70000,
-    4.83750, 5.10000, 5.88750, 6.70000, 7.01875,
-    7.30000, 7.91250, 8.60000, 9.25625, 9.80000,
-    10.19375, 10.20000, 9.19375, 8.30000, 8.90000,
-    9.60000, 9.22500, 8.50000, 7.64375, 7.00000,
-    7.18125, 7.60000, 7.91875, 8.00000, 7.46875,
-    6.70000, 5.73125, 5.20000, 6.24375, 7.40000,
-    7.22500, 6.80000, 6.90000, 7.00000, 6.76875,
-    6.40000, 5.87500, 5.50000, 5.71875, 6.10000,
-    6.43125, 6.50000,
-  };
-
-  /* M values for [1nm,5nm][1931,1964][M1,M2][g, h, i, j, k, l] */
-  double ms[2][2][2][6] = {
-    {				/* 1nm */
-     {
-      {-1.77864, 5.90745, -1.34666, 0.25540, -0.73218, 0.02387},
-      {-31.44505, 30.06408, 0.03656, 0.25540, -0.73218, 0.02387}
-      },
-     {
-      {-1.57049, 5.56450, -1.31211, 0.21249, -0.71591, 0.04663},
-      {-30.15166, 31.07906, -0.73912, 0.21249, -0.71591, 0.04663}
-      }
-     },
-    {				/* 5nm */
-     {
-      {-1.77861, 5.90757, -1.34674, 0.25539, -0.73217, 0.02387},
-      {-31.44464, 30.06400, 0.03638, 0.25539, -0.73217, 0.02387}
-      },
-     {
-      {-1.57049, 5.56460, -1.31215, 0.21250, -0.71592, 0.04663},
-      {-30.15139, 31.07931, -0.73928, 0.21250, -0.71592, 0.04663}
-      }
-     }
-  };
-
-  int i;
-  double xd, yd;
-  int sint = 1;			/* 5nm */
-  int obs = 0;			/* 1931 */
-  double m1, m2;
-
-  if (ct < 2500.0 || ct > 25000.0)
-    {				/* Only accurate down to about 4000 */
-      abort ();
-      return 1;
-    }
-
-  /* Compute chromaticity coordinates */
-  if (ct < 7000.0)
-    {
-      xd =
-	-4.6070e9 / (ct * ct * ct) + 2.9678e6 / (ct * ct) + 0.09911e3 / ct +
-	0.244063;
-    }
-  else
-    {
-      xd =
-	-2.0064e9 / (ct * ct * ct) + 1.9018e6 / (ct * ct) + 0.24748e3 / ct +
-	0.237040;
-    }
-  yd = -3.000 * xd * xd + 2.870 * xd - 0.275;
-
-  /* Compute m factors */
-  m1 =
-    (ms[sint][obs][0][0] * xd + ms[sint][obs][0][1] * yd +
-     ms[sint][obs][0][2]) / (ms[sint][obs][0][3] * xd +
-			     ms[sint][obs][0][4] * yd + ms[sint][obs][0][5]);
-  m2 =
-    (ms[sint][obs][1][0] * xd + ms[sint][obs][1][1] * yd +
-     ms[sint][obs][1][2]) / (ms[sint][obs][1][3] * xd +
-			     ms[sint][obs][1][4] * yd + ms[sint][obs][1][5]);
-
-  /* Compute spectral values.
-     Argyll starts from 300,w hile we start from 380 thus offset is 80/5=16. */
-  for (i = 16; i < 16 + SPECTRUM_SIZE; i++)
-    {
-      spec[i - 16] = s0[i] + m1 * s1[i] + m2 * s2[i];
-    }
-
-#if 0
-  sp->spec_n = 107;		/* 5nm spacing */
-  sp->spec_wl_short = 300.0;
-  sp->spec_wl_long = 830;
-  sp->norm = 100.0;		/* Arbitrary */
-#endif
-
-  return 0;
-}
-
 }
 
 /* Adjust xscale, yscale and zscale so dye rgb (1,1,1) results
@@ -1519,13 +1293,10 @@ spectrum_dyes_to_xyz::normalize_xyz_to_backlight_whitepoint ()
     }
 }
 
-/* Autochrome screen was made by mixing dyes to be gray.  Simulate same thing: find
-   rscale, gscale and wscale so together they produce a given.  */
 void
-spectrum_dyes_to_xyz::set_daylight_backlight (luminosity_t temperature)
+spectrum_dyes_to_xyz::set_backlight (enum illuminants il, luminosity_t temperature)
 {
-  //compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
-  daylight_il (backlight, temperature);
+  set_illuminant_to (backlight, il, temperature);
 }
 
 /* Autochrome screen was made by mixing dyes to be gray.  Simulate same thing: find
@@ -1535,7 +1306,7 @@ spectrum_dyes_to_xyz::normalize_dyes (luminosity_t temperature)
 {
   spectrum backlight_bck;
   memcpy (backlight_bck, backlight, sizeof (backlight));
-  daylight_il (backlight, temperature);
+  set_backlight (il_D, temperature);
   rscale = gscale = bscale = 1;
   xyz rxyz = get_xyz (red);
   xyz gxyz = get_xyz (green);
@@ -1633,7 +1404,7 @@ xyz
 spectrum_dyes_to_xyz::temperature_xyz (luminosity_t temperature)
 {
   spectrum_dyes_to_xyz dyes;
-  dyes.set_daylight_backlight (temperature);
+  dyes.set_backlight (il_D, temperature);
   return dyes.whitepoint_xyz ();
 }
 
@@ -1665,22 +1436,6 @@ get_xyz_old_observer (spectrum backlight, spectrum s, const char *filename = NUL
   ret.z *= scale;
   /* Argyll scales by backlight.  */
   return ret;
-}
-
-void
-spectrum_dyes_to_xyz::set_il_A_backlight ()
-{
-  compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
-}
-void
-spectrum_dyes_to_xyz::set_il_B_backlight ()
-{
-  compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false);
-}
-void
-spectrum_dyes_to_xyz::set_il_C_backlight ()
-{
-  compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false);
 }
 
 xyz
@@ -1730,7 +1485,7 @@ void
 spectrum_dyes_to_xyz::set_response_to_neopan_100 ()
 {
   spectrum dl;
-  daylight_il (dl, 5400);
+  set_illuminant_to (dl, il_D, 5400);
   compute_log_sensitivity (film_response, sizeof (wedge_Neopan_100_acros_daylight_5400k) / sizeof (spectra_entry), wedge_Neopan_100_acros_daylight_5400k);
   log_sensitivity_to_reversal_transmitance (film_response);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -1742,7 +1497,7 @@ void
 spectrum_dyes_to_xyz::set_response_to_ilford_panchromatic ()
 {
   spectrum dl;
-  daylight_il (dl, 5400);
+  set_illuminant_to (dl, il_D, 5400);
   compute_spectrum (film_response, sizeof (ilford_manual_of_photography_panchromatic_emulsion_fig54) / sizeof (spectra_entry), ilford_manual_of_photography_panchromatic_emulsion_fig54, false);
   //log2_sensitivity_to_reversal_transmitance (film_response);
   for (int i = 0; i < SPECTRUM_SIZE; i++)

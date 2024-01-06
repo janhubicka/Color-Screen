@@ -19,7 +19,6 @@ dufaycolor::tiff_with_primaries (const char *filename, bool corrected)
   xyz blue = corrected ? blue_dye : blue_dye_color_cinematography_xyY;
   return tiff_with_strips (filename, red, green, blue, (xyz){0, 0, 0},
 			   red * (red_size / screen_size) + green * (green_size / screen_size) + blue * (blue_size / screen_size));
-		       
 }
 
 static void
@@ -334,7 +333,7 @@ dufaycolor::print_xyY_report ()
 	  dominant_wavelength (blue_dye_color_cinematography_xyY),
 	  dominant_wavelength (blue_dye_color_cinematography_xyY, best));
   spectrum_dyes_to_xyz spec;
-  spec.set_il_C_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   report_xyz_dyes ("xyY data", "corrected-screen.tif", red_dye, green_dye, blue_dye, get_corrected_dufay_white (), spec.whitepoint_xyz (1931));
   printf ("IL C neutral scrren for corrected dyes saved to corrected-screen.tif\n");
   report_xyz_dyes ("xyY data", "color-cinematography-screen.tif", red_dye_color_cinematography_xyY, green_dye_color_cinematography_xyY, blue_dye_color_cinematography_xyY, get_color_cinematography_xyY_dufay_white (), spec.whitepoint_xyz (1931));
@@ -348,34 +347,34 @@ void
 dufaycolor::print_spectra_report ()
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_il_C_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
-  spec.set_il_A_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_A);
   initialize_spec (spec, false);
   report_illuminant (spec, "CIE A", "harrison-horner-spectra-ilA-screen.tif", "harrison-horner-spectra-ilA-screen-resp.tif");
   initialize_spec (spec, true);
   report_illuminant (spec, "CIE A", "color-cinematography-spectra-ilA-screen.tif", "color-cinematography-spectra-ilA-screen-resp.tif");
-  spec.set_il_B_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_B);
   initialize_spec (spec, false);
   report_illuminant (spec, "CIE B", "harrison-horner-spectra-ilB-screen.tif", "harrison-horner-spectra-ilB-screen-resp.tif");
   initialize_spec (spec, true);
   report_illuminant (spec, "CIE B", "color-cinematography-spectra-ilB-screen.tif", "color-cinematography-spectra-ilB-screen-resp.tif");
-  spec.set_il_C_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   initialize_spec (spec, false);
   report_illuminant (spec, "CIE C", "harrison-horner-spectra-ilC-screen.tif", "harrison-horner-spectra-ilC-screen-resp.tif");
   spec.tiff_with_primaries ("spec-C-primaries-harrison-horner.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   initialize_spec (spec, true);
   report_illuminant (spec, "CIE C", "color-cinematography-spectra-ilC-screen.tif", "color-cinematography-spectra-ilC-screen-resp.tif");
   spec.tiff_with_primaries ("spec-C-primaries-color-cinematography.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
-  spec.set_daylight_backlight (5000);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
   report_illuminant (spec, "5000K", "color-cinematography-spectra-5000-screen.tif", "color-cinematography-spectra-5000-screen-resp.tif");
   spec.tiff_with_overlapping_filters ("spec-d50-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
   spec.tiff_with_overlapping_filters_response ("spec-d50-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
-  spec.set_daylight_backlight (5500);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, 5500);
   report_illuminant (spec, "5500K", "color-cinematography-spectra-5500-screen.tif", "color-cinematography-spectra-5500-screen-resp.tif");
   spec.tiff_with_overlapping_filters ("spec-d55-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
   spec.tiff_with_overlapping_filters_response ("spec-d55-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
-  spec.set_daylight_backlight (6500);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, 6500);
   report_illuminant (spec, "6500K", "color-cinematography-spectra-6500-screen.tif", "color-cinematography-spectra-6500-screen-resp.tif");
   spec.tiff_with_primaries ("spec-d65-primaries.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.tiff_with_overlapping_filters ("spec-d65-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
@@ -383,7 +382,7 @@ dufaycolor::print_spectra_report ()
   spec.write_spectra ("dufay-red.dat", "dufay-green.dat", "dufay-blue.dat", NULL, 400, 720, false);
   spec.write_spectra ("dufay-red-absorbance.dat", "dufay-green-absorbance.dat", "dufay-blue-absorbance.dat", NULL, 400, 720, true);
   printf ("spectra by Color Cinematography saved to dufay-red.dat, dufay-green.dat and dufay-blue.dat\n");
-  spec.set_il_C_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor);
   report_illuminant (spec, "CIE C aged", "color-cinematography-spectra-ilC-screen-aged.tif", "color-cinematography-spectra-ilC-screen-resp-aged.tif");
 }
@@ -395,7 +394,7 @@ dufaycolor::print_synthetic_dyes_report ()
 	  //m.print (stdout);
 
   spectrum_dyes_to_xyz spec;
-  spec.set_il_B_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_B);
   //spec.set_dyes_to_dufay_color_cinematography ();
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
 
@@ -428,7 +427,7 @@ dufaycolor::print_synthetic_dyes_report ()
   xyz best_cred (0,0,0);
   xyz best_tred (0,0,0);
   xyz best_sred (0,0,0);
-  spec.set_il_C_backlight ();
+  spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   xyz target_red = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
   xyz target_green = spec.dyes_rgb_to_xyz (0, 1, 0, 1931);
@@ -574,7 +573,7 @@ bool
 dufaycolor::generate_ti3_file (FILE *f)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (temperature);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec);
   return spec.generate_simulated_argyll_ti3_file (f);
 }
@@ -583,7 +582,7 @@ bool
 dufaycolor::generate_color_target_tiff (const char *filename, const char **error)
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (temperature);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec);
   spec.write_film_response ("spectral-response.dat", NULL, false, false);
   spec.write_film_response ("absolute-spectral-response.dat", NULL, true, false);
@@ -605,7 +604,7 @@ color_matrix
 dufaycolor_correction_color_cinematography_matrix ()
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (temperature);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec, true);
   return spec.optimized_xyz_matrix ();
 }
@@ -613,7 +612,7 @@ color_matrix
 dufaycolor_correction_harrison_horner_matrix ()
 {
   spectrum_dyes_to_xyz spec;
-  spec.set_daylight_backlight (temperature);
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec, false);
   return spec.optimized_xyz_matrix ();
 }

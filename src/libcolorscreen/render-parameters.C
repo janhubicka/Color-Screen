@@ -245,7 +245,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
     }
   if (m_spectrum_dyes_to_xyz)
     {
-      m_spectrum_dyes_to_xyz->set_daylight_backlight (backlight_temperature);
+      m_spectrum_dyes_to_xyz->set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
       switch (dye_balance)
 	{
 	  case render_parameters::dye_balance_none:

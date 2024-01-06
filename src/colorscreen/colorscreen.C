@@ -507,7 +507,7 @@ digital_laboratory (int argc, char **argv)
   else if (!strcmp (argv[0], "kodachrome25-color-target"))
     {
       spectrum_dyes_to_xyz spec;
-      spec.set_daylight_backlight (5000);
+      spec.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
       spec.set_response_to_kodachrome_25 ();
       spec.write_film_response ("kodachrome25-absolute-spectral-response-red.dat", spec.red, true, false);
       spec.write_film_response ("kodachrome25-spectral-response-red.dat", spec.red, false, false);

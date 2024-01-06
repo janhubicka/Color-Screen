@@ -36,7 +36,7 @@ public:
     kodachrome_25_sensitivity,
     dyes_max
   };
-  constexpr static const char *color_model_names[dyes_max] =
+  constexpr static const char *dyes_names[dyes_max] =
   {
     "dufaycolor_color_cinematography",
     "dufaycolor_harrison_horner",
@@ -52,6 +52,20 @@ public:
     "wratten_25_58_47_color_cinematograpjy",
     "wratten_25_58_47_kodak_1945",
     "kodachrome_25_sensitivity",
+  };
+  enum illuminants {
+     il_A,
+     il_B,
+     il_C,
+     il_D,
+     illuminants_max
+  };
+  constexpr static const char *illuminants_names[illuminants_max] =
+  {
+     "il_A",
+     "il_B",
+     "il_C",
+     "il_D",
   };
 
   static const int default_observer = 1931;
@@ -82,10 +96,7 @@ public:
   /* Set dyes to given measured spectra.
      If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
   void set_dyes (enum dyes, enum dyes dyes2 = dufaycolor_color_cinematography, luminosity_t age = 0);
-  void set_daylight_backlight (luminosity_t temperature);
-  void set_il_A_backlight ();
-  void set_il_B_backlight ();
-  void set_il_C_backlight ();
+  void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
   /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
      in white in a given temperature of daylight.  */
   void normalize_dyes (luminosity_t temperature);
