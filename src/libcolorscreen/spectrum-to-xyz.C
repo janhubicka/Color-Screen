@@ -9,6 +9,10 @@
 #include "spectrum.h"
 #include "spectrum-dyes.h"
 
+constexpr const char *spectrum_dyes_to_xyz::dyes_names[spectrum_dyes_to_xyz::dyes_max];
+constexpr const char *spectrum_dyes_to_xyz::illuminants_names[spectrum_dyes_to_xyz::illuminants_max];
+constexpr const char *spectrum_dyes_to_xyz::responses_names[spectrum_dyes_to_xyz::responses_max];
+
 /* EBU TLCI ColorChecker samples */
 static xspect TLCI_2012_TCS[] = {
 

@@ -99,7 +99,7 @@ parse_mode (const char *mode)
   fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
   fprintf (stderr, "Possible values are: ");
   for (int i = 0; i < output_mode_max; i++)
-    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[i]);
+    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[i].name);
   exit (1);
   return output_mode_max;
 }
@@ -497,42 +497,113 @@ read_chemcad (int argc, char **argv)
 	printf ("%f\n", v);
     }
 }
+
+static enum spectrum_dyes_to_xyz::dyes
+parse_dyes (const char *profile)
+{
+  return parse_enum<enum spectrum_dyes_to_xyz::dyes,
+		    (const char **)spectrum_dyes_to_xyz::dyes_names,
+		    (int)spectrum_dyes_to_xyz::dyes_max> (profile, "Unkonwn dye:%s\n");
+}
+static enum spectrum_dyes_to_xyz::illuminants
+parse_illuminant (const char *il, luminosity_t *temperature)
+{
+  *temperature = 6500;
+  if (il[0] == 'D' && strlen (il) == 3
+      && il[1]>'0' && il[1]<='9' && il[2]>='0' && il[2] <= '9')
+    {
+      *temperature = (il[1] - '0') * 1000 + (il[2] - '0') * 100;
+      return spectrum_dyes_to_xyz::il_D;
+    }
+  return parse_enum<enum spectrum_dyes_to_xyz::illuminants,
+		    (const char **)spectrum_dyes_to_xyz::illuminants_names,
+		    (int)spectrum_dyes_to_xyz::illuminants_max> (il, "Unkonwn illuminant (backlight):%s\n");
+}
+static enum spectrum_dyes_to_xyz::responses
+parse_response (const char *profile)
+{
+  return parse_enum<enum spectrum_dyes_to_xyz::responses,
+		    (const char **)spectrum_dyes_to_xyz::responses_names,
+		    (int)spectrum_dyes_to_xyz::responses_max> (profile, "Unkonwn film response:%s\n");
+}
+
+void
+parse_filename_and_camera_setup (int argc, char **argv, const char **filename, spectrum_dyes_to_xyz &spec)
+{
+  if (argc != 4)
+    {
+      fprintf (stderr, "Expected parameters <filename> <backlight> <dyes> [<film-sensitivity>]\n");
+      print_help ();
+    }
+  *filename = argv[0];
+  luminosity_t temperature;
+  auto il = parse_illuminant (argv[1], &temperature);
+  spec.set_backlight (il, temperature);
+  spec.set_dyes (parse_dyes (argv[2]));
+  spec.set_film_response (parse_response (argv[3]));
+}
+
 void
 digital_laboratory (int argc, char **argv)
 {
-  if (argc != 1)
-    print_help ();
-  else if (!strcmp (argv[0], "dufay-xyY"))
+  if (argc == 1 && !strcmp (argv[0], "dufay-xyY"))
     dufaycolor::print_xyY_report ();
-  else if (!strcmp (argv[0], "dufay-spectra"))
+  else if (argc == 1 && !strcmp (argv[0], "dufay-spectra"))
     dufaycolor::print_spectra_report ();
-  else if (!strcmp (argv[0], "dufay-synthetic"))
+  else if (argc == 1 && !strcmp (argv[0], "dufay-synthetic"))
     dufaycolor::print_synthetic_dyes_report ();
-  else if (!strcmp (argv[0], "wratten-xyz"))
+  else if (argc == 1 && !strcmp (argv[0], "wratten-xyz"))
     wratten::print_xyz_report ();
-  else if (!strcmp (argv[0], "wratten-spectra"))
+  else if (argc == 1 && !strcmp (argv[0], "wratten-spectra"))
     wratten::print_spectra_report ();
-  else if (!strcmp (argv[0], "kodachrome25-color-target"))
+  else if (!strcmp (argv[0], "save-illuminant"))
+    {
+      if (argc != 3)
+	{
+	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	}
+      spectrum_dyes_to_xyz spec;
+      luminosity_t temperature;
+      auto il = parse_illuminant (argv[2], &temperature);
+      spec.set_backlight (il, temperature);
+      spec.write_spectra (NULL, NULL, NULL, argv[1]);
+    }
+  else if (!strcmp (argv[0], "save-dyes"))
+    {
+      if (argc != 5)
+	{
+	  printf ("Expected <red_filename> <green_filename> <blue_filename> <dyes>\n");
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_dyes (parse_dyes (argv[4]));
+      spec.write_spectra (argv[1], argv[2], argv[3], NULL);
+    }
+  else if (!strcmp (argv[0], "render-target"))
     {
       spectrum_dyes_to_xyz spec;
-      spec.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
-      spec.set_response_to_kodachrome_25 ();
-      spec.write_film_response ("kodachrome25-absolute-spectral-response-red.dat", spec.red, true, false);
-      spec.write_film_response ("kodachrome25-spectral-response-red.dat", spec.red, false, false);
-      spec.write_film_response ("kodachrome25-absolute-spectral-response-green.dat", spec.green, true, false);
-      spec.write_film_response ("kodachrome25-spectral-response-green.dat", spec.green, false, false);
-      spec.write_film_response ("kodachrome25-absolute-spectral-response-blue.dat", spec.blue, true, false);
-      spec.write_film_response ("kodachrome25-spectral-response-blue.dat", spec.blue, false, false);
+      const char *filename;
       const char *error;
-      spec.generate_color_target_tiff ("kodachrome25-target.tif", &error, true, true);
-      if (error)
-	{
-	  fprintf (stderr, "%s\n", error);
-	  exit (1);
-	}
-      FILE *f = fopen ("kodachrome25.ti3", "wt");
-      spec.generate_simulated_argyll_ti3_file (f);
-      fclose (f);
+
+      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
+      spec.generate_color_target_tiff (filename, &error, false, false);
+    }
+  else if (!strcmp (argv[0], "render-wb-target"))
+    {
+      spectrum_dyes_to_xyz spec;
+      const char *filename;
+      const char *error;
+
+      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
+      spec.generate_color_target_tiff (filename, &error, true, false);
+    }
+  else if (!strcmp (argv[0], "render-optimized-target"))
+    {
+      spectrum_dyes_to_xyz spec;
+      const char *filename;
+      const char *error;
+
+      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
+      spec.generate_color_target_tiff (filename, &error, true, true);
     }
   else
     print_help ();
@@ -565,17 +636,6 @@ main (int argc, char **argv)
 	}
       dufaycolor::generate_ti3_file (f);
       fclose (f);
-    }
-  else if (!strcmp (argv[1], "dufay-color-target"))
-    {
-      if (argc != 3)
-	print_help ();
-      const char *error;
-      if (!dufaycolor::generate_color_target_tiff (argv[2], &error))
-	{
-	  fprintf (stderr, "%s\n", error);
-	  exit (1);
-	}
     }
   else if (!strcmp (argv[1], "read-chemcad-spectra"))
     read_chemcad (argc-2, argv+2);

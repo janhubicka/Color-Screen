@@ -379,9 +379,6 @@ dufaycolor::print_spectra_report ()
   spec.tiff_with_primaries ("spec-d65-primaries.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.tiff_with_overlapping_filters ("spec-d65-primaries-overlap.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size}, "combined-");
   spec.tiff_with_overlapping_filters_response ("spec-d65-primaries-overlap-response.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
-  spec.write_spectra ("dufay-red.dat", "dufay-green.dat", "dufay-blue.dat", NULL, 400, 720, false);
-  spec.write_spectra ("dufay-red-absorbance.dat", "dufay-green-absorbance.dat", "dufay-blue-absorbance.dat", NULL, 400, 720, true);
-  printf ("spectra by Color Cinematography saved to dufay-red.dat, dufay-green.dat and dufay-blue.dat\n");
   spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor);
   report_illuminant (spec, "CIE C aged", "color-cinematography-spectra-ilC-screen-aged.tif", "color-cinematography-spectra-ilC-screen-resp-aged.tif");

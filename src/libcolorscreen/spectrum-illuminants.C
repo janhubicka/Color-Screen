@@ -235,13 +235,13 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
   switch (il)
   {
     case spectrum_dyes_to_xyz::il_A:
-      compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false);
+      compute_spectrum (backlight, 300, 830, sizeof (il_A)/sizeof (luminosity_t), il_A, false, 100);
       break;
     case spectrum_dyes_to_xyz::il_B:
-      compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false);
+      compute_spectrum (backlight, 320, 780, sizeof (il_B)/sizeof (luminosity_t), il_B, false, 100);
       break;
     case spectrum_dyes_to_xyz::il_C:
-      compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false);
+      compute_spectrum (backlight, 320, 780, sizeof (il_C)/sizeof (luminosity_t), il_C, false, 100);
       break;
     case spectrum_dyes_to_xyz::il_D:
       daylight_il (backlight, temperature);

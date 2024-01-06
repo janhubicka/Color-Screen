@@ -82,7 +82,7 @@ public:
     "neopan_100",
     "ilford_panchromatic",
     "ilford_panchromatic_fp4",
-    "observer_y"
+    "observer_y",
     "even"
   };
 
