@@ -574,11 +574,34 @@ digital_laboratory (int argc, char **argv)
     wratten::print_xyz_report ();
   else if (argc == 1 && !strcmp (argv[0], "wratten-spectra"))
     wratten::print_spectra_report ();
+  else if (!strcmp (argv[0], "save-film-sensitivity"))
+    {
+      if (argc != 3)
+	{
+	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	  print_help ();
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_film_response (parse_response (argv[2]));
+      spec.write_film_response (argv[1], NULL, true, false);
+    }
+  else if (!strcmp (argv[0], "save-film-log-sensitivity"))
+    {
+      if (argc != 3)
+	{
+	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	  print_help ();
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_film_response (parse_response (argv[2]));
+      spec.write_film_response (argv[1], NULL, true, true);
+    }
   else if (!strcmp (argv[0], "save-illuminant"))
     {
       if (argc != 3)
 	{
 	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	  print_help ();
 	}
       spectrum_dyes_to_xyz spec;
       luminosity_t temperature;
@@ -594,7 +617,20 @@ digital_laboratory (int argc, char **argv)
 	}
       spectrum_dyes_to_xyz spec;
       spec.set_dyes (parse_dyes (argv[4]));
+      printf ("Saving to %s %s %s\n", argv[1], argv[2], argv[3]);
       spec.write_spectra (argv[1], argv[2], argv[3], NULL);
+    }
+  else if (!strcmp (argv[0], "save-responses"))
+    {
+      if (argc != 5)
+	{
+	  printf ("Expected <red_filename> <green_filename> <blue_filename> <dyes> <respnse>\n");
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_dyes (parse_dyes (argv[4]));
+      spec.set_film_response (parse_response (argv[5]));
+      printf ("Saving to %s %s %s\n", argv[1], argv[2], argv[3]);
+      spec.write_responses (argv[1], argv[2], argv[3], false);
     }
   else if (!strcmp (argv[0], "render-target"))
     {
@@ -621,7 +657,22 @@ digital_laboratory (int argc, char **argv)
       const char *error;
 
       parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
-      spec.generate_color_target_tiff (filename, &error, true, true);
+      if (!spec.generate_color_target_tiff (filename, &error, true, true))
+	{
+	  fprintf (stderr, "%s\n", error);
+	  exit (1);
+	}
+    }
+  else if (!strcmp (argv[0], "render-spectra-photo"))
+    {
+      spectrum_dyes_to_xyz spec;
+      const char *filename;
+      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
+      if (!spec.tiff_with_spectra_photo (filename))
+	{
+	  fprintf (stderr, "Error writting %s\n", filename);
+	  exit (1);
+	}
     }
   else
     print_help ();

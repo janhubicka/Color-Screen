@@ -147,7 +147,8 @@ initialize_spec_response (spectrum_dyes_to_xyz &spec)
   //spec.set_response_to_equal ();
   //spec.set_response_to_neopan_100 ();
   //spec.set_response_to_ilford_panchromatic ();
-  spec.set_film_response (spectrum_dyes_to_xyz::ilford_panchromatic_fp4);
+  //spec.set_film_response (spectrum_dyes_to_xyz::ilford_panchromatic_fp4);
+  spec.set_film_response (spectrum_dyes_to_xyz::spicer_dufay_guess/*spectrum_dyes_to_xyz::ilford_sfx200*//*spectrum_dyes_to_xyz::neopan_100*/);
   //spec.set_response_to_y ();
   //
   //spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();

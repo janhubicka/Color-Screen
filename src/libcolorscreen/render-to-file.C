@@ -413,7 +413,12 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   if (scan.stitch)
     return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
   if (rfparams.dng)
+  {
     rparam.output_gamma = 1;
+    rparam.dark_point = 0;
+    rparam.scan_exposure = rparam.brightness = 1;
+    rparam.white_balance.red = rparam.white_balance.green = rparam.white_balance.blue = 1;
+  }
   if (rfparams.verbose)
     {
       if (progress)

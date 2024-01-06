@@ -1115,6 +1115,8 @@ simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_
         }
       sum += val;
     }
+  if (!rsum)
+    return 0;
   return sum / rsum;
 }
 
@@ -1251,7 +1253,8 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
               xyz_to_dyes_rgb (whitepoint);
       scale /= sum * 0.3;
     }
-  printf ("RGB scales  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
+  luminosity_t sum = scale.red + scale.green + scale.blue;
+  printf ("RGB scales  %f %f%% %f %f%% %f %f%%\n", scale.red, 100 * scale.red / sum, scale.green, 100 * scale.green / sum, scale.blue, 100 * scale.blue / sum);
   color_matrix m = !optimized ? xyz_matrix () : optimized_xyz_matrix ();
   luminosity_t deltaEsum = 0;
   luminosity_t deltaEmax = 0;
@@ -1319,7 +1322,6 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
 {
   if (observing_spec == NULL)
     observing_spec = this;
-  xyz whitep = /*srgb_white*/ whitepoint_xyz ();
   const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   rgbdata colors[n];
   xyz targets[n];
@@ -1426,6 +1428,45 @@ print_response_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_S
       }
 }
 
+
+void
+spectrum_dyes_to_xyz::write_responses (const char *reds, const char *greens, const char *blues, bool log, int start, int end)
+{
+  spectrum sred, sgreen, sblue;
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+    {
+      sred[i] = red[i] * film_response[i];
+      sgreen[i] = green[i] * film_response[i];
+      sblue[i] = blue[i] * film_response[i];
+    }
+  if (reds)
+    {
+      FILE *f = fopen (reds, "wt");
+      if (log)
+        print_response_spectrum (f, sred);
+      else
+        print_transmitance_spectrum (f, sred, start, end);
+      fclose (f);
+    }
+  if (greens)
+    {
+      FILE *f = fopen (greens, "wt");
+      if (log)
+        print_response_spectrum (f, sgreen);
+      else
+        print_transmitance_spectrum (f, sgreen, start, end);
+      fclose (f);
+    }
+  if (blues)
+    {
+      FILE *f = fopen (blues, "wt");
+      if (log)
+        print_response_spectrum (f, sblue, start, end);
+      else
+        print_transmitance_spectrum (f, sblue, start, end);
+      fclose (f);
+    }
+}
 /* Write response of the film covered by optional filter specified by F.  */
 
 bool
@@ -1505,6 +1546,98 @@ tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz fi
 	}
     }
   free (buffer);
+  return true;
+}
+/* Output tiff file showing primaries.  */
+bool
+spectrum_dyes_to_xyz::tiff_with_spectra_photo (const char *filename)
+{
+  tiff_writer_params par;
+  par.filename=filename;
+  const int w = 100;
+  void *buffer;
+  size_t len = create_pro_photo_rgb_profile (&buffer, srgb_white);
+  par.width = SPECTRUM_END - SPECTRUM_START;
+  par.height = w * 4;
+  par.depth = 32;
+  par.hdr = true;
+  par.icc_profile = buffer;
+  par.icc_profile_len = len;
+  const char *error;
+  tiff_writer tiff (par, &error);
+  spectrum bandf;
+  const int minp = 400;
+  const int maxp = 780;
+  const double powf = 1.5;
+  if (error)
+    return false;
+  luminosity_t max = 0;
+  for (int x = 0; x < SPECTRUM_END - SPECTRUM_START; x++)
+  {
+    int band = x + SPECTRUM_START;
+    set_illuminant_to (bandf, il_band, band);
+    luminosity_t l = simulated_response (backlight, film_response, bandf, NULL);
+    if (l > max)
+      max = l;
+  }
+  for (int y = 0; y < w * 4; y++)
+    {
+      for (int x = 0; x < par.width; x++)
+        {
+	  luminosity_t lxp = pow ((x-1) / (luminosity_t)par.width, powf);
+	  luminosity_t xp = pow (x / (luminosity_t)par.width, powf);
+	  luminosity_t nxp = pow ((x+1) / (luminosity_t)par.width, powf);
+	  int lband = minp + lxp * (maxp - minp);
+	  int band = minp + xp * (maxp - minp);
+	  int nband = minp + nxp * (maxp - minp);
+	  if ((((int)lband) / 100) < ((int)nband) / 100 && (y % w) > 3 *w /4)
+	    tiff.put_hdr_pixel (x, 1, 0, 0);
+	  else if ((((int)lband) / 50) < ((int)nband) / 50 && (y % w) > 5 *w /6)
+	    tiff.put_hdr_pixel (x, 1, 0, 0);
+#if 0
+	  else if (((band + 1) % 50) < 3 && (y % w) > 5 *w /6)
+#endif
+	  else if ((((int)band) / 10) < ((int)nband) / 10 && (y % w) > 7 *w /8)
+	    tiff.put_hdr_pixel (x, 0, 0, 1);
+	  else 
+	    {
+	      set_illuminant_to (bandf, il_band, band);
+	      luminosity_t *s = y < w ? blue : y < 2 * w ? green : y < 3 * w ? red : NULL, r, g, b;
+	      if ((y % w) < 2 * w / 3)
+		{
+	          luminosity_t l = simulated_response (backlight, film_response, bandf, s);
+		  l /= max;
+		  xyz_to_pro_photo_rgb (l, l, l, &r, &g, &b);
+		}
+	      else
+		{
+		  xyz c;
+		  if (s)
+		    for (int i = 0; i < SPECTRUM_SIZE; i++)
+		      bandf[i] *= s[i];
+	          c = get_xyz_old_observer (backlight, bandf);
+		  c = c * 15;
+		  xyz_to_pro_photo_rgb (c.x, c.y, c.z, &r, &g, &b);
+		}
+	      tiff.put_hdr_pixel (x, r, g, b);
+	    }
+#if 0
+	  else
+	    {
+	      set_backlight (il_band, band);
+	      xyz color = whitepoint_xyz ();
+	      luminosity_t r,g,b;
+	      color.to_srgb (&r, &g, &b);
+	      r = std::min (std::max (r, (luminosity_t)0), (luminosity_t)1);
+	      g = std::min (std::max (g, (luminosity_t)0), (luminosity_t)1);
+	      b = std::min (std::max (b, (luminosity_t)0), (luminosity_t)1);
+	      tiff.put_pixel (x, r* 65535, g * 65535, b * 65535);
+	    }
+#endif
+        }
+      if (!tiff.write_row ())
+	return false;
+    }
   return true;
 }
 

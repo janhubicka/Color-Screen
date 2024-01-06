@@ -59,7 +59,7 @@ public:
      il_C,
      il_D,
      il_band,
-     il_even,
+     il_equal_energy,
      illuminants_max
   };
   constexpr static const char *illuminants_names[illuminants_max] =
@@ -69,12 +69,15 @@ public:
      "C",
      "D",
      "band",
-     "even",
+     "equal_energy",
   };
   enum responses {
     neopan_100,
     ilford_panchromatic,
     ilford_panchromatic_fp4,
+    ilford_sfx200,
+    rollei_retro_80s,
+    spicer_dufay_guess,
     observer_y,
     response_even,
     responses_max
@@ -84,6 +87,9 @@ public:
     "neopan_100",
     "ilford_panchromatic",
     "ilford_panchromatic_fp4",
+    "ilford_sfx200",
+    "rollei_retro_80s",
+    "spicer_dufay_guess",
     "observer_y",
     "even"
   };
@@ -182,6 +188,7 @@ public:
   bool is_linear ();
 
   void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
+  void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
   bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
@@ -217,6 +224,7 @@ public:
   bool tiff_with_primaries (const char *filename, rgbdata white);
   bool tiff_with_overlapping_filters (const char *filename, rgbdata white, const char *spectra_prefix);
   bool tiff_with_overlapping_filters_response (const char *filename, rgbdata white);
+  bool tiff_with_spectra_photo (const char *filename);
 
   private:
     static const bool debug = false;

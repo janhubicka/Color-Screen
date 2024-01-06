@@ -1,7 +1,9 @@
 plot()
 {
-min=400
-max=720
+#min=400
+#max=700
+min=380
+max=780
 gnuplot <<END
 set terminal $1
 set output "$3"

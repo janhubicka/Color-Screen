@@ -248,7 +248,7 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
     case spectrum_dyes_to_xyz::il_D:
       daylight_il (backlight, temperature);
       break;
-    case spectrum_dyes_to_xyz::il_even:
+    case spectrum_dyes_to_xyz::il_equal_energy:
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	backlight[i] = 1;
       break;
@@ -259,7 +259,6 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
       float b = my_modf ((temperature - SPECTRUM_START) / SPECTRUM_STEP, &p);
       if (p >= 0 && p < SPECTRUM_SIZE)
         {
-          printf ("%i %f\n", p, b);
 	  if (p + 1 < SPECTRUM_SIZE)
 	  {
 	    backlight[p] = 1 - b;
