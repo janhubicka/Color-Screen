@@ -246,5 +246,9 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
     case spectrum_dyes_to_xyz::il_D:
       daylight_il (backlight, temperature);
       break;
+    case spectrum_dyes_to_xyz::il_even:
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	backlight[i] = 1;
+      break;
   }
 }

@@ -73,53 +73,61 @@ print_help ()
   exit (1);
 }
 
+template<typename T,const char *names[],int max>
+T
+parse_enum (const char *arg, const char *errmsg)
+{
+  for (int i = 0; i < max; i++)
+    if (!strcmp (arg, names[i]))
+      return (T)i;
+  fprintf (stderr, errmsg, arg);
+  fprintf (stderr, "Possible values are: ");
+  for (int i = 0; i < max; i++)
+    fprintf (stderr, " %s", names[i]);
+  fprintf (stderr, "\n");
+  exit (1);
+  return (T)max;
+}
+
 /* Parse output mode.  */
 static enum output_mode
 parse_mode (const char *mode)
 {
   for (int i = 0; i < output_mode_max; i++)
-    if (!strcmp (mode, render_to_file_params::output_mode_properties [i].name))
+    if (!strcmp (mode, render_to_file_params::output_mode_properties[i].name))
       return (output_mode)i;
   fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
-  print_help ();
+  fprintf (stderr, "Possible values are: ");
+  for (int i = 0; i < output_mode_max; i++)
+    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[i]);
+  exit (1);
   return output_mode_max;
 }
+
 /* Parse output mode.  */
 static enum render_parameters::output_profile_t
 parse_output_profile (const char *profile)
 {
-  int j;
-  for (j = 0; j < render_parameters::output_profile_max; j++)
-    if (!strcmp (profile, render_parameters::output_profile_names[j]))
-      return (render_parameters::output_profile_t)j;
-  fprintf (stderr, "Unkonwn output profile:%s\n", profile);
-  print_help ();
-  return render_parameters::output_profile_max;
+  return parse_enum<enum render_parameters::output_profile_t,
+		    render_parameters::output_profile_names,
+		    (int)render_parameters::output_profile_max> (profile, "Unkonwn output profile:%s\n");
 }
 
 /* Parse color model.  */
 static enum render_parameters::color_model_t
 parse_color_model (const char *model)
 {
-  int j;
-  for (j = 0; j < render_parameters::color_model_max; j++)
-    if (!strcmp (model, render_parameters::color_model_names[j]))
-      return (render_parameters::color_model_t)j;
-  fprintf (stderr, "Unkonwn color model:%s\n", model);
-  print_help ();
-  return render_parameters::color_model_max;
+  return parse_enum<enum render_parameters::color_model_t,
+		    render_parameters::color_model_names,
+		    (int)render_parameters::color_model_max> (model, "Unkonwn color model:%s\n");
 }
 
 static enum render_parameters::dye_balance_t
 parse_dye_balance (const char *model)
 {
-  int j;
-  for (j = 0; j < render_parameters::dye_balance_max; j++)
-    if (!strcmp (model, render_parameters::dye_balance_names[j]))
-      return (render_parameters::dye_balance_t)j;
-  fprintf (stderr, "Unkonwn dye balancel:%s\n", model);
-  print_help ();
-  return render_parameters::dye_balance_max;
+  return parse_enum<enum render_parameters::dye_balance_t,
+		    render_parameters::dye_balance_names,
+		    (int)render_parameters::dye_balance_max> (model, "Unkonwn dye balance:%s\n");
 }
 
 /* If there is --arg param or --arg=param at the command line

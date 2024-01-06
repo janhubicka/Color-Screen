@@ -58,4 +58,5 @@ compute_log_sensitivity (spectrum s, int size, const spectra_entry * data)
 void log_sensitivity_to_reversal_transmitance(spectrum response);
 void log2_sensitivity_to_reversal_transmitance(spectrum response);
 void set_illuminant_to (spectrum backlight, enum spectrum_dyes_to_xyz::illuminants il, luminosity_t temperature = 5400);
+void set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type);
 #endif

@@ -58,14 +58,32 @@ public:
      il_B,
      il_C,
      il_D,
+     il_even,
      illuminants_max
   };
   constexpr static const char *illuminants_names[illuminants_max] =
   {
-     "il_A",
-     "il_B",
-     "il_C",
-     "il_D",
+     "A",
+     "B",
+     "C",
+     "D",
+     "even",
+  };
+  enum responses {
+    neopan_100,
+    ilford_panchromatic,
+    ilford_panchromatic_fp4,
+    observer_y,
+    response_even,
+    responses_max
+  };
+  constexpr static const char *responses_names[responses_max] =
+  {
+    "neopan_100",
+    "ilford_panchromatic",
+    "ilford_panchromatic_fp4",
+    "observer_y"
+    "even"
   };
 
   static const int default_observer = 1931;
@@ -169,11 +187,7 @@ public:
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
   bool generate_simulated_argyll_ti3_file (FILE *f);
   bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
-  void set_response_to_neopan_100 ();
-  void set_response_to_ilford_panchromatic ();
-  void set_response_to_ilford_panchromatic_fp4 ();
-  void set_response_to_equal ();
-  void set_response_to_y ();
+  void set_film_response (enum responses film);
   void set_response_to_kodachrome_25 ();
   void adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
   void adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
