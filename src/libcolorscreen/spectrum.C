@@ -140,3 +140,35 @@ compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorba
         s[i] = min_transmitance * repnorm;
     }
 }
+
+/* Wedge histograms seems to be log sensitivity.  Lets assume that it is base 10 logarithm.
+   Sensitivity is the reciprocal of time needed to obtain given density.  For reversal film
+   I assume that it is reciprocal of time needed to get maximal brightness.  So to translate
+   this to linear data and assuming that iflm is linear it should be 1/time, where time is
+   10^{1/response}.  */
+
+void
+log_sensitivity_to_reversal_transmitance(spectrum response)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+  {
+    if (response[i] != CLAMP)
+      //response[i] = 1/ (pow(10,1/response[i]));
+      // We do flipping positive to negative by 1/density.  This should be done by
+      // characteristic curve.
+      response[i] = pow(10,response[i]);
+    else
+      response[i]=0;
+  }
+}
+void
+log2_sensitivity_to_reversal_transmitance(spectrum response)
+{
+  for (int i = 0; i < SPECTRUM_SIZE; i++)
+  {
+    if (response[i]>0)
+      response[i] = pow(2,response[i]);
+    else
+      response[i]=0;
+  }
+}

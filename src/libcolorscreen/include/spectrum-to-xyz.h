@@ -33,6 +33,7 @@ public:
     autochrome_reconstructed_aged,
     wratten_25_58_47_color_cinematography,
     wratten_25_58_47_kodak_1945,
+    kodachrome_25_sensitivity,
     dyes_max
   };
   constexpr static const char *color_model_names[dyes_max] =
@@ -50,6 +51,7 @@ public:
     "autochrome_Casella_Tsukada_aged",
     "wratten_25_58_47_color_cinematograpjy",
     "wratten_25_58_47_kodak_1945",
+    "kodachrome_25_sensitivity",
   };
 
   static const int default_observer = 1931;
@@ -224,9 +226,6 @@ public:
 
 color_matrix dufaycolor_correction_color_cinematography_matrix ();
 color_matrix dufaycolor_correction_harrison_horner_matrix ();
-void synthetic_dufay_red (spectrum s, luminosity_t d1, luminosity_t d2);
-void synthetic_dufay_green (spectrum s, luminosity_t d1, luminosity_t d2);
-void synthetic_dufay_blue (spectrum s, luminosity_t d1, luminosity_t d2);
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
 

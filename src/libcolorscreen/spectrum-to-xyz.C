@@ -1312,12 +1312,6 @@ const static spectra_entry canon_CN_E_85mm_T1_3_tramsmission[] =
   {749.6027911969938, 82.46502530084618},
 };
 
-void
-compute_log_sensitivity (spectrum s, int size, const spectra_entry * data)
-{
-  compute_spectrum (s, size, data, false, 1, -1, -1, true);
-}
-
 /* Taken from Argyll
    General temperature Daylight spectra from CIE 15.2004 Appendix C.   
    ## uses improved interpolation rather than CIE 15.2004 Section 3.1 ##   
@@ -1707,38 +1701,6 @@ combined_xyz (luminosity_t *dye1, luminosity_t *dye2, luminosity_t *backlight, c
   xyz ret = get_xyz_old_observer (backlight, tmp, filename2);
   return ret;
 }
-
-/* Wedge histograms seems to be log sensitivity.  Lets assume that it is base 10 logarithm.
-   Sensitivity is the reciprocal of time needed to obtain given density.  For reversal film
-   I assume that it is reciprocal of time needed to get maximal brightness.  So to translate
-   this to linear data and assuming that iflm is linear it should be 1/time, where time is
-   10^{1/response}.  */
-
-void
-log_sensitivity_to_reversal_transmitance(spectrum response)
-{
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-  {
-    if (response[i] != CLAMP)
-      //response[i] = 1/ (pow(10,1/response[i]));
-      // We do flipping positive to negative by 1/density.  This should be done by
-      // characteristic curve.
-      response[i] = pow(10,response[i]);
-    else
-      response[i]=0;
-  }
-}
-void
-log2_sensitivity_to_reversal_transmitance(spectrum response)
-{
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-  {
-    if (response[i]>0)
-      response[i] = pow(2,response[i]);
-    else
-      response[i]=0;
-  }
-}
 void
 spectrum_dyes_to_xyz::set_response_to_y ()
 {
@@ -1809,21 +1771,9 @@ spectrum_dyes_to_xyz::set_response_to_equal ()
 void
 spectrum_dyes_to_xyz::set_response_to_kodachrome_25 ()
 {
-	// TODO
-#if 0
-  /* It is best to clamp missing data to 0 for spectral response.
-     We make sure it remans zero in log_sensitivity_to_reversal_transmiatance  */
-  compute_log_sensitivity (red, sizeof (kodachrome_25_spectral_response_red) / sizeof (spectra_entry), kodachrome_25_spectral_response_red);
-  compute_log_sensitivity (green, sizeof (kodachrome_25_spectral_response_green) / sizeof (spectra_entry), kodachrome_25_spectral_response_green);
-  compute_log_sensitivity (blue, sizeof (kodachrome_25_spectral_response_blue) / sizeof (spectra_entry), kodachrome_25_spectral_response_blue);
-  print_transmitance_spectrum (stdout, red);
-  log_sensitivity_to_reversal_transmitance (red);
-  print_transmitance_spectrum (stdout, red);
-  log_sensitivity_to_reversal_transmitance (green);
-  log_sensitivity_to_reversal_transmitance (blue);
+  set_dyes_to (red, green, blue, kodachrome_25_sensitivity);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     film_response[i] = 1;
-#endif
 }
 
 /* Simulate density of recording BACKLIGHT filtred by FILTER1 and FILTER2

@@ -49,4 +49,12 @@ void compute_spectrum (spectrum s, luminosity_t start, luminosity_t end, int siz
 		       const luminosity_t data[], bool absorbance, luminosity_t norm = 1, bool limit_range = true, bool clamp = false);
 void compute_spectrum (spectrum s, const xspect &in);
 void compute_spectrum (spectrum s, int size, const spectra_entry * data, bool absorbance = false, luminosity_t norm = 1, luminosity_t min_transmitance = -1, luminosity_t max_transmitance = -1, bool clamp = false);
+
+inline void
+compute_log_sensitivity (spectrum s, int size, const spectra_entry * data)
+{
+  compute_spectrum (s, size, data, false, 1, -1, -1, true);
+}
+void log_sensitivity_to_reversal_transmitance(spectrum response);
+void log2_sensitivity_to_reversal_transmitance(spectrum response);
 #endif

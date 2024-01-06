@@ -2682,5 +2682,15 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, enum spectrum_dyes_to_
 	compute_spectrum (green, 400.0, 700.0, sizeof (wratten_filter_green_58_kodak) / sizeof (luminosity_t), wratten_filter_green_58_kodak, false, 100);
 	compute_spectrum (blue, 400.0, 700.0, sizeof (wratten_filter_blue_47_kodak) / sizeof (luminosity_t), wratten_filter_blue_47_kodak, false, 100);
 	break;
+      case spectrum_dyes_to_xyz::kodachrome_25_sensitivity:
+	/* It is best to clamp missing data to 0 for spectral response.
+	   We make sure it remans zero in log_sensitivity_to_reversal_transmiatance  */
+	compute_log_sensitivity (red, sizeof (kodachrome_25_spectral_response_red) / sizeof (spectra_entry), kodachrome_25_spectral_response_red);
+	compute_log_sensitivity (green, sizeof (kodachrome_25_spectral_response_green) / sizeof (spectra_entry), kodachrome_25_spectral_response_green);
+	compute_log_sensitivity (blue, sizeof (kodachrome_25_spectral_response_blue) / sizeof (spectra_entry), kodachrome_25_spectral_response_blue);
+	log_sensitivity_to_reversal_transmitance (red);
+	log_sensitivity_to_reversal_transmitance (green);
+	log_sensitivity_to_reversal_transmitance (blue);
+	break;
     }
 }
