@@ -1091,7 +1091,7 @@ simulated_response (luminosity_t *backlight, luminosity_t *response, luminosity_
 	{
 	   if (backlight[i] < 0)
 	     printf ("Negative backlight %i %f\n", i, backlight[i]);
-	   assert (backlight[i]>0);
+	   assert (backlight[i]>=0);
 	   val *= backlight[i];
 	}
       rsum += val;
@@ -1315,8 +1315,10 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   return true;
 }
 color_matrix
-spectrum_dyes_to_xyz::optimized_xyz_matrix ()
+spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec)
 {
+  if (observing_spec == NULL)
+    observing_spec = this;
   xyz whitep = /*srgb_white*/ whitepoint_xyz ();
   const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   rgbdata colors[n];
@@ -1335,7 +1337,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix ()
       colors[i].red   = simulated_response (backlight, film_response, tile, red)/res.red;
       colors[i].green = simulated_response (backlight, film_response, tile, green)/res.green;
       colors[i].blue  = simulated_response (backlight, film_response, tile, blue)/res.blue;
-      targets[i] = get_xyz_old_observer (backlight, tile);
+      targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
   color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
 #if 0

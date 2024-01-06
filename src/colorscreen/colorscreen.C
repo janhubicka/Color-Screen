@@ -509,15 +509,33 @@ static enum spectrum_dyes_to_xyz::illuminants
 parse_illuminant (const char *il, luminosity_t *temperature)
 {
   *temperature = 6500;
-  if (il[0] == 'D' && strlen (il) == 3
+  if ((il[0] == 'D' || il[0] == 'd') && strlen (il) == 3
       && il[1]>'0' && il[1]<='9' && il[2]>='0' && il[2] <= '9')
     {
       *temperature = (il[1] - '0') * 1000 + (il[2] - '0') * 100;
       return spectrum_dyes_to_xyz::il_D;
     }
-  return parse_enum<enum spectrum_dyes_to_xyz::illuminants,
-		    (const char **)spectrum_dyes_to_xyz::illuminants_names,
-		    (int)spectrum_dyes_to_xyz::illuminants_max> (il, "Unkonwn illuminant (backlight):%s\n");
+  if (strlen(il) == 3
+      && il[0] >= '3' && il[0]<='7'
+      && il[1] >= '0' && il[1]<='9'
+      && il[2] >= '0' && il[2]<='9')
+    {
+      *temperature = atoi (il);
+      return spectrum_dyes_to_xyz::il_band;
+    }
+  for (int i = 0; i < (int)spectrum_dyes_to_xyz::illuminants_max; i++)
+    if (!strcmp (il, spectrum_dyes_to_xyz::illuminants_names[i])
+	&& (spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_D
+	&& (spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_band)
+      return (spectrum_dyes_to_xyz::illuminants)i;
+  fprintf (stderr, "Unknown illuminant %s\n", il);
+  fprintf (stderr, "Possible values are: D[0-9][0-9] for daylight, [3-7][0-9][0-9] for single band");
+  for (int i = 0; i < (int)spectrum_dyes_to_xyz::illuminants_max; i++)
+    if ((spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_D
+        && (spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_band)
+    fprintf (stderr, ", %s", spectrum_dyes_to_xyz::illuminants_names[i]);
+  fprintf (stderr, "\n");
+  exit (1);
 }
 static enum spectrum_dyes_to_xyz::responses
 parse_response (const char *profile)

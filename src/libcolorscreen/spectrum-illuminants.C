@@ -1,3 +1,5 @@
+#include <cmath>
+#include "include/base.h"
 #include "include/spectrum-to-xyz.h"
 #include "spectrum.h"
 namespace{
@@ -249,6 +251,25 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
     case spectrum_dyes_to_xyz::il_even:
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	backlight[i] = 1;
+      break;
+    case spectrum_dyes_to_xyz::il_band:
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	backlight[i] = 0;
+      int p;
+      float b = my_modf ((temperature - SPECTRUM_START) / SPECTRUM_STEP, &p);
+      if (p >= 0 && p < SPECTRUM_SIZE)
+        {
+          printf ("%i %f\n", p, b);
+	  if (p + 1 < SPECTRUM_SIZE)
+	  {
+	    backlight[p] = 1 - b;
+	    backlight[p+1] = b;
+	  }
+	  else
+	    backlight[p] = 1;
+        }
+      else
+	backlight[0] = 1;
       break;
   }
 }

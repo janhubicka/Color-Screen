@@ -58,6 +58,7 @@ public:
      il_B,
      il_C,
      il_D,
+     il_band,
      il_even,
      illuminants_max
   };
@@ -67,6 +68,7 @@ public:
      "B",
      "C",
      "D",
+     "band",
      "even",
   };
   enum responses {
@@ -155,7 +157,7 @@ public:
 		      0  , 0  , 0  , 1);
       return m;
     }
-  color_matrix optimized_xyz_matrix ();
+  color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = NULL);
 
   /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
      and backlight.  */
