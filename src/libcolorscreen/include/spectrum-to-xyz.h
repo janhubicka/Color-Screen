@@ -23,8 +23,8 @@ public:
     dufaycolor_color_cinematography,
     dufaycolor_harrison_horner,
     dufaycolor_dufaycolor_manual,
-    dufaycolor_photography_its_matherials_and_processes,
-    dufaycolor_separation_filters_photography_its_matherials_and_processes,
+    dufaycolor_photography_its_materials_and_processes,
+    dufaycolor_separation_filters_photography_its_materials_and_processes,
     dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor,
     dufaycolor_aged_DC_MSI_NSMM11951,
     dufaycolor_aged_DC_MSI_NSMM11960,
@@ -42,9 +42,9 @@ public:
   {
     "dufaycolor_color_cinematography",
     "dufaycolor_harrison_horner",
-    "dufaycolor_photography_its_matherials_and_processes",
-    "dufaycolor_separation_filters_photography_its_matherials_and_processes",
     "dufaycolor_dufaycolor_manual",
+    "dufaycolor_photography_its_materials_and_processes",
+    "dufaycolor_separation_filters_photography_its_materials_and_processes",
     "dufaycolor_NSMM_Bradford_11948",
     "dufaycolor_NSMM_Bradford_11951",
     "dufaycolor_NSMM_Bradford_11960",
@@ -275,6 +275,7 @@ public:
 
 color_matrix dufaycolor_correction_color_cinematography_matrix ();
 color_matrix dufaycolor_correction_harrison_horner_matrix ();
+color_matrix dufaycolor_correction_photography_its_materials_and_processes_matrix ();
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
 

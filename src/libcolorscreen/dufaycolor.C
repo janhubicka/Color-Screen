@@ -156,12 +156,16 @@ initialize_spec_response (spectrum_dyes_to_xyz &spec)
 }
 
 static void
-initialize_spec (spectrum_dyes_to_xyz &spec, bool color_cinematography = true)
+initialize_spec (spectrum_dyes_to_xyz &spec, int mode = 0)
 {
-  if (color_cinematography)
+  if (!mode)
     spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
-  else
+  else if (mode == 1)
     spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
+  else if (mode == 2)
+    spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
+  else
+    abort ();
   initialize_spec_response (spec);
 }
 
@@ -351,20 +355,20 @@ dufaycolor::print_spectra_report ()
   spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   spec.set_backlight (spectrum_dyes_to_xyz::il_A);
-  initialize_spec (spec, false);
+  initialize_spec (spec, 1);
   report_illuminant (spec, "CIE A", "harrison-horner-spectra-ilA-screen.tif", "harrison-horner-spectra-ilA-screen-resp.tif");
-  initialize_spec (spec, true);
+  initialize_spec (spec, 0);
   report_illuminant (spec, "CIE A", "color-cinematography-spectra-ilA-screen.tif", "color-cinematography-spectra-ilA-screen-resp.tif");
   spec.set_backlight (spectrum_dyes_to_xyz::il_B);
-  initialize_spec (spec, false);
+  initialize_spec (spec, 1);
   report_illuminant (spec, "CIE B", "harrison-horner-spectra-ilB-screen.tif", "harrison-horner-spectra-ilB-screen-resp.tif");
-  initialize_spec (spec, true);
+  initialize_spec (spec, 0);
   report_illuminant (spec, "CIE B", "color-cinematography-spectra-ilB-screen.tif", "color-cinematography-spectra-ilB-screen-resp.tif");
   spec.set_backlight (spectrum_dyes_to_xyz::il_C);
-  initialize_spec (spec, false);
+  initialize_spec (spec, 1);
   report_illuminant (spec, "CIE C", "harrison-horner-spectra-ilC-screen.tif", "harrison-horner-spectra-ilC-screen-resp.tif");
   spec.tiff_with_primaries ("spec-C-primaries-harrison-horner.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
-  initialize_spec (spec, true);
+  initialize_spec (spec, 0);
   report_illuminant (spec, "CIE C", "color-cinematography-spectra-ilC-screen.tif", "color-cinematography-spectra-ilC-screen-resp.tif");
   spec.tiff_with_primaries ("spec-C-primaries-color-cinematography.tif",(rgbdata){red_size / screen_size, green_size / screen_size, blue_size / screen_size});
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, 5000);
@@ -603,7 +607,7 @@ dufaycolor_correction_color_cinematography_matrix ()
 {
   spectrum_dyes_to_xyz spec;
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
-  initialize_spec (spec, true);
+  initialize_spec (spec, 0);
   return spec.optimized_xyz_matrix ();
 }
 color_matrix
@@ -611,6 +615,14 @@ dufaycolor_correction_harrison_horner_matrix ()
 {
   spectrum_dyes_to_xyz spec;
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
-  initialize_spec (spec, false);
+  initialize_spec (spec, 1);
+  return spec.optimized_xyz_matrix ();
+}
+color_matrix
+dufaycolor_correction_photography_its_materials_and_processes_matrix ()
+{
+  spectrum_dyes_to_xyz spec;
+  spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
+  initialize_spec (spec, 2);
   return spec.optimized_xyz_matrix ();
 }

@@ -2435,7 +2435,7 @@ const static spectra_entry kodachrome_25_spectral_response_blue[] = {
   {526.2295971068013, 0.8228834116866885},
   {529.4119677251559, 0.7696546946684384},
 };
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_red[] = {
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_red[] = {
   {400, 0.14797509610367854},
   {419.9287323673442, 0.13618294677388576},
   {439.85746473468834, 0.12439079744407877},
@@ -2495,7 +2495,7 @@ const static spectra_entry dufaycolor_photography_its_matherials_and_processes_r
   {691.7848026335801, 86.33626811229679},
   {699.2587791849847, 86.42060303741431},
 };
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_green[] = {
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_green[] = {
   {400, 0.14797509610366433},
   {419.9287323673442, 0.13618294677388576},
   {439.5015945138429, 0.12460137153927064},
@@ -2574,7 +2574,7 @@ const static spectra_entry dufaycolor_photography_its_matherials_and_processes_g
   {680.0712676326558, 0.1597672454334429},
   {700, 0.14797509610366433}
 };
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_blue[] = {
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_blue[] = {
   {400.41132139924144, 52.15956603018697},
   {404.3364225333, 53.488604431882784},
   {408.2601198400573, 54.64012887134624},
@@ -2623,7 +2623,7 @@ const static spectra_entry dufaycolor_photography_its_matherials_and_processes_b
   {659.4300929099702, 0.08322356183738577},
   {680.0712676326557, 0.15976724543347132},
   {700.3558702208455, 0.14776452200845824}};
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_red1s[] = {
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_red1s[] = {
   {399.9376459440879, 0.0893916825383485},
   {419.75471503955214, 0.1192694872192277},
   {438.6050535381037, 0.14208815701734068},
@@ -2665,7 +2665,7 @@ const static spectra_entry dufaycolor_photography_its_matherials_and_processes_r
   {683.5857620960348, 52.23839959312099},
   {688.9028817886006, 52.29004807207497},
   {694.2196981508928, 52.30334043797742}};
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_green2s[] = {
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_green2s[] = {
   {400.90555767194206, 0.24580482497685807},
   {418.7886167858537, 0.19217015177450492},
   {438.6050535381037, 0.14208815701734068},
@@ -2699,39 +2699,50 @@ const static spectra_entry dufaycolor_photography_its_matherials_and_processes_g
   {679.790363718535, 0.13636171478746917},
   {697.6740233025794, 0.1586564898707934},
 };
-const static spectra_entry dufaycolor_photography_its_matherials_and_processes_blue3s[] = {
-  {400.90555767194206, 0.24580482497685807},
-  {418.7886167858537, 0.19217015177450492},
-  {438.6050535381037, 0.14208815701734068},
-  {457.9385884953515, 0.14708660659142936},
-  {504.8254754857596, 0.5467415747470028},
-  {510.26693892390654, 1.0421535768756627},
-  {513.8683399375249, 3.147386283073601},
-  {516.2135339327947, 4.293440276877746},
-  {518.1578376513836, 5.678595802995233},
-  {519.8599971461325, 7.003620435732003},
-  {520.8390606023672, 8.570169631893364},
-  {522.3003469715641, 9.99579374975103},
-  {524.0031420154569, 11.4011835717386},
-  {526.4309397452956, 12.806144398054016},
-  {530.5504826305021, 14.219236642337151},
-  {535.6252067684298, 14.178973448524857},
-  {538.9963024264283, 12.62793244591198},
-  {540.9182030376934, 11.180215050938202},
-  {542.8414144690678, 9.898250858794242},
-  {545.006579459539, 8.652308003255754},
-  {547.6538323087792, 7.24836246669777},
-  {550.5436742662602, 5.9608034559961},
-  {553.916533573133, 4.632775853554222},
-  {557.7733238312924, 3.3798046189202324},
-  {561.4427594980621, 2.203961245085125},
-  {568.1474900067901, 1.1558504298662058},
-  {571.5272825770514, 0.7045339828877957},
-  {598.1067711015182, 0.19017467190550974},
-  {640.8819999882869, 0.17376802492088927},
-  {659.9740714092723, 0.20470852528343642},
-  {679.790363718535, 0.13636171478746917},
-  {697.6740233025794, 0.1586564898707934}
+const static spectra_entry dufaycolor_photography_its_materials_and_processes_blue3s[] = {
+  {401.98120189987145, 34.39766340938526},
+  {403.12169483866614, 36.00429986780044},
+  {404.58250454600505, 37.36965009372},
+  {406.28613374814927, 38.880519226599276},
+  {408.4715092013977, 40.190189389236735},
+  {411.6240911471642, 41.56709568607503},
+  {416.22651596646205, 42.922596073862834},
+  {421.0591690649968, 42.831456159977485},
+  {424.9148111733634, 41.433301384048114},
+  {427.80381783768365, 40.04011955318822},
+  {430.21076955560136, 38.80910217207687},
+  {432.615623961344, 37.31287966643784},
+  {434.779668796449, 35.92529316484479},
+  {436.70288022782347, 34.64332897270083},
+  {438.6250191700175, 33.22574852369611},
+  {440.5460856230311, 31.672551817830637},
+  {442.46774790336724, 30.194697476887825},
+  {443.67036577098173, 29.470695780843542},
+  {457.3322096126915, 15.147495527770971},
+  {459.2537527275631, 13.65457271384362},
+  {461.1752958424347, 12.161649899916256},
+  {463.0976731155577, 10.7742063968806},
+  {465.2613366211763, 9.338400781737064},
+  {467.666191026919, 7.842178276098039},
+  {470.3133008776018, 6.420150571958615},
+  {473.4437549315221, 4.998984944836579},
+  {476.817090900253, 3.7312312343328244},
+  {485.01488867449353, 1.3365486069264563},
+  {488.1517353623356, 0.7237315392168426},
+  {445.7633661906913, 26.92562990900859},
+  {448.9388235459274, 23.46221247862087},
+  {452.46804538105727, 19.73231353078944},
+  {499.28779161587545, 0.0892249235498781},
+  {519.2172258968702, 0.16618975533627633},
+  {539.8576987059052, 0.15397645781615665},
+  {559.7864310732494, 0.14218430848634966},
+  {580.0710336614391, 0.13018158506137922},
+  {599.6445977215883, 0.2073569909429267},
+  {619.5733300889326, 0.19556484161314813},
+  {639.8579326771221, 0.1835621181881777},
+  {659.4307948236208, 0.17198054295356258},
+  {679.7153974118105, 0.15997781952863477},
+  {700.0000000000001, 0.1479750961036217},
 };
 
 /* Based on Casella-Tsukada paper.  */
@@ -2920,15 +2931,15 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, enum spectrum_dyes_to_
 	compute_spectrum (green, sizeof (harrison_horner_dufay_green) / sizeof (spectra_entry), harrison_horner_dufay_green, false, 100, 0, 100);
 	compute_spectrum (blue, sizeof (harrison_horner_dufay_blue) / sizeof (spectra_entry), harrison_horner_dufay_blue, false, 100, 0, 100);
 	break;
-      case spectrum_dyes_to_xyz::dufaycolor_photography_its_matherials_and_processes:
-	compute_spectrum (red, sizeof (dufaycolor_photography_its_matherials_and_processes_red) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_red, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_photography_its_matherials_and_processes_green) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_green, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_photography_its_matherials_and_processes_blue) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_blue, false, 100, 0, 100);
+      case spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes:
+	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red, false, 100, 0, 100);
+	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green, false, 100, 0, 100);
+	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue, false, 100, 0, 100);
 	break;
-      case spectrum_dyes_to_xyz::dufaycolor_separation_filters_photography_its_matherials_and_processes:
-	compute_spectrum (red, sizeof (dufaycolor_photography_its_matherials_and_processes_red1s) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_red1s, false, 100, 0, 100);
-	compute_spectrum (green, sizeof (dufaycolor_photography_its_matherials_and_processes_green2s) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_green2s, false, 100, 0, 100);
-	compute_spectrum (blue, sizeof (dufaycolor_photography_its_matherials_and_processes_blue3s) / sizeof (spectra_entry), dufaycolor_photography_its_matherials_and_processes_blue3s, false, 100, 0, 100);
+      case spectrum_dyes_to_xyz::dufaycolor_separation_filters_photography_its_materials_and_processes:
+	compute_spectrum (red, sizeof (dufaycolor_photography_its_materials_and_processes_red1s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_red1s, false, 100, 0, 100);
+	compute_spectrum (green, sizeof (dufaycolor_photography_its_materials_and_processes_green2s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_green2s, false, 100, 0, 100);
+	compute_spectrum (blue, sizeof (dufaycolor_photography_its_materials_and_processes_blue3s) / sizeof (spectra_entry), dufaycolor_photography_its_materials_and_processes_blue3s, false, 100, 0, 100);
 	break;
       case spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual:
 	compute_spectrum (red, sizeof (manual_dufay_red) / sizeof (spectra_entry), manual_dufay_red, false);

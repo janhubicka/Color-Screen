@@ -22,8 +22,10 @@ const char * render_parameters::color_model_names [] = {
   "dufaycolor_reseau_by_color_cinematography_wavelength",
   "dufaycolor_reseau_by_color_cinematography_spectra",
   "dufaycolor_reseau_by_harrison_horner_spectra",
+  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra",
   "dufaycolor_reseau_by_color_cinematography_spectra_correction",
   "dufaycolor_reseau_by_harrison_horner_spectra_correction",
+  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra_correction",
   "dufaycolor_NSMM_Bradford_11948",
   "dufaycolor_NSMM_Bradford_11951",
   "dufaycolor_NSMM_Bradford_11960",
@@ -227,6 +229,17 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_dufay_harrison_horner_spectra_correction:
 	{
 	  dyes = dufaycolor_correction_harrison_horner_matrix ();
+	  break;
+	}
+      case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
+	}
+	break;
+      case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra_correction:
+	{
+	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix ();
 	  break;
 	}
       case render_parameters::color_model_dufay1:

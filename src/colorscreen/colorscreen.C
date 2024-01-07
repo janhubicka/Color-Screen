@@ -33,7 +33,7 @@ static void
 print_help ()
 {
   fprintf (stderr, "%s <command> [<args>]\n", binname);
-  fprintf (stderr, "Supporteds command and parametrs are:\n\n");
+  fprintf (stderr, "Supported commands and parameters are:\n\n");
   fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
   fprintf (stderr, "    render scan into tiff\n");
   fprintf (stderr, "    <scan> is image, <parametrs> is the ColorScreen parametr file\n");
@@ -576,25 +576,37 @@ digital_laboratory (int argc, char **argv)
     wratten::print_spectra_report ();
   else if (!strcmp (argv[0], "save-film-sensitivity"))
     {
-      if (argc != 3)
+      if (argc != 3 && argc != 4)
 	{
-	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	  printf ("Expected <emulsion> [<illuminant>]\n");
 	  print_help ();
 	}
       spectrum_dyes_to_xyz spec;
       spec.set_film_response (parse_response (argv[2]));
-      spec.write_film_response (argv[1], NULL, true, false);
+      if (argc == 4)
+	{
+	  luminosity_t temperature;
+	  auto il = parse_illuminant (argv[3], &temperature);
+	  spec.set_backlight (il, temperature);
+	}
+      spec.write_film_response (argv[1], NULL, argc == 3 ? true : false, false);
     }
   else if (!strcmp (argv[0], "save-film-log-sensitivity"))
     {
-      if (argc != 3)
+      if (argc != 3 && argc != 4)
 	{
-	  printf ("Expected <illuminat_filename> <illuminant>\n");
+	  printf ("Expected <emulsion> [<illuminant>]\n");
 	  print_help ();
 	}
       spectrum_dyes_to_xyz spec;
       spec.set_film_response (parse_response (argv[2]));
-      spec.write_film_response (argv[1], NULL, true, true);
+      if (argc == 4)
+	{
+	  luminosity_t temperature;
+	  auto il = parse_illuminant (argv[3], &temperature);
+	  spec.set_backlight (il, temperature);
+	}
+      spec.write_film_response (argv[1], NULL, argc == 3 ? true : false, true);
     }
   else if (!strcmp (argv[0], "save-illuminant"))
     {
@@ -614,6 +626,7 @@ digital_laboratory (int argc, char **argv)
       if (argc != 5)
 	{
 	  printf ("Expected <red_filename> <green_filename> <blue_filename> <dyes>\n");
+	  exit (1);
 	}
       spectrum_dyes_to_xyz spec;
       spec.set_dyes (parse_dyes (argv[4]));
@@ -625,6 +638,7 @@ digital_laboratory (int argc, char **argv)
       if (argc != 5)
 	{
 	  printf ("Expected <red_filename> <green_filename> <blue_filename> <dyes> <respnse>\n");
+	  exit (1);
 	}
       spectrum_dyes_to_xyz spec;
       spec.set_dyes (parse_dyes (argv[4]));
