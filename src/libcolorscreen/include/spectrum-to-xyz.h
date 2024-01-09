@@ -25,6 +25,7 @@ public:
     dufaycolor_dufaycolor_manual,
     dufaycolor_photography_its_materials_and_processes,
     dufaycolor_separation_filters_photography_its_materials_and_processes,
+    dufaycolor_narrow_cut_filters_harrison_horner,
     dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor,
     dufaycolor_aged_DC_MSI_NSMM11951,
     dufaycolor_aged_DC_MSI_NSMM11960,
@@ -36,6 +37,8 @@ public:
     wratten_25_58_47_color_cinematography,
     wratten_25_58_47_kodak_1945,
     kodachrome_25_sensitivity,
+    phase_one_sensitivity,
+    nikon_d3_sensitivity,
     dyes_max
   };
   constexpr static const char *dyes_names[dyes_max] =
@@ -45,6 +48,7 @@ public:
     "dufaycolor_dufaycolor_manual",
     "dufaycolor_photography_its_materials_and_processes",
     "dufaycolor_separation_filters_photography_its_materials_and_processes",
+    "dufaycolor_narrow_cut_filters_harrison_hordner",
     "dufaycolor_NSMM_Bradford_11948",
     "dufaycolor_NSMM_Bradford_11951",
     "dufaycolor_NSMM_Bradford_11960",
@@ -56,6 +60,8 @@ public:
     "wratten_25_58_47_color_cinematograpjy",
     "wratten_25_58_47_kodak_1945",
     "kodachrome_25_sensitivity",
+    "phase_one_sensitivity",
+    "nikon_d3_sensitivity",
   };
   enum illuminants {
      il_A,
@@ -87,6 +93,8 @@ public:
     ilford_delta_400_professional,
     fomapan_400,
     fomapan_100_classic,
+    kodak_professional_trix_400,
+    dufaycolor_harrison_horner_emulsion_cut,
     observer_y,
     response_even,
     responses_max
@@ -104,6 +112,8 @@ public:
     "ilford_delta_400_professional",
     "fomapan_400",
     "fomapan_100_classic",
+    "kodak_professional_trix_400",
+    "dufaycolor_harrison_horner_emulsion_cut",
     "observer_y",
     "even"
   };
@@ -111,14 +121,19 @@ public:
   static const int default_observer = 1931;
   spectrum_dyes_to_xyz ()
     : rscale (1), gscale (1), bscale (1),
-      xscale (1), yscale (1), zscale (1)
+      xscale (1), yscale (1), zscale (1),
+      dark (0,0,0),
+      subtractive (false)
   {
   }
   spectrum backlight;
   spectrum red, green, blue;
+  spectrum cyan, magenta, yellow;
   spectrum film_response;
   luminosity_t rscale, gscale, bscale;
   luminosity_t xscale, yscale, zscale;
+  xyz dark;
+  bool subtractive;
   rgbdata film_rgb_response (luminosity_t *s);
 
   void
@@ -155,9 +170,32 @@ public:
   dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = default_observer)
     {
       spectrum s;
+#if 0
       for (int i = 0; i < SPECTRUM_SIZE; i++)
-	s[i] = red [i] * r * rscale + green [i] * g * gscale + blue [i] * b * bscale;
-      struct xyz ret = get_xyz (s, observer);
+	      printf (" %f", cyan[i]);
+      printf ("\n");
+#endif
+      if (!subtractive)
+	{
+	  for (int i = 0; i < SPECTRUM_SIZE; i++)
+	    s[i] = red [i] * r * rscale + green [i] * g * gscale + blue [i] * b * bscale;
+	}
+      else
+	{
+	  r/=3;
+	  g/=3;
+	  b/=3;
+	  for (int i = 0; i < SPECTRUM_SIZE; i++)
+	    {
+	      luminosity_t ir = (1-(1-cyan [i]) * (1-r * rscale));
+	      luminosity_t ig = (1-(1-magenta [i]) * (1-g * gscale));
+	      luminosity_t ib = (1-(1-yellow [i]) * (1-b * bscale));
+	      //printf ("%f %f %f %f %f %f %f %f %f %f %f %f\n", ir, ig, ib, rscale, bscale, gscale,r,g,b, cyan[i], magenta[i], yellow[i]);
+	      //assert (ir >= 0 && ig >= 0 && ib >= 0 && ir <= 1 && ig <= 1 && ib <= 1);
+	      s[i] = ir * ig * ib;
+	    }
+	}
+      struct xyz ret = get_xyz (s, observer) - dark;
       ret.x *= xscale;
       ret.y *= yscale;
       ret.z *= zscale;
@@ -203,6 +241,7 @@ public:
 
   void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
   void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
+  void write_ssf_json (const char *name);
   bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
