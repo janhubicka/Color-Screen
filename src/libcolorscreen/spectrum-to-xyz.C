@@ -4119,25 +4119,16 @@ spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observe
 {
   xyz whitepoint = whitepoint_xyz (observer);
   rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
-  rgbdata res =
-    {
-      simulated_response (backlight, film_response, red),
-      simulated_response (backlight, film_response, green),
-      simulated_response (backlight, film_response, blue)
-    };
+  rgbdata res = film_rgb_response (NULL);
   return {white.red / res.red, white.green / res.green, white.blue / res.blue};
 }
 
 bool
 spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
 {
-  rgbdata res =
-    {
-      simulated_response (backlight, film_response, red),
-      simulated_response (backlight, film_response, green),
-      simulated_response (backlight, film_response, blue)
-    };
-  rgbdata scale = {1/res.red, 1/res.green, 1/res.blue};
+  rgbdata res = film_rgb_response (NULL);
+  luminosity_t sum = res.red + res.green + res.blue;
+  rgbdata scale = {1/sum, 1/sum, 1/sum};
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   fprintf (f, "CTI3\n\n");
   fprintf (f, "DESCRIPTOR \"Colorscreen produced Argyll Calibration Target chart information 3\"\n");
@@ -4161,15 +4152,7 @@ spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
 	  spectrum tile;
 	  compute_spectrum (tile, xtile);
 	  xyz real_color = get_xyz_old_observer (backlight, tile);
-	  rgbdata color =
-	    {
-	      simulated_response (backlight, film_response, tile, red),
-	      simulated_response (backlight, film_response, tile, green),
-	      simulated_response (backlight, film_response, tile, blue)
-	    };
-	  color.red *= scale.red;
-	  color.green *= scale.green; 
-	  color.blue *= scale.blue;
+          rgbdata color = film_rgb_response (tile) * scale;
 	  fprintf (f, "A%c%i %f %f %f %f %f %f %f %f %f\n",
 		   'A'+y, x+1,
 		   real_color.x * 100, real_color.y * 100, real_color.z * 100,

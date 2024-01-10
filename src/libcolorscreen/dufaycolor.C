@@ -602,6 +602,7 @@ dufaycolor::generate_color_target_tiff (const char *filename, const char **error
   write_optimal_response (spec.optimized_xyz_matrix (), "optimal-optimized-response-red.dat", "optimal-optimized-response-green.dat", "optimal-optimized-response-blue.dat", 0.3, 0.3, 0.3);
   return spec.generate_color_target_tiff (filename, error, false, true);
 }
+
 color_matrix
 dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
@@ -612,6 +613,7 @@ dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, lum
   view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
   return spec.optimized_xyz_matrix (&view_spec);
 }
+
 color_matrix
 dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
@@ -620,8 +622,9 @@ dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosi
   initialize_spec (spec, 1);
   spectrum_dyes_to_xyz view_spec;
   view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
-  return spec.optimized_xyz_matrix ();
+  return spec.optimized_xyz_matrix (&view_spec);
 }
+
 color_matrix
 dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
@@ -630,5 +633,5 @@ dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity
   initialize_spec (spec, 2);
   spectrum_dyes_to_xyz view_spec;
   view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
-  return spec.optimized_xyz_matrix ();
+  return spec.optimized_xyz_matrix (&view_spec);
 }
