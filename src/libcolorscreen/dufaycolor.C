@@ -603,26 +603,32 @@ dufaycolor::generate_color_target_tiff (const char *filename, const char **error
   return spec.generate_color_target_tiff (filename, error, false, true);
 }
 color_matrix
-dufaycolor_correction_color_cinematography_matrix ()
+dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
   spectrum_dyes_to_xyz spec;
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec, 0);
-  return spec.optimized_xyz_matrix ();
+  spectrum_dyes_to_xyz view_spec;
+  view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
+  return spec.optimized_xyz_matrix (&view_spec);
 }
 color_matrix
-dufaycolor_correction_harrison_horner_matrix ()
+dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
   spectrum_dyes_to_xyz spec;
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec, 1);
+  spectrum_dyes_to_xyz view_spec;
+  view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
   return spec.optimized_xyz_matrix ();
 }
 color_matrix
-dufaycolor_correction_photography_its_materials_and_processes_matrix ()
+dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temperature)
 {
   spectrum_dyes_to_xyz spec;
   spec.set_backlight (spectrum_dyes_to_xyz::il_D, temperature);
   initialize_spec (spec, 2);
+  spectrum_dyes_to_xyz view_spec;
+  view_spec.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
   return spec.optimized_xyz_matrix ();
 }

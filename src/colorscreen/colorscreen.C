@@ -635,7 +635,7 @@ digital_laboratory (int argc, char **argv)
     }
   else if (!strcmp (argv[0], "save-responses"))
     {
-      if (argc != 5)
+      if (argc != 6)
 	{
 	  printf ("Expected <red_filename> <green_filename> <blue_filename> <dyes> <respnse>\n");
 	  exit (1);
@@ -645,6 +645,18 @@ digital_laboratory (int argc, char **argv)
       spec.set_film_response (parse_response (argv[5]));
       printf ("Saving to %s %s %s\n", argv[1], argv[2], argv[3]);
       spec.write_responses (argv[1], argv[2], argv[3], false);
+    }
+  else if (!strcmp (argv[0], "save-ssf-json"))
+    {
+      if (argc != 4)
+	{
+	  printf ("Expected <filename> <dyes> <respnse>\n");
+	  exit (1);
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_dyes (parse_dyes (argv[2]));
+      spec.set_film_response (parse_response (argv[3]));
+      spec.write_ssf_json (argv[1]);
     }
   else if (!strcmp (argv[0], "render-target"))
     {

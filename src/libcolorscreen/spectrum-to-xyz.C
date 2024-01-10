@@ -4311,55 +4311,23 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
   rgbdata colors[n];
   xyz targets[n];
   rgbdata res = film_rgb_response (NULL);
+  luminosity_t sum = res.red + res.green + res.blue;
+  res.red = res.green = res.blue = sum / 3;
+  rgbdata scale = {1 / res.red, 1 / res.green, 1 / res.blue};
   for (int i = 0; i < n; i++)
     {
       xspect &xtile = TLCI_2012_TCS [i];
       spectrum tile;
       compute_spectrum (tile, xtile);
-      colors[i].red   = simulated_response (backlight, film_response, tile, red)/res.red;
-      colors[i].green = simulated_response (backlight, film_response, tile, green)/res.green;
-      colors[i].blue  = simulated_response (backlight, film_response, tile, blue)/res.blue;
+      colors[i] = film_rgb_response (tile) * scale;
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
   color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
+#if 0
     {
       color_matrix m2 = m1.invert ();
       m2.print (stdout);
     }
-
-  /* Matrix of Nikon D3 for testing.  */
-#if 0
-  color_matrix m1 (8139 / 10000.0,-2171 / 10000.0,-663 / 10000.0,0,-8747 / 10000.0,16541 / 10000.0,2295 / 10000.0,0,-1925 / 10000.0,2008 / 10000.0,8093 / 10000.0,0,0,0,0,1);
-#endif
-#if 0
-
-  luminosity_t rw, gw,bw;
-  cm.normalize_grayscale (whitep.x, whitep.y, whitep.z, &rw, &gw, &bw);
-  rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0};
-  rgbdata res =
-    {
-      simulated_response (backlight, film_response, red),
-      simulated_response (backlight, film_response, green),
-      simulated_response (backlight, film_response, blue)
-    };
-
-  dred.red   = simulated_response (backlight, film_response, red, red)/res.red;
-  dred.green = simulated_response (backlight, film_response, red, green)/res.green;
-  dred.blue  = simulated_response (backlight, film_response, red, blue)/res.blue;
-  dgreen.red   = simulated_response (backlight, film_response, green, red)/res.red;
-  dgreen.green = simulated_response (backlight, film_response, green, green)/res.green;
-  dgreen.blue  = simulated_response (backlight, film_response, green, blue)/res.blue;
-  dblue.red   = simulated_response (backlight, film_response, blue, red)/res.red;
-  dblue.green = simulated_response (backlight, film_response, blue, green)/res.green;
-  dblue.blue  = simulated_response (backlight, film_response, blue, blue)/res.blue;
-  color_matrix m1 = xyz_matrix ();
-  color_matrix m2 (dred.red,   dgreen.red,   dblue.red,   0,
-		   dred.green, dgreen.green, dblue.green, 0,
-		   dred.blue,  dgreen.blue,  dblue.blue,  0,
-		   0  , 0  , 0  , 1);
-  m2 = m2.invert ();
-  m1 = m1 * m2;
-  //m1.normalize_grayscale (whitep.x, whitep.y, whitep.z);
 #endif
   
   return m1;

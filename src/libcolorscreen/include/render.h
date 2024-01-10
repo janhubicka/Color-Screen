@@ -20,7 +20,7 @@ struct DLL_PUBLIC render_parameters
   render_parameters()
   : gamma (2.2), output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
-    mix_red (0.3), mix_green (0.1), mix_blue (1), backlight_temperature (6500),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (6500),
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
@@ -72,7 +72,9 @@ struct DLL_PUBLIC render_parameters
   /* Parameters used to turn RGB data to grayscale:
      mix_red,green and blue are relative weights.  */
   luminosity_t mix_red, mix_green, mix_blue;
-  /* Temperature in K of backlight.  */
+  /* Temperature in K of daylight in photograph.  */
+  luminosity_t temperature;
+  /* Temperature in K of backlight when viewing the slide.  */
   luminosity_t backlight_temperature;
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;

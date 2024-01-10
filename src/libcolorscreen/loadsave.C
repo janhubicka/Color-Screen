@@ -44,6 +44,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
 	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
+	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
 	  || fprintf (f, "k1: %f\n", param->k1) < 0)
 	return false;
       for (int i = 0; i < param->n_motor_corrections; i++)
@@ -83,6 +84,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scren_blur_radius: %f\n", rparam->screen_blur_radius) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
+	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
 	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
@@ -435,6 +437,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      else if (!strcmp (buf, "final_rotation"))
+	{
+	  if (!read_scalar (f, param_check (final_rotation)))
+	    {
+	      *error = "error parsing final_rotation";
+	      return false;
+	    }
+	}
       else if (!strcmp (buf, "k1"))
 	{
 	  if (!read_scalar (f, param_check (k1)))
@@ -603,6 +613,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (rparam)
 	    rparam->dye_balance = (enum render_parameters::dye_balance_t) j;
+	}
+      else if (!strcmp (buf, "temperature"))
+	{
+	  if (!read_luminosity (f, rparam_check (temperature)))
+	    {
+	      *error = "error parsing temperature";
+	      return false;
+	    }
 	}
       else if (!strcmp (buf, "backlight_temperature"))
 	{

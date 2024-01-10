@@ -217,7 +217,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra_correction:
 	{
-	  dyes = dufaycolor_correction_color_cinematography_matrix ();
+	  dyes = dufaycolor_correction_color_cinematography_matrix (temperature, backlight_temperature);
 	  break;
 	}
       case render_parameters::color_model_dufay_harrison_horner_spectra:
@@ -228,7 +228,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	break;
       case render_parameters::color_model_dufay_harrison_horner_spectra_correction:
 	{
-	  dyes = dufaycolor_correction_harrison_horner_matrix ();
+	  dyes = dufaycolor_correction_harrison_horner_matrix (temperature, backlight_temperature);
 	  break;
 	}
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra:
@@ -239,7 +239,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	break;
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra_correction:
 	{
-	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix ();
+	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix (temperature, backlight_temperature);
 	  break;
 	}
       case render_parameters::color_model_dufay1:
