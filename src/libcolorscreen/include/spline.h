@@ -32,7 +32,7 @@ public:
 
     if (!u || !m_y2)
       {
-	fprintf (stderr, "Out of memory allocatin spline\n");
+	fprintf (stderr, "Out of memory allocating spline\n");
 	abort ();
       }
     if (yp1 > (T) 0.99e30)

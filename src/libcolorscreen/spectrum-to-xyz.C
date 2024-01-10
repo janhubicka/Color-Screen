@@ -12,6 +12,7 @@
 constexpr const char *spectrum_dyes_to_xyz::dyes_names[spectrum_dyes_to_xyz::dyes_max];
 constexpr const char *spectrum_dyes_to_xyz::illuminants_names[spectrum_dyes_to_xyz::illuminants_max];
 constexpr const char *spectrum_dyes_to_xyz::responses_names[spectrum_dyes_to_xyz::responses_max];
+constexpr const char *spectrum_dyes_to_xyz::characteristic_curve_names[spectrum_dyes_to_xyz::characteristic_curves_max];
 
 /* EBU TLCI ColorChecker samples */
 static xspect TLCI_2012_TCS[] = {
@@ -4119,14 +4120,14 @@ spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observe
 {
   xyz whitepoint = whitepoint_xyz (observer);
   rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
-  rgbdata res = film_rgb_response (NULL);
+  rgbdata res = linear_film_rgb_response (NULL);
   return {white.red / res.red, white.green / res.green, white.blue / res.blue};
 }
 
 bool
 spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
 {
-  rgbdata res = film_rgb_response (NULL);
+  rgbdata res = linear_film_rgb_response (NULL);
   luminosity_t sum = res.red + res.green + res.blue;
   rgbdata scale = {1/sum, 1/sum, 1/sum};
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
@@ -4162,13 +4163,25 @@ spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
   fprintf (f, "END_DATA\n");
   return true;
 }
-
 rgbdata
-spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
+spectrum_dyes_to_xyz::linear_film_rgb_response (luminosity_t *s)
 {
   return {simulated_response (backlight, film_response, red, s),
 	  simulated_response (backlight, film_response, green, s),
 	  simulated_response (backlight, film_response, blue, s)};
+}
+
+rgbdata
+spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
+{
+  rgbdata ret = linear_film_rgb_response (s);
+  if (red_characteristic_curve)
+    {
+      ret.red = red_characteristic_curve->apply (ret.red);
+      ret.green = green_characteristic_curve->apply (ret.green);
+      ret.blue = blue_characteristic_curve->apply (ret.blue);
+    }
+  return ret;
 }
 
 bool
@@ -4349,6 +4362,30 @@ spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const
     {
       FILE *f = fopen (backlights, "wt");
       print_transmitance_spectrum (f, backlight, start, end);
+      fclose (f);
+    }
+}
+
+
+void
+spectrum_dyes_to_xyz::write_film_characteristic_curves (const char *reds, const char *greens, const char *blues)
+{
+  if (reds && red_characteristic_curve)
+    {
+      FILE *f = fopen (reds, "wt");
+      red_characteristic_curve->print (f);
+      fclose (f);
+    }
+  if (greens && green_characteristic_curve)
+    {
+      FILE *f = fopen (greens, "wt");
+      green_characteristic_curve->print (f);
+      fclose (f);
+    }
+  if (blues && blue_characteristic_curve)
+    {
+      FILE *f = fopen (blues, "wt");
+      blue_characteristic_curve->print (f);
       fclose (f);
     }
 }
@@ -4727,20 +4764,12 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
     return false;
   }
   luminosity_t gamma = 1;
-  rgbdata dred = {0,0,0}, dgreen = {0,0,0}, dblue = {0,0,0}, dwhite = {0,0,0};
 
-  dred.red   = simulated_response (backlight, film_response, red, red);
-  dred.green = simulated_response (backlight, film_response, red, green);
-  dred.blue  = simulated_response (backlight, film_response, red, blue);
-  dgreen.red   = simulated_response (backlight, film_response, green, red);
-  dgreen.green = simulated_response (backlight, film_response, green, green);
-  dgreen.blue  = simulated_response (backlight, film_response, green, blue);
-  dblue.red   = simulated_response (backlight, film_response, blue, red);
-  dblue.green = simulated_response (backlight, film_response, blue, green);
-  dblue.blue  = simulated_response (backlight, film_response, blue, blue);
-  dwhite.red   = simulated_response (backlight, film_response, red);
-  dwhite.green = simulated_response (backlight, film_response, green);
-  dwhite.blue  = simulated_response (backlight, film_response, blue);
+  rgbdata dred = film_rgb_response (red);
+  rgbdata dgreen = film_rgb_response (green);
+  rgbdata dblue = film_rgb_response (blue);
+  rgbdata dwhite = film_rgb_response (NULL);
+  /*TODO apply sensitivity curve.  */
   luminosity_t dglass = simulated_response (backlight, film_response);
   color_matrix m = xyz_matrix ();
 
@@ -4866,4 +4895,33 @@ spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t ag
 	  blue[i] = blue[i] * (1 - age) + aged_blue[i] * age;
 	}
     }
+}
+
+void
+spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve)
+{
+  switch (curve)
+  {
+  case linear_curve:
+    break;
+  case input_curve:
+    hd_curve = new synthetic_hd_curve (10, input_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    red_characteristic_curve->precompute ();
+    break;
+  case safe_output_curve:
+    hd_curve = new synthetic_hd_curve (10, safe_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    red_characteristic_curve->precompute ();
+    break;
+  case safe_reversal_output_curve:
+    hd_curve = new synthetic_hd_curve (10, safe_reversal_output_curve_params);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve);
+    red_characteristic_curve->precompute ();
+    break;
+  case kodachrome25_curve:
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_red, 0, 4);
+    red_characteristic_curve->precompute ();
+    break;
+  }
 }

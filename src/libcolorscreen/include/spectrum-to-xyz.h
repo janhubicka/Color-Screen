@@ -2,6 +2,7 @@
 #define SPECTRUM_TO_XYZ_H
 #include "dllpublic.h"
 #include "color.h"
+#include "sensitivity.h"
 
 #define SPECTRUM_START 380
 #define SPECTRUM_STEP  5
@@ -142,14 +143,43 @@ public:
     "observer_y",
     "even"
   };
+  enum characteristic_curves {
+    linear_curve,
+    input_curve,
+    safe_output_curve,
+    safe_reversal_output_curve,
+    kodachrome25_curve,
+    characteristic_curves_max
+  };
+  constexpr static const char *characteristic_curve_names[characteristic_curves_max] =
+  {
+    "linear",
+    "input",
+    "safe",
+    "safe_reversal",
+    "kodachrome25"
+  };
 
   static const int default_observer = 1931;
   spectrum_dyes_to_xyz ()
     : rscale (1), gscale (1), bscale (1),
       xscale (1), yscale (1), zscale (1),
       dark (0,0,0),
-      subtractive (false)
+      red_characteristic_curve (NULL), green_characteristic_curve (NULL), blue_characteristic_curve (NULL),
+      subtractive (false),
+      hd_curve (NULL)
   {
+  }
+  ~spectrum_dyes_to_xyz ()
+  {
+    if (red_characteristic_curve)
+      delete (red_characteristic_curve);
+    if (green_characteristic_curve && green_characteristic_curve != red_characteristic_curve)
+      delete (green_characteristic_curve);
+    if (blue_characteristic_curve && blue_characteristic_curve != red_characteristic_curve)
+      delete (blue_characteristic_curve);
+    if (hd_curve)
+      delete (hd_curve);
   }
   spectrum backlight;
   /* Transmitance spectra of dyes for additive color synthetis.  */
@@ -160,7 +190,13 @@ public:
   luminosity_t rscale, gscale, bscale;
   luminosity_t xscale, yscale, zscale;
   xyz dark;
+
+  /* Characteristic curves of film . */
+  film_sensitivity *red_characteristic_curve, *green_characteristic_curve, *blue_characteristic_curve;
+
+
   bool subtractive;
+  rgbdata linear_film_rgb_response (luminosity_t *s);
   rgbdata film_rgb_response (luminosity_t *s);
 
   void
@@ -175,6 +211,7 @@ public:
       memcpy (green, g, sizeof (backlight));
       memcpy (blue, b, sizeof (backlight));
     }
+  void set_characteristic_curve (enum characteristic_curves);
   /* Set dyes to given measured spectra.
      If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
   void set_dyes (enum dyes, enum dyes dyes2 = dufaycolor_color_cinematography, luminosity_t age = 0);
@@ -278,6 +315,7 @@ public:
   void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
   void write_ssf_json (const char *name);
   bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
+  void write_film_characteristic_curves (const char *red, const char *green, const char *blue);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
@@ -315,6 +353,7 @@ public:
   bool tiff_with_spectra_photo (const char *filename);
 
   private:
+    synthetic_hd_curve *hd_curve;
     static const bool debug = false;
     /* Compute XYZ values.  */
     inline struct xyz

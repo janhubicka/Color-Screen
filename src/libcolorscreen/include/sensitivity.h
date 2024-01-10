@@ -93,7 +93,7 @@ struct synthetic_hd_curve_parameters
 };
 
 /* Densitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
-extern struct synthetic_hd_curve_parameters safe_output_curve, input_curve;
+extern struct synthetic_hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
 
 /* Produce a synthetic HD curve.  */
 class synthetic_hd_curve : public hd_curve
@@ -143,12 +143,15 @@ class
 film_sensitivity
 {
 public:
-  film_sensitivity (hd_curve *c, luminosity_t exp = 1)
-  : m_curve (c), m_preflash (0), m_boost (1), m_exposure (exp), m_clip (false)
+  film_sensitivity (hd_curve *c, luminosity_t preflash = 0.1, luminosity_t exp = 100)
+  : m_curve (c), m_preflash (preflash), m_boost (1), m_exposure (exp), m_clip (false)
   {
   }
   static struct hd_curve ilfrod_galerie_FB1;
   static struct hd_curve fujicolor_crystal_archive_digital_pearl_paper;
+  static struct hd_curve kodachrome_25_red;
+  static struct hd_curve kodachrome_25_green;
+  static struct hd_curve kodachrome_25_blue;
   DLL_PUBLIC static struct hd_curve linear_sensitivity;
 
   void
@@ -162,7 +165,7 @@ public:
       mid = m_curve->apply (Dmax / 2);
       if (m_curve->n < 2)
 	abort ();
-      if (dump)
+      if (dump ||1)
 	{
 	  FILE *f = fopen("/tmp/hd.dat", "wt");
 	  m_curve->print (f);
@@ -172,29 +175,38 @@ public:
   luminosity_t
   apply (luminosity_t y)
     {
-      //return 1/y;
-      //
       /* Preflash.  */
+
       y += m_preflash / 100;
 
       /* Apply exposure */
       y *= m_exposure;
 
       /* Scale emulsion response and logarithmize.  */
-      y = log10 (y * 5000);
+      y = log10 (y);
 
       /* Adjust contrast.  */
       //y = (y - mid) * m_contrast + mid;
       
       /* Apply HD curve. */
       //fprintf (stderr, "%f %f %f\n", m_exposure,y, m_curve->apply(y));
+      //
+      
+      printf ("in %f", y);
       y = m_curve->apply (y);
+      printf ("out %f", y);
+      //
       /* Apply density boost.  */
       y *= m_boost;
       /* Compensate fog  */
       y -= Dfog;
       /* Get back to linear.  */
-      return pow (10, -y);
+      //printf ("%f %f\n", l0,y);
+      printf ("pre %f", y);
+      y = pow (10, -y);
+      //printf ("%f %f\n", l0,y);
+      printf ("out2 %f\n", y);
+      return y;
     }
   luminosity_t
   unapply (luminosity_t y)
@@ -213,6 +225,12 @@ public:
 	else
 	  min = yy;
       }
+  }
+  void
+  print (FILE *f)
+  {
+    for (float l = 0; l <= 1; l+=0.01)
+      fprintf (f, "%f %f\n",l,apply(l));
   }
 private:
   hd_curve *m_curve;

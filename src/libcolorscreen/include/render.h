@@ -335,7 +335,7 @@ public:
   {
     if (m_params.invert)
       {
-	static synthetic_hd_curve c (10, safe_output_curve);
+	static synthetic_hd_curve c (10, safe_output_curve_params);
 	m_params.output_curve = &c;
       }
     else

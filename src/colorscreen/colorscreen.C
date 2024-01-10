@@ -544,13 +544,20 @@ parse_response (const char *profile)
 		    (const char **)spectrum_dyes_to_xyz::responses_names,
 		    (int)spectrum_dyes_to_xyz::responses_max> (profile, "Unkonwn film response:%s\n");
 }
+static enum spectrum_dyes_to_xyz::characteristic_curves
+parse_characteristic_curve (const char *profile)
+{
+  return parse_enum<enum spectrum_dyes_to_xyz::characteristic_curves,
+		    (const char **)spectrum_dyes_to_xyz::characteristic_curve_names,
+		    (int)spectrum_dyes_to_xyz::characteristic_curves_max> (profile, "Unkonwn film characteristic curve:%s\n");
+}
 
 void
 parse_filename_and_camera_setup (int argc, char **argv, const char **filename, spectrum_dyes_to_xyz &spec)
 {
-  if (argc != 4)
+  if (argc != 5)
     {
-      fprintf (stderr, "Expected parameters <filename> <backlight> <dyes> [<film-sensitivity>]\n");
+      fprintf (stderr, "Expected parameters <filename> <backlight> <dyes> <film-sensitivity> <film-characteristic-cuve>\n");
       print_help ();
     }
   *filename = argv[0];
@@ -559,6 +566,7 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename, s
   spec.set_backlight (il, temperature);
   spec.set_dyes (parse_dyes (argv[2]));
   spec.set_film_response (parse_response (argv[3]));
+  spec.set_characteristic_curve (parse_characteristic_curve (argv[4]));
 }
 
 void
@@ -607,6 +615,18 @@ digital_laboratory (int argc, char **argv)
 	  spec.set_backlight (il, temperature);
 	}
       spec.write_film_response (argv[1], NULL, argc == 3 ? true : false, true);
+    }
+  else if (!strcmp (argv[0], "save-film-linear-characteristic-curve"))
+    {
+      if (argc != 3 && argc != 5)
+	{
+	  printf ("Expected <red-file> <green-file> <blue-file> <film-characterstic-curve>\n");
+	  printf ("         or <red-file> <film-characterstic-curve>\n");
+	  print_help ();
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_characteristic_curve (parse_characteristic_curve (argv[argc-1]));
+      spec.write_film_characteristic_curves (argv[1], argc==5 ? argv[2] : NULL, argc==5 ? argv[3] : NULL);
     }
   else if (!strcmp (argv[0], "save-illuminant"))
     {
