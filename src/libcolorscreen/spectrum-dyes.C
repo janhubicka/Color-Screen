@@ -3692,9 +3692,9 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 	log_sensitivity_to_reversal_transmitance (red);
 	log_sensitivity_to_reversal_transmitance (green);
 	log_sensitivity_to_reversal_transmitance (blue);
-	compute_spectrum (cyan, sizeof (kodachrome25_cyan) / sizeof (spectra_entry), kodachrome25_cyan, true, 1.1, 0, 1.3);
-	compute_spectrum (magenta, sizeof (kodachrome25_magenta) / sizeof (spectra_entry), kodachrome25_magenta, true, 1.1, 0, 1.3);
-	compute_spectrum (yellow, sizeof (kodachrome25_yellow) / sizeof (spectra_entry), kodachrome25_yellow, true, 1.1, 0, 1.3);
+	compute_spectrum (cyan, sizeof (kodachrome25_cyan) / sizeof (spectra_entry), kodachrome25_cyan, false, 1.0, 0, 1.3);
+	compute_spectrum (magenta, sizeof (kodachrome25_magenta) / sizeof (spectra_entry), kodachrome25_magenta, false, 1.0, 0, 1.3);
+	compute_spectrum (yellow, sizeof (kodachrome25_yellow) / sizeof (spectra_entry), kodachrome25_yellow, false, 1.0, 0, 1.3);
 	return true;
 	break;
       case spectrum_dyes_to_xyz::phase_one_sensitivity:

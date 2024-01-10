@@ -18,29 +18,6 @@ struct spectra_entry
   float transmitance;
 };
 
-inline luminosity_t
-transmitance_to_absorbance (luminosity_t t)
-{
-  return 2 - log10 (t * 100);
-}
-
-inline luminosity_t
-absorbance_to_transmitance (luminosity_t a)
-{
-  //return pow (10, 2 - a) * 0.01;
-  luminosity_t ret = pow (10, -a);
-  if (ret > 1)
-    {
-      printf ("%f\n",ret);
-      return 1;
-    }
-  if (ret < 0)
-    {
-      printf ("%f %f\n",a,ret);
-      return 0;
-    }
-  return ret;
-}
 
 /* Output gnuplottable data.  */
 void print_transmitance_spectrum (FILE * out, const spectrum spec, int start = SPECTRUM_START, int end = SPECTRUM_END);

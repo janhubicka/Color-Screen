@@ -15,6 +15,31 @@ extern const DLL_PUBLIC spectrum cie_cmf_z;
 extern const DLL_PUBLIC spectrum cie_cmf1964_x;
 extern const DLL_PUBLIC spectrum cie_cmf1964_y;
 extern const DLL_PUBLIC spectrum cie_cmf1964_z;
+inline luminosity_t
+transmitance_to_absorbance (luminosity_t t)
+{
+  return 2 - log10 (std::max (t, 0.000001) * 100);
+}
+
+inline luminosity_t
+absorbance_to_transmitance (luminosity_t a)
+{
+  //return pow (10, 2 - a) * 0.01;
+  luminosity_t ret = pow (10, -a);
+#if 0
+  if (ret > 1)
+    {
+      //printf ("%f\n",ret);
+      return 1;
+    }
+  if (ret < 0)
+    {
+      //printf ("%f %f\n",a,ret);
+      return 0;
+    }
+#endif
+  return ret;
+}
 
 class DLL_PUBLIC spectrum_dyes_to_xyz
 {
@@ -127,7 +152,9 @@ public:
   {
   }
   spectrum backlight;
+  /* Transmitance spectra of dyes for additive color synthetis.  */
   spectrum red, green, blue;
+  /* Absorbance spectra of dyes for subtractive color synthetsis.  */
   spectrum cyan, magenta, yellow;
   spectrum film_response;
   luminosity_t rscale, gscale, bscale;
@@ -182,17 +209,25 @@ public:
 	}
       else
 	{
+	  r = transmitance_to_absorbance (r * rscale);
+	  g = transmitance_to_absorbance (g * gscale);
+	  b = transmitance_to_absorbance (b * bscale);
+#if 0
 	  r/=3;
 	  g/=3;
 	  b/=3;
+#endif
 	  for (int i = 0; i < SPECTRUM_SIZE; i++)
 	    {
+	      s[i] = absorbance_to_transmitance (cyan [i] * r + magenta [i] * g + yellow [i] * b);
+#if 0
 	      luminosity_t ir = (1-(1-cyan [i]) * (1-r * rscale));
 	      luminosity_t ig = (1-(1-magenta [i]) * (1-g * gscale));
 	      luminosity_t ib = (1-(1-yellow [i]) * (1-b * bscale));
 	      //printf ("%f %f %f %f %f %f %f %f %f %f %f %f\n", ir, ig, ib, rscale, bscale, gscale,r,g,b, cyan[i], magenta[i], yellow[i]);
 	      //assert (ir >= 0 && ig >= 0 && ib >= 0 && ir <= 1 && ig <= 1 && ib <= 1);
 	      s[i] = ir * ig * ib;
+#endif
 	    }
 	}
       struct xyz ret = get_xyz (s, observer) - dark;

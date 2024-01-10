@@ -4193,38 +4193,46 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 {
   xyz whitepoint = whitepoint_xyz ();
   rgbdata scale = determine_relative_patch_sizes_by_simulated_response ();
-  scale.red = 1;
-  scale.green = 1;
-  scale.blue = 1;
-  printf ("white balance  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
   //scale = determine_patch_weights_by_simulated_response ();
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   if (subtractive)
-  {
-    dark = dyes_rgb_to_xyz (0,0,0);
-  }
-  else if (optimized)
     {
-      rgbdata res =
-	{
-	  simulated_response (backlight, film_response, red),
-	  simulated_response (backlight, film_response, green),
-	  simulated_response (backlight, film_response, blue)
-	};
-      scale.red = 1/res.red;
-      scale.green = 1/res.green;
-      scale.blue = 1/res.blue;
+	//xyz dufay_color = dyes_rgb_to_xyz (0.1, 0.1, 0.1);
+	rscale = gscale = bscale = /*dufay_color.y / 0.1*/1;
     }
-  else if (white_balance)
-    scale = determine_patch_weights_by_simulated_response ();
-  else
+  if (optimized)
     {
       rgbdata film_white = film_rgb_response (NULL);
-      luminosity_t sum = film_white.red + film_white.green + film_white.blue;
-      printf ("response %f %f %f %f\n", film_white.red, film_white.green, film_white.blue, sum);
-      scale = /*determine_relative_patch_sizes_by_whitepoint ();*/
-              xyz_to_dyes_rgb (whitepoint);
-      scale /= sum * 0.3;
+      scale.red = 1/film_white.red;
+      scale.green = 1/film_white.green;
+      scale.blue = 1/film_white.blue;
+    }
+  else if (white_balance)
+    {
+      scale = determine_patch_weights_by_simulated_response ();
+      printf ("white balance  %f%% %f%% %f%%\n",100 * scale.red, 100 * scale.green, 100 * scale.blue);
+    }
+  else 
+    {
+      rgbdata film_white = film_rgb_response (NULL);
+      luminosity_t sum;
+      printf ("Film response to backlight %f %f %f %f\n", film_white.red, film_white.green, film_white.blue, sum);
+
+      /* For subtractive processes just be sure that backlight is 100% white on film.  */
+      if (subtractive)
+        sum = (film_white.red + film_white.green + film_white.blue) / 3;
+      /* For additive processes make backlight photo to have 100% white in replay.
+         This also compensates the screen darkness.  */
+      else
+        {
+	  xyz c = dyes_rgb_to_xyz (film_white.red, film_white.green, film_white.blue);
+	  sum = c.y;
+        }
+      scale.red = scale.green = scale.blue = 1 / sum;
+	      /*determine_relative_patch_sizes_by_whitepoint ();*/
+              /*xyz_to_dyes_rgb (whitepoint);*/
+    
+      //scale /= sum * 0.3;
     }
   luminosity_t sum = scale.red + scale.green + scale.blue;
   printf ("RGB scales  %f %f%% %f %f%% %f %f%%\n", scale.red, 100 * scale.red / sum, scale.green, 100 * scale.green / sum, scale.blue, 100 * scale.blue / sum);
@@ -4302,12 +4310,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
   const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   rgbdata colors[n];
   xyz targets[n];
-  rgbdata res =
-    {
-      simulated_response (backlight, film_response, red),
-      simulated_response (backlight, film_response, green),
-      simulated_response (backlight, film_response, blue)
-    };
+  rgbdata res = film_rgb_response (NULL);
   for (int i = 0; i < n; i++)
     {
       xspect &xtile = TLCI_2012_TCS [i];
@@ -4319,10 +4322,10 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
   color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
-  {
-    color_matrix m2 = m1.invert ();
-    m2.print (stdout);
-  }
+    {
+      color_matrix m2 = m1.invert ();
+      m2.print (stdout);
+    }
 
   /* Matrix of Nikon D3 for testing.  */
 #if 0

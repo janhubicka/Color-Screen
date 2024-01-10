@@ -154,9 +154,17 @@ struct xyz {
   {
     return {x + b.x, y + b.y, z + b.z};
   }
+  xyz operator-(const xyz b)
+  {
+    return {x - b.x, y - b.y, z - b.z};
+  }
   xyz operator*(const luminosity_t b)
   {
     return {x * b, y * b, z * b};
+  }
+  xyz operator/(const luminosity_t b)
+  {
+    return {x / b, y / b, z / b};
   }
   xyz &operator-=(const xyz other)
   {
@@ -482,41 +490,6 @@ inline rgbdata operator-(rgbdata lhs, rgbdata rhs)
   return lhs;
 }
 inline rgbdata operator*(rgbdata lhs, rgbdata rhs)
-{
-  lhs *= rhs;
-  return lhs;
-}
-inline xyz operator+(xyz lhs, luminosity_t rhs)
-{
-  lhs += rhs;
-  return lhs;
-}
-inline xyz operator-(xyz lhs, luminosity_t rhs)
-{
-  lhs -= rhs;
-  return lhs;
-}
-inline xyz operator*(xyz lhs, luminosity_t rhs)
-{
-  lhs *= rhs;
-  return lhs;
-}
-inline xyz operator/(xyz lhs, luminosity_t rhs)
-{
-  lhs /= rhs;
-  return lhs;
-}
-inline xyz operator+(xyz lhs, xyz rhs)
-{
-  lhs += rhs;
-  return lhs;
-}
-inline xyz operator-(xyz lhs, xyz rhs)
-{
-  lhs -= rhs;
-  return lhs;
-}
-inline xyz operator*(xyz lhs, xyz rhs)
 {
   lhs *= rhs;
   return lhs;

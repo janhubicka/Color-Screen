@@ -45,12 +45,13 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       return;
     }
   static uint16_t extras[] = {EXTRASAMPLE_UNASSALPHA};
+  int samplesperpixel = p.alpha ? 4 : 3;
   /* We must set some DPI since offset is specified relative to it.  */
   if (p.tile && !p.xdpi)
     p.xdpi = p.ydpi = 300;
   if (!TIFFSetField (out, TIFFTAG_IMAGEWIDTH, (uint32_t) p.width)
       || !TIFFSetField (out, TIFFTAG_IMAGELENGTH, (uint32_t) p.height)
-      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, p.alpha ? 4 : 3)
+      || !TIFFSetField (out, TIFFTAG_SAMPLESPERPIXEL, samplesperpixel)
       || !TIFFSetField (out, TIFFTAG_BITSPERSAMPLE, p.depth)
       || !TIFFSetField (out, TIFFTAG_SAMPLEFORMAT, p.hdr ? SAMPLEFORMAT_IEEEFP : SAMPLEFORMAT_UINT)
       || !TIFFSetField (out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT)
@@ -93,7 +94,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
   if (p.dng)
     {
       TIFFMergeFieldInfo (out, tiffFields, sizeof (tiffFields) / sizeof (TIFFFieldInfo));
-      long white = 0xffff;
+      long white[] = {0xffff, 0xffff, 0xffff, 0xffff};
       float forward_matrix[] = {
         (float)p.dye_to_xyz.m_elements[0][0], (float)p.dye_to_xyz.m_elements[1][0], (float)p.dye_to_xyz.m_elements[2][0],
         (float)p.dye_to_xyz.m_elements[0][1], (float)p.dye_to_xyz.m_elements[1][1], (float)p.dye_to_xyz.m_elements[2][1],
@@ -110,6 +111,8 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
       float neutral[3] = {1,1,1};
       //float neutralxy[2] =
       float tonecurve[] = {0,0,1,1};
+      short black[] = {(short)p.black, (short)p.black, (short)p.black, (short)p.black};
+      printf ("Black :%i\n", p.black);
       /* TODO: Thumbnail should be subfiletype 1.  */
       if (!TIFFSetField (out, TIFFTAG_SUBFILETYPE, 0)
 	  || !TIFFSetField (out, TIFFTAG_DNGVERSION, "\001\004\0\0")
@@ -121,7 +124,8 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	  || !TIFFSetField (out, TIFFTAG_MODEL, "Really old camera")
 	  || !TIFFSetField (out, TIFFTAG_UNIQUECAMERAMODEL, "Long forgotten")
 	  || !TIFFSetField (out, TIFFTAG_CALIBRATIONILLUMINANT1, 21 /*21 is D65, 17 is IL A*/)
-	  || !TIFFSetField (out, TIFFTAG_WHITELEVEL, 1, &white)
+	  || !TIFFSetField (out, TIFFTAG_BLACKLEVEL, samplesperpixel, &black)
+	  || !TIFFSetField (out, TIFFTAG_WHITELEVEL, samplesperpixel, &white)
 	  || !TIFFSetField (out, TIFFTAG_PROFILETONECURVE, 4,tonecurve))
 	{
 	  *error = "write error";

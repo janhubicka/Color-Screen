@@ -63,8 +63,9 @@ struct tiff_writer_params
   int xoffset, yoffset;
   bool dng;
   color_matrix dye_to_xyz;
+  int black;
   tiff_writer_params ()
-    : filename (NULL), width (0), height (0), depth (16), xdpi(0), ydpi (0), alpha (false), hdr (false), tile (false), icc_profile (NULL), icc_profile_len (0), dng (false)
+    : filename (NULL), width (0), height (0), depth (16), xdpi(0), ydpi (0), alpha (false), hdr (false), tile (false), icc_profile (NULL), icc_profile_len (0), dng (false), black (0)
   {
   }
 };

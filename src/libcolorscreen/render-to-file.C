@@ -55,7 +55,7 @@ print_time ()
 
 template<typename T, rgbdata (T::*sample_data)(coord_t x, coord_t y), rgbdata (T::*sample_scr_data)(coord_t x, coord_t y), bool support_tile>
 const char *
-produce_file (render_to_file_params p, T &render, progress_info *progress)
+produce_file (render_to_file_params p, T &render, int black, progress_info *progress)
 {
   const char *error = NULL;
   tiff_writer_params tp;
@@ -68,6 +68,7 @@ produce_file (render_to_file_params p, T &render, progress_info *progress)
       p.hdr = false;
       tp.dng = true; 
       tp.dye_to_xyz = render.get_dye_to_xyz_matrix ();
+      tp.black= black;
     }
   tp.hdr = p.hdr;
   tp.depth = p.depth;
@@ -410,15 +411,17 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 		progress_info * progress, const char **error)
 {
   bool free_profile = false;
+  int black = 0;
   if (scan.stitch)
     return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
   if (rfparams.dng)
-  {
-    rparam.output_gamma = 1;
-    rparam.dark_point = 0;
-    rparam.scan_exposure = rparam.brightness = 1;
-    rparam.white_balance.red = rparam.white_balance.green = rparam.white_balance.blue = 1;
-  }
+   {
+     rparam.output_gamma = 1;
+     black = rparam.dark_point * 65536;
+     rparam.dark_point = 0;
+     rparam.scan_exposure = rparam.brightness = 1;
+     rparam.white_balance.red = rparam.white_balance.green = rparam.white_balance.blue = 1;
+   }
   if (rfparams.verbose)
     {
       if (progress)
@@ -515,7 +518,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 
 	// TODO: For HDR output we want to linearize the ICC profile.
-	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, progress);
+	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -549,7 +552,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	      progress->resume_stdout ();
 	  }
 
-	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, progress);
+	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -582,7 +585,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  }
 	/* TODO: Maybe preview_grid and color_preview_grid
 	   should be in the scan profile.  */
-	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, progress);
+	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -607,7 +610,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    if (progress)
 	      progress->resume_stdout ();
 	  }
-	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, progress);
+	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -634,7 +637,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    if (progress)
 	      progress->resume_stdout ();
 	  }
-	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, progress);
+	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -661,7 +664,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    if (progress)
 	      progress->resume_stdout ();
 	  }
-	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, progress);
+	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -688,7 +691,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    if (progress)
 	      progress->resume_stdout ();
 	  }
-	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, progress);
+	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
@@ -715,7 +718,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	    if (progress)
 	      progress->resume_stdout ();
 	  }
-	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, progress);
+	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, black, progress);
 	if (*error)
 	  {
 	    if (free_profile)
