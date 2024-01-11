@@ -4189,21 +4189,25 @@ bool
 spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized)
 {
   xyz whitepoint = whitepoint_xyz ();
-  rgbdata scale = determine_relative_patch_sizes_by_simulated_response ();
+  rgbdata scale = {0,0,0};/*determine_relative_patch_sizes_by_simulated_response ();*/
   //scale = determine_patch_weights_by_simulated_response ();
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
+  int n = 0;
   adjust_exposure ();
+#if 0
   if (subtractive)
     {
 	//xyz dufay_color = dyes_rgb_to_xyz (0.1, 0.1, 0.1);
 	rscale = gscale = bscale = /*dufay_color.y / 0.1*/1;
     }
+#endif
   if (optimized)
     {
       rgbdata film_white = film_rgb_response (NULL);
-      scale.red = 1/film_white.red;
-      scale.green = 1/film_white.green;
-      scale.blue = 1/film_white.blue;
+      luminosity_t sum = (film_white.red + film_white.green + film_white.blue) / 3;
+      scale.red = 1/sum;
+      scale.green = 1/sum;
+      scale.blue = 1/sum;
     }
   else if (white_balance)
     {
@@ -4235,7 +4239,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   luminosity_t sum = scale.red + scale.green + scale.blue;
   printf ("RGB scales  %f %f%% %f %f%% %f %f%%\n", scale.red, 100 * scale.red / sum, scale.green, 100 * scale.green / sum, scale.blue, 100 * scale.blue / sum);
   color_matrix id;
-  color_matrix m = subtractive ? id : !optimized ? xyz_matrix () : optimized_xyz_matrix ();
+  color_matrix m = optimized ? optimized_xyz_matrix () : subtractive ? id : xyz_matrix ();
   luminosity_t deltaEsum = 0;
   luminosity_t deltaEmax = 0;
 
@@ -4267,7 +4271,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	      xyz real_color = get_xyz_old_observer (backlight, tile);
 	      rgbdata color = film_rgb_response (tile) * scale;
 	      xyz dufay_color (0,0,0);
-	      if (!subtractive)
+	      if (!subtractive || optimized)
 	        m.apply_to_rgb (color.red, color.green, color.blue, &dufay_color.x, &dufay_color.y, &dufay_color.z);
 	      else
 		dufay_color = dyes_rgb_to_xyz (color.red, color.green, color.blue);
@@ -4279,10 +4283,16 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	      tiff.put_hdr_pixel (x * 2 + 1, r, g, b);
 	      if (y * 6 + x < nsamples)
 		{
+#if 0
+			printf ("Compare2 %i\n", y * 6 + x);
+			real_color.print (stdout);
+			dufay_color.print (stdout);
+#endif
 		  luminosity_t de = deltaE2000 (real_color, dufay_color);
 		  if (de > deltaEmax)
 		    deltaEmax = de;
 		  deltaEsum += de;
+		  n++;
 		}
 	    }
 	  if (!tiff.write_row ())
@@ -4294,7 +4304,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	}
     }
   free (buffer);
-  printf ("Average deltaE 2000 %f, max %f\n", deltaEsum / nsamples, deltaEmax);
+  printf ("Average deltaE 2000 %f, max %f\n", deltaEsum / n, deltaEmax);
   return true;
 }
 color_matrix
@@ -4882,6 +4892,15 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
 void
 spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t age)
 {
+#if 0
+  if ((int)dyes >= (int)dufaycolor_color_cinematography
+      && (int)dyes <= (int)dufaycolor_narrow_cut_filters_harrison_horner)
+    {
+      rscale = dufaycolor::red_size;
+      gscale = dufaycolor::green_size;
+      bscale = dufaycolor::blue_size;
+    }
+#endif
   subtractive = set_dyes_to (red, green, blue, cyan, magenta, yellow, dyes);
   if (age > 0)
     {
@@ -4955,29 +4974,29 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
     break;
   case spicer_dufay_reversal_curve_low:
     hd_curve = new synthetic_hd_curve (10, {
-		    0.10817262955238283, 1.7389218674795455,
-		    0.10817262955238283, 1.7389218674795455,
-3.1461832183539227, 0.19716428686026033,
-3.990309642226858, 0.10466468795122763});
+		0.10817262955238283, 1.7389218674795455,
+		0.10817262955238283, 1.7389218674795455,
+		3.1461832183539227, 0.19716428686026033,
+		3.990309642226858, 0.10466468795122763});
 
     red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0, 3000);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_mid:
     hd_curve = new synthetic_hd_curve (10, {
-1.2834525910476495, 2.253437349590888,
-1.2834525910476495, 2.253437349590888,
-3.262801219316541, 0.27367639980747693,
-3.990309642226858, 0.10466468795122763});
+		1.2834525910476495, 2.253437349590888,
+		1.2834525910476495, 2.253437349590888,
+		3.262801219316541, 0.27367639980747693,
+		3.990309642226858, 0.10466468795122763});
     red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_high:
     hd_curve = new synthetic_hd_curve (10, {
-2.446334028557678, 2.2031926841007543,
-2.446334028557678, 2.2031926841007543,
-3.409735279961495, 0.34393951548211144,
-3.9904123215145204, 0.13004572437028772});
+		2.446334028557678, 2.2031926841007543,
+		2.446334028557678, 2.2031926841007543,
+		3.409735279961495, 0.34393951548211144,
+		3.9904123215145204, 0.13004572437028772});
     red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
     blue_characteristic_curve->precompute ();
     break;

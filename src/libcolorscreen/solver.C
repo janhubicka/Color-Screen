@@ -1758,10 +1758,15 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark
       xyz color2;
       ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
       luminosity_t d = deltaE2000 (targets[i], color2);
+#if 0
+			printf ("Compare1 %i\n", i);
+			targets[i].print (stdout);
+			color2.print (stdout);
+#endif
       desum += d;
       if (demax < d)
 	demax = d;
     }
-  printf ("DeltaE2000 avg %f, max %f\n", desum / n, demax);
+  printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
   return ret;
 }
