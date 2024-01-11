@@ -516,6 +516,36 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
     {
+      if (k == 'g')
+      {
+	if (!(event->state & GDK_CONTROL_MASK))
+	  {
+	    rparams.film_gamma -= 0.01;
+	    rparams.target_film_gamma -= 0.01;
+	    printf ("Film gamma %f\n", rparams.film_gamma);
+	  }
+	else
+	  {
+	    rparams.target_film_gamma -= 0.01;
+	    printf ("Target film gamma %f\n", rparams.target_film_gamma);
+	  }
+	display_scheduled = true;
+      }
+      if (k == 'G')
+      {
+	if (!(event->state & GDK_CONTROL_MASK))
+	  {
+	    rparams.film_gamma += 0.01;
+	    rparams.target_film_gamma += 0.01;
+	    printf ("Film gamma %f\n", rparams.film_gamma);
+	  }
+	else
+	  {
+	    rparams.target_film_gamma += 0.01;
+	    printf ("Target film gamma %f\n", rparams.target_film_gamma);
+	  }
+	display_scheduled = true;
+      }
       if (k == 'd' && current.type != Dufay)
       {
 	save_parameters ();

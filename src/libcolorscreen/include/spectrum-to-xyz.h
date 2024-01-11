@@ -144,20 +144,32 @@ public:
     "even"
   };
   enum characteristic_curves {
-    linear_curve,
+    linear_reversal_curve,
     input_curve,
     safe_output_curve,
     safe_reversal_output_curve,
     kodachrome25_curve,
+    spicer_dufay_curve_low,
+    spicer_dufay_curve_mid,
+    spicer_dufay_curve_high,
+    spicer_dufay_reversal_curve_low,
+    spicer_dufay_reversal_curve_mid,
+    spicer_dufay_reversal_curve_high,
     characteristic_curves_max
   };
   constexpr static const char *characteristic_curve_names[characteristic_curves_max] =
   {
-    "linear",
+    "linear_reversal",
     "input",
     "safe",
     "safe_reversal",
-    "kodachrome25"
+    "kodachrome25",
+    "spicer_dufay_low",
+    "spicer_dufay_mid",
+    "spicer_dufay_high",
+    "spicer_dufay_reversal_low",
+    "spicer_dufay_reversal_mid",
+    "spicer_dufay_reversal_high",
   };
 
   static const int default_observer = 1931;
@@ -165,6 +177,7 @@ public:
     : rscale (1), gscale (1), bscale (1),
       xscale (1), yscale (1), zscale (1),
       dark (0,0,0),
+      exp_adjust {1,1,1},
       red_characteristic_curve (NULL), green_characteristic_curve (NULL), blue_characteristic_curve (NULL),
       subtractive (false),
       hd_curve (NULL)
@@ -190,6 +203,7 @@ public:
   luminosity_t rscale, gscale, bscale;
   luminosity_t xscale, yscale, zscale;
   xyz dark;
+  rgbdata exp_adjust;
 
   /* Characteristic curves of film . */
   film_sensitivity *red_characteristic_curve, *green_characteristic_curve, *blue_characteristic_curve;
@@ -345,6 +359,14 @@ public:
     rgbdata ret = determine_patch_weights_by_simulated_response (observer);
     luminosity_t sum = ret.red + ret.green + ret.blue;
     return ret / sum;
+  }
+
+  void
+  adjust_exposure ()
+  {
+    rgbdata film_white = linear_film_rgb_response (NULL);
+    luminosity_t sum = (film_white.red + film_white.green + film_white.blue) / 3;
+    exp_adjust.red = exp_adjust.green = exp_adjust.blue = 1 / sum;
   }
 
   bool tiff_with_primaries (const char *filename, rgbdata white);

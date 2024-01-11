@@ -18,7 +18,8 @@
 struct DLL_PUBLIC render_parameters
 {
   render_parameters()
-  : gamma (2.2), output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
+  : gamma (2.2),  film_gamma (1), target_film_gamma (1),
+    output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
     mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (6500),
     age(0),
@@ -53,6 +54,7 @@ struct DLL_PUBLIC render_parameters
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
+  luminosity_t film_gamma, target_film_gamma;
   /* Output gamma.  -1 means sRGB transfer curve.  */
   luminosity_t output_gamma;
   /* Radious (in pixels) and amount for unsharp-mask filter.  */
@@ -208,6 +210,8 @@ struct DLL_PUBLIC render_parameters
       if (tile_adjustments[i] != other.tile_adjustments[i])
         return false;
     return gamma == other.gamma
+	   && film_gamma == other.film_gamma
+	   && target_film_gamma == other.target_film_gamma
 	   && output_gamma == other.output_gamma
 	   && sharpen_radius == other.sharpen_radius
 	   && sharpen_amount == other.sharpen_amount
@@ -506,7 +510,10 @@ render::get_unadjusted_data (int x, int y)
 inline luminosity_t
 render::adjust_luminosity_ir (luminosity_t lum)
 {
-  return (lum - m_params.dark_point) * m_params.scan_exposure;
+  lum = (lum - m_params.dark_point) * m_params.scan_exposure;
+  if (m_params.film_gamma != 1)
+    lum = invert_gamma (lum, m_params.film_gamma);
+  return lum;
 }
 
 /* Get image data in normalized range 0...1.  */

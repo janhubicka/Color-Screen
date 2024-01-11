@@ -4127,7 +4127,8 @@ spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observe
 bool
 spectrum_dyes_to_xyz::generate_simulated_argyll_ti3_file (FILE *f)
 {
-  rgbdata res = linear_film_rgb_response (NULL);
+  adjust_exposure ();
+  rgbdata res = film_rgb_response (NULL);
   luminosity_t sum = res.red + res.green + res.blue;
   rgbdata scale = {1/sum, 1/sum, 1/sum};
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
@@ -4177,9 +4178,9 @@ spectrum_dyes_to_xyz::film_rgb_response (luminosity_t *s)
   rgbdata ret = linear_film_rgb_response (s);
   if (red_characteristic_curve)
     {
-      ret.red = red_characteristic_curve->apply (ret.red);
-      ret.green = green_characteristic_curve->apply (ret.green);
-      ret.blue = blue_characteristic_curve->apply (ret.blue);
+      ret.red = red_characteristic_curve->apply (ret.red * exp_adjust.red);
+      ret.green = green_characteristic_curve->apply (ret.green * exp_adjust.green);
+      ret.blue = blue_characteristic_curve->apply (ret.blue * exp_adjust.blue);
     }
   return ret;
 }
@@ -4191,6 +4192,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   rgbdata scale = determine_relative_patch_sizes_by_simulated_response ();
   //scale = determine_patch_weights_by_simulated_response ();
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
+  adjust_exposure ();
   if (subtractive)
     {
 	//xyz dufay_color = dyes_rgb_to_xyz (0.1, 0.1, 0.1);
@@ -4263,10 +4265,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	      spectrum tile;
 	      compute_spectrum (tile, xtile);
 	      xyz real_color = get_xyz_old_observer (backlight, tile);
-	      rgbdata color = film_rgb_response (tile);
-	      color.red *= scale.red;
-	      color.green *= scale.green; 
-	      color.blue *= scale.blue;
+	      rgbdata color = film_rgb_response (tile) * scale;
 	      xyz dufay_color (0,0,0);
 	      if (!subtractive)
 	        m.apply_to_rgb (color.red, color.green, color.blue, &dufay_color.x, &dufay_color.y, &dufay_color.z);
@@ -4900,9 +4899,10 @@ spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t ag
 void
 spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve)
 {
+  assert (!red_characteristic_curve);
   switch (curve)
   {
-  case linear_curve:
+  case linear_reversal_curve:
     break;
   case input_curve:
     hd_curve = new synthetic_hd_curve (10, input_curve_params);
@@ -4920,8 +4920,66 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
     red_characteristic_curve->precompute ();
     break;
   case kodachrome25_curve:
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_red, 0, 4);
+    red_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_red, 0, 4);
     red_characteristic_curve->precompute ();
+    green_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_green, 0, 4);
+    green_characteristic_curve->precompute ();
+    blue_characteristic_curve = new film_sensitivity (&film_sensitivity::kodachrome_25_blue, 0, 4);
+    blue_characteristic_curve->precompute ();
+    break;
+    /* Based on chart in The Spicer-Dudfay Colour Film Process, Thorne Baker, The Photograhic Jounral, March 1932, 109--117 */
+  case spicer_dufay_curve_low:
+    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+					    0.9264367078453395, 0.25357372051981475,
+					    3.8351612385689076, 1.7539186587518052,
+					    3.8351612385689076, 1.7539186587518052});
+
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    blue_characteristic_curve->precompute ();
+    break;
+  case spicer_dufay_curve_mid:
+    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+					    0.7346061286699825, 0.3354524306112632,
+					    2.7042515642547724, 2.207183539226697,
+					    2.7042515642547724, 2.207183539226697});
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    blue_characteristic_curve->precompute ();
+    break;
+  case spicer_dufay_curve_high:
+    hd_curve = new synthetic_hd_curve (10, {0.005596021177603383, 0.13326648483876236,
+					    0.664193807155463, 0.430406706240976,
+					    1.5716733515161239, 2.2480065778918665,
+					    1.5716733515161239, 2.2480065778918665});
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    blue_characteristic_curve->precompute ();
+    break;
+  case spicer_dufay_reversal_curve_low:
+    hd_curve = new synthetic_hd_curve (10, {
+		    0.10817262955238283, 1.7389218674795455,
+		    0.10817262955238283, 1.7389218674795455,
+3.1461832183539227, 0.19716428686026033,
+3.990309642226858, 0.10466468795122763});
+
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0, 3000);
+    blue_characteristic_curve->precompute ();
+    break;
+  case spicer_dufay_reversal_curve_mid:
+    hd_curve = new synthetic_hd_curve (10, {
+1.2834525910476495, 2.253437349590888,
+1.2834525910476495, 2.253437349590888,
+3.262801219316541, 0.27367639980747693,
+3.990309642226858, 0.10466468795122763});
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
+    blue_characteristic_curve->precompute ();
+    break;
+  case spicer_dufay_reversal_curve_high:
+    hd_curve = new synthetic_hd_curve (10, {
+2.446334028557678, 2.2031926841007543,
+2.446334028557678, 2.2031926841007543,
+3.409735279961495, 0.34393951548211144,
+3.9904123215145204, 0.13004572437028772});
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
+    blue_characteristic_curve->precompute ();
     break;
   }
 }

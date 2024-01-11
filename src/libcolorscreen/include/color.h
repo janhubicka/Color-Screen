@@ -505,7 +505,7 @@ invert_gamma (luminosity_t val, luminosity_t gamma)
   if (val >= 0)
     return my_pow (val, 1 / gamma);
   else
-    return my_pow (-val, 1 / gamma);
+    return -my_pow (-val, 1 / gamma);
 }
 
 typedef rgbdata color_t;

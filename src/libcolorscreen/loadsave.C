@@ -75,6 +75,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   if (rparam)
     {
       if (fprintf (f, "gamma: %f\n", rparam->gamma) < 0
+	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
+	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
 	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen_radius) < 0
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen_amount) < 0
@@ -458,6 +460,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, rparam_check (gamma)))
 	    {
 	      *error = "error parsing gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "film_gamma"))
+	{
+	  if (!read_luminosity (f, rparam_check (gamma)))
+	    {
+	      *error = "error parsing film_gamma";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "target_film_gamma"))
+	{
+	  if (!read_luminosity (f, rparam_check (gamma)))
+	    {
+	      *error = "error parsing target_film_gamma";
 	      return false;
 	    }
 	}

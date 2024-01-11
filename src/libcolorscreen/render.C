@@ -118,11 +118,13 @@ struct out_lookup_table_params
 {
   int maxval;
   luminosity_t output_gamma;
+  luminosity_t target_film_gamma;
   bool
   operator==(out_lookup_table_params &o)
   {
     return maxval == o.maxval
-	   && output_gamma == o.output_gamma;
+	   && output_gamma == o.output_gamma
+	   && target_film_gamma == o.target_film_gamma;
   }
 };
 
@@ -131,10 +133,13 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
   luminosity_t *lookup_table = new luminosity_t[65536];
   luminosity_t gamma = p.output_gamma;
+  luminosity_t target_film_gamma = p.target_film_gamma;
   int maxval = p.maxval;
 
   for (int i = 0; i < 65536; i++)
-    lookup_table[i] = invert_gamma ((i + (luminosity_t)0.5) / 65535, gamma) * maxval;
+    {
+      lookup_table[i] = invert_gamma (apply_gamma ((i + (luminosity_t)0.5) / 65535, target_film_gamma), gamma) * maxval;
+    }
 
   return lookup_table;
 }
@@ -385,7 +390,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, progress
       if (!m_rgb_lookup_table)
 	return false;
     }
-  out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma};
+  out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   if (grayscale_needed)
