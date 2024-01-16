@@ -553,11 +553,15 @@ parse_characteristic_curve (const char *profile)
 }
 
 void
-parse_filename_and_camera_setup (int argc, char **argv, const char **filename, spectrum_dyes_to_xyz &spec)
+parse_filename_and_camera_setup (int argc, char **argv, const char **filename, spectrum_dyes_to_xyz &spec, bool patch_sizes = false)
 {
-  if (argc != 5)
+  if (argc != 5 + (patch_sizes ? 3 : 0)
+      && (!patch_sizes || (argc != 6 || strcmp (argv[5],"dufay"))))
     {
-      fprintf (stderr, "Expected parameters <filename> <backlight> <dyes> <film-sensitivity> <film-characteristic-cuve>\n");
+      fprintf (stderr, "Expected parameters <filename> <backlight> <dyes> <film-sensitivity> <film-characteristic-cuve>%s\n",
+	       patch_sizes ? " <rscal> <gscale> <bscale>":"");
+      if (patch_sizes)
+	fprintf (stderr, "last three options can be also replaced by \"dufay\"\n");
       print_help ();
     }
   *filename = argv[0];
@@ -567,6 +571,18 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename, s
   spec.set_dyes (parse_dyes (argv[2]));
   spec.set_film_response (parse_response (argv[3]));
   spec.set_characteristic_curve (parse_characteristic_curve (argv[4]));
+  if (patch_sizes && argc != 6)
+    {
+      spec.rscale = atof (argv[5]);
+      spec.gscale = atof (argv[6]);
+      spec.bscale = atof (argv[7]);
+    }
+  else if (patch_sizes)
+    {
+      spec.rscale = dufaycolor::red_portion;
+      spec.gscale = dufaycolor::green_portion;
+      spec.bscale = dufaycolor::blue_portion;
+    }
 }
 
 void
@@ -684,7 +700,7 @@ digital_laboratory (int argc, char **argv)
       const char *filename;
       const char *error;
 
-      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec);
+      parse_filename_and_camera_setup (argc - 1, argv + 1, &filename, spec, true);
       spec.generate_color_target_tiff (filename, &error, false, false);
     }
   else if (!strcmp (argv[0], "render-wb-target"))
@@ -739,19 +755,6 @@ main (int argc, char **argv)
   else if (!strcmp (argv[1], "digital-laboratory")
 	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);
-  else if (!strcmp (argv[1], "dufay-ti3"))
-    {
-      if (argc != 3)
-	print_help ();
-      FILE *f = fopen (argv[2], "wt");
-      if (!f)
-	{
-	  perror (argv[2]);
-	  exit (1);
-	}
-      dufaycolor::generate_ti3_file (f);
-      fclose (f);
-    }
   else if (!strcmp (argv[1], "read-chemcad-spectra"))
     read_chemcad (argc-2, argv+2);
   else

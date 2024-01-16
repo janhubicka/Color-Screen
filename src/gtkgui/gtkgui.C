@@ -521,7 +521,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (!(event->state & GDK_CONTROL_MASK))
 	  {
 	    rparams.film_gamma -= 0.01;
-	    rparams.target_film_gamma -= 0.01;
 	    printf ("Film gamma %f\n", rparams.film_gamma);
 	  }
 	else
@@ -536,7 +535,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (!(event->state & GDK_CONTROL_MASK))
 	  {
 	    rparams.film_gamma += 0.01;
-	    rparams.target_film_gamma += 0.01;
 	    printf ("Film gamma %f\n", rparams.film_gamma);
 	  }
 	else
@@ -602,7 +600,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 		  display_scheduled = true;
 	    }
         }
-      else if (k >= '1' && k <='7')
+      else if (k >= '1' && k <'1' + (int)render::render_type_max)
 	{
 	  display_type = k - '1';
 	  display_scheduled = true;

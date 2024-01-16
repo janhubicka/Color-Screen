@@ -56,7 +56,7 @@ render_to_scr::pixel_size ()
 bool
 render_to_scr::precompute_all(bool grayscale_needed, bool normalized_patches, progress_info *progress)
 {
-  return render::precompute_all (grayscale_needed, normalized_patches, progress);
+  return render::precompute_all (grayscale_needed, normalized_patches, m_scr_to_img.patch_proportions (), progress);
 }
 bool
 render_to_scr::precompute (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress)

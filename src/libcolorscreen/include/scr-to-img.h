@@ -26,6 +26,7 @@ enum scr_type
    Dufay,
    max_scr_type
 };
+rgbdata patch_proportions (enum scr_type t);
 
 /* Type of a scanner used.  */
 enum scanner_type {
@@ -457,6 +458,10 @@ public:
   {
     return m_param;
   }
+  rgbdata patch_proportions ()
+  {
+    return ::patch_proportions (m_param.type);
+  }
   void dump (FILE *f);
 private:
   precomputed_function<coord_t> *m_motor_correction;
@@ -542,4 +547,5 @@ private:
   }
   const bool debug = false;
 };
+
 #endif

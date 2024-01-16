@@ -21,7 +21,7 @@ struct DLL_PUBLIC render_parameters
   : gamma (2.2),  film_gamma (1), target_film_gamma (1),
     output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
-    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (6500),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (srgb_white),
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
@@ -78,6 +78,8 @@ struct DLL_PUBLIC render_parameters
   luminosity_t temperature;
   /* Temperature in K of backlight when viewing the slide.  */
   luminosity_t backlight_temperature;
+  /* Whitepoint observer's eye is adapted to.  */
+  xy_t observer_whitepoint;
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
 
@@ -86,6 +88,8 @@ struct DLL_PUBLIC render_parameters
   enum dye_balance_t
   {
     dye_balance_none,
+    dye_balance_brightness,
+    dye_balance_bradford,
     dye_balance_neutral,
     dye_balance_whitepoint,
     dye_balance_max
@@ -113,10 +117,12 @@ struct DLL_PUBLIC render_parameters
       color_model_dufay_color_cinematography_xyY_correctedY,
       color_model_dufay_color_cinematography_wavelength,
       color_model_dufay_color_cinematography_spectra,
-      color_model_dufay_harrison_horner_spectra,
-      color_model_dufay_photography_its_materials_and_processes_spectra,
       color_model_dufay_color_cinematography_spectra_correction,
+      color_model_dufay_harrison_horner_spectra,
       color_model_dufay_harrison_horner_spectra_correction,
+      color_model_dufay_collins_giles_spectra,
+      color_model_dufay_collins_giles_spectra_correction,
+      color_model_dufay_photography_its_materials_and_processes_spectra,
       color_model_dufay_photography_its_materials_and_processes_spectra_correction,
       color_model_dufay1,
       color_model_dufay2,
@@ -191,7 +197,7 @@ struct DLL_PUBLIC render_parameters
 
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_patches);
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_patches, rgbdata patch_proportions);
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   const tile_adjustment&
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
@@ -362,7 +368,8 @@ public:
     render_type_interpolated,
     render_type_combined,
     render_type_predictive,
-    render_type_fast
+    render_type_fast,
+    render_type_max
   };
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
@@ -378,7 +385,7 @@ public:
   inline luminosity_t get_unadjusted_data_red (int x, int y);
   inline luminosity_t get_unadjusted_data_green (int x, int y);
   inline luminosity_t get_unadjusted_data_blue (int x, int y);
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
+  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress);
   inline rgbdata
   get_linearized_rgb_pixel (int x, int y)
   {
@@ -409,11 +416,17 @@ public:
     d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
     return d;
   }
-  color_matrix get_dye_to_xyz_matrix ()
+  /* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
+     patches respectively. It should have sum at most 1.
+     
+     If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
+     size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
+     PATCH_PROPORTIONS.  */
+  color_matrix get_dye_to_xyz_matrix (bool normalized_patches, rgbdata patch_proportions)
   {
     bool is_rgb;
     bool spectrum_based;
-    color_matrix dyes = m_params.get_dyes_matrix (&is_rgb, &spectrum_based, &m_img, true);
+    color_matrix dyes = m_params.get_dyes_matrix (&is_rgb, &spectrum_based, &m_img, normalized_patches, patch_proportions);
     /* TODO: It may make more sense to have presaturation done in DNG file.  */
 #if 0
     if (m_params.presaturation != 1)

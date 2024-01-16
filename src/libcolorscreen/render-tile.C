@@ -419,15 +419,15 @@ render_to_scr::render_tile (enum render_type_t render_type,
       break;
     case render_type_realistic:
       {
-	render_parameters my_rparam = rparam;
+	//render_parameters my_rparam = rparam;
 	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
-	my_rparam.brightness *= 3;
+	//my_rparam.brightness *= 3;
 	if (img.stitch)
 	  {
 	    render_stitched<render_superpose_img> (
-		[&img,color,&progress] (render_parameters &my_rparam, int x, int y) mutable
+		[&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
 		{
-		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255, false);
+		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, false);
 		  if (color)
 		    r->set_color_display ();
 		  if (!r->precompute_all (progress))
@@ -437,11 +437,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		    }
 		  return r;
 		},
-		img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
+		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, true, progress);
 	    break;
 	  }
 	render_superpose_img render (param, img,
-				     my_rparam, 255, false);
+				     rparam, 255, false);
 	if (color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))

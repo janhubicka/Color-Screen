@@ -21,10 +21,12 @@ const char * render_parameters::color_model_names [] = {
   "dufaycolor_reseau_by_color_cinematography_xyY_correctedY",
   "dufaycolor_reseau_by_color_cinematography_wavelength",
   "dufaycolor_reseau_by_color_cinematography_spectra",
-  "dufaycolor_reseau_by_harrison_horner_spectra",
-  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra",
   "dufaycolor_reseau_by_color_cinematography_spectra_correction",
+  "dufaycolor_reseau_by_harrison_horner_spectra",
   "dufaycolor_reseau_by_harrison_horner_spectra_correction",
+  "dufaycolor_reseau_by_collins_giles_spectra",
+  "dufaycolor_reseau_by_collins_giles_spectra_correction",
+  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra",
   "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra_correction",
   "dufaycolor_NSMM_Bradford_11948",
   "dufaycolor_NSMM_Bradford_11951",
@@ -36,6 +38,8 @@ const char * render_parameters::color_model_names [] = {
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
+  "brightness",
+  "bradford",
   "neutral",
   "whitepoint"
 };
@@ -44,11 +48,32 @@ const char * render_parameters::output_profile_names [] = {
   "original"
 };
 
+
+/* patch_portions describes how much percent of screen is occupied by red, green and blue
+   patches respectively. It should have sum at most 1.  */
+rgbdata patch_proportions (enum scr_type t)
+{
+  switch (t)
+    {
+    case Paget:
+    case Thames:
+    case Finlay:
+      /* TODO: Measure actual portions.  */
+      return {1/3.0,1/3.0,1/3.0};
+    case Dufay:
+      return {dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion};
+    }
+}
+
 /* Return matrix which contains the color of dyes either as rgb or xyz.
-   If REALISTIC is true, use actual dye colors. Otheriwse re-scale them so white balance is
-   corrected for interpolated rendering.  */
+   PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
+   patches respectively. It should have sum at most 1.
+     
+   If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
+   size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
+   patch_portions.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_dyes)
+render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_dyes, rgbdata patch_proportions)
 {
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
@@ -173,25 +198,25 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
       case render_parameters::color_model_dufay_color_cinematography_xyY:
 	{
 	  dyes = dufaycolor::color_cinematography_xyY_dye_matrix ();
-	  dyes.normalize_xyz_brightness ();
-	  xyz white (0, 0, 0);
-	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
+	  //dyes.normalize_xyz_brightness ();
+	  //xyz white (0, 0, 0);
+	  //dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
 	  //printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
-	  if (normalized_dyes)
-	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
-	  dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
+	  //if (normalized_dyes)
+	    //dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
+	  //dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_xyY_correctedY:
 	{
 	  dyes = dufaycolor::corrected_dye_matrix ();
-	  dyes.normalize_xyz_brightness ();
-	  xyz white (0, 0, 0);
-	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
+	  //dyes.normalize_xyz_brightness ();
+	  //xyz white (0, 0, 0);
+	  //dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
 	  //printf ("Normalized: %i white %f %f %f\n", normalized_dyes, white.x, white.y, white.z);
 	  if (normalized_dyes)
 	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
-	  dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
+	  //dyes = bradford_whitepoint_adaptation_matrix (/*white*/ il_B_white, srgb_white) * dyes;
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_wavelength:
@@ -201,45 +226,87 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 				    xyY(0.2987423914, 0.6949214652, 0.43), /* dominating wavelength 549.6*/
 				    xyY(0.133509341, 0.04269239, 0.087) /* dominating wavelength 466.0*/);
 	  dyes.normalize_xyz_brightness ();
-	  xyz white (0, 0, 0);
-	  dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
+	  //xyz white (0, 0, 0);
+	  //dyes.apply_to_rgb (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion, &white.x, &white.y, &white.z);
 	  //printf ("Normalized: %i\n", normalized_dyes);
-	  if (normalized_dyes)
-	    dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
-	  dyes = bradford_whitepoint_adaptation_matrix (white, srgb_white) * dyes;
+	  //if (normalized_dyes)
+	    //dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
+	  //dyes = bradford_whitepoint_adaptation_matrix (white, srgb_white) * dyes;
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
+	  //if (normalized_dyes)
+	    //{
+	      //m_spectrum_dyes_to_xyz->rscale = dufaycolor::red_portion;
+	      //m_spectrum_dyes_to_xyz->gscale = dufaycolor::green_portion;
+	      //m_spectrum_dyes_to_xyz->bscale = dufaycolor::blue_portion;
+	    //}
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra_correction:
 	{
 	  dyes = dufaycolor_correction_color_cinematography_matrix (temperature, backlight_temperature);
+	  //if (normalized_dyes)
+	    //dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
 	  break;
 	}
       case render_parameters::color_model_dufay_harrison_horner_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
+	  //if (normalized_dyes)
+	    //{
+	      //m_spectrum_dyes_to_xyz->rscale = dufaycolor::red_portion;
+	      //m_spectrum_dyes_to_xyz->gscale = dufaycolor::green_portion;
+	      //m_spectrum_dyes_to_xyz->bscale = dufaycolor::blue_portion;
+	    //}
 	}
 	break;
       case render_parameters::color_model_dufay_harrison_horner_spectra_correction:
 	{
 	  dyes = dufaycolor_correction_harrison_horner_matrix (temperature, backlight_temperature);
+	  //if (normalized_dyes)
+	    //dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
 	  break;
 	}
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
+	  //if (normalized_dyes)
+	    //{
+	      //m_spectrum_dyes_to_xyz->rscale = dufaycolor::red_portion;
+	      //m_spectrum_dyes_to_xyz->gscale = dufaycolor::green_portion;
+	      //m_spectrum_dyes_to_xyz->bscale = dufaycolor::blue_portion;
+	    //}
 	}
 	break;
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra_correction:
 	{
 	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix (temperature, backlight_temperature);
+	  //if (normalized_dyes)
+	    //dyes.scale_channels (dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion);
+	  break;
+	}
+      case render_parameters::color_model_dufay_collins_giles_spectra:
+	{
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_collins_giles);
+	  //if (normalized_dyes)
+	    //{
+	      //m_spectrum_dyes_to_xyz->rscale = dufaycolor::red_portion;
+	      //m_spectrum_dyes_to_xyz->gscale = dufaycolor::green_portion;
+	      //m_spectrum_dyes_to_xyz->bscale = dufaycolor::blue_portion;
+	    //}
+	}
+	break;
+      case render_parameters::color_model_dufay_collins_giles_spectra_correction:
+	{
+	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix (temperature, backlight_temperature);
+	  //dyes = dufaycolor_correction_collins_giles_matrix (temperature, backlight_temperature);
 	  break;
 	}
       case render_parameters::color_model_dufay1:
@@ -251,6 +318,12 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography,
 					    (spectrum_dyes_to_xyz::dyes)((int)color_model - (int)render_parameters::color_model_dufay1 + (int)spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor), age);
+	  //if (normalized_dyes)
+	    //{
+	      //m_spectrum_dyes_to_xyz->rscale = dufaycolor::red_portion;
+	      //m_spectrum_dyes_to_xyz->gscale = dufaycolor::green_portion;
+	      //m_spectrum_dyes_to_xyz->bscale = dufaycolor::blue_portion;
+	    //}
 	  break;
 	}
       case render_parameters::color_model_max:
@@ -259,6 +332,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
   if (m_spectrum_dyes_to_xyz)
     {
       m_spectrum_dyes_to_xyz->set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
+#if 0
       switch (dye_balance)
 	{
 	  case render_parameters::dye_balance_none:
@@ -273,6 +347,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  default:
 	    abort ();
 	}
+#endif
       /* At the moment all conversion we do are linear conversions.  In that case
          we can build XYZ matrix and proceed with that.  */
       if (debug && !m_spectrum_dyes_to_xyz->is_linear ())
@@ -303,6 +378,10 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_d
 	  dyes = m_spectrum_dyes_to_xyz->xyz_matrix ();
 	}
     }
+  if (normalized_dyes && !is_srgb)
+    {
+      dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
+    }
   return dyes;
 }
 
@@ -311,7 +390,8 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
 {
   bool is_rgb;
   bool spectrum_based;
-  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based, img, normalized_dyes);
+  // TODO: Handle patch proportions right
+  color_matrix dyes = get_dyes_matrix (&is_rgb, &spectrum_based, img, normalized_dyes, {1/3.0,1/3.0,1/3.0});
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};

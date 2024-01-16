@@ -9,10 +9,25 @@ class dufaycolor
 {
 public:
   /* Sizes in percent based on color cinematography screen.  */
-  static constexpr const coord_t red_width = 21.0;
-  static constexpr const coord_t green_blue_width = /*28.6*/49.9-red_width;  /* Measured on microscropic image as 49.3.  */
+#if 0
+  //static constexpr const coord_t red_width = 21.0;
+  //static constexpr const coord_t green_blue_width = /*28.6*/49.9 - red_width;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height = 22.7;
   static constexpr const coord_t green_height = 26.9;
+#endif
+  static constexpr const coord_t red_width = 33;
+  static constexpr const coord_t green_blue_width = 100-red_width;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t blue_height = 53.1;
+  static constexpr const coord_t green_height = 100-blue_height;
+
+  /* Based on Gawain's photo.  */
+#if 0
+  static constexpr const coord_t red_width = 209;
+  static constexpr const coord_t green_blue_width = 338;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t blue_height = 108;
+  static constexpr const coord_t green_height = 105;
+#endif
+
 #if 0
 #if 0
   static constexpr const coord_t red_width = 35.7;
@@ -61,9 +76,9 @@ public:
 
   /* Proportions of the color in screen.  Interpolated rendering needs these correction
      factors to match realistic rendering.  */
-  static constexpr const coord_t red_portion = red_size * 3 / screen_size;
-  static constexpr const coord_t green_portion = green_size * 3 / screen_size;
-  static constexpr const coord_t blue_portion = blue_size * 3 / screen_size;
+  static constexpr const coord_t red_portion = red_size / screen_size;
+  static constexpr const coord_t green_portion = green_size / screen_size;
+  static constexpr const coord_t blue_portion = blue_size / screen_size;
 
   /* xyY coordinates of the dyes as listed in Color Cinematography table.
      Inspection is done under Illuminant B.  */
@@ -126,8 +141,6 @@ public:
   static void print_spectra_report ();
   static void print_synthetic_dyes_report ();
   static bool tiff_with_primaries (const char *, bool);
-  static bool generate_ti3_file (FILE *);
-  static bool generate_color_target_tiff (const char *filename, const char **error);
 };
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);
 #endif

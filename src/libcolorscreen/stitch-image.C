@@ -1342,14 +1342,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 		    && other.load_img (error, progress))
 		  {
 		    render1 = new render (*img, rparams, 255);
-		    if (!render1->precompute_all (img->data != NULL, false, progress))
+		    if (!render1->precompute_all (img->data != NULL, false, {1/3.0, 1/3.0, 1/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;
 			render1 = 0;
 		      }
 		    render2 = new render (*other.img, rparams, 255);
-		    if (!render2->precompute_all (img->data != NULL, false, progress))
+		    if (!render2->precompute_all (img->data != NULL, false, {1/3.0, 1/3.0, 1/3.0}, progress))
 		      {
 			*error = "precomputation failed";
 			delete render1;

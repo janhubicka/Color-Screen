@@ -3799,10 +3799,8 @@ const static spectra_entry canon_CN_E_85mm_T1_3_tramsmission[] =
 void
 spectrum_dyes_to_xyz::normalize_brightness ()
 {
-  spectrum s;
-  for (int i = 0; i < SPECTRUM_SIZE; i++)
-    s[i] = red [i] * rscale + green [i] * gscale + blue [i] * bscale;
-  struct xyz ret = get_xyz (s);
+  xscale = yscale = zscale = 1;
+  struct xyz ret = dyes_rgb_to_xyz (1, 1, 1);
   xscale = yscale = zscale = 1 / ret.y;
   if (debug)
     {
@@ -4118,9 +4116,18 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
 rgbdata
 spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observer)
 {
+  film_sensitivity *tred = red_characteristic_curve;
+  film_sensitivity *tgreen = green_characteristic_curve;
+  film_sensitivity *tblue = blue_characteristic_curve;
+  red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = NULL;
+
+
   xyz whitepoint = whitepoint_xyz (observer);
   rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
   rgbdata res = linear_film_rgb_response (NULL);
+  red_characteristic_curve = tred;
+  green_characteristic_curve = tgreen;
+  blue_characteristic_curve = tblue;
   return {white.red / res.red, white.green / res.green, white.blue / res.blue};
 }
 
@@ -4194,6 +4201,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   int nsamples = sizeof (TLCI_2012_TCS) / sizeof (xspect);
   int n = 0;
   adjust_exposure ();
+  spectrum tile;
 #if 0
   if (subtractive)
     {
@@ -4216,7 +4224,9 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
     }
   else 
     {
-      rgbdata film_white = film_rgb_response (NULL);
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	 tile[i] = 0.5;
+      rgbdata film_white = film_rgb_response (tile);
       luminosity_t sum;
       printf ("Film response to backlight %f %f %f %f\n", film_white.red, film_white.green, film_white.blue, sum);
 
@@ -4230,14 +4240,16 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	  xyz c = dyes_rgb_to_xyz (film_white.red, film_white.green, film_white.blue);
 	  sum = c.y;
         }
-      scale.red = scale.green = scale.blue = 1 / sum;
+      scale.red = scale.green = scale.blue = 0.5 / sum;
 	      /*determine_relative_patch_sizes_by_whitepoint ();*/
               /*xyz_to_dyes_rgb (whitepoint);*/
     
       //scale /= sum * 0.3;
     }
   luminosity_t sum = scale.red + scale.green + scale.blue;
+  luminosity_t sum2 = scale.red * rscale + scale.green * gscale + scale.blue * bscale;
   printf ("RGB scales  %f %f%% %f %f%% %f %f%%\n", scale.red, 100 * scale.red / sum, scale.green, 100 * scale.green / sum, scale.blue, 100 * scale.blue / sum);
+  printf ("RGB scales adjusted by patch sizes  %f %f%% %f %f%% %f %f%%\n", scale.red * rscale, 100 * scale.red * rscale / sum2, scale.green * gscale, 100 * scale.green * gscale / sum2, scale.blue * bscale, 100 * scale.blue * bscale / sum2);
   color_matrix id;
   color_matrix m = optimized ? optimized_xyz_matrix () : subtractive ? id : xyz_matrix ();
   luminosity_t deltaEsum = 0;
@@ -4266,7 +4278,6 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	  for (int x = 0; x < 6; x++)
 	    {
 	      xspect &xtile = TLCI_2012_TCS [std::min (y * 6 + x, nsamples - 1)];
-	      spectrum tile;
 	      compute_spectrum (tile, xtile);
 	      xyz real_color = get_xyz_old_observer (backlight, tile);
 	      rgbdata color = film_rgb_response (tile) * scale;

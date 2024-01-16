@@ -369,7 +369,7 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 }
 
 bool
-render::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)
+render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
@@ -414,16 +414,35 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, progress
       /* Matrix converting dyes either to XYZ or sRGB.  */
       bool spectrum_based;
       bool is_srgb;
-      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img, normalized_patches);
+      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img, normalized_patches, patch_proportions);
       if (is_srgb)
 	color = dyes * color;
       else
 	{
 	  color = dyes * color;
-	  if (m_params.backlight_temperature != 6500 && !spectrum_based)
+	  rgbdata screen_whitepoint = {1, 1, 1};
+	  if (!normalized_patches)
+	    screen_whitepoint = patch_proportions;
+	  xyz dye_whitepoint;
+	  bool correct_whitepoints = true;
+	  color.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
+	  switch (m_params.dye_balance)
 	    {
-	      xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
-	      color = bradford_whitepoint_adaptation_matrix (srgb_white, whitepoint) * color;
+	      case render_parameters::dye_balance_none:
+	        break;
+	      case render_parameters::dye_balance_bradford:
+		color = bradford_whitepoint_adaptation_matrix (dye_whitepoint, srgb_white) * color;
+		correct_whitepoints = false;
+		break;
+	      case render_parameters::dye_balance_brightness:
+		if (dye_whitepoint.y > 0)
+		  color = color * (1/dye_whitepoint.y);
+		break;
+	    }
+	  if (correct_whitepoints && m_params.observer_whitepoint != (xy_t)srgb_white) /*&& !spectrum_based)*/
+	    {
+	      //xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
+	      color = bradford_whitepoint_adaptation_matrix (srgb_white, (xyz)m_params.observer_whitepoint) * color;
 #if 0
 	      xyz white = xyz::from_srgb (1, 1, 1);
 	      for (int i = 0; i < 4; i++)

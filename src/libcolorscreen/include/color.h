@@ -115,6 +115,7 @@ struct xyz {
   : x (0), y (0), z(0)
   { }
   inline constexpr xyz (struct xyY);
+  inline constexpr xyz (struct xy_t);
   xyz &operator+=(const luminosity_t other)
   {
     x += other;
@@ -257,6 +258,15 @@ struct xy_t
   constexpr xy_t (xyz c)
   : x (c.x / (c.x + c.y + c.z)), y (c.y / (c.x + c.y + c.z))
   { }
+  bool operator== (const xy_t &other) const
+  {
+    return x == other.x
+	   && y == other.y;
+  }
+  bool operator!= (const xy_t &other) const
+  {
+    return !(*this == other);
+  }
 };
 struct xyY
 {
@@ -325,6 +335,10 @@ public:
 
 constexpr xyz::xyz (xyY c)
  : x (!c.Y ? 0 : c.x * c.Y / c.y), y (c.Y), z (!c.Y ? 0 : (1 - c.x - c.y) * c.Y / c.y)
+{
+}
+constexpr xyz::xyz (xy_t c)
+ : x (c.x / c.y), y (1), z ((1 - c.x - c.y) / c.y)
 {
 }
 

@@ -48,6 +48,7 @@ public:
   enum dyes {
     dufaycolor_color_cinematography,
     dufaycolor_harrison_horner,
+    dufaycolor_collins_giles,
     dufaycolor_dufaycolor_manual,
     dufaycolor_photography_its_materials_and_processes,
     dufaycolor_separation_filters_photography_its_materials_and_processes,
@@ -71,6 +72,7 @@ public:
   {
     "dufaycolor_color_cinematography",
     "dufaycolor_harrison_horner",
+    "dufaycolor_collins_giles",
     "dufaycolor_dufaycolor_manual",
     "dufaycolor_photography_its_materials_and_processes",
     "dufaycolor_separation_filters_photography_its_materials_and_processes",
@@ -411,6 +413,7 @@ public:
 color_matrix dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
 color_matrix dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
 color_matrix dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
+color_matrix dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
 

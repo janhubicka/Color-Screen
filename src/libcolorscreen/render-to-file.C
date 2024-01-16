@@ -67,7 +67,8 @@ produce_file (render_to_file_params p, T &render, int black, progress_info *prog
       p.depth=16;
       p.hdr = false;
       tp.dng = true; 
-      tp.dye_to_xyz = render.get_dye_to_xyz_matrix ();
+      // TODO: Handle normalized patches and screen proportions correctly.
+      tp.dye_to_xyz = render.get_dye_to_xyz_matrix (true, {1/3.0,1/3.0,1/3.0});
       tp.black= black;
     }
   tp.hdr = p.hdr;
