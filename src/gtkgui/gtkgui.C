@@ -379,7 +379,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	}
 #endif
      }
-  if (k == 'b' && scan.stitch && (event->state & GDK_CONTROL_MASK))
+  if (k == 'b' && (event->state & GDK_CONTROL_MASK))
     {
       rparams.backlight_temperature = std::max (rparams.backlight_temperature - 100 , (luminosity_t)render_parameters::temperature_min);
       printf ("backlight temperature %f\n",rparams.backlight_temperature);
@@ -393,7 +393,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'B' && scan.stitch && (event->state & GDK_CONTROL_MASK))
+  if (k == 'B' && (event->state & GDK_CONTROL_MASK))
     {
       rparams.backlight_temperature = std::min (rparams.backlight_temperature + 100 , (luminosity_t)render_parameters::temperature_max);
       printf ("backlight temperature %f\n",rparams.backlight_temperature);
