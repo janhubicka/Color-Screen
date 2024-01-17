@@ -174,7 +174,7 @@ public:
   }
 
   inline
-  matrix3x3<T>& operator=(const matrix<T, 3>rhs)
+  matrix3x3<T>& operator=(const matrix<T, 3>&rhs)
   {
     memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
     return *this;
@@ -238,7 +238,7 @@ public:
 #endif
 
   inline
-  matrix4x4<T>& operator=(const matrix<T, 4>rhs)
+  matrix4x4<T>& operator=(const matrix<T, 4> &rhs)
   {
     memcpy(B::m_elements,rhs.B::m_elements,sizeof (B::m_elements));
     return *this;

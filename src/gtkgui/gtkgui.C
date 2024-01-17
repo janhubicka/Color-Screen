@@ -241,15 +241,15 @@ setvals (void)
 static void
 print_help()
 {
+	printf ("\n");
 	if (ui_mode == screen_detection)
 	   printf ("Screen detection mode\n"
-		   "e   - switch to screen editing");
+		   "e   - switch to screen editing\n");
 	if (ui_mode == screen_editing)
 	   printf ("Screen editing mode\n"
-	           "W   - switch to solver editing mode\n"
 	           "c   - set center                              C   - set lens center\n"
 		   "x   - freeze x                                y   - freeze y                      a - unfreeze both\n"
-		   "s S - fast/precise screen collection");
+		   "s S - fast/precise screen collection\n");
 	if (ui_mode == solver_editing)
 	   printf ("Solver editing mode\n"
 	           "w   - switch to screen editing mode\n"
@@ -261,10 +261,11 @@ print_help()
 	if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
 	   printf ("g G - control film gamma                      d   - set to dufay                  p - set to Paget\n"
 	           "f   - set to Finlay                           N   - compute mesh (nonlinear)      n - disable mesh\n"
-		   "1-9 - display modes                           t   - scanner type                  R - motor editing mode\n");
+		   "1-9 - display modes                           t   - scanner type                  R - motor editing mode\n"
+		   "l L - dye balance\n");
 	else
 	   printf ("d   - set dark point                         r g b- set color\n");
-	printf    ("E   - screen editing mode                   \n"
+	printf    ("W   - switch to solver editing mode           E   - screen editing mode                   \n"
 		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
 	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
 		   "q Q - control age\n"
@@ -342,7 +343,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'E' && ui_mode != screen_detection && scan.rgbdata)
+  if (k == 'E' && scan.rgbdata)
     {
       ui_mode = screen_detection;
       printf ("Screen detection mode\n");
@@ -356,7 +357,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'W' && ui_mode == screen_editing)
+  if (k == 'W')
     {
       printf ("Solver editing mode entered\n");
       display_scheduled = true;
@@ -507,6 +508,25 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  rparams.precise = true;
 	  display_scheduled = true;
 	}
+      if (k == 'l')
+        {
+	  if (rparams.dye_balance == render_parameters::dye_balance_none)
+	    rparams.dye_balance = (render_parameters::dye_balance_t)((int)render_parameters::dye_balance_max - 1);
+	  else
+	    rparams.dye_balance = (render_parameters::dye_balance_t)((int)rparams.dye_balance - 1);
+	  printf ("Dye balance:%s\n", render_parameters::dye_balance_names [(int)rparams.dye_balance]);
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+        }
+      if (k == 'L')
+        {
+	  rparams.dye_balance = (render_parameters::dye_balance_t)((int)rparams.dye_balance + 1);
+	  if (rparams.dye_balance == render_parameters::dye_balance_max)
+	    rparams.dye_balance = render_parameters::dye_balance_none;
+	  printf ("Dye balance:%s\n", render_parameters::dye_balance_names [(int)rparams.dye_balance]);
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+        }
     }
   if (ui_mode == solver_editing)
     {

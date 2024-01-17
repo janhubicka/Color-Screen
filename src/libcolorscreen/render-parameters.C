@@ -79,6 +79,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
   bool is_srgb = false;
+  xyz dye_whitepoint = srgb_white;
   *spectrum_based = false;
   *optimized = false;
   switch (color_model)
@@ -168,6 +169,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
+	  dye_whitepoint = il_C_white;
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
@@ -200,11 +202,13 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
       case render_parameters::color_model_dufay_color_cinematography_xyY:
 	{
 	  dyes = dufaycolor::color_cinematography_xyY_dye_matrix ();
+	  dye_whitepoint = il_C_white;
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_xyY_correctedY:
 	{
 	  dyes = dufaycolor::corrected_dye_matrix ();
+	  dye_whitepoint = il_C_white;
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_wavelength:
@@ -274,6 +278,11 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
       case render_parameters::color_model_max:
 	abort ();
     }
+  if (is_srgb)
+    {
+      srgb_xyz_matrix m;
+      dyes = m * dyes;
+    }
   if (m_spectrum_dyes_to_xyz)
     {
       m_spectrum_dyes_to_xyz->set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
@@ -287,10 +296,13 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dyes = m_spectrum_dyes_to_xyz->xyz_matrix ();
 	}
     }
-  if (is_srgb)
+  else
     {
-      srgb_xyz_matrix m;
-      dyes = m * dyes;
+      spectrum_dyes_to_xyz s;
+      s.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
+      xyz backlight_white = s.whitepoint_xyz ();
+	
+      dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, backlight_white) * dyes;
     }
   return dyes;
 }
@@ -336,7 +348,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
   dyes.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
 
   /* Different dye balances.  */
-  switch (dye_balance)
+  switch (optimized ? render_parameters::dye_balance_brightness : dye_balance)
     {
       case render_parameters::dye_balance_none:
 	break;
