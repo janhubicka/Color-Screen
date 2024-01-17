@@ -361,11 +361,12 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 	  rgbdata scales;
 	  dyes.invert ().apply_to_rgb (white.x, white.y, white.z, &scales.red, &scales.green, &scales.blue);
 	  scales /= screen_whitepoint;
+	  dyes.apply_to_rgb (scales.red,scales.green,scales.blue, &white.x, &white.y, &white.z);
 	  for (int i = 0; i < 4; i++)
 	    {
-	      dyes.m_elements[i][0] *= target_whitepoint.x / dye_whitepoint.x;
-	      dyes.m_elements[i][1] *= target_whitepoint.y / dye_whitepoint.y;
-	      dyes.m_elements[i][2] *= target_whitepoint.z / dye_whitepoint.z;
+	      dyes.m_elements[0][i] *= scales.red;
+	      dyes.m_elements[1][i] *= scales.green;
+	      dyes.m_elements[2][i] *= scales.blue;
 	    }
 	}
 	break;
@@ -375,9 +376,10 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
       case render_parameters::dye_balance_whitepoint:
 	for (int i = 0; i < 4; i++)
 	  {
-	    dyes.m_elements[0][i] *= target_whitepoint.x / dye_whitepoint.x;
-	    dyes.m_elements[1][i] *= target_whitepoint.y / dye_whitepoint.y;
-	    dyes.m_elements[2][i] *= target_whitepoint.z / dye_whitepoint.z;
+	    xyz white = observer_whitepoint;
+	    dyes.m_elements[i][0] *= white.x / dye_whitepoint.x;
+	    dyes.m_elements[i][1] *= white.y / dye_whitepoint.y;
+	    dyes.m_elements[i][2] *= white.z / dye_whitepoint.z;
 	  }
 	break;
       default:
