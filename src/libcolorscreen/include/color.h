@@ -574,114 +574,6 @@ public:
   {}
 };
 
-/* Autocrhome dyes srgb based on Eversmart scan of Smirous singer
-   54.4 9.1 5.2
-   8.9 36.5 8.1
-   19.6 9.8 33.3
- */
-class autochrome_matrix : public color_matrix
-{
-public:
-  inline
-  autochrome_matrix ()
-  : color_matrix (0.544,0.089,0.052, 0,
-	       0.089,0.365,0.081, 0,
-	       0.196,0.098,0.333, 0,
-	       0,             0,              0,                  1)
-  { }
-};
-/* Matrix profile of Finlay taking screen
-   Based on XYZ measurements of Finlay filter scan on eversmart dimmed to 50%.   */
-#if 0
-class finlay_matrix : public color_matrix
-{
-public:
-  inline
-  finlay_matrix ()
-  : color_matrix (0.116325,0.148173,0.060772, 0,
-	          0.059402,0.201094,0.028883, 0,
-	          0.005753,0.030250,0.136011, 0,
-	          0,             0,              0,                  1)
-  { }
-};
-#else
-#if 0
-/* Based on second measurement. */
-class finlay_matrix : public color_matrix
-{
-public:
-  inline
-  finlay_matrix ()
-  : color_matrix (0.127466,0.147393,0.060898, 0,
-	       0.064056,0.200520,0.028144, 0,
-	       0.053229,0.028117,0.138672, 0,
-	       0,             0,              0,                  1)
-  { }
-};
-#endif
-#if 0
-/* Based on second measurement. */
-class finlay_matrix : public color_matrix
-{
-public:
-  inline
-  finlay_matrix ()
-  : color_matrix (0.212141,0.276332,0.102475, 0,
-	       0.104568,0.378063,0.050871, 0,
-	       0.102475,0.057676,0.267136, 0,
-	       0,             0,              0,                  1)
-  { }
-};
-#endif
-/* Based on third measurement. */
-class finlay_matrix : public color_matrix
-{
-public:
-  inline
-  finlay_matrix ()
-  : color_matrix (0.158378,0.191719,0.078963, 0,
-	       0.079810,0.258469,0.036660, 0,
-	       0.072299,0.038142,0.179542, 0,
-	       0,             0,              0,                  1)
-  { }
-};
-#endif
-class adjusted_finlay_matrix : public color_matrix
-{
-public:
-  inline
-  adjusted_finlay_matrix ()
-  : color_matrix (0.116325,0.148173-0.015,0.060772 - 0.03, 0,
-		  0.059402+0.02,0.201094+0.04,0.028883 /*- 0.02*/+0.01, 0,
-		  0.005753,0.030250,0.136011 /*+ 0.1*/, 0,
-		  0,             0,              0,                  1)
-  { }
-};
-/* Matrix profile of dufay taken from Nikon steamroler.
-   In XYZ.  */
-class dufay_matrix : public color_matrix
-{
-public:
-  inline
-  dufay_matrix ()
-  : color_matrix (0.321001,0.205657,0.072222, 0,
-		  0.178050,0.406124,0.071736, 0,
-		  0.006007,0.040292,0.240037, 0,
-		  0,             0,              0,                  1)
-  { }
-};
-/* Matrix I decided works well for kimono picture (sRGB).  */
-class grading_matrix : public color_matrix
-{
-public:
-  inline
-  grading_matrix ()
-  : color_matrix (1,-0.4,-0.1, 0,
-		  0.25,1,-0.1, 0,
-		  +0.05,-0.55,1.05, 0,
-		  0,             0,              0,                  1)
-  { normalize_grayscale (); }
-};
 /* XYZ->wide gammut RGB conversion matrix.  */
 class xyz_wide_gammut_rgb_matrix : public color_matrix
 {
@@ -694,7 +586,7 @@ public:
 		  0,             0,              0,                  1)
   {}
 };
-/* XYZ->wide gammut RGB conversion matrix.  */
+/* XYZ->Pro Photo RGB conversion matrix.  */
 class xyz_pro_photo_rgb_matrix : public color_matrix
 {
 public:
@@ -703,6 +595,18 @@ public:
   : color_matrix (1.3459433, -0.2556075, -0.0511118, 0,
 		  -0.5445989,  1.5081673,  0.0205351, 0,
 		   0.0000000,  0.0000000,  1.2118128, 0,
+		  0,             0,              0,                  1)
+  {}
+};
+/* Pro Photo RGB->XYZ conversion matrix.  */
+class pro_photo_rgb_xyz_matrix : public color_matrix
+{
+public:
+  inline
+  pro_photo_rgb_xyz_matrix ()
+  : color_matrix (0.7976749,  0.1351917,  0.0313534, 0,
+		  0.2880402,  0.7118741,  0.0000857, 0,
+		  0.0000000,  0.0000000,  0.8252100, 0,
 		  0,             0,              0,                  1)
   {}
 };

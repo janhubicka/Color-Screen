@@ -404,71 +404,16 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
     }
 
   color_matrix color;
-  if (m_params.presaturation != 1)
-    {
-      presaturation_matrix m (m_params.presaturation);
-      color = m * color;
-    }
+
   if (m_params.output_profile != render_parameters::output_profile_original)
     {
-      /* Matrix converting dyes either to XYZ or sRGB.  */
-      bool is_srgb;
-      color_matrix dyes = m_params.get_balanced_dyes_matrix (&is_srgb, &m_img, normalized_patches, patch_proportions, d65_white);
-      color = dyes * color;
-      if (!is_srgb)
-        {
-	  xyz_srgb_matrix m2;
-	  color = m2 * color;
-        }
-#if 0
-      if (is_srgb)
-	color = dyes * color;
-      else
-	{
-	  color = dyes * color;
-	  if (!normalized_patches)
-	    screen_whitepoint = patch_proportions;
-	  xyz dye_whitepoint;
-	  bool correct_whitepoints = true;
-	  color.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
-	  switch (m_params.dye_balance)
-	    {
-	      case render_parameters::dye_balance_none:
-	        break;
-	      case render_parameters::dye_balance_bradford:
-		color = bradford_whitepoint_adaptation_matrix (dye_whitepoint, srgb_white) * color;
-		correct_whitepoints = false;
-		break;
-	      case render_parameters::dye_balance_brightness:
-		if (dye_whitepoint.y > 0)
-		  color = color * (1/dye_whitepoint.y);
-		break;
-	    }
-	  if (correct_whitepoints && m_params.observer_whitepoint != (xy_t)srgb_white) /*&& !spectrum_based)*/
-	    {
-	      //xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
-	      color = bradford_whitepoint_adaptation_matrix ((xyz)m_params.observer_whitepoint, srgb_white) * color;
-#if 0
-	      xyz white = xyz::from_srgb (1, 1, 1);
-	      for (int i = 0; i < 4; i++)
-		{
-		  color.m_elements[0][i] *= whitepoint.x / white.x;
-		  color.m_elements[1][i] *= whitepoint.y / white.y;
-		  color.m_elements[2][i] *= whitepoint.z / white.z;
-		}
-#endif
-	    }
-	  xyz_srgb_matrix m2;
-	  color = m2 * color;
-	}
-#endif
-      if (m_params.saturation != 1)
-	{
-	  saturation_matrix m (m_params.saturation);
-	  color = m * color;
-	}
+      /* Matrix converting dyes either to XYZ.  */
+      color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, d65_white) * color;
+      xyz_srgb_matrix m;
+      color = m * color;
     }
-  color = color * m_params.brightness;
+  else
+    color = m_params.get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
   m_color_matrix = color;
   return true;
 }

@@ -238,6 +238,39 @@ setvals (void)
   initialized = 1;
 }
 
+static void
+print_help()
+{
+	if (ui_mode == screen_detection)
+	   printf ("Screen detection mode\n"
+		   "e   - switch to screen editing");
+	if (ui_mode == screen_editing)
+	   printf ("Screen editing mode\n"
+	           "W   - switch to solver editing mode\n"
+	           "c   - set center                              C   - set lens center\n"
+		   "x   - freeze x                                y   - freeze y                      a - unfreeze both\n"
+		   "s S - fast/precise screen collection");
+	if (ui_mode == solver_editing)
+	   printf ("Solver editing mode\n"
+	           "w   - switch to screen editing mode\n"
+		   "D   - detect regular screen                   a A - autosolve                     L - set lens center\n"
+		   "l   - disable lens center\n");
+	if (ui_mode == solver_editing)
+	   printf ("Motor editing mode\n"
+		   "r   - swithc to screen editing mode\n");
+	if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
+	   printf ("g G - control film gamma                      d   - set to dufay                  p - set to Paget\n"
+	           "f   - set to Finlay                           N   - compute mesh (nonlinear)      n - disable mesh\n"
+		   "1-9 - display modes                           t   - scanner type                  R - motor editing mode\n");
+	else
+	   printf ("d   - set dark point                         r g b- set color\n");
+	printf    ("E   - screen editing mode                   \n"
+		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
+	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
+		   "q Q - control age\n"
+		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments\n");
+}
+
 /* Render image into the main window.  */
 static void
 cb_image_annotate (GtkImageViewer * imgv,
@@ -263,6 +296,7 @@ static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 {
   gint k = event->keyval;
+  print_help ();
 
   if (k == 'o')
     {
@@ -416,6 +450,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
+  if (k == 'Q')
+    {
+      rparams.age+=0.1;
+      printf ("Age: %f\n", rparams.age);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
   if (k == 'G' && scan.stitch && (event->state & GDK_CONTROL_MASK))
     {
       rparams.set_tile_adjustments_dimensions (0, 0);
@@ -432,13 +473,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 			      &error, &progress))
 	fprintf (stderr, "exposure analysis failed: %s\n", error);
       setvals ();
-      display_scheduled = true;
-      preview_display_scheduled = true;
-    }
-  if (k == 'Q')
-    {
-      rparams.age+=0.1;
-      printf ("Age: %f\n", rparams.age);
       display_scheduled = true;
       preview_display_scheduled = true;
     }

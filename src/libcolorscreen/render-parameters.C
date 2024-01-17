@@ -74,23 +74,23 @@ rgbdata patch_proportions (enum scr_type t)
    If OPTIMIZED is true, then the matrix is optimized camera matrix construted from
    process simulation and both temperature and backlight_temperature parameters are handled correctly.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *optimized, image_data *img)
+render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image_data *img)
 {
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
+  bool is_srgb = false;
   *spectrum_based = false;
   *optimized = false;
-  *is_srgb = false;
   switch (color_model)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */
       case render_parameters::color_model_none:
-	*is_srgb = true;
+	is_srgb = true;
 	break;
       case render_parameters::color_model_scan:
 	if (!img)
 	  {
-	    *is_srgb = true;
+	    is_srgb = true;
 	    break;
 	  }
 	dyes = matrix_by_dye_xyY (img->primary_red, img->primary_green, img->primary_blue);
@@ -107,7 +107,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *o
 			  0.5, 0, 0, 0,
 			  0, 0, 0, 1);
 	  dyes = m;
-	  *is_srgb = true;
+	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_green:
@@ -117,7 +117,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *o
 			  0, 0.5,0, 0,
 			  0, 0, 0,1);
 	  dyes = m;
-	  *is_srgb = true;
+	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_blue:
@@ -127,7 +127,7 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *o
 			  0, 0, 1,0,
 			  0, 0, 0, 1);
 	  dyes = m;
-	  *is_srgb = true;
+	  is_srgb = true;
 	}
 	break;
       /* Color based on frequencies determined in Wall's Practical Color Photography
@@ -287,6 +287,11 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *o
 	  dyes = m_spectrum_dyes_to_xyz->xyz_matrix ();
 	}
     }
+  if (is_srgb)
+    {
+      srgb_xyz_matrix m;
+      dyes = m * dyes;
+    }
   return dyes;
 }
 
@@ -302,19 +307,21 @@ render_parameters::get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *o
    default is D50 for XYZ_D50.  */
 
 color_matrix
-render_parameters::get_balanced_dyes_matrix (bool *is_srgb, image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
+render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
 {
   bool optimized;
   bool spectrum_based;
-  color_matrix dyes = get_dyes_matrix (is_srgb, &spectrum_based, &optimized, img);
-  if (color_model == render_parameters::color_model_none
-      || color_model == render_parameters::color_model_scan)
-    return dyes;
+  color_matrix dyes = get_dyes_matrix (&spectrum_based, &optimized, img);
 
   /* If dyes are normalised, we need to scale primaries to match their proportions in actual sreen.  */
   if (normalized_patches)
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
-  if (*is_srgb)
+
+  if (color_model == render_parameters::color_model_none
+      || color_model == render_parameters::color_model_scan
+      || color_model == render_parameters::color_model_red
+      || color_model == render_parameters::color_model_green
+      || color_model == render_parameters::color_model_blue)
     return dyes;
 
   /* Determine whitepoint of the screen.  For normalized patches it is {1, 1, 1} since color screens
@@ -383,11 +390,46 @@ render_parameters::get_balanced_dyes_matrix (bool *is_srgb, image_data *img, boo
   return dyes;
 }
 
+/* Return matrix adjusting RGB values read from the scan.  */
+color_matrix
+render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions)
+{
+  color_matrix color;
+  if (presaturation != 1
+      && color_model != render_parameters::color_model_scan)
+    {
+      presaturation_matrix m (presaturation);
+      color = m * color;
+    }
+  color = color * brightness;
+  return color;
+}
+
+/* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
+   patches respectively. It should have sum at most 1.
+   
+   If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
+   size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
+   PATCH_PROPORTIONS.  */
+color_matrix
+render_parameters::get_rgb_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
+{
+  color_matrix color = get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
+  color = get_balanced_dyes_matrix (img, normalized_patches, patch_proportions, target_whitepoint) * color;
+  color = color * brightness;
+  if (saturation != 1)
+    {
+      saturation_matrix m (saturation);
+      color = m * color;
+    }
+  return color;
+}
+
 size_t
 render_parameters::get_icc_profile (void **buffer, image_data *img, bool normalized_patches)
 {
   // TODO: Handle patch proportions right
-  color_matrix dyes = get_dye_to_xyz_matrix (img, normalized_patches, {1/3.0,1/3.0,1/3.0});
+  color_matrix dyes = get_rgb_to_xyz_matrix (img, normalized_patches, {1/3.0,1/3.0,1/3.0});
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};

@@ -197,25 +197,8 @@ struct DLL_PUBLIC render_parameters
 
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *optimized, image_data *img);
-  color_matrix get_balanced_dyes_matrix (bool *is_srgb, image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
-  /* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
-     patches respectively. It should have sum at most 1.
-     
-     If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
-     size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
-     PATCH_PROPORTIONS.  */
-  color_matrix get_dye_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white)
-  {
-    bool is_rgb;
-    color_matrix dyes = get_balanced_dyes_matrix (&is_rgb, img, normalized_patches, patch_proportions);
-    if (is_rgb)
-      {
-        xyz_srgb_matrix m;
-        dyes = m.invert () * dyes;
-      }
-    return dyes;
-  }
+  color_matrix get_rgb_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
+  color_matrix get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions);
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   const tile_adjustment&
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
@@ -329,6 +312,8 @@ struct DLL_PUBLIC render_parameters
   }
 private:
   static const bool debug = false;
+  color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized, image_data *img);
+  color_matrix get_balanced_dyes_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
 };
 
 /* Helper for downscaling template for color rendering
@@ -440,9 +425,9 @@ public:
      If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
      size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
      PATCH_PROPORTIONS.  */
-  color_matrix get_dye_to_xyz_matrix (bool normalized_patches, rgbdata patch_proportions)
+  color_matrix get_rgb_to_xyz_matrix (bool normalized_patches, rgbdata patch_proportions)
   {
-    return m_params.get_dye_to_xyz_matrix (&m_img, normalized_patches, patch_proportions);
+    return m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions);
   }
 
 protected:
