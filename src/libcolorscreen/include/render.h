@@ -21,7 +21,7 @@ struct DLL_PUBLIC render_parameters
   : gamma (2.2),  film_gamma (1), target_film_gamma (1),
     output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
-    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (srgb_white),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (/*srgb_white*/d50_white),
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
@@ -197,7 +197,25 @@ struct DLL_PUBLIC render_parameters
 
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
-  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, image_data *img, bool normalized_patches, rgbdata patch_proportions);
+  color_matrix get_dyes_matrix (bool *is_srgb, bool *spectrum_based, bool *optimized, image_data *img);
+  color_matrix get_balanced_dyes_matrix (bool *is_srgb, image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
+  /* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
+     patches respectively. It should have sum at most 1.
+     
+     If NORMALIZED_PATCHES is true, the rgbdata represents patch intensities regardless of their
+     size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
+     PATCH_PROPORTIONS.  */
+  color_matrix get_dye_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white)
+  {
+    bool is_rgb;
+    color_matrix dyes = get_balanced_dyes_matrix (&is_rgb, img, normalized_patches, patch_proportions);
+    if (is_rgb)
+      {
+        xyz_srgb_matrix m;
+        dyes = m.invert () * dyes;
+      }
+    return dyes;
+  }
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   const tile_adjustment&
   get_tile_adjustment (stitch_project *stitch, int x, int y) const;
@@ -424,23 +442,7 @@ public:
      PATCH_PROPORTIONS.  */
   color_matrix get_dye_to_xyz_matrix (bool normalized_patches, rgbdata patch_proportions)
   {
-    bool is_rgb;
-    bool spectrum_based;
-    color_matrix dyes = m_params.get_dyes_matrix (&is_rgb, &spectrum_based, &m_img, normalized_patches, patch_proportions);
-    /* TODO: It may make more sense to have presaturation done in DNG file.  */
-#if 0
-    if (m_params.presaturation != 1)
-      {
-        presaturation_matrix m (m_params.presaturation);
-        dyes = dyes * m;
-      }
-#endif
-    if (is_rgb)
-      {
-        xyz_srgb_matrix m;
-        dyes = m.invert () * dyes;
-      }
-    return dyes;
+    return m_params.get_dye_to_xyz_matrix (&m_img, normalized_patches, patch_proportions);
   }
 
 protected:

@@ -412,15 +412,20 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
   if (m_params.output_profile != render_parameters::output_profile_original)
     {
       /* Matrix converting dyes either to XYZ or sRGB.  */
-      bool spectrum_based;
       bool is_srgb;
-      color_matrix dyes = m_params.get_dyes_matrix (&is_srgb, &spectrum_based, &m_img, normalized_patches, patch_proportions);
+      color_matrix dyes = m_params.get_balanced_dyes_matrix (&is_srgb, &m_img, normalized_patches, patch_proportions, d65_white);
+      color = dyes * color;
+      if (!is_srgb)
+        {
+	  xyz_srgb_matrix m2;
+	  color = m2 * color;
+        }
+#if 0
       if (is_srgb)
 	color = dyes * color;
       else
 	{
 	  color = dyes * color;
-	  rgbdata screen_whitepoint = {1, 1, 1};
 	  if (!normalized_patches)
 	    screen_whitepoint = patch_proportions;
 	  xyz dye_whitepoint;
@@ -442,7 +447,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	  if (correct_whitepoints && m_params.observer_whitepoint != (xy_t)srgb_white) /*&& !spectrum_based)*/
 	    {
 	      //xyz whitepoint = spectrum_dyes_to_xyz::temperature_xyz (m_params.backlight_temperature);
-	      color = bradford_whitepoint_adaptation_matrix (srgb_white, (xyz)m_params.observer_whitepoint) * color;
+	      color = bradford_whitepoint_adaptation_matrix ((xyz)m_params.observer_whitepoint, srgb_white) * color;
 #if 0
 	      xyz white = xyz::from_srgb (1, 1, 1);
 	      for (int i = 0; i < 4; i++)
@@ -456,6 +461,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	  xyz_srgb_matrix m2;
 	  color = m2 * color;
 	}
+#endif
       if (m_params.saturation != 1)
 	{
 	  saturation_matrix m (m_params.saturation);

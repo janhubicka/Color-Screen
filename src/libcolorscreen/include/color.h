@@ -191,6 +191,16 @@ struct xyz {
       default: __builtin_unreachable ();
     }
   }
+  bool operator== (const xyz &other) const
+  {
+    return x == other.x
+	   && y == other.y
+	   && z == other.z;
+  }
+  bool operator!= (const xyz &other) const
+  {
+    return !(*this == other);
+  }
   inline void
   to_srgb (luminosity_t *r, luminosity_t *g, luminosity_t *b)
   {
@@ -391,6 +401,13 @@ struct rgbdata
     red *= other;
     green *= other;
     blue *= other;
+    return *this;
+  }
+  rgbdata &operator/=(const rgbdata other)
+  {
+    red /= other.red;
+    green /= other.green;
+    blue /= other.blue;
     return *this;
   }
   rgbdata &operator/=(const luminosity_t other)
@@ -746,8 +763,13 @@ xy_t find_best_whitepoint (xyz red, xyz green, xyz blue,
 			   luminosity_t blue_dominating_wavelength);
 
 static const xyz srgb_white (0.9505, 1, 1.0888);	 // sRGB whitepoint
-static const xyz netural_white = xyY (0.33,0.33, 1);     // neutral white
-static const xyz il_A_white = xyY (0.44757, 0.40745, 1); // Illuminant B white
+static const xyz d50_white (0.9642, 1.0000, 0.8251);
+static const xyz d55_white (0.9568, 1.0000, 0.9214);
+static const xyz d65_white (0.9504, 1.0000, 1.088);
+static const xyz il_A_white (1.0985, 1.0000, 0.3558);
+static const xyz il_C_white (0.9807, 1.0000, 1.1822);
+//static const xyz netural_white = xyY (0.33,0.33, 1);     // neutral white
+//static const xyz il_A_white = xyY (0.44757, 0.40745, 1); // Illuminant B white
 static const xyz il_B_white = xyY (0.34842, 0.35161, 1); // Illuminant B white
-static const xyz il_C_white = xyY (0.31006, 0.31616, 1); // Illuminant C white
+//static const xyz il_C_white = xyY (0.31006, 0.31616, 1); // Illuminant C white
 #endif
