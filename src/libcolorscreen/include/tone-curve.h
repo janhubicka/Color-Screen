@@ -7,7 +7,7 @@
 /* Implement DNG-style tone curve.  */
 class tone_curve:public precomputed_function <luminosity_t>
 {
-  const bool debug=true;
+  const bool debug = false;
 public:
   enum tone_curves
   {
@@ -26,6 +26,8 @@ public:
   apply_to_rgb (rgbdata c)
   {
     const int r = 0, g = 1, b = 2;
+    if (m_linear)
+      return c;
     if (c.red >= c.green)
       {
 	if (c.green > c.blue)

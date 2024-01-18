@@ -22,7 +22,7 @@ template<typename T> class precomputed_function
   public:
   constexpr
   precomputed_function<T> (T min_x, T max_x)
-  : m_min_x (min_x), m_max_x (max_x)
+  : m_min_x (min_x), m_max_x (max_x), m_entries (NULL)
   {
   }
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */

@@ -636,11 +636,15 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
   if (m_tone_curve)
     {
       rgbdata c = {r,g,b};
+      //printf ("in %f %f %f\n",c.red, c.green, c.blue);
       c = m_tone_curve->apply_to_rgb (c);
+      //printf ("out %f %f %f\n",c.red, c.green, c.blue);
+      color_matrix cm;
       pro_photo_rgb_xyz_matrix m1;
+      cm = m1 * cm;
       xyz_srgb_matrix m;
-      m.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
-      m1.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+      cm = m1 * m;
+      cm.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
       *rr = c.red;
       *gg = c.green;
       *bb = c.blue;

@@ -261,13 +261,16 @@ static const luminosity_t dng_curve[] = {
   1.00000f
 };
 }
+
+constexpr const char *tone_curve::tone_curve_names[tone_curve::tone_curve_max];
 tone_curve::tone_curve (enum tone_curves type)
 : precomputed_function (0, 1)
 {
+  m_linear = false;
   switch (type)
     {
       case tone_curve_linear:
-	m_linear = 1;
+	m_linear = true;
 	return;
       case tone_curve_dng:
 	init_by_y_values (dng_curve, sizeof (dng_curve));
