@@ -12,6 +12,7 @@
 #include "progress-info.h"
 #include "sensitivity.h"
 #include "backlight-correction.h"
+#include "tone-curve.h"
 
 
 /* Parameters of rendering algorithms.  */
@@ -25,7 +26,7 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), output_profile (output_profile_sRGB), dark_point (0), scan_exposure (1),
+    color_model (color_model_none), output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_dng), dark_point (0), scan_exposure (1),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     backlight_correction (NULL), backlight_correction_black (0), invert (false),
@@ -143,6 +144,7 @@ struct DLL_PUBLIC render_parameters
       output_profile_max
     };
   output_profile_t output_profile;
+  enum tone_curve::tone_curves output_tone_curve;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
   /* After linearizing we apply (val - dark_point) * scan_exposure  */
   luminosity_t dark_point, scan_exposure;
@@ -344,7 +346,7 @@ class DLL_PUBLIC render
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_backlight_correction (NULL)
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_backlight_correction (NULL), m_tone_curve (NULL)
   {
     if (m_params.invert)
       {
@@ -477,6 +479,7 @@ protected:
 
 private:
   const bool debug = false;
+  tone_curve *m_tone_curve;
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;
@@ -627,6 +630,21 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
 	  g *= lum2 / lum;
 	  b *= lum2 / lum;
 	}
+    }
+
+  /* Apply DNG-style tone curve correction.  */
+  if (m_tone_curve)
+    {
+      rgbdata c = {r,g,b};
+      c = m_tone_curve->apply_to_rgb (c);
+      pro_photo_rgb_xyz_matrix m1;
+      xyz_srgb_matrix m;
+      m.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+      m1.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+      *rr = c.red;
+      *gg = c.green;
+      *bb = c.blue;
+      return;
     }
 
   *rr = r;

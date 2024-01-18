@@ -409,8 +409,17 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
     {
       /* Matrix converting dyes either to XYZ.  */
       color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, d65_white) * color;
-      xyz_srgb_matrix m;
-      color = m * color;
+      if (m_params.output_tone_curve != tone_curve::tone_curve_linear)
+	{
+	  xyz_pro_photo_rgb_matrix m;
+	  color = m * color;
+	  m_tone_curve = new tone_curve (m_params.output_tone_curve);
+	}
+      else
+	{
+	  xyz_srgb_matrix m;
+	  color = m * color;
+	}
     }
   else
     color = m_params.get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
@@ -426,6 +435,8 @@ render::~render ()
     lookup_table_cache.release (m_rgb_lookup_table);
   if (m_sharpened_data)
     gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
+  if (m_tone_curve)
+    delete m_tone_curve;
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */

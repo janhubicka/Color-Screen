@@ -1,6 +1,7 @@
 #ifndef PRECOMPUTED_FUNCTION_H
 #define PRECOMPUTED_FUNCTION_H
-#include <stdlib.h>
+#include <cmath>
+#include <cstdlib>
 #include <algorithm>
 
 static inline double
@@ -19,14 +20,19 @@ my_floor (float x)
 template<typename T> class precomputed_function
 {
   public:
+  constexpr
+  precomputed_function<T> (T min_x, T max_x)
+  : m_min_x (min_x), m_max_x (max_x)
+  {
+  }
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */
-  precomputed_function<T> (T min_x, T max_x, T *y, int len)
+  precomputed_function<T> (T min_x, T max_x, const T *y, int len)
   : m_min_x (min_x), m_max_x (max_x)
     {
       init_by_y_values (y, len);
     }
   /* Construct linear interpolation between known X and Y values.  */
-  precomputed_function<T> (T min_x, T max_x, int len, T *x, T *y, int npoints)
+  precomputed_function<T> (T min_x, T max_x, int len, const T *x, const T *y, int npoints)
   : m_min_x (min_x), m_max_x (max_x)
   {
     /* Sanitize input. */
@@ -76,7 +82,7 @@ template<typename T> class precomputed_function
     }
 
   /* Return f(x).  */
-  T
+  const T
   apply (T x)
     {
       int index = my_floor ((x - m_min_x) * m_step_inv);
@@ -119,17 +125,8 @@ template<typename T> class precomputed_function
     return ret;
   }
 
-private:
-  const T epsilon = 0.001;
-  T m_min_x, m_max_x, m_step, m_step_inv;
-  int m_entries;
-  struct entry {
-    T slope, add;
-  } *m_entry;
-  bool increasing;
-
   void
-  init_by_y_values (T *y, int len)
+  init_by_y_values (const T *y, int len)
   {
     if (len < 2)
       abort ();
@@ -147,6 +144,15 @@ private:
       }
     increasing = y[0] < y[len - 1];
   }
+
+private:
+  const T epsilon = 0.001;
+  T m_min_x, m_max_x, m_step, m_step_inv;
+  int m_entries;
+  struct entry {
+    T slope, add;
+  } *m_entry;
+  bool increasing;
   const bool debug = false;
 };
 
