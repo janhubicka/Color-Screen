@@ -537,6 +537,13 @@ parse_illuminant (const char *il, luminosity_t *temperature)
   fprintf (stderr, "\n");
   exit (1);
 }
+static enum tone_curve::tone_curves
+parse_tone_curve (const char *profile)
+{
+  return parse_enum<enum tone_curve::tone_curves,
+		    (const char **)tone_curve::tone_curve_names,
+		    (int)tone_curve::tone_curve_max> (profile, "Unkonwn tone curve:%s\n");
+}
 static enum spectrum_dyes_to_xyz::responses
 parse_response (const char *profile)
 {
@@ -735,6 +742,24 @@ digital_laboratory (int argc, char **argv)
 	  fprintf (stderr, "Error writting %s\n", filename);
 	  exit (1);
 	}
+    }
+  else if (!strcmp (argv[0], "save-tone-curve"))
+    {
+      if (argc != 3)
+	{
+	  printf ("Expected <filename> <tone-curve>\n");
+	  exit (1);
+	}
+      tone_curve c(parse_tone_curve(argv[2]));
+      FILE *f = fopen (argv[1], "wt");
+      if (!f)
+        {
+	  perror (argv[1]);
+	  exit(1);
+        }
+      for (float i = 0; i < 1; i+= 0.01)
+	fprintf (f, "%f %f\n", i, (float)c.apply_to_rgb((rgbdata){i,i,i}).red);
+      fclose (f);
     }
   else
     print_help ();

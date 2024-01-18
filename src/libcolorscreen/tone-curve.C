@@ -273,7 +273,7 @@ tone_curve::tone_curve (enum tone_curves type)
 	m_linear = true;
 	return;
       case tone_curve_dng:
-	init_by_y_values (dng_curve, sizeof (dng_curve));
+	init_by_y_values (dng_curve, sizeof (dng_curve) / sizeof (luminosity_t));
   	return;
     }
 }

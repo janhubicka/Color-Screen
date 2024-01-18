@@ -268,7 +268,7 @@ print_help()
 	printf    ("W   - switch to solver editing mode           E   - screen editing mode                   \n"
 		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
 	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
-		   "q Q - control age\n"
+		   "q Q - control age                             v V - tone curve\n"
 		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments\n");
 }
 
@@ -340,6 +340,25 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model - 1);
 	}
       printf ("Color model: %s\n", render_parameters::color_model_names[(int)rparams.color_model]);
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'v' || k == 'V')
+    {
+      if (k == 'v')
+	{
+	  rparams.output_tone_curve = (tone_curve::tone_curves)((int)rparams.output_tone_curve + 1);
+	  if ((int)rparams.output_tone_curve >= tone_curve::tone_curve_max)
+	    rparams.output_tone_curve = (tone_curve::tone_curves)0;
+	}
+      else
+	{
+	  if ((int)rparams.output_tone_curve == 0)
+	    rparams.output_tone_curve = (tone_curve::tone_curves)((int)tone_curve::tone_curve_max - 1);
+	  else
+	    rparams.output_tone_curve = (tone_curve::tone_curves)((int)rparams.output_tone_curve - 1);
+	}
+      printf ("Tone curve: %s\n", tone_curve::tone_curve_names[(int)rparams.output_tone_curve]);
       display_scheduled = true;
       preview_display_scheduled = true;
     }

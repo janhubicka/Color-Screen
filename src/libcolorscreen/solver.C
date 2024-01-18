@@ -10,7 +10,7 @@ const char *solver_parameters::point_color_names[(int)max_point_color] = {"red",
 namespace
 {
 bool debug_output = false;
-bool debug = true;
+bool debug = false;
 
 inline int fast_rand16(unsigned int *g_seed) {
     *g_seed = (214013* *g_seed+2531011);

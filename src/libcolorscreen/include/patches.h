@@ -57,6 +57,6 @@ private:
     }
     std::vector<patch> m_vec;
     patch_index_t *m_map;
-    static const bool debug = true;
+    static const bool debug = false;
 };
 #endif

@@ -26,7 +26,7 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_dng), dark_point (0), scan_exposure (1),
+    color_model (color_model_none), output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     backlight_correction (NULL), backlight_correction_black (0), invert (false),
@@ -301,6 +301,7 @@ struct DLL_PUBLIC render_parameters
     dark_point = rparam.dark_point;
     brightness = rparam.brightness;
     color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+    output_tone_curve = rparam.output_tone_curve;
     tile_adjustments = rparam.tile_adjustments;
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
@@ -636,14 +637,13 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
   if (m_tone_curve)
     {
       rgbdata c = {r,g,b};
-      //printf ("in %f %f %f\n",c.red, c.green, c.blue);
+      assert (!m_tone_curve->is_linear ());
       c = m_tone_curve->apply_to_rgb (c);
-      //printf ("out %f %f %f\n",c.red, c.green, c.blue);
       color_matrix cm;
       pro_photo_rgb_xyz_matrix m1;
       cm = m1 * cm;
       xyz_srgb_matrix m;
-      cm = m1 * m;
+      cm = m * cm;
       cm.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
       *rr = c.red;
       *gg = c.green;

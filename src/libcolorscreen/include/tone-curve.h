@@ -67,7 +67,6 @@ private:
   inline
   rgbdata apply_to_rgb_1 (rgbdata c, int i1, int i2, int i3)
   {
-    return c;
     if (debug && (c[i1]<c[i2] || c[i2]<c[i3]))
       {
 	printf ("Wrong order in tone-curve %f %f %f : %f %f %f\n",c[i1],c[i2],c[i3], c.red, c.green, c.blue);
