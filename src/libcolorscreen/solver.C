@@ -1709,6 +1709,7 @@ color_matrix
 determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark_point)
 {
   int nvariables = 9;
+  const bool verbose = false;
   if (dark_point)
     nvariables++;
   int nequations = n * 3;
@@ -1752,21 +1753,24 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark
   gsl_vector_free (w);
   gsl_vector_free (c);
   gsl_matrix_free (cov);
-  luminosity_t desum = 0, demax = 0;
-  for (int i = 0; i < n; i++)
+  if (verbose)
     {
-      xyz color2;
-      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
-      luminosity_t d = deltaE2000 (targets[i], color2);
+      luminosity_t desum = 0, demax = 0;
+      for (int i = 0; i < n; i++)
+	{
+	  xyz color2;
+	  ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
+	  luminosity_t d = deltaE2000 (targets[i], color2);
 #if 0
-			printf ("Compare1 %i\n", i);
-			targets[i].print (stdout);
-			color2.print (stdout);
+			    printf ("Compare1 %i\n", i);
+			    targets[i].print (stdout);
+			    color2.print (stdout);
 #endif
-      desum += d;
-      if (demax < d)
-	demax = d;
+	  desum += d;
+	  if (demax < d)
+	    demax = d;
+	}
+      printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
     }
-  printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
   return ret;
 }

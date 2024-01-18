@@ -4339,12 +4339,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
   color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
-#if 0
-    {
-      color_matrix m2 = m1.invert ();
-      m2.print (stdout);
-    }
-#endif
+  m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
   
   return m1;
 }

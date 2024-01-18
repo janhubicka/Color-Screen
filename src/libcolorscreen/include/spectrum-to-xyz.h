@@ -123,6 +123,9 @@ public:
     fomapan_100_classic,
     kodak_professional_trix_400,
     dufaycolor_harrison_horner_emulsion_cut,
+    aviphot_pan_400s,
+    aviphot_pan_40_pe0,
+    aviphot_pan_40_pe0_cut,
     observer_y,
     response_even,
     responses_max
@@ -142,6 +145,9 @@ public:
     "fomapan_100_classic",
     "kodak_professional_trix_400",
     "dufaycolor_harrison_horner_emulsion_cut",
+    "aviphot_pan_400s",
+    "aviphot_pan_40_pe0",
+    "aviphot_pan_40_pe0_cut",
     "observer_y",
     "even"
   };

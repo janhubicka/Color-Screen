@@ -348,7 +348,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
   dyes.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
 
   /* Different dye balances.  */
-  switch (optimized ? render_parameters::dye_balance_brightness : dye_balance)
+  switch (render_parameters::dye_balance_brightness)
     {
       case render_parameters::dye_balance_none:
 	break;
@@ -374,12 +374,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 	  dyes.invert ().apply_to_rgb (white.x, white.y, white.z, &scales.red, &scales.green, &scales.blue);
 	  scales /= screen_whitepoint;
 	  dyes.apply_to_rgb (scales.red,scales.green,scales.blue, &white.x, &white.y, &white.z);
-	  for (int i = 0; i < 4; i++)
-	    {
-	      dyes.m_elements[0][i] *= scales.red;
-	      dyes.m_elements[1][i] *= scales.green;
-	      dyes.m_elements[2][i] *= scales.blue;
-	    }
+	  dyes.scale_channels (scales.red, scales.green, scales.blue);
 	}
 	break;
 

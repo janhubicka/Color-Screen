@@ -395,7 +395,11 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       break;
     case render_type_adjusted_color:
       {
-	render_scr_detect render (param, img, rparam, 255);
+	render_parameters my_rparam = rparam;
+	my_rparam.color_model = render_parameters::color_model_none;
+	my_rparam.presaturation = 1;
+	my_rparam.saturation = 1;
+	render_scr_detect render (param, img, my_rparam, 255);
 	if (!render.precompute_all (false, false, progress))
 	  return false;
 
@@ -443,9 +447,12 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       break;
     case render_type_normalized_color:
       {
-	render_parameters rparam2 = rparam;
-	rparam2.brightness = 1;
-	render_scr_detect render (param, img, rparam2, 255);
+	render_parameters my_rparam = rparam;
+	my_rparam.color_model = render_parameters::color_model_none;
+	my_rparam.presaturation = 1;
+	my_rparam.saturation = 1;
+	my_rparam.brightness = 1;
+	render_scr_detect render (param, img, my_rparam, 255);
 	if (!render.precompute_all (false, false, progress))
 	  return false;
 
@@ -493,7 +500,12 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       break;
     case render_type_pixel_colors:
       {
-	render_scr_detect render (param, img, rparam, 255);
+	render_parameters my_rparam = rparam;
+	my_rparam.color_model = render_parameters::color_model_none;
+	my_rparam.presaturation = 1;
+	my_rparam.saturation = 1;
+	my_rparam.brightness = 1;
+	render_scr_detect render (param, img, my_rparam, 255);
 	if (!render.precompute_all (false, false, progress))
 	  return false;
 	if (step > 1)
@@ -535,10 +547,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
       break;
     case render_type_realistic_scr:
       {
-	render_parameters my_rparam = rparam;
-	/* To get realistic rendering of same brightness as interpolated, scale by 3.  */
-	my_rparam.brightness *= 3;
-	render_scr_detect_superpose_img render (param, img, my_rparam, 255);
+	render_scr_detect_superpose_img render (param, img, rparam, 255);
 	if (!render.precompute_all (progress))
 	  return false;
 	if (step > 1)

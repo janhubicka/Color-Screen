@@ -146,10 +146,11 @@ initialize_spec_response (spectrum_dyes_to_xyz &spec)
 {
   //spec.set_film_response (spectrum_dyes_to_xyz::ilford_fp4_plus);
   //spec.set_film_response (spectrum_dyes_to_xyz::ilford_panchromatic);
-  spec.set_film_response (spectrum_dyes_to_xyz::spicer_dufay_guess/*spectrum_dyes_to_xyz::ilford_sfx200*//*spectrum_dyes_to_xyz::neopan_100*/);
+  //spec.set_film_response (spectrum_dyes_to_xyz::spicer_dufay_guess/*spectrum_dyes_to_xyz::ilford_sfx200*//*spectrum_dyes_to_xyz::neopan_100*/);
+  spec.set_film_response (spectrum_dyes_to_xyz::aviphot_pan_40_pe0_cut/*spectrum_dyes_to_xyz::ilford_sfx200*//*spectrum_dyes_to_xyz::neopan_100*/);
   //spec.set_response_to_y ();
   //
-  //spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
+  spec.adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
   //spec.adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
 }
 

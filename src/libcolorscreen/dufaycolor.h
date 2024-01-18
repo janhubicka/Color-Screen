@@ -9,16 +9,17 @@ class dufaycolor
 {
 public:
   /* Sizes in percent based on color cinematography screen.  */
-#if 0
-  //static constexpr const coord_t red_width = 21.0;
-  //static constexpr const coord_t green_blue_width = /*28.6*/49.9 - red_width;  /* Measured on microscropic image as 49.3.  */
+#if 1
+  static constexpr const coord_t red_width = 21.0;
+  static constexpr const coord_t green_blue_width = /*28.6*/49.9 - red_width;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height = 22.7;
   static constexpr const coord_t green_height = 26.9;
-#endif
+#else
   static constexpr const coord_t red_width = 33;
   static constexpr const coord_t green_blue_width = 100-red_width;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height = 53.1;
   static constexpr const coord_t green_height = 100-blue_height;
+#endif
 
   /* Based on Gawain's photo.  */
 #if 0
@@ -107,7 +108,7 @@ public:
   //static constexpr xyY green_dye = xyY (0.236, 0.642, 0.43); 
   static constexpr xyY green_dye = xyY (0.233/*0.293*/, 0.647, 0.43);
   //					  0.293?
-  static constexpr xyY blue_dye = xyY (/*0.14*/ 0.164, 0.089, /*0.037*/ 0.073 /*0.087*/ ); 
+  static constexpr xyY blue_dye = xyY (/*0.14*/ 0.164, 0.089, /*0.037*/ /*0.073*/ 0.087 ); 
   //static constexpr xyY blue_dye = xyY (0.1640, 0.089, 0.037 ); /* dominating wavelength 466.0*/
 
 
