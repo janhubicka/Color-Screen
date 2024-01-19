@@ -1524,6 +1524,8 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load parametrs: %s\n", error);
       exit (1);
     }
+  if (!in && scan.gamma != -2)
+    rparams.gamma = scan.gamma;
 
   current_mesh = current.mesh_trans;
   if (in)

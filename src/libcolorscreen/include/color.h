@@ -342,6 +342,17 @@ public:
   }
 };
 
+class bradford_d50_to_d65_matrix : public color_matrix
+{
+public:
+  inline
+  bradford_d50_to_d65_matrix ()
+  : color_matrix (0.9555766, -0.0230393,  0.0631636, 0,
+		  -0.0282895,  1.0099416, 0.0210077, 0,
+		  0.0122982, -0.0204830,  1.3299098, 0,
+		  0,        0,       0,      1)
+  {}
+};
 
 constexpr xyz::xyz (xyY c)
  : x (!c.Y ? 0 : c.x * c.Y / c.y), y (c.Y), z (!c.Y ? 0 : (1 - c.x - c.y) * c.Y / c.y)

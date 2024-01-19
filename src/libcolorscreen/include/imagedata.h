@@ -64,6 +64,8 @@ public:
   xyz whitepoint;
   class backlight_correction_parameters *lcc;
   void set_dpi (coord_t xdpi, coord_t ydpi);
+  /* Gamma, -2 if unknown.  */
+  luminosity_t gamma;
 private:
   image_data_loader *loader;
   /* True of the data is owned by the structure.  */

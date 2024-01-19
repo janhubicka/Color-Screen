@@ -642,6 +642,8 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
       color_matrix cm;
       pro_photo_rgb_xyz_matrix m1;
       cm = m1 * cm;
+      bradford_d50_to_d65_matrix m2;
+      cm = m2 * cm;
       xyz_srgb_matrix m;
       cm = m * cm;
       cm.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);

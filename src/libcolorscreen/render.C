@@ -407,9 +407,12 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 
   if (m_params.output_profile != render_parameters::output_profile_original)
     {
-      /* Matrix converting dyes either to XYZ.  */
-      color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, d65_white) * color;
-      if (m_params.output_tone_curve != tone_curve::tone_curve_linear)
+      /* See if we want to do some output adjustments in pro photo RGB space.
+         These should closely follow what DNG reference recommends.  */
+      bool do_pro_photo = m_params.output_tone_curve != tone_curve::tone_curve_linear;
+      /* Matrix converting dyes to XYZ.  */
+      color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, do_pro_photo ? d50_white : d65_white) * color;
+      if (do_pro_photo)
 	{
 	  xyz_pro_photo_rgb_matrix m;
 	  color = m * color;

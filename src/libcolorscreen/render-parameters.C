@@ -67,6 +67,15 @@ rgbdata patch_proportions (enum scr_type t)
     }
 }
 
+static void
+print_mid_white (color_matrix m)
+{
+  xyz c;
+  m.apply_to_rgb (0.5, 0.5, 0.5, &c.x, &c.y, &c.z);
+  printf ("Mid neutral:");
+  c.print (stdout);
+}
+
 /* Return matrix that translate RGB values in the color process space into RGB or XYZ.
    If SPECTRUM_BASED is true, the the matrix is based on actual spectra of dyes and
    thus backlight_temeperature parameter is handled correctly.
@@ -99,7 +108,19 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  {
 	    xyz white = xyz::from_linear_srgb (1, 1, 1);
 	    dyes.normalize_grayscale (white.x, white.y, white.z);
+	    dye_whitepoint = {1,1,1};
 	  }
+	else
+	  {
+	    dye_whitepoint = {1,1,1};
+	    //dyes.apply_to_rgb (1, 1, 1, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
+	  }
+#if 0
+	/* image-data applies white balance given by libraw which by raw-identify should be D65,
+	   why we need D50 here?  */
+	else
+	  dye_whitepoint = d50_white;
+#endif
 	break;
       case render_parameters::color_model_red:
 	{
@@ -138,6 +159,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dyes = matrix_by_dye_xy (0.7319933,0.2680067,  /*670nm */
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);
+	  dye_whitepoint = srgb_white;
 	  break;
 	}
       /* Colors found to be working for Finlays and Pagets pretty well.  */
@@ -146,6 +168,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dyes = matrix_by_dye_xy (0.674, 0.325, 
 				   0.059325533,0.829425776, /*518nm */
 				   0.143960396, 0.02970297 /*460nm */);
+	  dye_whitepoint = srgb_white;
 	  break;
 	}
       /* Colors derived from reconstructed filters for Miethe-Goerz projector by Jens Wagner.  */
@@ -154,6 +177,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dyes = matrix_by_dye_xy (0.674, 0.325,
 				   0.182, 0.747,
 				   0.151, 0.041);
+	  dye_whitepoint = srgb_white;
 	  break;
 	}
       case render_parameters::color_model_wratten_25_58_47_xyz:
@@ -163,13 +187,13 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 			  wratten::filter_25_red.z, wratten::filter_58_green.z, wratten::filter_47_blue.z , 0,
 			  0, 0, 0, 1);
 	  dyes = m;
+	  dye_whitepoint = il_C_white;
 	  break;
 	}
       case render_parameters::color_model_wratten_25_58_47_spectra:
 	{
 	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
 	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
-	  dye_whitepoint = il_C_white;
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
@@ -251,6 +275,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra_correction:
 	{
 	  dyes = dufaycolor_correction_photography_its_materials_and_processes_matrix (temperature, backlight_temperature);
+	  *optimized = true;
 	  break;
 	}
       case render_parameters::color_model_dufay_collins_giles_spectra:
@@ -296,13 +321,27 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dyes = m_spectrum_dyes_to_xyz->xyz_matrix ();
 	}
     }
-  else
+  /* dye_whitepoint is the whitepoint xyz values of dyes was measured for.
+     To turn them to a different whitepoint, we use bradford adaptation.  */
+  else if (!*optimized)
     {
       spectrum_dyes_to_xyz s;
       s.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
       xyz backlight_white = s.whitepoint_xyz ();
 	
+      printf (" Dye :");
+      dye_whitepoint.print (stdout);
+      print_mid_white (dyes);
+      //bradford_whitepoint_adaptation_matrix (d50_white, d65_white).print (stdout);
+      //printf ("2");
+      //bradford_d50_to_d65_matrix m;
+      //m.print (stdout);
+      //dyes.print (stdout);
       dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, backlight_white) * dyes;
+      printf (" Backlight :");
+      backlight_white.print (stdout);
+      print_mid_white (dyes);
+      //dyes.print (stdout);
     }
   return dyes;
 }
@@ -330,11 +369,22 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
 
   if (color_model == render_parameters::color_model_none
-      || color_model == render_parameters::color_model_scan
       || color_model == render_parameters::color_model_red
       || color_model == render_parameters::color_model_green
       || color_model == render_parameters::color_model_blue)
     return dyes;
+  if (color_model == render_parameters::color_model_scan)
+    {
+      printf (" Observer:");
+      ((xyz)observer_whitepoint).print (stdout);
+      print_mid_white (dyes);
+      if ((xyz)observer_whitepoint != target_whitepoint) 
+	dyes = bradford_whitepoint_adaptation_matrix ((xyz)observer_whitepoint, target_whitepoint) * dyes;
+      printf (" Target:");
+      target_whitepoint.print (stdout);
+      print_mid_white (dyes);
+      return dyes;
+    }
 
   /* Determine whitepoint of the screen.  For normalized patches it is {1, 1, 1} since color screens
      should be neutral.  */
@@ -356,6 +406,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
       /* Bradford correct the white of color screen into target whitepoint.  */
       case render_parameters::dye_balance_bradford:
 	dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, target_whitepoint) * dyes;
+	/* Save one step and go directly to target white.  */
 	correct_whitepoints = false;
 	break;
 

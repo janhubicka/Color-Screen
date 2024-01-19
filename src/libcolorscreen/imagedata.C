@@ -118,7 +118,7 @@ private:
 
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), loader (NULL), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), loader (NULL), own (false)
 { 
 }
 
@@ -652,6 +652,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       return false;
     }
   grayscale = false;
+  m_img->gamma = 1;
   rgb = true;
   m_img->width = RawProcessor.imgdata.sizes.width;
   m_img->height = RawProcessor.imgdata.sizes.height;
@@ -660,13 +661,28 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		 RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[2][1], 0,
 		 RawProcessor.imgdata.color.cam_xyz[0][2], RawProcessor.imgdata.color.cam_xyz[1][2], RawProcessor.imgdata.color.cam_xyz[2][2], 0,
 		 0, 0, 0, 1);
-  m = m.invert ();
+  //m = m.invert ();
+#if 0
+  const double b = 512;
+  color_matrix premult (b/RawProcessor.imgdata.color.cam_mul[0],0, 0, 0,
+			0, b/RawProcessor.imgdata.color.cam_mul[1], 0, 0,
+			0, 0, b/RawProcessor.imgdata.color.cam_mul[2], 0,
+			0, 0, 0, 1);
+#endif
+  color_matrix premult (1/RawProcessor.imgdata.color.pre_mul[0],0, 0, 0,
+			0, 1/RawProcessor.imgdata.color.pre_mul[1], 0, 0,
+			0, 0, 1/RawProcessor.imgdata.color.pre_mul[2], 0,
+			0, 0, 0, 1);
+  m = premult * m.invert ();
   xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
   //printf ("red %f %f\n",  m_img->primary_red.x, m_img->primary_red.y);
   xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
   //printf ("green %f %f\n",  m_img->primary_green.x, m_img->primary_green.y);
   xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
   //printf ("blue %f %f\n",  m_img->primary_blue.x, m_img->primary_blue.y);
+  //m_img->primary_red.Y /= RawProcessor.imgdata.color.pre_mul[0];
+  //m_img->primary_green.Y /= RawProcessor.imgdata.color.pre_mul[1];
+  //m_img->primary_blue.Y /= RawProcessor.imgdata.color.pre_mul[2];
   if (buffer)
     free (buffer);
   return true;
