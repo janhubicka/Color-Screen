@@ -3,6 +3,7 @@
 #include <cassert>
 #include "precomputed-function.h"
 #include "color.h"
+#include "spectrum-to-xyz.h"
 
 /* Implement DNG-style tone curve.  */
 class tone_curve:public precomputed_function <luminosity_t>
@@ -13,12 +14,24 @@ public:
   {
     tone_curve_linear,
     tone_curve_dng,
+    tone_curve_dng_contrast,
+    tone_curve_safe,
+    tone_curve_kodachrome25,
+    tone_curve_spicer_dufay_low,
+    tone_curve_spicer_dufay_mid,
+    tone_curve_spicer_dufay_high,
     tone_curve_max
   };
   constexpr static const char *tone_curve_names[tone_curve_max] =
   {
     "linear",
-    "dng"
+    "dng",
+    "dng_contrast",
+    "safe",
+    "kodachrome25",
+    "spicer_dufay_low",
+    "spicer_dufay_mid",
+    "spicer_dufay_high"
   };
   tone_curve (enum tone_curves type);
   /* This does the same as dng reference implementation.  */
@@ -80,5 +93,6 @@ private:
     return ret;
   }
   bool m_linear;
+  void init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curves curve);
 };
 #endif

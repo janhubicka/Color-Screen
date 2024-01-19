@@ -1,4 +1,5 @@
 #include "include/tone-curve.h"
+#include "include/sensitivity.h"
 namespace
 {
 static const luminosity_t dng_curve[] = {
@@ -262,6 +263,20 @@ static const luminosity_t dng_curve[] = {
 };
 }
 
+void
+tone_curve::init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curves curve)
+{
+  spectrum_dyes_to_xyz spec;
+  spec.set_characteristic_curve (curve);
+  const int len = 1024;
+  luminosity_t table[len];
+  luminosity_t min = spec.red_characteristic_curve->apply (0);
+  luminosity_t max = spec.red_characteristic_curve->apply (1);
+  for (int i = 0; i < len; i++)
+    table[i] = (spec.red_characteristic_curve->apply (i / 1023.0)/* - min) * (1 / (max - min)*/);
+  init_by_y_values (table, len);
+}
+
 constexpr const char *tone_curve::tone_curve_names[tone_curve::tone_curve_max];
 tone_curve::tone_curve (enum tone_curves type)
 : precomputed_function (0, 1)
@@ -275,5 +290,29 @@ tone_curve::tone_curve (enum tone_curves type)
       case tone_curve_dng:
 	init_by_y_values (dng_curve, sizeof (dng_curve) / sizeof (luminosity_t));
   	return;
+      case tone_curve_dng_contrast:
+	{
+	  const int len = sizeof (dng_curve) / sizeof (luminosity_t);
+	  luminosity_t table[len];
+	  for (int i = 0; i < len; i++)
+	    table[i] = apply_gamma (dng_curve[i], 2.2);
+	  init_by_y_values (table, len);
+  	  return;
+	}
+      case tone_curve_safe:
+	init_by_sensitivity (spectrum_dyes_to_xyz::safe_reversal_output_curve);
+	break;
+      case tone_curve_kodachrome25:
+	init_by_sensitivity (spectrum_dyes_to_xyz::kodachrome25_curve);
+	break;
+      case tone_curve_spicer_dufay_low:
+	init_by_sensitivity (spectrum_dyes_to_xyz::spicer_dufay_reversal_curve_low);
+	break;
+      case tone_curve_spicer_dufay_mid:
+	init_by_sensitivity (spectrum_dyes_to_xyz::spicer_dufay_reversal_curve_mid);
+	break;
+      case tone_curve_spicer_dufay_high:
+	init_by_sensitivity (spectrum_dyes_to_xyz::spicer_dufay_reversal_curve_high);
+	break;
     }
 }

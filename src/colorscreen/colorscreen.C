@@ -70,6 +70,28 @@ print_help ()
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "  lab <subcommnad>\n");
+  fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
+  fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
+  fprintf (stderr, "      dufay-spectra: print report about Dufaycolor resau spectra\n");
+  fprintf (stderr, "      dufay-synthetic: print report about mixing Dufaycolor reseau from known dyes\n");
+  fprintf (stderr, "      wratten-xyz: print report about Wratten trichromatic set xyY values\n");
+  fprintf (stderr, "      wratten-spectra: print report about Wratten trichromatic set spectra\n");
+  fprintf (stderr, "      save-film-sensitivity: save film sensitivity curve\n");
+  fprintf (stderr, "      save-film-log-sensitivity: save film sensitivity curve with log sensitivity (wedge spectrogram)\n");
+  fprintf (stderr, "      save-film-linear-characteristic-curve: save film characteristic curve\n");
+  fprintf (stderr, "      save-film-hd-characteristic-curve: save film characteristic H&D (Hurter and Driffield) curve\n");
+  fprintf (stderr, "      save-dyes: save spectra of dyes\n");
+  fprintf (stderr, "      save-ssf-jason: save spectral sensitivity functions to jsason file for dcamprof\n");
+  fprintf (stderr, "      render-target: render color target\n");
+  fprintf (stderr, "      render-wb-target: render color target with auto white balance\n");
+  fprintf (stderr, "      render-optimized-target: render color target with optimized camera matrix\n");
+  fprintf (stderr, "      render-spectra-photo: render photo of spectrum taken over filters\n");
+  fprintf (stderr, "      render-tone-curve: save tone curve in linear gamma\n");
+  fprintf (stderr, "      render-tone-hd-curve: save tone curve as hd curve\n");
+  fprintf (stderr, "    Each subcommand has its own help.\n");
+  fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
+  fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
   exit (1);
 }
 
@@ -651,6 +673,18 @@ digital_laboratory (int argc, char **argv)
       spec.set_characteristic_curve (parse_characteristic_curve (argv[argc-1]));
       spec.write_film_characteristic_curves (argv[1], argc==5 ? argv[2] : NULL, argc==5 ? argv[3] : NULL);
     }
+  else if (!strcmp (argv[0], "save-film-hd-characteristic-curve"))
+    {
+      if (argc != 3 && argc != 5)
+	{
+	  printf ("Expected <red-file> <green-file> <blue-file> <film-characterstic-curve>\n");
+	  printf ("         or <red-file> <film-characterstic-curve>\n");
+	  print_help ();
+	}
+      spectrum_dyes_to_xyz spec;
+      spec.set_characteristic_curve (parse_characteristic_curve (argv[argc-1]));
+      spec.write_film_hd_characteristic_curves (argv[1], argc==5 ? argv[2] : NULL, argc==5 ? argv[3] : NULL);
+    }
   else if (!strcmp (argv[0], "save-illuminant"))
     {
       if (argc != 3)
@@ -759,6 +793,40 @@ digital_laboratory (int argc, char **argv)
         }
       for (float i = 0; i < 1; i+= 0.01)
 	fprintf (f, "%f %f\n", i, (float)c.apply_to_rgb((rgbdata){i,i,i}).red);
+      fclose (f);
+    }
+  else if (!strcmp (argv[0], "save-tone-hd-curve"))
+    {
+      if (argc != 3)
+	{
+	  printf ("Expected <filename> <tone-curve>\n");
+	  exit (1);
+	}
+      tone_curve c(parse_tone_curve(argv[2]));
+      FILE *f = fopen (argv[1], "wt");
+      if (!f)
+        {
+	  perror (argv[1]);
+	  exit(1);
+        }
+      for (float i = 0; i < 1; i+= 0.001)
+        {
+	  luminosity_t val = c.apply_to_rgb((rgbdata){i,i,i}).red;
+	  if (val >= 1/255.0)
+	    fprintf (f, "%f %f\n", log10(i)/*-log10 (0.001)*/, log10 (1/val));
+        }
+#if 0
+      for (float i = -2; i < 2; i+= 0.01)
+        {
+	    fprintf (f, "%f %f\n", i, c.apply_to_rgb((rgbdata){i,i,i}).red);
+#if 0
+	  float ii = pow (10, i);
+	  luminosity_t val = c.apply_to_rgb((rgbdata){ii,ii,ii}).red;
+	  if (val >= 1/255.0)
+	    fprintf (f, "%f %f\n", log10(ii)/*-log10 (0.001)*/, log10 (1/val));
+#endif
+        }
+#endif
       fclose (f);
     }
   else

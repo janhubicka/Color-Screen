@@ -4116,18 +4116,15 @@ adjust_concentration_to_y (spectrum backlight, spectrum s, luminosity_t y, lumin
 rgbdata
 spectrum_dyes_to_xyz::determine_patch_weights_by_simulated_response (int observer)
 {
-  film_sensitivity *tred = red_characteristic_curve;
-  film_sensitivity *tgreen = green_characteristic_curve;
-  film_sensitivity *tblue = blue_characteristic_curve;
-  red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = NULL;
-
-
-  xyz whitepoint = whitepoint_xyz (observer);
-  rgbdata white = xyz_to_dyes_rgb (whitepoint, observer);
-  rgbdata res = linear_film_rgb_response (NULL);
-  red_characteristic_curve = tred;
-  green_characteristic_curve = tgreen;
-  blue_characteristic_curve = tblue;
+  xyz half_whitepoint = whitepoint_xyz (observer) * 0.5;
+  rgbdata white = xyz_to_dyes_rgb (half_whitepoint, observer);
+  rgbdata res = /*linear_*/film_rgb_response (NULL) * 0.5;
+#if 0
+  if (red_characteristic_curve)
+    return {red_characteristic_curve->unapply (white.red) / red_characteristic_curve->unapply (res.red),
+	    green_characteristic_curve->unapply (white.green) / green_characteristic_curve->unapply (res.green),
+	    blue_characteristic_curve->unapply (white.blue) / blue_characteristic_curve->unapply (res.blue)};
+#endif
   return {white.red / res.red, white.green / res.green, white.blue / res.blue};
 }
 
@@ -4401,6 +4398,28 @@ spectrum_dyes_to_xyz::write_film_characteristic_curves (const char *reds, const 
     {
       FILE *f = fopen (blues, "wt");
       blue_characteristic_curve->print (f);
+      fclose (f);
+    }
+}
+void
+spectrum_dyes_to_xyz::write_film_hd_characteristic_curves (const char *reds, const char *greens, const char *blues)
+{
+  if (reds && red_characteristic_curve)
+    {
+      FILE *f = fopen (reds, "wt");
+      red_characteristic_curve->print_hd (f);
+      fclose (f);
+    }
+  if (greens && green_characteristic_curve)
+    {
+      FILE *f = fopen (greens, "wt");
+      green_characteristic_curve->print_hd (f);
+      fclose (f);
+    }
+  if (blues && blue_characteristic_curve)
+    {
+      FILE *f = fopen (blues, "wt");
+      blue_characteristic_curve->print_hd (f);
       fclose (f);
     }
 }
@@ -4959,7 +4978,7 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
 					    3.8351612385689076, 1.7539186587518052,
 					    3.8351612385689076, 1.7539186587518052});
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 4);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0.25, 6);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_curve_mid:
@@ -4985,7 +5004,7 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
 		3.1461832183539227, 0.19716428686026033,
 		3.990309642226858, 0.10466468795122763});
 
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0, 3000);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve, 0, 3000 /*6000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_mid:
@@ -4994,7 +5013,7 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
 		1.2834525910476495, 2.253437349590888,
 		3.262801219316541, 0.27367639980747693,
 		3.990309642226858, 0.10466468795122763});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000 /*20000*/);
     blue_characteristic_curve->precompute ();
     break;
   case spicer_dufay_reversal_curve_high:
@@ -5003,7 +5022,7 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
 		2.446334028557678, 2.2031926841007543,
 		3.409735279961495, 0.34393951548211144,
 		3.9904123215145204, 0.13004572437028772});
-    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000);
+    red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000 /*30000*/);
     blue_characteristic_curve->precompute ();
     break;
   }

@@ -165,18 +165,11 @@ public:
       mid = m_curve->apply (Dmax / 2);
       if (m_curve->n < 2)
 	abort ();
-      if (dump ||1)
-	{
-	  FILE *f = fopen("/tmp/hd.dat", "wt");
-	  m_curve->print (f);
-	  fclose (f);
-	}
     }
   luminosity_t
   apply (luminosity_t y)
     {
       /* Preflash.  */
-
       y += m_preflash / 100;
 
       /* Apply exposure */
@@ -189,23 +182,16 @@ public:
       //y = (y - mid) * m_contrast + mid;
       
       /* Apply HD curve. */
-      //fprintf (stderr, "%f %f %f\n", m_exposure,y, m_curve->apply(y));
-      //
-      
-      printf ("in %f", y);
       y = m_curve->apply (y);
-      printf ("out %f", y);
-      //
+
       /* Apply density boost.  */
       y *= m_boost;
+
       /* Compensate fog  */
       y -= Dfog;
+
       /* Get back to linear.  */
-      //printf ("%f %f\n", l0,y);
-      printf ("pre %f", y);
       y = pow (10, -y);
-      //printf ("%f %f\n", l0,y);
-      printf ("out2 %f\n", y);
       return y;
     }
   luminosity_t
@@ -232,6 +218,11 @@ public:
     for (float l = 0; l <= 1; l+=0.01)
       fprintf (f, "%f %f\n",l,apply(l));
   }
+  void
+  print_hd (FILE *f)
+  {
+    m_curve->print (f);
+  }
 private:
   hd_curve *m_curve;
   luminosity_t m_preflash;
@@ -240,6 +231,5 @@ private:
   bool m_clip;
 
   luminosity_t Dfog, Dmax, mid;
-  static const bool dump = false;
 };
 #endif

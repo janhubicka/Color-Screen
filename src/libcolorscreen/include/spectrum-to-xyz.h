@@ -338,6 +338,7 @@ public:
   void write_ssf_json (const char *name);
   bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
   void write_film_characteristic_curves (const char *red, const char *green, const char *blue);
+  void write_film_hd_characteristic_curves (const char *red, const char *green, const char *blue);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);

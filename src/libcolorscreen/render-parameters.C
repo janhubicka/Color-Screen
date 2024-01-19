@@ -348,7 +348,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
   dyes.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
 
   /* Different dye balances.  */
-  switch (render_parameters::dye_balance_brightness)
+  switch (dye_balance)
     {
       case render_parameters::dye_balance_none:
 	break;
