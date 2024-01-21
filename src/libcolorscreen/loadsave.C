@@ -763,7 +763,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "solver_optimize_tilt"))
 	{
-	  if (!parse_bool (f, sparam_check (optimize_lens)))
+	  if (!parse_bool (f, sparam_check (optimize_tilt)))
 	    {
 	      *error = "error parsing solver_optimize_tilt";
 	      return false;
