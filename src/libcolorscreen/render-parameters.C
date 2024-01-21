@@ -7,6 +7,7 @@
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
+  "optimized",
   "red",
   "green",
   "blue",
@@ -76,6 +77,19 @@ print_mid_white (color_matrix m)
   c.print (stdout);
 }
 
+/* Return true if dye balance applies to the model.  */
+
+static bool
+apply_balance_to_model (render_parameters::color_model_t color_model)
+{
+  return (color_model != render_parameters::color_model_none
+	  && color_model != render_parameters::color_model_optimized
+	  && color_model != render_parameters::color_model_scan
+	  && color_model != render_parameters::color_model_red
+	  && color_model != render_parameters::color_model_green
+	  && color_model != render_parameters::color_model_blue);
+}
+
 /* Return matrix that translate RGB values in the color process space into RGB or XYZ.
    If SPECTRUM_BASED is true, the the matrix is based on actual spectra of dyes and
    thus backlight_temeperature parameter is handled correctly.
@@ -108,19 +122,20 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  {
 	    xyz white = xyz::from_linear_srgb (1, 1, 1);
 	    dyes.normalize_grayscale (white.x, white.y, white.z);
-	    dye_whitepoint = {1,1,1};
 	  }
 	else
-	  {
-	    dye_whitepoint = {1,1,1};
-	    //dyes.apply_to_rgb (1, 1, 1, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
-	  }
-#if 0
-	/* image-data applies white balance given by libraw which by raw-identify should be D65,
-	   why we need D50 here?  */
-	else
+	  dye_whitepoint = {1,1,1};
+        dye_whitepoint = {1,1,1};
+	break;
+      case render_parameters::color_model_optimized:
+	{
+	  color_matrix m (optimized_red.x, optimized_green.x, optimized_blue.x, optimized_dark.x,
+			  optimized_red.y, optimized_green.y, optimized_blue.y, optimized_dark.y,
+			  optimized_red.z, optimized_green.z, optimized_blue.z, optimized_dark.z,
+			  0              , 0                , 0               , 1);
 	  dye_whitepoint = d50_white;
-#endif
+	  dyes = m;
+	}
 	break;
       case render_parameters::color_model_red:
 	{
@@ -329,18 +344,18 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
       s.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
       xyz backlight_white = s.whitepoint_xyz ();
 	
-      printf (" Dye :");
-      dye_whitepoint.print (stdout);
-      print_mid_white (dyes);
+      //printf (" Dye :");
+      //dye_whitepoint.print (stdout);
+      //print_mid_white (dyes);
       //bradford_whitepoint_adaptation_matrix (d50_white, d65_white).print (stdout);
       //printf ("2");
       //bradford_d50_to_d65_matrix m;
       //m.print (stdout);
       //dyes.print (stdout);
       dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, backlight_white) * dyes;
-      printf (" Backlight :");
-      backlight_white.print (stdout);
-      print_mid_white (dyes);
+      //printf (" Backlight :");
+      //backlight_white.print (stdout);
+      //print_mid_white (dyes);
       //dyes.print (stdout);
     }
   return dyes;
@@ -362,91 +377,82 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 {
   bool optimized;
   bool spectrum_based;
+  bool correct_whitepoints = true;
   color_matrix dyes = get_dyes_matrix (&spectrum_based, &optimized, img);
 
   /* If dyes are normalised, we need to scale primaries to match their proportions in actual sreen.  */
   if (normalized_patches)
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
 
-  if (color_model == render_parameters::color_model_none
-      || color_model == render_parameters::color_model_red
-      || color_model == render_parameters::color_model_green
-      || color_model == render_parameters::color_model_blue)
-    return dyes;
-  if (color_model == render_parameters::color_model_scan)
+  if (apply_balance_to_model (color_model))
     {
-      printf (" Observer:");
-      ((xyz)observer_whitepoint).print (stdout);
-      print_mid_white (dyes);
-      if ((xyz)observer_whitepoint != target_whitepoint) 
-	dyes = bradford_whitepoint_adaptation_matrix ((xyz)observer_whitepoint, target_whitepoint) * dyes;
-      printf (" Target:");
-      target_whitepoint.print (stdout);
-      print_mid_white (dyes);
-      return dyes;
-    }
+      /* Determine whitepoint of the screen.  For normalized patches it is {1, 1, 1} since color screens
+	 should be neutral.  */
+      rgbdata screen_whitepoint = {1, 1, 1};
+      if (!normalized_patches)
+	screen_whitepoint = patch_proportions;
 
-  /* Determine whitepoint of the screen.  For normalized patches it is {1, 1, 1} since color screens
-     should be neutral.  */
-  rgbdata screen_whitepoint = {1, 1, 1};
-  if (!normalized_patches)
-    screen_whitepoint = patch_proportions;
-  bool correct_whitepoints = true;
+      /* Determine actual whitepoint of the screen.  */
+      xyz dye_whitepoint;
+      dyes.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
 
-  /* Determine actual whitepoint of the screen.  */
-  xyz dye_whitepoint;
-  dyes.apply_to_rgb (screen_whitepoint.red, screen_whitepoint.green, screen_whitepoint.blue, &dye_whitepoint.x, &dye_whitepoint.y, &dye_whitepoint.z);
-
-  /* Different dye balances.  */
-  switch (dye_balance)
-    {
-      case render_parameters::dye_balance_none:
-	break;
-
-      /* Bradford correct the white of color screen into target whitepoint.  */
-      case render_parameters::dye_balance_bradford:
-	dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, target_whitepoint) * dyes;
-	/* Save one step and go directly to target white.  */
-	correct_whitepoints = false;
-	break;
-
-      /* Scale so y of screen white is 1.  */
-      case render_parameters::dye_balance_brightness:
-	if (dye_whitepoint.y > 0)
-	  dyes = dyes * (1/dye_whitepoint.y);
-	break;
-
-      /* Scale intensity of dyes so they produce given whitepoint.  This correspond to adjusting
-         sizes of color patches in the emulsion.  */
-      case render_parameters::dye_balance_neutral:
+      /* Different dye balances.  */
+      switch (dye_balance)
 	{
-	  xyz white = observer_whitepoint;
-	  rgbdata scales;
-	  dyes.invert ().apply_to_rgb (white.x, white.y, white.z, &scales.red, &scales.green, &scales.blue);
-	  scales /= screen_whitepoint;
-	  dyes.apply_to_rgb (scales.red,scales.green,scales.blue, &white.x, &white.y, &white.z);
-	  dyes.scale_channels (scales.red, scales.green, scales.blue);
-	}
-	break;
+	  case render_parameters::dye_balance_none:
+	    break;
 
-      /* Scale final XYZ values to obtain wihtepoint.  This is probably always
-         worse than Bradford correction.  */
-      case render_parameters::dye_balance_whitepoint:
-	for (int i = 0; i < 4; i++)
-	  {
-	    xyz white = observer_whitepoint;
-	    dyes.m_elements[i][0] *= white.x / dye_whitepoint.x;
-	    dyes.m_elements[i][1] *= white.y / dye_whitepoint.y;
-	    dyes.m_elements[i][2] *= white.z / dye_whitepoint.z;
-	  }
-	break;
-      default:
-	abort ();
+	  /* Bradford correct the white of color screen into target whitepoint.  */
+	  case render_parameters::dye_balance_bradford:
+	    dyes = bradford_whitepoint_adaptation_matrix (dye_whitepoint, target_whitepoint) * dyes;
+	    /* Save one step and go directly to target white.  */
+	    correct_whitepoints = false;
+	    break;
+
+	  /* Scale so y of screen white is 1.  */
+	  case render_parameters::dye_balance_brightness:
+	    if (dye_whitepoint.y > 0)
+	      dyes = dyes * (1/dye_whitepoint.y);
+	    break;
+
+	  /* Scale intensity of dyes so they produce given whitepoint.  This correspond to adjusting
+	     sizes of color patches in the emulsion.  */
+	  case render_parameters::dye_balance_neutral:
+	    {
+	      xyz white = observer_whitepoint;
+	      rgbdata scales;
+	      dyes.invert ().apply_to_rgb (white.x, white.y, white.z, &scales.red, &scales.green, &scales.blue);
+	      scales /= screen_whitepoint;
+	      dyes.apply_to_rgb (scales.red,scales.green,scales.blue, &white.x, &white.y, &white.z);
+	      dyes.scale_channels (scales.red, scales.green, scales.blue);
+	    }
+	    break;
+
+	  /* Scale final XYZ values to obtain wihtepoint.  This is probably always
+	     worse than Bradford correction.  */
+	  case render_parameters::dye_balance_whitepoint:
+	    for (int i = 0; i < 4; i++)
+	      {
+		xyz white = observer_whitepoint;
+		dyes.m_elements[i][0] *= white.x / dye_whitepoint.x;
+		dyes.m_elements[i][1] *= white.y / dye_whitepoint.y;
+		dyes.m_elements[i][2] *= white.z / dye_whitepoint.z;
+	      }
+	    break;
+	  default:
+	    abort ();
+	}
     }
   
   /* After balancing to observer whitepoint bradford correct to target whitepoint.  */
+  //printf (" Observer:");
+  //((xyz)observer_whitepoint).print (stdout);
+  //print_mid_white (dyes);
   if (correct_whitepoints && (xyz)observer_whitepoint != target_whitepoint) 
     dyes = bradford_whitepoint_adaptation_matrix ((xyz)observer_whitepoint, target_whitepoint) * dyes;
+  //printf (" Target:");
+  //target_whitepoint.print (stdout);
+  //print_mid_white (dyes);
   return dyes;
 }
 
@@ -454,14 +460,15 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 color_matrix
 render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions)
 {
-  color_matrix color;
-  if (presaturation != 1
-      && color_model != render_parameters::color_model_scan)
+  color_matrix color (white_balance.red * brightness, 0, 0, 0,
+		      0, white_balance.green * brightness, 0, 0,
+		      0, 0, white_balance.blue * brightness, 0,
+		      0, 0, 0, 1);
+  if (presaturation != 1)
     {
       presaturation_matrix m (presaturation);
       color = m * color;
     }
-  color = color * brightness;
   return color;
 }
 
@@ -476,7 +483,7 @@ render_parameters::get_rgb_to_xyz_matrix (image_data *img, bool normalized_patch
 {
   color_matrix color = get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
   color = get_balanced_dyes_matrix (img, normalized_patches, patch_proportions, target_whitepoint) * color;
-  color = color * brightness;
+  //color = color * brightness;
   if (saturation != 1)
     {
       saturation_matrix m (saturation);

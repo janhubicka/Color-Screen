@@ -262,6 +262,7 @@ done:
   {
     return m_color_class_map;
   }
+  static rgbdata analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *p = NULL);
 protected:
   my_mem_rgbdata *m_precomputed_rgbdata;
   color_class_map *m_color_class_map;
@@ -271,6 +272,7 @@ protected:
   void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_normalized_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {

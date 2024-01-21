@@ -244,12 +244,14 @@ print_help()
 	printf ("\n");
 	if (ui_mode == screen_detection)
 	   printf ("Screen detection mode\n"
-		   "e   - switch to screen editing\n");
+		   "e   - switch to screen editing                P   - determine screen proportions\n"
+		   "                                              O   - determine screen proportions and assume screen geometry is correct\n"
+		   "d   - set black                              r g b- set given color\n");
 	if (ui_mode == screen_editing)
 	   printf ("Screen editing mode\n"
 	           "c   - set center                              C   - set lens center\n"
 		   "x   - freeze x                                y   - freeze y                      a - unfreeze both\n"
-		   "s S - fast/precise screen collection\n");
+		   "s S - fast/precise screen collection          O   - optimize colors\n");
 	if (ui_mode == solver_editing)
 	   printf ("Solver editing mode\n"
 	           "w   - switch to screen editing mode\n"
@@ -291,13 +293,14 @@ static bool freeze_x = false;
 static bool freeze_y = false;
 static void display ();
 static int setcolor;
+static bool optimize_colors;
+static std::vector<point_t> color_optimizer_points;
 
 /* Handle all the magic keys.  */
 static gint
 cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 {
   gint k = event->keyval;
-  print_help ();
 
   if (k == 'o')
     {
@@ -310,6 +313,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
+  if (k == '?')
+    print_help ();
   if (k == 'u')
     {
       undo_parameters ();	
@@ -365,6 +370,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'E' && scan.rgbdata)
     {
       ui_mode = screen_detection;
+      print_help ();
       printf ("Screen detection mode\n");
       display_scheduled = true;
       preview_display_scheduled = true;
@@ -372,27 +378,32 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'e' && ui_mode == screen_detection)
     {
       ui_mode = screen_editing;
+      print_help ();
       printf ("Screen editing mode\n");
       display_scheduled = true;
       preview_display_scheduled = true;
     }
   if (k == 'W')
     {
-      printf ("Solver editing mode entered\n");
       display_scheduled = true;
       ui_mode = solver_editing;
+      print_help ();
+      printf ("Solver editing mode entered\n");
     }
   if (k == 'w' && ui_mode == solver_editing)
     {
+      ui_mode = screen_editing;
+      print_help ();
       printf ("Screen editing mode\n");
       display_scheduled = true;
-      ui_mode = screen_editing;
     }
   if (k == 'e' && ui_mode == screen_detection)
     {
       ui_mode = screen_editing;
       display_scheduled = true;
       preview_display_scheduled = true;
+      print_help ();
+      printf ("Screen editing mode\n");
     }
   if (k == ' ')
     {
@@ -691,14 +702,22 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	}
       if (k == 'r' && ui_mode == motor_correction_editing)
       {
-	  printf ("Motor correction mode\n");
 	ui_mode = screen_editing;
+        print_help ();
+        printf ("Motor correction mode\n");
       }
       if (k == 'R' && (ui_mode == screen_editing || ui_mode == solver_editing))
 	{
-	  printf ("Screen editing mode\n");
 	  ui_mode = motor_correction_editing;
+          print_help ();
+	  printf ("Screen editing mode\n");
 	}
+      if (k == 'O' && scan.rgbdata)
+        {
+	  optimize_colors = true;
+          preview_display_scheduled = true;
+	  printf ("Please select by left button colors to optimize. Middle button cancels the action. Right button optimizes\n");
+        }
     }
   else
     {
@@ -715,6 +734,22 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	setcolor = 3;
       if (k == 'b')
 	setcolor = 4;
+      if (k == 'P' || k == 'O')
+	{
+	  gdouble scale_x, scale_y;
+	  gint shift_x, shift_y;
+	  gint pxsize =  /*gtk_image_viewer_get_image_width (GTK_IMAGE_VIEWER (data.image_viewer))*/1024;
+	  gint pysize =  /*gtk_image_viewer_get_image_height (GTK_IMAGE_VIEWER (data.image_viewer))*/800;
+	  gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+						&scale_x, &scale_y, &shift_x,
+						&shift_y);
+	  int minx = std::max ((int)(shift_x / scale_x), 0);
+	  int maxx = std::min ((int)((shift_x + pxsize) / scale_x), scan.width);
+	  int miny = std::max ((int)(shift_y / scale_y), 0);
+	  int maxy = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
+	  file_progress_info progress (stdout);
+	  render_scr_detect::analyze_color_proportions (current_scr_detect, rparams, scan, k == 'O' ? &current : NULL, minx, miny, maxx, maxy, &progress);
+	}
     }
 
   return FALSE;
@@ -840,6 +875,9 @@ previewrender (GdkPixbuf ** pixbuf)
   guint8 *pixels;
   if (scan.stitch)
     return;
+  enum render_parameters::color_model_t cm = rparams.color_model;
+  if (optimize_colors)
+    rparams.color_model = render_parameters::color_model_optimized;
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
@@ -882,6 +920,7 @@ previewrender (GdkPixbuf ** pixbuf)
     }
 #endif
   cairo_surface_destroy (surface);
+  rparams.color_model = cm;
 }
 
 static void
@@ -1094,6 +1133,35 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     }
   if (!initialized)
     return;
+  if (optimize_colors)
+    {
+      if (event->button == 1)
+	{
+	  coord_t x = (event->x + shift_x) / scale_x;
+	  coord_t y = (event->y + shift_y) / scale_y;
+	  coord_t screenx, screeny;
+	  scr_to_img map;
+	  map.set_parameters (current, scan);
+	  map.to_scr (x, y, &screenx, &screeny);
+	  color_optimizer_points.push_back ({screenx, screeny});
+	  printf ("Adding screen optimization point %f %f\n",screenx, screeny);
+	  file_progress_info progress (stdout);
+	  if (optimize_color_model_colors (&current, scan, rparams, color_optimizer_points, &progress))
+	    preview_display_scheduled = true;
+          display_scheduled = true;
+	}
+      else if (event->button == 2)
+        {
+	  printf ("Leaving color optimization\n");
+	  optimize_colors = false;
+        }
+      else if (event->button == 3)
+        {
+	  printf ("Optimizing colors and leaving color optimization\n");
+	  optimize_colors = false;
+        }
+      
+    }
   if (ui_mode == screen_detection)
     {
       if (setcolor && event->button == 1)
@@ -1524,8 +1592,8 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load parametrs: %s\n", error);
       exit (1);
     }
-  if (!in && scan.gamma != -2)
-    rparams.gamma = scan.gamma;
+  //if (!in && scan.gamma != -2)
+    //rparams.gamma = scan.gamma;
 
   current_mesh = current.mesh_trans;
   if (in)

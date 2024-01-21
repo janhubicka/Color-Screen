@@ -4,6 +4,7 @@
 #include "include/colorscreen.h"
 #include "screen-map.h"
 #include "sharpen.h"
+#include "render-interpolate.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
@@ -322,6 +323,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   param->coordinate1_y = coordinate1_y - center_y;
   param->coordinate2_x = coordinate2_x - center_x;
   param->coordinate2_y = coordinate2_y - center_y;
+  printf ("Rotation %i\n", flags & homography::solve_rotation);
   /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
   if (flags & homography::solve_rotation)
     {
@@ -1697,21 +1699,30 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
 
   if (debug_output)
     print_system (stdout, A,v);
+  gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_linalg_HH_svx (A, v);
+  gsl_set_error_handler (old_handler);
   gsl_matrix_free (A);
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, invert, ts, td);
 }
 
 /* Determine matrix profile based on colors and targets.
+   if dark_point_elts == 0 then dark point will be (0, 0, 0)
+   if dark_point_elts == 1 then dark point will be (x, x, x) for some constant x
+   if dark_point_elts == 3 then dark point is arbirtrary
    TODO: We should not minimize least squares, we want smallest deltaE2000  */
 
 color_matrix
-determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark_point)
+determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elts)
 {
   int nvariables = 9;
-  const bool verbose = false;
-  if (dark_point)
+  const bool verbose = true;
+  if (dark_point_elts == 1)
     nvariables++;
+  else if (dark_point_elts == 3)
+    nvariables += 3;
+  else
+    assert (dark_point_elts == 0);
   int nequations = n * 3;
   gsl_matrix *X, *cov;
   gsl_vector *y, *w, *c;
@@ -1730,23 +1741,25 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark
 	      gsl_matrix_set (X, i * 3 + j, 3 * k + 1, j == k ? colors[i].green : 0);
 	      gsl_matrix_set (X, i * 3 + j, 3 * k + 2, j == k ? colors[i].blue : 0);
 	    }
-	  if (dark_point)
+	  if (dark_point_elts == 1)
 	    gsl_matrix_set (X, i * 3 + j, 9, 1);
+	  else if (dark_point_elts == 3)
+	    gsl_matrix_set (X, i * 3 + j, 9 + j, 1);
 	  gsl_vector_set (y, i * 3 + j, targets[i][j]);
 	  gsl_vector_set (w, i * 3 + j, 1);
 	}
     }
   double chisq;
+  gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_multifit_linear_workspace * work
     = gsl_multifit_linear_alloc (nequations, nvariables);
   gsl_multifit_wlinear (X, w, y, c, cov,
 			&chisq, work);
-  color_matrix ret (C(0), C(1), C(2), 0,
-		    C(3), C(4), C(5), 0,
-		    C(6), C(7), C(8), 0,
+  color_matrix ret (C(0), C(1), C(2), dark_point_elts == 1? C(9) : dark_point_elts == 3 ? C(9) : 0,
+		    C(3), C(4), C(5), dark_point_elts == 1? C(9) : dark_point_elts == 3 ? C(10) : 0,
+		    C(6), C(7), C(8), dark_point_elts == 1? C(9) : dark_point_elts == 3 ? C(11) : 0,
 		    0, 0, 0, 1);
-  if (dark_point)
-    *dark_point = C(9);
+  gsl_set_error_handler (old_handler);
   gsl_multifit_linear_free (work);
   gsl_matrix_free (X);
   gsl_vector_free (y);
@@ -1773,4 +1786,126 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, luminosity_t *dark
       printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
     }
   return ret;
+}
+
+bool
+optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, progress_info *progress)
+{
+   render_parameters my_rparam = rparam;
+   render_parameters my_rparam2;
+   my_rparam.output_profile = render_parameters::output_profile_xyz;
+   my_rparam.output_tone_curve = tone_curve::tone_curve_linear;
+   my_rparam.brightness = 1;
+   my_rparam.saturation = 1;
+   my_rparam2.original_render_from (my_rparam, true, true);
+   render_interpolate r (*param, img, my_rparam, 255, false, false);
+   render_interpolate r2 (*param, img, my_rparam2, 255, false, false);
+   r2.original_color ();
+   scr_to_img map;
+   map.set_parameters (*param, img);
+   rgbdata proportions = map.patch_proportions ();
+   color_matrix color_to_xyz = my_rparam.get_rgb_to_xyz_matrix (&img, true, proportions, d50_white);
+   r.precompute_all (progress);
+   r2.precompute_all (progress);
+   int n = 0;
+   rgbdata *colors = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
+   xyz *targets = (xyz *)malloc (sizeof (xyz) * points.size ());
+
+   for (size_t i = 0; i < points.size (); i++)
+     {
+       int px = points[i].x;
+       int py = points[i].y;
+       const int range = 2;
+       int xmin, ymin, xmax, ymax;
+       luminosity_t sx, sy;
+       map.to_img (px - range, py - range, &sx, &sy);
+       xmin = my_floor (sx);
+       ymin = my_floor (sy);
+       xmax = ceil (sx);
+       ymax = ceil (sy);
+       map.to_img (px + range, py - range, &sx, &sy);
+       xmin = std::min (xmin, (int)my_floor (sx));
+       ymin = std::min (ymin, (int)my_floor (sy));
+       xmax = std::max (xmax, (int)ceil (sx));
+       ymax = std::max (ymax, (int)ceil (sy));
+       map.to_img (px - range, py + range, &sx, &sy);
+       xmin = std::min (xmin, (int)my_floor (sx));
+       ymin = std::min (ymin, (int)my_floor (sy));
+       xmax = std::max (xmax, (int)ceil (sx));
+       ymax = std::max (ymax, (int)ceil (sy));
+       map.to_img (px - range, py - range, &sx, &sy);
+       xmin = std::min (xmin, (int)my_floor (sx));
+       ymin = std::min (ymin, (int)my_floor (sy));
+       xmax = std::max (xmax, (int)ceil (sx));
+       ymax = std::max (ymax, (int)ceil (sy));
+       xmin -= 5;
+       ymin -= 5;
+       xmax += 5;
+       ymax += 5;
+       rgbdata color = {0, 0, 0};
+       if (xmin < 0 || ymin < 0 || xmax >= img.width || ymax >= img.height)
+	 continue;
+#if 0
+       int c = 0;
+       for (int y = ymin; y <= ymax; y++)
+         for (int x = xmin; x <= xmax; x++)
+	   {
+	     luminosity_t sx, sy;
+	     map.to_scr (x, y, &sx, &sy);
+	     if (sx < px - range || sx >= px + range + 1
+	         || sy < py - range || sy >= py + range + 1)
+	       continue;
+	     color += r.get_rgb_pixel (x, y);
+	     c++;
+	   }
+       assert (c);
+       color *= (1 / (luminosity_t)c);
+#endif
+       xyz target = {0, 0, 0};
+       for (int y = py - range; y <= py + range; y++)
+         for (int x = px - range; x <= px + range; x++)
+	   {
+	     rgbdata rc = r.sample_pixel_scr (x, y);
+	     xyz c;
+	     color_to_xyz.apply_to_rgb (rc.red, rc.green, rc.blue, &c.x, &c.y, &c.z);
+	     target += c;
+	     color += r2.sample_pixel_scr (x, y);
+	   }
+       target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+       color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+       //printf ("Point %i %i-%i:%i-%i\n", i, xmin,xmax,ymin,ymax);
+       //target.print (stdout);
+       //color.print (stdout);
+       targets [n] = target;
+       colors [n++] = color;
+     }
+   if (n >= 4)
+     {
+       color_matrix c = determine_color_matrix (colors, targets, n, 3);
+       /* Do basic sanity check.  All the values should be relative close to range 0...1  */
+       for (int i = 0; i < 4; i++)
+	 for (int j = 0; j < 3; j++)
+	   if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
+	     return false;
+       rparam.optimized_red   = {c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2]};
+       rparam.optimized_green = {c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2]};
+       rparam.optimized_blue  = {c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2]};
+       rparam.optimized_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
+       printf ("Dark ");
+       rparam.optimized_dark.print (stdout);
+       printf ("Red ");
+       rparam.optimized_red.print (stdout);
+       printf ("Green ");
+       rparam.optimized_green.print (stdout);
+       printf ("Blue ");
+       rparam.optimized_blue.print (stdout);
+#if 0
+       rgbdata proportions = map.patch_proportions ();
+       rparam.optimized_red /= proportions.red;
+       rparam.optimized_green /= proportions.green;
+       rparam.optimized_blue /= proportions.blue;
+#endif
+       return true;
+     }
+   return false;
 }

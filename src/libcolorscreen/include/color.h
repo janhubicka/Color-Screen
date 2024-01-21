@@ -487,6 +487,15 @@ struct rgbdata
     rgbdata ret = {red * coef, green * coef, blue * coef};
     return ret;
   }
+  void
+  print (FILE *f)
+  {
+    luminosity_t r,g,b;
+    r = red * 255;
+    g = green * 255;
+    b = blue * 255;
+    fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
+  }
 };
 /* Datastructure used to store information about dye luminosities.  */
 struct mem_rgbdata

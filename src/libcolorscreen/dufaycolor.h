@@ -8,6 +8,12 @@
 class dufaycolor
 {
 public:
+  /* New measuremet from Gawain's photo.  */
+  static constexpr const coord_t red_width = 0.3745;
+  static constexpr const coord_t green_blue_width = 1 - red_width;
+  static constexpr const coord_t green_height = 0.3058 / green_blue_width;
+  static constexpr const coord_t blue_height = 1 - green_height;
+#if 0
   /* Sizes in percent based on color cinematography screen.  */
 #if 1
   static constexpr const coord_t red_width = 21.0;
@@ -19,6 +25,7 @@ public:
   static constexpr const coord_t green_blue_width = 100-red_width;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height = 53.1;
   static constexpr const coord_t green_height = 100-blue_height;
+#endif
 #endif
 
   /* Based on Gawain's photo.  */
@@ -61,9 +68,22 @@ public:
      Credit: David Pfluger, ERC Advanced Grant FilmColors.
      Imaging was performed with support of the Center for Microscopy and Image Analysis, University of Zurich  */
   static constexpr const coord_t red_width4 = 21.0;
-  static constexpr const coord_t green_blue_width4 = /*28.6*/49.9-red_width;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t green_blue_width4 = /*28.6*/49.9-red_width4;  /* Measured on microscropic image as 49.3.  */
   static constexpr const coord_t blue_height4 = 22.7;
   static constexpr const coord_t green_height4 = 26.9;
+
+  /* Gawain's microscopic photo analyzed using render_scr_detect.  */
+  static constexpr const coord_t red_width5 = 0.3745;
+  static constexpr const coord_t green_blue_width5 = 1 - red_width5;
+  static constexpr const coord_t green_height5 = 0.3058 / green_blue_width5;
+  static constexpr const coord_t blue_height5 = 1 - green_height5;
+
+  /* Penichons's microscopic photo analyzed using render_scr_detect.
+   * Probably not very accurate since colors are not well separated.  */
+  static constexpr const coord_t red_width6 = 0.4265;
+  static constexpr const coord_t green_blue_width6 = 1 - red_width5;
+  static constexpr const coord_t green_height6 = 0.3044 / green_blue_width5;
+  static constexpr const coord_t blue_height6 = 1 - green_height5;
 
   /* Relative widths of the two strips used to print Dufaycolor reseau.  */
   static constexpr const coord_t red_strip_width = red_width / (red_width + green_blue_width);

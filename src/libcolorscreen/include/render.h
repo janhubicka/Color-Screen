@@ -26,7 +26,12 @@ struct DLL_PUBLIC render_parameters
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
-    color_model (color_model_none), output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
+    color_model (color_model_none),
+    optimized_dark (0, 0, 0),
+    optimized_red (1, 0, 0),
+    optimized_green (0, 1, 0),
+    optimized_blue (0, 0, 1),
+    output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
     backlight_correction (NULL), backlight_correction_black (0), invert (false),
@@ -104,6 +109,7 @@ struct DLL_PUBLIC render_parameters
     {
       color_model_none,
       color_model_scan,
+      color_model_optimized,
       color_model_red,
       color_model_green,
       color_model_blue,
@@ -140,9 +146,14 @@ struct DLL_PUBLIC render_parameters
   enum output_profile_t
     {
       output_profile_sRGB,
+      output_profile_xyz,
       output_profile_original,
       output_profile_max
     };
+  xyz optimized_dark;
+  xyz optimized_red;
+  xyz optimized_green;
+  xyz optimized_blue;
   output_profile_t output_profile;
   enum tone_curve::tone_curves output_tone_curve;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
@@ -291,7 +302,7 @@ struct DLL_PUBLIC render_parameters
   /* Initialize render parameters for showing original scan.
      In this case we do not want to apply color models etc.  */
   void
-  original_render_from (render_parameters &rparam, bool color)
+  original_render_from (render_parameters &rparam, bool color, bool optimized)
   {
     backlight_correction = rparam.backlight_correction;
     backlight_correction_black = rparam.backlight_correction_black;
@@ -300,11 +311,18 @@ struct DLL_PUBLIC render_parameters
     scan_exposure = rparam.scan_exposure;
     dark_point = rparam.dark_point;
     brightness = rparam.brightness;
-    color_model = color ? render_parameters::color_model_scan : render_parameters::color_model_none;
+    color_model = color ? (optimized ? render_parameters::color_model_optimized : render_parameters::color_model_scan) : render_parameters::color_model_none;
     output_tone_curve = rparam.output_tone_curve;
     tile_adjustments = rparam.tile_adjustments;
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
+    if (optimized)
+      {
+	optimized_red = rparam.optimized_red;
+	optimized_green = rparam.optimized_green;
+	optimized_blue = rparam.optimized_blue;
+	optimized_dark = rparam.optimized_dark;
+      }
     if (color)
       white_balance = rparam.white_balance;
     mix_red = rparam.mix_red;
@@ -369,6 +387,8 @@ public:
   {
     render_type_original,
     render_type_interpolated_original,
+    render_type_optimized_original,
+    render_type_interpolated_optimized_original,
     render_type_preview_grid,
     render_type_realistic,
     render_type_interpolated,
@@ -595,10 +615,10 @@ render::get_data_blue (int x, int y)
 inline void
 render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
 {
+#if 0
   r *= m_params.white_balance.red;
   g *= m_params.white_balance.green;
   b *= m_params.white_balance.blue;
-#if 0
   if (m_spectrum_dyes_to_xyz)
     {
       /* At the moment all conversions are linear.

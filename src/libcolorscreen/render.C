@@ -411,8 +411,10 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
          These should closely follow what DNG reference recommends.  */
       bool do_pro_photo = m_params.output_tone_curve != tone_curve::tone_curve_linear;
       /* Matrix converting dyes to XYZ.  */
-      color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, do_pro_photo ? d50_white : d65_white) * color;
-      if (do_pro_photo)
+      color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, do_pro_photo ? d50_white : d65_white);
+      if (m_params.output_profile == render_parameters::output_profile_xyz)
+	;
+      else if (do_pro_photo)
 	{
 	  xyz_pro_photo_rgb_matrix m;
 	  color = m * color;

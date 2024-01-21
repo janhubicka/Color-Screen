@@ -361,7 +361,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     case render_type_original:
       {
 	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, color);
+	my_rparam.original_render_from (rparam, color, false);
 	if (render_type == render_type_original && step > 1)
 	  {
 	    scr_to_img_parameters dummy;
@@ -689,6 +689,89 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   return m_precomputed_rgbdata;
 }
 
+/* Analyze proportion of screen that is red, green and blue.  If PARAM is non-NULL expect that we know
+   the screen geomery and only analyze whole screen patches.  */
+rgbdata
+render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  uint64_t rcount[4] = {0, 0, 0, 0};
+  scr_to_img *s = NULL;
+  if (param)
+    {
+      s = new scr_to_img ();
+      s->set_parameters (*param, m_img);
+    }
+  if (xmin < 0)
+    xmin = 0;
+  if (ymin < 0)
+    ymin = 0;
+  if (xmax >= m_img.width)
+    xmax = m_img.width - 1;
+  if (ymax >= m_img.height)
+    ymax = m_img.height - 1;
+  if (progress)
+    progress->set_task ("analyzing screen proportions", ymax - ymin);
+  for (int y = ymin; y <= ymax; y++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	{
+	  for (int x = xmin; x <= xmax; x++)
+	    {
+	      if (s)
+	        {
+		  coord_t sx, sy;
+		  s->to_scr (x, y, &sx, &sy);
+		  int isx = my_floor (sx);
+		  int isy = my_floor (sy);
+		  coord_t ix, iy;
+		  s->to_img (isx, isy, &ix, &iy);
+		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		    continue;
+		  s->to_img (isx + 1, isy, &ix, &iy);
+		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		    continue;
+		  s->to_img (isx, isy + 1, &ix, &iy);
+		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		    continue;
+		  s->to_img (isx + 1, isy + 1, &ix, &iy);
+		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		    continue;
+	        }
+	      rcount[(int)m_color_class_map->get_class (x, y)]++;
+	    }
+	}
+     if (progress)
+       progress->inc_progress ();
+    }
+  if (s)
+    delete s;
+  int sum = rcount[0] + rcount[1] + rcount[2];
+  if (!sum)
+    {
+      printf ("No known pixels found\n");
+      return {1/3.0, 1/3.0, 1/3.0};
+    }
+  rgbdata ret = {rcount[0] / (luminosity_t)sum, rcount[1] / (luminosity_t)sum, rcount[2] / (luminosity_t)sum};
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Pixel counts red %" PRIu64 " (%.2f%%) green %" PRIu64 " (%.2f%%) blue %" PRIu64 " (%.2f%%) unknown %" PRIu64 " (%.2f%%)\n",
+	  rcount[0], ret.red * 100, rcount[1], ret.green * 100, rcount[2], ret.blue * 100, rcount[3], rcount[3] / (luminosity_t)(((uint64_t)xmax - xmin) * (ymax - ymin)) * 100);
+  if (progress)
+    progress->resume_stdout ();
+  return ret;
+}
+
+rgbdata
+render_scr_detect::analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  /* Sharpening changes screen proportions.  Lets hope that no sharpening yields to most realistic results.  */
+  //param.sharpen_amount = 0;
+  //param.min_ratio = 1.3;
+  //param.min_luminosity = 0.01;
+  render_scr_detect r (param, img, rparam, 256);
+  r.precompute_all (false, false, progress);
+  return r.analyze_color_proportions (map_param, xmin, ymin, xmax, ymax, progress);
+}
 
 render_scr_detect::~render_scr_detect ()
 {

@@ -242,7 +242,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
     has_rgbdata = false;
   if (color && !has_rgbdata)
     color = false;
-  if (!has_rgbdata && render_type == render_type_interpolated_original)
+  if (!has_rgbdata
+      && (render_type == render_type_interpolated_original || render_type == render_type_interpolated_optimized_original))
     render_type = render_type_original;
 
   if (progress)
@@ -250,9 +251,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
   switch (render_type)
     {
     case render_type_original:
+    case render_type_optimized_original:
       {
 	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, color);
+	my_rparam.original_render_from (rparam, color, render_type == render_type_optimized_original);
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
@@ -493,6 +495,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
       }
       break;
     case render_type_interpolated_original:
+    case render_type_interpolated_optimized_original:
     case render_type_interpolated:
     case render_type_combined:
     case render_type_predictive:
@@ -501,8 +504,9 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	bool screen_compensation = (render_type == render_type_predictive);
 	render_parameters my_rparam;
 
-	if (render_type == render_type_interpolated_original)
-	  my_rparam.original_render_from (rparam, true);
+	if (render_type == render_type_interpolated_original
+	    || render_type == render_type_interpolated_optimized_original)
+	  my_rparam.original_render_from (rparam, true, render_type == render_type_interpolated_optimized_original);
 	else
 	  my_rparam = rparam;
 	if (img.stitch)
@@ -511,7 +515,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		[&img,screen_compensation,adjust_luminosity,render_type,&progress] (render_parameters &my_rparam, int x, int y) mutable
 		{
 		  render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255,screen_compensation, adjust_luminosity);
-		  if (render_type == render_type_interpolated_original)
+		  if (render_type == render_type_interpolated_original
+		      || render_type == render_type_interpolated_optimized_original)
 		    r->original_color ();
 		  if (!r->precompute_all (progress))
 		    {
@@ -525,7 +530,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	render_interpolate render (param, img,
 				   my_rparam, 255, screen_compensation, adjust_luminosity);
-	if (render_type == render_type_interpolated_original)
+	if (render_type == render_type_interpolated_original
+	    || render_type == render_type_interpolated_optimized_original)
 	  render.original_color ();
 	if (!render.precompute_img_range (xoffset * step, yoffset * step,
 					  (width + xoffset) * step,
@@ -601,6 +607,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	       progress->inc_progress ();
 	  }
       }
+    default:
+      abort ();
     }
   if (stats)
     {
