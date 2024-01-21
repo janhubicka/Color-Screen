@@ -135,6 +135,9 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 			  0              , 0                , 0               , 1);
 	  dye_whitepoint = d50_white;
 	  dyes = m;
+	  /* Do not apply any of the backlight temperature adjustments.  */
+	  assert (observer_whitepoint == d50_white);
+	  return dyes;
 	}
 	break;
       case render_parameters::color_model_red:
@@ -381,8 +384,9 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
   color_matrix dyes = get_dyes_matrix (&spectrum_based, &optimized, img);
 
   /* If dyes are normalised, we need to scale primaries to match their proportions in actual sreen.  */
-  if (normalized_patches)
+  if (normalized_patches && color_model != render_parameters::color_model_optimized)
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
+  dyes.verify_last_row_0001 ();
 
   if (apply_balance_to_model (color_model))
     {
@@ -412,7 +416,10 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 	  /* Scale so y of screen white is 1.  */
 	  case render_parameters::dye_balance_brightness:
 	    if (dye_whitepoint.y > 0)
-	      dyes = dyes * (1/dye_whitepoint.y);
+	      {
+	        dyes = dyes * (1/dye_whitepoint.y);
+		dyes.m_elements[3][3] = 1;
+	      }
 	    break;
 
 	  /* Scale intensity of dyes so they produce given whitepoint.  This correspond to adjusting
@@ -444,12 +451,22 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 	}
     }
   
+  dyes.verify_last_row_0001 ();
   /* After balancing to observer whitepoint bradford correct to target whitepoint.  */
   //printf (" Observer:");
   //((xyz)observer_whitepoint).print (stdout);
   //print_mid_white (dyes);
   if (correct_whitepoints && (xyz)observer_whitepoint != target_whitepoint) 
-    dyes = bradford_whitepoint_adaptation_matrix ((xyz)observer_whitepoint, target_whitepoint) * dyes;
+    {
+      dyes = bradford_whitepoint_adaptation_matrix ((xyz)observer_whitepoint, target_whitepoint) * dyes;
+      dyes.verify_last_row_0001 ();
+    }
+  /* Don't do this as part of early adjustments, it confuses dark point of optimized matrices.  */
+  color_matrix br (brightness, 0, 0, 0,
+		   0, brightness, 0, 0,
+		   0, 0, brightness, 0,
+		   0, 0, 0, 1);
+  dyes = br * dyes;
   //printf (" Target:");
   //target_whitepoint.print (stdout);
   //print_mid_white (dyes);
@@ -460,15 +477,16 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
 color_matrix
 render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions)
 {
-  color_matrix color (white_balance.red * brightness, 0, 0, 0,
-		      0, white_balance.green * brightness, 0, 0,
-		      0, 0, white_balance.blue * brightness, 0,
+  color_matrix color (white_balance.red , 0, 0, 0,
+		      0, white_balance.green, 0, 0,
+		      0, 0, white_balance.blue , 0,
 		      0, 0, 0, 1);
   if (presaturation != 1)
     {
       presaturation_matrix m (presaturation);
       color = m * color;
     }
+  color.verify_last_row_0001 ();
   return color;
 }
 
@@ -489,6 +507,7 @@ render_parameters::get_rgb_to_xyz_matrix (image_data *img, bool normalized_patch
       saturation_matrix m (saturation);
       color = m * color;
     }
+  color.verify_last_row_0001 ();
   return color;
 }
 

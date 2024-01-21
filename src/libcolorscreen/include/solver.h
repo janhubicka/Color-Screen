@@ -184,7 +184,7 @@ DLL_PUBLIC detected_screen detect_regular_screen (image_data &img, enum scr_type
 void optimize_screen_colors (scr_detect_parameters *param, luminosity_t gamma, color_t *reds, int nreds, color_t *greens, int ngreens, color_t *blues, int nblues, progress_info *progress = NULL, FILE *report = NULL);
 void optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress = NULL, FILE *report = NULL);
 bool optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress = NULL, FILE *report = NULL);
-color_matrix determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elts = 0);
+color_matrix determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elts = 0, luminosity_t brightness = 1);
 bool optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, progress_info *progress);
 
 

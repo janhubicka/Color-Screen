@@ -322,14 +322,28 @@ struct DLL_PUBLIC render_parameters
 	optimized_green = rparam.optimized_green;
 	optimized_blue = rparam.optimized_blue;
 	optimized_dark = rparam.optimized_dark;
+	film_gamma = rparam.film_gamma;
+	target_film_gamma = rparam.target_film_gamma;
+	saturation = rparam.saturation;
+	/* We always produce optimized data for d50 white.  */
+	observer_whitepoint = d50_white;
       }
-    if (color)
+    else if (color)
       white_balance = rparam.white_balance;
-    mix_red = rparam.mix_red;
-    mix_green = rparam.mix_green;
-    mix_blue = rparam.mix_blue;
+    else
+      {
+	mix_red = rparam.mix_red;
+	mix_green = rparam.mix_green;
+	mix_blue = rparam.mix_blue;
+      }
     sharpen_amount = rparam.sharpen_amount;
     sharpen_radius = rparam.sharpen_radius;
+
+    /* Copy setup of interpolated rendering algorithm.  */
+    precise = rparam.precise;
+    collection_threshold = rparam.collection_threshold;
+    screen_blur_radius = rparam.screen_blur_radius;
+
   }
 private:
   static const bool debug = false;

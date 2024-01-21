@@ -289,6 +289,15 @@ public:
     }
   }
 
+  inline void
+  verify_last_row_0001()
+  {
+    assert (B::m_elements[0][3] == 0);
+    assert (B::m_elements[1][3] == 0);
+    assert (B::m_elements[2][3] == 0);
+    assert (B::m_elements[3][3] == 1);
+  }
+
   /* Matrix-vector multiplication used for RGB values.  */
   inline void
   apply_to_rgb (T r, T g, T b, T *rr, T *gg, T *bb)
@@ -310,7 +319,7 @@ public:
 	vec[i] += ivec[j] * inv.m_elements[j][i];
     //assert (vec[3]==1);
     for (int i = 0; i < 4; i++)
-      for (int j = 0; j < 4; j++)
+      for (int j = 0; j < 3; j++)
 	B::m_elements[i][j] *= vec[i];
     if (rw != NULL)
       {
