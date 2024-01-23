@@ -42,10 +42,11 @@ matrix_by_dye_xyz (xyz r, xyz g, xyz b)
   return m;
 }
 
-cie_lab::cie_lab (xyz c)
+cie_lab::cie_lab (xyz c, xyz white)
 {
   luminosity_t x, y, z;
-  const luminosity_t refX = 0.95047, refY = 1, refZ = 1.08883;
+  const luminosity_t refX = white.x, refY = white.y, refZ = white.z;
+  assert (white.y == 1);
   
   x = c.x / refX; y = c.y / refY; z = c.z / refZ;
   
@@ -214,19 +215,19 @@ deltaE2000(cie_lab c1, cie_lab c2)
   //return scr_to_img::my_sqrt((c1.l - c2.l) * (c1.l - c2.l) + (c1.a - c2.a) * (c1.a - c2.a) + (c1.b - c2.b) * (c1.b - c2.b));
 }
 luminosity_t
-deltaE(xyz c1, xyz c2)
+deltaE(xyz c1, xyz c2, xyz white)
 {
   //printf ("XYZ %f %f %f  -  %f %f %f\n",c1.x,c1.y,c1.z, c2.x,c2.y,c2.z);
-  cie_lab lc1 (c1);
-  cie_lab lc2 (c2);
+  cie_lab lc1 (c1, white);
+  cie_lab lc2 (c2, white);
   return deltaE(lc1, lc2);
 }
 luminosity_t
-deltaE2000(xyz c1, xyz c2)
+deltaE2000(xyz c1, xyz c2, xyz white)
 {
   //printf ("XYZ %f %f %f  -  %f %f %f\n",c1.x,c1.y,c1.z, c2.x,c2.y,c2.z);
-  cie_lab lc1 (c1);
-  cie_lab lc2 (c2);
+  cie_lab lc1 (c1, white);
+  cie_lab lc2 (c2, white);
   return deltaE2000(lc1, lc2);
 }
 

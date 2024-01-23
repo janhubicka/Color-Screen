@@ -82,7 +82,7 @@ tiff_with_screen (const char *filename, coord_t red_strip_width, coord_t green_s
   avg.x /= width * height;
   avg.y /= width * height;
   avg.z /= width * height;
-  if (deltaE (iavg, avg)>1)
+  if (deltaE (iavg, avg, whitepoint)>1)
     {
       printf ("Mismatch between average and intended average (luminosity_t == float?)");
       printf ("Intended average: ");
@@ -106,7 +106,7 @@ report_color (const char *name, const char *illuminant, xyz f, xyz target, xyz b
   int rr = std::min (std::max ((int)(r * 255 + 0.5), 0), 255);
   int gg = std::min (std::max ((int)(g * 255 + 0.5), 0), 255);
   int bb = std::min (std::max ((int)(b * 255 + 0.5), 0), 255);
-  printf ("%-5s    %-7s %6.4f %6.4f %6.4f     %5.1f     %6.4f %6.4f %6.4f    %7.1f %7.1f %7.1f  #%02x%02x%02x  %5.1f %5.1f\n", name, illuminant, f.x, f.y, f.z, deltaE2000 (f, target), c.x, c.y, c.Y, r * 256, g * 256, b * 256, rr, gg, bb, dominant_wavelength (f), dominant_wavelength (f, backlight));
+  printf ("%-5s    %-7s %6.4f %6.4f %6.4f     %5.1f     %6.4f %6.4f %6.4f    %7.1f %7.1f %7.1f  #%02x%02x%02x  %5.1f %5.1f\n", name, illuminant, f.x, f.y, f.z, deltaE2000 (f, target, backlight), c.x, c.y, c.Y, r * 256, g * 256, b * 256, rr, gg, bb, dominant_wavelength (f), dominant_wavelength (f, backlight));
 }
 
 static void
@@ -446,6 +446,7 @@ dufaycolor::print_synthetic_dyes_report ()
   xyz target_red = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
   xyz target_green = spec.dyes_rgb_to_xyz (0, 1, 0, 1931);
   xyz target_blue = spec.dyes_rgb_to_xyz (0, 0, 1, 1931);
+  xyz white = spec.whitepoint_xyz ();
 #if 0
   target_red.print (stdout);
   target_green.print (stdout);
@@ -465,21 +466,21 @@ dufaycolor::print_synthetic_dyes_report ()
 	    xyz red = red1 * l;
 	    xyz green = green1 * l;
 	    xyz blue = blue1 * l;
-	    if (deltaE (green, dufaycolor::green_dye_color_cinematography_xyY) < deltaE (best_green, dufaycolor::green_dye_color_cinematography_xyY))
+	    if (deltaE (green, dufaycolor::green_dye_color_cinematography_xyY, white) < deltaE (best_green, dufaycolor::green_dye_color_cinematography_xyY, white))
 	      {
 		best_green = green;
 		best_green_d1 = d1;
 		best_green_d2 = d2;
 		best_green_l = l;
 	      }
-	    if (deltaE (green, dufaycolor::green_dye) < deltaE (best_cgreen, dufaycolor::green_dye))
+	    if (deltaE (green, dufaycolor::green_dye, white) < deltaE (best_cgreen, dufaycolor::green_dye, white))
 	      {
 		best_cgreen = green;
 		best_cgreen_d1 = d1;
 		best_cgreen_d2 = d2;
 		best_cgreen_l = l;
 	      }
-	    if (deltaE (green, target_green) < deltaE (best_tgreen, target_green))
+	    if (deltaE (green, target_green, white) < deltaE (best_tgreen, target_green, white))
 	      {
 		best_tgreen = green;
 		best_tgreen_d1 = d1;
@@ -487,21 +488,21 @@ dufaycolor::print_synthetic_dyes_report ()
 		best_tgreen_l = l;
 	      }
 
-	    if (deltaE (blue, dufaycolor::blue_dye_color_cinematography_xyY) < deltaE (best_blue, dufaycolor::blue_dye_color_cinematography_xyY))
+	    if (deltaE (blue, dufaycolor::blue_dye_color_cinematography_xyY, white) < deltaE (best_blue, dufaycolor::blue_dye_color_cinematography_xyY, white))
 	      {
 		best_blue = blue;
 		best_blue_d1 = d1;
 		best_blue_d2 = d2;
 		best_blue_l = l;
 	      }
-	    if (deltaE (blue, dufaycolor::blue_dye) < deltaE (best_cblue, dufaycolor::blue_dye))
+	    if (deltaE (blue, dufaycolor::blue_dye, white) < deltaE (best_cblue, dufaycolor::blue_dye, white))
 	      {
 		best_cblue = blue;
 		best_cblue_d1 = d1;
 		best_cblue_d2 = d2;
 		best_cblue_l = l;
 	      }
-	    if (deltaE (blue, target_blue) < deltaE (best_tblue, target_blue))
+	    if (deltaE (blue, target_blue, white) < deltaE (best_tblue, target_blue, white))
 	      {
 		best_tblue = blue;
 		best_tblue_d1 = d1;
@@ -509,21 +510,21 @@ dufaycolor::print_synthetic_dyes_report ()
 		best_tblue_l = l;
 	      }
 
-	    if (deltaE (red, dufaycolor::red_dye_color_cinematography_xyY) < deltaE (best_red, dufaycolor::red_dye_color_cinematography_xyY))
+	    if (deltaE (red, dufaycolor::red_dye_color_cinematography_xyY, white) < deltaE (best_red, dufaycolor::red_dye_color_cinematography_xyY, white))
 	      {
 		best_red = red;
 		best_red_d1 = d1;
 		best_red_d2 = d2;
 		best_red_l = l;
 	      }
-	    if (deltaE (red, dufaycolor::red_dye) < deltaE (best_cred, dufaycolor::red_dye))
+	    if (deltaE (red, dufaycolor::red_dye, white) < deltaE (best_cred, dufaycolor::red_dye, white))
 	      {
 		best_cred = red;
 		best_cred_d1 = d1;
 		best_cred_d2 = d2;
 		best_cred_l = l;
 	      }
-	    if (deltaE (red, target_red) < deltaE (best_tred, target_red))
+	    if (deltaE (red, target_red, white) < deltaE (best_tred, target_red, white))
 	      {
 		best_tred = red;
 		best_tred_d1 = d1;
@@ -533,49 +534,49 @@ dufaycolor::print_synthetic_dyes_report ()
 	  }
       }
 
-  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_red, dufaycolor::red_dye_color_cinematography_xyY), deltaE2000 (best_red, dufaycolor::red_dye_color_cinematography_xyY), best_red_d1, best_red_d2, best_red_l);
+  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_red, dufaycolor::red_dye_color_cinematography_xyY, white), deltaE2000 (best_red, dufaycolor::red_dye_color_cinematography_xyY, white), best_red_d1, best_red_d2, best_red_l);
   best_red.print (stdout);
   spec.synthetic_dufay_red (best_red_d1, best_red_d2);
   spec.write_spectra ("synthetic-dufay-red.dat", NULL, NULL, NULL, 400, 720);
   spec.write_spectra ("synthetic-dufay-red.abs.txt", NULL, NULL, NULL, 400, 720, true);
-  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cred, dufaycolor::red_dye), deltaE2000 (best_cred, dufaycolor::red_dye), best_cred_d1, best_cred_d2, best_cred_l);
+  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cred, dufaycolor::red_dye, white), deltaE2000 (best_cred, dufaycolor::red_dye, white), best_cred_d1, best_cred_d2, best_cred_l);
   best_cred.print (stdout);
   spec.synthetic_dufay_red (best_cred_d1, best_cred_d2);
   spec.write_spectra ("synthetic-dufay-red-corrected.dat", NULL, NULL, NULL, 400, 720);
   spec.write_spectra ("synthetic-dufay-red-corrected.abs.txt", NULL, NULL, NULL, 400, 720, true);
-  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tred, target_red), deltaE2000 (best_tred, target_red), best_tred_d1, best_tred_d2, best_tred_l);
+  printf ("Best macthing red: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tred, target_red, white), deltaE2000 (best_tred, target_red, white), best_tred_d1, best_tred_d2, best_tred_l);
   best_tred.print (stdout);
   spec.synthetic_dufay_red (best_tred_d1, best_tred_d2);
   spec.write_spectra ("synthetic-dufay-red-spectra.dat", NULL, NULL, NULL, 400, 720);
   spec.write_spectra ("synthetic-dufay-red-spectra.abs.txt", NULL, NULL, NULL, 400, 720, true);
 
-  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_green, dufaycolor::green_dye_color_cinematography_xyY),deltaE2000 (best_green, dufaycolor::green_dye_color_cinematography_xyY), best_green_d1, best_green_d2, best_green_l);
+  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_green, dufaycolor::green_dye_color_cinematography_xyY, white),deltaE2000 (best_green, dufaycolor::green_dye_color_cinematography_xyY, white), best_green_d1, best_green_d2, best_green_l);
   best_green.print (stdout);
   spec.synthetic_dufay_green (best_green_d1, best_green_d2);
   spec.write_spectra (NULL, "synthetic-dufay-green.dat", NULL, NULL, 400, 720);
   spec.write_spectra (NULL, "synthetic-dufay-green.abs.txt", NULL, NULL, 400, 720, true);
-  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cgreen, dufaycolor::green_dye), deltaE2000 (best_cgreen, dufaycolor::green_dye), best_cgreen_d1, best_cgreen_d2, best_cgreen_l);
+  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cgreen, dufaycolor::green_dye, white), deltaE2000 (best_cgreen, dufaycolor::green_dye, white), best_cgreen_d1, best_cgreen_d2, best_cgreen_l);
   best_cgreen.print (stdout);
   spec.synthetic_dufay_green (best_cgreen_d1, best_cgreen_d2);
   spec.write_spectra (NULL, "synthetic-dufay-green-corrected.dat", NULL, NULL, 400, 720);
   spec.write_spectra (NULL, "synthetic-dufay-green-corrected.abs.txt", NULL, NULL, 400, 720, true);
-  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tgreen, target_green), deltaE2000 (best_tgreen, target_green), best_tgreen_d1, best_tgreen_d2, best_tgreen_l);
+  printf ("Best macthing green: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tgreen, target_green, white), deltaE2000 (best_tgreen, target_green, white), best_tgreen_d1, best_tgreen_d2, best_tgreen_l);
   best_tgreen.print (stdout);
   spec.synthetic_dufay_green (best_tgreen_d1, best_tgreen_d2);
   spec.write_spectra (NULL, "synthetic-dufay-green-spectra.dat", NULL, NULL, 400, 720);
   spec.write_spectra (NULL, "synthetic-dufay-green-spectra.abs.txt", NULL, NULL, 400, 720, true);
 
-  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_blue, dufaycolor::blue_dye_color_cinematography_xyY), deltaE2000 (best_blue, dufaycolor::blue_dye_color_cinematography_xyY), best_blue_d1, best_blue_d2, best_blue_l);
+  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_blue, dufaycolor::blue_dye_color_cinematography_xyY, white), deltaE2000 (best_blue, dufaycolor::blue_dye_color_cinematography_xyY, white), best_blue_d1, best_blue_d2, best_blue_l);
   best_blue.print (stdout);
   spec.synthetic_dufay_blue (best_blue_d1, best_blue_d2);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue.dat", NULL, 400, 720);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue.abs.txt", NULL, 400, 720, true);
-  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cblue, dufaycolor::blue_dye), deltaE2000 (best_cblue, dufaycolor::blue_dye), best_cblue_d1, best_cblue_d2, best_cblue_l);
+  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_cblue, dufaycolor::blue_dye, white), deltaE2000 (best_cblue, dufaycolor::blue_dye, white), best_cblue_d1, best_cblue_d2, best_cblue_l);
   best_cblue.print (stdout);
   spec.synthetic_dufay_blue (best_cblue_d1, best_cblue_d2);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-corrected.dat", NULL, 400, 720);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-corrected.abs.txt", NULL, 400, 720, true);
-  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tblue, target_blue), deltaE2000 (best_tblue, target_blue), best_tblue_d1, best_tblue_d2, best_tblue_l);
+  printf ("Best macthing blue: deltaE %f deltaE2k %f density1 %f density2 %f l %f ", deltaE (best_tblue, target_blue, white), deltaE2000 (best_tblue, target_blue, white), best_tblue_d1, best_tblue_d2, best_tblue_l);
   best_tblue.print (stdout);
   spec.synthetic_dufay_blue (best_tblue_d1, best_tblue_d2);
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-spectra.dat", NULL, 400, 720);

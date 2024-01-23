@@ -4224,9 +4224,8 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	 tile[i] = 0.5;
       rgbdata film_white = film_rgb_response (tile);
-      luminosity_t sum;
-      printf ("Film response to backlight %f %f %f %f\n", film_white.red, film_white.green, film_white.blue, sum);
 
+      luminosity_t sum;
       /* For subtractive processes just be sure that backlight is 100% white on film.  */
       if (subtractive)
         sum = (film_white.red + film_white.green + film_white.blue) / 3;
@@ -4237,6 +4236,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 	  xyz c = dyes_rgb_to_xyz (film_white.red, film_white.green, film_white.blue);
 	  sum = c.y;
         }
+      printf ("Film response to backlight %f %f %f sum:%f\n", film_white.red, film_white.green, film_white.blue, sum);
       scale.red = scale.green = scale.blue = 0.5 / sum;
 	      /*determine_relative_patch_sizes_by_whitepoint ();*/
               /*xyz_to_dyes_rgb (whitepoint);*/
@@ -4296,7 +4296,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
 			real_color.print (stdout);
 			dufay_color.print (stdout);
 #endif
-		  luminosity_t de = deltaE2000 (real_color, dufay_color);
+		  luminosity_t de = deltaE2000 (real_color, dufay_color, whitepoint);
 		  if (de > deltaEmax)
 		    deltaEmax = de;
 		  deltaEsum += de;
@@ -4335,7 +4335,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
       colors[i] = film_rgb_response (tile) * scale;
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
-  color_matrix m1 = determine_color_matrix (colors, targets, n, NULL);
+  color_matrix m1 = determine_color_matrix (colors, targets, NULL, n, observing_spec->whitepoint_xyz ());
   m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
   
   return m1;
@@ -5025,5 +5025,7 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
     red_characteristic_curve = green_characteristic_curve = blue_characteristic_curve = new film_sensitivity (hd_curve,0 , 3000 /*30000*/);
     blue_characteristic_curve->precompute ();
     break;
+  default:
+    abort ();
   }
 }

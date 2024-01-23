@@ -64,8 +64,8 @@ static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1
 
 }
 
-render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity), m_original_color (false), m_dufay (NULL), m_paget (NULL)
+render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity, bool unadjusted)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity), m_original_color (false), m_unadjusted (unadjusted), m_profiled (false), m_dufay (NULL), m_paget (NULL)
 {
 }
 
@@ -73,7 +73,7 @@ bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
-  if (!render_to_scr::precompute (!m_original_color, !m_original_color, xmin, ymin, xmax, ymax, progress))
+  if (!render_to_scr::precompute (!m_original_color, !m_original_color || m_profiled, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)
     {
@@ -157,7 +157,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) adjust_luminosity_ir (m_paget->blue (xp + (xx), yp + (yy)))
+#define get_blue(xx, yy) m_paget->blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
@@ -169,7 +169,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
 
-#define get_green(xx, yy) adjust_luminosity_ir (m_paget->diag_green (xp + (xx), yp + (yy)))
+#define get_green(xx, yy) m_paget->diag_green (xp + (xx), yp + (yy))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
@@ -178,7 +178,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       analyze_paget::to_diagonal_coordinates (x + (coord_t)0.5, y, &xd, &yd);
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
-#define get_red(xx, yy) adjust_luminosity_ir (m_paget->diag_red (xp + (xx), yp + (yy)))
+#define get_red(xx, yy) m_paget->diag_red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
@@ -196,7 +196,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       int xp, yp;
       coord_t xo = my_modf (xx, &xp);
       coord_t yo = my_modf (yy, &yp);
-#define get_red(xx, yy) adjust_luminosity_ir (m_dufay->red (xp + (xx), yp + (yy)))
+#define get_red(xx, yy) m_dufay->red (xp + (xx), yp + (yy))
       red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
 			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
@@ -206,7 +206,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       yy = y;
       xo = my_modf (xx, &xp);
       yo = my_modf (yy, &yp);
-#define get_green(xx, yy) adjust_luminosity_ir (m_dufay->green (xp + (xx), yp + (yy)))
+#define get_green(xx, yy) m_dufay->green (xp + (xx), yp + (yy))
       green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
 				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
@@ -216,12 +216,34 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
       //yy = y;
       xo = my_modf (xx, &xp);
       //yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) adjust_luminosity_ir (m_dufay->blue (xp + (xx), yp + (yy)))
+#define get_blue(xx, yy) m_dufay->blue (xp + (xx), yp + (yy))
       blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
 				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
+    }
+  if (m_unadjusted)
+    ;
+  else if (!m_original_color)
+    {
+      red = adjust_luminosity_ir (red);
+      green = adjust_luminosity_ir (green);
+      blue = adjust_luminosity_ir (blue);
+    }
+  else if (m_profiled)
+    {
+      profile_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
+      red = adjust_luminosity_ir (red);
+      green = adjust_luminosity_ir (green);
+      blue = adjust_luminosity_ir (blue);
+    }
+  else 
+    {
+      rgbdata d = adjust_rgb ({red, green, blue});
+      red = d.red;
+      green = d.green;
+      blue = d.blue;
     }
   if (m_screen_compensation)
     {

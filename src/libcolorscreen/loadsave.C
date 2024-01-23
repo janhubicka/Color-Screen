@@ -95,10 +95,10 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
-	  || fprintf (f, "optimized_dark: %f %f %f\n", rparam->optimized_dark.x, rparam->optimized_dark.y, rparam->optimized_dark.z) < 0
-	  || fprintf (f, "optimized_red: %f %f %f\n", rparam->optimized_red.x, rparam->optimized_red.y, rparam->optimized_red.z) < 0
-	  || fprintf (f, "optimized_green: %f %f %f\n", rparam->optimized_green.x, rparam->optimized_green.y, rparam->optimized_green.z) < 0
-	  || fprintf (f, "optimized_blue: %f %f %f\n", rparam->optimized_blue.x, rparam->optimized_blue.y, rparam->optimized_blue.z) < 0)
+	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
+	  || fprintf (f, "profiled_red: %f %f %f\n", rparam->profiled_red.red, rparam->profiled_red.green, rparam->profiled_red.blue) < 0
+	  || fprintf (f, "profiled_green: %f %f %f\n", rparam->profiled_green.red, rparam->profiled_green.green, rparam->profiled_green.blue) < 0
+	  || fprintf (f, "profiled_blue: %f %f %f\n", rparam->profiled_blue.red, rparam->profiled_blue.green, rparam->profiled_blue.blue) < 0)
 	return false;
       if (rparam->backlight_correction)
 	{
@@ -549,33 +549,33 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "optimized_dark"))
+      else if (!strcmp (buf, "profiled_dark"))
 	{
-	  if (!read_xyz (f, rparam_check (optimized_dark)))
+	  if (!read_color (f, rparam_check (profiled_dark)))
 	    {
 	      *error = "error parsing mix_weights";
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "optimized_red"))
+      else if (!strcmp (buf, "profiled_red"))
 	{
-	  if (!read_xyz (f, rparam_check (optimized_red)))
+	  if (!read_color (f, rparam_check (profiled_red)))
 	    {
 	      *error = "error parsing mix_weights";
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "optimized_green"))
+      else if (!strcmp (buf, "profiled_green"))
 	{
-	  if (!read_xyz (f, rparam_check (optimized_green)))
+	  if (!read_color (f, rparam_check (profiled_green)))
 	    {
 	      *error = "error parsing mix_weights";
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "optimized_blue"))
+      else if (!strcmp (buf, "profiled_blue"))
 	{
-	  if (!read_xyz (f, rparam_check (optimized_blue)))
+	  if (!read_color (f, rparam_check (profiled_blue)))
 	    {
 	      *error = "error parsing mix_weights";
 	      return false;

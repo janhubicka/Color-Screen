@@ -47,24 +47,44 @@ print_matrix(FILE *f, const char *name, const gsl_matrix *m)
         return n;
 }
 int
-print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w = 0)
+print_system(FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w = 0, gsl_vector *c = 0)
 {
         int status, n = 0;
 
+	printf ("Solution:\n");
+
+	if (c)
+          for (size_t i = 0; i < m->size1; i++) 
+	    {
+	      if ((status = fprintf(f, "%4.4f ", gsl_vector_get(c, i))) < 0)
+		      return -1;
+	      n += status;
+	    }
+	printf ("\n");
+
         for (size_t i = 0; i < m->size1; i++) {
+	  	double sol = 0;
                 for (size_t j = 0; j < m->size2; j++) {
-                        if ((status = fprintf(f, "%4.2f ", gsl_matrix_get(m, i, j))) < 0)
+                        if ((status = fprintf(f, "%4.4f ", gsl_matrix_get(m, i, j))) < 0)
                                 return -1;
                         n += status;
+			if (c)
+			  sol += gsl_vector_get (c, j) * gsl_matrix_get (m, i, j);
                 }
 
-                if ((status = fprintf(f, "| %4.2f", gsl_vector_get (v, i))) < 0)
+                if ((status = fprintf(f, "| %4.4f", gsl_vector_get (v, i))) < 0)
                         return -1;
                 n += status;
 
 		if (w)
 		  {
-		    if ((status = fprintf(f, " (weight %4.2f)", gsl_vector_get (w, i))) < 0)
+		    if ((status = fprintf(f, " (weight %4.4f)", gsl_vector_get (w, i))) < 0)
+			    return -1;
+		    n += status;
+		  }
+		if (c)
+		  {
+		    if ((status = fprintf(f, " (solution %4.4f)", sol) < 0))
 			    return -1;
 		    n += status;
 		  }
@@ -1718,23 +1738,29 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
 }
 
 /* Determine matrix profile based on colors and targets.
+   Targets can be xyz or RGB
    if dark_point_elts == 0 then dark point will be (0, 0, 0)
    if dark_point_elts == 1 then dark point will be (x, x, x) for some constant x
    if dark_point_elts == 3 then dark point is arbirtrary
    TODO: We should not minimize least squares, we want smallest deltaE2000  */
 
 color_matrix
-determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elts, luminosity_t brightness)
+determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r)
 {
    rgbdata avg1 = {0,0,0};
    xyz avg2 = {0,0,0};
+   rgbdata avg3 = {0,0,0};
    for (int i = 0; i < n; i++)
      {
        avg1 += colors[i];
-       avg2 += targets[i];
+       if (targets)
+         avg2 += targets[i];
+       else
+	 avg3 += rgbtargets[i];
      }
+   /* Normalize values to reduce rounoff errors.  */
    luminosity_t scale1 = 3*n/(avg1.red + avg1.green + avg1.blue);
-   luminosity_t scale2 = 3*n/(avg2.x + avg2.y + avg2.z);
+   luminosity_t scale2 = targets ? 3*n/(avg2.x + avg2.y + avg2.z) : 3*n/(avg3.red + avg3.green + avg3.blue);
 
   int nvariables = 9;
   const bool verbose = false;
@@ -1745,13 +1771,12 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elt
   else
     assert (dark_point_elts == 0);
   int nequations = n * 3;
-  gsl_matrix *X, *cov;
+  gsl_matrix *X;
   gsl_vector *y, *w, *c;
   X = gsl_matrix_alloc (nequations, nvariables);
   y = gsl_vector_alloc (nequations);
   w = gsl_vector_alloc (nequations);
   c = gsl_vector_alloc (nvariables);
-  cov = gsl_matrix_alloc (nvariables, nvariables);
   for (int i = 0; i < n; i++)
     {
       for (int j = 0; j < 3; j++)
@@ -1770,92 +1795,142 @@ determine_color_matrix (rgbdata *colors, xyz *targets, int n, int dark_point_elt
 	      gsl_matrix_set (X, i * 3 + j, 10, j == 1);
 	      gsl_matrix_set (X, i * 3 + j, 11, j == 2);
 	    }
-	  gsl_vector_set (y, i * 3 + j, targets[i][j] * scale2);
+	  gsl_vector_set (y, i * 3 + j, (targets ? targets[i][j] : rgbtargets[i][j]) * scale2);
 	  gsl_vector_set (w, i * 3 + j, 1);
 	}
     }
   double chisq;
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
-  gsl_multifit_linear_workspace * work
-    = gsl_multifit_linear_alloc (nequations, nvariables);
+  if (nequations == nvariables && 0)
+    {
+      for (int i = 0; i < nvariables; i++)
+	gsl_vector_set (c, i, gsl_vector_get (y, i));
+      gsl_matrix *T = gsl_matrix_alloc (nequations, nvariables);
+      for (int i = 0; i < nvariables; i++)
+        for (int j = 0; j < nvariables; j++)
+	  gsl_matrix_set (T, i, j, gsl_matrix_get (X, i, j));
+      bool colinear = gsl_linalg_HH_svx (T, c);
+      if (colinear)
+	{
+	  printf ("Colinear input\n");
+	  color_matrix ret;
+	  gsl_matrix_free (X);
+	  gsl_matrix_free (T);
+	  gsl_vector_free (y);
+	  gsl_vector_free (w);
+	  gsl_vector_free (c);
+	  gsl_set_error_handler (old_handler);
+	  return ret;
+	}
+      printf ("HH solved\n");
+    }
+  else
+    {
+      gsl_multifit_linear_workspace * work
+	= gsl_multifit_linear_alloc (nequations, nvariables);
+      gsl_matrix *cov;
+      cov = gsl_matrix_alloc (nvariables, nvariables);
+      gsl_multifit_wlinear (X, w, y, c, cov,
+			    &chisq, work);
+      gsl_matrix_free (cov);
+      gsl_multifit_linear_free (work);
+    }
   if (verbose)
-    print_system (stdout, X, y, w);
-  gsl_multifit_wlinear (X, w, y, c, cov,
-			&chisq, work);
+    print_system (stdout, X, y, w, c);
   luminosity_t s = (scale1 / scale2);
   color_matrix ret (C(0) * s, C(1) * s, C(2) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(9) / scale2 : 0,
 		    C(3) * s, C(4) * s, C(5) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(10) / scale2 : 0,
 		    C(6) * s, C(7) * s, C(8) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(11) / scale2 : 0,
 		    0, 0, 0, 1);
+  ret.verify_last_row_0001 ();
   gsl_set_error_handler (old_handler);
-  gsl_multifit_linear_free (work);
   gsl_matrix_free (X);
   gsl_vector_free (y);
   gsl_vector_free (w);
   gsl_vector_free (c);
-  gsl_matrix_free (cov);
-  if (verbose)
+  if (verbose || report)
     {
       luminosity_t desum = 0, demax = 0;
+      if (report)
+	report->clear ();
       for (int i = 0; i < n; i++)
 	{
-	  xyz color2;
-	  ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
-	  luminosity_t d = deltaE2000 (targets[i] * brightness, color2 * brightness);
+	  xyz color1, color2;
+	  if (targets)
+	    {
+	      color1 = targets[i];
+	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
+	    }
+	  else
+	    {
+	      rgbdata c = rgbtargets[i];
+	      c.red = r->adjust_luminosity_ir (c.red);
+	      c.green = r->adjust_luminosity_ir (c.green);
+	      c.blue = r->adjust_luminosity_ir (c.blue);
+
+	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
+	      c.red = r->adjust_luminosity_ir (c.red);
+	      c.green = r->adjust_luminosity_ir (c.green);
+	      c.blue = r->adjust_luminosity_ir (c.blue);
+	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
+	    }
+	  luminosity_t d = deltaE2000 (color1, color2, white);
 #if 0
 			    printf ("Compare1 %i\n", i);
 			    targets[i].print (stdout);
 			    color2.print (stdout);
 #endif
+	  if (report)
+	    report->push_back ({color2, color1, d});
 	  desum += d;
 	  if (demax < d)
 	    demax = d;
 	}
-      ret.print (stdout);
-      printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
+      if (verbose)
+	{
+          ret.print (stdout);
+          printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
+	}
     }
   return ret;
 }
 
 bool
-optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, progress_info *progress)
+optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress)
 {
-   bool verbose = false;
+   bool verbose = true;
    /* Set up scr-to-img map.  */
    scr_to_img map;
    map.set_parameters (*param, img);
-   rgbdata proportions = map.patch_proportions ();
+   //rgbdata proportions = map.patch_proportions ();
 
-   /* Set render parameters to do no adjustments that can be also performed on optimized render.
-      (i.e. we can't do presaturation, but we can do saturation).  */
    render_parameters my_rparam = rparam;
    my_rparam.output_profile = render_parameters::output_profile_xyz;
-   my_rparam.output_tone_curve = tone_curve::tone_curve_linear;
-   my_rparam.brightness = 1;
-   my_rparam.saturation = 1;
-   color_matrix color_to_xyz = my_rparam.get_rgb_to_xyz_matrix (&img, true, proportions, d50_white);
 
-   /* First renderer is interpolated with normal color processing.  */
-   render_interpolate r (*param, img, my_rparam, 255, false, false);
+   /* First renderer is interpolated with normal data collection with unadjusted mode.  */
+   render_interpolate r (*param, img, my_rparam, 255, false, false, true);
 
-   /* Second renderer is interpolated with adjusted color processing.  */
+   /* Second renderer is interpolated with original color collection with unadjusted mode.  */
    render_parameters my_rparam2;
    my_rparam2.original_render_from (my_rparam, true, true);
-   render_interpolate r2 (*param, img, my_rparam2, 255, false, false);
-   r2.original_color ();
+   render_interpolate r2 (*param, img, my_rparam2, 255, false, false, true);
+   r2.original_color (false);
 
 
    r.precompute_all (progress);
    r2.precompute_all (progress);
    int n = 0;
    rgbdata *colors = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
-   xyz *targets = (xyz *)malloc (sizeof (xyz) * points.size ());
+   rgbdata *targets = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
 
    for (size_t i = 0; i < points.size (); i++)
      {
        int px = points[i].x;
        int py = points[i].y;
        const int range = 2;
+       rgbdata color = {0, 0, 0};
+#if 0
        int xmin, ymin, xmax, ymax;
        luminosity_t sx, sy;
        map.to_img (px - range, py - range, &sx, &sy);
@@ -1882,10 +1957,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
        ymin -= 5;
        xmax += 5;
        ymax += 5;
-       rgbdata color = {0, 0, 0};
        if (xmin < 0 || ymin < 0 || xmax >= img.width || ymax >= img.height)
 	 continue;
-#if 0
        int c = 0;
        for (int y = ymin; y <= ymax; y++)
          for (int x = xmin; x <= xmax; x++)
@@ -1901,14 +1974,11 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
        assert (c);
        color *= (1 / (luminosity_t)c);
 #endif
-       xyz target = {0, 0, 0};
+       rgbdata target = {0, 0, 0};
        for (int y = py - range; y <= py + range; y++)
          for (int x = px - range; x <= px + range; x++)
 	   {
-	     rgbdata rc = r.sample_pixel_scr (x, y);
-	     xyz c;
-	     color_to_xyz.apply_to_rgb (rc.red, rc.green, rc.blue, &c.x, &c.y, &c.z);
-	     target += c;
+	     target += r.sample_pixel_scr (x, y);
 	     color += r2.sample_pixel_scr (x, y);
 	   }
        target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
@@ -1921,26 +1991,37 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
      }
    if (n >= 4)
      {
-       color_matrix c = determine_color_matrix (colors, targets, n, 3, rparam.brightness);
+       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r);
        /* Do basic sanity check.  All the values should be relative close to range 0...1  */
        for (int i = 0; i < 4; i++)
 	 for (int j = 0; j < 3; j++)
 	   if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
 	     return false;
-       rparam.optimized_red   = {c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2]};
-       rparam.optimized_green = {c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2]};
-       rparam.optimized_blue  = {c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2]};
+       /* First determine dark point of the scan.  */
+       color_matrix ci = c.invert ();
+       rparam.profiled_dark  = {ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2]};
+
+       /* Now obtain scanner response to process red, green and blue.  */
+       c.m_elements[3][0] = 0;
+       c.m_elements[3][1] = 0;
+       c.m_elements[3][2] = 0;
+       c = c.invert ();
+       rparam.profiled_red   = {c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2]};
+       rparam.profiled_green = {c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2]};
+       rparam.profiled_blue  = {c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2]};
+#if 0
        rparam.optimized_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
+#endif
        if (verbose)
 	 {
 	   printf ("Dark ");
-	   rparam.optimized_dark.print (stdout);
+	   rparam.profiled_dark.print (stdout);
 	   printf ("Red ");
-	   rparam.optimized_red.print (stdout);
+	   rparam.profiled_red.print (stdout);
 	   printf ("Green ");
-	   rparam.optimized_green.print (stdout);
+	   rparam.profiled_green.print (stdout);
 	   printf ("Blue ");
-	   rparam.optimized_blue.print (stdout);
+	   rparam.profiled_blue.print (stdout);
 	 }
 
 #if 0

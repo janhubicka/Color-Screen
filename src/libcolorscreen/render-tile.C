@@ -517,7 +517,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		  render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255,screen_compensation, adjust_luminosity);
 		  if (render_type == render_type_interpolated_original
 		      || render_type == render_type_interpolated_optimized_original)
-		    r->original_color ();
+		    r->original_color (render_type == render_type_interpolated_optimized_original);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -532,7 +532,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 				   my_rparam, 255, screen_compensation, adjust_luminosity);
 	if (render_type == render_type_interpolated_original
 	    || render_type == render_type_interpolated_optimized_original)
-	  render.original_color ();
+	  render.original_color (render_type == render_type_interpolated_optimized_original);
 	if (!render.precompute_img_range (xoffset * step, yoffset * step,
 					  (width + xoffset) * step,
 					  (height + yoffset) * step, progress))

@@ -367,7 +367,7 @@ struct cie_lab
 {
    luminosity_t l, a, b;
 
-   cie_lab (xyz c);
+   cie_lab (xyz c, xyz white);
 };
 
 struct mem_rgbdata;
@@ -461,6 +461,13 @@ struct rgbdata
     }
   }
   inline rgbdata
+  cut ()
+  {
+    return {std::min (std::max (red, (luminosity_t)0), (luminosity_t) 1),
+	    std::min (std::max (green, (luminosity_t)0), (luminosity_t) 1),
+	    std::min (std::max (blue, (luminosity_t)0), (luminosity_t) 1)};
+  }
+  inline rgbdata
   gamma (luminosity_t g)
   {
     rgbdata ret = {apply_gamma (red, g), apply_gamma (green, g), apply_gamma (blue, g)};
@@ -491,9 +498,9 @@ struct rgbdata
   print (FILE *f)
   {
     luminosity_t r,g,b;
-    r = red * 255;
-    g = green * 255;
-    b = blue * 255;
+    r = std::max (std::min (red * 255, (luminosity_t)266), (luminosity_t)0);
+    g = std::max (std::min (green * 255, (luminosity_t)266), (luminosity_t)0);
+    b = std::max (std::min (blue * 255, (luminosity_t)266), (luminosity_t)0);
     fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
   }
 };
@@ -678,8 +685,8 @@ xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, l
 
 luminosity_t deltaE(cie_lab c1, cie_lab c2);
 luminosity_t deltaE2000(cie_lab c1, cie_lab c2);
-luminosity_t deltaE(xyz c1, xyz c2);
-luminosity_t deltaE2000(xyz c1, xyz c2);
+luminosity_t deltaE(xyz c1, xyz c2, xyz white);
+luminosity_t deltaE2000(xyz c1, xyz c2, xyz white);
 luminosity_t dominant_wavelength (xy_t color, xy_t whitepoint = xy_t(0.33,0.33));
 xy_t find_best_whitepoint (xyz red, xyz green, xyz blue,
 			   luminosity_t red_dominating_wavelength,

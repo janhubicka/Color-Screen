@@ -27,10 +27,10 @@ struct DLL_PUBLIC render_parameters
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
     color_model (color_model_none),
-    optimized_dark (0, 0, 0),
-    optimized_red (1, 0, 0),
-    optimized_green (0, 1, 0),
-    optimized_blue (0, 0, 1),
+    profiled_dark (0, 0, 0),
+    profiled_red (1, 0, 0),
+    profiled_green (0, 1, 0),
+    profiled_blue (0, 0, 1),
     output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
@@ -109,7 +109,6 @@ struct DLL_PUBLIC render_parameters
     {
       color_model_none,
       color_model_scan,
-      color_model_optimized,
       color_model_red,
       color_model_green,
       color_model_blue,
@@ -150,10 +149,15 @@ struct DLL_PUBLIC render_parameters
       output_profile_original,
       output_profile_max
     };
-  xyz optimized_dark;
-  xyz optimized_red;
-  xyz optimized_green;
-  xyz optimized_blue;
+
+  /* Profile used to convert RGB data of scanner to RGB data of the color process.
+     Dark is the dark point of scanner (which is subtracted first).
+     Red is scanner's response to red filter etc.  */
+  rgbdata profiled_dark;
+  rgbdata profiled_red;
+  rgbdata profiled_green;
+  rgbdata profiled_blue;
+
   output_profile_t output_profile;
   enum tone_curve::tone_curves output_tone_curve;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
@@ -302,8 +306,13 @@ struct DLL_PUBLIC render_parameters
   /* Initialize render parameters for showing original scan.
      In this case we do not want to apply color models etc.  */
   void
-  original_render_from (render_parameters &rparam, bool color, bool optimized)
+  original_render_from (render_parameters &rparam, bool color, bool profiled)
   {
+    if (profiled)
+    {
+      *this = rparam;
+      return;
+    }
     backlight_correction = rparam.backlight_correction;
     backlight_correction_black = rparam.backlight_correction_black;
     gamma = rparam.gamma;
@@ -311,12 +320,13 @@ struct DLL_PUBLIC render_parameters
     scan_exposure = rparam.scan_exposure;
     dark_point = rparam.dark_point;
     brightness = rparam.brightness;
-    color_model = color ? (optimized ? render_parameters::color_model_optimized : render_parameters::color_model_scan) : render_parameters::color_model_none;
+    color_model = color ? (profiled ? rparam.color_model : render_parameters::color_model_scan) : render_parameters::color_model_none;
     output_tone_curve = rparam.output_tone_curve;
     tile_adjustments = rparam.tile_adjustments;
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
-    if (optimized)
+#if 0
+    if (profiled)
       {
 	optimized_red = rparam.optimized_red;
 	optimized_green = rparam.optimized_green;
@@ -328,7 +338,9 @@ struct DLL_PUBLIC render_parameters
 	/* We always produce optimized data for d50 white.  */
 	observer_whitepoint = d50_white;
       }
-    else if (color)
+    else
+#endif
+    if (color)
       white_balance = rparam.white_balance;
     else
       {
@@ -344,6 +356,26 @@ struct DLL_PUBLIC render_parameters
     collection_threshold = rparam.collection_threshold;
     screen_blur_radius = rparam.screen_blur_radius;
 
+  }
+  color_matrix get_profile_matrix ()
+  {
+    color_matrix subtract_dark (1, 0, 0, -profiled_dark.red,
+				0, 1, 0, -profiled_dark.green,
+				0, 0, 1, -profiled_dark.blue,
+				0, 0, 0, 1);
+    color_matrix process_colors (profiled_red.red,   profiled_green.red,   profiled_blue.red, 0,
+				 profiled_red.green, profiled_green.green, profiled_blue.green, 0,
+				 profiled_red.blue,  profiled_green.blue,  profiled_blue.blue, 0,
+				 0, 0, 0, 1);
+    color_matrix ret = process_colors.invert ();
+    ret = ret * subtract_dark;
+    return ret;
+#if 0
+    return color_matrix (optimized_red.x, optimized_green.x, optimized_blue.x, optimized_dark.x,
+			 optimized_red.y, optimized_green.y, optimized_blue.y, optimized_dark.y,
+			 optimized_red.z, optimized_green.z, optimized_blue.z, optimized_dark.z,
+			 0              , 0                , 0               , 1);
+#endif
   }
 private:
   static const bool debug = false;
@@ -448,13 +480,17 @@ public:
     return d;
   }
   inline rgbdata
-  get_rgb_pixel (int x, int y)
+  adjust_rgb (rgbdata d)
   {
-    rgbdata d = get_unadjusted_rgb_pixel (x, y);
     d.red = (d.red - m_params.dark_point) * m_params.scan_exposure;
     d.green = (d.green - m_params.dark_point) * m_params.scan_exposure;
     d.blue = (d.blue - m_params.dark_point) * m_params.scan_exposure;
     return d;
+  }
+  inline rgbdata
+  get_rgb_pixel (int x, int y)
+  {
+    return adjust_rgb (get_unadjusted_rgb_pixel (x, y));
   }
   /* PATCH_PORTIONS describes how much percent of screen is occupied by red, green and blue
      patches respectively. It should have sum at most 1.

@@ -24,7 +24,8 @@ enum ui_mode
   screen_editing,
   screen_detection,
   motor_correction_editing,
-  solver_editing
+  solver_editing,
+  color_profiling
 } ui_mode;
 
 #define MAX_SOVER_POINTS 10000
@@ -242,6 +243,10 @@ static void
 print_help()
 {
 	printf ("\n");
+	if (ui_mode == color_profiling)
+	   printf ("Color profiling mode\n"
+		   "left button adds point, middle/right button removes\n"
+		   "p   - switch to screen editing\n");
 	if (ui_mode == screen_detection)
 	   printf ("Screen detection mode\n"
 		   "e   - switch to screen editing                P   - determine screen proportions\n"
@@ -251,7 +256,7 @@ print_help()
 	   printf ("Screen editing mode\n"
 	           "c   - set center                              C   - set lens center\n"
 		   "x   - freeze x                                y   - freeze y                      a - unfreeze both\n"
-		   "s S - fast/precise screen collection          O   - optimize colors\n");
+		   "s S - fast/precise screen collection          O   - optimize colors               P - color profiling mode\n");
 	if (ui_mode == solver_editing)
 	   printf ("Solver editing mode\n"
 	           "w   - switch to screen editing mode\n"
@@ -293,8 +298,8 @@ static bool freeze_x = false;
 static bool freeze_y = false;
 static void display ();
 static int setcolor;
-static bool optimize_colors;
 static std::vector<point_t> color_optimizer_points;
+static std::vector<color_match> color_optimizer_match;
 
 /* Handle all the magic keys.  */
 static gint
@@ -598,7 +603,15 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	display_scheduled = true;
       }
     }
-  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing)
+  if (ui_mode == color_profiling && k == 'p')
+  {
+    ui_mode == screen_editing;
+    display_scheduled = true;
+    print_help ();
+    printf ("Color editing mode\n");
+    return false;
+  }
+  if (ui_mode == screen_editing || ui_mode == motor_correction_editing || ui_mode == solver_editing || ui_mode == color_profiling)
     {
       if (k == 'g')
       {
@@ -712,11 +725,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
           print_help ();
 	  printf ("Screen editing mode\n");
 	}
-      if (k == 'O' && scan.rgbdata)
+      if (k == 'P' && scan.rgbdata)
         {
-	  optimize_colors = true;
+	  ui_mode = color_profiling;
           preview_display_scheduled = true;
-	  printf ("Please select by left button colors to optimize. Middle button cancels the action. Right button optimizes\n");
+          display_scheduled = true;
+	  print_help ();
+	  printf ("Color profiling mode\n");
         }
     }
   else
@@ -876,8 +891,8 @@ previewrender (GdkPixbuf ** pixbuf)
   if (scan.stitch)
     return;
   enum render_parameters::color_model_t cm = rparams.color_model;
-  if (optimize_colors)
-    rparams.color_model = render_parameters::color_model_optimized;
+  //if (optimize_colors)
+    //rparams.color_model = render_parameters::color_model_optimized;
   render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
   int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height (), rowstride;
   int max_size = std::max (scr_xsize, scr_ysize);
@@ -926,7 +941,7 @@ previewrender (GdkPixbuf ** pixbuf)
 static void
 draw_circle (cairo_surface_t *surface, coord_t bigscale,
     	     int xoffset, int yoffset, int width, int height,
-    	     coord_t x, coord_t y, coord_t r, coord_t g, coord_t b, coord_t radius = 3)
+    	     coord_t x, coord_t y, coord_t r, coord_t g, coord_t b, coord_t radius = 3, luminosity_t opacity = 0.5)
 {
   if ((x + radius) * bigscale - xoffset < 0
       || (y + radius) * bigscale - yoffset < 0
@@ -938,7 +953,7 @@ draw_circle (cairo_surface_t *surface, coord_t bigscale,
   cairo_translate (cr, -xoffset, -yoffset);
   cairo_scale (cr, bigscale, bigscale);
 
-  cairo_set_source_rgba (cr, r, g, b, 0.5);
+  cairo_set_source_rgba (cr, r, g, b, opacity);
   cairo_arc (cr, x, y, radius, 0.0, 2 * G_PI);
 
   cairo_fill (cr);
@@ -948,16 +963,41 @@ draw_circle (cairo_surface_t *surface, coord_t bigscale,
 static void
 draw_line (cairo_surface_t *surface, coord_t bigscale,
 	   int xoffset, int yoffset,
-	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b, coord_t width = 1)
+	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b, coord_t width = 1, luminosity_t opacity = 0.5)
 {
   cairo_t *cr = cairo_create (surface);
   cairo_translate (cr, -xoffset, -yoffset);
   cairo_scale (cr, bigscale, bigscale);
 
   cairo_set_line_width (cr, std::max (width/bigscale, (coord_t)1));
-  cairo_set_source_rgba (cr, r, g, b, 0.5);
+  cairo_set_source_rgba (cr, r, g, b, opacity);
   cairo_move_to (cr, x1, y1);
   cairo_line_to (cr, x2, y2);
+
+  cairo_stroke (cr);
+  cairo_destroy (cr);
+}
+
+void
+draw_text (cairo_surface_t *surface, coord_t bigscale,
+	   int xoffset, int yoffset, char *text,
+	   coord_t x, coord_t y, coord_t r, coord_t g, coord_t b, coord_t width = 1, luminosity_t opacity = 0.5)
+{
+  cairo_t *cr = cairo_create (surface);
+  cairo_translate (cr, -xoffset, -yoffset);
+  cairo_scale (cr, bigscale, bigscale);
+
+  cairo_set_source_rgb(cr, r, g, b);
+
+  cairo_select_font_face(cr, "Helvetica",
+      CAIRO_FONT_SLANT_NORMAL,
+      CAIRO_FONT_WEIGHT_BOLD);
+
+  cairo_set_font_size(cr, 25 / bigscale);
+
+  cairo_move_to(cr, x, y);
+  cairo_show_text(cr, text);
+
 
   cairo_stroke (cr);
   cairo_destroy (cr);
@@ -1013,6 +1053,38 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 		draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, ix, iy, t == solver_parameters::blue, t == solver_parameters::green, t == solver_parameters::red, 1);
               }
          }
+
+  if (ui_mode == color_profiling)
+    {
+      scr_to_img map;
+      map.set_parameters (current, scan);
+      bradford_whitepoint_adaptation_matrix m(d50_white, srgb_white);
+      for (size_t i = 0; i < color_optimizer_points.size (); i++)
+        {
+	  coord_t sx, sy;
+	  map.to_img (color_optimizer_points[i].x, color_optimizer_points[i].y, &sx, &sy);
+	  rgbdata c2 = {1, 0, 0};
+	  rgbdata c1 = {1, 1, 1};
+	  if (color_optimizer_match.size () > i)
+	    {
+	      xyz c = color_optimizer_match[i].target;
+	      m.apply_to_rgb (c.x, c.y, c.z, &c.x, &c.y, &c.z);
+	      c.to_srgb (&c1.red, &c1.green, &c1.blue);
+	      c1 = c1.cut ();
+	      c = color_optimizer_match[i].profiled;
+	      m.apply_to_rgb (c.x, c.y, c.z, &c.x, &c.y, &c.z);
+	      c.to_srgb (&c2.red, &c2.green, &c2.blue);
+	      c2 = c2.cut ();
+	      char buf[256];
+	      sprintf (buf, "%.1fΔE2k", color_optimizer_match[i].deltaE);
+	      draw_text (surface, bigscale, xoffset, yoffset, buf, sx + 27 / bigscale, sy + 2 / bigscale, 0, 0, 0, 1);
+	      draw_text (surface, bigscale, xoffset, yoffset, buf, sx + 25 / bigscale, sy, 1, 1, 1, 1);
+	    }
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, 1,1,1, 23/bigscale, 1);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, c2.blue, c2.green, c2.red, 20/bigscale, 1);
+          draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, c1.blue, c1.green, c1.red, 10/bigscale, 1);
+        }
+    }
 
   if (current.n_motor_corrections && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
     for (int i = 0; i < current.n_motor_corrections; i++)
@@ -1133,32 +1205,39 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     }
   if (!initialized)
     return;
-  if (optimize_colors)
+  //printf ("Press %i\n",ui_mode == color_profiling);
+  if (ui_mode == color_profiling)
     {
+      coord_t x = (event->x + shift_x) / scale_x;
+      coord_t y = (event->y + shift_y) / scale_y;
+      coord_t screenx, screeny;
+      scr_to_img map;
+      map.set_parameters (current, scan);
+      map.to_scr (x, y, &screenx, &screeny);
       if (event->button == 1)
 	{
-	  coord_t x = (event->x + shift_x) / scale_x;
-	  coord_t y = (event->y + shift_y) / scale_y;
-	  coord_t screenx, screeny;
-	  scr_to_img map;
-	  map.set_parameters (current, scan);
-	  map.to_scr (x, y, &screenx, &screeny);
 	  color_optimizer_points.push_back ({screenx, screeny});
-	  printf ("Adding screen optimization point %f %f\n",screenx, screeny);
-	  file_progress_info progress (stdout);
-	  if (optimize_color_model_colors (&current, scan, rparams, color_optimizer_points, &progress))
-	    preview_display_scheduled = true;
+	  printf ("Added\n");
           display_scheduled = true;
+	  return;
 	}
-      else if (event->button == 2)
+      else if (event->button >= 2 && color_optimizer_points.size ());
         {
-	  printf ("Leaving color optimization\n");
-	  optimize_colors = false;
-        }
-      else if (event->button == 3)
-        {
-	  printf ("Optimizing colors and leaving color optimization\n");
-	  optimize_colors = false;
+	  int best = 0;
+	  coord_t delta = 10000000;
+	  for (int i = 0; i < color_optimizer_points.size (); i++)
+	    {
+	      coord_t dist = sqrt ((color_optimizer_points[i].x-screenx) * (color_optimizer_points[i].x-screenx) + (color_optimizer_points[i].y-screeny) * (color_optimizer_points[i].y-screeny));
+	      if (dist < delta)
+	        {
+		   best = i;
+		   delta = dist;
+	        }
+	    }
+	  for (int i = best; i < color_optimizer_points.size () - 1; i++)
+	    color_optimizer_points[i] = color_optimizer_points[i + 1];
+	  color_optimizer_points.pop_back ();
+	  display_scheduled = true;
         }
       
     }
@@ -1589,7 +1668,7 @@ main (int argc, char **argv)
   const char *error;
   if (in && !load_csp (in, &current, &current_scr_detect, &rparams, &current_solver, &error))
     {
-      fprintf (stderr, "Can not load parametrs: %s\n", error);
+      fprintf (stderr, "Can not load parameters: %s\n", error);
       exit (1);
     }
   //if (!in && scan.gamma != -2)
@@ -1638,6 +1717,12 @@ main (int argc, char **argv)
 
   while (true)
     {
+      if (ui_mode == color_profiling
+	  && (display_scheduled || preview_display_scheduled))
+	{
+	  file_progress_info progress (stdout);
+	  optimize_color_model_colors (&current, scan, rparams, color_optimizer_points, &color_optimizer_match, &progress);
+	}
       if (display_scheduled)
 	{
 	  display ();

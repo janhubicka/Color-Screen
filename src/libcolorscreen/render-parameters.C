@@ -7,7 +7,6 @@
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
-  "optimized",
   "red",
   "green",
   "blue",
@@ -83,7 +82,6 @@ static bool
 apply_balance_to_model (render_parameters::color_model_t color_model)
 {
   return (color_model != render_parameters::color_model_none
-	  && color_model != render_parameters::color_model_optimized
 	  && color_model != render_parameters::color_model_scan
 	  && color_model != render_parameters::color_model_red
 	  && color_model != render_parameters::color_model_green
@@ -127,6 +125,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  dye_whitepoint = {1,1,1};
         dye_whitepoint = {1,1,1};
 	break;
+#if 0
       case render_parameters::color_model_optimized:
 	{
 	  color_matrix m (optimized_red.x, optimized_green.x, optimized_blue.x, optimized_dark.x,
@@ -140,6 +139,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	  return dyes;
 	}
 	break;
+#endif
       case render_parameters::color_model_red:
 	{
 	  color_matrix m (1, 0, 0, 0,
@@ -384,7 +384,7 @@ render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_pa
   color_matrix dyes = get_dyes_matrix (&spectrum_based, &optimized, img);
 
   /* If dyes are normalised, we need to scale primaries to match their proportions in actual sreen.  */
-  if (normalized_patches && color_model != render_parameters::color_model_optimized)
+  if (normalized_patches)
     dyes.scale_channels (patch_proportions.red, patch_proportions.green, patch_proportions.blue);
   dyes.verify_last_row_0001 ();
 

@@ -7,7 +7,7 @@
 class render_interpolate : public render_to_scr
 {
 public:
-  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity);
+  render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity, bool unadjusted = false);
   ~render_interpolate ();
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
   rgbdata sample_pixel_final (coord_t x, coord_t y)
@@ -51,18 +51,27 @@ public:
     set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
   pure_attr flatten_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
-  void original_color ()
+  void original_color (bool profiled)
   {
     if (m_img.rgbdata)
-      m_original_color = true;
+      {
+	m_original_color = true;
+	if (profiled)
+	{
+	  profile_matrix = m_params.get_profile_matrix ();
+	  m_profiled = true;
+	}
+      }
   }
 private:
   screen *m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
   bool m_original_color;
+  bool m_unadjusted;
+  bool m_profiled;
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
-
+  color_matrix profile_matrix;
 };
 #endif
