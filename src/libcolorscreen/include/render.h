@@ -376,7 +376,7 @@ struct DLL_PUBLIC render_parameters
 				 0, 0, 0, 1);
     process_colors.transpose ();
     mix_dark = profiled_dark;
-    process_colors.invert ().apply_to_rgb (/*patch_proportions.red / */ white_balance.red, /*patch_proportions.green / */ white_balance.green, /*patch_proportions.blue / */ white_balance.blue, &mix_red, &mix_green, &mix_blue);
+    process_colors.invert ().apply_to_rgb (3 * patch_proportions.red / white_balance.red, 3 * patch_proportions.green / white_balance.green, 3 * patch_proportions.blue / white_balance.blue, &mix_red, &mix_green, &mix_blue);
     mix_red = mix_red;
     mix_green = mix_green;
     mix_blue = mix_blue;

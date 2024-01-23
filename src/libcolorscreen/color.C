@@ -45,10 +45,11 @@ matrix_by_dye_xyz (xyz r, xyz g, xyz b)
 cie_lab::cie_lab (xyz c, xyz white)
 {
   luminosity_t x, y, z;
-  const luminosity_t refX = white.x, refY = white.y, refZ = white.z;
   assert (white.y == 1);
   
-  x = c.x / refX; y = c.y / refY; z = c.z / refZ;
+  x = c.x / white.x;
+  y = c.y / white.y;
+  z = c.z / white.z;
   
   if (x > 0.008856)
     x = my_pow(x, (luminosity_t)(1 / 3.0));
@@ -65,6 +66,8 @@ cie_lab::cie_lab (xyz c, xyz white)
   l = 116 * y - 16;
   a = 500 * (x - y);
   b = 200 * (y - z);
+  //c.print (stdout);
+  //printf ("%f %f %f\n",l,a,b);
 }
 
 

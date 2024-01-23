@@ -1745,7 +1745,7 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
    TODO: We should not minimize least squares, we want smallest deltaE2000  */
 
 color_matrix
-determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r)
+determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r, rgbdata proportions)
 {
    rgbdata avg1 = {0,0,0};
    xyz avg2 = {0,0,0};
@@ -1864,15 +1864,15 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 	  else
 	    {
 	      rgbdata c = rgbtargets[i];
-	      c.red = r->adjust_luminosity_ir (c.red);
-	      c.green = r->adjust_luminosity_ir (c.green);
-	      c.blue = r->adjust_luminosity_ir (c.blue);
+	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+	      c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
 
 	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
 	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
-	      c.red = r->adjust_luminosity_ir (c.red);
-	      c.green = r->adjust_luminosity_ir (c.green);
-	      c.blue = r->adjust_luminosity_ir (c.blue);
+	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+	      c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
 	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
 	    }
 	  luminosity_t d = deltaE2000 (color1, color2, white);
@@ -1983,6 +1983,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	   }
        target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
        color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+
+       /* We collect normalized patches with R but non-normalized with R2.  Compensate.  */
        target.red *= proportions.red;
        target.green *= proportions.green;
        target.blue *= proportions.blue;
@@ -1994,7 +1996,7 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
      }
    if (n >= 4)
      {
-       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r);
+       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r, proportions);
        /* Do basic sanity check.  All the values should be relative close to range 0...1  */
        for (int i = 0; i < 4; i++)
 	 for (int j = 0; j < 3; j++)
