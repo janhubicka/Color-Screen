@@ -325,21 +325,6 @@ struct DLL_PUBLIC render_parameters
     tile_adjustments = rparam.tile_adjustments;
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
-#if 0
-    if (profiled)
-      {
-	optimized_red = rparam.optimized_red;
-	optimized_green = rparam.optimized_green;
-	optimized_blue = rparam.optimized_blue;
-	optimized_dark = rparam.optimized_dark;
-	film_gamma = rparam.film_gamma;
-	target_film_gamma = rparam.target_film_gamma;
-	saturation = rparam.saturation;
-	/* We always produce optimized data for d50 white.  */
-	observer_whitepoint = d50_white;
-      }
-    else
-#endif
     if (color)
       white_balance = rparam.white_balance;
     else
@@ -370,12 +355,6 @@ struct DLL_PUBLIC render_parameters
     color_matrix ret = process_colors.invert ();
     ret = ret * subtract_dark;
     return ret;
-#if 0
-    return color_matrix (optimized_red.x, optimized_green.x, optimized_blue.x, optimized_dark.x,
-			 optimized_red.y, optimized_green.y, optimized_blue.y, optimized_dark.y,
-			 optimized_red.z, optimized_green.z, optimized_blue.z, optimized_dark.z,
-			 0              , 0                , 0               , 1);
-#endif
   }
 private:
   static const bool debug = false;
