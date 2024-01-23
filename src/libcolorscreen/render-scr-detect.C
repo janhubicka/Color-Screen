@@ -370,7 +370,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	scr_to_img_parameters dummy;
 	render_img render (dummy, img, my_rparam, 255);
 	if (color)
-	  render.set_color_display ();
+	  render.set_color_display (false);
 	if (!render.precompute_all (progress))
 	  return false;
 

@@ -73,6 +73,9 @@ bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
+  /* When doing profiled matrix, we need to pre-scale the profile so black point corretion goes right.
+     Without doing so, for exmaple black from red pixels would be subtracted too agressively, since
+     we account for every pixel in image, not only red patch portion.  */
   if (!render_to_scr::precompute (!m_original_color, !m_original_color || m_profiled, xmin, ymin, xmax, ymax, progress))
     return false;
   if (m_screen_compensation || m_params.precise)

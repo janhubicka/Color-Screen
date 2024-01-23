@@ -58,7 +58,7 @@ public:
 	m_original_color = true;
 	if (profiled)
 	{
-	  profile_matrix = m_params.get_profile_matrix ();
+	  profile_matrix = m_params.get_profile_matrix (m_scr_to_img.patch_proportions ());
 	  m_profiled = true;
 	}
       }

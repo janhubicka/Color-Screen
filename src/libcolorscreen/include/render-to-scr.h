@@ -61,20 +61,40 @@ class render_img : public render_to_scr
 {
 public:
   render_img (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
-    : render_to_scr (param, img, rparam, dstmaxval), m_color (false)
+    : render_to_scr (param, img, rparam, dstmaxval), m_color (false), m_profiled (false)
   { }
-  void set_color_display () { if (m_img.rgbdata) m_color = 1; }
+  void set_color_display (bool profiled = false)
+  { 
+    if (m_img.rgbdata)
+      {
+        m_color = 1;
+	m_profiled = profiled;
+	  /* When doing profiled matrix, we need to pre-scale the profile so black point corretion goes right.
+	     Without doing so, for exmaple black from red pixels would be subtracted too agressively, since
+	     we account for every pixel in image, not only red patch portion.  */
+	if (profiled)
+	  profile_matrix = m_params.get_profile_matrix (m_scr_to_img.patch_proportions ());
+      }
+  }
   bool precompute_all (progress_info *progress = NULL)
   {
-    return render_to_scr::precompute_all (!m_color, false, progress);
+    return render_to_scr::precompute_all (!m_color, m_profiled, progress);
   }
   inline rgbdata sample_pixel_img (coord_t x, coord_t y)
   {
     rgbdata ret;
     if (!m_color)
       ret.red = ret.green = ret.blue = get_img_pixel (x, y);
-    else
+    else if (!m_profiled)
       get_img_rgb_pixel (x, y, &ret.red, &ret.green, &ret.blue);
+    else
+      {
+	get_unadjusted_img_rgb_pixel (x, y, &ret.red, &ret.green, &ret.blue);
+        profile_matrix.apply_to_rgb (ret.red, ret.green, ret.blue, &ret.red, &ret.green, &ret.blue);
+        ret.red = adjust_luminosity_ir (ret.red);
+        ret.green = adjust_luminosity_ir (ret.green);
+        ret.blue = adjust_luminosity_ir (ret.blue);
+      }
     return ret;
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
@@ -87,14 +107,25 @@ public:
     rgbdata d = sample_pixel_img (x, y);
     set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
-  void inline fast_render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  rgbdata inline get_profiled_rgb_pixel (int x, int y)
   {
-    luminosity_t gg, rr, bb;
+    rgbdata c = get_unadjusted_rgb_pixel (x, y);
+    profile_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+    c.red = adjust_luminosity_ir (c.red);
+    c.green = adjust_luminosity_ir (c.green);
+    c.blue = adjust_luminosity_ir (c.blue);
+    return c;
+  }
+  void inline fast_render_pixel_img (int x, int y, int *r, int *g, int *b)
+  {
+    rgbdata c;
     if (!m_color)
-      rr = gg = bb = fast_get_img_pixel (x, y);
+      c.red = c.green = c.blue = fast_get_img_pixel (x, y);
+    else if (!m_profiled)
+      c = get_rgb_pixel (x, y);
     else
-      get_img_rgb_pixel (x, y, &rr, &gg, &bb);
-    set_color (rr, gg, bb, r, g, b);
+      c = get_profiled_rgb_pixel (x, y);
+    set_color (c.red, c.green, c.blue, r, g, b);
   }
   void inline render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
   {
@@ -132,8 +163,16 @@ public:
     m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
     render_hdr_pixel_img (xx, yy, r, g, b);
   }
+  /* Compute RGB data of downscaled image.  */
+  void
+  get_profiled_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  {
+    downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+  }
 private:
   bool m_color;
+  bool m_profiled;
+  color_matrix profile_matrix;
 };
 
 /* Sample diagonal square.

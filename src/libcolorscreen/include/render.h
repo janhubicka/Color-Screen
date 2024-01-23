@@ -22,11 +22,13 @@ struct DLL_PUBLIC render_parameters
   : gamma (2.2),  film_gamma (1), target_film_gamma (1),
     output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
+    mix_dark (0, 0, 0),
     mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (/*srgb_white*/d50_white),
     age(0),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
     color_model (color_model_none),
+    ignore_infrared (false),
     profiled_dark (0, 0, 0),
     profiled_red (1, 0, 0),
     profiled_green (0, 1, 0),
@@ -77,6 +79,8 @@ struct DLL_PUBLIC render_parameters
   luminosity_t collection_threshold;
   /* White balance adjustment in dye coordinates.  */
   rgbdata white_balance;
+  /* Black subtracted before channel mixing.  */
+  rgbdata mix_dark;
   /* Parameters used to turn RGB data to grayscale:
      mix_red,green and blue are relative weights.  */
   luminosity_t mix_red, mix_green, mix_blue;
@@ -149,6 +153,9 @@ struct DLL_PUBLIC render_parameters
       output_profile_original,
       output_profile_max
     };
+
+  /* Ignore infrared channel and produce fake one using RGB data.  */
+  bool ignore_infrared;
 
   /* Profile used to convert RGB data of scanner to RGB data of the color process.
      Dark is the dark point of scanner (which is subtracted first).
@@ -318,6 +325,7 @@ struct DLL_PUBLIC render_parameters
     gamma = rparam.gamma;
     invert = rparam.invert;
     scan_exposure = rparam.scan_exposure;
+    ignore_infrared = rparam.ignore_infrared;
     dark_point = rparam.dark_point;
     brightness = rparam.brightness;
     color_model = color ? (profiled ? rparam.color_model : render_parameters::color_model_scan) : render_parameters::color_model_none;
@@ -342,19 +350,49 @@ struct DLL_PUBLIC render_parameters
     screen_blur_radius = rparam.screen_blur_radius;
 
   }
-  color_matrix get_profile_matrix ()
+  color_matrix get_profile_matrix (rgbdata patch_proportions)
   {
     color_matrix subtract_dark (1, 0, 0, -profiled_dark.red,
 				0, 1, 0, -profiled_dark.green,
 				0, 0, 1, -profiled_dark.blue,
 				0, 0, 0, 1);
-    color_matrix process_colors (profiled_red.red,   profiled_green.red,   profiled_blue.red, 0,
-				 profiled_red.green, profiled_green.green, profiled_blue.green, 0,
-				 profiled_red.blue,  profiled_green.blue,  profiled_blue.blue, 0,
+    color_matrix process_colors (profiled_red.red * patch_proportions.red,   profiled_green.red * patch_proportions.green,   profiled_blue.red * patch_proportions.blue, 0,
+				 profiled_red.green * patch_proportions.red, profiled_green.green * patch_proportions.green, profiled_blue.green * patch_proportions.blue, 0,
+				 profiled_red.blue * patch_proportions.red,  profiled_green.blue * patch_proportions.green,  profiled_blue.blue * patch_proportions.blue, 0,
 				 0, 0, 0, 1);
     color_matrix ret = process_colors.invert ();
     ret = ret * subtract_dark;
     return ret;
+  }
+  void
+  compute_mix_weights (rgbdata patch_proportions)
+  {
+    rgbdata sprofiled_red = profiled_red /*/ patch_proportions.red*/;
+    rgbdata sprofiled_green = profiled_green /*/ patch_proportions.green*/;
+    rgbdata sprofiled_blue= profiled_blue /*/ patch_proportions.blue*/;
+    color_matrix process_colors (sprofiled_red.red,   sprofiled_green.red,   sprofiled_blue.red, 0,
+				 sprofiled_red.green, sprofiled_green.green, sprofiled_blue.green, 0,
+				 sprofiled_red.blue,  sprofiled_green.blue,  sprofiled_blue.blue, 0,
+				 0, 0, 0, 1);
+    process_colors.transpose ();
+    mix_dark = profiled_dark;
+    process_colors.invert ().apply_to_rgb (/*patch_proportions.red / */ white_balance.red, /*patch_proportions.green / */ white_balance.green, /*patch_proportions.blue / */ white_balance.blue, &mix_red, &mix_green, &mix_blue);
+    mix_red = mix_red;
+    mix_green = mix_green;
+    mix_blue = mix_blue;
+    white_balance = {1, 1, 1};
+    printf ("profiled dark ");
+    profiled_dark.print (stdout);
+    printf ("Scaled profiled red ");
+    sprofiled_red.print (stdout);
+    printf ("Scaled profiled green ");
+    sprofiled_green.print (stdout);
+    printf ("Scaled profiled blue ");
+    sprofiled_blue.print (stdout);
+    printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
+    printf ("%f %f\n", profiled_red.red * mix_red + profiled_red.green * mix_green + profiled_red.blue * mix_blue, patch_proportions.red);
+    printf ("%f %f\n", profiled_green.red * mix_red + profiled_green.green * mix_green + profiled_green.blue * mix_blue, patch_proportions.green);
+    printf ("%f %f\n", profiled_blue.red * mix_red + profiled_blue.green * mix_green + profiled_blue.blue * mix_blue, patch_proportions.blue);
   }
 private:
   static const bool debug = false;
@@ -404,6 +442,7 @@ public:
   inline luminosity_t get_img_pixel (coord_t x, coord_t y);
   inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y);
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b);
+  inline void get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   inline luminosity_t sample_img_square (coord_t xc, coord_t yc, coord_t x1, coord_t y1, coord_t x2, coord_t y2);
   inline luminosity_t fast_get_img_pixel (int x, int y);
     
@@ -433,9 +472,9 @@ public:
   inline luminosity_t get_data_red (int x, int y);
   inline luminosity_t get_data_green (int x, int y);
   inline luminosity_t get_data_blue (int x, int y);
-  inline luminosity_t get_unadjusted_data_red (int x, int y);
-  inline luminosity_t get_unadjusted_data_green (int x, int y);
-  inline luminosity_t get_unadjusted_data_blue (int x, int y);
+  inline luminosity_t get_linearized_data_red (int x, int y);
+  inline luminosity_t get_linearized_data_green (int x, int y);
+  inline luminosity_t get_linearized_data_blue (int x, int y);
   bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress);
   inline rgbdata
   get_linearized_rgb_pixel (int x, int y)
@@ -580,20 +619,20 @@ render::get_data (int x, int y)
 /* Get same for rgb data.  */
 
 inline luminosity_t
-render::get_unadjusted_data_red (int x, int y)
+render::get_linearized_data_red (int x, int y)
 {
   return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
   /* TODO do inversion and film curves if requested.  */
 }
 
 inline luminosity_t
-render::get_unadjusted_data_green (int x, int y)
+render::get_linearized_data_green (int x, int y)
 {
   return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
   /* TODO do inversion and film curves if requested.  */
 }
 inline luminosity_t
-render::get_unadjusted_data_blue (int x, int y)
+render::get_linearized_data_blue (int x, int y)
 {
   return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
   /* TODO do inversion and film curves if requested.  */
@@ -818,7 +857,7 @@ render::get_img_pixel (coord_t xp, coord_t yp)
    Use bicubic interpolation.  */
 
 inline flatten_attr void
-render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+render::get_unadjusted_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
   /* Center of pixel [0,0] is [0.5,0.5].  */
   xp -= (coord_t)0.5;
@@ -830,20 +869,20 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
   if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
     {
       luminosity_t rr, gg, bb;
-      rr = cubic_interpolate (cubic_interpolate (get_unadjusted_data_red ( sx-1, sy-1), get_unadjusted_data_red (sx-1, sy), get_unadjusted_data_red (sx-1, sy+1), get_unadjusted_data_red (sx-1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_red ( sx-0, sy-1), get_unadjusted_data_red (sx-0, sy), get_unadjusted_data_red (sx-0, sy+1), get_unadjusted_data_red (sx-0, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_red ( sx+1, sy-1), get_unadjusted_data_red (sx+1, sy), get_unadjusted_data_red (sx+1, sy+1), get_unadjusted_data_red (sx+1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_red ( sx+2, sy-1), get_unadjusted_data_red (sx+2, sy), get_unadjusted_data_red (sx+2, sy+1), get_unadjusted_data_red (sx+2, sy+2), ry),
+      rr = cubic_interpolate (cubic_interpolate (get_linearized_data_red ( sx-1, sy-1), get_linearized_data_red (sx-1, sy), get_linearized_data_red (sx-1, sy+1), get_linearized_data_red (sx-1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_red ( sx-0, sy-1), get_linearized_data_red (sx-0, sy), get_linearized_data_red (sx-0, sy+1), get_linearized_data_red (sx-0, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_red ( sx+1, sy-1), get_linearized_data_red (sx+1, sy), get_linearized_data_red (sx+1, sy+1), get_linearized_data_red (sx+1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_red ( sx+2, sy-1), get_linearized_data_red (sx+2, sy), get_linearized_data_red (sx+2, sy+1), get_linearized_data_red (sx+2, sy+2), ry),
 			      rx);
-      gg = cubic_interpolate (cubic_interpolate (get_unadjusted_data_green ( sx-1, sy-1), get_unadjusted_data_green (sx-1, sy), get_unadjusted_data_green (sx-1, sy+1), get_unadjusted_data_green (sx-1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_green ( sx-0, sy-1), get_unadjusted_data_green (sx-0, sy), get_unadjusted_data_green (sx-0, sy+1), get_unadjusted_data_green (sx-0, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_green ( sx+1, sy-1), get_unadjusted_data_green (sx+1, sy), get_unadjusted_data_green (sx+1, sy+1), get_unadjusted_data_green (sx+1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_green ( sx+2, sy-1), get_unadjusted_data_green (sx+2, sy), get_unadjusted_data_green (sx+2, sy+1), get_unadjusted_data_green (sx+2, sy+2), ry),
+      gg = cubic_interpolate (cubic_interpolate (get_linearized_data_green ( sx-1, sy-1), get_linearized_data_green (sx-1, sy), get_linearized_data_green (sx-1, sy+1), get_linearized_data_green (sx-1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_green ( sx-0, sy-1), get_linearized_data_green (sx-0, sy), get_linearized_data_green (sx-0, sy+1), get_linearized_data_green (sx-0, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_green ( sx+1, sy-1), get_linearized_data_green (sx+1, sy), get_linearized_data_green (sx+1, sy+1), get_linearized_data_green (sx+1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_green ( sx+2, sy-1), get_linearized_data_green (sx+2, sy), get_linearized_data_green (sx+2, sy+1), get_linearized_data_green (sx+2, sy+2), ry),
 			      rx);
-      bb = cubic_interpolate (cubic_interpolate (get_unadjusted_data_blue ( sx-1, sy-1), get_unadjusted_data_blue (sx-1, sy), get_unadjusted_data_blue (sx-1, sy+1), get_unadjusted_data_blue (sx-1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_blue ( sx-0, sy-1), get_unadjusted_data_blue (sx-0, sy), get_unadjusted_data_blue (sx-0, sy+1), get_unadjusted_data_blue (sx-0, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_blue ( sx+1, sy-1), get_unadjusted_data_blue (sx+1, sy), get_unadjusted_data_blue (sx+1, sy+1), get_unadjusted_data_blue (sx+1, sy+2), ry),
-			      cubic_interpolate (get_unadjusted_data_blue ( sx+2, sy-1), get_unadjusted_data_blue (sx+2, sy), get_unadjusted_data_blue (sx+2, sy+1), get_unadjusted_data_blue (sx+2, sy+2), ry),
+      bb = cubic_interpolate (cubic_interpolate (get_linearized_data_blue ( sx-1, sy-1), get_linearized_data_blue (sx-1, sy), get_linearized_data_blue (sx-1, sy+1), get_linearized_data_blue (sx-1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_blue ( sx-0, sy-1), get_linearized_data_blue (sx-0, sy), get_linearized_data_blue (sx-0, sy+1), get_linearized_data_blue (sx-0, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_blue ( sx+1, sy-1), get_linearized_data_blue (sx+1, sy), get_linearized_data_blue (sx+1, sy+1), get_linearized_data_blue (sx+1, sy+2), ry),
+			      cubic_interpolate (get_linearized_data_blue ( sx+2, sy-1), get_linearized_data_blue (sx+2, sy), get_linearized_data_blue (sx+2, sy+1), get_linearized_data_blue (sx+2, sy+2), ry),
 			      rx);
       if (m_backlight_correction)
 	{
@@ -851,10 +890,9 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
 	  gg = m_backlight_correction->apply (gg, xp, yp, backlight_correction_parameters::green, true);
 	  bb = m_backlight_correction->apply (bb, xp, yp, backlight_correction_parameters::blue, true);
 	}
-      *r = (rr - m_params.dark_point) * m_params.scan_exposure;
-      *g = (gg - m_params.dark_point) * m_params.scan_exposure;
-      *b = (bb - m_params.dark_point) * m_params.scan_exposure;
-      /* TODO do inversion and film curves if requested.  */
+      *r = rr;
+      *g = gg;
+      *b = bb;
     }
   else
     {
@@ -863,6 +901,15 @@ render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t
       *b = 0;
       return;
     }
+}
+inline flatten_attr void
+render::get_img_rgb_pixel (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  get_unadjusted_img_rgb_pixel (xp, yp, r, g, b);
+  *r = (*r - m_params.dark_point) * m_params.scan_exposure;
+  *g = (*g - m_params.dark_point) * m_params.scan_exposure;
+  *b = (*b - m_params.dark_point) * m_params.scan_exposure;
+  /* TODO do inversion and film curves if requested.  */
 }
 
 /* Sample square patch with center xc and yc and x1/y1, x2/y2 determining a coordinates

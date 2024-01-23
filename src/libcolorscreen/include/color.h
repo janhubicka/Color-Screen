@@ -498,9 +498,9 @@ struct rgbdata
   print (FILE *f)
   {
     luminosity_t r,g,b;
-    r = std::max (std::min (red * 255, (luminosity_t)266), (luminosity_t)0);
-    g = std::max (std::min (green * 255, (luminosity_t)266), (luminosity_t)0);
-    b = std::max (std::min (blue * 255, (luminosity_t)266), (luminosity_t)0);
+    r = std::max (std::min (red * 255, (luminosity_t)255), (luminosity_t)0);
+    g = std::max (std::min (green * 255, (luminosity_t)255), (luminosity_t)0);
+    b = std::max (std::min (blue * 255, (luminosity_t)255), (luminosity_t)0);
     fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
   }
 };

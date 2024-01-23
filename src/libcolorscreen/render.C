@@ -155,24 +155,30 @@ struct graydata_params
      to check cache entries.  */
   uint64_t image_id;
   image_data *img;
-  /* Gamma and weights of individual channels.  */
-  luminosity_t gamma, red, green, blue;
+  luminosity_t gamma;
+  /* Dark point for mixing. */
+  rgbdata dark;
+  /* Weights of individual channels.  */
+  luminosity_t red, green, blue;
   bool invert;
   /* Backlight correction.  */
   backlight_correction *backlight;
   uint64_t backlight_correction_id;
   luminosity_t backlight_correction_black;
+  bool ignore_infrared;
   bool
   operator==(graydata_params &o)
   {
     return image_id == o.image_id
 	   && gamma == o.gamma
 	   && invert == o.invert
+	   && dark == o.dark
 	   && red == o.red
 	   && green == o.green
 	   && blue == o.blue
 	   && backlight_correction_id == o.backlight_correction_id
-	   && backlight_correction_black == o.backlight_correction_black;
+	   && backlight_correction_black == o.backlight_correction_black
+	   && ignore_infrared == o.ignore_infrared;
   }
 };
 
@@ -181,6 +187,7 @@ struct gray_data_tables
   luminosity_t *rtable;
   luminosity_t *gtable;
   luminosity_t *btable;
+  rgbdata dark;
   luminosity_t red, green, blue;
   backlight_correction *correction;
   bool invert;
@@ -193,6 +200,8 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   luminosity_t red = p.red;
   luminosity_t green = p.green;
   luminosity_t blue = p.blue;
+  rgbdata dark = p.dark;
+#if 0
   luminosity_t sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
 
   if (!sum)
@@ -204,6 +213,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   red /= sum;
   green /= sum;
   blue /= sum;
+#endif
 
   /* Normally the lookup tables contains red, green, blue weights.
      However with backlight correction we need to apply them only after
@@ -217,11 +227,13 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   par.gamma = p.gamma;
   par.maxval = p.img->maxval;
   par.scan_exposure = correction ? 1 : red;
+  par.dark_point = dark.red;
   par.invert = p.invert;
   ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
+  par.dark_point = dark.green;
   ret.gtable = lookup_table_cache.get (par, progress);
   if (!ret.gtable)
     {
@@ -231,6 +243,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
     }
   par.scan_exposure = correction ? 1 : blue;
   ret.btable = lookup_table_cache.get (par, progress);
+  par.dark_point = dark.blue;
   if (!ret.btable)
     {
       lookup_table_cache.release (ret.rtable);
@@ -326,7 +339,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
     }
 
   bool ok;
-  if (p.gp.img->data)
+  if (p.gp.img->data && !p.gp.ignore_infrared)
     {
       lookup_table_params par;
       getdata_params d;
@@ -395,7 +408,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0, m_params.ignore_infrared},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

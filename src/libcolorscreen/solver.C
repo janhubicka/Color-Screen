@@ -1903,7 +1903,7 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
    /* Set up scr-to-img map.  */
    scr_to_img map;
    map.set_parameters (*param, img);
-   //rgbdata proportions = map.patch_proportions ();
+   rgbdata proportions = map.patch_proportions ();
 
    render_parameters my_rparam = rparam;
    my_rparam.output_profile = render_parameters::output_profile_xyz;
@@ -1983,6 +1983,9 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	   }
        target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
        color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+       target.red *= proportions.red;
+       target.green *= proportions.green;
+       target.blue *= proportions.blue;
        //printf ("Point %i %i-%i:%i-%i\n", i, xmin,xmax,ymin,ymax);
        //target.print (stdout);
        //color.print (stdout);
@@ -1997,7 +2000,10 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	 for (int j = 0; j < 3; j++)
 	   if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
 	     return false;
+       printf ("Matrix\n");
+       c.print (stdout);
        /* First determine dark point of the scan.  */
+       //rparam.profiled_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
        color_matrix ci = c.invert ();
        rparam.profiled_dark  = {ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2]};
 
@@ -2009,6 +2015,13 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
        rparam.profiled_red   = {c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2]};
        rparam.profiled_green = {c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2]};
        rparam.profiled_blue  = {c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2]};
+
+#if 0
+       rgbdata proportions = map.patch_proportions ();
+       rparam.profiled_red /= proportions.red;
+       rparam.profiled_green /= proportions.green;
+       rparam.profiled_blue /= proportions.blue;
+#endif
 #if 0
        rparam.optimized_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
 #endif
@@ -2022,6 +2035,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	   rparam.profiled_green.print (stdout);
 	   printf ("Blue ");
 	   rparam.profiled_blue.print (stdout);
+	   printf ("Final\n");
+	   rparam.get_profile_matrix ({1,1,1}).print (stdout);
 	 }
 
 #if 0

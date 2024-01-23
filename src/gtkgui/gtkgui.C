@@ -246,7 +246,7 @@ print_help()
 	if (ui_mode == color_profiling)
 	   printf ("Color profiling mode\n"
 		   "left button adds point, middle/right button removes\n"
-		   "p   - switch to screen editing\n");
+		   "p   - switch to screen editing                X   - set mixing weights\n");
 	if (ui_mode == screen_detection)
 	   printf ("Screen detection mode\n"
 		   "e   - switch to screen editing                P   - determine screen proportions\n"
@@ -275,7 +275,7 @@ print_help()
 	printf    ("W   - switch to solver editing mode           E   - screen editing mode                   \n"
 		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
 	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
-		   "q Q - control age                             v V - tone curve\n"
+		   "q Q - control age                             v V - tone curve                    I - ignore/use infrared\n"
 		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments\n");
 }
 
@@ -311,6 +311,16 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       color_display = !color_display;
       display_scheduled = true;
+    }
+  if (k == 'I' && scan.data && scan.rgbdata)
+    {
+      rparams.ignore_infrared = !rparams.ignore_infrared;
+      if (rparams.ignore_infrared)
+	printf ("Ignoring infrared\n");
+      else
+	printf ("Using infrared\n");
+      display_scheduled = true;
+      preview_display_scheduled = true;
     }
   if (k == 'i')
     {
@@ -732,6 +742,11 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
           display_scheduled = true;
 	  print_help ();
 	  printf ("Color profiling mode\n");
+        }
+      if (k == 'X' && scan.rgbdata)
+        {
+	  rparams.compute_mix_weights (patch_proportions (current.type));
+          setvals ();
         }
     }
   else

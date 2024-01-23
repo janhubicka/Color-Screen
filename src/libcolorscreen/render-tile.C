@@ -258,11 +258,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
-		[&img,&progress,color] (render_parameters &my_rparam, int x, int y) mutable
+		[&img,&progress,color,render_type] (render_parameters &my_rparam, int x, int y) mutable
 		{
 		  render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255);
 		  if (color)
-		    r->set_color_display ();
+		    r->set_color_display (render_type == render_type_optimized_original);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -275,7 +275,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	render_img render (param, img, my_rparam, 255);
 	if (color)
-	  render.set_color_display ();
+	  render.set_color_display (render_type == render_type_optimized_original);
 	if (!render.precompute_all (progress))
 	  {
 	    if (lock_p)
@@ -308,7 +308,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	else if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    if (render_type != render_type_optimized_original)
+	      render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+	    else
+	      render.get_profiled_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
 	    if (progress)
 	      progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)

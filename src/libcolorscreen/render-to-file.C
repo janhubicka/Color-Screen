@@ -501,7 +501,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       {
 	render_img render (param, scan, rparam, 65535);
 	if (rfparams.mode == corrected_color)
-	  render.set_color_display ();
+	  render.set_color_display (false);
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";
