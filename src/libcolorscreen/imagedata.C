@@ -513,7 +513,7 @@ has_suffix (const char *name, const char *suffix)
   int l1 = strlen (name), l2 = strlen (suffix);
   if (l1 < l2)
     return false;
-  return !strcmp (suffix, name + l1 - l2);
+  return !strcasecmp (suffix, name + l1 - l2);
 }
 
 bool
@@ -858,7 +858,7 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
     loader = new tiff_image_data_loader (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
     loader = new jpg_image_data_loader (this);
-  else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq") || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
+  else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq") || has_suffix (name, "NEF") || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
     loader = new raw_image_data_loader (this);
   else if (has_suffix (name, ".eip"))
     loader = new raw_image_data_loader (this);

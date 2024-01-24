@@ -243,7 +243,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
   if (color && !has_rgbdata)
     color = false;
   if (!has_rgbdata
-      && (render_type == render_type_interpolated_original || render_type == render_type_interpolated_optimized_original))
+      && (render_type == render_type_interpolated_original || render_type == render_type_interpolated_profiled_original
+	  || render_type == render_type_interpolated_diff))
     render_type = render_type_original;
 
   if (progress)
@@ -251,10 +252,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
   switch (render_type)
     {
     case render_type_original:
-    case render_type_optimized_original:
+    case render_type_profiled_original:
       {
 	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, color, render_type == render_type_optimized_original);
+	my_rparam.original_render_from (rparam, color, render_type == render_type_profiled_original);
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
@@ -262,7 +263,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		{
 		  render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255);
 		  if (color)
-		    r->set_color_display (render_type == render_type_optimized_original);
+		    r->set_color_display (render_type == render_type_profiled_original);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -275,7 +276,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	render_img render (param, img, my_rparam, 255);
 	if (color)
-	  render.set_color_display (render_type == render_type_optimized_original);
+	  render.set_color_display (render_type == render_type_profiled_original);
 	if (!render.precompute_all (progress))
 	  {
 	    if (lock_p)
@@ -308,7 +309,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	else if (step > 1)
 	  {
 	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    if (render_type != render_type_optimized_original)
+	    if (render_type != render_type_profiled_original)
 	      render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
 	    else
 	      render.get_profiled_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
@@ -498,7 +499,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
       }
       break;
     case render_type_interpolated_original:
-    case render_type_interpolated_optimized_original:
+    case render_type_interpolated_profiled_original:
     case render_type_interpolated:
     case render_type_combined:
     case render_type_predictive:
@@ -508,8 +509,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	render_parameters my_rparam;
 
 	if (render_type == render_type_interpolated_original
-	    || render_type == render_type_interpolated_optimized_original)
-	  my_rparam.original_render_from (rparam, true, render_type == render_type_interpolated_optimized_original);
+	    || render_type == render_type_interpolated_profiled_original)
+	  my_rparam.original_render_from (rparam, true, render_type == render_type_interpolated_profiled_original);
 	else
 	  my_rparam = rparam;
 	if (img.stitch)
@@ -519,8 +520,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		{
 		  render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255,screen_compensation, adjust_luminosity);
 		  if (render_type == render_type_interpolated_original
-		      || render_type == render_type_interpolated_optimized_original)
-		    r->original_color (render_type == render_type_interpolated_optimized_original);
+		      || render_type == render_type_interpolated_profiled_original)
+		    r->original_color (render_type == render_type_interpolated_profiled_original);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -534,8 +535,56 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	render_interpolate render (param, img,
 				   my_rparam, 255, screen_compensation, adjust_luminosity);
 	if (render_type == render_type_interpolated_original
-	    || render_type == render_type_interpolated_optimized_original)
-	  render.original_color (render_type == render_type_interpolated_optimized_original);
+	    || render_type == render_type_interpolated_profiled_original)
+	  render.original_color (render_type == render_type_interpolated_profiled_original);
+	if (!render.precompute_img_range (xoffset * step, yoffset * step,
+					  (width + xoffset) * step,
+					  (height + yoffset) * step, progress))
+	  {
+	    if (lock_p)
+	      global_rendering_lock.unlock ();
+	    return false;
+	  }
+
+	if (progress)
+	  progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+	for (int y = 0; y < height; y++)
+	  {
+	    coord_t py = (y + yoffset) * step;
+	    if (!progress || !progress->cancel_requested ())
+	      for (int x = 0; x < width; x++)
+		{
+		  int r, g, b;
+
+		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+					   &b);
+		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+		}
+	     if (progress)
+	       progress->inc_progress ();
+	  }
+      }
+      break;
+    case render_type_interpolated_diff:
+      {
+	if (img.stitch)
+	  {
+	    render_stitched<render_diff> (
+		[&img,&progress] (render_parameters &rparam, int x, int y) mutable
+		{
+		  render_diff *r = new render_diff (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		  if (!r->precompute_all (progress))
+		    {
+		      delete r;
+		      r = NULL;
+		    }
+		  return r;
+		},
+		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, render_type != render_type_interpolated, progress);
+	    break;
+	  }
+	render_diff render (param, img, rparam, 255);
 	if (!render.precompute_img_range (xoffset * step, yoffset * step,
 					  (width + xoffset) * step,
 					  (height + yoffset) * step, progress))

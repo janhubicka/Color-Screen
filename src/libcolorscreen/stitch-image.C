@@ -574,55 +574,87 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       }
   }
 #endif
-  detect_regular_screen_params dsparams;
-  dsparams.min_screen_percentage = m_prj->params.min_screen_percentage;
   int inborder = m_prj->params.inner_tile_border;
   int skiptop = top ? m_prj->params.outer_tile_border : inborder;
   int skipbottom = bottom ? m_prj->params.outer_tile_border : inborder;
   int skipleft = left ? m_prj->params.outer_tile_border : inborder;
   int skipright = right ? m_prj->params.outer_tile_border : inborder;
-  dsparams.border_top = skiptop;
-  dsparams.border_bottom = skipbottom;
-  dsparams.border_left = skipleft;
-  dsparams.border_right = skipright;
-  dsparams.top = top;
-  dsparams.bottom = bottom;
-  dsparams.k1 = k1;
-  dsparams.left = left;
-  dsparams.right = right;
-  dsparams.optimize_colors = m_prj->params.optimize_colors;
-  dsparams.slow_floodfill = m_prj->params.slow_floodfill;
-  dsparams.fast_floodfill = m_prj->params.fast_floodfill;
-  dsparams.max_unknown_screen_range = m_prj->params.max_unknown_screen_range;
-  if (m_prj->params.min_patch_contrast > 0)
-    dsparams.min_patch_contrast = m_prj->params.min_patch_contrast;
-  dsparams.return_known_patches = true;
-  dsparams.do_mesh = m_prj->params.mesh_trans;
-  dsparams.return_screen_map = true;
-  detected = detect_regular_screen (*img, m_prj->params.type, m_prj->dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
-  if (!detected.success)
+
+  if (!m_prj->params.load_registration)
     {
-      progress->pause_stdout ();
-      fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
-      exit (1);
-    }
-  mesh_trans = detected.mesh_trans;
-  if (m_prj->params.reoptimize_colors)
-    {
-      scr_detect_parameters optimized_dparam = m_prj->dparam;
-      optimize_screen_colors (&optimized_dparam, m_prj->params.type, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
-      delete mesh_trans;
-      delete detected.known_patches;
-      delete detected.smap;
-      dsparams.optimize_colors = false;
-      detected = detect_regular_screen (*img, m_prj->params.type, optimized_dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
-      mesh_trans = detected.mesh_trans;
+      detect_regular_screen_params dsparams;
+      dsparams.min_screen_percentage = m_prj->params.min_screen_percentage;
+      dsparams.border_top = skiptop;
+      dsparams.border_bottom = skipbottom;
+      dsparams.border_left = skipleft;
+      dsparams.border_right = skipright;
+      dsparams.top = top;
+      dsparams.bottom = bottom;
+      dsparams.k1 = k1;
+      dsparams.left = left;
+      dsparams.right = right;
+      dsparams.optimize_colors = m_prj->params.optimize_colors;
+      dsparams.slow_floodfill = m_prj->params.slow_floodfill;
+      dsparams.fast_floodfill = m_prj->params.fast_floodfill;
+      dsparams.max_unknown_screen_range = m_prj->params.max_unknown_screen_range;
+      if (m_prj->params.min_patch_contrast > 0)
+	dsparams.min_patch_contrast = m_prj->params.min_patch_contrast;
+      dsparams.return_known_patches = true;
+      dsparams.do_mesh = m_prj->params.mesh_trans;
+      dsparams.return_screen_map = true;
+      detected = detect_regular_screen (*img, m_prj->params.type, m_prj->dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
       if (!detected.success)
 	{
 	  progress->pause_stdout ();
-	  fprintf (stderr, "Failed to analyze screen of %s after optimizing screen colors. Probably a bug\n", filename.c_str ());
+	  fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
 	  exit (1);
 	}
+      mesh_trans = detected.mesh_trans;
+      if (m_prj->params.reoptimize_colors)
+	{
+	  scr_detect_parameters optimized_dparam = m_prj->dparam;
+	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
+	  delete mesh_trans;
+	  delete detected.known_patches;
+	  delete detected.smap;
+	  dsparams.optimize_colors = false;
+	  detected = detect_regular_screen (*img, m_prj->params.type, optimized_dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
+	  mesh_trans = detected.mesh_trans;
+	  if (!detected.success)
+	    {
+	      progress->pause_stdout ();
+	      fprintf (stderr, "Failed to analyze screen of %s after optimizing screen colors. Probably a bug\n", filename.c_str ());
+	      exit (1);
+	    }
+	}
+      param = detected.param;
+    }
+  else
+    {
+      std::string par_filename = filename;
+      int len = filename.length ();
+      par_filename[len-3]='p';
+      par_filename[len-2]='a';
+      par_filename[len-1]='r';
+      scr_to_img_parameters p;
+      FILE *f = fopen (par_filename.c_str (), "rt");
+      if (!f)
+        {
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Failed to open %s\n", par_filename.c_str ());
+	  return false;
+        }
+      const char *error;
+      //scr_to_img_parameters nparam;
+      if (!load_csp (f, &param, NULL, NULL, NULL, &error))
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Failed to load %s: %s\n", par_filename.c_str (), error);
+	  fclose(f);
+	  return false;
+	}
+      fclose (f);
+      mesh_trans = param.mesh_trans;
     }
 
 
@@ -634,7 +666,6 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
-  param = detected.param;
   param.mesh_trans = mesh_trans;
   param.type = m_prj->params.type;
   render_to_scr render (param, *img, my_rparam, 256);
@@ -655,23 +686,34 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       fprintf (stderr, "Failed to write outliers: %s\n", error);
       exit (1);
     }
-  delete detected.smap;
-  basic_scr_to_img_map.set_parameters (detected.param, *img);
+  if (!m_prj->params.load_registration)
+    delete detected.smap;
+  if (m_prj->params.load_registration)
+    basic_scr_to_img_map.set_parameters (detected.param, *img);
+  else
+    {
+      scr_to_img_parameters p = param;
+      p.mesh_trans = NULL;
+      basic_scr_to_img_map.set_parameters (p, *img);
+    }
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
   final_width = render.get_final_width ();
   final_height = render.get_final_height ();
 
   scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
-  screen_detected_patches = new bitmap_2d (width, height);
-  for (int y = 0; y < height; y++)
-    if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < detected.known_patches->height)
-      for (int x = 0; x < width; x++)
-        if (x - xshift +  detected.xshift > 0 && x - xshift +  detected.xshift < detected.known_patches->width
-	    && detected.known_patches->test_bit (x - xshift + detected.xshift, y - yshift +  detected.yshift))
-           screen_detected_patches->set_bit (x, y);
-  delete detected.known_patches;
-  detected.known_patches = NULL;
+  if (!m_prj->params.load_registration)
+    {
+      screen_detected_patches = new bitmap_2d (width, height);
+      for (int y = 0; y < height; y++)
+	if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < detected.known_patches->height)
+	  for (int x = 0; x < width; x++)
+	    if (x - xshift +  detected.xshift > 0 && x - xshift +  detected.xshift < detected.known_patches->width
+		&& detected.known_patches->test_bit (x - xshift + detected.xshift, y - yshift +  detected.yshift))
+	       screen_detected_patches->set_bit (x, y);
+      delete detected.known_patches;
+      detected.known_patches = NULL;
+    }
   if (m_prj->params.type == Dufay)
     dufay.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
   else
@@ -806,6 +848,8 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   int x1, y1, x2, y2;
   int xs = other.xpos - xpos;
   int ys = other.ypos - ypos;
+  if (!m_prj)
+    return;
   if (m_prj->params.max_contrast < 0)
     return;
   luminosity_t ratio = dufay.compare_contrast (other.dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);

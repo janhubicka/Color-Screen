@@ -451,8 +451,9 @@ public:
   {
     render_type_original,
     render_type_interpolated_original,
-    render_type_optimized_original,
-    render_type_interpolated_optimized_original,
+    render_type_profiled_original,
+    render_type_interpolated_profiled_original,
+    render_type_interpolated_diff,
     render_type_preview_grid,
     render_type_realistic,
     render_type_interpolated,

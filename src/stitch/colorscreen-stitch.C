@@ -195,6 +195,7 @@ void stitch (progress_info *progress)
 	}
       if (!prj->analyze_images (progress))
 	{
+	  fflush (prj->report_file);
 	  exit (1);
 	}
       if (save_project_filename)
@@ -430,6 +431,11 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--hdr"))
 	{
 	  prj->params.hdr = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--load-registration"))
+        {
+	  prj->params.load_registration = true;
 	  continue;
 	}
       if (!strncmp (argv[i], "--downscale=", strlen ("--downscale=")))
