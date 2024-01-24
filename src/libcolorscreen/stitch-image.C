@@ -673,8 +673,15 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   if (!m_prj->my_screen)
     {
       m_prj->pixel_size = detected.pixel_size;
-      m_prj->my_screen = render_to_scr::get_screen (m_prj->params.type, false, detected.pixel_size * my_rparam.screen_blur_radius, progress);
     }
+  else
+    {
+      render_img r (param, *img, m_prj->passthrough_rparam, 255);
+      if (!r.precompute_all (progress))
+	return false;
+      m_prj->pixel_size = r.pixel_size ();
+    }
+  m_prj->my_screen = render_to_scr::get_screen (m_prj->params.type, false, m_prj->pixel_size * my_rparam.screen_blur_radius, progress);
   scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   

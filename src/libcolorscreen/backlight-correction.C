@@ -244,6 +244,7 @@ backlight_correction::backlight_correction (backlight_correction_parameters &par
     progress->set_task ("computing backlight correction", 1);
   m_weights = (entry *)malloc (m_width * m_height * sizeof (entry));
   m_black = black;
+  const luminosity_t epsilon = 1.0/256;
 
   if (!m_weights)
     return;
@@ -255,11 +256,17 @@ backlight_correction::backlight_correction (backlight_correction_parameters &par
     sum[0] = sum[1] = sum[2] = (sum[0] + sum[1] + sum[2]) / 3;
   luminosity_t correct[4];
   for (int i = 0;i < 4; i++)
-    if (sum[i])
-      correct[i] = sum[i] / (m_width*m_height);
+    if (sum[i] > epsilon * (m_width* (int64_t)m_height))
+      correct[i] = sum[i] / (m_width* (int64_t)m_height);
     else
       correct[i] = 1;
+
   for (int x = 0; x < m_width * m_height; x++)
     for (int i = 0;i < 4; i++)
-      m_weights[x].mult[i] = correct[i] / (m_params.m_luminosities [x].lum[i] - black);
+      {
+	if ((m_params.m_luminosities [x].lum[i] - black) > epsilon)
+          m_weights[x].mult[i] = correct[i] / (m_params.m_luminosities [x].lum[i] - black);
+	else
+	  m_weights[x].mult[i] = correct[i];
+      }
 }
