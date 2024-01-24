@@ -957,7 +957,7 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
 
   /* Feed to GSL.  */
   int nvariables = ((flags & OPTIMIZE_EXPOSURE) ? (params.width * params.height - 1) : 0)
-		   + (flags & OPTIMIZE_DARK_POINT) ? (params.width * params.height - 1) : 0;
+		   + ((flags & OPTIMIZE_DARK_POINT) ? (params.width * params.height - 1) : 0);
   int fx = params.width / 2;
   int fy = params.height / 2;
   gsl_vector *c = NULL, *w = NULL;
