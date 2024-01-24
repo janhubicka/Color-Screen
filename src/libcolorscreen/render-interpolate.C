@@ -54,7 +54,7 @@ static analyze_paget *
 get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift, int width, int height, progress_info *progress)
 {
   analyze_paget *ret = new analyze_paget();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.mode != analyze_base::fast, p.collection_threshold, progress))
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height, xshift, yshift, p.mode, p.collection_threshold, progress))
     return ret;
   delete ret;
   return NULL;

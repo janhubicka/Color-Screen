@@ -109,6 +109,106 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
   }
   return !progress || !progress->cancelled ();
 }
+/* Collect luminosity of individual color patches.
+   Function is flattened so it should do only necessary work.  */
+bool flatten_attr
+analyze_paget::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+{
+  /* Collect luminosity of individual color patches.  */
+#pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  {
+#pragma omp for 
+    for (int y = miny ; y < maxy; y++)
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int x = minx; x < maxx; x++)
+	    {
+	      rgbdata d = render->get_unadjusted_rgb_pixel (x, y);
+	      coord_t scr_x, scr_y;
+	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+	      scr_x += m_xshift;
+	      scr_y += m_yshift;
+	      if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		continue;
+
+	      {
+		coord_t xd, yd;
+		to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
+		xd = nearest_int (xd);
+		yd = nearest_int (yd);
+		int xx = ((int)xd + (int)yd) / 2;
+		int yy = -(int)xd + (int)yd;
+		if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		  {
+		    red_atomic_add (xx, yy, d.red);
+		    luminosity_t &l = w_red [yy * m_width + xx];
+#pragma omp atomic
+		    l+=1;
+		  }
+	      }
+	      {
+		coord_t xd, yd;
+		to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
+		xd = nearest_int (xd);
+		yd = nearest_int (yd);
+		int xx = ((int)xd + (int)yd) / 2;
+		int yy = -(int)xd + (int)yd;
+		if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		  {
+		    green_atomic_add (xx, yy, d.green);
+		    luminosity_t &l = w_green [yy * m_width + xx];
+#pragma omp atomic
+		    l+=1;
+		  }
+	      }
+	      {
+		int xx = nearest_int (2*(scr_x-(coord_t)0.25));
+		int yy = nearest_int (2*(scr_y-(coord_t)0.25));
+		blue_atomic_add (xx, yy, d.blue);
+		luminosity_t &l = w_blue [yy * m_width * 2 + xx];
+#pragma omp atomic
+		l+=1;
+	      }
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
+  if (!progress || !progress->cancel_requested ())
+    {
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_red [y * m_width + x] != 0)
+		red (x,y) /= w_red [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width; x++)
+	      if (w_green [y * m_width + x] != 0)
+		green (x,y) /= w_green [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_width * 2; x++)
+	      if (w_blue [y * m_width * 2 + x] != 0)
+		blue (x,y) /= w_blue [y * m_width * 2 + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  }
+  return !progress || !progress->cancelled ();
+}
 bool flatten_attr
 analyze_paget::analyze_fast (render_to_scr *render,progress_info *progress)
 {
@@ -136,7 +236,7 @@ analyze_paget::analyze_fast (render_to_scr *render,progress_info *progress)
   return !progress || !progress->cancelled ();
 }
 bool
-analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, bool precise, luminosity_t collection_threshold, progress_info *progress)
+analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
   m_width = width;
@@ -156,7 +256,7 @@ analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
        B   B
      .   .   .  
      2 reds and greens per one screen tile while there are 4 blues.  */
-  if (precise)
+  if (mode == precise || mode == color)
     {
       luminosity_t *w_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
       luminosity_t *w_green = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
@@ -199,7 +299,10 @@ analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
       if (progress)
 	progress->set_task ("determining intensities of Paget/Finlay screen patches (precise mode)", maxy - miny + m_height * 2 * 3);
 
-      analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      if (mode == precise)
+        analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      else
+        analyze_color (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 
       free (w_red);
       free (w_green);
