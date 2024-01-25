@@ -981,3 +981,19 @@ image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
   if (stitch)
     stitch->set_dpi (new_xdpi, new_ydpi);
 }
+
+bool
+image_data::has_rgb ()
+{
+  if (stitch)
+    return stitch->images[0][0].img->has_rgb ();
+  return rgbdata != NULL;
+}
+
+bool
+image_data::has_grayscale_or_ir ()
+{
+  if (stitch)
+    return stitch->images[0][0].img->has_grayscale_or_ir ();
+  return data != NULL;
+}

@@ -58,6 +58,9 @@ public:
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
 
+  bool has_rgb ();
+  bool has_grayscale_or_ir ();
+
   xyY primary_red;
   xyY primary_green;
   xyY primary_blue;

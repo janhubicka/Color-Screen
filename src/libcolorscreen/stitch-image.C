@@ -694,14 +694,16 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       exit (1);
     }
   if (!m_prj->params.load_registration)
-    delete detected.smap;
-  if (m_prj->params.load_registration)
-    basic_scr_to_img_map.set_parameters (detected.param, *img);
+    {
+      delete detected.smap;
+      basic_scr_to_img_map.set_parameters (detected.param, *img);
+    }
   else
     {
       scr_to_img_parameters p = param;
       p.mesh_trans = NULL;
       basic_scr_to_img_map.set_parameters (p, *img);
+      known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL);
     }
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
@@ -1275,7 +1277,7 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   param.mesh_trans = NULL;
   scr_to_img_map.set_parameters (param, data);
   param.mesh_trans = mesh_trans;
-  known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL);
+  known_pixels = compute_known_pixels (*img, scr_to_img_map, 5,5,5,5, NULL);
   analyzed = true;
   return true;
 }

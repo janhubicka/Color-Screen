@@ -457,8 +457,8 @@ public:
     render_type_preview_grid,
     render_type_realistic,
     render_type_interpolated,
-    render_type_combined,
     render_type_predictive,
+    render_type_combined,
     render_type_fast,
     render_type_max
   };

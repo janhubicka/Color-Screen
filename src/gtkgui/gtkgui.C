@@ -312,7 +312,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       color_display = !color_display;
       display_scheduled = true;
     }
-  if (k == 'I' && scan.data && scan.rgbdata)
+  if (k == 'I' && scan.has_grayscale_or_ir () && scan.has_rgb ())
     {
       rparams.ignore_infrared = !rparams.ignore_infrared;
       if (rparams.ignore_infrared)
@@ -743,7 +743,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  print_help ();
 	  printf ("Color profiling mode\n");
         }
-      if (k == 'X' && scan.rgbdata)
+      if (k == 'X' && scan.has_rgb ())
         {
 	  rparams.compute_mix_weights (patch_proportions (current.type));
           setvals ();
@@ -1636,7 +1636,7 @@ cb_save (GtkButton * button, Data * data)
     {
       perror (paroname);
     }
-  if (!save_csp (out, &current, scan.rgbdata ? &current_scr_detect : NULL, &rparams, &current_solver))
+  if (!save_csp (out, &current, scan.has_rgb () ? &current_scr_detect : NULL, &rparams, &current_solver))
     {
       fprintf (stderr, "saving failed\n");
       exit (1);

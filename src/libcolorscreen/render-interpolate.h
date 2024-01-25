@@ -109,9 +109,9 @@ public:
   {
     rgbdata c1 = r1.sample_pixel_scr (x, y);
     rgbdata c2 = r2.sample_pixel_scr (x, y);
-    return {0.2-4 * (c1.red - c2.red),
-	    0.2-4 * (c1.green - c2.green),
-	    0.2-4 * (c1.blue - c2.blue)};
+    return {0.25-4 * (c1.red - c2.red),
+	    0.25-4 * (c1.green - c2.green),
+	    0.25-4 * (c1.blue - c2.blue)};
   }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
