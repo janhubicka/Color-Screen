@@ -567,7 +567,9 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     case preview_grid:
     case color_preview_grid:
       {
-	render_superpose_img render (param, scan, rparam, 65535, rfparams.mode != realistic);
+	render_superpose_img render (param, scan, rparam, 65535);
+	if (rfparams.mode != realistic)
+	  render.set_preview_grid ();
 	if (rfparams.mode == color_preview_grid && scan.rgbdata)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))

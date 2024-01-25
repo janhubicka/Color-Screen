@@ -6,12 +6,19 @@
 class render_superpose_img : public render_to_scr
 {
 public:
-  inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval, bool preview)
+  inline render_superpose_img (scr_to_img_parameters &param, image_data &data, render_parameters &rparam, int dst_maxval)
    : render_to_scr (param, data, rparam, dst_maxval),
-     m_screen (NULL), m_color (false), m_preview (preview)
-  { 
-    coord_t radius = preview ? 0 : m_params.screen_blur_radius * pixel_size ();
-    m_screen = get_screen (m_scr_to_img.get_type (), preview, radius, NULL);
+     m_screen (NULL), m_color (false), m_preview (false)
+  { }
+  void set_render_type (render_type_parameters rtparam)
+  {
+    m_preview = (rtparam.type == render_type_preview_grid);
+    if (rtparam.color)
+      set_color_display ();
+  }
+  void set_preview_grid ()
+  {
+    m_preview = true;
   }
   inline ~render_superpose_img ()
   {
@@ -20,7 +27,13 @@ public:
   }
   bool precompute_all (progress_info *progress)
   {
+    coord_t radius = m_preview ? 0 : m_params.screen_blur_radius * pixel_size ();
+    m_screen = get_screen (m_scr_to_img.get_type (), m_preview, radius, NULL);
     return render_to_scr::precompute_all (!m_color, m_preview, progress);
+  }
+  bool precompute_img_range (int, int, int, int, progress_info *progress = NULL)
+  {
+    return precompute_all (progress);
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void inline render_pixel_img_antialias (coord_t x, coord_t y, coord_t pixelsize, int steps, int *r, int *g, int *b);

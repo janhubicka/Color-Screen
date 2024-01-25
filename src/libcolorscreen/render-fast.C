@@ -5,7 +5,7 @@ render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_
 {
 }
 
-pure_attr flatten_attr rgbdata
+pure_attr rgbdata
 render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 {
   coord_t dx = x, dy = y;

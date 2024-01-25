@@ -13,6 +13,10 @@ public:
   ~render_diff ()
   {
   }
+  void
+  set_render_type (render_type_parameters)
+  {
+  }
   bool
   precompute_img_range (int x1, int x2, int y1, int y2, progress_info *progress)
   {
