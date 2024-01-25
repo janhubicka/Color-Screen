@@ -1909,12 +1909,14 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
    my_rparam.output_profile = render_parameters::output_profile_xyz;
 
    /* First renderer is interpolated with normal data collection with unadjusted mode.  */
-   render_interpolate r (*param, img, my_rparam, 255, false, false, true);
+   render_interpolate r (*param, img, my_rparam, 255);
+   r.set_unadjusted ();
 
    /* Second renderer is interpolated with original color collection with unadjusted mode.  */
    render_parameters my_rparam2;
    my_rparam2.original_render_from (my_rparam, true, true);
-   render_interpolate r2 (*param, img, my_rparam2, 255, false, false, true);
+   render_interpolate r2 (*param, img, my_rparam2, 255);
+   r2.set_unadjusted ();
    r2.original_color (false);
 
 

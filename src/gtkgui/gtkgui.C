@@ -1036,8 +1036,13 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 				    bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
       }
     else
-      ret = render_to_scr::render_tile ((enum render_to_scr::render_type_t)display_type, get_scr_to_img_parameters (), scan, rparams, color_display,
-				  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
+      {
+	render::render_type_parameters rtparam;
+	rtparam.type = (enum render_to_scr::render_type_t)display_type;
+	rtparam.color = color_display;
+	ret = render_to_scr::render_tile (rtparam, get_scr_to_img_parameters (), scan, rparams,
+					  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
+      }
   }
 
   cairo_surface_t *surface

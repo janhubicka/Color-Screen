@@ -8,6 +8,7 @@
 #include "include/stitch.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
+#include "render-diff.h"
 
 namespace {
 
@@ -25,9 +26,64 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
     *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
 }
 
+/* Template for normal rendering, which calls render_pixel on every pixel.
+   Main motivation to do rendering cores as templates is to get things nicely inlined.   */
+template<typename T>
+void render_img_normal(T &render, unsigned char *pixels, int pixelbytes, int rowstride,
+		       int width, int height,
+		       double xoffset, double yoffset,
+		       double step,
+		       progress_info *progress)
+{
+  if (progress)
+    progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+  for (int y = 0; y < height; y++)
+    {
+      coord_t py = (y + yoffset) * step;
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < width; x++)
+	  {
+	    int r, g, b;
+	    render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
+				     &b);
+	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	  }
+       if (progress)
+	 progress->inc_progress ();
+    }
+}
+template<typename T>
+void render_img_downscale(T &render, unsigned char *pixels, int pixelbytes, int rowstride,
+			  int width, int height,
+			  double xoffset, double yoffset,
+			  double step,
+			  progress_info *progress)
+{
+  rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
+  render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+  if (progress)
+    progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+  for (int y = 0; y < height; y++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < width; x++)
+	  {
+	    int r, g, b;
+	    render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
+	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	  }
+       if (progress)
+	 progress->inc_progress ();
+    }
+  free (data);
+}
+
+
 /* Render from stitched project.  We do not try todo antialiasing, since it would be slow.  */
 template<typename T>
-void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)> init_render, image_data &img,
+void render_stitched(std::function<T *(render_parameters &rparam, image_data &img, scr_to_img_parameters &param)> init_render, image_data &img,
 		     render_parameters &rparam,
     		     unsigned char *pixels, int pixelbytes, int rowstride,
 		     int width, int height,
@@ -108,7 +164,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 	    rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 	    if (progress)
 	      progress->push ();
-	    renders[iy * stitch.params.width + ix]  = init_render (rparam2, ix, iy);
+	    renders[iy * stitch.params.width + ix]  = init_render (rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param);
 	    if (progress)
 	      {
 		progress->pop ();
@@ -118,7 +174,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
   }
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,antialias)
+#pragma omp parallel for default(none) shared(img,rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,init_render,lock,antialias)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -160,7 +216,7 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 			  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 			  if (progress)
 			    progress->push ();
-			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, ix, iy);
+			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param);
 			  if (progress)
 			    progress->pop ();
 			}
@@ -218,9 +274,9 @@ void render_stitched(std::function<T *(render_parameters &rparam, int x, int y)>
 
 
 bool
-render_to_scr::render_tile (enum render_type_t render_type,
+render_to_scr::render_tile (render_type_parameters rtparam,
 			    scr_to_img_parameters &param, image_data &img,
-			    render_parameters &rparam, bool color,
+			    render_parameters &rparam,
 			    unsigned char *pixels, int pixelbytes, int rowstride,
 			    int width, int height,
 			    double xoffset, double yoffset,
@@ -237,33 +293,32 @@ render_to_scr::render_tile (enum render_type_t render_type,
   const bool lock_p = false;
   if (lock_p)
     global_rendering_lock.lock ();
-  bool has_rgbdata = true;
-  if ((!img.stitch && !img.rgbdata) || (img.stitch && !img.stitch->images[0][0].img->rgbdata))
-    has_rgbdata = false;
-  if (color && !has_rgbdata)
-    color = false;
-  if (!has_rgbdata
-      && (render_type == render_type_interpolated_original || render_type == render_type_interpolated_profiled_original
-	  || render_type == render_type_interpolated_diff))
-    render_type = render_type_original;
+
+  if (rtparam.color && !img.has_rgb ())
+    rtparam.color = false;
+
+  /* These rendering types requires RGB.  */
+  if (!img.has_rgb ()
+      && (rtparam.type == render_type_interpolated_original || rtparam.type == render_type_interpolated_profiled_original
+	  || rtparam.type == render_type_interpolated_diff))
+    rtparam.type = render_type_original;
 
   if (progress)
     progress->set_task ("precomputing", 1);
-  switch (render_type)
+  switch (rtparam.type)
     {
     case render_type_original:
     case render_type_profiled_original:
       {
 	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, color, render_type == render_type_profiled_original);
+	my_rparam.original_render_from (rparam, rtparam.color, rtparam.type == render_type_profiled_original);
 	if (img.stitch)
 	  {
 	    render_stitched<render_img> (
-		[&img,&progress,color,render_type] (render_parameters &my_rparam, int x, int y) mutable
+		[&progress,rtparam] (render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_img *r = new render_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255);
-		  if (color)
-		    r->set_color_display (render_type == render_type_profiled_original);
+		  render_img *r = new render_img (param, img, my_rparam, 255);
+		  r->set_render_type (rtparam);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -275,8 +330,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	    break;
 	  }
 	render_img render (param, img, my_rparam, 255);
-	if (color)
-	  render.set_color_display (render_type == render_type_profiled_original);
+        render.set_render_type (rtparam);
 	if (!render.precompute_all (progress))
 	  {
 	    if (lock_p)
@@ -284,7 +338,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	    return false;
 	  }
 
-	if (!color && step > 1)
+	if (!rtparam.color && step > 1)
 	  {
 	    luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
 	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
@@ -308,47 +362,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	else if (step > 1)
 	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    if (render_type != render_type_profiled_original)
-	      render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    else
-	      render.get_profiled_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
+	    render_img_downscale (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	    break;
 	  }
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					   &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
-	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_preview_grid:
@@ -356,10 +373,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_superpose_img> (
-		[&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
+		[rtparam,&progress] (render_parameters &rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, true);
-		  if (color)
+		  render_superpose_img *r = new render_superpose_img (param, img, rparam, 255, true);
+		  if (rtparam.color)
 		    r->set_color_display ();
 		  if (!r->precompute_all (progress))
 		    {
@@ -373,7 +390,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	render_superpose_img render (param, img,
 				     rparam, 255, true);
-	if (color)
+	if (rtparam.color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
@@ -383,44 +400,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	if (step > 1)
 	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		 if (progress)
-		   progress->inc_progress ();
-	      }
-	    free (data);
+	    render_img_downscale (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	    break;
 	  }
 
-	 if (progress)
-	   progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					   &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
-	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_realistic:
@@ -431,10 +415,10 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_superpose_img> (
-		[&img,color,&progress] (render_parameters &rparam, int x, int y) mutable
+		[rtparam,&progress] (render_parameters &rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_superpose_img *r = new render_superpose_img (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255, false);
-		  if (color)
+		  render_superpose_img *r = new render_superpose_img (param, img, rparam, 255, false);
+		  if (rtparam.color)
 		    r->set_color_display ();
 		  if (!r->precompute_all (progress))
 		    {
@@ -448,7 +432,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	render_superpose_img render (param, img,
 				     rparam, 255, false);
-	if (color)
+	if (rtparam.color)
 	  render.set_color_display ();
 	if (!render.precompute_all (progress))
 	  {
@@ -458,44 +442,11 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	  }
 	if (step > 1)
 	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		 if (progress)
-		   progress->inc_progress ();
-	      }
-	    free (data);
+	    render_img_downscale (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 	    break;
 	  }
 
-	 if (progress)
-	   progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img_antialias ((x + xoffset) * step, py,
-						     1 * step, 8, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
-	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_interpolated_original:
@@ -504,24 +455,20 @@ render_to_scr::render_tile (enum render_type_t render_type,
     case render_type_combined:
     case render_type_predictive:
       {
-	bool adjust_luminosity = (render_type == render_type_combined);
-	bool screen_compensation = (render_type == render_type_predictive);
 	render_parameters my_rparam;
 
-	if (render_type == render_type_interpolated_original
-	    || render_type == render_type_interpolated_profiled_original)
-	  my_rparam.original_render_from (rparam, true, render_type == render_type_interpolated_profiled_original);
+	if (rtparam.type == render_type_interpolated_original
+	    || rtparam.type == render_type_interpolated_profiled_original)
+	  my_rparam.original_render_from (rparam, true, rtparam.type == render_type_interpolated_profiled_original);
 	else
 	  my_rparam = rparam;
 	if (img.stitch)
 	  {
 	    render_stitched<render_interpolate> (
-		[&img,screen_compensation,adjust_luminosity,render_type,&progress] (render_parameters &my_rparam, int x, int y) mutable
+		[rtparam,&progress] (render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_interpolate *r = new render_interpolate (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, my_rparam, 255,screen_compensation, adjust_luminosity);
-		  if (render_type == render_type_interpolated_original
-		      || render_type == render_type_interpolated_profiled_original)
-		    r->original_color (render_type == render_type_interpolated_profiled_original);
+		  render_interpolate *r = new render_interpolate (param, img, my_rparam, 255);
+		  r->set_render_type (rtparam);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -529,14 +476,12 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		    }
 		  return r;
 		},
-		img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, render_type != render_type_interpolated, progress);
+		img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.type != render_type_interpolated, progress);
 	    break;
 	  }
 	render_interpolate render (param, img,
-				   my_rparam, 255, screen_compensation, adjust_luminosity);
-	if (render_type == render_type_interpolated_original
-	    || render_type == render_type_interpolated_profiled_original)
-	  render.original_color (render_type == render_type_interpolated_profiled_original);
+				   my_rparam, 255);
+        render.set_render_type (rtparam);
 	if (!render.precompute_img_range (xoffset * step, yoffset * step,
 					  (width + xoffset) * step,
 					  (height + yoffset) * step, progress))
@@ -546,24 +491,12 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	    return false;
 	  }
 
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
+	if (step > 1)
 	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					   &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
+	    render_img_downscale (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+	    break;
 	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_interpolated_diff:
@@ -571,9 +504,9 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_diff> (
-		[&img,&progress] (render_parameters &rparam, int x, int y) mutable
+		[&progress] (render_parameters &rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_diff *r = new render_diff (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		  render_diff *r = new render_diff (param, img, rparam, 255);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -581,7 +514,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 		    }
 		  return r;
 		},
-		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, render_type != render_type_interpolated, progress);
+		img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.type != render_type_interpolated, progress);
 	    break;
 	  }
 	render_diff render (param, img, rparam, 255);
@@ -596,22 +529,12 @@ render_to_scr::render_tile (enum render_type_t render_type,
 
 	if (progress)
 	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
+	if (step > 1)
 	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					   &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
+	    render_img_downscale (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+	    break;
 	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_fast:
@@ -619,9 +542,9 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	if (img.stitch)
 	  {
 	    render_stitched<render_fast> (
-		[&img,&progress] (render_parameters &rparam, int x, int y) mutable
+		[&progress] (render_parameters &rparam, image_data &img, scr_to_img_parameters &param) mutable
 		{
-		  render_fast *r = new render_fast (img.stitch->images[y][x].param, *img.stitch->images[y][x].img, rparam, 255);
+		  render_fast *r = new render_fast (param, img, rparam, 255);
 		  if (!r->precompute_all (progress))
 		    {
 		      delete r;
@@ -640,24 +563,8 @@ render_to_scr::render_tile (enum render_type_t render_type,
 	    return false;
 	  }
 
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-					   &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	     if (progress)
-	       progress->inc_progress ();
-	  }
+	render_img_normal (render, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+	break;
       }
     default:
       abort ();
@@ -670,7 +577,7 @@ render_to_scr::render_tile (enum render_type_t render_type,
 
       gettimeofday (&end_time, NULL);
       double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
-      printf ("\nRender type:%i resolution:%ix%i time:%.3fs fps:%.3f", render_type, width, height, time, 1/time);
+      printf ("\nRender type:%i resolution:%ix%i time:%.3fs fps:%.3f", rtparam.type, width, height, time, 1/time);
       if (prev_time_set)
 	{
 	  double time2 = end_time.tv_sec + end_time.tv_usec/1000000.0 - prev_time.tv_sec - prev_time.tv_usec/1000000.0;

@@ -462,6 +462,15 @@ public:
     render_type_fast,
     render_type_max
   };
+  struct render_type_parameters
+  {
+    enum render_type_t type;
+    bool color;
+    bool antialias;
+    render_type_parameters ()
+    : type (render_type_original), color (true), antialias (true)
+    { }
+  };
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
@@ -576,14 +585,14 @@ typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec
 
 /* Cubic interpolation helper.  */
 
-static inline luminosity_t
+static inline luminosity_t const_attr
 cubic_interpolate (luminosity_t p0, luminosity_t p1, luminosity_t p2, luminosity_t p3, coord_t x)
 {
   return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +
 			 (luminosity_t)x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
 			      (luminosity_t)x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
 }
-static inline vec_luminosity_t
+static inline vec_luminosity_t const_attr
 vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_t p2, vec_luminosity_t p3, coord_t x)
 {
   return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +

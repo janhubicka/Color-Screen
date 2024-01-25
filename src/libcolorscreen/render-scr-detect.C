@@ -365,7 +365,10 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	if (render_type == render_type_original && step > 1)
 	  {
 	    scr_to_img_parameters dummy;
-	    return render_to_scr::render_tile (render::render_type_original, dummy, img, my_rparam, color, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
+	    render_type_parameters rtparam;
+	    rtparam.color = color;
+	    rtparam.type = render::render_type_original;
+	    return render_to_scr::render_tile (rtparam, dummy, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
 	  }
 	scr_to_img_parameters dummy;
 	render_img render (dummy, img, my_rparam, 255);

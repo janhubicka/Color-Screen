@@ -5,6 +5,7 @@
 typedef double coord_t;
 #define flatten_attr __attribute__ ((__flatten__))
 #define pure_attr __attribute__ ((__pure__))
+#define const_attr __attribute__ ((__const__))
 
 /* Like modf but always round down.  */
 static inline float

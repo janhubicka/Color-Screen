@@ -40,8 +40,8 @@ public:
   {
     return m_final_yshift;
   }
-  DLL_PUBLIC static bool render_tile (enum render_type_t render_type, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
-				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
+  DLL_PUBLIC static bool render_tile (render_type_parameters rtparam, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
+				      unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
@@ -76,9 +76,18 @@ public:
 	  profile_matrix = m_params.get_profile_matrix (m_scr_to_img.patch_proportions ());
       }
   }
+  void set_render_type (render_type_parameters rtparam)
+  {
+    if (rtparam.color)
+      set_color_display (rtparam.type == render_type_profiled_original);
+  }
   bool precompute_all (progress_info *progress = NULL)
   {
     return render_to_scr::precompute_all (!m_color, m_profiled, progress);
+  }
+  bool precompute_img_range (int, int, int, int, progress_info *progress = NULL)
+  {
+    return precompute_all (progress);
   }
   inline rgbdata sample_pixel_img (coord_t x, coord_t y)
   {
@@ -165,10 +174,7 @@ public:
   }
   /* Compute RGB data of downscaled image.  */
   void
-  get_profiled_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
-  {
-    downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
-  }
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 private:
   bool m_color;
   bool m_profiled;

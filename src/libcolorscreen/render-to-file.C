@@ -532,11 +532,12 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     case predictive:
     case combined:
       {
-	bool screen_compensation = rfparams.mode == predictive;
-	bool adjust_luminosity = rfparams.mode == combined;
 
-	render_interpolate render (param, scan, rparam, 65535,
-				   screen_compensation, adjust_luminosity);
+	render_interpolate render (param, scan, rparam, 65535);
+	if (rfparams.mode == predictive)
+	  render.set_predictive ();
+	if (rfparams.mode == combined)
+	  render.set_adjust_luminosity ();
 	if (!render.precompute_all (progress))
 	  {
 	    *error = "Precomputation failed (out of memory)";

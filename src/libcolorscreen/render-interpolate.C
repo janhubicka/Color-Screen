@@ -64,9 +64,18 @@ static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1
 
 }
 
-render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval, bool screen_compensation, bool adjust_luminosity, bool unadjusted)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (screen_compensation), m_adjust_luminosity (adjust_luminosity), m_original_color (false), m_unadjusted (unadjusted), m_profiled (false), m_dufay (NULL), m_paget (NULL)
+render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (NULL), m_profiled (false), m_dufay (NULL), m_paget (NULL)
 {
+}
+void
+render_interpolate::set_render_type (render_type_parameters rtparam)
+{
+  m_adjust_luminosity = (rtparam.type == render_type_combined);
+  m_screen_compensation = (rtparam.type == render_type_predictive);
+  if (rtparam.type == render_type_interpolated_original
+      || rtparam.type == render_type_interpolated_profiled_original)
+    original_color (rtparam.type == render_type_interpolated_profiled_original);
 }
 
 bool
@@ -143,7 +152,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   return !progress || !progress->cancelled ();
 }
 
-pure_attr flatten_attr rgbdata
+pure_attr rgbdata
 render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 {
   luminosity_t red, green, blue;
@@ -342,4 +351,11 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
   /* Triple size, since we have 3 modes.  */
   dufay_analyzer_cache.increase_capacity (3 * n);
   paget_analyzer_cache.increase_capacity (3 * n);
+}
+
+/* Compute RGB data of downscaled image.  */
+void
+render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+{
+  downscale<render_interpolate, rgbdata, &render_interpolate::sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }

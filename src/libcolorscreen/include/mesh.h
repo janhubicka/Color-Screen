@@ -275,7 +275,7 @@ private:
 
   /* Smoothly map triangle (0,0), (1,0), (1,1) to trangle z, x, y */
 
-  static point
+  static point const_attr
   triangle_interpolate (point z, point x, point y, point p)
   {
     point ret;
@@ -297,7 +297,7 @@ private:
 
   /* tl is a top left point, tr is top right, bl is bottom left and br is bottom right point
      of a square cell.  Interpolate point p accordingly.  */
-  static point
+  static point const_attr
   interpolate (point tl, point tr, point bl, point br, point p)
   {
     bool swap = (p.x < p.y);
