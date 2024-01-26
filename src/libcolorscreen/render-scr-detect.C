@@ -4,6 +4,7 @@
 #include "include/render-to-scr.h"
 #include "lru-cache.h"
 #include "sharpen.h"
+#include "render-tile.h"
 struct color_data
 {
   luminosity_t *m_data[3];
@@ -31,7 +32,6 @@ color_data::~color_data()
 
 namespace
 {
-static int stats = -1;
 /* Lookup table translates raw input data into linear values.  */
 struct color_class_params
 {
@@ -307,17 +307,6 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
 static lru_cache <color_data_params, color_data, get_new_color_data, 1> color_data_cache ("color data");
 }
 class distance_list distance_list;
-
-static inline void
-putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
-       	  int r, int g, int b)
-{
-  *(pixels + y * rowstride + x * pixelbytes) = r;
-  *(pixels + y * rowstride + x * pixelbytes + 1) = g;
-  *(pixels + y * rowstride + x * pixelbytes + 2) = b;
-  if (pixelbytes > 3)
-    *(pixels + y * rowstride + x * pixelbytes + 3) = 255;
-}
 
 void
 render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)

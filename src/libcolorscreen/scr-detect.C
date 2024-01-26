@@ -24,7 +24,7 @@ scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int
 		  0, 0, 0, 1);
   //printf ("basis\n");
   //t.print(stdout);
-  t = t * m;
+  t = m * t;
   //t.print(stdout);
   //printf ("Forward color transform:\n");
   //t.print(stdout);
