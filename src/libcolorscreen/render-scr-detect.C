@@ -349,8 +349,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
   scr_to_img_parameters dummy;
   render_type_parameters rtparam;
   rtparam.color = color;
-  if (render_type == render_type_realistic_scr
-      || render_type == render_type_scr_nearest
+  if (render_type == render_type_scr_nearest
       || render_type == render_type_scr_nearest_scaled
       || render_type == render_type_scr_relax)
    rtparam.antialias = false;

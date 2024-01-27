@@ -382,7 +382,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'E' && scan.rgbdata)
+  if (k == 'E' && scan.has_rgb ())
     {
       ui_mode = screen_detection;
       print_help ();
