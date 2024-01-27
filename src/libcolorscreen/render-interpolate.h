@@ -29,18 +29,6 @@ public:
   {
     m_unadjusted = true;
   }
-  void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel_scr (xx, yy, r, g, b);
-  }
-  void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.to_scr (x, y, &xx, &yy);
-    render_pixel_scr (xx, yy, r, g, b);
-  }
   bool precompute_all (progress_info *progress)
   {
     int xshift, yshift, width, height;
@@ -52,16 +40,6 @@ public:
     int xshift, yshift, width, height;
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
     return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
-  }
-  void render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    rgbdata d = sample_pixel_scr (x, y);
-    set_color (d.red, d.green, d.blue, r, g, b);
-  }
-  void render_hdr_pixel_scr (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
-  {
-    rgbdata d = sample_pixel_scr (x, y);
-    set_hdr_color (d.red, d.green, d.blue, r, g, b);
   }
   pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
   rgbdata sample_pixel_img (int x, int y)

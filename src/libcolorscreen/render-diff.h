@@ -57,14 +57,6 @@ public:
     m_scr_to_img.to_scr (x, y, &xx, &yy);
     return sample_pixel_scr (xx, yy);
   }
-  void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.to_scr (x, y, &xx, &yy);
-    rgbdata d = sample_pixel_scr (xx, yy);
-    set_color (d.red, d.green, d.blue, r, g, b);
-  }
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   {
     downscale<render_diff, rgbdata, &render_diff::sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);

@@ -320,12 +320,6 @@ public:
     return precompute_all (progress);
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  flatten_attr void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue, r,g,b);
-  }
 };
 /* Simple wrapper to be used by rendering templates.  */
 class render_scr_detect_pixel_color : public render_scr_detect

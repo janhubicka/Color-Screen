@@ -55,8 +55,8 @@ bool render_img_normal(render::render_type_parameters rtparam,
 	for (int x = 0; x < width; x++)
 	  {
 	    int r, g, b;
-	    render.render_pixel_img ((x + xoffset) * step, py, &r, &g,
-				     &b);
+	    rgbdata c = render.sample_pixel_img ((x + xoffset) * step, py);
+	    render.set_color (c.red, c.green, c.blue, &r, &g, &b);
 	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	  }
        if (progress)

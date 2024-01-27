@@ -106,16 +106,6 @@ public:
       }
     return ret;
   }
-  void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    rgbdata d = sample_pixel_img (x, y);
-    set_color (d.red, d.green, d.blue, r, g, b);
-  }
-  void inline render_hdr_pixel_img (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
-  {
-    rgbdata d = sample_pixel_img (x, y);
-    set_hdr_color (d.red, d.green, d.blue, r, g, b);
-  }
   rgbdata inline get_profiled_rgb_pixel (int x, int y)
   {
     rgbdata c = get_unadjusted_rgb_pixel (x, y);
@@ -124,29 +114,6 @@ public:
     c.green = adjust_luminosity_ir (c.green);
     c.blue = adjust_luminosity_ir (c.blue);
     return c;
-  }
-  void inline fast_render_pixel_img (int x, int y, int *r, int *g, int *b)
-  {
-    rgbdata c;
-    if (!m_color)
-      c.red = c.green = c.blue = fast_get_img_pixel (x, y);
-    else if (!m_profiled)
-      c = get_rgb_pixel (x, y);
-    else
-      c = get_profiled_rgb_pixel (x, y);
-    set_color (c.red, c.green, c.blue, r, g, b);
-  }
-  void inline render_pixel_scr (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.to_img (x, y, &xx, &yy);
-    render_pixel_img (xx, yy, r, g, b);
-  }
-  void inline render_hdr_pixel_scr (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.to_img (x, y, &xx, &yy);
-    render_hdr_pixel_img (xx, yy, r, g, b);
   }
   inline rgbdata sample_pixel_final (coord_t x, coord_t y)
   {
@@ -159,18 +126,6 @@ public:
     coord_t xx, yy;
     m_scr_to_img.to_img (x, y, &xx, &yy);
     return sample_pixel_img (xx, yy);
-  }
-  void inline render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel_img (xx, yy, r, g, b);
-  }
-  void inline render_hdr_pixel_final (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_hdr_pixel_img (xx, yy, r, g, b);
   }
   /* Compute RGB data of downscaled image.  */
   void

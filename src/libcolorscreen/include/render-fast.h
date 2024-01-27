@@ -17,41 +17,35 @@ public:
   {
     return precompute_all (progress);
   }
-  void render_pixel_scr (int x, int y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.to_img (x, y, &xx, &yy);
-    render_pixel (x, y, xx, yy, r, g, b);
-  }
   rgbdata sample_pixel_scr (int x, int y)
   {
     coord_t xx, yy;
     m_scr_to_img.to_img (x, y, &xx, &yy);
     return sample_pixel (x, y, xx, yy);
   }
-  void render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  rgbdata sample_pixel_img (int x, int y)
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);
-    render_pixel_scr (xx, yy, r, g, b);
-  }
-  void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
-  {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
-    render_pixel_scr (xx, yy, r, g, b);
+    return sample_pixel (xx, yy, x, y);
   }
   /* Unimplemented; just exists to make rendering templates happy. We never downscale.  */
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   {
     abort ();
   }
-private:
-  void render_pixel (int x, int y, coord_t zx, coord_t zy, int *r, int *g, int *b)
+  void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    rgbdata d = sample_pixel (x, y, zx, zy);
+    coord_t xx, yy;
+    coord_t xx2, yy2;
+    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    int ix = xx + 0.5;
+    int iy = yy + 0.5;
+    m_scr_to_img.to_img (ix, iy, &xx2, &yy2);
+    rgbdata d = sample_pixel (ix, iy, xx2, yy2);
     set_color (d.red, d.green, d.blue, r, g, b);
-  }
+   }
+private:
   pure_attr 
   rgbdata sample_pixel (int x, int y, coord_t zx, coord_t zy);
 };
