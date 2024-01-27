@@ -366,7 +366,9 @@ public:
   {
     if (m_param.mesh_trans)
       {
- 	m_param.mesh_trans->apply (x, y, xp, yp);
+ 	point_t p = m_param.mesh_trans->apply ({x, y});
+	*xp = p.x;
+	*yp = p.y;
 	return;
       }
 #if 0

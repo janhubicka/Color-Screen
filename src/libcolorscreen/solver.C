@@ -841,7 +841,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	{
 	  coord_t ix, iy;
 	  next += step;
-	  m->apply (x, y, &ix, &iy);
+	  point_t p = m->apply ({(coord_t)x, (coord_t)y});
+	  ix = p.x;
+	  iy = p.y;
 	  if (nng < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g
@@ -854,9 +856,11 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	      nng++;
 	    }
 	  if (type == Dufay)
-	    m->apply ((x)+0.5, y, &ix, &iy);
+	    p = m->apply ({(x)+0.5, (coord_t)y});
 	  else
-	    m->apply ((x)+0.25, y + 0.25, &ix, &iy);
+	    p = m->apply ({(x)+0.25, y + 0.25});
+	  ix = p.x;
+	  iy = p.y;
 	  if (nnb < samples && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g
@@ -867,7 +871,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	      blues[nnb].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
 	      nnb++;
 	    }
-	  m->apply ((x), y + 0.5, &ix, &iy);
+	  p = m->apply ({(coord_t)(x), y + 0.5});
+	  ix = p.x;
+	  iy = p.y;
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g
@@ -879,9 +885,11 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	      nnr++;
 	    }
 	  if (type == Dufay)
-	    m->apply ((x) + 0.5, y + 0.5, &ix, &iy);
+	    p = m->apply ({(x) + 0.5, y + 0.5});
 	  else
-	    m->apply ((x) + 0.5, y, &ix, &iy);
+	    p = m->apply ({(x) + 0.5, y});
+	  ix = p.x;
+	  iy = p.y;
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
 	      && (img->rgbdata[(int)iy][(int)ix].r
 		  || img->rgbdata[(int)iy][(int)ix].g

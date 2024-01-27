@@ -18,7 +18,7 @@ public:
     free (m_data);
     free (m_invdata);
   }
-  struct point {
+  struct mesh_point {
     mesh_coord_t x,y;
   };
   void
@@ -37,40 +37,39 @@ public:
     *xx = m_data[y * m_width + x].x;
     *yy = m_data[y * m_width + x].y;
   }
-  void
-  apply (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
+  point_t pure_attr
+  apply (point_t p)
   {
     int ix, iy;
-    x= my_modf ((x + m_xshift) * m_xstepinv, &ix);
-    y= my_modf ((y + m_yshift) * m_ystepinv, &iy);
+    p.x= my_modf ((p.x + m_xshift) * m_xstepinv, &ix);
+    p.y= my_modf ((p.y + m_yshift) * m_ystepinv, &iy);
     if (ix < 0)
       {
 	//x += ix * m_xstep;
-	x = 0;
+	p.x = 0;
 	ix = 0;
       }
     if (iy < 0)
       {
 	//y += iy * m_ystep;
-	y = 0;
+	p.y = 0;
 	iy = 0;
       }
     if (ix >= m_width - 1)
       {
 	//x -= ix * (ix - m_width + 1);
-	x = 1;
+	p.x = 1;
 	ix = m_width - 2;
       }
     if (iy >= m_height - 1)
       {
 	//y -= iy * (iy - m_height + 1);
-	y = 1;
+	p.y = 1;
 	iy = m_height - 2;
       }
-    point p = {(mesh_coord_t) x, (mesh_coord_t) y};
-    p = interpolate (m_data[iy * m_width + ix], m_data[iy * m_width + ix + 1], m_data[(iy + 1) * m_width + ix], m_data[(iy + 1) * m_width + ix + 1], p);
-    *xx = p.x;
-    *yy = p.y;
+    mesh_point np = {(mesh_coord_t) p.x, (mesh_coord_t) p.y};
+    np = interpolate (m_data[iy * m_width + ix], m_data[iy * m_width + ix + 1], m_data[(iy + 1) * m_width + ix], m_data[(iy + 1) * m_width + ix + 1], np);
+    return {np.x, np.y};
   }
   /* Return true if x, y are in the range covered by mesh.  */
   bool
@@ -83,7 +82,7 @@ public:
   point_t pure_attr
   invert (point_t ip)
   {
-    point p = {(mesh_coord_t) ip.x, (mesh_coord_t) ip.y};
+    mesh_point p = {(mesh_coord_t) ip.x, (mesh_coord_t) ip.y};
     int ix = (ip.x + m_invxshift) * m_invxstepinv;
     int iy = (ip.y + m_invyshift) * m_invystepinv;
     if (ix >= 0 && iy >= 0 && ix < m_width - 1 && iy < m_height - 1)
@@ -93,10 +92,10 @@ public:
 	  for (int x = m_invdata[pp].minx; x <= (int)m_invdata[pp].maxx; x++)
 	    {
 	      /* Determine cell corners.  */
-	      point p1 = m_data[y * m_width + x];
-	      point p2 = m_data[y * m_width + x + 1];
-	      point p3 = m_data[(y + 1) * m_width + x];
-	      point p4 = m_data[(y + 1) * m_width + x + 1];
+	      mesh_point p1 = m_data[y * m_width + x];
+	      mesh_point p2 = m_data[y * m_width + x + 1];
+	      mesh_point p3 = m_data[(y + 1) * m_width + x];
+	      mesh_point p4 = m_data[(y + 1) * m_width + x + 1];
 
 	      /* Check if point is above or bellow diagonal.  */
 	      mesh_coord_t sgn1 = sign (p, p1, p4);
@@ -153,11 +152,11 @@ public:
     int new_width = m_width + left + right;
     int new_height = m_height + top + bottom;
     assert (!m_invdata);
-    point *new_data = (point *)malloc (new_width * new_height * sizeof (point));
+    mesh_point *new_data = (mesh_point *)malloc (new_width * new_height * sizeof (mesh_point));
     if (!new_data)
       return false;
     for (int y = 0; y < m_height; y++)
-      memcpy (new_data + (new_width * (y + top) + left), m_data + m_width * y, m_width * sizeof (point));
+      memcpy (new_data + (new_width * (y + top) + left), m_data + m_width * y, m_width * sizeof (mesh_point));
     free (m_data);
     m_data = new_data;
     m_width = new_width;
@@ -241,7 +240,7 @@ private:
     {
       unsigned int minx, miny, maxx, maxy;
     };
-  point *m_data;
+  mesh_point *m_data;
   mesh_inverse *m_invdata;
   mesh_coord_t m_xshift, m_yshift, m_xstep, m_ystep, m_xstepinv, m_ystepinv;
   int m_width, m_height;
@@ -249,7 +248,7 @@ private:
   int m_invwidth, m_invheight;
 
   static mesh_coord_t
-  sign (point p1, point p2, point p3)
+  sign (mesh_point p1, mesh_point p2, mesh_point p3)
   {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
   }
@@ -274,10 +273,10 @@ private:
 
   /* Smoothly map triangle (0,0), (1,0), (1,1) to trangle z, x, y */
 
-  static point const_attr
-  triangle_interpolate (point z, point x, point y, point p)
+  static mesh_point const_attr
+  triangle_interpolate (mesh_point z, mesh_point x, mesh_point y, mesh_point p)
   {
-    point ret;
+    mesh_point ret;
     if (p.x != 0)
       {
 	mesh_coord_t yp = p.y / p.x;
@@ -296,8 +295,8 @@ private:
 
   /* tl is a top left point, tr is top right, bl is bottom left and br is bottom right point
      of a square cell.  Interpolate point p accordingly.  */
-  static point const_attr
-  interpolate (point tl, point tr, point bl, point br, point p)
+  static mesh_point const_attr
+  interpolate (mesh_point tl, mesh_point tr, mesh_point bl, mesh_point br, mesh_point p)
   {
     bool swap = (p.x < p.y);
     if (swap)

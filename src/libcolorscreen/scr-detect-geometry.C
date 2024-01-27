@@ -1624,7 +1624,9 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    point_t p = m->invert ({(coord_t)x, (coord_t)y});
 	    p.x = (int)p.x;
 	    p.y = (int)p.y;
-	    m->apply (p.x, p.y, &ix, &iy);
+	    point_t ap = m->apply (p);
+	    ix = ap.x;
+	    iy = ap.y;
 	    sparam.add_point (ix, iy, p.x, p.y, solver_parameters::green);
 	  }
       ret.mesh_trans = m;
