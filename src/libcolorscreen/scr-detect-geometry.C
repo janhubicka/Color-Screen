@@ -1620,13 +1620,12 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
       for (int y = img.height / (ysteps + 2); y < img.height - img.height / (ysteps + 2); y += img.height / (ysteps + 2))
 	for (int x = img.width / (xsteps + 2); x < img.width - img.height / (ysteps + 2); x += img.width / (xsteps + 2))
 	  {
-	    coord_t sx, sy;
 	    coord_t ix, iy;
-	    m->invert (x, y, &sx, &sy);
-	    sx = (int)sx;
-	    sy = (int)sy;
-	    m->apply (sx, sy, &ix, &iy);
-	    sparam.add_point (ix, iy, sx, sy, solver_parameters::green);
+	    point_t p = m->invert ({(coord_t)x, (coord_t)y});
+	    p.x = (int)p.x;
+	    p.y = (int)p.y;
+	    m->apply (p.x, p.y, &ix, &iy);
+	    sparam.add_point (ix, iy, p.x, p.y, solver_parameters::green);
 	  }
       ret.mesh_trans = m;
       ret.param.mesh_trans = m;

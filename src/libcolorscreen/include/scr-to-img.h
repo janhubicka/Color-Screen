@@ -395,7 +395,9 @@ public:
     coord_t xx = x, yy = y;
     if (m_param.mesh_trans)
       {
-	m_param.mesh_trans->invert (x, y, xp, yp);
+	point_t p = m_param.mesh_trans->invert ({x, y});
+	*xp = p.x;
+	*yp = p.y;
 	/* (-1,-1) is used to sgnalize that inverse is not computed.  */
 	if (debug && *xp == -1 && *yp == -1)
 	  return;

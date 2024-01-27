@@ -7,8 +7,6 @@
 #include "imagedata.h"
 #include "bitmap.h"
 
-struct point_t {coord_t x, y;};
-
 struct solver_parameters
 {
   DLL_PUBLIC solver_parameters ()

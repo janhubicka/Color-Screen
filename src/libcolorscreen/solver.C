@@ -354,7 +354,6 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   param->coordinate1_y = coordinate1_y - center_y;
   param->coordinate2_x = coordinate2_x - center_x;
   param->coordinate2_y = coordinate2_y - center_y;
-  printf ("Rotation %i\n", flags & homography::solve_rotation);
   /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
   if (flags & homography::solve_rotation)
     {

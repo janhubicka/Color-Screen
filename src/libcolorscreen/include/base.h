@@ -3,6 +3,10 @@
 #include <cmath>
 #include <cstdint>
 typedef double coord_t;
+struct point_t
+{
+  coord_t x, y;
+};
 #define flatten_attr __attribute__ ((__flatten__))
 #define pure_attr __attribute__ ((__pure__))
 #define const_attr __attribute__ ((__const__))

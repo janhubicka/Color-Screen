@@ -2,6 +2,7 @@
 #define MESH_H
 #include "matrix.h"
 #include "render.h"
+#include "base.h"
 
 
 class mesh
@@ -79,12 +80,12 @@ public:
     y= (y + m_yshift) * m_ystepinv;
     return (x >= 0 && y >= 0 && x < m_width && y < m_height);
   }
-  void
-  invert (coord_t x, coord_t y, coord_t *xx, coord_t *yy)
+  point_t pure_attr
+  invert (point_t ip)
   {
-    point p = {(mesh_coord_t) x, (mesh_coord_t) y};
-    int ix = (x + m_invxshift) * m_invxstepinv;
-    int iy = (y + m_invyshift) * m_invystepinv;
+    point p = {(mesh_coord_t) ip.x, (mesh_coord_t) ip.y};
+    int ix = (ip.x + m_invxshift) * m_invxstepinv;
+    int iy = (ip.y + m_invyshift) * m_invystepinv;
     if (ix >= 0 && iy >= 0 && ix < m_width - 1 && iy < m_height - 1)
       {
 	int pp = iy * m_invwidth + ix;
@@ -111,8 +112,7 @@ public:
 				     p4.x - p3.x, p4.y - p3.y,
 				     &rx, &ry);
 		  rx = 1 / rx;
-		  *xx = (ry * rx + x) * m_xstep - m_xshift;
-		  *yy = (rx + y) * m_ystep - m_yshift;
+		  return {(ry * rx + x) * m_xstep - m_xshift, (rx + y) * m_ystep - m_yshift};
 		}
 	      else
 		{
@@ -126,21 +126,20 @@ public:
 				     p4.x - p2.x, p4.y - p2.y,
 				     &rx, &ry);
 		  rx = 1 / rx;
-		  *xx = (rx + x) * m_xstep - m_xshift;
-		  *yy = (ry * rx + y) * m_ystep - m_yshift;
+		  return {(rx + x) * m_xstep - m_xshift, (ry * rx + y) * m_ystep - m_yshift};
 		}
-
-	      return;
 	    }
       }
+    point_t ret;
     if (ix < m_invwidth / 2)
-      *xx = -m_xshift;
+      ret.x = -m_xshift;
     else
-      *xx = -m_xshift + m_xstep * m_width;
+      ret.x = -m_xshift + m_xstep * m_width;
     if (iy < m_invwidth / 2)
-      *yy = -m_yshift;
+      ret.y = -m_yshift;
     else
-      *yy = -m_yshift + m_ystep * m_height;
+      ret.y = -m_yshift + m_ystep * m_height;
+    return ret;
   }
   void get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax);
   void
