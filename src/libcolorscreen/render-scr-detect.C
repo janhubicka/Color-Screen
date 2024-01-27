@@ -309,19 +309,19 @@ static lru_cache <color_data_params, color_data, get_new_color_data, 1> color_da
 class distance_list distance_list;
 
 void
-render_scr_detect::get_adjusted_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_adjusted::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_adjusted_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 void
-render_scr_detect::get_normalized_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_normalized::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_normalized_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
 void
-render_scr_detect::get_screen_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+render_scr_detect_pixel_color::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 { 
   downscale<render_scr_detect, rgbdata, &render_scr_detect::fast_get_screen_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
@@ -336,6 +336,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 			        double step,
 				progress_info *progress)
 {
+  bool ok = true;
   if (width <= 0 || height <= 0)
     return true;
   if (stats == -1)
@@ -345,44 +346,22 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     gettimeofday (&start_time, NULL);
   if (progress)
     progress->set_task ("precomputing", 1);
+  scr_to_img_parameters dummy;
+  render_type_parameters rtparam;
+  rtparam.color = color;
+  if (render_type == render_type_realistic_scr
+      || render_type == render_type_scr_nearest
+      || render_type == render_type_scr_nearest_scaled
+      || render_type == render_type_scr_relax)
+   rtparam.antialias = false;
+
   switch (render_type)
     {
     case render_type_original:
       {
 	render_parameters my_rparam;
 	my_rparam.original_render_from (rparam, color, false);
-	if (render_type == render_type_original && step > 1)
-	  {
-	    scr_to_img_parameters dummy;
-	    render_type_parameters rtparam;
-	    rtparam.color = color;
-	    rtparam.type = render::render_type_original;
-	    return render_to_scr::render_tile (rtparam, dummy, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step);
-	  }
-	scr_to_img_parameters dummy;
-	render_img render (dummy, img, my_rparam, 255);
-	if (color)
-	  render.set_color_display (false);
-	if (!render.precompute_all (progress))
-	  return false;
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.fast_render_pixel_img ((x + xoffset) * step, py, &r, &g,
-						&b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
+	ok = do_render_tile_with_gray<render_img> (rtparam, dummy, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_adjusted_color:
@@ -391,50 +370,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	my_rparam.color_model = render_parameters::color_model_none;
 	my_rparam.presaturation = 1;
 	my_rparam.saturation = 1;
-	render_scr_detect render (param, img, my_rparam, 255);
-	if (!render.precompute_all (false, false, progress))
-	  return false;
-
-	if (step > 1)
-	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_adjusted_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
-	    break;
-	  }
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_adjusted_pixel_img ((x + xoffset) * step, py, &r, &g,
-						&b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
+        ok = do_render_tile_img<render_scr_detect_adjusted> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_normalized_color:
@@ -444,50 +380,7 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	my_rparam.presaturation = 1;
 	my_rparam.saturation = 1;
 	my_rparam.brightness = 1;
-	render_scr_detect render (param, img, my_rparam, 255);
-	if (!render.precompute_all (false, false, progress))
-	  return false;
-
-	if (step > 1)
-	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_normalized_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
-	    break;
-	  }
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_normalized_pixel_img ((x + xoffset) * step, py, &r, &g,
-						&b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
+        ok = do_render_tile_img<render_scr_detect_normalized> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_pixel_colors:
@@ -497,166 +390,23 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
 	my_rparam.presaturation = 1;
 	my_rparam.saturation = 1;
 	my_rparam.brightness = 1;
-	render_scr_detect render (param, img, my_rparam, 255);
-	if (!render.precompute_all (false, false, progress))
-	  return false;
-	if (step > 1)
-	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_screen_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    putpixel (pixels, pixelbytes, rowstride, x, y, data[x + width * y].red * 255 + 0.5, data[x + width * y].green * 255 + 0.5, data[x + width * y].blue * 255 + 0.5);
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
-	    break;
-	  }
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  coord_t px = (x + xoffset) * step;
-		  luminosity_t r, g, b;
-		  render.get_screen_color (px, py, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r * 255 + 0.5, g * 255 + 0.5, b * 255 + 0.5);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	   }
+        ok = do_render_tile_img<render_scr_detect_pixel_color> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_realistic_scr:
-      {
-	render_scr_detect_superpose_img render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
-	  return false;
-	if (step > 1)
-	  {
-	    rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
-	    render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y].red, data[x + width * y].green, data[x + width * y].blue, &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
-	    break;
-	  }
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
-      }
+      ok = do_render_tile_img<render_scr_detect_superpose_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_nearest:
-      {
-	render_scr_nearest render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
-	  return false;
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
-      }
+      ok = do_render_tile_img<render_scr_nearest> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_nearest_scaled:
-      {
-	render_scr_nearest_scaled render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
-	  return false;
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
-      }
+      ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_relax:
-      {
-	render_scr_relax render (param, img, rparam, 255);
-	if (!render.precompute_all (progress))
-	  return false;
-
-	if (progress)
-	  progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
-	for (int y = 0; y < height; y++)
-	  {
-	    coord_t py = (y + yoffset) * step;
-	    if (!progress || !progress->cancel_requested ())
-	      for (int x = 0; x < width; x++)
-		{
-		  int r, g, b;
-		  render.render_pixel_img ((x + xoffset) * step, py, &r, &g, &b);
-		  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		}
-	    if (progress)
-	      progress->inc_progress ();
-	  }
-      }
+      ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     }
-  return !progress || !progress->cancelled ();
+  return ok && (!progress || !progress->cancelled ());
 }
 bool
 render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)

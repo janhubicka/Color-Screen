@@ -153,7 +153,7 @@ private:
     T slope, add;
   } *m_entry;
   bool increasing;
-  const bool debug = false;
+  static const bool debug = false;
 };
 
 

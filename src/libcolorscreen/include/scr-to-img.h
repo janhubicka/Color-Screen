@@ -545,7 +545,7 @@ private:
     *xr = xd / r * radius * m_lens_radius;
     *yr = yd / r * radius * m_lens_radius;
   }
-  const bool debug = false;
+  static const bool debug = false;
 };
 
 #endif

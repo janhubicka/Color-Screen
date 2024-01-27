@@ -16,7 +16,7 @@
 #define strcpy_s(a,b) strcpy(a,b)
 #endif
 
-const int debug = 0;
+static const int debug = 0;
 
 std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";

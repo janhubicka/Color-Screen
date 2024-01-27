@@ -9,6 +9,12 @@ public:
      r1 (param, img, rparam, dst_maxval), r2 (param, img, rparam, dst_maxval)
   {
     r2.original_color (true);
+    m_brightness = m_params.brightness;
+    m_params.brightness = 1;
+    m_params.color_model = render_parameters::color_model_none;
+    m_params.white_balance = {1, 1, 1};
+    m_params.dark_point = 0;
+    m_params.scan_exposure = 0;
   }
   ~render_diff ()
   {
@@ -40,9 +46,9 @@ public:
   {
     rgbdata c1 = r1.sample_pixel_scr (x, y);
     rgbdata c2 = r2.sample_pixel_scr (x, y);
-    return {0.25-4 * (c1.red - c2.red),
-	    0.25-4 * (c1.green - c2.green),
-	    0.25-4 * (c1.blue - c2.blue)};
+    return {0.25-4 * (c1.red - c2.red) * m_brightness,
+	    0.25-4 * (c1.green - c2.green) * m_brightness,
+	    0.25-4 * (c1.blue - c2.blue) * m_brightness};
   }
   rgbdata
   sample_pixel_img (int x, int y)
@@ -64,6 +70,7 @@ public:
     downscale<render_diff, rgbdata, &render_diff::sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   }
 private:
+  luminosity_t m_brightness;
   render_interpolate r1;
   render_interpolate r2;
 };

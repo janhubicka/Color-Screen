@@ -530,9 +530,9 @@ public:
   {
     return m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions);
   }
+  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
 protected:
-  void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
 
@@ -577,7 +577,7 @@ protected:
   backlight_correction *m_backlight_correction;
 
 private:
-  const bool debug = false;
+  static const bool debug = false;
   tone_curve *m_tone_curve;
 };
 

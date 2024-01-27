@@ -30,8 +30,8 @@ public:
 	  }
     return t;
   }
-  inline 
-  void get_screen_color (coord_t xp, coord_t yp, luminosity_t *r, luminosity_t *g, luminosity_t *b)
+  inline rgbdata
+  get_screen_color (coord_t xp, coord_t yp)
   {
     /* Center of pixel [0,0] is [0.5,0.5].  */
     xp -= (coord_t)0.5;
@@ -42,32 +42,26 @@ public:
 
     if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
       {
-	*r = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_red ( sx-1, sy-1), m_color_class_map->get_color_red (sx-1, sy), m_color_class_map->get_color_red (sx-1, sy+1), m_color_class_map->get_color_red (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_red ( sx-0, sy-1), m_color_class_map->get_color_red (sx-0, sy), m_color_class_map->get_color_red (sx-0, sy+1), m_color_class_map->get_color_red (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_red ( sx+1, sy-1), m_color_class_map->get_color_red (sx+1, sy), m_color_class_map->get_color_red (sx+1, sy+1), m_color_class_map->get_color_red (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_red ( sx+2, sy-1), m_color_class_map->get_color_red (sx+2, sy), m_color_class_map->get_color_red (sx+2, sy+1), m_color_class_map->get_color_red (sx+2, sy+2), ry),
-				rx);
-	*g = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_green ( sx-1, sy-1), m_color_class_map->get_color_green (sx-1, sy), m_color_class_map->get_color_green (sx-1, sy+1), m_color_class_map->get_color_green (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_green ( sx-0, sy-1), m_color_class_map->get_color_green (sx-0, sy), m_color_class_map->get_color_green (sx-0, sy+1), m_color_class_map->get_color_green (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_green ( sx+1, sy-1), m_color_class_map->get_color_green (sx+1, sy), m_color_class_map->get_color_green (sx+1, sy+1), m_color_class_map->get_color_green (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_green ( sx+2, sy-1), m_color_class_map->get_color_green (sx+2, sy), m_color_class_map->get_color_green (sx+2, sy+1), m_color_class_map->get_color_green (sx+2, sy+2), ry),
-				rx);
-	*b = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_blue ( sx-1, sy-1), m_color_class_map->get_color_blue (sx-1, sy), m_color_class_map->get_color_blue (sx-1, sy+1), m_color_class_map->get_color_blue (sx-1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_blue ( sx-0, sy-1), m_color_class_map->get_color_blue (sx-0, sy), m_color_class_map->get_color_blue (sx-0, sy+1), m_color_class_map->get_color_blue (sx-0, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_blue ( sx+1, sy-1), m_color_class_map->get_color_blue (sx+1, sy), m_color_class_map->get_color_blue (sx+1, sy+1), m_color_class_map->get_color_blue (sx+1, sy+2), ry),
-				cubic_interpolate (m_color_class_map->get_color_blue ( sx+2, sy-1), m_color_class_map->get_color_blue (sx+2, sy), m_color_class_map->get_color_blue (sx+2, sy+1), m_color_class_map->get_color_blue (sx+2, sy+2), ry),
-				rx);
-	 *r = std::min (std::max (*r, (luminosity_t)0), (luminosity_t)1);
-	 *g = std::min (std::max (*g, (luminosity_t)0), (luminosity_t)1);
-	 *b = std::min (std::max (*b, (luminosity_t)0), (luminosity_t)1);
+	luminosity_t r,g,b;
+	r = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_red ( sx-1, sy-1), m_color_class_map->get_color_red (sx-1, sy), m_color_class_map->get_color_red (sx-1, sy+1), m_color_class_map->get_color_red (sx-1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_red ( sx-0, sy-1), m_color_class_map->get_color_red (sx-0, sy), m_color_class_map->get_color_red (sx-0, sy+1), m_color_class_map->get_color_red (sx-0, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_red ( sx+1, sy-1), m_color_class_map->get_color_red (sx+1, sy), m_color_class_map->get_color_red (sx+1, sy+1), m_color_class_map->get_color_red (sx+1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_red ( sx+2, sy-1), m_color_class_map->get_color_red (sx+2, sy), m_color_class_map->get_color_red (sx+2, sy+1), m_color_class_map->get_color_red (sx+2, sy+2), ry),
+			       rx);
+	g = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_green ( sx-1, sy-1), m_color_class_map->get_color_green (sx-1, sy), m_color_class_map->get_color_green (sx-1, sy+1), m_color_class_map->get_color_green (sx-1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_green ( sx-0, sy-1), m_color_class_map->get_color_green (sx-0, sy), m_color_class_map->get_color_green (sx-0, sy+1), m_color_class_map->get_color_green (sx-0, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_green ( sx+1, sy-1), m_color_class_map->get_color_green (sx+1, sy), m_color_class_map->get_color_green (sx+1, sy+1), m_color_class_map->get_color_green (sx+1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_green ( sx+2, sy-1), m_color_class_map->get_color_green (sx+2, sy), m_color_class_map->get_color_green (sx+2, sy+1), m_color_class_map->get_color_green (sx+2, sy+2), ry),
+			       rx);
+	b = cubic_interpolate (cubic_interpolate (m_color_class_map->get_color_blue ( sx-1, sy-1), m_color_class_map->get_color_blue (sx-1, sy), m_color_class_map->get_color_blue (sx-1, sy+1), m_color_class_map->get_color_blue (sx-1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_blue ( sx-0, sy-1), m_color_class_map->get_color_blue (sx-0, sy), m_color_class_map->get_color_blue (sx-0, sy+1), m_color_class_map->get_color_blue (sx-0, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_blue ( sx+1, sy-1), m_color_class_map->get_color_blue (sx+1, sy), m_color_class_map->get_color_blue (sx+1, sy+1), m_color_class_map->get_color_blue (sx+1, sy+2), ry),
+			       cubic_interpolate (m_color_class_map->get_color_blue ( sx+2, sy-1), m_color_class_map->get_color_blue (sx+2, sy), m_color_class_map->get_color_blue (sx+2, sy+1), m_color_class_map->get_color_blue (sx+2, sy+2), ry),
+			       rx);
+	return {std::min (std::max (r, (luminosity_t)0), (luminosity_t)1), std::min (std::max (g, (luminosity_t)0), (luminosity_t)1), std::min (std::max (b, (luminosity_t)0), (luminosity_t)1)};
      }
     else
-      {
-	*r = 0;
-	*g = 0;
-	*b = 0;
-	return;
-      }
+     return {0, 0, 0};
   }
   bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *);
   bool precompute_rgbdata (progress_info *progress);
@@ -181,6 +175,7 @@ public:
     d.blue = m_color_class_map->get_color_blue (x, y);
     return d;
   }
+#if 0
   void inline render_adjusted_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     int xx = x;
@@ -194,18 +189,15 @@ public:
     rgbdata d = fast_get_adjusted_pixel (xx, yy);
     set_color (d.red,d.green,d.blue, r, g, b);
   }
-  void inline render_normalized_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+#endif
+  rgbdata get_normalized_pixel_img (coord_t x, coord_t y)
   {
     int xx = x;
     int yy = y;
     if (xx < 0 || xx >= m_img.width || yy < 0 || yy >= m_img.height)
-      {
-	set_color (0, 0, 0, r,g,b);
-	return;
-      }
+      return {0,0,0};
     //rgbdata d = fast_get_normalized_pixel (xx, yy);
-    rgbdata d = fast_get_normalized_pixel (xx, yy);
-    set_color (d.red,d.green,d.blue, r, g, b);
+    return  fast_get_normalized_pixel (xx, yy);
   }
   luminosity_t
   get_patch_density (int x, int y, scr_detect::color_class c)
@@ -269,10 +261,102 @@ protected:
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;
   uint64_t m_precomputed_rgbdata_id;
-  void get_adjusted_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  void get_normalized_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  void get_screen_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
+};
+
+/* Simple wrapper to be used by rendering templates.  */
+class render_scr_detect_adjusted : public render_scr_detect
+{
+public:
+  render_scr_detect_adjusted (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  : render_scr_detect (param, img, rparam, dstmaxval)
+  { }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy)
+  {
+    return get_adjusted_pixel (xx, yy);
+  }
+  bool precompute_all (progress_info *progress)
+  {
+    return render_scr_detect::precompute_all (true, false, progress);
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  flatten_attr void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue, r,g,b);
+  }
+};
+
+/* Simple wrapper to be used by rendering templates.  */
+class render_scr_detect_normalized : public render_scr_detect
+{
+public:
+  render_scr_detect_normalized (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  : render_scr_detect (param, img, rparam, dstmaxval)
+  { }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy)
+  {
+    return get_normalized_pixel_img (xx, yy);
+  }
+  bool precompute_all (progress_info *progress)
+  {
+    return render_scr_detect::precompute_all (true, false, progress);
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  flatten_attr void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue, r,g,b);
+  }
+};
+/* Simple wrapper to be used by rendering templates.  */
+class render_scr_detect_pixel_color : public render_scr_detect
+{
+public:
+  render_scr_detect_pixel_color (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  : render_scr_detect (param, img, rparam, dstmaxval)
+  { }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy)
+  {
+    return get_screen_color (xx, yy);
+  }
+  bool precompute_all (progress_info *progress)
+  {
+    return render_scr_detect::precompute_all (true, false, progress);
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
+  flatten_attr void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  {
+    rgbdata d = sample_pixel_img (x, y);
+    set_color (d.red, d.green, d.blue, r,g,b);
+  }
 };
 class render_scr_detect_superpose_img : public render_scr_detect
 {
@@ -289,25 +373,24 @@ public:
   {
     return render_scr_detect::precompute_all (true, false, progress);
   }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
 private:
 };
 flatten_attr inline rgbdata
 render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y)
 {
-  luminosity_t rr, gg, bb;
-  get_screen_color (x, y, &rr, &gg, &bb);
-  luminosity_t graydata = get_data (x, y);
-  rgbdata ret = {graydata * rr, graydata * gg, graydata * bb};
-  return ret;
+  return get_screen_color (x, y) * get_data (x, y);
 }
 flatten_attr inline rgbdata
 render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y)
 {
-  luminosity_t rr, gg, bb;
-  get_screen_color (x, y, &rr, &gg, &bb);
-  luminosity_t graydata = get_img_pixel (x, y);
-  rgbdata ret = {graydata * rr, graydata * gg, graydata * bb};
-  return ret;
+  return get_screen_color (x, y) * get_img_pixel (x, y);
 }
 flatten_attr void
 render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
@@ -346,16 +429,19 @@ public:
   }
   bool precompute_all (progress_info *);
   rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy)
+  fast_sample_pixel_img (int x, int y)
   {
-    int x = xx + 0.5;
-    int y = yy + 0.5;
-    if (x < 0 || x > m_img.width || y < 0 || y > m_img.height)
+    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
       return {0,0,0};
     else
       return {get_luminosity (0, x, y),
 	      get_luminosity (1, x, y),
 	      get_luminosity (2, x, y)};
+  }
+  rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy)
+  {
+    return fast_sample_pixel_img (xx + 0.5, yy + 0.5);
   }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
@@ -364,6 +450,18 @@ public:
     set_color (d.red, d.green, d.blue,r,g,b);
   }
   ~render_scr_relax();
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  inline void
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  { 
+    downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+  }
 private:
   luminosity_t *cdata[3];
   luminosity_t get_luminosity (int color, int x, int y)
@@ -413,6 +511,11 @@ public:
      else
       return {get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue)};
   }
+  rgbdata
+  fast_sample_pixel_img (int x, int y)
+  {
+    return sample_pixel_img (x + 0.5, y + 0.5);
+  }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
@@ -422,6 +525,18 @@ public:
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, true, progress);
+  }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  inline void
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  { 
+    downscale<render_scr_nearest, rgbdata, &render_scr_nearest::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   }
 private:
 };
@@ -469,11 +584,28 @@ public:
     else
       return {0, 0, 0};
   }
+  rgbdata
+  fast_sample_pixel_img (int x, int y)
+  {
+    return sample_pixel_img (x + 0.5, y + 0.5);
+  }
   void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
     set_color (d.red, d.green, d.blue,r,g,b);
+  }
+  void set_render_type (render_type_parameters rtparam)
+  {
+  }
+  bool precompute_img_range (coord_t, coord_t, coord_t, coord_t, progress_info *progress)
+  {
+    return precompute_all (progress);
+  }
+  inline void
+  get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
+  { 
+    downscale<render_scr_relax, rgbdata, &render_scr_relax::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   }
 private:
   patches *m_patches;

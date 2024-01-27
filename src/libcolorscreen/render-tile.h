@@ -22,10 +22,10 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 
 /* Template for normal rendering, which calls render_pixel on every pixel.
    Main motivation to do rendering cores as templates is to get things nicely inlined.   */
-template<typename T>
+template<typename T, typename P, typename RP>
 bool render_img_normal(render::render_type_parameters rtparam,
-		       scr_to_img_parameters &param, image_data &img,
-		       render_parameters &rparam,
+		       P &param, image_data &img,
+		       RP &rparam,
 		       unsigned char *pixels, int pixelbytes, int rowstride,
 		       int width, int height,
 		       double xoffset, double yoffset,
@@ -64,10 +64,10 @@ bool render_img_normal(render::render_type_parameters rtparam,
     }
   return true;
 }
-template<typename T>
+template<typename T, typename P,typename RP>
 bool render_img_downscale(render::render_type_parameters rtparam,
-			  scr_to_img_parameters &param, image_data &img,
-			  render_parameters &rparam,
+			  P &param, image_data &img,
+			  RP &rparam,
 			  unsigned char *pixels, int pixelbytes, int rowstride,
 			  int width, int height,
 			  double xoffset, double yoffset,
@@ -109,9 +109,54 @@ bool render_img_downscale(render::render_type_parameters rtparam,
   free (data);
   return true;
 }
+template<typename T>
+bool render_img_gray_downscale(render::render_type_parameters rtparam,
+			       scr_to_img_parameters &param, image_data &img,
+			       render_parameters &rparam,
+			       unsigned char *pixels, int pixelbytes, int rowstride,
+			       int width, int height,
+			       double xoffset, double yoffset,
+			       double step,
+			       progress_info *progress)
+{
+  T render (param, img, rparam, 255);
+  render.set_render_type (rtparam);
+  if (progress)
+    {
+      progress->set_task ("precomputing", 1);
+      progress->push ();
+    }
+  if (!render.precompute_img_range (xoffset * step, yoffset * step,
+				    (width + xoffset) * step,
+				    (height + yoffset) * step, progress))
+    return false;
+  if (progress)
+    progress->pop ();
+  luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
+  if (!data)
+    return false;
+  render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
+  if (progress)
+    progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+  for (int y = 0; y < height; y++)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int x = 0; x < width; x++)
+	  {
+	    int r, g, b;
+            render.set_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
+	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	  }
+       if (progress)
+	 progress->inc_progress ();
+    }
+  free (data);
+  return true;
+}
 
-template<typename T> T*
-init_render (render::render_type_parameters &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, progress_info *progress)
+template<typename T,typename P,typename RP> T*
+init_render_scr (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
   T *r = new T (param, img, my_rparam, 255);
   r->set_render_type (rtparam);
@@ -122,10 +167,81 @@ init_render (render::render_type_parameters &rtparam, render_parameters &my_rpar
     }
   return r;
 }
+template<typename T,typename P,typename RP> T*
+init_render_img (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
+{
+  T *r = new T (oparam, img, my_rparam, 255);
+  r->set_render_type (rtparam);
+  if (!r->precompute_all (progress))
+    {
+      delete r;
+      r = NULL;
+    }
+  return r;
+}
+
+/* Sample pixel on screen coordinates X and Y of size STEP with ANTIALIAS.
+   This is used for render engines which does their own translation of scr to img coordinates
+   (inherited from render_scr)  */
+template<typename T> inline rgbdata
+render_loop_scr (T &render, scr_to_img &, int antialias, coord_t x, coord_t y, coord_t step)
+{
+  rgbdata d;
+  if (antialias == 1)
+    d = render.sample_pixel_scr (x, y);
+  else
+    {
+      coord_t substep = step / antialias;
+      d = {0,0,0};
+      for (int ax = 0; ax < antialias; ax++)
+	for (int ay = 0; ay < antialias; ay++)
+	  d += render.sample_pixel_scr (x + ax * substep, y + ay * substep);
+      luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
+      d.red *= ainv;
+      d.green *= ainv;
+      d.blue *= ainv;
+    }
+  return d;
+}
+
+/* Same but for render engines which handle only image coordinates.  */
+template<typename T> inline rgbdata
+render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y, coord_t step)
+{
+  rgbdata d;
+  if (antialias == 1)
+    {
+      coord_t xx, yy;
+      map.to_img (x, y, &xx, &yy);
+      d = render.sample_pixel_img (xx, yy);
+    }
+  else
+    {
+      coord_t substep = step / antialias;
+      d = {0,0,0};
+      for (int ax = 0; ax < antialias; ax++)
+	for (int ay = 0; ay < antialias; ay++)
+	  {
+	    coord_t xx, yy;
+	    map.to_img (x + ax * substep, y + ay * substep, &xx, &yy);
+	    d += render.sample_pixel_img (xx, yy);
+	  }
+      luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
+      d.red *= ainv;
+      d.green *= ainv;
+      d.blue *= ainv;
+    }
+  return d;
+}
+
 
 /* Render from stitched project.  We do not try todo antialiasing, since it would be slow.  */
-template<typename T>
-void render_stitched(render::render_type_parameters &rtparam,
+template<typename T, typename P,typename RP,
+	 /* Function to render pixel at a given coordinates and with a given anti-aliasing.  */
+       	 rgbdata (render_loop) (T &, scr_to_img &, int, coord_t, coord_t, coord_t),
+	 /* Function to initialize renderer on demand.  */
+       	 T *(init_render) (RP &, render_parameters &, image_data &, scr_to_img_parameters &, P &, progress_info *progress)>
+void render_stitched(RP &rtparam, P &outer_param,
 		     image_data &img,
 		     render_parameters &rparam,
     		     unsigned char *pixels, int pixelbytes, int rowstride,
@@ -207,7 +323,7 @@ void render_stitched(render::render_type_parameters &rtparam,
 	    rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 	    if (progress)
 	      progress->push ();
-	    renders[iy * stitch.params.width + ix]  = init_render<T> (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, progress);
+	    renders[iy * stitch.params.width + ix]  = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
 	    if (progress)
 	      {
 		progress->pop ();
@@ -217,7 +333,7 @@ void render_stitched(render::render_type_parameters &rtparam,
   }
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(img,rtparam,rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,lock,antialias)
+#pragma omp parallel for default(none) shared(img,rtparam,rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,lock,antialias,outer_param)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */
@@ -259,7 +375,7 @@ void render_stitched(render::render_type_parameters &rtparam,
 			  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
 			  if (progress)
 			    progress->push ();
-			  renders[iy * stitch.params.width + ix] = lastrender = init_render<T> (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, progress);
+			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
 			  if (progress)
 			    progress->pop ();
 			}
@@ -279,26 +395,10 @@ void render_stitched(render::render_type_parameters &rtparam,
 		lastx = ix;
 		lasty = iy;
 	      }
-	    rgbdata d;
-	    if (antialias == 1)
-	      {
-	        d = lastrender->sample_pixel_scr (sx - stitch.images[lasty][lastx].xpos, sy - stitch.images[lasty][lastx].ypos);
-	      }
-	    else
-	      {
-		coord_t substep = step / antialias;
-		d = {0,0,0};
-		for (int ax = 0; ax < antialias; ax++)
-		  for (int ay = 0; ay < antialias; ay++)
-		    d += lastrender->sample_pixel_scr (sx - stitch.images[lasty][lastx].xpos + ax * substep, sy - stitch.images[lasty][lastx].ypos + ay * substep);
-		luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
-		d.red *= ainv;
-		d.green *= ainv;
-		d.blue *= ainv;
-	      }
-	    int r, g, b;
-	    lastrender->set_color (d.red, d.green, d.blue, &r, &g, &b);
-	    putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
+	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, sx - stitch.images[lasty][lastx].xpos, sy - stitch.images[lasty][lastx].ypos, step);
+	  int r, g, b;
+	  lastrender->set_color (d.red, d.green, d.blue, &r, &g, &b);
+	  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
 	}
       if (progress)
 	progress->inc_progress ();
@@ -312,7 +412,8 @@ void render_stitched(render::render_type_parameters &rtparam,
         delete r;
     }
 }
-/* Render from stitched project.  We do not try todo antialiasing, since it would be slow.  */
+
+/* Main entry to rendering.   */
 template<typename T>
 bool do_render_tile(render::render_type_parameters &rtparam,
 		    scr_to_img_parameters &param,
@@ -326,7 +427,61 @@ bool do_render_tile(render::render_type_parameters &rtparam,
 {
   if (img.stitch)
     {
-      render_stitched<T> (rtparam, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      render_stitched<T,scr_to_img_parameters,render::render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      return true;
+    }
+
+  if (progress)
+    progress->set_task ("rendering", height);
+  if (step > 1 && rtparam.antialias)
+    return render_img_downscale<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+  else
+    return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+}
+/* Main entry to rendering if graydata needs to be handled specially.   */
+template<typename T>
+bool do_render_tile_with_gray(render::render_type_parameters &rtparam,
+			      scr_to_img_parameters &param,
+			      image_data &img,
+			      render_parameters &rparam,
+			      unsigned char *pixels, int pixelbytes, int rowstride,
+			      int width, int height,
+			      double xoffset, double yoffset,
+			      double step,
+			      progress_info *progress)
+{
+  if (img.stitch)
+    {
+      render_stitched<T,scr_to_img_parameters,render::render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      return true;
+    }
+
+  if (progress)
+    progress->set_task ("rendering", height);
+  if (step > 1 && rtparam.antialias)
+    {
+      if (!rtparam.color)
+        return render_img_gray_downscale<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      else
+        return render_img_downscale<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+    }
+  else
+    return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+}
+template<typename T>
+bool do_render_tile_img(render::render_type_parameters &rtparam,
+			scr_detect_parameters &param,
+			image_data &img,
+			render_parameters &rparam,
+			unsigned char *pixels, int pixelbytes, int rowstride,
+			int width, int height,
+			double xoffset, double yoffset,
+			double step,
+			progress_info *progress)
+{
+  if (img.stitch)
+    {
+      render_stitched<T,scr_detect_parameters,render::render_type_parameters,render_loop_img,init_render_img<T,scr_detect_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
       return true;
     }
 

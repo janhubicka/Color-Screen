@@ -201,7 +201,6 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   luminosity_t green = p.green;
   luminosity_t blue = p.blue;
   rgbdata dark = p.dark;
-#if 0
   luminosity_t sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
 
   if (!sum)
@@ -210,10 +209,9 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
       green = 1;
       blue = red = 0;
     }
-  red /= sum;
-  green /= sum;
-  blue /= sum;
-#endif
+  red /= sum / 3;
+  green /= sum / 3;
+  blue /= sum / 3;
 
   /* Normally the lookup tables contains red, green, blue weights.
      However with backlight correction we need to apply them only after

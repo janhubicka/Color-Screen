@@ -50,38 +50,7 @@ render_to_scr::render_tile (render_type_parameters rtparam,
       {
 	render_parameters my_rparam;
 	my_rparam.original_render_from (rparam, rtparam.color, rtparam.type == render_type_profiled_original);
-
-        if (!img.stitch && !rtparam.color && step > 1)
-	  {
-	    render_img render (param, img, my_rparam, 255);
-	    render.set_render_type (rtparam);
-	    if (!render.precompute_all (progress))
-	      {
-		if (lock_p)
-		  global_rendering_lock.unlock ();
-		return false;
-	      }
-	    luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
-	    render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
-	    if (progress)
-	      progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
-	    for (int y = 0; y < height; y++)
-	      {
-		if (!progress || !progress->cancel_requested ())
-		  for (int x = 0; x < width; x++)
-		    {
-		      int r, g, b;
-		      render.set_color (data[x + width * y], data[x + width * y], data[x + width * y], &r, &g, &b);
-		      putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);
-		    }
-		if (progress)
-		  progress->inc_progress ();
-	      }
-	    free (data);
-	    break;
-	  }
-	ok = do_render_tile<render_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+	ok = do_render_tile_with_gray<render_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       }
       break;
     case render_type_preview_grid:

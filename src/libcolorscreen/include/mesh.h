@@ -6,7 +6,7 @@
 
 class mesh
 {
-  const bool debug = false;
+  static const bool debug = false;
 public:
   /* Conserve memory; we do not need to be that precise here since we interpolate across small regions.  */
   typedef float mesh_coord_t;

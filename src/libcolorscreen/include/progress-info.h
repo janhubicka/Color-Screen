@@ -157,7 +157,7 @@ public:
   virtual void pause_stdout ();
   virtual void resume_stdout ();
 private:
-  const static int debug = false;
+  static const bool debug = false;
   std::atomic<const char *>m_task;
   std::atomic_uint64_t m_max, m_current;
   std::atomic_bool m_cancel;
