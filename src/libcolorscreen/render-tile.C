@@ -4,6 +4,7 @@
 #include "render-diff.h"
 #include "render-tile.h"
 
+
 bool
 render_to_scr::render_tile (render_type_parameters rtparam,
 			    scr_to_img_parameters &param, image_data &img,

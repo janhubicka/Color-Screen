@@ -24,7 +24,6 @@ enum output_mode
   output_mode_max
 };
 
-
 struct render_to_file_params
 {
   output_mode mode;

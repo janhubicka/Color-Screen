@@ -65,17 +65,6 @@ public:
   }
   bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *);
   bool precompute_rgbdata (progress_info *progress);
-  enum render_scr_detect_type_t
-  {
-    render_type_original,
-    render_type_adjusted_color,
-    render_type_normalized_color,
-    render_type_pixel_colors,
-    render_type_realistic_scr,
-    render_type_scr_nearest,
-    render_type_scr_nearest_scaled,
-    render_type_scr_relax
-  };
   rgbdata get_adjusted_pixel (coord_t xp, coord_t yp)
   {
     xp -= (coord_t)0.5;
@@ -247,8 +236,8 @@ done:
       }
      return val / end;
   }
-  DLL_PUBLIC static bool render_tile (enum render_scr_detect_type_t render_type, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
-				      bool color, unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
+  DLL_PUBLIC static bool render_tile (render_type_parameters &rtparam, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
+				      unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *p = NULL);
   color_class_map *get_color_class_map ()
   {

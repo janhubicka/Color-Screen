@@ -244,7 +244,7 @@ produce_file (render_to_file_params p, T &render, int black, progress_info *prog
 }
 template<typename T, typename P, rgbdata (T::*sample_data)(coord_t x, coord_t y), rgbdata (T::*sample_scr_data)(coord_t x, coord_t y), bool support_tile>
 const char *
-produce_file (render_to_file_params &rfparams, render::render_type_parameters rtparam, P param, render_parameters rparam, image_data &img, int black, progress_info *progress)
+produce_file (render_to_file_params &rfparams, render_type_parameters rtparam, P param, render_parameters rparam, image_data &img, int black, progress_info *progress)
 {
   T render (param, img, rparam, 65535);
   render.set_render_type (rtparam);

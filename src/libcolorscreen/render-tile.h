@@ -23,7 +23,7 @@ putpixel (unsigned char *pixels, int pixelbytes, int rowstride, int x, int y,
 /* Template for normal rendering, which calls render_pixel on every pixel.
    Main motivation to do rendering cores as templates is to get things nicely inlined.   */
 template<typename T, typename P, typename RP>
-bool render_img_normal(render::render_type_parameters rtparam,
+bool render_img_normal(render_type_parameters rtparam,
 		       P &param, image_data &img,
 		       RP &rparam,
 		       unsigned char *pixels, int pixelbytes, int rowstride,
@@ -65,7 +65,7 @@ bool render_img_normal(render::render_type_parameters rtparam,
   return true;
 }
 template<typename T, typename P,typename RP>
-bool render_img_downscale(render::render_type_parameters rtparam,
+bool render_img_downscale(render_type_parameters rtparam,
 			  P &param, image_data &img,
 			  RP &rparam,
 			  unsigned char *pixels, int pixelbytes, int rowstride,
@@ -110,7 +110,7 @@ bool render_img_downscale(render::render_type_parameters rtparam,
   return true;
 }
 template<typename T>
-bool render_img_gray_downscale(render::render_type_parameters rtparam,
+bool render_img_gray_downscale(render_type_parameters rtparam,
 			       scr_to_img_parameters &param, image_data &img,
 			       render_parameters &rparam,
 			       unsigned char *pixels, int pixelbytes, int rowstride,
@@ -415,7 +415,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 
 /* Main entry to rendering.   */
 template<typename T>
-bool do_render_tile(render::render_type_parameters &rtparam,
+bool do_render_tile(render_type_parameters &rtparam,
 		    scr_to_img_parameters &param,
 		    image_data &img,
 		    render_parameters &rparam,
@@ -427,7 +427,7 @@ bool do_render_tile(render::render_type_parameters &rtparam,
 {
   if (img.stitch)
     {
-      render_stitched<T,scr_to_img_parameters,render::render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      render_stitched<T,scr_to_img_parameters,render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
       return true;
     }
 
@@ -440,7 +440,7 @@ bool do_render_tile(render::render_type_parameters &rtparam,
 }
 /* Main entry to rendering if graydata needs to be handled specially.   */
 template<typename T>
-bool do_render_tile_with_gray(render::render_type_parameters &rtparam,
+bool do_render_tile_with_gray(render_type_parameters &rtparam,
 			      scr_to_img_parameters &param,
 			      image_data &img,
 			      render_parameters &rparam,
@@ -452,7 +452,7 @@ bool do_render_tile_with_gray(render::render_type_parameters &rtparam,
 {
   if (img.stitch)
     {
-      render_stitched<T,scr_to_img_parameters,render::render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      render_stitched<T,scr_to_img_parameters,render_type_parameters,render_loop_scr,init_render_scr<T,scr_to_img_parameters,render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
       return true;
     }
 
@@ -469,7 +469,7 @@ bool do_render_tile_with_gray(render::render_type_parameters &rtparam,
     return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
 }
 template<typename T>
-bool do_render_tile_img(render::render_type_parameters &rtparam,
+bool do_render_tile_img(render_type_parameters &rtparam,
 			scr_detect_parameters &param,
 			image_data &img,
 			render_parameters &rparam,
@@ -481,7 +481,7 @@ bool do_render_tile_img(render::render_type_parameters &rtparam,
 {
   if (img.stitch)
     {
-      render_stitched<T,scr_detect_parameters,render::render_type_parameters,render_loop_img,init_render_img<T,scr_detect_parameters,render::render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
+      render_stitched<T,scr_detect_parameters,render_type_parameters,render_loop_img,init_render_img<T,scr_detect_parameters,render_type_parameters>> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, rtparam.antialias, progress);
       return true;
     }
 

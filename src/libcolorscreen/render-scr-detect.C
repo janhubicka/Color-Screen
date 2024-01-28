@@ -327,9 +327,9 @@ render_scr_detect_pixel_color::get_color_data (rgbdata *data, coord_t x, coord_t
 }
 
 bool
-render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
+render_scr_detect::render_tile (render_type_parameters &rtparam,
 			        scr_detect_parameters &param, image_data &img,
-			        render_parameters &rparam, bool color,
+			        render_parameters &rparam,
 			        unsigned char *pixels, int pixelbytes, int rowstride,
 			        int width, int height,
 			        double xoffset, double yoffset,
@@ -347,22 +347,13 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
   if (progress)
     progress->set_task ("precomputing", 1);
   scr_to_img_parameters dummy;
-  render_type_parameters rtparam;
-  rtparam.color = color;
-  if (render_type == render_type_scr_nearest
-      || render_type == render_type_scr_nearest_scaled
-      || render_type == render_type_scr_relax)
+  if (rtparam.type == render_type_scr_nearest
+      || rtparam.type == render_type_scr_nearest_scaled
+      || rtparam.type == render_type_scr_relax)
    rtparam.antialias = false;
 
-  switch (render_type)
+  switch (rtparam.type)
     {
-    case render_type_original:
-      {
-	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, color, false);
-	ok = do_render_tile_with_gray<render_img> (rtparam, dummy, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
-      break;
     case render_type_adjusted_color:
       {
 	render_parameters my_rparam = rparam;
@@ -404,6 +395,8 @@ render_scr_detect::render_tile (enum render_scr_detect_type_t render_type,
     case render_type_scr_relax:
       ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
+    default:
+      abort ();
     }
   return ok && (!progress || !progress->cancelled ());
 }

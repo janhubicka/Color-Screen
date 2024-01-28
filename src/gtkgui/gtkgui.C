@@ -707,7 +707,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 		  display_scheduled = true;
 	    }
         }
-      else if (k >= '1' && k <'1' + (int)render::render_type_max)
+      else if (k >= '1' && k <'1' + (int)render_type_first_scr_detect)
 	{
 	  display_type = k - '1';
 	  display_scheduled = true;
@@ -751,7 +751,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   else
     {
-      if (k >= '1' && k <='8')
+      if (k >= '1' && k <= (int)render_type_max-(int)render_type_first_scr_detect + 1)
 	{
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
@@ -1030,15 +1030,17 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 
   {
     file_progress_info progress (stdout);
-    if (ui_mode == screen_detection)
+    if (ui_mode == screen_detection && scr_detect_display_type)
       {
-	ret = render_scr_detect::render_tile ((enum render_scr_detect::render_scr_detect_type_t)scr_detect_display_type, current_scr_detect, scan, rparams, color_display,
-				    bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
+	render_type_parameters rtparam;
+	rtparam.type = (enum render_type_t)(display_type + (int)render_type_first_scr_detect - 1);
+	rtparam.color = color_display;
+	ret = render_scr_detect::render_tile (rtparam, current_scr_detect, scan, rparams, bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
       }
     else
       {
-	render::render_type_parameters rtparam;
-	rtparam.type = (enum render_to_scr::render_type_t)display_type;
+	render_type_parameters rtparam;
+	rtparam.type = ui_mode == screen_detection ? render_type_original : (enum render_type_t)display_type;
 	rtparam.color = color_display;
 	ret = render_to_scr::render_tile (rtparam, get_scr_to_img_parameters (), scan, rparams,
 					  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);

@@ -14,6 +14,83 @@
 #include "backlight-correction.h"
 #include "tone-curve.h"
 
+enum render_type_t
+{
+  render_type_original,
+  render_type_interpolated_original,
+  render_type_profiled_original,
+  render_type_interpolated_profiled_original,
+  render_type_interpolated_diff,
+  render_type_preview_grid,
+  render_type_realistic,
+  render_type_interpolated,
+  render_type_predictive,
+  render_type_combined,
+  render_type_fast,
+  render_type_adjusted_color,
+  render_type_first_scr_detect = render_type_adjusted_color,
+  render_type_normalized_color,
+  render_type_pixel_colors,
+  render_type_realistic_scr,
+  render_type_scr_nearest,
+  render_type_scr_nearest_scaled,
+  render_type_scr_relax,
+  render_type_max
+};
+
+struct render_type_property
+{
+  const char *name;
+  int flags;
+  enum flag
+  {
+    NEEDS_SCR_TO_IMG = 1,
+    NEEDS_RGB = 2,
+    NEEDS_SCR_DETECT = 6, /* scr detect needs RGB.  */
+    OUTPUTS_SCAN_PROFILE = 8,
+    OUTPUTS_PROCESS_PROFILE = 16,
+    OUTPUTS_SRGB_PROFILE = 32,
+    SUPPORTS_IR_RGB_SWITCH = 64,
+    SCAN_RESOLUTION = 128,
+    SCREEN_RESOLUTION = 256,
+    PATCH_RESOLUTION = 512,
+  };
+};
+
+namespace {
+static const constexpr render_type_property render_type_properties[render_type_max-1] =
+{
+   {"original", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::SCAN_RESOLUTION},
+   {"interpolated-original", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
+   {"profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::SCAN_RESOLUTION},
+   {"interpolated-profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::SCAN_RESOLUTION},
+   {"interpolated-diff", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
+   {"interpolated-preview-grid", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
+   {"realistic", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
+   {"interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
+   {"interpolated-predictive", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
+   {"interpolated-combined", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
+   {"fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
+   {"adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"pixel-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"detected-interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"detected-interpolated-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"detected-relaxation-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+};
+}
+
+
+//static const enum render_type_t first_scr_detect = render_type_adjusted_color;
+struct render_type_parameters
+{
+  enum render_type_t type;
+  bool color;
+  bool antialias;
+  render_type_parameters ()
+  : type (render_type_original), color (true), antialias (true)
+  { }
+};
 
 /* Parameters of rendering algorithms.  */
 struct DLL_PUBLIC render_parameters
@@ -447,30 +524,6 @@ public:
   inline luminosity_t fast_get_img_pixel (int x, int y);
     
   static const int num_color_models = render_parameters::color_model_max;
-  enum render_type_t
-  {
-    render_type_original,
-    render_type_interpolated_original,
-    render_type_profiled_original,
-    render_type_interpolated_profiled_original,
-    render_type_interpolated_diff,
-    render_type_preview_grid,
-    render_type_realistic,
-    render_type_interpolated,
-    render_type_predictive,
-    render_type_combined,
-    render_type_fast,
-    render_type_max
-  };
-  struct render_type_parameters
-  {
-    enum render_type_t type;
-    bool color;
-    bool antialias;
-    render_type_parameters ()
-    : type (render_type_original), color (true), antialias (true)
-    { }
-  };
   static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
   static void release_lookup_table (luminosity_t *);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *);
