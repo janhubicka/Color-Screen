@@ -676,7 +676,8 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
     }
   else
     {
-      render_img r (param, *img, m_prj->passthrough_rparam, 255);
+      render_parameters dummy;
+      render_img r (param, *img, dummy, 255);
       if (!r.precompute_all (progress))
 	return false;
       m_prj->pixel_size = r.pixel_size ();
@@ -808,8 +809,12 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, 
 	    progress->pop (stack);
 	  return false;
 	}
+      fprintf (stderr, "TODO: Update this code to new rendering API.\n");
+      abort ();
+#if 0
       render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
       render2->set_color_display ();
+#endif
       if (!render2->precompute_all (progress))
 	{
 	  delete render2;
@@ -1071,7 +1076,7 @@ stitch_image::write_stitch_info (progress_info *progress, int x, int y, int xx, 
 }
 
 bool
-stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, const char **error, progress_info *progress)
+stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, render_type_parameters &rtparam, const char **error, progress_info *progress)
 {
   /* We must arrange whole panorama rotated same way.
      If this ever breaks, maybe while analyzing later images should get it from first one.  */
@@ -1110,11 +1115,12 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   rfparams.ypos = ypos;
   rfparams.width = final_width / rfparams.xstep;
   rfparams.height = final_height / rfparams.ystep;
-  rfparams.pixel_known_p = rfparams.mode == corrected || rfparams.mode == corrected_color ? img_pixel_known_p_wrap : pixel_known_p_wrap;
+  /* TODO, handle by flags.  Is it still needed? */
+  rfparams.pixel_known_p = rtparam.type == render_type_original ? img_pixel_known_p_wrap : pixel_known_p_wrap;
   rfparams.pixel_known_p_data = (void *)this;
   if (!load_img (error, progress))
     return false;
-  if (!render_to_file (*img, param, m_prj->dparam, rparam, rfparams, progress, error))
+  if (!render_to_file (*img, param, m_prj->dparam, rparam, rfparams, rtparam, progress, error))
     {
       release_img ();
       return false;
@@ -1122,50 +1128,6 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   
   release_img ();
   return true;
-}
-
-bool
-stitch_image::write_tile_old (const char **error, scr_to_img &map, int stitch_xmin, int stitch_ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress)
-{
-  std::string suffix;
-
-  render_to_file_params rfparams;
-  switch(mode)
-  {
-  case render_demosaiced:
-    suffix = "-demosaicedtile";
-    rfparams.mode = interpolated;
-    rfparams.hdr = m_prj->params.hdr;
-    break;
-  case render_original:
-    rfparams.mode = corrected_color;
-    suffix = "-tile";
-    break;
-  case render_predictive:
-    suffix = "-predictivetile";
-    rfparams.mode = predictive;
-    rfparams.hdr = m_prj->params.hdr;
-    break;
-  case render_max:
-    abort ();
-  }
-
-  std::string name = m_prj->adjusted_filename (filename, suffix, ".tif");
-
-  rfparams.filename = name.c_str ();
-  rfparams.xstep = xstep;
-  rfparams.ystep = ystep;
-  rfparams.verbose = true;
-  rfparams.xdpi = m_prj->xdpi [(int)mode];
-  rfparams.ydpi = m_prj->ydpi [(int)mode];
-  if ((!rfparams.xdpi || !rfparams.ydpi) && img->xdpi && img->ydpi)
-    {
-      render_to_file_params rf2 = rfparams;
-      complete_rendered_file_parameters (param, *img, &rf2);
-      m_prj->xdpi[(int)mode] = rfparams.xdpi = rf2.xdpi;
-      m_prj->ydpi[(int)mode] = rfparams.ydpi = rf2.ydpi;
-    }
-  return stitch_image::write_tile (rfparams.mode == render_original ? m_prj->passthrough_rparam : m_prj->rparam, stitch_xmin, stitch_ymin, rfparams, error, progress);
 }
 
 bool

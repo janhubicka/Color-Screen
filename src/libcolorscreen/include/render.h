@@ -54,11 +54,12 @@ struct render_type_property
     SCAN_RESOLUTION = 128,
     SCREEN_RESOLUTION = 256,
     PATCH_RESOLUTION = 512,
+    RESET_BRIGHTNESS_ETC = 1024,
   };
 };
 
 namespace {
-static const constexpr render_type_property render_type_properties[render_type_max-1] =
+static const constexpr render_type_property render_type_properties[render_type_max] =
 {
    {"original", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::SCAN_RESOLUTION},
    {"interpolated-original", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
@@ -71,9 +72,10 @@ static const constexpr render_type_property render_type_properties[render_type_m
    {"interpolated-predictive", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
    {"interpolated-combined", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
    {"fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
-   {"adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
-   {"pixel-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"detected-adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-screen-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-realistic", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
    {"detected-interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
    {"detected-interpolated-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
    {"detected-relaxation-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
@@ -410,6 +412,7 @@ struct DLL_PUBLIC render_parameters
     tile_adjustments = rparam.tile_adjustments;
     tile_adjustments_width = rparam.tile_adjustments_width;
     tile_adjustments_height = rparam.tile_adjustments_height;
+    output_profile = rparam.output_profile;
     if (color)
       white_balance = rparam.white_balance;
     else
@@ -425,7 +428,29 @@ struct DLL_PUBLIC render_parameters
     precise = rparam.precise;
     collection_threshold = rparam.collection_threshold;
     screen_blur_radius = rparam.screen_blur_radius;
+  }
 
+  void
+  adjust_for (render_type_parameters &rtparam, render_parameters &rparam)
+  {
+    const render_type_property &prop = render_type_properties[rtparam.type];
+    if (prop.flags & render_type_property::OUTPUTS_SCAN_PROFILE)
+      original_render_from (rparam, rtparam.color, false);
+    else if (prop.flags & render_type_property::OUTPUTS_SRGB_PROFILE)
+      {
+        *this = rparam;
+	color_model = color_model_none;
+	presaturation = 1;
+	saturation = 1;
+	if (prop.flags & render_type_property::RESET_BRIGHTNESS_ETC)
+	  {
+	    output_tone_curve = tone_curve::tone_curve_linear;
+	    brightness = 1;
+	    dark_point = 0;
+	  }
+      }
+    else
+      *this = rparam;
   }
   color_matrix get_profile_matrix (rgbdata patch_proportions)
   {

@@ -3,6 +3,7 @@
 #include "render-superposeimg.h"
 #include "render-diff.h"
 #include "render-tile.h"
+#include "render-to-file.h"
 
 
 bool
@@ -41,6 +42,8 @@ render_to_scr::render_tile (render_type_parameters rtparam,
       || rtparam.type == render_type_interpolated_profiled_original
       || rtparam.type == render_type_interpolated)
     rtparam.antialias = false;
+  render_parameters my_rparam;
+  my_rparam.adjust_for (rtparam, rparam);
 
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -48,39 +51,24 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     {
     case render_type_original:
     case render_type_profiled_original:
-      {
-	render_parameters my_rparam;
-	my_rparam.original_render_from (rparam, rtparam.color, rtparam.type == render_type_profiled_original);
-	ok = do_render_tile_with_gray<render_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
+      ok = do_render_tile_with_gray<render_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_preview_grid:
     case render_type_realistic:
-      ok = do_render_tile<render_superpose_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile<render_superpose_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_interpolated_original:
     case render_type_interpolated_profiled_original:
     case render_type_interpolated:
     case render_type_combined:
     case render_type_predictive:
-      {
-	render_parameters my_rparam;
-
-	if (rtparam.type == render_type_interpolated_original
-	    || rtparam.type == render_type_interpolated_profiled_original)
-	{
-	  my_rparam.original_render_from (rparam, true, rtparam.type == render_type_interpolated_profiled_original);
-	}
-	else
-	  my_rparam = rparam;
-        ok = do_render_tile<render_interpolate> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
+      ok = do_render_tile<render_interpolate> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_interpolated_diff:
-      ok = do_render_tile<render_diff> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile<render_diff> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_fast:
-      ok = do_render_tile<render_fast> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile<render_fast> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     default:
       abort ();
@@ -108,4 +96,34 @@ render_to_scr::render_tile (render_type_parameters rtparam,
   if (lock_p)
     global_rendering_lock.unlock ();
   return (!progress || !progress->cancelled ()) && ok;
+}
+const char *
+render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters param, render_parameters rparam, image_data &img, int black, progress_info *progress)
+{
+  switch (rtparam.type)
+    {
+    case render_type_original:
+    case render_type_profiled_original:
+      return produce_file<render_img,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_preview_grid:
+    case render_type_realistic:
+      return produce_file<render_superpose_img,supports_img> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_interpolated_original:
+    case render_type_interpolated_profiled_original:
+    case render_type_interpolated:
+    case render_type_combined:
+    case render_type_predictive:
+      return produce_file<render_interpolate,supports_final> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_interpolated_diff:
+      return produce_file<render_diff,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    case render_type_fast:
+      return produce_file<render_fast,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+    default:
+      abort ();
+    }
 }

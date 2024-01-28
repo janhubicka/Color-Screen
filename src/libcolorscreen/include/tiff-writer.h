@@ -1,4 +1,5 @@
 #ifndef TIFFWRITER_H
+#define TIFFWRITER_H
 #include <tiffio.h>
 #include "color.h"
 inline uint16_t float_to_half(float f)

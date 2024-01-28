@@ -32,15 +32,10 @@ print_help (const char *filename)
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --save-project=filename.csprj               store analysis to a project file\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
-  printf ("  --orig-tile-gamma=gamma                     gamma curve of the output tiles (by default it is set to one of input file)\n");
-  printf ("  --downscale=factor                          reduce size of predictive panorama\n");
   printf ("  --hdr                                       output predictive and interpolated panorama in hdr\n");
   printf (" tiles to ouptut:\n");
-  printf ("  --demosaiced-tiles                          store demosaiced tiles (for later blending)\n");
-  printf ("  --predictive-tiles                          store predictive tiles (for later blending)\n");
   printf ("  --screen-tiles                              store screen tiles (for verification)\n");
   printf ("  --known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
-  printf ("  --orig-tiles                                store geometrically corrected tiles (for later blending)\n");
   printf (" overlap detection:\n");
   printf ("  --no-cpfind                                 disable use of Hugin's cpfind to determine overlap\n");
   printf ("  --cpfind                                    enable use of Hugin's cpfind to determine overlap\n");
@@ -293,18 +288,6 @@ void stitch (progress_info *progress)
 
   for (int y = 0; y < prj->params.height; y++)
     for (int x = 0; x < prj->params.width; x++)
-    {
-      coord_t demosaicedstep = prj->params.type == Dufay ? 0.5 : 0.25;
-      if ((prj->params.orig_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, xstep, ystep, stitch_image::render_original, progress))
-	  || (prj->params.demosaiced_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, demosaicedstep, demosaicedstep, stitch_image::render_demosaiced, progress))
-	  || (prj->params.predictive_tiles && !prj->images[y][x].write_tile_old (&error, prj->common_scr_to_img, xmin, ymin, pred_xstep, pred_ystep, stitch_image::render_predictive, progress)))
-	{
-	  fprintf (stderr, "Writting tile: %s\n", error);
-	  exit (1);
-	}
-    }
-  for (int y = 0; y < prj->params.height; y++)
-    for (int x = 0; x < prj->params.width; x++)
       if (prj->images[y][x].img)
 	prj->images[y][x].release_image_data (progress);
   if (prj->report_file)
@@ -411,21 +394,6 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--cpfind-verification"))
 	{
 	  prj->params.cpfind = 2;
-	  continue;
-	}
-      if (!strcmp (argv[i], "--demosaiced-tiles"))
-	{
-	  prj->params.demosaiced_tiles = true;
-	  continue;
-	}
-      if (!strcmp (argv[i], "--predictive-tiles"))
-	{
-	  prj->params.predictive_tiles = true;
-	  continue;
-	}
-      if (!strcmp (argv[i], "--orig-tiles"))
-	{
-	  prj->params.orig_tiles = true;
 	  continue;
 	}
       if (!strcmp (argv[i], "--hdr"))
@@ -579,11 +547,6 @@ main (int argc, char **argv)
       if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
 	{
 	  prj->params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
-	  continue;
-	}
-      if (!strncmp (argv[i], "--orig-tile-gamma=", strlen ("--orig-tile-gamma=")))
-	{
-	  prj->params.orig_tile_gamma = atof (argv[i] + strlen ("--orig-tile-gamma="));
 	  continue;
 	}
       if (!strncmp (argv[i], "--scan-ppi=", strlen ("--scan-ppi=")))

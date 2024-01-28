@@ -5,6 +5,7 @@
 #include "lru-cache.h"
 #include "sharpen.h"
 #include "render-tile.h"
+#include "render-to-file.h"
 struct color_data
 {
   luminosity_t *m_data[3];
@@ -202,7 +203,7 @@ struct color_data_params
   }
 };
 
-/* Do relaxation and demosaik color data.  TODO:progress  */
+/* Do relaxation and demosaic color data.  TODO:progress  */
 static color_data *
 get_new_color_data (struct color_data_params &p, progress_info *progress)
 {
@@ -265,7 +266,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
     }
   luminosity_t *tmp = (luminosity_t *)malloc (p.img->width * p.img->height * sizeof (luminosity_t));
   if (progress)
-    progress->set_task ("demosaiking", p.img->height * 100 * 3);
+    progress->set_task ("demosaicing", p.img->height * 100 * 3);
   for (int color = 0; color < 3; color++)
     {
       for (int iteration = 0; iteration < 100; iteration ++)
@@ -351,54 +352,71 @@ render_scr_detect::render_tile (render_type_parameters &rtparam,
       || rtparam.type == render_type_scr_nearest_scaled
       || rtparam.type == render_type_scr_relax)
    rtparam.antialias = false;
+  render_parameters my_rparam;
+  my_rparam.adjust_for (rtparam, rparam);
 
   switch (rtparam.type)
     {
     case render_type_adjusted_color:
-      {
-	render_parameters my_rparam = rparam;
-	my_rparam.color_model = render_parameters::color_model_none;
-	my_rparam.presaturation = 1;
-	my_rparam.saturation = 1;
-        ok = do_render_tile_img<render_scr_detect_adjusted> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
+      ok = do_render_tile_img<render_scr_detect_adjusted> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_normalized_color:
-      {
-	render_parameters my_rparam = rparam;
-	my_rparam.color_model = render_parameters::color_model_none;
-	my_rparam.presaturation = 1;
-	my_rparam.saturation = 1;
-	my_rparam.brightness = 1;
-        ok = do_render_tile_img<render_scr_detect_normalized> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
+      ok = do_render_tile_img<render_scr_detect_normalized> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_pixel_colors:
-      {
-	render_parameters my_rparam = rparam;
-	my_rparam.color_model = render_parameters::color_model_none;
-	my_rparam.presaturation = 1;
-	my_rparam.saturation = 1;
-	my_rparam.brightness = 1;
-        ok = do_render_tile_img<render_scr_detect_pixel_color> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
-      }
+      ok = do_render_tile_img<render_scr_detect_pixel_color> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_realistic_scr:
-      ok = do_render_tile_img<render_scr_detect_superpose_img> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile_img<render_scr_detect_superpose_img> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_nearest:
-      ok = do_render_tile_img<render_scr_nearest> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile_img<render_scr_nearest> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_nearest_scaled:
-      ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     case render_type_scr_relax:
-      ok = do_render_tile_img<render_scr_nearest_scaled> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      ok = do_render_tile_img<render_scr_relax> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
     default:
       abort ();
     }
   return ok && (!progress || !progress->cancelled ());
+}
+const char *
+render_scr_detect::render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam, image_data &img, int black, progress_info *progress)
+{
+  if (rtparam.type == render_type_scr_nearest
+      || rtparam.type == render_type_scr_nearest_scaled
+      || rtparam.type == render_type_scr_relax)
+   rtparam.antialias = false;
+
+  switch (rtparam.type)
+    {
+    case render_type_adjusted_color:
+      return produce_file<render_scr_detect_adjusted,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_normalized_color:
+      return produce_file<render_scr_detect_normalized,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_pixel_colors:
+      return produce_file<render_scr_detect_pixel_color,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_realistic_scr:
+      return produce_file<render_scr_detect_superpose_img,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_scr_nearest:
+      return produce_file<render_scr_nearest,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_scr_nearest_scaled:
+      return produce_file<render_scr_nearest_scaled,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    case render_type_scr_relax:
+      return produce_file<render_scr_relax,supports_img> (rfparams, rtparam, param, dparam, rparam, img, black, progress);
+      break;
+    default:
+      abort ();
+    }
 }
 bool
 render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress)

@@ -17,9 +17,6 @@ struct stitching_params
 
   enum scr_type type;
 
-  bool demosaiced_tiles;
-  bool predictive_tiles;
-  bool orig_tiles;
   bool screen_tiles;
   bool known_screen_tiles;
   int cpfind;
@@ -44,7 +41,6 @@ struct stitching_params
   int max_unknown_screen_range;
   int downscale;
   luminosity_t max_contrast;
-  luminosity_t orig_tile_gamma;
   luminosity_t min_patch_contrast;
 
   int num_control_points;
@@ -64,10 +60,10 @@ struct stitching_params
 
 
   stitching_params ()
-  : type (Dufay), demosaiced_tiles (false), predictive_tiles (false), orig_tiles (false), screen_tiles (false), known_screen_tiles (false),
+  : type (Dufay), screen_tiles (false), known_screen_tiles (false),
     cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
     geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false), load_registration (false),
-    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), orig_tile_gamma (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0), height (0), path("")
   {
   }
@@ -80,14 +76,6 @@ class stitch_project;
 class stitch_image
 {
   public:
-
-  enum render_mode
-  {
-    render_demosaiced,
-    render_predictive,
-    render_original,
-    render_max
-  };
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
@@ -145,8 +133,7 @@ class stitch_image
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
-  bool write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, const char **error, progress_info *progress);
-  bool write_tile_old (const char **error, scr_to_img &map, int xmin, int ymin, coord_t xstep, coord_t ystep, render_mode mode, progress_info *progress);
+  bool write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, render_type_parameters &rtparam, const char **error, progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
   void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
   void clear_stitch_info ();
@@ -211,9 +198,6 @@ public:
   scr_to_img_parameters param;
   /* Rendering parameters. Expected to be initialized by user.  */
   render_parameters rparam;
-  /* Rendering parameters used to output original tiles.  Initialized 
-     in initialize () call.  */
-  render_parameters passthrough_rparam;
   /* Used to output final image. Initialized by determine_angle.  */
   scr_to_img common_scr_to_img;
   /* Screen detection parameters used at analysis stage only.  */
@@ -296,7 +280,7 @@ public:
     return true;
 #endif
   }
-  bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error);
+  bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, struct render_type_parameters &rtparam, int n, progress_info * progress, const char **error);
   enum optimize_tile_adjustments_flags
   {
     OPTIMIZE_BACKLIGHT_BLACK = 1,
@@ -326,8 +310,6 @@ private:
   /* Screen used to collect patch density at analysis stage.  */
   screen *my_screen;
   int stitch_info_scale = 0;
-  coord_t xdpi[(int)stitch_image::render_max];
-  coord_t ydpi[(int)stitch_image::render_max];
   bool release_images;
   coord_t rotation_adjustment;
   friend stitch_image;

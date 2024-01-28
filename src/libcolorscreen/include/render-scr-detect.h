@@ -4,6 +4,7 @@
 #include "progress-info.h"
 #include "scr-detect.h"
 #include "patches.h"
+class render_to_file_params;
 class render_scr_detect : public render
 {
 public:
@@ -239,6 +240,7 @@ done:
   DLL_PUBLIC static bool render_tile (render_type_parameters &rtparam, scr_detect_parameters &param, image_data &img, render_parameters &rparam,
 				      unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *p = NULL);
+  static const char *render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters rparam, image_data &img, int black, progress_info *progress);
   color_class_map *get_color_class_map ()
   {
     return m_color_class_map;

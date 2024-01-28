@@ -5,6 +5,7 @@
 #include "scr-to-img.h"
 
 struct screen;
+class render_to_file_params;
 
 /* Base class for renderes that use mapping between image and screen coordinates.  */
 class render_to_scr : public render
@@ -43,6 +44,7 @@ public:
   DLL_PUBLIC static bool render_tile (render_type_parameters rtparam, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
 				      unsigned char *pixels, int rowstride, int pixelbytes, int width, int height,
 				      double xoffset, double yoffset, double step, progress_info *progress = NULL);
+  static const char *render_to_file (render_to_file_params &rfparams, render_type_parameters rtparam, scr_to_img_parameters param, render_parameters rparam, image_data &img, int black, progress_info *progress);
   inline luminosity_t sample_scr_diag_square (coord_t xc, coord_t yc, coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w, coord_t h);
   static screen *get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress, uint64_t *id = NULL);

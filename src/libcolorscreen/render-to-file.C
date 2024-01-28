@@ -10,25 +10,8 @@
 #include "icc.h"
 #include "render-to-file.h"
 
-const struct render_to_file_params::output_mode_property render_to_file_params::output_mode_properties[output_mode_max]
-{
-	{"corrected", false},
-	{"corrected-color", true},
-	{"realistic", false},
-	{"preview-grid", false},
-	{"color-preview-grid", true},
-	{"interpolated", false},
-	{"predictive", false},
-	{"combined", false},
-	{"detect-adjusted", true},
-	{"detect-realistic", true},
-	{"detect-nearest", true},
-	{"detect-nearest-scaled", true},
-	{"detect-relaxation", true}
-};
-
 bool
-complete_rendered_file_parameters (scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
+complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
 {
   render_parameters rparam;
   if (scan && scan->stitch)
@@ -36,141 +19,139 @@ complete_rendered_file_parameters (scr_to_img_parameters * param, image_data *sc
       stitch = scan->stitch;
       scan = NULL;
     }
-  switch (p->mode)
+  const render_type_property &prop = render_type_properties [(int)rtparams->type];
+  if (/*prop.flags & (render_type_property::SCAN_RESOLUTION | render_type_property::SCREEN_RESOLUTION)*/ 1 /*TODO:scr geometry*/)
     {
-    case corrected:
-    case corrected_color:
-    case interpolated:
-    case predictive:
-    case combined:
-    case realistic:
-    case preview_grid:
-    case color_preview_grid:
-      {
-	coord_t render_width, render_height;
-	if (!stitch)
-	  {
-	    render_img render (*param, *scan, rparam, 65535);
-	    render_width = render.get_final_width ();
-	    render_height = render.get_final_height ();
-	    if (!p->pixel_size)
+      coord_t render_width, render_height;
+      if (!stitch)
+	{
+	  render_img render (*param, *scan, rparam, 65535);
+	  render_width = render.get_final_width ();
+	  render_height = render.get_final_height ();
+	  if (!p->pixel_size)
+	    {
 	      p->pixel_size = render.pixel_size ();
-	    if (p->mode == interpolated)
-	      p->pixel_size = param->type == Dufay ? 0.5 : 1.0/3;
-	  }
-	else
-	  {
-	    int xmin, xmax, ymin, ymax;
-	    stitch->determine_viewport (xmin, xmax, ymin, ymax);
-	    render_width = xmax - xmin;
-	    render_height = ymax - ymin;
-	    p->xpos = xmin;
-	    p->ypos = ymin;
-	    if (!p->pixel_size)
+	      if (prop.flags & render_type_property::PATCH_RESOLUTION)
+		p->pixel_size = param->type == Dufay ? 0.5 : 1.0/3;
+	      else if (prop.flags & render_type_property::SCREEN_RESOLUTION)
+		p->pixel_size = 1;
+	    }
+	}
+      else
+	{
+	  int xmin, xmax, ymin, ymax;
+	  stitch->determine_viewport (xmin, xmax, ymin, ymax);
+	  render_width = xmax - xmin;
+	  render_height = ymax - ymin;
+	  p->xpos = xmin;
+	  p->ypos = ymin;
+	  if (!p->pixel_size)
+	    {
 	      p->pixel_size = stitch->pixel_size;
-	    if (p->mode == interpolated)
-	      p->pixel_size = stitch->params.type == Dufay ? 0.5 : 1.0/3;
-	  }
-	if (!p->xstep)
-	  {
-	    p->xstep = p->pixel_size / p->scale;
-	    p->ystep = p->pixel_size / p->scale;
-	  }
-	if (!p->antialias)
-	  {
-	    p->antialias = round (1 * p->xstep / p->pixel_size);
-	    if (p->mode == predictive || p->mode == realistic)
-	      p->antialias = round (4 * p->xstep / p->pixel_size);
-	    if (!p->antialias)
-	      p->antialias = 1;
-	  }
-	if (!p->width)
-	  {
-	    p->width = render_width / p->xstep;
-	    p->height = render_height / p->ystep;
-	  }
-	/* TODO: Make this work with stitched projects.  */
-	if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
-	  {
-	    coord_t zx, zy, xx, yy;
-	    coord_t cx, cy;
-	    scr_to_img map;
-	    map.set_parameters (*param, *scan);
-	    map.img_to_final (scan->width / 2, scan->height / 2, &cx, &cy);
-	    map.final_to_img (cx, cy, &zx, &zy);
-	    map.final_to_img (cx + p->xstep, cy, &xx, &yy);
-	    //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
-	    xx = (xx - zx) / scan->xdpi;
-	    yy = (yy - zy) / scan->ydpi;
-	    coord_t len = sqrt (xx * xx + yy * yy);
-	    //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
-	    /* This is approximate for defomated screens, so take average of X and Y resolution.  */
-	    if (len && !p->xdpi)
-	      {
-		coord_t xdpi = 1 / len;
+	      if (prop.flags & render_type_property::PATCH_RESOLUTION)
+		p->pixel_size = stitch->params.type == Dufay ? 0.5 : 1.0/3;
+	      else if (prop.flags & render_type_property::SCREEN_RESOLUTION)
+		p->pixel_size = 1;
+	    }
+	}
+      if (!p->xstep)
+	{
+	  p->xstep = p->pixel_size / p->scale;
+	  p->ystep = p->pixel_size / p->scale;
+	}
+      if (!p->antialias)
+	{
+	  p->antialias = round (1 * p->xstep / p->pixel_size);
+	  /* TODO add flag for bosting up antialias.  */
+#if 0
+	  if (p->mode == predictive || p->mode == realistic)
+	    p->antialias = round (4 * p->xstep / p->pixel_size);
+#endif
+	  if (!p->antialias)
+	    p->antialias = 1;
+	}
+      if (!p->width)
+	{
+	  p->width = render_width / p->xstep;
+	  p->height = render_height / p->ystep;
+	}
+      /* TODO: Make this work with stitched projects.  */
+      if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
+	{
+	  coord_t zx, zy, xx, yy;
+	  coord_t cx, cy;
+	  scr_to_img map;
+	  map.set_parameters (*param, *scan);
+	  map.img_to_final (scan->width / 2, scan->height / 2, &cx, &cy);
+	  map.final_to_img (cx, cy, &zx, &zy);
+	  map.final_to_img (cx + p->xstep, cy, &xx, &yy);
+	  //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
+	  xx = (xx - zx) / scan->xdpi;
+	  yy = (yy - zy) / scan->ydpi;
+	  coord_t len = sqrt (xx * xx + yy * yy);
+	  //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
+	  /* This is approximate for defomated screens, so take average of X and Y resolution.  */
+	  if (len && !p->xdpi)
+	    {
+	      coord_t xdpi = 1 / len;
 
-		map.final_to_img (cx, cy + p->ystep, &xx, &yy);
-		xx = (xx - zx) / scan->xdpi;
-		yy = (yy - zy) / scan->ydpi;
-		len = sqrt (xx * xx + yy * yy);
-		if (len && !p->ydpi)
-		  {
-		    p->xdpi = p->ydpi = (xdpi + 1 / len) / 2;
-		  }
-	      }
-	  }
-      }
-      break;
-    case detect_realistic:
-    case detect_adjusted:
-    case detect_nearest:
-    case detect_nearest_scaled:
-    case detect_relax:
-      {
-	if (!p->xstep)
-	  p->xstep = p->ystep = 1 / p->scale;
-	if (!p->width)
-	  {
-	    p->width = scan->width / p->xstep;
-	    p->height = scan->height / p->ystep;
-	  }
-	if (!p->antialias)
-	  {
-	    if (p->mode == detect_realistic || p->mode == detect_adjusted)
-	      p->antialias = round (4 * p->xstep);
-	    else
-	      p->antialias = round (1 * p->ystep);
-	    if (!p->antialias)
-	      p->antialias = 1;
-	  }
-	if (!p->xdpi)
-	  p->xdpi = scan->xdpi / p->xstep;
-	if (!p->ydpi)
-	  p->ydpi = scan->ydpi / p->ystep;
-      }
-      break;
-    default:
-      abort ();
+	      map.final_to_img (cx, cy + p->ystep, &xx, &yy);
+	      xx = (xx - zx) / scan->xdpi;
+	      yy = (yy - zy) / scan->ydpi;
+	      len = sqrt (xx * xx + yy * yy);
+	      if (len && !p->ydpi)
+		{
+		  p->xdpi = p->ydpi = (xdpi + 1 / len) / 2;
+		}
+	    }
+	}
+    }
+  else
+    {
+      if (!p->xstep)
+	p->xstep = p->ystep = 1 / p->scale;
+      if (!p->width)
+	{
+	  p->width = scan->width / p->xstep;
+	  p->height = scan->height / p->ystep;
+	}
+      if (!p->antialias)
+	{
+	  /*TODO*/
+	  if (/*p->mode == detect_realistic || p->mode == detect_adjusted*/ 0)
+	    p->antialias = round (4 * p->xstep);
+	  else
+	    p->antialias = round (1 * p->ystep);
+	  if (!p->antialias)
+	    p->antialias = 1;
+	}
+      if (!p->xdpi)
+	p->xdpi = scan->xdpi / p->xstep;
+      if (!p->ydpi)
+	p->ydpi = scan->ydpi / p->ystep;
     }
   return true;
 }
 bool
-complete_rendered_file_parameters (scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
+complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
 {
-  return complete_rendered_file_parameters (&param, &scan, NULL, p);
+  return complete_rendered_file_parameters (&rtparams, &param, &scan, NULL, p);
 }
 
 /* Render image to TIFF file OUTFNAME.  */
 bool
 render_to_file (image_data & scan, scr_to_img_parameters & param,
-		scr_detect_parameters & dparam, render_parameters rparam /* modified */,
+		scr_detect_parameters & dparam, render_parameters &in_rparam,
 		struct render_to_file_params rfparams /* modified */,
+		render_type_parameters &rtparam,
 		progress_info * progress, const char **error)
 {
   bool free_profile = false;
   int black = 0;
   if (scan.stitch)
-    return scan.stitch->write_tiles (rparam, &rfparams, 1, progress, error);
+    return scan.stitch->write_tiles (in_rparam, &rfparams, rtparam, 1, progress, error);
+  render_parameters rparam;
+  rparam.adjust_for (rtparam, in_rparam);
   if (rfparams.dng)
    {
      rparam.output_gamma = 1;
@@ -192,19 +173,10 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   void *icc_profile /*= sRGB_icc*/ = NULL;
   size_t icc_profile_len = /*sRGB_icc_len =*/ 0;
 
-  if ((int)rfparams.mode >= (int)detect_adjusted && !scan.rgbdata)
+  const render_type_property &prop = render_type_properties [(int)rtparam.type];
+  if ((prop.flags & render_type_property::NEEDS_RGB) && !scan.has_rgb ())
     {
-      *error = "Screen detection is imposible in monochromatic scan";
-      return false;
-    }
-  if ((int)rfparams.mode == (int)corrected_color && !scan.rgbdata)
-    {
-      *error = "Corrected color is imposible in monochromatic scan";
-      return false;
-    }
-  if ((int)rfparams.mode == (int)color_preview_grid && !scan.rgbdata)
-    {
-      *error = "color preview grid is imposible in monochromatic scan";
+      *error = "Selected rendering algorithm is impossible on monochromatic scan";
       return false;
     }
   if (rfparams.hdr || rfparams.dng)
@@ -212,7 +184,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 
   if (rparam.output_profile == render_parameters::output_profile_original)
     {
-      if (rfparams.mode == corrected_color)
+      if (prop.flags & render_type_property::OUTPUTS_SCAN_PROFILE)
         {
 	  if (scan.icc_profile
 	      && rparam.gamma == rparam.output_gamma)
@@ -229,12 +201,21 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	      free_profile = true;
 	    }
         }
+      if (prop.flags & render_type_property::OUTPUTS_SRGB_PROFILE)
+        {
+	  rfparams.icc_profile = sRGB_icc;
+	  rfparams.icc_profile_len = sRGB_icc_len;
+	  rparam.output_gamma = -1;
+        }
       else
-        icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/);
+        {
+          icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/);
+	  free_profile = true;
+        }
     }
 
   /* Initialize rendering engine.  */
-  if (!complete_rendered_file_parameters (param, scan, &rfparams))
+  if (!complete_rendered_file_parameters (rtparam, param, scan, &rfparams))
     {
       *error = "Precomputation failed (out of memory)";
       if (free_profile)
@@ -249,247 +230,10 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     }
   if (progress)
     progress->set_task ("precomputing", 1);
-
-  switch (rfparams.mode)
-    {
-    case corrected:
-    case corrected_color:
-      {
-	render_img render (param, scan, rparam, 65535);
-	if (rfparams.mode == corrected_color)
-	  render.set_color_display (false);
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-
-	// TODO: For HDR output we want to linearize the ICC profile.
-	*error = produce_file<render_img, &render_img::sample_pixel_final, &render_img::sample_pixel_scr, true> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    case interpolated:
-    case predictive:
-    case combined:
-      {
-
-	render_interpolate render (param, scan, rparam, 65535);
-	if (rfparams.mode == predictive)
-	  render.set_predictive ();
-	if (rfparams.mode == combined)
-	  render.set_adjust_luminosity ();
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-
-	*error = produce_file<render_interpolate, &render_interpolate::sample_pixel_final, &render_interpolate::sample_pixel_scr, true> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    case realistic:
-    case preview_grid:
-    case color_preview_grid:
-      {
-	render_superpose_img render (param, scan, rparam, 65535);
-	if (rfparams.mode != realistic)
-	  render.set_preview_grid ();
-	if (rfparams.mode == color_preview_grid && scan.rgbdata)
-	  render.set_color_display ();
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	/* TODO: Maybe preview_grid and color_preview_grid
-	   should be in the scan profile.  */
-	*error = produce_file<render_superpose_img, &render_superpose_img::sample_pixel_final, &render_superpose_img::sample_pixel_scr, true> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    case detect_realistic:
-      {
-	render_scr_detect_superpose_img render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (progress))
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	*error = produce_file<render_scr_detect_superpose_img, &render_scr_detect_superpose_img::sample_pixel_img, &render_scr_detect_superpose_img::sample_pixel_img, false> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	break;
-      }
-    case detect_adjusted:
-      {
-	render_scr_detect render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (false, false, progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	*error = produce_file<render_scr_detect, &render_scr_detect::get_adjusted_pixel, &render_scr_detect::get_adjusted_pixel, false> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	break;
-      }
-    case detect_nearest:
-      {
-	render_scr_nearest render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	*error = produce_file<render_scr_nearest, &render_scr_nearest::sample_pixel_img, &render_scr_nearest::sample_pixel_img, false> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    case detect_nearest_scaled:
-      {
-	render_scr_nearest_scaled render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	*error = produce_file<render_scr_nearest_scaled, &render_scr_nearest_scaled::sample_pixel_img, &render_scr_nearest_scaled::sample_pixel_img, false> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    case detect_relax:
-      {
-	render_scr_relax render (dparam, scan, rparam, 65535);
-	if (!render.precompute_all (progress))
-	  {
-	    *error = "Precomputation failed (out of memory)";
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-	if (rfparams.verbose)
-	  {
-	    if (progress)
-	      progress->pause_stdout ();
-	    print_time ();
-	    if (progress)
-	      progress->resume_stdout ();
-	  }
-	*error = produce_file<render_scr_relax, &render_scr_relax::sample_pixel_img, &render_scr_relax::sample_pixel_img, false> (rfparams, render, black, progress);
-	if (*error)
-	  {
-	    if (free_profile)
-	      free (icc_profile);
-	    return false;
-	  }
-      }
-      break;
-    default:
-      abort ();
-    }
+  if ((int)rtparam.type < (int)render_type_adjusted_color)
+    render_to_scr::render_to_file (rfparams, rtparam, param, rparam, scan, black, progress);
+  else
+    render_scr_detect::render_to_file (rfparams, rtparam, param, dparam, rparam, scan, black, progress);
   if (free_profile)
     free (icc_profile);
   return true;

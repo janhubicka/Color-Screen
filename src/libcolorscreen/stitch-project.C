@@ -9,7 +9,7 @@
 #include "loadsave.h"
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
-    passthrough_rparam (), common_scr_to_img (), dparam (), solver_param (),
+    common_scr_to_img (), dparam (), solver_param (),
     pixel_size (0), my_screen (NULL), stitch_info_scale (0), 
     release_images (true), rotation_adjustment (0)
 {}
@@ -24,17 +24,6 @@ stitch_project::~stitch_project ()
 bool
 stitch_project::initialize ()
 {
-  passthrough_rparam.gamma = rparam.gamma;
-  if (params.orig_tile_gamma > 0)
-    passthrough_rparam.output_gamma = params.orig_tile_gamma;
-  else
-    passthrough_rparam.output_gamma = rparam.gamma;
-
-  for (int i = 0; i < (int)stitch_image::render_max; i++)
-  {
-    xdpi[i] = 0;
-    ydpi[i] = 0;
-  }
 
   image_data data;
   scr_param.type = params.type;
@@ -598,10 +587,10 @@ std::string stitch_project::adjusted_filename (std::string filename, std::string
    We support multiple modes at once since it is more memory effective.  */
 
 bool 
-stitch_project::write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, int n, progress_info * progress, const char **error)
+stitch_project::write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, struct render_type_parameters &rtparam, int n, progress_info * progress, const char **error)
 {
   for (int i = 0; i < n; i++)
-    if (!complete_rendered_file_parameters (NULL, NULL, this, &rfparams[i]))
+    if (!complete_rendered_file_parameters (&rtparam, NULL, NULL, this, &rfparams[i]))
       {
 	*error = "Precomputation failed (out of memory)";
 	return false;
@@ -619,15 +608,15 @@ stitch_project::write_tiles (render_parameters rparam, struct render_to_file_par
 	    struct render_to_file_params rfparams2 = rfparams[i];
 	    std::string fname2;
 	    if (fname)
-	      fname2 = adjusted_filename (fname, render_to_file_params::output_mode_properties[rfparams2.mode].name,".tif",x,y);
+	      fname2 = adjusted_filename (fname, render_type_properties[rtparam.type].name,".tif",x,y);
 	    else
-	      fname2 = adjusted_filename (images[y][x].filename, render_to_file_params::output_mode_properties[rfparams2.mode].name,".tif",-1,-1);
+	      fname2 = adjusted_filename (images[y][x].filename, render_type_properties[rtparam.type].name,".tif",-1,-1);
 	    rfparams2.filename = fname2.c_str ();
 
 	    if (progress)
 	      progress->push ();
 	      
-	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, error, progress))
+	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, rtparam, error, progress))
 	      return false;
 	    if (progress)
 	      progress->pop ();

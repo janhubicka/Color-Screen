@@ -45,6 +45,7 @@ const char * render_parameters::dye_balance_names [] = {
 };
 const char * render_parameters::output_profile_names [] = {
   "sRGB",
+  "XYZ",
   "original"
 };
 

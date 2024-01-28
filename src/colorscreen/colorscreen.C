@@ -42,11 +42,11 @@ print_help ()
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --mode=mode               select one of output modes:");
-  for (int j = 0; j < output_mode_max; j++)
+  for (int j = 0; j < render_type_max; j++)
   {
     if (!(j % 4))
       fprintf (stderr, "\n                                 ");
-    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[j].name);
+    fprintf (stderr, " %s", render_type_properties[j].name);
   }
   fprintf (stderr, "\n");
   fprintf (stderr, "      --hdr                     output HDR tiff\n");
@@ -112,18 +112,18 @@ parse_enum (const char *arg, const char *errmsg)
 }
 
 /* Parse output mode.  */
-static enum output_mode
+static enum render_type_t
 parse_mode (const char *mode)
 {
-  for (int i = 0; i < output_mode_max; i++)
-    if (!strcmp (mode, render_to_file_params::output_mode_properties[i].name))
-      return (output_mode)i;
+  for (int i = 0; i < render_type_max; i++)
+    if (!strcmp (mode, render_type_properties[i].name))
+      return (render_type_t)i;
   fprintf (stderr, "Unkonwn rendering mode:%s\n", mode);
   fprintf (stderr, "Possible values are: ");
-  for (int i = 0; i < output_mode_max; i++)
-    fprintf (stderr, " %s", render_to_file_params::output_mode_properties[i].name);
+  for (int i = 0; i < render_type_max; i++)
+    fprintf (stderr, " %s", render_type_properties[i].name);
   exit (1);
-  return output_mode_max;
+  return render_type_max;
 }
 
 /* Parse output mode.  */
@@ -205,6 +205,7 @@ render (int argc, char **argv)
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
   struct solver_parameters solver_param;
   render_to_file_params rfparams;
+  render_type_parameters rtparam;
   bool force_precise = false;
   bool detect_geometry = false;
   float scan_dpi = 0;
@@ -219,7 +220,7 @@ render (int argc, char **argv)
       else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
 	verbose = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "mode"))
-	rfparams.mode = parse_mode (str);
+	rtparam.type = parse_mode (str);
       else if (!strcmp (argv[i], "--hdr"))
 	rfparams.hdr = true;
       else if (!strcmp (argv[i], "--dng"))
@@ -286,12 +287,6 @@ render (int argc, char **argv)
       printf ("\n");
       print_time ();
       progress.resume_stdout ();
-    }
-  if (rfparams.mode == detect_nearest && !scan.rgbdata)
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Screen detection is imposible in monochromatic scan\n");
-      exit (1);
     }
 
   /* Load color screen and rendering parameters.  */
@@ -370,7 +365,7 @@ render (int argc, char **argv)
 
   /* ... and render!  */
   rfparams.verbose = verbose;
-  if (!render_to_file (scan, param, dparam, rparam, rfparams, &progress, &error))
+  if (!render_to_file (scan, param, dparam, rparam, rfparams, rtparam, &progress, &error))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
