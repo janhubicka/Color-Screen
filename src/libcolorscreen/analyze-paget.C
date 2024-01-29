@@ -114,6 +114,8 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 bool flatten_attr
 analyze_paget::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  printf ("TODO: implement more precise data collection.");
+
   /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {

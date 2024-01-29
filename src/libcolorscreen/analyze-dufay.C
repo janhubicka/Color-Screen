@@ -6,6 +6,29 @@
 bool flatten_attr
 analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+#if 0
+  printf ("\n");
+  for (int y = 0; y < screen::size; y++)
+  {
+	  for (int x = 0; x < screen::size; x++)
+		  printf (" %.1f", screen->mult[y][x][0]);
+	  printf ("\n");
+  }
+	  printf ("\n");
+  for (int y = 0; y < screen::size; y++)
+  {
+	  for (int x = 0; x < screen::size; x++)
+		  printf (" %.1f", screen->mult[y][x][1]);
+	  printf ("\n");
+  }
+	  printf ("\n");
+  for (int y = 0; y < screen::size; y++)
+  {
+	  for (int x = 0; x < screen::size; x++)
+		  printf (" %.1f", screen->mult[y][x][2]);
+	  printf ("\n");
+  }
+#endif
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
 #pragma omp for 
@@ -28,9 +51,9 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		{
 		  int xx = nearest_int (scr_x * 2 - (coord_t)0.5);
 		  int yy = nearest_int (scr_y - (coord_t)0.5);
-		  red_atomic_add (xx, yy, (screen->mult[iy][ix][0] - collection_threshold) * l);
-		  luminosity_t &l = w_red [yy * m_width * 2 + xx];
 		  luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
+		  red_atomic_add (xx, yy, val * l);
+		  luminosity_t &l = w_red [yy * m_width * 2 + xx];
 #pragma omp atomic
 		  l += val;
 		}
@@ -38,9 +61,9 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		{
 		  int xx = nearest_int (scr_x);
 		  int yy = nearest_int (scr_y);
-		  green_atomic_add (xx, yy, (screen->mult[iy][ix][1] - collection_threshold) * l);
-		  luminosity_t &l = w_green [yy * m_width + xx];
 		  luminosity_t val = (screen->mult[iy][ix][1] - collection_threshold);
+		  green_atomic_add (xx, yy, val * l);
+		  luminosity_t &l = w_green [yy * m_width + xx];
 #pragma omp atomic
 		  l += val;
 		}
@@ -48,9 +71,9 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 		{
 		  int xx = nearest_int (scr_x-(coord_t)0.5);
 		  int yy = nearest_int (scr_y);
-		  blue_atomic_add (xx, yy, (screen->mult[iy][ix][2] - collection_threshold) * l);
-		  luminosity_t &l = w_blue [yy * m_width + xx];
 		  luminosity_t val = (screen->mult[iy][ix][2] - collection_threshold);
+		  blue_atomic_add (xx, yy, val * l);
+		  luminosity_t &l = w_blue [yy * m_width + xx];
 #pragma omp atomic
 		  l += val;
 		}
@@ -123,7 +146,30 @@ analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
 bool flatten_attr
 analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
-#pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  luminosity_t weights[256];
+  luminosity_t half_weights[256];
+  coord_t pixel_size = render->pixel_size ();
+  coord_t left = 128 - (pixel_size / 2) * 256;
+  coord_t right = 128 + (pixel_size / 2) * 256;
+  coord_t half_left = 128 - (pixel_size / 4) * 256;
+  coord_t half_right = 128 + (pixel_size / 4) * 256;
+  for (int i = 0; i < 256; i++)
+    {
+      if (i <= left)
+	weights[i] = 0;
+      else if (i >= right)
+	weights[i] = 1;
+      else
+	weights[i] = (i - left) / (right - left);
+
+      if (i <= half_left)
+	half_weights[i] = 0;
+      else if (i >= half_right)
+	half_weights[i] = 1;
+      else
+	half_weights[i] = (i - half_left) / (half_right - half_left);
+    }
+#pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy, weights, half_weights) default(none)
   {
 #pragma omp for 
     for (int y = miny ; y < maxy; y++)
@@ -136,30 +182,85 @@ analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, lum
 	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
 	      scr_x += m_xshift;
 	      scr_y += m_yshift;
-	      if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+	      if (scr_x < 1 || scr_x >= m_width - 2 || scr_y < 1 || scr_y >= m_height - 2)
 		continue;
 
-	      int xx = nearest_int (scr_x * 2 - (coord_t)0.5);
-	      int yy = nearest_int (scr_y - (coord_t)0.5);
-	      luminosity_t &lr = w_red [yy * m_width * 2 + xx];
-	      red_atomic_add (xx, yy, d.red);
+	      int xx, yy;
+	      coord_t xxs = my_modf (scr_x * 2 - (coord_t)0.5, &xx);
+	      coord_t yys = my_modf (scr_y - (coord_t)0.5, &yy);
+	      xxs = half_weights[(int)(xxs * 255.5)];
+	      yys = weights[(int)(yys * 255.5)];
+	      luminosity_t &lr1 = w_red [(yy) * m_width * 2 + xx];
+	      luminosity_t &lr2 = w_red [(yy) * m_width * 2 + xx + 1];
+	      luminosity_t &lr3 = w_red [(yy + 1) * m_width * 2 + xx];
+	      luminosity_t &lr4 = w_red [(yy + 1) * m_width * 2 + xx + 1];
+	      luminosity_t val1 = (1 - xxs) * (1 - yys);
+	      luminosity_t val2 = (xxs) * (1 - yys);
+	      luminosity_t val3 = (1 - xxs) * (yys);
+	      luminosity_t val4 = (xxs) * (yys);
+	      red_atomic_add (xx, yy, d.red * val1);
+	      red_atomic_add (xx + 1, yy, d.red * val2);
+	      red_atomic_add (xx, yy + 1, d.red * val3);
+	      red_atomic_add (xx + 1, yy + 1, d.red * val4);
 #pragma omp atomic
-	      lr += 1;
-
-
-	      xx = nearest_int (scr_x);
-	      yy = nearest_int (scr_y);
-	      luminosity_t &lg = w_green [yy * m_width + xx];
-	      green_atomic_add (xx, yy, d.green);
+	      lr1 += val1;
 #pragma omp atomic
-	      lg += 1;
-
-
-	      xx = nearest_int (scr_x-(coord_t)0.5);
-	      luminosity_t &lb = w_blue [yy * m_width + xx];
-	      blue_atomic_add (xx, yy, d.blue);
+	      lr2 += val2;
 #pragma omp atomic
-	      lb += 1;
+	      lr3 += val3;
+#pragma omp atomic
+	      lr4 += val4;
+
+
+	      xxs = my_modf (scr_x, &xx);
+	      yys = my_modf (scr_y, &yy);
+	      xxs = weights[(int)(xxs * 255.5)];
+	      yys = weights[(int)(yys * 255.5)];
+	      luminosity_t &lg1 = w_green [yy * m_width + xx];
+	      luminosity_t &lg2 = w_green [yy * m_width + xx + 1];
+	      luminosity_t &lg3 = w_green [(yy + 1) * m_width + xx];
+	      luminosity_t &lg4 = w_green [(yy + 1) * m_width + xx + 1];
+	      val1 = (1 - xxs) * (1 - yys);
+	      val2 = (xxs) * (1 - yys);
+	      val3 = (1 - xxs) * (yys);
+	      val4 = (xxs) * (yys);
+	      green_atomic_add (xx, yy, d.green * val1);
+	      green_atomic_add (xx + 1, yy, d.green * val2);
+	      green_atomic_add (xx, yy + 1, d.green * val3);
+	      green_atomic_add (xx + 1, yy + 1, d.green * val4);
+#pragma omp atomic
+	      lg1 += val1;
+#pragma omp atomic
+	      lg2 += val2;
+#pragma omp atomic
+	      lg3 += val3;
+#pragma omp atomic
+	      lg4 += val4;
+
+
+	      xxs = my_modf (scr_x-(coord_t)0.5, &xx);
+	      xxs = weights[(int)(xxs * 255.5)];
+	      luminosity_t &lb1 = w_blue [yy * m_width + xx];
+	      luminosity_t &lb2 = w_blue [yy * m_width + xx + 1];
+	      luminosity_t &lb3 = w_blue [(yy + 1) * m_width + xx];
+	      luminosity_t &lb4 = w_blue [(yy + 1) * m_width + xx + 1];
+	      val1 = (1 - xxs) * (1 - yys);
+	      val2 = (xxs) * (1 - yys);
+	      val3 = (1 - xxs) * (yys);
+	      val4 = (xxs) * (yys);
+	      blue_atomic_add (xx, yy, d.blue * val1);
+	      blue_atomic_add (xx + 1, yy, d.blue * val2);
+	      blue_atomic_add (xx, yy + 1, d.blue * val3);
+	      blue_atomic_add (xx + 1, yy + 1, d.blue * val4);
+#pragma omp atomic
+	      lb1 += val1;
+#pragma omp atomic
+	      lb2 += val2;
+#pragma omp atomic
+	      lb3 += val3;
+#pragma omp atomic
+	      lb4 += val4;
+
 	    }
 	if (progress)
 	  progress->inc_progress ();

@@ -466,6 +466,15 @@ public:
   {
     return ::patch_proportions (m_param.type);
   }
+  pure_attr coord_t
+  pixel_size (int img_width, int img_height)
+  {
+    coord_t x,x2, y, y2;
+    coord_t bx = img_width / 2, by = img_height / 2;
+    to_scr (bx + 0, by + 0, &x, &y);
+    to_scr (bx + 1, by + 0, &x2, &y2);
+    return my_sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+  }
   void dump (FILE *f);
 private:
   precomputed_function<coord_t> *m_motor_correction;

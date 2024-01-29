@@ -46,11 +46,7 @@ static lru_cache <screen_params, screen, get_new_screen, 4> screen_cache ("scree
 coord_t
 render_to_scr::pixel_size ()
 {
-  coord_t x,x2, y, y2;
-  coord_t bx = m_img.width / 2, by = m_img.height / 2;
-  m_scr_to_img.to_scr (bx + 0, by + 0, &x, &y);
-  m_scr_to_img.to_scr (bx + 1, by + 0, &x2, &y2);
-  return sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+  return m_scr_to_img.pixel_size (m_img.width, m_img.height);
 }
 
 bool
