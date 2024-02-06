@@ -64,32 +64,6 @@ private:
 };
 #endif
 
-
-/* Prevent conversion to wrong data type when doing math.  */
-static inline float
-my_pow (float x, float y)
-{
-  return powf (x, y);
-}
-
-static inline double
-my_pow (double x, double y)
-{
-  return pow (x, y);
-}
-
-/* Prevent conversion to wrong data type when doing math.  */
-static inline float
-my_sqrt (float x)
-{
-  return sqrtf (x);
-}
-static inline double
-my_sqrt (double x)
-{
-  return sqrt (x);
-}
-
 inline luminosity_t
 srgb_to_linear (luminosity_t c)
 {

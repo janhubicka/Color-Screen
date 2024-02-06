@@ -38,14 +38,20 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     {
       if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
 	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type]) < 0
-	  || fprintf (f, "lens_center: %f %f\n", param->lens_center_x, param->lens_center_y) < 0
+	  //|| fprintf (f, "lens_center: %f %f\n", param->lens_center_x, param->lens_center_y) < 0
 	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
 	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
 	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
-	  || fprintf (f, "k1: %f\n", param->k1) < 0)
+	  || fprintf (f, "warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
+		      param->lens_correction.kr[0],
+		      param->lens_correction.kr[1],
+		      param->lens_correction.kr[2],
+		      param->lens_correction.kr[3],
+		      param->lens_correction.center.x,
+		      param->lens_correction.center.y))
 	return false;
       for (int i = 0; i < param->n_motor_corrections; i++)
 	{
@@ -83,7 +89,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
-	  || fprintf (f, "scren_blur_radius: %f\n", rparam->screen_blur_radius) < 0
+	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
+	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
@@ -394,9 +401,25 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (param)
 	    param->scanner_type = (enum scanner_type) j;
 	}
+      else if (!strcmp (buf, "warp_rectilinear"))
+        {
+	  if (!read_scalar (f, NULL)
+	      || !read_scalar (f, param_check (lens_correction.kr[0]))
+	      || !read_scalar (f, param_check (lens_correction.kr[1]))
+	      || !read_scalar (f, param_check (lens_correction.kr[2]))
+	      || !read_scalar (f, param_check (lens_correction.kr[3]))
+	      || !read_scalar (f, NULL)
+	      || !read_scalar (f, NULL)
+	      || !read_vector (f, param_check (lens_correction.center.x), param_check (lens_correction.center.y)))
+	    {
+	      *error = "error parsing warp_rectililnear";
+	      return false;
+	    }
+        }
+      /* Old lens correction parameter; now ignored.  */
       else if (!strcmp (buf, "lens_center"))
 	{
-	  if (!read_vector (f, param_check (lens_center_x), param_check (lens_center_y)))
+	  if (!read_vector (f, /*param_check (lens_center_x), param_check (lens_center_y)*/ NULL, NULL))
 	    {
 	      *error = "error parsing screen_shift";
 	      return false;
@@ -461,9 +484,10 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      /* Old lens correction parameter; now ignored.  */
       else if (!strcmp (buf, "k1"))
 	{
-	  if (!read_scalar (f, param_check (k1)))
+	  if (!read_scalar (f, /*param_check (k1)*/ NULL))
 	    {
 	      *error = "error parsing k1";
 	      return false;
@@ -479,7 +503,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "film_gamma"))
 	{
-	  if (!read_luminosity (f, rparam_check (gamma)))
+	  if (!read_luminosity (f, rparam_check (film_gamma)))
 	    {
 	      *error = "error parsing film_gamma";
 	      return false;
@@ -487,7 +511,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "target_film_gamma"))
 	{
-	  if (!read_luminosity (f, rparam_check (gamma)))
+	  if (!read_luminosity (f, rparam_check (target_film_gamma)))
 	    {
 	      *error = "error parsing target_film_gamma";
 	      return false;
@@ -581,7 +605,16 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "scren_blur_radius"))
+      /* Handle typo which was present in old save implementation.  */
+      else if (!strcmp (buf, "scren_blur_radius") || !strcmp (buf, "screen_blur_radius"))
+	{
+	  if (!read_scalar (f, rparam_check (screen_blur_radius)))
+	    {
+	      *error = "error parsing screen_blur_radius";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "collection_threshold"))
 	{
 	  if (!read_scalar (f, rparam_check (screen_blur_radius)))
 	    {

@@ -57,7 +57,7 @@ bool
 stitch_project::analyze (int x, int y, progress_info *progress)
 {
   return images[y][x].analyze (this, !y, y == params.height - 1,
-			       !x, x == params.width - 1, param.k1,
+			       !x, x == params.width - 1, param.lens_correction,
 			       progress);
 }
 

@@ -171,8 +171,11 @@ openimage (const char *name)
       fprintf (stderr, "%s\n", error);
       exit (1);
     }
+#if 0
   current.lens_center_x = scan.width * 0.5;
   current.lens_center_y = scan.height * 0.5;
+#endif
+  rparams.gamma = scan.gamma;
 }
 
 /* Get values displayed in the UI.  */
@@ -201,7 +204,7 @@ getvals (void)
   rparams.white_balance.red = gtk_spin_button_get_value (data.balance_red);
   rparams.white_balance.green = gtk_spin_button_get_value (data.balance_green);
   rparams.white_balance.blue = gtk_spin_button_get_value (data.balance_blue);
-  current.k1 = gtk_spin_button_get_value (data.k1);
+  current.lens_correction.kr[1] = gtk_spin_button_get_value (data.k1);
   if (rparams != old || current != old2)
     {
       maybe_solve ();
@@ -235,7 +238,7 @@ setvals (void)
   gtk_spin_button_set_value (data.balance_red, rparams.white_balance.red);
   gtk_spin_button_set_value (data.balance_green, rparams.white_balance.green);
   gtk_spin_button_set_value (data.balance_blue, rparams.white_balance.blue);
-  gtk_spin_button_set_value (data.k1, current.k1);
+  gtk_spin_button_set_value (data.k1, current.lens_correction.kr[1]);
   initialized = 1;
 }
 
@@ -1033,7 +1036,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
     if (ui_mode == screen_detection && scr_detect_display_type)
       {
 	render_type_parameters rtparam;
-	rtparam.type = (enum render_type_t)(display_type + (int)render_type_first_scr_detect - 1);
+	rtparam.type = (enum render_type_t)(scr_detect_display_type + (int)render_type_first_scr_detect - 1);
 	rtparam.color = color_display;
 	ret = render_scr_detect::render_tile (rtparam, current_scr_detect, scan, rparams, bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
       }
@@ -1057,7 +1060,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
   draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
 
-  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.lens_center_x, current.lens_center_y, 1, 0, 1);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.lens_correction.center.x * scan.width, current.lens_correction.center.y * scan.height, 1, 0, 1);
 
   if (detected.smap && bigscale >= 1)
     for (int y = 0; y < detected.smap->height; y++)
@@ -1508,13 +1511,13 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	}
       if (event->button == 1 && set_lens_center)
 	{
-	  double newcenter_x = (event->x + shift_x) / scale_x;
-	  double newcenter_y = (event->y + shift_y) / scale_y;
+	  double newcenter_x = ((event->x + shift_x) / scale_x) / scan.width;
+	  double newcenter_y = ((event->y + shift_y) / scale_y) / scan.height;
           set_lens_center = false;
-	  if (newcenter_x != current.lens_center_x || newcenter_y != current.lens_center_y)
+	  if (newcenter_x != current.lens_correction.center.x || newcenter_y != current.lens_correction.center.y)
 	    {
-	      current.lens_center_x = newcenter_x;
-	      current.lens_center_y = newcenter_y;
+	      current.lens_correction.center.x = newcenter_x;
+	      current.lens_correction.center.y = newcenter_y;
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;

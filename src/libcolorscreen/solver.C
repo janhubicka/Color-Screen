@@ -529,7 +529,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 
   if (progress)
     progress->set_task ("optimizing", 1);
-  bool optimize_k1 = sparam.optimize_lens && sparam.npoints > 1000;
+  bool optimize_k1 = sparam.optimize_lens && sparam.npoints > 100;
   bool optimize_rotation = sparam.optimize_tilt && sparam.npoints > 10;
   coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), !optimize_k1);
 
@@ -538,7 +538,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     {
       coord_t k1min = -0.01;
       coord_t k1max = 0.01;
-      coord_t best_k1 = param->k1;
+      coord_t best_k1 = param->lens_correction.kr[1];
       int k1steps = 1000;
       if (progress)
 	progress->set_task ("optimizing lens correction", k1steps);
@@ -550,7 +550,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	  param->coordinate1_y = 0;
 	  param->coordinate2_x = 0;
 	  param->coordinate2_y = 1;
-	  param->k1 = k * (k1max - k1min) / (k1steps - 1) + k1min;
+	  param->lens_correction.kr[1] = k * (k1max - k1min) / (k1steps - 1) + k1min;
 	  scr_to_img map;
 	  map.set_parameters (*param, img_data);
 	  coord_t chi;
@@ -559,12 +559,12 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	  if (chi < chimin)
 	    {
 	      chimin = chi;
-	      best_k1 = param->k1;
+	      best_k1 = param->lens_correction.kr[1];
 	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
-      param->k1 = best_k1;
+      param->lens_correction.kr[1] = best_k1;
       chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
     }
 

@@ -1,11 +1,13 @@
 #ifndef SCR_TO_IMG_H
 #define SCR_TO_IMG_H
 #include <atomic>
+#include <climits>
 #include "base.h"
 #include "dllpublic.h"
 #include "matrix.h"
 #include "precomputed-function.h"
 #include "mesh.h"
+#include "lens-correction.h"
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
@@ -35,7 +37,6 @@ enum scanner_type {
 	lens_move_vertically,
 	max_scanner_type
 };
-
 
 extern const char * const scanner_type_names[max_scanner_type];
 
@@ -67,13 +68,10 @@ struct DLL_PUBLIC scr_to_img_parameters
      a green dot just below (center_x, center_y).  */
   coord_t coordinate2_x, coordinate2_y;
 
-  /* Center of lens within scan image (in scan coordinates.  */
-  coord_t lens_center_x, lens_center_y;
   /* Distance of the perspective pane from the camera coordinate.  */
   coord_t projection_distance;
   /* Perspective tilt in x and y coordinate in degrees.  */
   coord_t tilt_x, tilt_y;
-  coord_t k1;
 
   /* Rotation from screen coordinates to final coordinates.  */
   coord_t final_rotation;
@@ -91,21 +89,22 @@ struct DLL_PUBLIC scr_to_img_parameters
   enum scr_type type;
   enum scanner_type scanner_type;
 
+  lens_warp_correction_parameters lens_correction;
+
   scr_to_img_parameters ()
   : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    lens_center_x (0), lens_center_y (0), projection_distance (1), tilt_x (0), tilt_y(0), k1(0),
+    projection_distance (1), tilt_x (0), tilt_y(0), 
     final_rotation (0), final_angle (90), final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
-    n_motor_corrections (0), mesh_trans (NULL), type (Finlay), scanner_type (fixed_lens)
+    n_motor_corrections (0), mesh_trans (NULL), type (Finlay), scanner_type (fixed_lens), lens_correction ()
   { }
   scr_to_img_parameters (const scr_to_img_parameters &from)
   : center_x (from.center_x), center_y (from.center_y),
     coordinate1_x(from.coordinate1_x), coordinate1_y (from.coordinate1_y),
     coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
-    lens_center_x (from.lens_center_x), lens_center_y (from.lens_center_y),
-    projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y) , k1(from.k1),
+    projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y), 
     final_rotation (from.final_rotation), final_angle (from.final_angle), final_ratio (from.final_ratio), motor_correction_x (NULL), motor_correction_y (NULL),
     n_motor_corrections (from.n_motor_corrections),
-    mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type)
+    mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type), lens_correction (from.lens_correction)
   {
     if (n_motor_corrections)
       {
@@ -138,18 +137,16 @@ struct DLL_PUBLIC scr_to_img_parameters
     coordinate1_y = from.coordinate1_y;
     coordinate2_x = from.coordinate2_x;
     coordinate2_y = from.coordinate2_y;
-    lens_center_x = from.lens_center_x;
-    lens_center_y = from.lens_center_y;
     projection_distance = from.projection_distance;
     tilt_x = from.tilt_x;
     tilt_y = from.tilt_y;
-    k1 = from.k1;
     final_rotation = from.final_rotation;
     final_angle = from.final_angle;
     final_ratio = from.final_ratio;
     type = from.type;
     scanner_type = from.scanner_type;
     mesh_trans = from.mesh_trans;
+    lens_correction = from.lens_correction;
     if (n_motor_corrections)
       abort ();
   }
@@ -172,17 +169,15 @@ struct DLL_PUBLIC scr_to_img_parameters
 	   && coordinate1_y == other.coordinate1_y
 	   && coordinate2_x == other.coordinate2_x
 	   && coordinate2_y == other.coordinate2_y
-	   && lens_center_x == other.lens_center_x
-	   && lens_center_y == other.lens_center_y
 	   && projection_distance == other.projection_distance
-	   && k1 == other.k1
 	   && final_rotation == other.final_rotation
 	   && final_angle == other.final_angle
 	   && final_ratio == other.final_ratio
 	   && tilt_x == other.tilt_x
 	   && tilt_y == other.tilt_y
 	   && type == other.type
-	   && scanner_type == other.scanner_type;
+	   && scanner_type == other.scanner_type
+	   && lens_correction == other.lens_correction;
   }
   bool operator!= (scr_to_img_parameters &other) const
   {
@@ -312,52 +307,32 @@ public:
   apply_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
     apply_motor_correction (x, y, &x, &y);
-    x -= m_corrected_lens_center_x;
-    y -= m_corrected_lens_center_y;
-    apply_lens_correction (x, y, &x, &y);
-    *xr = x * m_inverted_projection_distance;
-    *yr = y * m_inverted_projection_distance;
+    point_t p = m_lens_correction.scan_to_corrected ({x,y});
+    *xr = p.x * m_inverted_projection_distance;
+    *yr = p.y * m_inverted_projection_distance;
   }
   void
   inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
     x *= m_param.projection_distance;
     y *= m_param.projection_distance;
-    inverse_lens_correction (x, y, &x, &y);
-    x += m_corrected_lens_center_x;
-    y += m_corrected_lens_center_y;
-    inverse_motor_correction (x, y, xr, yr);
+    point_t p = m_lens_correction.corrected_to_scan ({x,y});
+    inverse_motor_correction (p.x, p.y, xr, yr);
   }
 
   void
   apply_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-   if (!m_param.k1)
-     {
-       *xr = x;
-       *yr = y;
-     }
-   /* Hack: Inverse correction works only for positive k1 otherwise
-      it ends up with square root of a negative number.  */
-   else if (m_param.k1 > 0)
-      apply_lens_correction_1 (x, y, xr, yr, m_param.k1);
-   else
-      inverse_lens_correction_1 (x, y, xr, yr, -m_param.k1);
+    point_t p = m_lens_correction.corrected_to_scan ({x,y});
+    *xr = p.x;
+    *yr = p.y;
   }
   void
   inverse_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-   if (!m_param.k1)
-     {
-       *xr = x;
-       *yr = y;
-     }
-   /* Hack: Inverse correction works only for positive k1 otherwise
-      it ends up with square root of a negative number.  */
-   else if (m_param.k1 > 0)
-      inverse_lens_correction_1 (x, y, xr, yr, m_param.k1);
-   else
-      apply_lens_correction_1 (x, y, xr, yr, -m_param.k1);
+    point_t p = m_lens_correction.scan_to_corrected ({x,y});
+    *xr = p.x;
+    *yr = p.y;
   }
 
   /* Map screen coordinates to image coordinates.  */
@@ -480,6 +455,8 @@ private:
   precomputed_function<coord_t> *m_motor_correction;
   /* Center of lenses after the motor corrections.  */
   coord_t m_corrected_lens_center_x, m_corrected_lens_center_y;
+  /* Maximal distance from lens center to corner.  */
+  coord_t m_max_dist, m_inv_max_dist;
   /* Radius in pixels of the lens circle and its inverse.  */
   coord_t m_lens_radius, m_inverse_lens_radius;
   /* Inversed m_params.projection_distance.  */
@@ -500,6 +477,7 @@ private:
 
   scr_to_img_parameters m_param;
   coord_t m_rotation_adjustment;
+  lens_warp_correction m_lens_correction;
 
   /* Apply spline defining motor correction.  */
   void
@@ -525,38 +503,6 @@ private:
       *xr = m_motor_correction->invert (x);
     else
       *yr = m_motor_correction->invert (y);
-  }
-  /* Apply lens correction.  */
-  void
-  apply_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
-  {
-    coord_t powradius = (x * x + y * y) * m_inverse_lens_radius * m_inverse_lens_radius;
-    *xr = x + x * powradius * k1;
-    *yr = y + y * powradius * k1;
-  }
-  /* Invert lens correction.  */
-  void
-  inverse_lens_correction_1 (coord_t x, coord_t y, coord_t *xr, coord_t *yr, double k1)
-  {
-    coord_t xd = x * m_inverse_lens_radius;
-    coord_t yd = y * m_inverse_lens_radius;
-    coord_t rpow2 = xd * xd + yd * yd;
-    coord_t r = my_sqrt (rpow2);
-    /* An inverse as given by https://www.wolframalpha.com/input?i=x%2Bk*x*x*x-r%3D0  */
-    coord_t k1pow2 = k1 * k1;
-    coord_t k1pow3 = k1 * k1pow2;
-    coord_t k1pow4 = k1pow2 * k1pow2;
-    coord_t sqrt3 = 1.73205080757;
-    coord_t cbrt2 = 1.25992104989;
-    coord_t val = 27 * k1pow4 * rpow2 + 4 * k1pow3;
-    if (!(val >= 0))
-      val = 0;
-    coord_t coef = my_cbrt (9 * k1pow2 * r + sqrt3 * my_sqrt (val));
-    coord_t radius = coef / (cbrt2 * (coord_t)2.08008382305 /* 3^(2/3) */ * k1)
-		      - (coord_t)0.87358046473629 /* cbrt(2/3) */ / coef;
-
-    *xr = xd / r * radius * m_lens_radius;
-    *yr = yd / r * radius * m_lens_radius;
   }
   static const bool debug = false;
 };

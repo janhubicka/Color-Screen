@@ -163,7 +163,15 @@ scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord
 
   /* Next initialize lens correction.
      Lens center is specified in scan coordinates, so apply previous corrections.  */
-  apply_motor_correction (param.lens_center_x, param.lens_center_y, &m_corrected_lens_center_x, &m_corrected_lens_center_y);
+  point_t center, c1, c2, c3, c4;
+  apply_motor_correction (param.lens_correction.center.x * img.width, param.lens_correction.center.y * img.height, &center.x, &center.y);
+  apply_motor_correction (0, 0, &c1.x, &c1.y);
+  apply_motor_correction (img.width, 0, &c2.x, &c2.y);
+  apply_motor_correction (0, img.height, &c3.x, &c3.y);
+  apply_motor_correction (img.width, img.height, &c4.x, &c4.y);
+  m_lens_correction.set_parameters (param.lens_correction);
+  m_lens_correction.precompute (center, c1, c2, c3, c4);
+
   m_lens_radius = my_sqrt ((coord_t)(img.width * img.width + img.height * img.height));
   m_inverse_lens_radius = 1 / m_lens_radius;
 
@@ -264,7 +272,7 @@ scr_to_img::get_range (coord_t x1, coord_t y1,
       maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
       /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
-      if (m_param.k1 || m_param.tilt_x || m_param.tilt_y)
+      if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y)
 	{
 	  const int steps = 16*1024;
 	  for (int i = 1; i < steps; i++)
@@ -350,7 +358,7 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
       maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
       /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
-      if ((m_param.k1 || m_param.tilt_x || m_param.tilt_y) && 0)
+      if ((!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y) && 0)
 	{
 	  const int steps = 16*1024;
 	  for (int i = 1; i < steps; i++)

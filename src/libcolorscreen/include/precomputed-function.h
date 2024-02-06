@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
+#include "base.h"
 
 static inline double
 my_floor (double x)
@@ -21,8 +22,19 @@ template<typename T> class precomputed_function
 {
   public:
   constexpr
+  precomputed_function<T> ()
+  : m_min_x (0), m_max_x (0), m_entries (0)
+  {
+  }
+  void
+  set_range (T min, T max)
+  {
+    m_min_x = min;
+    m_max_x = max;
+  }
+  constexpr
   precomputed_function<T> (T min_x, T max_x)
-  : m_min_x (min_x), m_max_x (max_x), m_entries (NULL)
+  : m_min_x (min_x), m_max_x (max_x), m_entries (0)
   {
   }
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */
@@ -82,7 +94,7 @@ template<typename T> class precomputed_function
     }
 
   /* Return f(x).  */
-  const T
+  const T pure_attr 
   apply (T x)
     {
       int index = my_floor ((x - m_min_x) * m_step_inv);
@@ -92,7 +104,7 @@ template<typename T> class precomputed_function
     }
 
   /* Determine inverse.  Works only for monotone functions.  */
-  T
+  T pure_attr
   invert (T y)
   {
     unsigned int min = 0;

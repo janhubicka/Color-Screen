@@ -542,7 +542,7 @@ stitch_image::update_scr_to_final_parameters (coord_t ratio, coord_t anlge)
 }
 
 bool
-stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *progress)
+stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, lens_warp_correction_parameters &lens_correction, progress_info *progress)
 {
   if (analyzed)
     return true;
@@ -590,7 +590,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       dsparams.border_right = skipright;
       dsparams.top = top;
       dsparams.bottom = bottom;
-      dsparams.k1 = k1;
+      dsparams.lens_correction = lens_correction;
       dsparams.left = left;
       dsparams.right = right;
       dsparams.optimize_colors = m_prj->params.optimize_colors;

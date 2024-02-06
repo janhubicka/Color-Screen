@@ -126,7 +126,7 @@ class stitch_image
   bool load_part (int *permille, const char **error, progress_info *progress);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
-  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, coord_t k1, progress_info *);
+  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, lens_warp_correction_parameters &lens_correction, progress_info *);
   void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
   int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
@@ -194,7 +194,7 @@ public:
   FILE *report_file;
   stitch_image images[stitching_params::max_dim][stitching_params::max_dim];
   /* Expected to by initialized by user and used during analysis stage only
-     to pass k1.  */
+     to pass lens correction.  */
   scr_to_img_parameters param;
   /* Rendering parameters. Expected to be initialized by user.  */
   render_parameters rparam;

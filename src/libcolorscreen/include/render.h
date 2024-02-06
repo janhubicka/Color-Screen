@@ -626,7 +626,6 @@ protected:
   void process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T val, luminosity_t scale, luminosity_t xweight, luminosity_t yweight);
 
   template<typename D, typename T, T (D::*get_pixel) (int x, int y), void (*account_pixel) (T *, T, luminosity_t)>
-  __attribute__ ((__flatten__))
   bool downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 
   /* Scanned image.  */
