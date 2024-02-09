@@ -46,7 +46,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
 	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
 	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
-	  || fprintf (f, "lesn_warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
+	  || fprintf (f, "lens_warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
 		      param->lens_correction.kr[0],
 		      param->lens_correction.kr[1],
 		      param->lens_correction.kr[2],

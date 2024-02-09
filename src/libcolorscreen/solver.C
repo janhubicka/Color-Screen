@@ -530,6 +530,7 @@ public:
   image_data &m_img_data;
   solver_parameters &m_sparam;
   progress_info *m_progress;
+  static const constexpr coord_t scale_kr = 100;
   int num_values ()
   {
     return 5;
@@ -537,11 +538,11 @@ public:
   coord_t start[5];
   coord_t epsilon ()
   {
-    return 0.00001;
+    return 0.00000001;
   }
   coord_t scale ()
   {
-    return 1;
+    return 0.1;
   }
   void
   constrain (coord_t *vals)
@@ -556,10 +557,10 @@ public:
       vals[1] = 1;
     for (int i = 2; i < 5; i++)
     {
-    if (vals[i] < -0.1)
-      vals[i] = -0.1;
-    if (vals[i] > 0.1)
-      vals[i] = 0.1;
+    if (vals[i] < -0.1 * scale_kr)
+      vals[i] = -0.1 * scale_kr;
+    if (vals[i] > 0.1 * scale_kr)
+      vals[i] = 0.1 * scale_kr;
     }
   }
   coord_t
@@ -572,9 +573,9 @@ public:
     m_param.coordinate2_x = 0;
     m_param.coordinate2_y = 1;
     m_param.lens_correction.center = {vals[0], vals[1]};
-    m_param.lens_correction.kr[1] = vals[2];
-    m_param.lens_correction.kr[2] = vals[3];
-    m_param.lens_correction.kr[3] = vals[4];
+    m_param.lens_correction.kr[1] = vals[2] * (1 / scale_kr);
+    m_param.lens_correction.kr[2] = vals[3] * (1 / scale_kr);
+    m_param.lens_correction.kr[3] = vals[4] * (1 / scale_kr);
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
     coord_t chi;
@@ -597,7 +598,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     progress->set_task ("optimizing", 1);
   bool optimize_k1 = sparam.optimize_lens && sparam.npoints > 100;
   bool optimize_rotation = sparam.optimize_tilt && sparam.npoints > 10;
-  coord_t chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), !optimize_k1);
+  coord_t chimin;
 
 
   if (optimize_k1)
@@ -605,9 +606,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
       lens_solver s (*param, img_data, sparam, progress);
       simplex<coord_t, lens_solver>(s);
       param->lens_correction.center = {s.start[0], s.start[1]};
-      param->lens_correction.kr[1] = s.start[2];
-      param->lens_correction.kr[2] = s.start[3];
-      param->lens_correction.kr[3] = s.start[4];
+      param->lens_correction.kr[1] = s.start[2] * (1 / lens_solver::scale_kr);
+      param->lens_correction.kr[2] = s.start[3] * (1 / lens_solver::scale_kr);
+      param->lens_correction.kr[3] = s.start[4] * (1 / lens_solver::scale_kr);
 #if 0
       coord_t k1min = -0.01;
       coord_t k1max = 0.01;
@@ -638,9 +639,10 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	    progress->inc_progress ();
 	}
       param->lens_correction.kr[1] = best_k1;
-#endif
       chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
+#endif
     }
+  chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 
 #if  0
   coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;

@@ -265,7 +265,7 @@ print_help()
 	   printf ("Solver editing mode\n"
 	           "w   - switch to screen editing mode\n"
 		   "D   - detect regular screen                   a A - autosolve                     L - set lens center\n"
-		   "l   - disable lens center\n");
+		   "l   - disable lens center			  dek - remove points in selected region\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");
