@@ -1,6 +1,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
 #include <assert.h>
 #include <gtk/gtkbuilder.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -303,6 +304,7 @@ static void display ();
 static int setcolor;
 static std::vector<point_t> color_optimizer_points;
 static std::vector<color_match> color_optimizer_match;
+static double sel1x,sel1y, sel2x,sel2y;
 
 /* Handle all the magic keys.  */
 static gint
@@ -578,6 +580,17 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == solver_editing)
     {
+      if (k == GDK_KEY_Delete || k == GDK_KEY_BackSpace)
+        {
+ 	  printf ("Deleting %f %f %f %f\n", sel1x, sel1y, sel2x, sel2y);
+	  for (int n = 0; n < current_solver.npoints;)
+	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
+	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	      current_solver.remove_point (n);
+	    else
+	      n++;
+	  display_scheduled = true;
+        }
       if (k == 'D')
 	{
 	  save_parameters ();
@@ -995,6 +1008,26 @@ draw_line (cairo_surface_t *surface, coord_t bigscale,
   cairo_stroke (cr);
   cairo_destroy (cr);
 }
+static void
+draw_rectangle (cairo_surface_t *surface, coord_t bigscale,
+	   int xoffset, int yoffset,
+	   coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t r, coord_t g, coord_t b, coord_t width = 1, luminosity_t opacity = 0.5)
+{
+  cairo_t *cr = cairo_create (surface);
+  cairo_translate (cr, -xoffset, -yoffset);
+  cairo_scale (cr, bigscale, bigscale);
+
+  cairo_set_line_width (cr, std::max (width/bigscale, (coord_t)1));
+  cairo_set_source_rgba (cr, r, g, b, opacity);
+  cairo_move_to (cr, x1, y1);
+  cairo_line_to (cr, x2, y1);
+  cairo_line_to (cr, x2, y2);
+  cairo_line_to (cr, x1, y2);
+  cairo_line_to (cr, x1, y1);
+
+  cairo_stroke (cr);
+  cairo_destroy (cr);
+}
 
 void
 draw_text (cairo_surface_t *surface, coord_t bigscale,
@@ -1158,6 +1191,12 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, 1, 1, 1, 3);
 	}
     }
+  if (ui_mode == solver_editing)
+    {
+      if (sel1x != sel2x || sel1y != sel2y)
+	draw_rectangle (surface, bigscale, xoffset, yoffset, sel1x, sel1y, sel2x, sel2y, 1,1,1, 6);
+    }
+
 
   cairo_surface_destroy (surface);
 }
@@ -1202,6 +1241,8 @@ cb_press_small (GtkImage * image, GdkEventButton * event, Data * data)
 
 static double xpress, ypress;
 static double xpress1, ypress1;
+
+
 static bool button1_pressed;
 static bool button3_pressed;
 static struct scr_to_img_parameters press_parameters;
@@ -1221,13 +1262,6 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
   gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
 					&scale_x, &scale_y, &shift_x,
 					&shift_y);
-  if (zoom_saved)
-    {
-      gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
-					    saved_scale_x, saved_scale_y, saved_shift_x, saved_shift_y);
-      zoom_saved = false;
-      display_type = saved_display_type;
-    }
   if (!initialized)
     return;
   //printf ("Press %i\n",ui_mode == color_profiling);
@@ -1387,29 +1421,14 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       coord_t x = (event->x + shift_x) / scale_x;
       coord_t y = (event->y + shift_y) / scale_y;
-      const int desired_zoom = 16;
-      if (scale_x < desired_zoom && event->button == 1)
-	{
-	  zoom_saved = true;
-	  saved_display_type = display_type;
-	  display_type = 0;
-	  gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
-						&saved_scale_x, &saved_scale_y, &saved_shift_x,
-						&saved_shift_y);
-	  gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
-						desired_zoom, desired_zoom, desired_zoom * x - event->x, desired_zoom * y - event->y);
-	  return;
-	}
+      xpress = x;
+      ypress = y;
       coord_t screenx, screeny;
       coord_t pscreenx, pscreeny;
       coord_t rscreenx, rscreeny;
       scr_to_img map;
       map.set_parameters (current, scan);
       map.to_scr (x, y, &screenx, &screeny);
-#if 0
-      rscreenx = round (screenx);
-      rscreeny = round (screeny);
-#else
       pscreenx = floor (screenx);
       pscreeny = floor (screeny);
       rscreenx = pscreenx;
@@ -1431,46 +1450,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 		rcolor = points[i].color;
 	    }
 	}
-#endif
-
-      if (event->button == 1)
-	{
-	  if (set_solver_center)
-	    {
-	      double newcenter_x = (event->x + shift_x) / scale_x;
-	      double newcenter_y = (event->y + shift_y) / scale_y;
-	      set_solver_center = false;
-	      current_solver.weighted = true;
-	      current_solver.center_x = newcenter_x;
-	      current_solver.center_y = newcenter_y;
-	      printf ("Solver center: %f %f\n", newcenter_x, newcenter_y);
-	      file_progress_info progress (stdout);
-	      solver (&current, scan, current_solver, &progress);
-	      preview_display_scheduled = true;
-	      display_scheduled = true;
-	      return;
-	    }
-	  current_solver.add_point (x, y, rscreenx, rscreeny, rcolor);
-#if 0
-	  int n;
-	  for (n = 0; n < n_solver_points; n++)
-	    if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
-	      break;
-	  if (n == n_solver_points)
-	    n_solver_points++;
-	  solver_point[n].screen_x = rscreenx;
-	  solver_point[n].screen_y = rscreeny;
-	  solver_point[n].img_x = x;
-	  solver_point[n].img_y = y;
-	  for (int i =0; i < n_solver_points; i++)
-	    {
-	      printf ("point %i img %f %f maps to scr %f %f\n", i, solver_point[i].img_x, solver_point[i].img_y, solver_point[i].screen_x, solver_point[i].screen_y);
-	    }
-#endif
-	  display_scheduled = true;
-	  maybe_solve ();
-	}
-      else if (event->button == 3)
+      if (event->button == 3)
 	{
 	  int n;
 	  int best_n = -1;
@@ -1573,6 +1553,16 @@ handle_drag (int x, int y, int button)
     }
   else if (ui_mode == solver_editing)
     {
+      coord_t xx = (x + shift_x) / scale_x;
+      coord_t yy = (y + shift_y) / scale_y;
+      if (xx != xpress && yy != ypress && button == 1)
+        {
+	  sel1x = xpress;
+	  sel1y = ypress;
+	  sel2x = xx;
+	  sel2y = yy;
+	  display_scheduled = true;
+        }
       return;
     }
   if (button == 1)
@@ -1623,6 +1613,103 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 {
   handle_drag (event->x, event->y, event->button);
   save_parameters ();
+  gdouble scale_x, scale_y;
+  gint shift_x, shift_y;
+  gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+					&scale_x, &scale_y, &shift_x,
+					&shift_y);
+  if (zoom_saved)
+    {
+      gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+					    saved_scale_x, saved_scale_y, saved_shift_x, saved_shift_y);
+      zoom_saved = false;
+      display_type = saved_display_type;
+    }
+  if (ui_mode == solver_editing && event->button == 1)
+    {
+      coord_t x = (event->x + shift_x) / scale_x;
+      coord_t y = (event->y + shift_y) / scale_y;
+      if (x == xpress && y == ypress)
+	{
+	  const int desired_zoom = 16;
+	  if (scale_x < desired_zoom && event->button == 1)
+	    {
+	      zoom_saved = true;
+	      saved_display_type = display_type;
+	      display_type = 0;
+	      gtk_image_viewer_get_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+						    &saved_scale_x, &saved_scale_y, &saved_shift_x,
+						    &saved_shift_y);
+	      gtk_image_viewer_set_scale_and_shift (GTK_IMAGE_VIEWER (data.image_viewer),
+						    desired_zoom, desired_zoom, desired_zoom * x - event->x, desired_zoom * y - event->y);
+	      return;
+	    }
+	  coord_t screenx, screeny;
+	  coord_t pscreenx, pscreeny;
+	  coord_t rscreenx, rscreeny;
+	  scr_to_img map;
+	  map.set_parameters (current, scan);
+	  map.to_scr (x, y, &screenx, &screeny);
+	  pscreenx = floor (screenx);
+	  pscreeny = floor (screeny);
+	  rscreenx = pscreenx;
+	  rscreeny = pscreenx;
+	  struct coord {coord_t x, y;
+			solver_parameters::point_color color;};
+	  enum solver_parameters::point_color rcolor = solver_parameters::green;
+	  int npoints;
+	  struct solver_parameters::point_location *points = solver_parameters::get_point_locations (current.type, &npoints);
+	  for (int i = 0; i < npoints; i++)
+	    {
+	      coord_t qscreenx = pscreenx + points[i].x;
+	      coord_t qscreeny = pscreeny + points[i].y;
+	      if ((screenx - rscreenx) * (screenx - rscreenx) + (screeny - rscreeny) * (screeny - rscreeny)
+		  >(screenx - qscreenx) * (screenx - qscreenx) + (screeny - qscreeny) * (screeny - qscreeny))
+		{
+		    rscreenx = qscreenx;
+		    rscreeny = qscreeny;
+		    rcolor = points[i].color;
+		}
+	    }
+	  if (event->button == 1)
+	    {
+	      if (set_solver_center)
+		{
+		  double newcenter_x = (event->x + shift_x) / scale_x;
+		  double newcenter_y = (event->y + shift_y) / scale_y;
+		  set_solver_center = false;
+		  current_solver.weighted = true;
+		  current_solver.center_x = newcenter_x;
+		  current_solver.center_y = newcenter_y;
+		  printf ("Solver center: %f %f\n", newcenter_x, newcenter_y);
+		  file_progress_info progress (stdout);
+		  solver (&current, scan, current_solver, &progress);
+		  preview_display_scheduled = true;
+		  display_scheduled = true;
+		  return;
+		}
+	      current_solver.add_point (x, y, rscreenx, rscreeny, rcolor);
+#if 0
+	      int n;
+	      for (n = 0; n < n_solver_points; n++)
+		if (solver_point[n].screen_x == rscreenx && solver_point[n].screen_y == rscreeny)
+		  break;
+	      if (n == n_solver_points)
+		n_solver_points++;
+	      solver_point[n].screen_x = rscreenx;
+	      solver_point[n].screen_y = rscreeny;
+	      solver_point[n].img_x = x;
+	      solver_point[n].img_y = y;
+	      for (int i =0; i < n_solver_points; i++)
+		{
+		  printf ("point %i img %f %f maps to scr %f %f\n", i, solver_point[i].img_x, solver_point[i].img_y, solver_point[i].screen_x, solver_point[i].screen_y);
+		}
+#endif
+	      display_scheduled = true;
+	      maybe_solve ();
+	    }
+	}
+    }
   if (event->button == 1)
     button1_pressed = false;
   if (event->button == 3)

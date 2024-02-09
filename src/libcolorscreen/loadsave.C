@@ -7,6 +7,7 @@
 
 static const char * const scr_names[max_scr_type] =
 {
+  "Random",
   "Paget",
   "Thames",
   "Finlay",
@@ -45,13 +46,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
 	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
 	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
-	  || fprintf (f, "warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
+	  || fprintf (f, "lesn_warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
 		      param->lens_correction.kr[0],
 		      param->lens_correction.kr[1],
 		      param->lens_correction.kr[2],
 		      param->lens_correction.kr[3],
 		      param->lens_correction.center.x,
-		      param->lens_correction.center.y))
+		      param->lens_correction.center.y) < 0)
 	return false;
       for (int i = 0; i < param->n_motor_corrections; i++)
 	{
@@ -401,18 +402,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (param)
 	    param->scanner_type = (enum scanner_type) j;
 	}
-      else if (!strcmp (buf, "warp_rectilinear"))
+      else if (!strcmp (buf, "lens_warp_rectilinear"))
         {
-	  if (!read_scalar (f, NULL)
+	  coord_t a,t1,t2;
+	  if (!read_scalar (f, &a)
+	      || a != 1
 	      || !read_scalar (f, param_check (lens_correction.kr[0]))
 	      || !read_scalar (f, param_check (lens_correction.kr[1]))
 	      || !read_scalar (f, param_check (lens_correction.kr[2]))
 	      || !read_scalar (f, param_check (lens_correction.kr[3]))
-	      || !read_scalar (f, NULL)
-	      || !read_scalar (f, NULL)
+	      || !read_scalar (f, &t1)
+	      || t1
+	      || !read_scalar (f, &t2)
+	      || t2
 	      || !read_vector (f, param_check (lens_correction.center.x), param_check (lens_correction.center.y)))
 	    {
-	      *error = "error parsing warp_rectililnear";
+	      *error = "error parsing lens_warp_rectililnear";
 	      return false;
 	    }
         }

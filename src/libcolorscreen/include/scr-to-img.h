@@ -22,6 +22,7 @@ typedef matrix2x2<coord_t> trans_2d_matrix;
 /* Types of supported screens.  */
 enum scr_type
 {
+   Random,
    Paget,
    Thames,
    Finlay,

@@ -5,6 +5,7 @@
 #include "screen-map.h"
 #include "sharpen.h"
 #include "render-interpolate.h"
+#include "nmsimplex.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
@@ -518,6 +519,71 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parame
   return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
 }
 
+class lens_solver
+{
+public:
+  lens_solver (scr_to_img_parameters &param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
+  : m_param (param), m_img_data (img_data), m_sparam (sparam), m_progress (progress), start {0.5,0.5,0,0,0}
+  {
+  }
+  scr_to_img_parameters &m_param;
+  image_data &m_img_data;
+  solver_parameters &m_sparam;
+  progress_info *m_progress;
+  int num_values ()
+  {
+    return 5;
+  }
+  coord_t start[5];
+  coord_t epsilon ()
+  {
+    return 0.00001;
+  }
+  coord_t scale ()
+  {
+    return 1;
+  }
+  void
+  constrain (coord_t *vals)
+  {
+    if (vals[0] < 0)
+      vals[0] = 0;
+    if (vals[0] > 1)
+      vals[0] = 1;
+    if (vals[1] < 0)
+      vals[1] = 0;
+    if (vals[1] > 1)
+      vals[1] = 1;
+    for (int i = 2; i < 5; i++)
+    {
+    if (vals[i] < -0.1)
+      vals[i] = -0.1;
+    if (vals[i] > 0.1)
+      vals[i] = 0.1;
+    }
+  }
+  coord_t
+  objfunc (coord_t *vals)
+  {
+    m_param.center_x = 0;
+    m_param.center_y = 0;
+    m_param.coordinate1_x = 1;
+    m_param.coordinate1_y = 0;
+    m_param.coordinate2_x = 0;
+    m_param.coordinate2_y = 1;
+    m_param.lens_correction.center = {vals[0], vals[1]};
+    m_param.lens_correction.kr[1] = vals[2];
+    m_param.lens_correction.kr[2] = vals[3];
+    m_param.lens_correction.kr[3] = vals[4];
+    scr_to_img map;
+    map.set_parameters (m_param, m_img_data);
+    coord_t chi;
+    homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
+				   m_param.scanner_type, &map, 0, 0, &chi, false);
+    return chi;
+  }
+};
+
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
@@ -536,6 +602,13 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 
   if (optimize_k1)
     {
+      lens_solver s (*param, img_data, sparam, progress);
+      simplex<coord_t, lens_solver>(s);
+      param->lens_correction.center = {s.start[0], s.start[1]};
+      param->lens_correction.kr[1] = s.start[2];
+      param->lens_correction.kr[2] = s.start[3];
+      param->lens_correction.kr[3] = s.start[4];
+#if 0
       coord_t k1min = -0.01;
       coord_t k1max = 0.01;
       coord_t best_k1 = param->lens_correction.kr[1];
@@ -565,6 +638,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	    progress->inc_progress ();
 	}
       param->lens_correction.kr[1] = best_k1;
+#endif
       chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
     }
 
