@@ -249,7 +249,8 @@ class image_data;
 class DLL_PUBLIC scr_to_img
 {
 public:
-  void set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment = 0);
+  void set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment = 0, bool need_inverse = true);
+  void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle);
   void get_range (int img_width, int img_height,
 		  int *scr_xshift, int *scr_yshift,
@@ -458,8 +459,6 @@ private:
   coord_t m_corrected_lens_center_x, m_corrected_lens_center_y;
   /* Maximal distance from lens center to corner.  */
   coord_t m_max_dist, m_inv_max_dist;
-  /* Radius in pixels of the lens circle and its inverse.  */
-  coord_t m_lens_radius, m_inverse_lens_radius;
   /* Inversed m_params.projection_distance.  */
   coord_t m_inverted_projection_distance;
   /* Perspective correction matrix.  */
@@ -506,6 +505,7 @@ private:
       *yr = m_motor_correction->invert (y);
   }
   static const bool debug = false;
+  void initialize ();
 };
 
 #endif

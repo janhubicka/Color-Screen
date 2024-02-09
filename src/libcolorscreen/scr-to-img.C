@@ -136,47 +136,11 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio, coord_t final_a
   m_scr_to_final_matrix = rotation_2x2matrix (rotate) * fm;
   m_final_to_scr_matrix = m_scr_to_final_matrix.invert ();
 }
-
-/* Initilalize the translation matrix to PARAM.  */
 void
-scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment)
+scr_to_img::initialize ()
 {
-  /* We do not need to copy motor corrections since we already constructed the function.  */
-  m_param.copy_from_cheap (param);
-  m_inverted_projection_distance = 1 / param.projection_distance;
-  m_nwarnings = 0;
-  m_rotation_adjustment = rotation_adjustment;
-
-  /* Initialize motor correction.  */
-  m_motor_correction = NULL;
-  if (param.n_motor_corrections && param.scanner_type != fixed_lens)
-    {
-      int len = param.scanner_type == lens_move_horisontally ? img.width : img.height;
-      if (param.n_motor_corrections > 2 && 0)
-	{
-	  spline<coord_t> spline (param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
-	  m_motor_correction = spline.precompute (0, len, len);
-	}
-      else
-	m_motor_correction = new precomputed_function<coord_t> (0, len, len, param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
-    }
-
-  /* Next initialize lens correction.
-     Lens center is specified in scan coordinates, so apply previous corrections.  */
-  point_t center, c1, c2, c3, c4;
-  apply_motor_correction (param.lens_correction.center.x * img.width, param.lens_correction.center.y * img.height, &center.x, &center.y);
-  apply_motor_correction (0, 0, &c1.x, &c1.y);
-  apply_motor_correction (img.width, 0, &c2.x, &c2.y);
-  apply_motor_correction (0, img.height, &c3.x, &c3.y);
-  apply_motor_correction (img.width, img.height, &c4.x, &c4.y);
-  m_lens_correction.set_parameters (param.lens_correction);
-  m_lens_correction.precompute (center, c1, c2, c3, c4);
-
-  m_lens_radius = my_sqrt ((coord_t)(img.width * img.width + img.height * img.height));
-  m_inverse_lens_radius = 1 / m_lens_radius;
-
   /* Now set up the projection matrix that combines tilts and shifting to a given distance.  */
-  rotation_distance_matrix rd (m_param.projection_distance, param.tilt_x, param.tilt_y, param.scanner_type);
+  rotation_distance_matrix rd (m_param.projection_distance, m_param.tilt_x, m_param.tilt_y, m_param.scanner_type);
   m_perspective_matrix = rd;
   coord_t c1x, c1y;
   coord_t c2x, c2y;
@@ -240,6 +204,51 @@ scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord
   m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, zero, x, y, xpy, txpy);
 
   update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
+}
+
+/* Initilalize the translation matrix to PARAM.  */
+void
+scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment, bool need_inverse)
+{
+  /* We do not need to copy motor corrections since we already constructed the function.  */
+  m_param.copy_from_cheap (param);
+  m_inverted_projection_distance = 1 / param.projection_distance;
+  m_nwarnings = 0;
+  m_rotation_adjustment = rotation_adjustment;
+
+  /* Initialize motor correction.  */
+  m_motor_correction = NULL;
+  if (param.n_motor_corrections && param.scanner_type != fixed_lens)
+    {
+      int len = param.scanner_type == lens_move_horisontally ? img.width : img.height;
+      if (param.n_motor_corrections > 2 && 0)
+	{
+	  spline<coord_t> spline (param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
+	  m_motor_correction = spline.precompute (0, len, len);
+	}
+      else
+	m_motor_correction = new precomputed_function<coord_t> (0, len, len, param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);
+    }
+
+  /* Next initialize lens correction.
+     Lens center is specified in scan coordinates, so apply previous corrections.  */
+  point_t center, c1, c2, c3, c4;
+  apply_motor_correction (param.lens_correction.center.x * img.width, param.lens_correction.center.y * img.height, &center.x, &center.y);
+  apply_motor_correction (0, 0, &c1.x, &c1.y);
+  apply_motor_correction (img.width, 0, &c2.x, &c2.y);
+  apply_motor_correction (0, img.height, &c3.x, &c3.y);
+  apply_motor_correction (img.width, img.height, &c4.x, &c4.y);
+  m_lens_correction.set_parameters (param.lens_correction);
+  m_lens_correction.precompute (center, c1, c2, c3, c4, need_inverse);
+  initialize ();
+}
+
+/* Update map for new parameters.  It can only differ in those describing the linear transforms.  */
+void
+scr_to_img::update_linear_parameters (scr_to_img_parameters &param)
+{
+  m_param = param;
+  initialize ();
 }
 
 /* Determine rectangular section of the screen to which the whole image

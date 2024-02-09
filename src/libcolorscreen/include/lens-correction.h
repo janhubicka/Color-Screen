@@ -39,7 +39,7 @@ struct lens_warp_correction
 
 
   bool
-  precompute (point_t center, point_t c1, point_t c2, point_t c3, point_t c4)
+  precompute (point_t center, point_t c1, point_t c2, point_t c3, point_t c4, bool need_inverse = true)
   {
     if (m_params.is_noop ())
       {
@@ -51,32 +51,35 @@ struct lens_warp_correction
     m_inv_max_dist_sq2 = 1 / (m_max_dist * m_max_dist);
     m_inverted_ratio.set_range (0, m_max_dist);
     m_center = center;
-    coord_t data[size];
-
-    /* Determine the start of binary search for computing inverse.
-       For correction to make sense, get_ratio must be monotonously increasing
-       for whole image area.  For negative correction coefficient the function
-       is not monotonously increasing for large values.  So search carefully
-       for max element which inverts to m_max_dist.  */
-    coord_t max = 1;
-    coord_t last = 0;
-    coord_t next;
-    while ((next = max * get_ratio (max * max * m_inv_max_dist_sq2)) < m_max_dist)
+    if (need_inverse)
       {
-	/* Did we reach point where function decreases now?
-	   This means that parameters are broken, but we can cap search and get
-	   somewhat sane results.  */
-	if (last > next)
-	   break;
-	max = 1.2 * max;
-	last = next;
-      }
-    m_max = max;
+	coord_t data[size];
 
-    /* Now precompute inverse.  */
-    for (int i = 0; i < size; i++)
-      data[i] = get_inverse (i * m_max_dist / (size - 1));
-    m_inverted_ratio.init_by_y_values (data, size);
+	/* Determine the start of binary search for computing inverse.
+	   For correction to make sense, get_ratio must be monotonously increasing
+	   for whole image area.  For negative correction coefficient the function
+	   is not monotonously increasing for large values.  So search carefully
+	   for max element which inverts to m_max_dist.  */
+	coord_t max = 1;
+	coord_t last = 0;
+	coord_t next;
+	while ((next = max * get_ratio (max * max * m_inv_max_dist_sq2)) < m_max_dist)
+	  {
+	    /* Did we reach point where function decreases now?
+	       This means that parameters are broken, but we can cap search and get
+	       somewhat sane results.  */
+	    if (last > next)
+	       break;
+	    max = 1.2 * max;
+	    last = next;
+	  }
+	m_max = max;
+
+	/* Now precompute inverse.  */
+	for (int i = 0; i < size; i++)
+	  data[i] = get_inverse (i * m_max_dist / (size - 1));
+	m_inverted_ratio.init_by_y_values (data, size);
+      }
     return true;
   }
 

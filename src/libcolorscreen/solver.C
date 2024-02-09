@@ -364,6 +364,8 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       int tilt_y_steps = 21;
       coord_t minsq = INT_MAX;
       coord_t best_tilt_x = 1, best_tilt_y = 1;
+      scr_to_img map2;
+      map2.set_parameters (*param, img_data);
       for (int i = 0; i < 10; i++)
 	{
 	  coord_t txstep = (tilt_x_max - tilt_x_min) / (tilt_x_steps - 1);
@@ -374,8 +376,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 		  param->tilt_x = tilt_x_min + txstep * tx;
 		  param->tilt_y = tilt_y_min + tystep * ty;
 		  coord_t sq = 0;
-		  scr_to_img map2;
-		  map2.set_parameters (*param, img_data);
+		  map2.update_linear_parameters (*param);
 		  for (int sy = -100; sy <= 100; sy+=100)
 		    for (int sx = -100; sx <= 100; sx+=100)
 		      {
@@ -578,9 +579,14 @@ public:
     m_param.lens_correction.kr[3] = vals[4] * (1 / scale_kr);
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
-    coord_t chi;
+    coord_t chi = 5;
+#if 0
     homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 				   m_param.scanner_type, &map, 0, 0, &chi, false);
+#endif
+    homography::get_matrix (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
+			    m_param.scanner_type, &map, 0, 0, &chi);
+    printf ("chi:%f\n",chi);
     return chi;
   }
 };
@@ -757,9 +763,8 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
     }
   else
     {
-       double chisq;
        trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/ 0,
-						   fixed_lens, NULL, sx, sy, &chisq);
+						   fixed_lens, NULL, sx, sy, NULL);
       //solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, homography::solve_limit_ransac_iterations);
       //scr_to_img map2;
       //map2.set_parameters (lparam, img_data);
@@ -1688,13 +1693,32 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
   chisq = 0;
   gsl_multifit_robust_free (work);
 #endif
-  if (chisq_ret)
-    *chisq_ret = chisq;
   gsl_matrix_free (X);
   gsl_vector_free (y);
   gsl_vector_free (w);
   gsl_matrix_free (cov);
-  return solution_to_matrix (c, flags, scanner_type, false, ts, td);
+  trans_4d_matrix ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
+  /* FIXME: Why chisq returned by multifit_wlinear tends to be 0?  */
+  if (chisq_ret && chisq)
+    *chisq_ret = chisq;
+  else if (chisq_ret)
+    {
+      solver_parameters::point_t *tpoints = points;
+      tpoints = (solver_parameters::point_t *)malloc (sizeof (solver_parameters::point_t) * n);
+      for (int i = 0; i < n; i++)
+	{
+	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
+	  coord_t xt, yt;
+	  map->to_scr (xi, yi, &xt, &yt);
+	  tpoints[i].img_x = xt;
+	  tpoints[i].img_y = yt;
+	  tpoints[i].screen_x = xs;
+	  tpoints[i].screen_y = ys;
+	}
+      *chisq_ret = compute_chisq (tpoints, n, ret);
+      free (tpoints);
+    }
+  return ret;
 }
 
 /* Return homography matrix M.
