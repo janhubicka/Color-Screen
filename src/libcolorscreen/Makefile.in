@@ -165,7 +165,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-spectrum-dyes.lo \
 	libcolorscreen_la-spectrum-illuminants.lo \
 	libcolorscreen_la-spectrum-responses.lo \
-	libcolorscreen_la-tone-curve.lo
+	libcolorscreen_la-tone-curve.lo \
+	libcolorscreen_la-lens-warp-correction.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -201,6 +202,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo \
 	./$(DEPDIR)/libcolorscreen_la-icc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
+	./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo \
 	./$(DEPDIR)/libcolorscreen_la-loadsave.Plo \
 	./$(DEPDIR)/libcolorscreen_la-mapalloc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-mesh.Plo \
@@ -415,11 +417,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h include/stitch.h include/backlight-correction.h include/analyze-dufay.h include/analyze-paget.h include/analyze-base.h
+include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h include/stitch.h include/backlight-correction.h include/analyze-dufay.h include/analyze-paget.h include/analyze-base.h include/lens-correction.h
 #noinst_LIBRARIES = libcolorscreen.a
 #libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C
+libcolorscreen_la_SOURCES = render.C  render-to-scr.C render-fast.C  render-interpolate.C  screen.C  scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -539,6 +541,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-icc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-loadsave.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-mapalloc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-mesh.Plo@am__quote@ # am--include-marker
@@ -872,6 +875,13 @@ libcolorscreen_la-tone-curve.lo: tone-curve.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-tone-curve.lo `test -f 'tone-curve.C' || echo '$(srcdir)/'`tone-curve.C
 
+libcolorscreen_la-lens-warp-correction.lo: lens-warp-correction.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-lens-warp-correction.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-lens-warp-correction.Tpo -c -o libcolorscreen_la-lens-warp-correction.lo `test -f 'lens-warp-correction.C' || echo '$(srcdir)/'`lens-warp-correction.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-lens-warp-correction.Tpo $(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lens-warp-correction.C' object='libcolorscreen_la-lens-warp-correction.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-lens-warp-correction.lo `test -f 'lens-warp-correction.C' || echo '$(srcdir)/'`lens-warp-correction.C
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1034,6 +1044,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-mapalloc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-mesh.Plo
@@ -1119,6 +1130,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-loadsave.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-mapalloc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-mesh.Plo

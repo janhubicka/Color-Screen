@@ -1,16 +1,22 @@
 #ifndef LENS_CORRECTION_H
 #define LENS_CORRECTION_H
+#include <cstdio>
 #include "base.h"
+#include "precomputed-function.h"
+#include "progress-info.h"
 struct lens_warp_correction_parameters
 {
   /* Radial correction coefficients, same as in the DNG specs.  */
   coord_t kr[4];
   /* Center in relative coordinates 0...1  */
   point_t center;
+
   constexpr lens_warp_correction_parameters ()
   : kr {1, 0, 0, 0}, center ({0.5,0.5})
   { }
-  bool operator== (lens_warp_correction_parameters &other) const
+
+  bool
+  operator== (lens_warp_correction_parameters &other) const
   {
     return center == other.center
 	   && kr[0] == other.kr[0]
@@ -18,20 +24,32 @@ struct lens_warp_correction_parameters
 	   && kr[2] == other.kr[2]
 	   && kr[3] == other.kr[3];
   }
-  bool is_noop ()
+  bool
+  is_noop ()
   {
     return kr[0] == 1 && kr[1] == 0 && kr[2] == 0 && kr[3] == 0;
   }
-  coord_t get_ratio (coord_t rsq)
+  /* kr0 + (kr1 * r^2) + (kr2 * r^4) + (kr3 * r^6)  */
+  coord_t
+  get_ratio (coord_t rsq)
   {
+    if (rsq > 1)
+      rsq = 1;
     return kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
   }
 };
 
 struct lens_warp_correction
 {
+  static constexpr const bool debug = true;
+  /* Size of table for inverse function.  16(1024 is probably overkill but
+     should have one entry for every pixel.  */
+  static constexpr const int size = 16 * 1024;
+  /* Error tolerated when looking for inverse.  */
+  static constexpr const coord_t epsilon = 0.001;
+
   lens_warp_correction ()
-  : m_params (), m_inverted_ratio (0, 1)
+  : m_params (), m_inverted_ratio (NULL)
   { }
 
   void
@@ -59,12 +77,13 @@ struct lens_warp_correction
 #endif
     return ret;
   }
+
   inline pure_attr 
   point_t scan_to_corrected (point_t p)
   {
     if (m_noop)
       return p;
-    point_t ret = (p - m_center) * m_inverted_ratio.apply (p.dist_from (m_center)) + m_center;
+    point_t ret = (p - m_center) * m_inverted_ratio->apply (p.dist_from (m_center)) + m_center;
     if (debug)
       {
 	point_t orig = corrected_to_scan (ret);
@@ -81,17 +100,13 @@ struct lens_warp_correction
   }
 
 private:
-  static constexpr const int size = 16 * 1024;
   lens_warp_correction_parameters m_params;
   /* Center in image coordinates, possibly after applying motor corrections.  */
   point_t m_center;
   coord_t m_max_dist, m_inv_max_dist_sq2;
-  precomputed_function<coord_t> m_inverted_ratio;
-  /* kr0 + (kr1 * r^2) + (kr2 * r^4) + (kr3 * r^6)  */
-  coord_t get_inverse (coord_t dist);
+  precomputed_function<coord_t> *m_inverted_ratio;
+  //coord_t get_inverse (coord_t dist);
   coord_t m_max;
   bool m_noop;
-  static constexpr const bool debug = true;
-  static constexpr const coord_t epsilon = 0.001;
 };
 #endif
