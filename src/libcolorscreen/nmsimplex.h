@@ -6,7 +6,6 @@ simplex (C &c)
   const T ALPHA = 1;
   const T BETA = 0.5;
   const T GAMMA = 2;
-  const bool verbose = true;
   const int MAX_IT =100000;     /* maximum number of iterations */
   int vs;			/* vertex with smallest value */
   int vh;			/* vertex with next smallest value */
@@ -83,7 +82,7 @@ simplex (C &c)
   k = n + 1;
 
   /* print out the initial values */
-  if (verbose)
+  if (c.verbose ())
   {
      printf("Initial Values\n");
      for (j=0;j<=n;j++) {
@@ -260,7 +259,7 @@ simplex (C &c)
 	}
 
       /* print out the value at each iteration */
-      if (verbose)
+      if (c.verbose ())
       {
          printf("Iteration %d\n",itr);
          for (j=0;j<=n;j++) {
@@ -299,18 +298,18 @@ simplex (C &c)
     }
 
 
-  if (verbose)
+  if (c.verbose ())
     printf("The minimum was found at\n"); 
   for (j = 0; j < n; j++)
     {
-      if (verbose)
+      if (c.verbose ())
         printf("%i:%f\n",j,v[vs][j]);
       c.start[j] = v[vs][j];
     }
 
   min = c.objfunc (v[vs]);
   k++;
-  if (verbose)
+  if (c.verbose ())
   {
      printf("%d Function Evaluations\n",k);
      printf("%d Iterations through program\n",itr);

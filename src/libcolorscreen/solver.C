@@ -543,7 +543,11 @@ public:
   }
   coord_t scale ()
   {
-    return 0.1;
+    return 1;
+  }
+  bool verbose ()
+  {
+    return false;
   }
   void
   constrain (coord_t *vals)
@@ -896,6 +900,7 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
       default: abort ();
     }
 }
+
 
 /* Given known portion of screen collect color samples and optimize to PARAM.
    M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. */
@@ -1842,6 +1847,98 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, invert, ts, td);
 }
 
+struct
+color_solver
+{
+  rgbdata *colors;
+  xyz *targets;
+  rgbdata *rgbtargets;
+  int n;
+  xyz white;
+  int dark_point_elts;
+  render *r;
+  rgbdata proportions;
+  luminosity_t start[12];
+  int num_values ()
+  {
+    return 9+dark_point_elts;
+  }
+  coord_t epsilon ()
+  {
+    return 0.000001;
+  }
+  coord_t scale ()
+  {
+    return 2;
+  }
+  bool verbose ()
+  {
+    return false;
+  }
+  void
+  constrain (coord_t *vals)
+  {
+  }
+
+  void
+  init_by_matrix (color_matrix &m)
+  {
+    start[0] = m.m_elements[0][0]; start[1] = m.m_elements[1][0]; start[2] = m.m_elements[2][0];
+    start[3] = m.m_elements[0][1]; start[4] = m.m_elements[1][1]; start[5] = m.m_elements[2][1];
+    start[6] = m.m_elements[0][2]; start[7] = m.m_elements[1][2]; start[8] = m.m_elements[2][2];
+    if (dark_point_elts == 1)
+      start[8] = m.m_elements[3][0];
+    if (dark_point_elts == 3)
+    {
+      start[8]  = m.m_elements[3][0];
+      start[9]  = m.m_elements[3][1];
+      start[10] = m.m_elements[3][2];
+    }
+  }
+
+  color_matrix
+  matrix_by_vals (coord_t *vals)
+  {
+    return color_matrix (vals[0], vals[1], vals[2], dark_point_elts == 1? vals[9]: dark_point_elts == 3 ? vals[9]: 0,
+			 vals[3], vals[4], vals[5], dark_point_elts == 1? vals[9]: dark_point_elts == 3 ? vals[10]: 0,
+			 vals[6], vals[7], vals[8], dark_point_elts == 1? vals[9]: dark_point_elts == 3 ? vals[11]: 0,
+			 0, 0, 0, 1);
+  }
+
+  coord_t
+  objfunc (coord_t *vals)
+  {
+    color_matrix ret = matrix_by_vals (vals);
+    luminosity_t desum = 0;
+    for (int i = 0; i < n; i++)
+      {
+	xyz color1, color2;
+	if (targets)
+	  {
+	    color1 = targets[i];
+	    ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
+	  }
+	else
+	  {
+	    rgbdata c = rgbtargets[i];
+	    c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+	    c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+	    c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
+
+	    r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+	    ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
+	    c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+	    c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+	    c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
+	    r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
+	  }
+	luminosity_t d = deltaE2000 (color1, color2, white);
+	desum += d;
+      }
+    return desum / n;
+  }
+};
+
 /* Determine matrix profile based on colors and targets.
    Targets can be xyz or RGB
    if dark_point_elts == 0 then dark point will be (0, 0, 0)
@@ -1947,6 +2044,27 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 		    C(3) * s, C(4) * s, C(5) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(10) / scale2 : 0,
 		    C(6) * s, C(7) * s, C(8) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(11) / scale2 : 0,
 		    0, 0, 0, 1);
+  color_solver solver;
+  solver.init_by_matrix (ret);
+  //printf ("Initial\n");
+  //ret.print (stdout);
+  //printf ("Initial\n");
+  //solver.matrix_by_vals (solver.start).print (stdout);
+  solver.colors = colors;
+  solver.targets = targets;
+  solver.rgbtargets = rgbtargets;
+  solver.n = n;
+  solver.white = white;
+  solver.dark_point_elts = dark_point_elts;
+  solver.r = r;
+  solver.proportions = proportions;
+  if (verbose)
+    printf ("Delta E2000 before nonlinear optimization %f\n", solver.objfunc (solver.start));
+  simplex<luminosity_t, color_solver>(solver);
+  ret = solver.matrix_by_vals (solver.start);
+  //printf ("Optimized\n");
+  //ret.print (stdout);
+
   ret.verify_last_row_0001 ();
   gsl_set_error_handler (old_handler);
   gsl_matrix_free (X);
