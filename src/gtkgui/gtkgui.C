@@ -767,7 +767,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   else
     {
-      if (k >= '1' && k <= (int)render_type_max-(int)render_type_first_scr_detect + 1)
+      if (k >= '1' && k <= (int)render_type_max-(int)render_type_first_scr_detect + 1 + '1')
 	{
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
@@ -1562,6 +1562,7 @@ handle_drag (int x, int y, int button)
 	  sel2x = xx;
 	  sel2y = yy;
 	  display_scheduled = true;
+	  printf ("Selcetion %f %f %f %f\n",sel1x, sel1y,sel2x,sel2y);
         }
       return;
     }

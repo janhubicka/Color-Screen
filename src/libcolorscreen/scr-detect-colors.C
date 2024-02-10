@@ -4,6 +4,44 @@
 #include "gsl-utils.h"
 #include "include/solver.h"
 #include "sharpen.h"
+#include "nmsimplex.h"
+namespace {
+
+/* Helper for sharpening part of the scan.  */
+struct imgtile
+{
+  luminosity_t *lookup_table;
+  int xstart, ystart;
+  image_data *img;
+};
+
+static rgbdata
+get_pixel (struct imgtile *sec, int x, int y, int, int)
+{
+  rgbdata ret = {0,0,0};
+  x += sec->xstart;
+  y += sec->ystart;
+  if (x < 0 || y < 0 || x >= sec->img->width || y >= sec->img->height)
+    return ret;
+  ret.red = sec->lookup_table [sec->img->rgbdata[y][x].r];
+  ret.green = sec->lookup_table [sec->img->rgbdata[y][x].g];
+  ret.blue = sec->lookup_table [sec->img->rgbdata[y][x].b];
+  return ret;
+}
+
+struct entry {
+	rgbdata sharpened_color;
+	rgbdata orig_color;
+	luminosity_t priority;
+};
+
+bool
+compare_priorities(struct entry &e1, struct entry &e2)
+{
+  return e2.priority < e1.priority;
+}
+
+}
 
 /* Given known portion of screen collect color samples and optimize to PARAM.
    M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. */
@@ -98,37 +136,6 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   optimize_screen_colors (param, gamma, reds, nnr, greens, nng, blues, nnb, progress, report);
 }
 
-/* Helper for sharpening part of the scan.  */
-struct imgtile
-{
-  luminosity_t *lookup_table;
-  int xstart, ystart;
-  image_data *img;
-};
-
-static
-rgbdata get_pixel (struct imgtile *sec, int x, int y, int, int)
-{
-  rgbdata ret = {0,0,0};
-  x += sec->xstart;
-  y += sec->ystart;
-  if (x < 0 || y < 0 || x >= sec->img->width || y >= sec->img->height)
-    return ret;
-  ret.red = sec->lookup_table [sec->img->rgbdata[y][x].r];
-  ret.green = sec->lookup_table [sec->img->rgbdata[y][x].g];
-  ret.blue = sec->lookup_table [sec->img->rgbdata[y][x].b];
-  return ret;
-}
-struct entry {
-	rgbdata sharpened_color;
-	rgbdata orig_color;
-	luminosity_t priority;
-};
-bool
-compare_priorities(struct entry &e1, struct entry &e2)
-{
-  return e2.priority < e1.priority;
-}
 
 bool
 optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosity_t gamma, int x, int y, int width, int height, progress_info *progress, FILE *report)
@@ -212,8 +219,146 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   return true;
 }
 
-/* MacOS clang does not accept steps to be const int.  */
-#define COLOR_SOLVER_STEPS 8
+#define C(i) (gsl_vector_get(c,(i)))
+
+namespace {
+static rgbdata
+optimize_chanel (rgbdata *colors, int n, int chanel)
+{
+  int matrixw = 2;
+  int matrixh = n * 2;
+
+  gsl_multifit_linear_workspace * work
+    = gsl_multifit_linear_alloc (matrixh, matrixw);
+  gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
+  gsl_vector *y = gsl_vector_alloc (matrixh);
+  gsl_vector *w = gsl_vector_alloc (matrixh);
+  gsl_vector *c = gsl_vector_alloc (matrixw);
+  gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
+  int c1, c2;
+  if (chanel == 0)
+    c1 = 1, c2 = 2;
+  else if (chanel == 1)
+    c1 = 0, c2 = 2;
+  else
+    c1 = 0, c2 = 1;
+
+  /* Those are realy two independent linear regressions.  We could simplify this.  */
+  for (int i = 0; i < n; i++)
+    {
+      int e = i * 2;
+      gsl_matrix_set (X, e, 0, colors[i][chanel]);
+      gsl_matrix_set (X, e, 1, 0);
+      gsl_vector_set (y, e, colors[i][c1]);
+      gsl_matrix_set (X, e + 1, 0, 0);
+      gsl_matrix_set (X, e + 1, 1, colors[i][chanel]);
+      gsl_vector_set (y, e + 1, colors[i][c2]);
+      gsl_vector_set (w, e, 1);
+      gsl_vector_set (w, e + 1, 1);
+    }
+  double chisq;
+  gsl_multifit_wlinear (X, w, y, c, cov,
+			&chisq, work);
+  gsl_multifit_linear_free (work);
+
+  rgbdata ret;
+  ret[chanel] = 1;
+  ret[c1] = C(0);
+  ret[c2] = C(1);
+
+  gsl_matrix_free (X);
+  gsl_vector_free (y);
+  gsl_vector_free (w);
+  gsl_vector_free (c);
+  gsl_matrix_free (cov);
+  return ret;
+}
+
+/* Nonlinear optimizer to find black, red, green and blue that best
+   separates the color samples.  */
+struct
+screen_color_solver
+{
+  /* Input colors  */
+  rgbdata *reds;
+  int nreds;
+  rgbdata *greens;
+  int ngreens;
+  rgbdata *blues;
+  int nblues;
+
+  luminosity_t start[9];
+  /* 3x3 matrix plus dark point.  */
+  int num_values ()
+  {
+    return 9;
+  }
+  coord_t epsilon ()
+  {
+    return 0.000001;
+  }
+  coord_t scale ()
+  {
+    return 2;
+  }
+  bool verbose ()
+  {
+    return false;
+  }
+
+  inline luminosity_t
+  objfunc_chanel (rgbdata *colors, int n, int chanel, color_matrix &mat)
+  {
+    luminosity_t sum;
+    int c1, c2;
+    if (chanel == 0)
+      c1 = 1, c2 = 2;
+    else if (chanel == 1)
+      c1 = 0, c2 = 2;
+    else
+      c1 = 0, c2 = 1;
+    for (int i = 0; i < n; i++)
+      {
+	luminosity_t c[3];
+	mat.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c[0], &c[1], &c[2]);
+	//sum += c[c1] * c[c1] + c[c2] * c[c2];
+	if (c[chanel] < 0.000001)
+	  {
+	    c[chanel] = 0.000001;
+	    sum += c[chanel] * c[chanel] * 100;
+	  }
+	//if (c[c1] > 0)
+	  sum += c[c1] * c[c1] / c[chanel];
+	//if (c[c2] > 0)
+	  sum += c[c2] * c[c2] / c[chanel];
+      }
+    return sum / n;
+  }
+
+  void
+  constrain (luminosity_t *)
+  {
+  }
+
+  luminosity_t
+  objfunc (luminosity_t *vals)
+  {
+    color_matrix subtract_dark (1, 0, 0, -vals[0],
+				0, 1, 0, -vals[1],
+				0, 0, 1, -vals[2],
+				0, 0, 0, 1);
+    color_matrix process_colors (1,       vals[5], vals[7],  0,
+				 vals[3], 1      , vals[8], 0,
+				 vals[4], vals[6], 1       , 0,
+				 0, 0, 0, 1);
+    color_matrix mat = process_colors.invert ();
+    mat = mat * subtract_dark;
+    return objfunc_chanel (reds, nreds, 0, mat)
+	   + objfunc_chanel (greens, ngreens, 1, mat)
+	   + objfunc_chanel (blues, nblues, 2, mat);
+  }
+};
+}
 
 /* Optimize screen colors based on known red, green and blue samples
    and store resulting black, red, green and blue colors to PARAM.  */
@@ -229,12 +374,52 @@ optimize_screen_colors (scr_detect_parameters *param,
 {
   if (!nreds || !ngreens || !nblues)
     abort ();
-  int n = nreds + ngreens + nblues;
-  int matrixw = 4 * 3;
-  int matrixh = n * 3;
+
+  param->black = {0, 0, 0};
+  param->red = optimize_chanel (reds, nreds, 0);
+  param->green = optimize_chanel (greens, ngreens, 1);
+  param->blue = optimize_chanel (blues, nblues, 2);
+  printf ("Red:  ");
+  param->red.print (stdout);
+  printf ("Green:  ");
+  param->green.print (stdout);
+  printf ("Blue:  ");
+  param->blue.print (stdout);
+
+  screen_color_solver solver;
+  solver.reds = reds;
+  solver.nreds = nreds;
+  solver.greens = greens;
+  solver.ngreens = ngreens;
+  solver.blues = blues;
+  solver.nblues = nblues;
+  /* Dark should be 0,0,0  */
+  solver.start[0] = solver.start[1] = solver.start[2] = 0;
+  solver.start[3] = param->red.green;
+  solver.start[4] = param->red.blue;
+  solver.start[5] = param->green.red;
+  solver.start[6] = param->green.blue;
+  solver.start[7] = param->blue.red;
+  solver.start[8] = param->blue.green;
+  simplex<luminosity_t, screen_color_solver>(solver);
+  param->black = {solver.start[0], solver.start[1], solver.start[2]};
+  param->red = {1, solver.start[3], solver.start[4]};
+  param->green = {solver.start[5], 1, solver.start[6]};
+  param->blue = {solver.start[7], solver.start[8], 1};
+  printf ("Black:  ");
+  param->black.print (stdout);
+  printf ("Red:  ");
+  param->red.print (stdout);
+  printf ("Green:  ");
+  param->green.print (stdout);
+  printf ("Blue:  ");
+  param->blue.print (stdout);
+
+#if 0
 
   double min_chisq = 0;
   bool found = false;
+  int n = nreds + ngreens + nblues;
   rgbdata bestdark, bestred, bestgreen, bestblue;
   luminosity_t bestrlum = 0, bestglum = 0, bestblum = 0;
   /* If true three dimenstional search is made for dark point.  */
@@ -243,7 +428,10 @@ optimize_screen_colors (scr_detect_parameters *param,
   const int iterations = 4;
   if (progress) 
     progress->set_task ("optimizing colors", iterations * COLOR_SOLVER_STEPS * (threed ? COLOR_SOLVER_STEPS * COLOR_SOLVER_STEPS : 1));
-
+/* MacOS clang does not accept steps to be const int.  */
+#define COLOR_SOLVER_STEPS 8
+  int matrixw = 4 * 3;
+  int matrixh = n * 3;
   /* Determine max of search range.  If this is too large, the red/green/blue colors may become negative.  */
   std::vector<luminosity_t> rlums;
   std::vector<luminosity_t> glums;
@@ -366,7 +554,6 @@ optimize_screen_colors (scr_detect_parameters *param,
 		double chisq;
 		gsl_multifit_wlinear (X, w, y, c, cov,
 				      &chisq, work);
-#define C(i) (gsl_vector_get(c,(i)))
 #pragma omp critical
 		if (!found || chisq < min_chisq)
 		  {
@@ -405,17 +592,16 @@ optimize_screen_colors (scr_detect_parameters *param,
       maxblum = bestblum + (maxblum - minblum) / COLOR_SOLVER_STEPS;
     }
 #if 0
-  param->black = bestdark.sgngamma (1/gamma);
-  param->red = (bestred + bestdark).sgngamma (1/gamma);
-  param->green = (bestgreen + bestdark).sgngamma (1/gamma);
-  param->blue = (bestblue + bestdark).sgngamma (1/gamma);
+  param->black = bestdark;
+  param->red = (bestred + bestdark);
+  param->green = (bestgreen + bestdark);
+  param->blue = (bestblue + bestdark);
 #else
   param->black = bestdark;
   param->red = bestred + bestdark;
   param->green = bestgreen + bestdark;
   param->blue = bestblue + bestdark;
 #endif
-#if 1
   if (report)
     {
       fprintf (report, "Color optimization:\n  Dark %f %f %f (gamma %f lum %f %f %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, gamma, bestrlum, bestglum, bestblum, min_chisq);
@@ -425,6 +611,11 @@ optimize_screen_colors (scr_detect_parameters *param,
       save_csp (report, NULL, param, NULL, NULL);
     }
 #endif
+  if (report)
+    {
+      fprintf (report, "After screen color detection:\n");
+      save_csp (report, NULL, param, NULL, NULL);
+    }
   if (report)
     fflush (report);
 }

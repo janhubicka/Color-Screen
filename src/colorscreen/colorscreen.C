@@ -612,6 +612,8 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename, s
 void
 digital_laboratory (int argc, char **argv)
 {
+  if (!argc)
+    print_help ();
   if (argc == 1 && !strcmp (argv[0], "dufay-xyY"))
     dufaycolor::print_xyY_report ();
   else if (argc == 1 && !strcmp (argv[0], "dufay-spectra"))
