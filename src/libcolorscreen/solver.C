@@ -2227,8 +2227,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	 for (int j = 0; j < 3; j++)
 	   if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
 	     return false;
-       printf ("Matrix\n");
-       c.print (stdout);
+       //printf ("Matrix\n");
+       //c.print (stdout);
        /* First determine dark point of the scan.  */
        //rparam.profiled_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
        color_matrix ci = c.invert ();
@@ -2262,8 +2262,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 	   rparam.profiled_green.print (stdout);
 	   printf ("Blue ");
 	   rparam.profiled_blue.print (stdout);
-	   printf ("Final\n");
-	   rparam.get_profile_matrix ({1,1,1}).print (stdout);
+	   //printf ("Final\n");
+	   //rparam.get_profile_matrix ({1,1,1}).print (stdout);
 	 }
 
 #if 0
