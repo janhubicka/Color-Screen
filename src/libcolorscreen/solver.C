@@ -5,7 +5,6 @@
 #include "include/colorscreen.h"
 #include "screen-map.h"
 #include "sharpen.h"
-#include "render-interpolate.h"
 #include "nmsimplex.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
@@ -492,12 +491,12 @@ public:
     if (vals[1] > 1)
       vals[1] = 1;
     for (int i = 2; i < 5; i++)
-    {
-    if (vals[i] < -0.1 * scale_kr)
-      vals[i] = -0.1 * scale_kr;
-    if (vals[i] > 0.1 * scale_kr)
-      vals[i] = 0.1 * scale_kr;
-    }
+      {
+      if (vals[i] < -0.1 * scale_kr)
+	vals[i] = -0.1 * scale_kr;
+      if (vals[i] > 0.1 * scale_kr)
+	vals[i] = 0.1 * scale_kr;
+      }
   }
   coord_t
   objfunc (coord_t *vals)
