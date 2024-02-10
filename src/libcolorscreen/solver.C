@@ -586,7 +586,6 @@ public:
 #endif
     homography::get_matrix (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 			    m_param.scanner_type, &map, 0, 0, &chi);
-    printf ("chi:%f\n",chi);
     return chi;
   }
 };
@@ -1698,10 +1697,9 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
   gsl_vector_free (w);
   gsl_matrix_free (cov);
   trans_4d_matrix ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
-  /* FIXME: Why chisq returned by multifit_wlinear tends to be 0?  */
-  if (chisq_ret && chisq)
-    *chisq_ret = chisq;
-  else if (chisq_ret)
+  /* We normalize equations and thus chisq is unnaturaly small.
+     To make get same range as in ransac we need to recompute.  */
+  if (chisq_ret)
     {
       solver_parameters::point_t *tpoints = points;
       tpoints = (solver_parameters::point_t *)malloc (sizeof (solver_parameters::point_t) * n);

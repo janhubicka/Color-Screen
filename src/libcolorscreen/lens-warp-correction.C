@@ -67,6 +67,7 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *)
 }
 static lru_cache <lens_inverse_parameters, precomputed_function<coord_t>, get_new_inverse, 4> lens_inverse_cache ("lens inverse functions");
 }
+
 bool
 lens_warp_correction::precompute (point_t center, point_t c1, point_t c2, point_t c3, point_t c4, bool need_inverse)
 {
@@ -85,4 +86,10 @@ lens_warp_correction::precompute (point_t center, point_t c1, point_t c2, point_
       m_inverted_ratio = lens_inverse_cache.get (p, NULL);
     }
   return true;
+}
+
+lens_warp_correction::~lens_warp_correction ()
+{
+  if (m_inverted_ratio)
+    lens_inverse_cache.release (m_inverted_ratio);
 }

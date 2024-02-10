@@ -41,7 +41,7 @@ struct lens_warp_correction_parameters
 
 struct lens_warp_correction
 {
-  static constexpr const bool debug = true;
+  static constexpr const bool debug = false;
   /* Size of table for inverse function.  16(1024 is probably overkill but
      should have one entry for every pixel.  */
   static constexpr const int size = 16 * 1024;
@@ -51,6 +51,8 @@ struct lens_warp_correction
   lens_warp_correction ()
   : m_params (), m_inverted_ratio (NULL)
   { }
+
+  ~lens_warp_correction ();
 
   void
   set_parameters (lens_warp_correction_parameters &p)
@@ -83,6 +85,9 @@ struct lens_warp_correction
   {
     if (m_noop)
       return p;
+    coord_t dist = p.dist_from (m_center);
+    if (dist > m_max_dist)
+      dist = m_max_dist;
     point_t ret = (p - m_center) * m_inverted_ratio->apply (p.dist_from (m_center)) + m_center;
     if (debug)
       {
