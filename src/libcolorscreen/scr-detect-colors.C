@@ -322,15 +322,15 @@ screen_color_solver
 	luminosity_t c[3];
 	mat.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c[0], &c[1], &c[2]);
 	//sum += c[c1] * c[c1] + c[c2] * c[c2];
+
+	// Negative value is bad.
 	if (c[chanel] < 0.000001)
 	  {
 	    c[chanel] = 0.000001;
-	    sum += c[chanel] * c[chanel] * 100;
+	    sum += c[chanel] * c[chanel];
 	  }
-	//if (c[c1] > 0)
-	  sum += c[c1] * c[c1] / c[chanel];
-	//if (c[c2] > 0)
-	  sum += c[c2] * c[c2] / c[chanel];
+	sum += c[c1] * c[c1] / (c[chanel] * c[chanel]);
+	sum += c[c2] * c[c2] / (c[chanel] * c[chanel]);
       }
     return sum / n;
   }

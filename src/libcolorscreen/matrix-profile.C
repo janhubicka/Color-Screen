@@ -67,21 +67,21 @@ color_solver
     start[6] = m.m_elements[0][2]; start[7] = m.m_elements[1][2]; start[8] = m.m_elements[2][2];
     if (dark_point_elts == 1)
       {
-        start[8] = m.m_elements[3][0];
-	start[9] = 0;
+        start[9] = m.m_elements[3][0];
 	start[10] = 0;
+	start[11] = 0;
       }
     else if (dark_point_elts == 3)
       {
-	start[8]  = m.m_elements[3][0];
-	start[9]  = m.m_elements[3][1];
-	start[10] = m.m_elements[3][2];
+	start[9]  = m.m_elements[3][0];
+	start[10]  = m.m_elements[3][1];
+	start[11] = m.m_elements[3][2];
       }
     else
       {
-        start[8] = 0;
-	start[9] = 0;
+        start[9] = 0;
 	start[10] = 0;
+	start[11] = 0;
       }
   }
 
@@ -148,20 +148,20 @@ color_solver
 color_matrix
 determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r, rgbdata proportions)
 {
-   rgbdata avg1 = {0,0,0};
-   xyz avg2 = {0,0,0};
-   rgbdata avg3 = {0,0,0};
-   for (int i = 0; i < n; i++)
-     {
-       avg1 += colors[i];
-       if (targets)
-         avg2 += targets[i];
-       else
-	 avg3 += rgbtargets[i];
-     }
-   /* Normalize values to reduce rounoff errors.  */
-   luminosity_t scale1 = 3*n/(avg1.red + avg1.green + avg1.blue);
-   luminosity_t scale2 = targets ? 3*n/(avg2.x + avg2.y + avg2.z) : 3*n/(avg3.red + avg3.green + avg3.blue);
+  rgbdata avg1 = {0,0,0};
+  xyz avg2 = {0,0,0};
+  rgbdata avg3 = {0,0,0};
+  for (int i = 0; i < n; i++)
+    {
+      avg1 += colors[i];
+      if (targets)
+        avg2 += targets[i];
+      else
+        avg3 += rgbtargets[i];
+    }
+  /* Normalize values to reduce rounoff errors.  */
+  luminosity_t scale1 = 3*n/(avg1.red + avg1.green + avg1.blue);
+  luminosity_t scale2 = targets ? 3*n/(avg2.x + avg2.y + avg2.z) : 3*n/(avg3.red + avg3.green + avg3.blue);
 
   int nvariables = 9;
   const bool verbose = false;
@@ -260,6 +260,8 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   if (verbose)
     printf ("Delta E2000 before nonlinear optimization %f\n", solver.objfunc (solver.start));
   simplex<luminosity_t, color_solver>(solver);
+  if (verbose)
+    printf ("Delta E2000 after nonlinear optimization %f\n", solver.objfunc (solver.start));
   ret = solver.matrix_by_vals (solver.start);
   //printf ("Optimized\n");
   //ret.print (stdout);
@@ -311,7 +313,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 	}
       if (verbose)
 	{
-          ret.print (stdout);
+          //ret.print (stdout);
           printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
 	}
     }
@@ -321,7 +323,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 bool
 optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress)
 {
-   bool verbose = true;
+   bool verbose = false;
    /* Set up scr-to-img map.  */
    scr_to_img map;
    map.set_parameters (*param, img);
