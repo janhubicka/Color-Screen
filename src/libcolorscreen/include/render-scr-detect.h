@@ -4,7 +4,7 @@
 #include "progress-info.h"
 #include "scr-detect.h"
 #include "patches.h"
-class render_to_file_params;
+struct render_to_file_params;
 class render_scr_detect : public render
 {
 public:

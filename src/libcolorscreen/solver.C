@@ -533,8 +533,6 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
   if (param->mesh_trans)
     abort ();
 
-  if (progress)
-    progress->set_task ("optimizing", 1);
   bool optimize_k1 = sparam.optimize_lens && sparam.npoints > 100;
   bool optimize_rotation = sparam.optimize_tilt && sparam.npoints > 10;
   coord_t chimin;
@@ -543,7 +541,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
   if (optimize_k1)
     {
       lens_solver s (*param, img_data, sparam, progress);
-      simplex<coord_t, lens_solver>(s);
+      simplex<coord_t, lens_solver>(s, "optimizing lens correction", progress);
       param->lens_correction.center = {s.start[0], s.start[1]};
       param->lens_correction.kr[1] = s.start[2] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[2] = s.start[3] * (1 / lens_solver::scale_kr);
@@ -581,6 +579,8 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
       chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
 #endif
     }
+  if (progress)
+    progress->set_task ("optimizing perspective correction", 1);
   chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 
 #if  0

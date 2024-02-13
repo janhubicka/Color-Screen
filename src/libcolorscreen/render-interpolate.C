@@ -65,7 +65,7 @@ static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1
 }
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (NULL), m_profiled (false), m_dufay (NULL), m_paget (NULL)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (false), m_profiled (false), m_dufay (NULL), m_paget (NULL)
 {
 }
 void

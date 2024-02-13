@@ -95,7 +95,7 @@ print_help ()
   exit (1);
 }
 
-template<typename T,const char *names[],int max>
+template<typename T,const char *const names[],int max>
 T
 parse_enum (const char *arg, const char *errmsg)
 {
@@ -519,7 +519,7 @@ static enum spectrum_dyes_to_xyz::dyes
 parse_dyes (const char *profile)
 {
   return parse_enum<enum spectrum_dyes_to_xyz::dyes,
-		    (const char **)spectrum_dyes_to_xyz::dyes_names,
+		    spectrum_dyes_to_xyz::dyes_names,
 		    (int)spectrum_dyes_to_xyz::dyes_max> (profile, "Unkonwn dye:%s\n");
 }
 static enum spectrum_dyes_to_xyz::illuminants
@@ -558,21 +558,21 @@ static enum tone_curve::tone_curves
 parse_tone_curve (const char *profile)
 {
   return parse_enum<enum tone_curve::tone_curves,
-		    (const char **)tone_curve::tone_curve_names,
+		    tone_curve::tone_curve_names,
 		    (int)tone_curve::tone_curve_max> (profile, "Unkonwn tone curve:%s\n");
 }
 static enum spectrum_dyes_to_xyz::responses
 parse_response (const char *profile)
 {
   return parse_enum<enum spectrum_dyes_to_xyz::responses,
-		    (const char **)spectrum_dyes_to_xyz::responses_names,
+		    spectrum_dyes_to_xyz::responses_names,
 		    (int)spectrum_dyes_to_xyz::responses_max> (profile, "Unkonwn film response:%s\n");
 }
 static enum spectrum_dyes_to_xyz::characteristic_curves
 parse_characteristic_curve (const char *profile)
 {
   return parse_enum<enum spectrum_dyes_to_xyz::characteristic_curves,
-		    (const char **)spectrum_dyes_to_xyz::characteristic_curve_names,
+		    spectrum_dyes_to_xyz::characteristic_curve_names,
 		    (int)spectrum_dyes_to_xyz::characteristic_curves_max> (profile, "Unkonwn film characteristic curve:%s\n");
 }
 

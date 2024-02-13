@@ -4866,19 +4866,19 @@ write_optimal_response (color_matrix m, const char *redname, const char *greenna
 {
   FILE *redf = fopen (redname, "wt");
   if (!redf)
-    return NULL;
+    return false;
   FILE *greenf = fopen (greenname, "wt");
   if (!greenf)
     {
       fclose (redf);
-      return NULL;
+      return false;
     }
   FILE *bluef = fopen (bluename, "wt");
   if (!bluef)
     {
       fclose (redf);
       fclose (greenf);
-      return NULL;
+      return false;
     }
   color_matrix im = m.invert ();
   for (int i = 0; i < SPECTRUM_SIZE; i++)

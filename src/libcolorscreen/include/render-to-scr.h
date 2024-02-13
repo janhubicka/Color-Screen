@@ -5,7 +5,7 @@
 #include "scr-to-img.h"
 
 struct screen;
-class render_to_file_params;
+struct render_to_file_params;
 
 /* Base class for renderes that use mapping between image and screen coordinates.  */
 class render_to_scr : public render

@@ -146,7 +146,7 @@ color_solver
    TODO: We should not minimize least squares, we want smallest deltaE2000  */
 
 color_matrix
-determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r, rgbdata proportions)
+determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r, rgbdata proportions, progress_info *progress)
 {
   rgbdata avg1 = {0,0,0};
   xyz avg2 = {0,0,0};
@@ -259,7 +259,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   solver.proportions = proportions;
   if (verbose)
     printf ("Delta E2000 before nonlinear optimization %f\n", solver.objfunc (solver.start));
-  simplex<luminosity_t, color_solver>(solver);
+  simplex<luminosity_t, color_solver>(solver, "optimizing color profile", progress);
   if (verbose)
     printf ("Delta E2000 after nonlinear optimization %f\n", solver.objfunc (solver.start));
   ret = solver.matrix_by_vals (solver.start);
@@ -422,7 +422,9 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
      }
    if (n >= 4)
      {
-       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r, proportions);
+       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r, proportions, progress);
+       if (progress && progress->cancelled ())
+	 return false;
        /* Do basic sanity check.  All the values should be relative close to range 0...1  */
        for (int i = 0; i < 4; i++)
 	 for (int j = 0; j < 3; j++)

@@ -472,6 +472,7 @@ struct DLL_PUBLIC render_parameters
     rgbdata sprofiled_red = profiled_red /*/ patch_proportions.red*/;
     rgbdata sprofiled_green = profiled_green /*/ patch_proportions.green*/;
     rgbdata sprofiled_blue= profiled_blue /*/ patch_proportions.blue*/;
+    bool verbose = true;
     color_matrix process_colors (sprofiled_red.red,   sprofiled_green.red,   sprofiled_blue.red, 0,
 				 sprofiled_red.green, sprofiled_green.green, sprofiled_blue.green, 0,
 				 sprofiled_red.blue,  sprofiled_green.blue,  sprofiled_blue.blue, 0,
@@ -479,22 +480,22 @@ struct DLL_PUBLIC render_parameters
     process_colors.transpose ();
     mix_dark = profiled_dark;
     process_colors.invert ().apply_to_rgb (3 * patch_proportions.red / white_balance.red, 3 * patch_proportions.green / white_balance.green, 3 * patch_proportions.blue / white_balance.blue, &mix_red, &mix_green, &mix_blue);
-    mix_red = mix_red;
-    mix_green = mix_green;
-    mix_blue = mix_blue;
     white_balance = {1, 1, 1};
-    printf ("profiled dark ");
-    profiled_dark.print (stdout);
-    printf ("Scaled profiled red ");
-    sprofiled_red.print (stdout);
-    printf ("Scaled profiled green ");
-    sprofiled_green.print (stdout);
-    printf ("Scaled profiled blue ");
-    sprofiled_blue.print (stdout);
-    printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
-    printf ("%f %f\n", profiled_red.red * mix_red + profiled_red.green * mix_green + profiled_red.blue * mix_blue, patch_proportions.red);
-    printf ("%f %f\n", profiled_green.red * mix_red + profiled_green.green * mix_green + profiled_green.blue * mix_blue, patch_proportions.green);
-    printf ("%f %f\n", profiled_blue.red * mix_red + profiled_blue.green * mix_green + profiled_blue.blue * mix_blue, patch_proportions.blue);
+    if (verbose)
+      {
+	printf ("profiled dark ");
+	profiled_dark.print (stdout);
+	printf ("Scaled profiled red ");
+	sprofiled_red.print (stdout);
+	printf ("Scaled profiled green ");
+	sprofiled_green.print (stdout);
+	printf ("Scaled profiled blue ");
+	sprofiled_blue.print (stdout);
+	printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
+	printf ("%f %f\n", profiled_red.red * mix_red + profiled_red.green * mix_green + profiled_red.blue * mix_blue, patch_proportions.red);
+	printf ("%f %f\n", profiled_green.red * mix_red + profiled_green.green * mix_green + profiled_green.blue * mix_blue, patch_proportions.green);
+	printf ("%f %f\n", profiled_blue.red * mix_red + profiled_blue.green * mix_green + profiled_blue.blue * mix_blue, patch_proportions.blue);
+      }
   }
 private:
   static const bool debug = false;

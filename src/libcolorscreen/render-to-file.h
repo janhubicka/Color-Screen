@@ -11,14 +11,14 @@ namespace {
 static struct timeval start_time;
 
 /* Start measurement.  */
-static void
+inline static void
 record_time ()
 {
   gettimeofday (&start_time, NULL);
 }
 
 /* Finish measurement and output time.  */
-static void
+inline static void
 print_time ()
 {
   struct timeval end_time;

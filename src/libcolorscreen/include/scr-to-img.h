@@ -455,10 +455,6 @@ public:
   void dump (FILE *f);
 private:
   precomputed_function<coord_t> *m_motor_correction;
-  /* Center of lenses after the motor corrections.  */
-  coord_t m_corrected_lens_center_x, m_corrected_lens_center_y;
-  /* Maximal distance from lens center to corner.  */
-  coord_t m_max_dist, m_inv_max_dist;
   /* Inversed m_params.projection_distance.  */
   coord_t m_inverted_projection_distance;
   /* Perspective correction matrix.  */

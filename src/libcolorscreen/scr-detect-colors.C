@@ -111,9 +111,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 	      nnr++;
 	    }
 	  if (type == Dufay)
-	    p = m->apply ({(x) + 0.5, y + 0.5});
+	    p = m->apply ({(x) + (coord_t)0.5, y + (coord_t)0.5});
 	  else
-	    p = m->apply ({(x) + 0.5, y});
+	    p = m->apply ({(x) + (coord_t)0.5, (coord_t)y});
 	  ix = p.x;
 	  iy = p.y;
 	  if (nnr < samples * 2 && ix >= 0 && iy >= 0 && ix < img->width && iy < img->height
@@ -374,17 +374,22 @@ optimize_screen_colors (scr_detect_parameters *param,
 {
   if (!nreds || !ngreens || !nblues)
     abort ();
+  if (progress) 
+    progress->set_task ("determining screen colors", 1);
 
   param->black = {0, 0, 0};
   param->red = optimize_chanel (reds, nreds, 0);
   param->green = optimize_chanel (greens, ngreens, 1);
   param->blue = optimize_chanel (blues, nblues, 2);
-  printf ("Red:  ");
-  param->red.print (stdout);
-  printf ("Green:  ");
-  param->green.print (stdout);
-  printf ("Blue:  ");
-  param->blue.print (stdout);
+  if (report)
+    {
+      fprintf (report, "Initial screen red:  ");
+      param->red.print (report);
+      fprintf (report, "Initial screen green:  ");
+      param->green.print (report);
+      fprintf (report, "Initial screen blue:  ");
+      param->blue.print (report);
+    }
 
   screen_color_solver solver;
   solver.reds = reds;
@@ -401,20 +406,24 @@ optimize_screen_colors (scr_detect_parameters *param,
   solver.start[6] = param->green.blue;
   solver.start[7] = param->blue.red;
   solver.start[8] = param->blue.green;
-  simplex<luminosity_t, screen_color_solver>(solver);
+  simplex<luminosity_t, screen_color_solver>(solver, "optimizing colors", progress);
   param->black = {solver.start[0], solver.start[1], solver.start[2]};
   param->red = {1, solver.start[3], solver.start[4]};
   param->green = {solver.start[5], 1, solver.start[6]};
   param->blue = {solver.start[7], solver.start[8], 1};
-  printf ("Black:  ");
-  param->black.print (stdout);
-  printf ("Red:  ");
-  param->red.print (stdout);
-  printf ("Green:  ");
-  param->green.print (stdout);
-  printf ("Blue:  ");
-  param->blue.print (stdout);
+  if (report)
+    {
+      fprintf (report, "optimized screen black:  ");
+      param->black.print (report);
+      fprintf (report, "optimized screen red:  ");
+      param->red.print (report);
+      fprintf (report, "optimized screen green:  ");
+      param->green.print (report);
+      fprintf (report, "optimized screen blue:  ");
+      param->blue.print (report);
+    }
 
+  /* Old optimization code that brute-forces dark point.  */
 #if 0
 
   double min_chisq = 0;

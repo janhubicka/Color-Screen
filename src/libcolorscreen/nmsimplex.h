@@ -1,7 +1,7 @@
 /* Based on nmsimplex.c by Michael F. Hutt used by dcamprof.  */
 template<typename T,typename C>
 double
-simplex (C &c)
+simplex (C &c, const char *task = NULL, progress_info *progress = NULL)
 {
   const T ALPHA = 1;
   const T BETA = 0.5;
@@ -31,6 +31,9 @@ simplex (C &c)
   T min;
 
   T fsum, favg, s, cent;
+
+  if (progress)
+    progress->set_task(task, MAX_IT);
 
   /* dynamically allocate arrays */
 
@@ -83,14 +86,12 @@ simplex (C &c)
 
   /* print out the initial values */
   if (c.verbose ())
-  {
-     printf("Initial Values\n");
-     for (j=0;j<=n;j++) {
-     for (i=0;i<n;i++) {
-     printf("%f %f\n",v[j][i],f[j]);
-     }
-     }
-  }
+    {
+       printf("Initial Values\n");
+       for (j=0;j<=n;j++) 
+	 for (i=0;i<n;i++)
+	   printf("%f %f\n",v[j][i],f[j]);
+    }
 
 
   /* begin the main loop of the minimization */
@@ -260,14 +261,12 @@ simplex (C &c)
 
       /* print out the value at each iteration */
       if (c.verbose ())
-      {
-         printf("Iteration %d\n",itr);
-         for (j=0;j<=n;j++) {
-         for (i=0;i<n;i++) {
-         printf("%f %f\n",v[j][i],f[j]);
-         }
-         }
-      }
+	{
+	   printf("Iteration %d\n",itr);
+	   for (j=0;j<=n;j++)
+	     for (i=0;i<n;i++) 
+	       printf("%f %f\n",v[j][i],f[j]);
+	}
 
       /* test for convergence */
       fsum = 0.0;
@@ -284,6 +283,12 @@ simplex (C &c)
       s = my_sqrt (s);
       if (s < EPSILON)
 	break;
+      if (progress)
+        {
+	  progress->inc_progress ();
+	  if (progress->cancel_requested ())
+	    break;
+        }
     }
   /* end main loop of the minimization */
 
@@ -310,10 +315,10 @@ simplex (C &c)
   min = c.objfunc (v[vs]);
   k++;
   if (c.verbose ())
-  {
-     printf("%d Function Evaluations\n",k);
-     printf("%d Iterations through program\n",itr);
-  }
+    {
+       printf("%d Function Evaluations\n",k);
+       printf("%d Iterations through program\n",itr);
+    }
 
   free (f);
   free (vr);

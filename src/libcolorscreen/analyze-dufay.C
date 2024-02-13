@@ -416,8 +416,8 @@ analyze_dufay::analyze_contrast (render_to_scr *render, image_data *img, scr_to_
 		}
 	      }
 	  }
-	if (progress)
-	  progress->inc_progress ();
+       if (progress)
+	 progress->inc_progress ();
     }
   return !progress || !progress->cancelled ();
 }
@@ -440,10 +440,10 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 	    if (x2 >= 0 && x2 < other.m_width - tile_size)
 	      {
 		bool skip = false;
-#if 1
+#if 0
 		luminosity_t wsum = 0;
-		luminosity_t ratsum1 = 0, ratsum2 = 0;
 #endif
+		luminosity_t ratsum1 = 0, ratsum2 = 0;
 		luminosity_t diffsum1 = 0, diffsum2 = 0, rsum1 = 0, rsum2 = 0;
 		const luminosity_t threshold = 0.1;
 		const luminosity_t minthreshold = 0.01;
@@ -468,7 +468,9 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 				//luminosity_t ratio = (get_contrast (x + xx, y + yy).max - get_contrast (x + xx, y + yy).min) / (other.get_contrast (x2 + xx, y2 + yy).max - other.get_contrast (x2 + xx, y2 + yy).min);
 				luminosity_t ratio1 = (get_contrast (x + xx, y + yy).max / get_contrast (x + xx, y + yy).min);
 				luminosity_t ratio2 = (other.get_contrast (x2 + xx, y2 + yy).max / other.get_contrast (x2 + xx, y2 + yy).min);
+#if 0
 				wsum += w;
+#endif
 				ratsum1 += ratio1 * w;
 				ratsum2 += ratio2 * w;
 			    }
