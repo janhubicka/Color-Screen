@@ -66,7 +66,7 @@ static const constexpr render_type_property render_type_properties[render_type_m
    {"profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::SCAN_RESOLUTION},
    {"interpolated-profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
    {"interpolated-diff", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"interpolated-preview-grid", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
+   {"preview-grid", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
    {"realistic", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
    {"interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"interpolated-predictive", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION},
