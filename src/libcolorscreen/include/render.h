@@ -103,7 +103,7 @@ struct DLL_PUBLIC render_parameters
     brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
     mix_dark (0, 0, 0),
     mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (/*srgb_white*/d50_white),
-    age(0),
+    age(1),
     dye_balance (dye_balance_neutral),
     screen_blur_radius (0.5),
     color_model (color_model_none),
@@ -112,6 +112,9 @@ struct DLL_PUBLIC render_parameters
     profiled_red (1, 0, 0),
     profiled_green (0, 1, 0),
     profiled_blue (0, 0, 1),
+    scanner_red (0, 0, 0),
+    scanner_green (0, 0, 0),
+    scanner_blue (0, 0, 0),
     output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
     film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
@@ -220,6 +223,7 @@ struct DLL_PUBLIC render_parameters
       color_model_dufay5,
       color_model_autochrome,
       color_model_autochrome2,
+      color_model_kodachrome25,
       color_model_max
     };
   DLL_PUBLIC static const char *color_model_names [(int)color_model_max];
@@ -243,6 +247,13 @@ struct DLL_PUBLIC render_parameters
   rgbdata profiled_red;
   rgbdata profiled_green;
   rgbdata profiled_blue;
+
+  /* Matrix profile of scanner.
+     If values are (0,0,0) then data obtained from image_data will be used.
+     It is only valid for RAW images where libraw understand the camera matrix.  */
+  xyz scanner_red;
+  xyz scanner_green;
+  xyz scanner_blue;
 
   output_profile_t output_profile;
   enum tone_curve::tone_curves output_tone_curve;
@@ -333,6 +344,14 @@ struct DLL_PUBLIC render_parameters
 	   && mix_green == other.mix_green
 	   && mix_blue == other.mix_blue
 	   && color_model == other.color_model
+	   && ignore_infrared == other.ignore_infrared
+	   && profiled_dark == other.profiled_dark
+	   && profiled_red == other.profiled_red
+	   && profiled_green == other.profiled_green
+	   && profiled_blue == other.profiled_blue
+	   && scanner_red == other.scanner_red
+	   && scanner_green == other.scanner_green
+	   && scanner_blue == other.scanner_blue
 	   && age == other.age
 	   && backlight_temperature == backlight_temperature
 	   && dark_point == other.dark_point
@@ -405,6 +424,9 @@ struct DLL_PUBLIC render_parameters
     invert = rparam.invert;
     scan_exposure = rparam.scan_exposure;
     ignore_infrared = rparam.ignore_infrared;
+    scanner_red = rparam.scanner_red;
+    scanner_green = rparam.scanner_green;
+    scanner_blue = rparam.scanner_blue;
     dark_point = rparam.dark_point;
     brightness = rparam.brightness;
     color_model = color ? (profiled ? rparam.color_model : render_parameters::color_model_scan) : render_parameters::color_model_none;
@@ -531,7 +553,7 @@ class DLL_PUBLIC render
 public:
   render (image_data &img, render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_backlight_correction (NULL), m_tone_curve (NULL)
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_tone_curve (NULL)
   {
     if (m_params.invert)
       {
@@ -649,8 +671,16 @@ protected:
   luminosity_t *m_rgb_lookup_table;
   /* Translates back to gamma 2.  */
   luminosity_t *m_out_lookup_table;
-  /* Color matrix.  */
+  /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
+     For subtractive processes it only applies transformations does in process RGB.  */
   color_matrix m_color_matrix;
+
+  /* For subtractive processes it converts dyes RGB to xyz.  */
+  spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz;
+
+  /* For cubstractive processes it converts xyz to prophoto RGB applying
+     corrections, like saturation control.  */
+  color_matrix m_color_matrix2;
 
   backlight_correction *m_backlight_correction;
 
@@ -796,6 +826,18 @@ render::set_linear_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, lu
     }
 #endif
   m_color_matrix.apply_to_rgb (r, g, b, &r, &g, &b);
+  if (m_spectrum_dyes_to_xyz)
+    {
+      if (m_spectrum_dyes_to_xyz->red_characteristic_curve)
+	r=m_spectrum_dyes_to_xyz->red_characteristic_curve->apply (r);
+      if (m_spectrum_dyes_to_xyz->green_characteristic_curve)
+	g=m_spectrum_dyes_to_xyz->green_characteristic_curve->apply (g);
+      if (m_spectrum_dyes_to_xyz->blue_characteristic_curve)
+	b=m_spectrum_dyes_to_xyz->blue_characteristic_curve->apply (b);
+      xyz c = m_spectrum_dyes_to_xyz->dyes_rgb_to_xyz (r, g, b);
+
+      m_color_matrix2.apply_to_rgb (c.x, c.y, c.z, &r, &g, &b);
+    }
   if (m_params.output_curve)
     {
       luminosity_t lum = r * rwght + g * gwght + b * bwght;

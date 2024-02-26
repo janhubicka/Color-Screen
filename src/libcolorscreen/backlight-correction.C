@@ -3,6 +3,29 @@
 #include "loadsave.h"
 #include "lru-cache.h"
 #include "include/tiff-writer.h"
+bool
+memory_buffer::load_file (FILE *f)
+{
+  fseek(f, 0L, SEEK_END);
+  len = ftell(f);
+  fseek(f, 0L, SEEK_SET);
+  data = malloc (len);
+  if (!data)
+    {
+      fclose (f);
+      return false;
+    }
+  size_t len2 = fread (data, 1, len, f);
+  if (len2 != len)
+    {
+      fclose (f);
+      return false;
+    }
+  pos = 0;
+  fclose (f);
+  return true;
+}
+
 backlight_correction_parameters::backlight_correction_parameters () : id (lru_caches::get ()), m_width (0), m_height (0), m_luminosities (NULL), m_channel_enabled {true, true, true, false}
 {
 }

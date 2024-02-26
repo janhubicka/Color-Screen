@@ -9,13 +9,14 @@
 struct memory_buffer 
 {
   void *data;
-  int pos;
-  int len;
+  uint64_t pos;
+  uint64_t len;
   char getc()
   {
     assert (pos < len);
     return *((char *)data+pos++);
   }
+  bool load_file (FILE *f);
 };
 class backlight_correction;
 class backlight_correction_parameters

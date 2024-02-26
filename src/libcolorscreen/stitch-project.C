@@ -1,4 +1,5 @@
 #include <vector>
+#include <locale>
 #include <climits>
 #include <limits>
 #include <gsl/gsl_multifit.h>

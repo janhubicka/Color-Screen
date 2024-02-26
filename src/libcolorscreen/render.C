@@ -423,19 +423,57 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
       bool do_pro_photo = m_params.output_tone_curve != tone_curve::tone_curve_linear;
       /* Matrix converting dyes to XYZ.  */
       color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, do_pro_photo ? d50_white : d65_white);
-      if (m_params.output_profile == render_parameters::output_profile_xyz)
-	;
-      else if (do_pro_photo)
-	{
-	  xyz_pro_photo_rgb_matrix m;
-	  color = m * color;
-	  m_tone_curve = new tone_curve (m_params.output_tone_curve);
-	  assert (!m_tone_curve->is_linear ());
-	}
+
+      /* For subtractive processes we do post-processing in separate matrix after spectrum dyes to xyz are applied.  */
+      if (m_params.color_model == render_parameters::color_model_kodachrome25)
+        {
+	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
+	  m_spectrum_dyes_to_xyz->set_film_response (spectrum_dyes_to_xyz::response_even);
+	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::kodachrome_25_sensitivity);
+	  m_spectrum_dyes_to_xyz->set_backlight (spectrum_dyes_to_xyz::il_D, m_params.backlight_temperature);
+
+	  spectrum_dyes_to_xyz dufay;
+	  dufay.set_film_response (spectrum_dyes_to_xyz::dufaycolor_harrison_horner_emulsion_cut);
+	  dufay.set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner/*dufaycolor_color_cinematography*/);
+	  dufay.set_backlight (spectrum_dyes_to_xyz::il_D, m_params.backlight_temperature);
+	  //dufay.set_characteristic_curve (spectrum_dyes_to_xyz::linear_reversal_curve);
+
+	  color = color * m_spectrum_dyes_to_xyz->process_transformation_matrix (&dufay);
+	  m_spectrum_dyes_to_xyz->set_characteristic_curve (spectrum_dyes_to_xyz::kodachrome25_curve);
+
+	  saturation_matrix m (m_params.saturation);
+	  m_color_matrix2 = (bradford_whitepoint_adaptation_matrix (m_spectrum_dyes_to_xyz->whitepoint_xyz (), do_pro_photo ? d50_white : d65_white) * m) * 1.5;
+	  if (m_params.output_profile == render_parameters::output_profile_xyz)
+	    ;
+	  else if (do_pro_photo)
+	    {
+	      xyz_pro_photo_rgb_matrix m;
+	      m_color_matrix2 = m * m_color_matrix2;
+	      m_tone_curve = new tone_curve (m_params.output_tone_curve);
+	      assert (!m_tone_curve->is_linear ());
+	    }
+	  else
+	    {
+	      xyz_srgb_matrix m;
+	      m_color_matrix2 = m * m_color_matrix2;
+	    }
+        }
       else
 	{
-	  xyz_srgb_matrix m;
-	  color = m * color;
+	  if (m_params.output_profile == render_parameters::output_profile_xyz)
+	    ;
+	  else if (do_pro_photo)
+	    {
+	      xyz_pro_photo_rgb_matrix m;
+	      color = m * color;
+	      m_tone_curve = new tone_curve (m_params.output_tone_curve);
+	      assert (!m_tone_curve->is_linear ());
+	    }
+	  else
+	    {
+	      xyz_srgb_matrix m;
+	      color = m * color;
+	    }
 	}
     }
   else
@@ -454,6 +492,8 @@ render::~render ()
     gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
   if (m_tone_curve)
     delete m_tone_curve;
+  if (m_spectrum_dyes_to_xyz)
+    delete m_spectrum_dyes_to_xyz;
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */

@@ -106,7 +106,10 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
 	  || fprintf (f, "profiled_red: %f %f %f\n", rparam->profiled_red.red, rparam->profiled_red.green, rparam->profiled_red.blue) < 0
 	  || fprintf (f, "profiled_green: %f %f %f\n", rparam->profiled_green.red, rparam->profiled_green.green, rparam->profiled_green.blue) < 0
-	  || fprintf (f, "profiled_blue: %f %f %f\n", rparam->profiled_blue.red, rparam->profiled_blue.green, rparam->profiled_blue.blue) < 0)
+	  || fprintf (f, "profiled_blue: %f %f %f\n", rparam->profiled_blue.red, rparam->profiled_blue.green, rparam->profiled_blue.blue) < 0
+	  || fprintf (f, "scanner_red: %f %f %f\n", rparam->scanner_red.x, rparam->scanner_red.y, rparam->scanner_red.z) < 0
+	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
+	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0)
 	return false;
       if (rparam->backlight_correction)
 	{
@@ -582,7 +585,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_color (f, rparam_check (profiled_dark)))
 	    {
-	      *error = "error parsing mix_weights";
+	      *error = "error parsing profiled_dark";
 	      return false;
 	    }
 	}
@@ -590,7 +593,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_color (f, rparam_check (profiled_red)))
 	    {
-	      *error = "error parsing mix_weights";
+	      *error = "error parsing profiled_red";
 	      return false;
 	    }
 	}
@@ -598,7 +601,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_color (f, rparam_check (profiled_green)))
 	    {
-	      *error = "error parsing mix_weights";
+	      *error = "error parsing profiled_green";
 	      return false;
 	    }
 	}
@@ -606,7 +609,31 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_color (f, rparam_check (profiled_blue)))
 	    {
-	      *error = "error parsing mix_weights";
+	      *error = "error parsing profiled_blue";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_red"))
+	{
+	  if (!read_xyz (f, rparam_check (scanner_red)))
+	    {
+	      *error = "error parsing scanner_red";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_green"))
+	{
+	  if (!read_xyz (f, rparam_check (scanner_green)))
+	    {
+	      *error = "error parsing scanner_green";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_blue"))
+	{
+	  if (!read_xyz (f, rparam_check (scanner_blue)))
+	    {
+	      *error = "error scanned_blue";
 	      return false;
 	    }
 	}

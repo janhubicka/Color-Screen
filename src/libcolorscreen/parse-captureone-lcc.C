@@ -18,16 +18,37 @@ std::string read_string (memory_buffer *f)
 }
 
 static void
-skip (memory_buffer *f, int l, bool verbose)
+skip (memory_buffer *f, int l, bool verbose, int iskip = 0)
 {
-	for (int i = 0; i < l; i++)
-	{
-	  unsigned char c = f->getc ();
-	  if (verbose)
-	    printf (" 0x%x", c);
-	}
-	if (verbose)
-	  printf ("\n");
+  union
+   {
+     unsigned char c[4];
+     float f;
+   } fu;
+  union
+   {
+     unsigned char c[8];
+     double d;
+   } du;
+  for (int i = 0; i < l; i++)
+  {
+    unsigned char c = f->getc ();
+    if (i >= iskip)
+      {
+	fu.c[(i - iskip) % 4]=c;
+	du.c[(i - iskip) % 8]=c;
+      }
+    if (verbose)
+      {
+        printf (" 0x%x", c);
+	if (i && ((i - iskip) % 4) == 3 && (std::isnormal (fu.f) || fu.f == 0))
+	    printf (" (float:%e)", fu.f);
+	if (i && ((i - iskip) % 8) == 7 && (std::isnormal (du.d) || du.d == 0))
+	    printf (" (double:%e)", du.d);
+      }
+  }
+  if (verbose)
+    printf ("\n");
 }
 
 static uint16_t
@@ -177,7 +198,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	  }
 	if (verbose)
 	  printf ("Shift: ");
-	skip (f, 18, verbose);
+	skip (f, 18, verbose, 2);
 	s = read_string (f);
 	if (s != "Chroma")
 	  {
@@ -237,7 +258,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	s = read_string (f);
 	if (s != "LightFalloff")
 	  {
-	    fprintf (stderr, "Expected LifhtFalloff and got >%s<\n", s.c_str ());
+	    fprintf (stderr, "Expected LightFalloff and got >%s<\n", s.c_str ());
 	    return NULL;
 	  }
 	uint16_t ligthfalloff = read_uint16 (f);
@@ -251,7 +272,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	  }
 	if (verbose)
 	  printf ("REF: ");
-	skip (f, 9, verbose);
+	skip (f, 9, verbose,1);
 	s = read_string (f);
 	if (s != "Hdr")
 	  {

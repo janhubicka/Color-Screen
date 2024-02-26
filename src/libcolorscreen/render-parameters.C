@@ -35,6 +35,7 @@ const char * render_parameters::color_model_names [] = {
   "spicer_dufay_NSMM_Bradford_12075",
   "cinecolor_koshofer",
   "autochrome_Casella_Tsukada",
+  "kodachrome25",
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
@@ -111,20 +112,23 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 	is_srgb = true;
 	break;
       case render_parameters::color_model_scan:
-	if (!img)
-	  {
-	    is_srgb = true;
-	    break;
-	  }
-	dyes = matrix_by_dye_xyY (img->primary_red, img->primary_green, img->primary_blue);
-	if (backlight_correction)
-	  {
-	    xyz white = xyz::from_linear_srgb (1, 1, 1);
-	    dyes.normalize_grayscale (white.x, white.y, white.z);
-	  }
-	else
-	  dye_whitepoint = {1,1,1};
-        dye_whitepoint = {1,1,1};
+	{
+	  if (!img)
+	    {
+	      is_srgb = true;
+	      break;
+	    }
+	  xyz zero = {0,0,0};
+	  dyes = matrix_by_dye_xyY (scanner_red == zero ? img->primary_red : (xyY)scanner_red, 
+				    scanner_green == zero ? img->primary_green : (xyY)scanner_green,
+				    scanner_blue == zero ? img->primary_blue : (xyY)scanner_blue);
+	  if (scanner_red != zero)
+	    dye_whitepoint = d50_white;
+	  else if (backlight_correction)
+	    dyes.normalize_grayscale (dye_whitepoint.x, dye_whitepoint.y, dye_whitepoint.z);
+	  else
+	    dye_whitepoint = {1,1,1};
+	}
 	break;
 #if 0
       case render_parameters::color_model_optimized:
@@ -319,6 +323,12 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
 					    (spectrum_dyes_to_xyz::dyes)((int)color_model - (int)render_parameters::color_model_dufay1 + (int)spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor), age);
 	  break;
 	}
+      /* Kodachrome is subtractive, it needs to be computed by spectrum_dyes_to_xyz.  */
+      case render_parameters::color_model_kodachrome25:
+	{
+	  color_matrix id;
+	  return id;
+	}
       case render_parameters::color_model_max:
 	abort ();
     }
@@ -503,7 +513,8 @@ render_parameters::get_rgb_to_xyz_matrix (image_data *img, bool normalized_patch
   color_matrix color = get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
   color = get_balanced_dyes_matrix (img, normalized_patches, patch_proportions, target_whitepoint) * color;
   //color = color * brightness;
-  if (saturation != 1)
+  //
+  if (saturation != 1 && color_model != color_model_kodachrome25)
     {
       saturation_matrix m (saturation);
       color = m * color;

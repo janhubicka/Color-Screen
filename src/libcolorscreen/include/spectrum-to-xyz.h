@@ -16,13 +16,13 @@ extern const DLL_PUBLIC spectrum cie_cmf_z;
 extern const DLL_PUBLIC spectrum cie_cmf1964_x;
 extern const DLL_PUBLIC spectrum cie_cmf1964_y;
 extern const DLL_PUBLIC spectrum cie_cmf1964_z;
-inline luminosity_t
+inline luminosity_t const_attr
 transmitance_to_absorbance (luminosity_t t)
 {
   return 2 - log10 (std::max (t, 0.000001) * 100);
 }
 
-inline luminosity_t
+inline luminosity_t const_attr
 absorbance_to_transmitance (luminosity_t a)
 {
   //return pow (10, 2 - a) * 0.01;
@@ -66,6 +66,8 @@ public:
     kodachrome_25_sensitivity,
     phase_one_sensitivity,
     nikon_d3_sensitivity,
+    nikon_coolscan_9000ED_sensitivity,
+    debug_dyes,
     dyes_max
   };
   constexpr static const char *dyes_names[dyes_max] =
@@ -90,6 +92,8 @@ public:
     "kodachrome_25_sensitivity",
     "phase_one_sensitivity",
     "nikon_d3_sensitivity",
+    "nikon_coolscan_9000ED_sensitivity",
+    "debug",
   };
   enum illuminants {
      il_A,
@@ -98,6 +102,10 @@ public:
      il_D,
      il_band,
      il_equal_energy,
+     il_nikon_coolscan_9000ED_LED_red,
+     il_nikon_coolscan_9000ED_LED_green,
+     il_nikon_coolscan_9000ED_LED_blue,
+     il_debug,
      illuminants_max
   };
   constexpr static const char *illuminants_names[illuminants_max] =
@@ -108,6 +116,10 @@ public:
      "D",
      "band",
      "equal_energy",
+     "nikon_coolscan_9000ED_LED_red",
+     "nikon_coolscan_9000ED_LED_green",
+     "nikon_coolscan_9000ED_LED_blue",
+     "debug"
   };
   enum responses {
     neopan_100,
@@ -126,6 +138,7 @@ public:
     aviphot_pan_400s,
     aviphot_pan_40_pe0,
     aviphot_pan_40_pe0_cut,
+    monochromatic_ccd,
     observer_y,
     response_even,
     responses_max
@@ -148,6 +161,7 @@ public:
     "aviphot_pan_400s",
     "aviphot_pan_40_pe0",
     "aviphot_pan_40_pe0_cut",
+    "monochromatic_ccd",
     "observer_y",
     "even"
   };
@@ -236,7 +250,7 @@ public:
   void set_characteristic_curve (enum characteristic_curves);
   /* Set dyes to given measured spectra.
      If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
-  void set_dyes (enum dyes, enum dyes dyes2 = dufaycolor_color_cinematography, luminosity_t age = 0);
+  void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, luminosity_t age = 1);
   void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
   /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
      in white in a given temperature of daylight.  */
@@ -252,15 +266,10 @@ public:
 
 
 
-  struct xyz
+  struct xyz  pure_attr __attribute__ ((noinline))
   dyes_rgb_to_xyz (luminosity_t r, luminosity_t g, luminosity_t b, int observer = default_observer)
     {
       spectrum s;
-#if 0
-      for (int i = 0; i < SPECTRUM_SIZE; i++)
-	      printf (" %f", cyan[i]);
-      printf ("\n");
-#endif
       if (!subtractive)
 	{
 	  for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -268,26 +277,11 @@ public:
 	}
       else
 	{
-	  r = transmitance_to_absorbance (r * rscale);
-	  g = transmitance_to_absorbance (g * gscale);
-	  b = transmitance_to_absorbance (b * bscale);
-#if 0
-	  r/=3;
-	  g/=3;
-	  b/=3;
-#endif
+	  r = transmitance_to_absorbance (std::max (r, (luminosity_t)0) * rscale + 1.0/65535);
+	  g = transmitance_to_absorbance (std::max (g, (luminosity_t)0) * gscale + 1.0/65535);
+	  b = transmitance_to_absorbance (std::max (b, (luminosity_t)0) * bscale + 1.0/65535);
 	  for (int i = 0; i < SPECTRUM_SIZE; i++)
-	    {
-	      s[i] = absorbance_to_transmitance (cyan [i] * r + magenta [i] * g + yellow [i] * b);
-#if 0
-	      luminosity_t ir = (1-(1-cyan [i]) * (1-r * rscale));
-	      luminosity_t ig = (1-(1-magenta [i]) * (1-g * gscale));
-	      luminosity_t ib = (1-(1-yellow [i]) * (1-b * bscale));
-	      //printf ("%f %f %f %f %f %f %f %f %f %f %f %f\n", ir, ig, ib, rscale, bscale, gscale,r,g,b, cyan[i], magenta[i], yellow[i]);
-	      //assert (ir >= 0 && ig >= 0 && ib >= 0 && ir <= 1 && ig <= 1 && ib <= 1);
-	      s[i] = ir * ig * ib;
-#endif
-	    }
+	    s[i] = absorbance_to_transmitance (cyan [i] * r + magenta [i] * g + yellow [i] * b);
 	}
       struct xyz ret = get_xyz (s, observer) - dark;
       ret.x *= xscale;
@@ -310,6 +304,7 @@ public:
       return m;
     }
   color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = NULL);
+  color_matrix process_transformation_matrix (spectrum_dyes_to_xyz *);
 
   /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
      and backlight.  */
@@ -387,12 +382,12 @@ public:
     synthetic_hd_curve *hd_curve;
     static const bool debug = false;
     /* Compute XYZ values.  */
-    inline struct xyz
+    inline struct xyz pure_attr
     get_xyz (spectrum s, int observer = default_observer)
     {
       struct xyz ret = { 0, 0, 0 };
       luminosity_t sum = 0;
-      assert (observer == 1931 || observer == 1964);
+      //assert (observer == 1931 || observer == 1964);
       //printf ("%i\n",observer);
       /* TODO: CIE recommends going by 1nm bands and interpolate.
 	 We can implement that easily if that makes difference.  */

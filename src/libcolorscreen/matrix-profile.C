@@ -103,6 +103,12 @@ color_solver
 	color1 = targets[i];
 	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
       }
+    /* If there is no way to redner XYZ just minimize difference.  */
+    else if (!r)
+      {
+	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
+        return fabs (rgbtargets[i].red - color2.x) + fabs (rgbtargets[i].green - color2.y) + fabs (rgbtargets[i].blue - color2.z);
+      }
     else
       {
 	rgbdata c = rgbtargets[i];
@@ -243,6 +249,11 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 		    C(3) * s, C(4) * s, C(5) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(10) / scale2 : 0,
 		    C(6) * s, C(7) * s, C(8) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(11) / scale2 : 0,
 		    0, 0, 0, 1);
+#if 0
+  /* If we have no way to produce XYZ data, then we can not minimize deltaE.  */
+  if (!targets && !r)
+    return ret;
+#endif
   color_solver solver;
   solver.init_by_matrix (ret);
   //printf ("Initial\n");
@@ -272,7 +283,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   gsl_vector_free (y);
   gsl_vector_free (w);
   gsl_vector_free (c);
-  if (verbose || report)
+  if ((verbose || report) && (targets || r))
     {
       luminosity_t desum = 0, demax = 0;
       if (report)

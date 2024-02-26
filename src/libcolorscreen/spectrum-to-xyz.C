@@ -4340,6 +4340,42 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
   
   return m1;
 }
+
+color_matrix
+spectrum_dyes_to_xyz::process_transformation_matrix (spectrum_dyes_to_xyz *from)
+{
+  const int n = sizeof (TLCI_2012_TCS) / sizeof (xspect);
+  rgbdata colors[n];
+  rgbdata targets[n];
+  rgbdata res = film_rgb_response (NULL);
+  luminosity_t sum = res.red + res.green + res.blue;
+  //res.red = res.green = res.blue = sum / 3;
+  rgbdata scale = {1 / res.red, 1 / res.green, 1 / res.blue};
+
+  rgbdata res2 = from->film_rgb_response (NULL);
+  luminosity_t sum2 = res2.red + res2.green + res2.blue;
+  //res2.red = res2.green = res2.blue = sum2 / 3;
+  rgbdata scale2 = {1 / res2.red, 1 / res2.green, 1 / res2.blue};
+
+  for (int i = 0; i < n; i++)
+    {
+      xspect &xtile = TLCI_2012_TCS [i];
+      spectrum tile;
+      compute_spectrum (tile, xtile);
+      colors[i] = from->film_rgb_response (tile) * scale2;
+      targets[i] = film_rgb_response (tile) * scale;
+#if 0
+      printf ("%i\n",i);
+      colors[i].print (stdout);
+      targets[i].print (stdout);
+#endif
+      //printf ("%f %f %f : %f %f %f\n", colors[i].red, colors[i].green, colors[i].blue, targets[i].red, targets[i].green, targets[i].blue);
+    }
+  color_matrix m1 = determine_color_matrix (colors, NULL, targets, n, whitepoint_xyz ());
+  m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
+  
+  return m1;
+}
 void
 spectrum_dyes_to_xyz::write_spectra (const char *reds, const char *greens, const char *blues, const char *backlights, int start, int end, bool absorbance)
 {
@@ -4927,7 +4963,7 @@ spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t ag
     }
 #endif
   subtractive = set_dyes_to (red, green, blue, cyan, magenta, yellow, dyes);
-  if (age > 0)
+  if (age > 0 && dyes2 != dyes_max)
     {
       spectrum aged_red, aged_green, aged_blue;
       set_dyes_to (aged_red, aged_green, aged_blue, cyan, magenta, yellow, dyes2);

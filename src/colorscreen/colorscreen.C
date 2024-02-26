@@ -70,6 +70,8 @@ print_help ()
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "  dump-lcc <filename>\n");
+  fprintf (stderr, "    Dump information in CaptureOne LLC file\n");
   fprintf (stderr, "  lab <subcommnad>\n");
   fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
   fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
@@ -89,6 +91,7 @@ print_help ()
   fprintf (stderr, "      render-spectra-photo: render photo of spectrum taken over filters\n");
   fprintf (stderr, "      render-tone-curve: save tone curve in linear gamma\n");
   fprintf (stderr, "      render-tone-hd-curve: save tone curve as hd curve\n");
+  fprintf (stderr, "      scan-primaries: produce matrix profile specialized for given backlight, response and process dyes\n");
   fprintf (stderr, "    Each subcommand has its own help.\n");
   fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
   fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
@@ -414,6 +417,25 @@ analyze_backlight (int argc, char **argv)
 	}
     }
   delete cor;
+}
+void
+dump_lcc (int argc, char **argv)
+{
+  memory_buffer buf;
+  if (argc != 1)
+    print_help ();
+  FILE *f = fopen (argv[0], "rt");
+  if (!f)
+    {
+      perror (argv[0]);
+      exit (1);
+    }
+  if (!buf.load_file (f))
+    {
+      fprintf (stderr, "Failed to load %s\n", argv[0]);
+      exit (1);
+    }
+  backlight_correction_parameters::load_captureone_lcc (&buf, true);
 }
 
 void
@@ -826,6 +848,129 @@ digital_laboratory (int argc, char **argv)
 #endif
       fclose (f);
     }
+  else if (!strcmp (argv[0], "scan-primaries"))
+    {
+      spectrum_dyes_to_xyz spec;
+      spectrum_dyes_to_xyz spec2;
+      if (argc != 6)
+	{
+	  printf ("Expected <scanner-backlight> <scanner-dyes> <scanner-ccd-response> <observing-backlight> <process-dyes>\n");
+	  exit (1);
+	}
+
+      luminosity_t temperature;
+      auto il = parse_illuminant (argv[1], &temperature);
+      spec.set_backlight (il, temperature);
+      spec.set_dyes (parse_dyes (argv[2]));
+      spec.set_film_response (parse_response (argv[3]));
+
+
+      il = parse_illuminant (argv[4], &temperature);
+      spec2.set_backlight (il, temperature);
+      spec2.set_dyes (parse_dyes (argv[5]));
+
+      spectrum white_spectrum;
+      for (int i = 0; i < SPECTRUM_SIZE; i++)
+	white_spectrum[i] = 1;
+      rgbdata white_res = spec.linear_film_rgb_response (white_spectrum);
+      printf ("Scanner white ");
+      white_res.print (stdout);
+
+      for (int do_balance = 0; do_balance < 2; do_balance++)
+	{
+	  rgbdata colors[5];
+	  xyz targets[5];
+	  rgbdata balance;
+	  if (do_balance)
+	    {
+	      balance = {1 / white_res.red, 1 / white_res.green, 1 / white_res.blue};
+	      printf ("\n\nScanner white balance: %f %f %f\n", balance.red, balance.green, balance.blue);
+	    }
+	  else
+	    {
+	      luminosity_t max = std::max (white_res.red, std::max (white_res.green, white_res.blue));
+	      balance = {1 / max, 1 / max, 1 / max};
+	      printf ("\n\nScanner exposure: %f\n", 1 / max);
+	    }
+	  colors[0] = spec.linear_film_rgb_response (spec2.red) * balance;
+	  colors[1] = spec.linear_film_rgb_response (spec2.green) * balance;
+	  colors[2] = spec.linear_film_rgb_response (spec2.blue) * balance;
+	  //colors[2] = spec.linear_film_rgb_response (white_spectrum) * balance;
+	  colors[3] = {0, 0, 0};
+	  colors[4] = spec.linear_film_rgb_response (white_spectrum) * balance;
+	  luminosity_t maxv = 0;
+	  for (int i = 0; i < 4; i++)
+	    {
+	      maxv = std::max (maxv, colors[i].red);
+	      maxv = std::max (maxv, colors[i].green);
+	      maxv = std::max (maxv, colors[i].blue);
+	    }
+	  for (int i = 0; i < 4; i++)
+	    colors[i] *= 0.3/maxv;
+          printf ("Additional exposure adjustment: %f\n", 1 / maxv);
+
+	  targets[0] = spec2.dyes_rgb_to_xyz (1,0,0);
+	  targets[1] = spec2.dyes_rgb_to_xyz (0,1,0);
+	  targets[2] = spec2.dyes_rgb_to_xyz (0,0,1);
+	  targets[3] = {0, 0, 0};
+	  targets[4] = spec2.whitepoint_xyz ();
+	  for (int i = 0; i < 5; i++)
+	    {
+	      printf ("target %i simulated scanner readout: ", i);
+	      colors[i].print (stdout);
+	      printf ("target %i actual color: ", i);
+	      (targets[i] * (1/3.0)).print (stdout);
+	    }
+	  color_matrix m1 = determine_color_matrix (colors, targets, NULL, 5, spec2.whitepoint_xyz ());
+	  printf ("scanner to xyz matrix:\n");
+	  m1.print (stdout);
+#if 0
+	  for (int i = 0; i < 5; i++)
+	  {
+	    luminosity_t x,y,z;
+	    m1.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &x, &y, &z);
+	    printf ("i:%f %f %f %f %f %f\n", targets[i].x, targets[i].y, targets[i].z, x, y, z);
+	  }
+#endif
+	  {
+	    xyz wh;
+	    m1.apply_to_rgb (colors[4].red, colors[4].green, colors[4].blue, &wh.x, &wh.y, &wh.z);
+	    printf ("Whitepoint drifht from:");
+	    (targets[4]*0.5).print (stdout);
+	    printf ("Whitepoint drifht to: ");
+	    (wh * (targets[4].y/wh.y/2)).print (stdout);
+	  }
+	  //printf ("xyz to scanner matrix:\n");
+	  //m1 = m1.invert ();
+	  //m1.print (stdout);
+	  printf ("\nScanner primary red: ");
+	  xyz red_primary = {m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2]};
+	  red_primary.print (stdout);
+	  printf ("Scanner primary green: ");
+	  xyz green_primary = {m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2]};
+	  green_primary.print (stdout);
+	  printf ("Scanner primary blue: ");
+	  xyz blue_primary = {m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2]};
+	  blue_primary.print (stdout);
+	  m1 = bradford_whitepoint_adaptation_matrix (spec2.whitepoint_xyz (), d50_white) * m1;
+	  printf ("\nScanner primary red Bradford corrected to D50: ");
+	  xyz corrected_red_primary = {m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2]};
+	  corrected_red_primary.print (stdout);
+	  printf ("Scanner primary green Bradford corrected to D50: ");
+	  xyz corrected_green_primary = {m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2]};
+	  corrected_green_primary.print (stdout);
+	  printf ("Scanner primary blue Bradford corrected to D50: ");
+	  xyz corrected_blue_primary = {m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2]};
+	  corrected_blue_primary.print (stdout);
+	  if (do_balance)
+	    printf ("\nThe following can be used in parameter file with backlight correction on:\n");
+	  else
+	    printf ("\nThe following can be used in parameter file with no backlight correction\n");
+	  printf ("scanner_red: %f %f %f\n", corrected_red_primary.x, corrected_red_primary.y, corrected_red_primary.z);
+	  printf ("scanner_green: %f %f %f\n", corrected_green_primary.x, corrected_green_primary.y, corrected_green_primary.z);
+	  printf ("scanner_blue: %f %f %f\n", corrected_blue_primary.x, corrected_blue_primary.y, corrected_blue_primary.z);
+	}
+    }
   else
     print_help ();
 }
@@ -842,6 +987,8 @@ main (int argc, char **argv)
     analyze_backlight (argc-2, argv+2);
   else if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
+  else if (!strcmp (argv[1], "dump-lcc"))
+    dump_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "digital-laboratory")
 	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);
