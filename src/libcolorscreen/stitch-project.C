@@ -577,10 +577,11 @@ std::string stitch_project::adjusted_filename (std::string filename, std::string
   if (lastindex == std::string::npos)
     lastindex = filename.length ();
   std::string ret = filename.substr (0, lastindex);
+  buf[255]=0;
   if (x == -1)
     buf[0]=0;
   else
-    sprintf (buf,"-%i-%i",y, x);
+    snprintf (buf, 255,"-%i-%i",y, x);
   return ret + suffix + buf + extension;
 }
 

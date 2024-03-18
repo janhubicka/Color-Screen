@@ -889,7 +889,8 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   int range = 400;
   //TODO
   char buf[4096];
-  sprintf (buf, "contrast-%03i-%s-%s",(int)((ratio -1) * 100 + 0.5), filename.c_str(), other.filename.c_str());
+  buf[4095]=0;
+  snprintf (buf, 4095, "contrast-%03i-%s-%s",(int)((ratio -1) * 100 + 0.5), filename.c_str(), other.filename.c_str());
 
   /* TODO: Error ignored.  */
   const char *error;

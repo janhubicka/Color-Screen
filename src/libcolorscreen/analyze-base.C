@@ -67,7 +67,8 @@ analyze_base::find_best_match_using_cpfind (analyze_base &other, coord_t *xshift
       if (progress)
 	progress->set_task ("executing cpfind", 1);
       char cmd[256];
-      sprintf (cmd, "cpfind --fullscale %s project-cpfind-%s.pto -o project-cpfind-%s-out.pto >cpfind.out", m ? "" : "--ransacmode=rpy", direction ? "vert" : "hor", direction ? "vert" : "hor");
+      cmd[255]=0;
+      snprintf (cmd, 254, "cpfind --fullscale %s project-cpfind-%s.pto -o project-cpfind-%s-out.pto >cpfind.out", m ? "" : "--ransacmode=rpy", direction ? "vert" : "hor", direction ? "vert" : "hor");
       //if (system (direction ? "cpfind --fullscale --ransacmode=rpy project-cpfind-vert.pto -o project-cpfind-vert-out.pto >cpfind.out": "cpfind --fullscale --ransacmode=rpy project-cpfind-hor.pto -o project-cpfind-hor-out.pto >cpfind.out"))
       if (system (cmd))
 	{
@@ -693,7 +694,8 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
     {
       static int fn;
       char name[256];
-      sprintf (name, "overlap%i%c.tif", fn, direction ? 'v' : 'h');
+      name[255]=0;
+      snprintf (name, 255, "overlap%i%c.tif", fn, direction ? 'v' : 'h');
       unsigned char ov[256][256][3];
       memset (ov, 0, 256*256*3);
       fn++;
