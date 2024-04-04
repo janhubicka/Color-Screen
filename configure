@@ -655,8 +655,8 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
-EXTRA_RENDER_FALSE
-EXTRA_RENDER_TRUE
+RENDER_EXTRA_FALSE
+RENDER_EXTRA_TRUE
 gtkgui_FALSE
 gtkgui_TRUE
 GTKGUI_BIN_LIBS
@@ -1479,7 +1479,7 @@ Optional Features:
                           sometimes confusing) to the casual installer
   --disable-openmp        do not use OpenMP
 --enable-gtkgui     enable gtk2 based gui interface
---enable-extra-render     enable additional render
+--enable-render-extra     enable additional render
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -19451,7 +19451,7 @@ fi
 if test "$do_extra_render" != "no"
 then
 
-printf "%s\n" "#define EXTRA_RENDER 1" >>confdefs.h
+printf "%s\n" "#define RENDER_EXTRA 1" >>confdefs.h
 
 fi
 
@@ -19464,11 +19464,11 @@ else
 fi
 
  if test "$do_extra_render" != "no"; then
-  EXTRA_RENDER_TRUE=
-  EXTRA_RENDER_FALSE='#'
+  RENDER_EXTRA_TRUE=
+  RENDER_EXTRA_FALSE='#'
 else
-  EXTRA_RENDER_TRUE='#'
-  EXTRA_RENDER_FALSE=
+  RENDER_EXTRA_TRUE='#'
+  RENDER_EXTRA_FALSE=
 fi
 
 ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile src/stitch/Makefile examples/Makefile examples/amcolony/Makefile"
@@ -19625,8 +19625,8 @@ if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then
   as_fn_error $? "conditional \"gtkgui\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
-if test -z "${EXTRA_RENDER_TRUE}" && test -z "${EXTRA_RENDER_FALSE}"; then
-  as_fn_error $? "conditional \"EXTRA_RENDER\" was never defined.
+if test -z "${RENDER_EXTRA_TRUE}" && test -z "${RENDER_EXTRA_FALSE}"; then
+  as_fn_error $? "conditional \"RENDER_EXTRA\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 
