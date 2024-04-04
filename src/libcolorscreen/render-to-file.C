@@ -9,6 +9,9 @@
 #include "icc-srgb.h"
 #include "icc.h"
 #include "render-to-file.h"
+#ifdef RENDER_EXTRA
+#include "extra-render/render-extra.h"
+#endif
 
 bool
 complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)

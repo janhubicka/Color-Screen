@@ -25,11 +25,6 @@ AC_CHECK_LIB([gsl],[gsl_blas_dgemm])
 # The following may be useful if we put javaglue to the library.
 # TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
 
-#AC_SUBST([JAVA_HOME])
-#AM_CONDITIONAL([JAVA_HOME_SET], [test ! -z "$JAVA_HOME"])
-#if test ! -z "$JAVA_HOME"; then
-  #CXXFLAGS="$CXXFLAGS  -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I${JAVA_HOME}/include/darwin"
-#fi
 
 AC_ARG_WITH(libtiff,
  [  --with-libtiff=PATH      enter the PATH to libtiff package],
@@ -140,6 +135,10 @@ fi
 
 do_extra_render=no
 AC_ARG_ENABLE(extra-render,[--enable-extra-render     enable additional render],do_extra_render=yes,do_extra_render=no)
+if test "$do_extra_render" != "no"
+then
+  AC_DEFINE([EXTRA_RENDER], 1, "include extra render from extenral source tree")
+fi
 
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AM_CONDITIONAL([EXTRA_RENDER], [test "$do_extra_render" != "no"])

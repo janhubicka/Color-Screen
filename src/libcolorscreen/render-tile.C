@@ -1,9 +1,13 @@
+#include "config.h"
 #include "include/render-fast.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "render-diff.h"
 #include "render-tile.h"
 #include "render-to-file.h"
+#ifdef RENDER_EXTRA
+#include "extra-render/render-extra.h"
+#endif
 
 
 bool
@@ -67,6 +71,11 @@ render_to_scr::render_tile (render_type_parameters rtparam,
     case render_type_interpolated_diff:
       ok = do_render_tile<render_diff> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
+    case render_type_extra:
+#ifdef RENDER_EXTRA
+      ok = do_render_tile<render_extra> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+      break;
+#endif
     case render_type_fast:
       ok = do_render_tile<render_fast> (rtparam, param, img, my_rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
       break;
@@ -120,6 +129,11 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
     case render_type_interpolated_diff:
       return produce_file<render_diff,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
+    case render_type_extra:
+#ifdef RENDER_EXTRA
+      return produce_file<render_exta,supports_final> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      break;
+#endif
     case render_type_fast:
       return produce_file<render_fast,supports_scr> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;

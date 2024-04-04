@@ -90,7 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@EXTRA_RENDER_TRUE@am__append_1 = extra-render/test.C
+@EXTRA_RENDER_TRUE@am__append_1 = extra-render/extra-render.C
 noinst_PROGRAMS = matrix$(EXEEXT)
 subdir = src/libcolorscreen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -146,8 +146,8 @@ am__libcolorscreen_la_SOURCES_DIST = render.C render-to-scr.C \
 	dufaycolor.C wratten.C spectrum.C spectrum-dyes.C \
 	spectrum-illuminants.C spectrum-responses.C tone-curve.C \
 	lens-warp-correction.C matrix-profile.C scr-detect-colors.C \
-	extra-render/test.C
-@EXTRA_RENDER_TRUE@am__objects_1 = libcolorscreen_la-test.lo
+	extra-render/extra-render.C
+@EXTRA_RENDER_TRUE@am__objects_1 = libcolorscreen_la-extra-render.lo
 am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-render-to-scr.lo \
 	libcolorscreen_la-render-fast.lo \
@@ -217,6 +217,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo \
 	./$(DEPDIR)/libcolorscreen_la-color.Plo \
 	./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo \
+	./$(DEPDIR)/libcolorscreen_la-extra-render.Plo \
 	./$(DEPDIR)/libcolorscreen_la-icc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo \
@@ -250,7 +251,6 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-spectrum.Plo \
 	./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo \
 	./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo \
-	./$(DEPDIR)/libcolorscreen_la-test.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo \
 	./$(DEPDIR)/libcolorscreen_la-wratten.Plo \
@@ -570,6 +570,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-color.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-extra-render.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-icc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo@am__quote@ # am--include-marker
@@ -603,7 +604,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-spectrum.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-test.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-wratten.Plo@am__quote@ # am--include-marker
@@ -930,12 +930,12 @@ libcolorscreen_la-scr-detect-colors.lo: scr-detect-colors.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-scr-detect-colors.lo `test -f 'scr-detect-colors.C' || echo '$(srcdir)/'`scr-detect-colors.C
 
-libcolorscreen_la-test.lo: extra-render/test.C
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-test.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-test.Tpo -c -o libcolorscreen_la-test.lo `test -f 'extra-render/test.C' || echo '$(srcdir)/'`extra-render/test.C
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-test.Tpo $(DEPDIR)/libcolorscreen_la-test.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='extra-render/test.C' object='libcolorscreen_la-test.lo' libtool=yes @AMDEPBACKSLASH@
+libcolorscreen_la-extra-render.lo: extra-render/extra-render.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-extra-render.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-extra-render.Tpo -c -o libcolorscreen_la-extra-render.lo `test -f 'extra-render/extra-render.C' || echo '$(srcdir)/'`extra-render/extra-render.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-extra-render.Tpo $(DEPDIR)/libcolorscreen_la-extra-render.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='extra-render/extra-render.C' object='libcolorscreen_la-extra-render.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-test.lo `test -f 'extra-render/test.C' || echo '$(srcdir)/'`extra-render/test.C
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-extra-render.lo `test -f 'extra-render/extra-render.C' || echo '$(srcdir)/'`extra-render/extra-render.C
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1097,6 +1097,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-extra-render.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
@@ -1130,7 +1131,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo
-	-rm -f ./$(DEPDIR)/libcolorscreen_la-test.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
@@ -1186,6 +1186,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-extra-render.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
@@ -1219,7 +1220,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-spectrum.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-image.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-stitch-project.Plo
-	-rm -f ./$(DEPDIR)/libcolorscreen_la-test.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
