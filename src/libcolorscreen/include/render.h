@@ -75,12 +75,12 @@ static const constexpr render_type_property render_type_properties[render_type_m
    {"fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
    {"extra", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
    {"detected-adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"detected-normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-screen-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-realistic", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
-   {"detected-interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
-   {"detected-interpolated-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
-   {"detected-relaxation-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCREEN_RESOLUTION},
+   {"detected-normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-screen-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
+   {"detected-realistic", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-interpolated", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-interpolated-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
+   {"detected-relaxation-scaled", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
 };
 }
 
