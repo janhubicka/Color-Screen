@@ -131,7 +131,7 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
       break;
     case render_type_extra:
 #ifdef RENDER_EXTRA
-      return produce_file<render_exta,supports_final> (rfparams, rtparam, param, param, rparam, img, black, progress);
+      return produce_file<render_extra,supports_final> (rfparams, rtparam, param, param, rparam, img, black, progress);
       break;
 #endif
     case render_type_fast:
