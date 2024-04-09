@@ -133,15 +133,15 @@ if test "$do_gtkgui" != "no"; then
   ])
 fi
 
-do_extra_render=no
-AC_ARG_ENABLE(extra-render,[--enable-render-extra     enable additional render],do_extra_render=yes,do_extra_render=no)
-if test "$do_extra_render" != "no"
+do_render_extra=no
+AC_ARG_ENABLE(render-extra,[--enable-render-extra     enable additional render],do_render_extra=yes,do_render_extra=no)
+if test "$do_render_extra" != "no"
 then
-  AC_DEFINE([RENDER_EXTRA], 1, "include extra render from extenral source tree")
+  AC_DEFINE([RENDER_EXTRA], 1, "include render extra from extenral source tree")
 fi
 
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
-AM_CONDITIONAL([RENDER_EXTRA], [test "$do_extra_render" != "no"])
+AM_CONDITIONAL([RENDER_EXTRA], [test "$do_render_extra" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile src/stitch/Makefile examples/Makefile examples/amcolony/Makefile])
 AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h])
 

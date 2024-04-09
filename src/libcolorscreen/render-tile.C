@@ -6,7 +6,7 @@
 #include "render-tile.h"
 #include "render-to-file.h"
 #ifdef RENDER_EXTRA
-#include "extra-render/render-extra.h"
+#include "render-extra/render-extra.h"
 #endif
 
 
