@@ -816,7 +816,7 @@ with_libraw
 with_libzip
 with_liblcms2
 enable_gtkgui
-enable_extra_render
+enable_render_extra
 '
       ac_precious_vars='build_alias
 host_alias
@@ -19438,17 +19438,17 @@ printf "%s\n" "yes" >&6; }
 fi
 fi
 
-do_extra_render=no
-# Check whether --enable-extra-render was given.
-if test ${enable_extra_render+y}
+do_render_extra=no
+# Check whether --enable-render-extra was given.
+if test ${enable_render_extra+y}
 then :
-  enableval=$enable_extra_render; do_extra_render=yes
+  enableval=$enable_render_extra; do_render_extra=yes
 else case e in #(
-  e) do_extra_render=no ;;
+  e) do_render_extra=no ;;
 esac
 fi
 
-if test "$do_extra_render" != "no"
+if test "$do_render_extra" != "no"
 then
 
 printf "%s\n" "#define RENDER_EXTRA 1" >>confdefs.h
@@ -19463,7 +19463,7 @@ else
   gtkgui_FALSE=
 fi
 
- if test "$do_extra_render" != "no"; then
+ if test "$do_render_extra" != "no"; then
   RENDER_EXTRA_TRUE=
   RENDER_EXTRA_FALSE='#'
 else
