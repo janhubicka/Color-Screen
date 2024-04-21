@@ -255,6 +255,7 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
     return ret;
 #endif
   color_solver solver;
+  solver.dark_point_elts = dark_point_elts;
   solver.init_by_matrix (ret);
   //printf ("Initial\n");
   //ret.print (stdout);
@@ -265,7 +266,6 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   solver.rgbtargets = rgbtargets;
   solver.n = n;
   solver.white = white;
-  solver.dark_point_elts = dark_point_elts;
   solver.r = r;
   solver.proportions = proportions;
   if (verbose)
