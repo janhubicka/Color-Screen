@@ -13,9 +13,9 @@ public:
   {
     return render_to_scr::precompute_all (true, true, progress);
   }
-  bool precompute_img_range (int, int, int, int, progress_info *progress = NULL)
+  bool precompute_img_range (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
   {
-    return precompute_all (progress);
+    return render_to_scr::precompute (true, true, xmin, ymin, xmax, ymax, progress);
   }
   rgbdata sample_pixel_scr (int x, int y)
   {
@@ -27,7 +27,9 @@ public:
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);
-    return sample_pixel (xx, yy, x, y);
+    /* We can not call directly sample_pixel; 
+       img coordinates it expects should be representing the center of screen coordinates.  */
+    return sample_pixel_scr (xx, yy);
   }
   /* Unimplemented; just exists to make rendering templates happy. We never downscale.  */
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
