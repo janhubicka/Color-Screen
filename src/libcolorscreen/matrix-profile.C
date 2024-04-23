@@ -77,12 +77,14 @@ color_solver
 	start[10]  = m.m_elements[3][1];
 	start[11] = m.m_elements[3][2];
       }
-    else
+    else if (dark_point_elts == 0)
       {
         start[9] = 0;
 	start[10] = 0;
 	start[11] = 0;
       }
+    else
+      abort ();
   }
 
   color_matrix

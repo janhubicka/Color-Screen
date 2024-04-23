@@ -896,10 +896,16 @@ daylight_il (spectrum spec, double ct)
   int obs = 0;			/* 1931 */
   double m1, m2;
 
-  if (ct < 2500.0 || ct > 25000.0)
-    {				/* Only accurate down to about 4000 */
-      abort ();
-      return 1;
+    /* Only accurate down to about 4000 */
+  if (ct < 2500.0)
+    {
+      fprintf (stderr, "Temperature of daylight too low %f\n", ct);
+      ct = 2500;
+    }
+  if (ct > 25000.0)
+    {
+      fprintf (stderr, "Temperature of daylight too hight %f\n", ct);
+      ct = 25000;
     }
 
   /* Compute chromaticity coordinates */
