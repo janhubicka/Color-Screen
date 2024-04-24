@@ -55,6 +55,7 @@ public:
   {
     if (width < clen)
     {
+#pragma omp simd
       for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
         int m = std::max (- clen / 2, -x);
@@ -66,6 +67,7 @@ public:
       return;
     }
      
+#pragma omp simd
     for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
 	O sum = getdata (data, 0, y, width, param) * cmatrix[-x + clen / 2];
@@ -73,6 +75,7 @@ public:
 	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
+#pragma omp simd
     for (int x = clen / 2; x < width - clen / 2; x++)
       {
 	int m = - clen / 2;
@@ -81,6 +84,7 @@ public:
 	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
+#pragma omp simd
     for (int x = width - clen / 2; x < width; x++)
       {
 	int m = - clen / 2;

@@ -13,6 +13,7 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	for (int x = 0; x < width; x++)
 	  out[y * width + x] = (mem_O) getdata (data, x, y, width, param);
     }
@@ -54,8 +55,10 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	    fir_blur::blur_horisontal<O, T, P, getdata> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, data, param, y + clen / 2 - 1, width, clen, cmatrix);
 	  else
 	    memset ((void*)(hblur + ((y + clen / 2 - 1 + clen) % clen) * width), 0, sizeof (O) * width);
+#pragma omp simd
 	  for (int d = 0; d < clen; d++)
 	    rotated_cmatrix[(y + d - clen / 2 + clen) % clen] = cmatrix[d];
+#pragma omp simd
 	  for (int x = 0; x < width; x++)
 	    {
 	      O sum = hblur[0 * width + x] * rotated_cmatrix[0];

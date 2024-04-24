@@ -13,6 +13,7 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
     for (int y = miny ; y < maxy; y++)
       {
 	if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	  for (int x = minx; x < maxx; x++)
 	    {
 	      coord_t scr_x, scr_y;
@@ -79,6 +80,7 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
       for (int y = 0; y < m_height * 2; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	    for (int x = 0; x < m_width; x++)
 	      if (w_red [y * m_width + x] != 0)
 		red (x,y) /= w_red [y * m_width + x];
@@ -89,6 +91,7 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
       for (int y = 0; y < m_height * 2; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	    for (int x = 0; x < m_width; x++)
 	      if (w_green [y * m_width + x] != 0)
 		green (x,y) /= w_green [y * m_width + x];
@@ -99,6 +102,7 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
       for (int y = 0; y < m_height * 2; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	    for (int x = 0; x < m_width * 2; x++)
 	      if (w_blue [y * m_width * 2 + x] != 0)
 		blue (x,y) /= w_blue [y * m_width * 2 + x];

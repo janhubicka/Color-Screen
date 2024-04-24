@@ -52,6 +52,7 @@ bool render_img_normal(render_type_parameters rtparam,
     {
       coord_t py = (y + yoffset) * step;
       if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	for (int x = 0; x < width; x++)
 	  {
 	    int r, g, b;
@@ -97,6 +98,7 @@ bool render_img_downscale(render_type_parameters rtparam,
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	for (int x = 0; x < width; x++)
 	  {
 	    int r, g, b;
@@ -142,6 +144,7 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
+#pragma omp simd
 	for (int x = 0; x < width; x++)
 	  {
 	    int r, g, b;
