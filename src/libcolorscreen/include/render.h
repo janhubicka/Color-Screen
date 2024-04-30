@@ -1283,5 +1283,5 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   return !progress || !progress->cancelled ();
 }
 
-rgbdata get_linearized_pixel (image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
+rgbdata DLL_PUBLIC get_linearized_pixel (image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
 #endif
