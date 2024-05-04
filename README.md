@@ -18,9 +18,13 @@ the main library and command line utility the following libraries are needed
 
  - [libtiff](http://www.libtiff.org/)
  - [libjpeg-turbo](https://libjpeg-turbo.org/)
+ - [libgsl](https://www.gnu.org/software/gsl/)
+ - [libraw](https://www.libraw.org/)
+ - [liblcms2](https://www.littlecms.com/)
 
 To build a GTK2 based gui, GTK2 and Glade libraries are needed. Note that the
-GTK2 gui is deprecated and new Java based [Color-Screen GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
+GTK2 gui is deprecated and new Java based [Color-Screen
+GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
 by Linda Kimrová
 
 ## Installation
@@ -34,9 +38,17 @@ script. `make examples` will download some sample images from the Library
 of Congress webpages and produce color renderings.
 
 ## Usage
-There are two programs installed. `colorscreen` is an command line utility to
-render into tiff files. See `colorscreen --help` for usage information.
-`colorscreen-gtk` is the GTK based gui application. Invoke it with
-`colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file format.
+There are three programs installed. 
+
+`colorscreen` is an command line utility to render into tiff files. See
+`colorscreen --help` for usage information.
+
+`colorscreen-stitch` is an command line utility to produce stitched projects.
+This is useful to scan and stitch additive color photographs using digital
+camera with mutiple tiles. See `colorscreen-stitch --help` for more information.
+
+`colorscreen-gtk` is the (now deprecated) GTK based gui application. Invoke it
+with `colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file
+format.
 
 Jan Hubicka (hubicka@ucw.cz)

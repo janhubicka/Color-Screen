@@ -118,11 +118,11 @@ struct DLL_PUBLIC render_parameters
   /* True if negatuve should be inverted to positive.  */
   bool invert;
 
+  /* Black subtracted before channel mixing.  */
+  rgbdata mix_dark;
   /* Parameters used to turn RGB data to grayscale (fake infrared channel):
      mix_red,green and blue are relative weights.  */
   luminosity_t mix_red, mix_green, mix_blue;
-  /* Black subtracted before channel mixing.  */
-  rgbdata mix_dark;
 
   /* Radius (in pixels) and amount for unsharp-mask filter.  */
   luminosity_t sharpen_radius, sharpen_amount;
@@ -172,10 +172,10 @@ struct DLL_PUBLIC render_parameters
   /* The following is used by interpolated rendering only.  */
   /* If true use precise data collection.  */
   bool precise;
-  /* Threshold for collecting color information.  */
-  luminosity_t collection_threshold;
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
+  /* Threshold for collecting color information.  */
+  luminosity_t collection_threshold;
 
   /* Width of strips used to print Dufaycolor reseau (screen).
      This is relative portion in range 0..1.
@@ -251,12 +251,14 @@ struct DLL_PUBLIC render_parameters
   /* Aging simulation (0 new dyes, 1 aged dyes).
      Only effective for color models that support aging simulation.  */
   luminosity_t age;
-  /* Temperature in K of backlight when viewing the slide.  */
-  luminosity_t backlight_temperature;
   /* Temperature in K of daylight in photograph.  */
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
   luminosity_t temperature;
+  /* Temperature in K of backlight when viewing the slide.  */
+  luminosity_t backlight_temperature;
+  /* Whitepoint observer's eye is adapted to.  */
+  xy_t observer_whitepoint;
   /* White balancing to apply to color dyes.  */
   enum dye_balance_t
   {
@@ -275,8 +277,6 @@ struct DLL_PUBLIC render_parameters
   luminosity_t saturation;
   /* Brightness adjustments.  */
   luminosity_t brightness;
-  /* Whitepoint observer's eye is adapted to.  */
-  xy_t observer_whitepoint;
   enum tone_curve::tone_curves output_tone_curve;
   /* desired gamma of the resulting image.  */
   luminosity_t target_film_gamma;
@@ -314,8 +314,8 @@ struct DLL_PUBLIC render_parameters
     scan_exposure (1),
     ignore_infrared (false),
     invert (false),
-    mix_red (0.3), mix_green (0.1), mix_blue (1), 
     mix_dark (0, 0, 0),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), 
     sharpen_radius (0), sharpen_amount (0),
 
     /* Tile adjustment.  */
@@ -324,8 +324,8 @@ struct DLL_PUBLIC render_parameters
     /* Patch density parameters.  */
     film_gamma (1),
     precise (true), 
-    collection_threshold (0.8),
     screen_blur_radius (0.5),
+    collection_threshold (0.8),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
 
     /* Scanner profile.  */
@@ -344,12 +344,12 @@ struct DLL_PUBLIC render_parameters
     presaturation (1),
     color_model (color_model_none),
     age(1),
-    backlight_temperature (5000),
     temperature (5000), 
-    dye_balance (dye_balance_neutral),
+    backlight_temperature (5000),
+    observer_whitepoint (/*srgb_white*/d50_white),
+    dye_balance (dye_balance_bradford),
     saturation (1),
     brightness (1), 
-    observer_whitepoint (/*srgb_white*/d50_white),
     output_tone_curve (tone_curve::tone_curve_linear), 
     target_film_gamma (1),
 
