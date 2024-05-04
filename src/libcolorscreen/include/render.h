@@ -99,81 +99,118 @@ struct render_type_parameters
 /* Parameters of rendering algorithms.  */
 struct DLL_PUBLIC render_parameters
 {
-  render_parameters()
-  : gamma (2.2),  film_gamma (1), target_film_gamma (1),
-    output_gamma (-1), sharpen_radius (0), sharpen_amount (0), presaturation (1), saturation (1),
-    brightness (1), collection_threshold (0.8), white_balance ({1, 1, 1}),
-    mix_dark (0, 0, 0),
-    mix_red (0.3), mix_green (0.1), mix_blue (1), temperature (5000), backlight_temperature (5000), observer_whitepoint (/*srgb_white*/d50_white),
-    age(1),
-    dye_balance (dye_balance_neutral),
-    screen_blur_radius (0.5),
-    color_model (color_model_none),
-    ignore_infrared (false),
-    profiled_dark (0, 0, 0),
-    profiled_red (1, 0, 0),
-    profiled_green (0, 1, 0),
-    profiled_blue (0, 0, 1),
-    scanner_red (0, 0, 0),
-    scanner_green (0, 0, 0),
-    scanner_blue (0, 0, 0),
-    output_profile (output_profile_sRGB), output_tone_curve (tone_curve::tone_curve_linear), dark_point (0), scan_exposure (1),
-    dufay_red_strip_width (0), dufay_green_strip_width (0),
-    film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
-    backlight_correction (NULL), backlight_correction_black (0), invert (false),
-    restore_original_luminosity (true), precise (true), tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments ()
-  {
-  }
+  /***** Scan linearization parmaeters  *****/
+
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
      Only positive values makes sense; meaningful range is approx 0.01 to 10.  */
   luminosity_t gamma;
-  luminosity_t film_gamma, target_film_gamma;
-  /* Output gamma.  -1 means sRGB transfer curve.  */
-  luminosity_t output_gamma;
-  /* Radious (in pixels) and amount for unsharp-mask filter.  */
+
+  /* TODO; Invert is applied before backlight correction which is wrong.  */
+  class backlight_correction_parameters *backlight_correction;
+  luminosity_t backlight_correction_black;
+
+  /* After linearizing we apply (val - dark_point) * scan_exposure  */
+  luminosity_t dark_point, scan_exposure;
+
+  /* Ignore infrared channel and produce fake one using RGB data.  */
+  bool ignore_infrared;
+
+  /* True if negatuve should be inverted to positive.  */
+  bool invert;
+
+  /* Parameters used to turn RGB data to grayscale (fake infrared channel):
+     mix_red,green and blue are relative weights.  */
+  luminosity_t mix_red, mix_green, mix_blue;
+  /* Black subtracted before channel mixing.  */
+  rgbdata mix_dark;
+
+  /* Radius (in pixels) and amount for unsharp-mask filter.  */
   luminosity_t sharpen_radius, sharpen_amount;
+
+
+  /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
+
+  struct tile_adjustment
+  {
+    /* Multiplicative correction to stitch-project global scan_exposure.  */
+    luminosity_t exposure;
+    /* Additive correction to stitch-project dark point.  */
+    luminosity_t dark_point;
+    /* If true tile is rendered, if false tile is not rendered.  */
+    bool enabled;
+    /* Coordinates of the tile in stitch project (used to check that tile
+       adjustments match stitch project dimensions).  */
+    unsigned char x, y;
+    constexpr tile_adjustment()
+    : exposure (1), dark_point (0), enabled (true), x(0), y(0)
+    {}
+    bool operator== (tile_adjustment &other) const
+    {
+      return enabled == other.enabled
+	     && dark_point == other.dark_point
+	     && exposure == other.exposure;
+    }
+    bool operator!= (tile_adjustment &other) const
+    {
+      return !(*this == other);
+    }
+    void apply (render_parameters *p) const
+    {
+      p->dark_point = dark_point + exposure * p->dark_point;
+      p->scan_exposure *= exposure;
+    }
+  };
+
+  int tile_adjustments_width, tile_adjustments_height;
+  std::vector<tile_adjustment> tile_adjustments;
+
+
+  /***** Path density parameters  *****/
+
+  /* Gamma curve of the film (to be replaced by HD curve eventually)  */
+  luminosity_t film_gamma;
+  /* The following is used by interpolated rendering only.  */
+  /* If true use precise data collection.  */
+  bool precise;
+  /* Threshold for collecting color information.  */
+  luminosity_t collection_threshold;
+  /* Radius (in image pixels) the screen should be blured.  */
+  coord_t screen_blur_radius;
+
+  /* Width of strips used to print Dufaycolor reseau (screen).
+     This is relative portion in range 0..1.
+     0 will give default values.  */
+  coord_t dufay_red_strip_width, dufay_green_strip_width;
+
+  /***** Scanner profile *****/
+
+  /* Matrix profile of scanner.
+     If values are (0,0,0) then data obtained from image_data will be used.
+     It is only valid for RAW images where libraw understand the camera matrix.  */
+  xyz scanner_red;
+  xyz scanner_green;
+  xyz scanner_blue;
+
+  /***** Process profile profile *****/
+
+  /* Profile used to convert RGB data of scanner to RGB data of the color process.
+     Dark is the dark point of scanner (which is subtracted first).
+     Red is scanner's response to red filter etc.  */
+  rgbdata profiled_dark;
+  rgbdata profiled_red;
+  rgbdata profiled_green;
+  rgbdata profiled_blue;
+
+  /***** Output Adjustment *****/
+
+  /* White balance adjustment in dye coordinates.  */
+  rgbdata white_balance;
   /* Pre-saturation increase (this works on data collected from the scan before
      color model is applied and is intended to compensate for loss of sharpness).
      Only positive values makes sense; meaningful range is approx 0.1 to 10.  */
   luminosity_t presaturation;
-  /* Saturation increase.  */
-  luminosity_t saturation;
-  /* Brightness adjustments.  */
-  luminosity_t brightness;
-  /* Threshold for collecting color information.  */
-  luminosity_t collection_threshold;
-  /* White balance adjustment in dye coordinates.  */
-  rgbdata white_balance;
-  /* Black subtracted before channel mixing.  */
-  rgbdata mix_dark;
-  /* Parameters used to turn RGB data to grayscale:
-     mix_red,green and blue are relative weights.  */
-  luminosity_t mix_red, mix_green, mix_blue;
-  /* Temperature in K of daylight in photograph.  */
-  luminosity_t temperature;
-  /* Temperature in K of backlight when viewing the slide.  */
-  luminosity_t backlight_temperature;
-  /* Whitepoint observer's eye is adapted to.  */
-  xy_t observer_whitepoint;
-  static const int temperature_min = 2500;
-  static const int temperature_max = 25000;
 
-  /* Aging simulation (0 new dyes, 1 aged dyes).  */
-  luminosity_t age;
-  enum dye_balance_t
-  {
-    dye_balance_none,
-    dye_balance_brightness,
-    dye_balance_bradford,
-    dye_balance_neutral,
-    dye_balance_whitepoint,
-    dye_balance_max
-  };
-  DLL_PUBLIC static const char *dye_balance_names [(int)dye_balance_max];
-  /* How to balance dye colors.  */
-  enum dye_balance_t dye_balance;
-  /* Radius (in image pixels) the screen should be blured.  */
-  coord_t screen_blur_radius;
+  /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
   enum color_model_t
     {
       color_model_none,
@@ -210,8 +247,43 @@ struct DLL_PUBLIC render_parameters
       color_model_max
     };
   DLL_PUBLIC static const char *color_model_names [(int)color_model_max];
-  /* If true apply color model of Finlay taking plate.  */
   enum color_model_t color_model;
+  /* Aging simulation (0 new dyes, 1 aged dyes).
+     Only effective for color models that support aging simulation.  */
+  luminosity_t age;
+  /* Temperature in K of backlight when viewing the slide.  */
+  luminosity_t backlight_temperature;
+  /* Temperature in K of daylight in photograph.  */
+  static const int temperature_min = 2500;
+  static const int temperature_max = 25000;
+  luminosity_t temperature;
+  /* White balancing to apply to color dyes.  */
+  enum dye_balance_t
+  {
+    dye_balance_none,
+    dye_balance_brightness,
+    dye_balance_bradford,
+    dye_balance_neutral,
+    dye_balance_whitepoint,
+    dye_balance_max
+  };
+  DLL_PUBLIC static const char *dye_balance_names [(int)dye_balance_max];
+  /* How to balance dye colors.  */
+  enum dye_balance_t dye_balance;
+
+  /* Saturation increase.  */
+  luminosity_t saturation;
+  /* Brightness adjustments.  */
+  luminosity_t brightness;
+  /* Whitepoint observer's eye is adapted to.  */
+  xy_t observer_whitepoint;
+  enum tone_curve::tone_curves output_tone_curve;
+  /* desired gamma of the resulting image.  */
+  luminosity_t target_film_gamma;
+
+  /***** Output Profile *****/
+
+  /* If true apply color model of Finlay taking plate.  */
   enum output_profile_t
     {
       output_profile_sRGB,
@@ -220,80 +292,78 @@ struct DLL_PUBLIC render_parameters
       output_profile_max
     };
 
-  /* Ignore infrared channel and produce fake one using RGB data.  */
-  bool ignore_infrared;
-
-  /* Profile used to convert RGB data of scanner to RGB data of the color process.
-     Dark is the dark point of scanner (which is subtracted first).
-     Red is scanner's response to red filter etc.  */
-  rgbdata profiled_dark;
-  rgbdata profiled_red;
-  rgbdata profiled_green;
-  rgbdata profiled_blue;
-
-  /* Matrix profile of scanner.
-     If values are (0,0,0) then data obtained from image_data will be used.
-     It is only valid for RAW images where libraw understand the camera matrix.  */
-  xyz scanner_red;
-  xyz scanner_green;
-  xyz scanner_blue;
-
   output_profile_t output_profile;
-  enum tone_curve::tone_curves output_tone_curve;
   DLL_PUBLIC static const char *output_profile_names [(int)output_profile_max];
-  /* After linearizing we apply (val - dark_point) * scan_exposure  */
-  luminosity_t dark_point, scan_exposure;
 
-  /* Width of strips used to print Dufaycolor reseau (screen).
-     This is relative portion in range 0..1.
-     0 will give default values.  */
-  coord_t dufay_red_strip_width, dufay_green_strip_width;
+  /* Output gamma.  -1 means sRGB transfer curve.  */
+  luminosity_t output_gamma;
+
+  /***** Experimental (unfinished) stuff *****/
 
   hd_curve *film_characteristics_curve;
   hd_curve *output_curve;
-  class backlight_correction_parameters *backlight_correction;
-  luminosity_t backlight_correction_black;
-
-  /* True if negatuve should be inverted to positive.  */
-  bool invert;
 
   /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;
 
-  /* The following is used by interpolated rendering only.  */
-  /* If true use precise data collection.  */
-  bool precise;
+  render_parameters()
+  : /* Scan linearization.  */
+    gamma (2.2),
+    backlight_correction (NULL), backlight_correction_black (0),
+    dark_point (0), 
+    scan_exposure (1),
+    ignore_infrared (false),
+    invert (false),
+    mix_red (0.3), mix_green (0.1), mix_blue (1), 
+    mix_dark (0, 0, 0),
+    sharpen_radius (0), sharpen_amount (0),
 
-  struct tile_adjustment
+    /* Tile adjustment.  */
+    tile_adjustments_width (0), tile_adjustments_height (0), tile_adjustments (),
+
+    /* Patch density parameters.  */
+    film_gamma (1),
+    precise (true), 
+    collection_threshold (0.8),
+    screen_blur_radius (0.5),
+    dufay_red_strip_width (0), dufay_green_strip_width (0),
+
+    /* Scanner profile.  */
+    scanner_red (0, 0, 0),
+    scanner_green (0, 0, 0),
+    scanner_blue (0, 0, 0),
+
+    /* Process profile.  */
+    profiled_dark (0, 0, 0),
+    profiled_red (1, 0, 0),
+    profiled_green (0, 1, 0),
+    profiled_blue (0, 0, 1),
+
+    /* Output adjustment.  */
+    white_balance ({1, 1, 1}),
+    presaturation (1),
+    color_model (color_model_none),
+    age(1),
+    backlight_temperature (5000),
+    temperature (5000), 
+    dye_balance (dye_balance_neutral),
+    saturation (1),
+    brightness (1), 
+    observer_whitepoint (/*srgb_white*/d50_white),
+    output_tone_curve (tone_curve::tone_curve_linear), 
+    target_film_gamma (1),
+
+    /* Output profile  */
+    output_profile (output_profile_sRGB), 
+    output_gamma (-1),
+    film_characteristics_curve (&film_sensitivity::linear_sensitivity), output_curve (NULL),
+    restore_original_luminosity (true)
   {
-    /* Multiplicative correction to stitch-project global scan_exposure.  */
-    luminosity_t exposure;
-    /* Additive correction to stitch-project dark point.  */
-    luminosity_t dark_point;
-    bool enabled;
-    unsigned char x, y;
-    constexpr tile_adjustment()
-    : exposure (1), dark_point (0), enabled (true), x(0), y(0)
-    {}
-    bool operator== (tile_adjustment &other) const
-    {
-      return enabled == other.enabled
-	     && dark_point == other.dark_point
-	     && exposure == other.exposure;
-    }
-    bool operator!= (tile_adjustment &other) const
-    {
-      return !(*this == other);
-    }
-    void apply (render_parameters *p) const
-    {
-      p->dark_point = dark_point + exposure * p->dark_point;
-      p->scan_exposure *= exposure;
-    }
-  };
+  }
 
-  int tile_adjustments_width, tile_adjustments_height;
-  std::vector<tile_adjustment> tile_adjustments;
+
+  /* Accessors.  */
+
 
   color_matrix get_rgb_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
   color_matrix get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions);
@@ -395,10 +465,10 @@ struct DLL_PUBLIC render_parameters
   original_render_from (render_parameters &rparam, bool color, bool profiled)
   {
     if (profiled)
-    {
-      *this = rparam;
-      return;
-    }
+      {
+	*this = rparam;
+	return;
+      }
     backlight_correction = rparam.backlight_correction;
     backlight_correction_black = rparam.backlight_correction_black;
     gamma = rparam.gamma;
@@ -1283,5 +1353,4 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   return !progress || !progress->cancelled ();
 }
 
-rgbdata DLL_PUBLIC get_linearized_pixel (image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
 #endif
