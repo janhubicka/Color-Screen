@@ -41,6 +41,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
 	  || rtparam.type == render_type_interpolated_diff))
     rtparam.type = render_type_original;
 
+  /* only original and profiled original rendering can be performed on Random screen.  */
+  if (param.type == Random
+      && rtparam.type != render_type_original
+      && rtparam.type != render_type_profiled_original)
+    rtparam.type = render_type_original;
+
   if (rtparam.type == render_type_fast
       || rtparam.type == render_type_interpolated_original
       || rtparam.type == render_type_interpolated_profiled_original

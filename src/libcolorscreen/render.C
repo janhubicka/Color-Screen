@@ -1,4 +1,5 @@
 #include <cassert>
+#include "include/colorscreen.h"
 #include "include/render.h"
 #include "lru-cache.h"
 #include "include/sensitivity.h"
@@ -532,7 +533,7 @@ render_increase_lru_cache_sizes_for_stitch_projects (int n)
   gray_and_sharpened_data_cache.increase_capacity (n);
 }
 
-rgbdata
+DLL_PUBLIC rgbdata
 get_linearized_pixel (image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
 {
    render r (img, rparam, 255);

@@ -578,8 +578,8 @@ render_scr_nearest_scaled::precompute_all (progress_info *progress)
 bool
 render_scr_relax::precompute_all (progress_info *progress)
 {
-	/* TODO: Perhaps non-scaled relaxation makes sense. */
-  if (!render_scr_detect::precompute_all (true, false, progress))
+/* TODO; Rendering is not normalized correctly.  we probably should still compute vornoi diagrams and determine diameter. */
+  if (!render_scr_detect::precompute_all (true, true, progress))
     return false;
   color_data_params p = {m_color_class_map_id, m_gray_data_id, &m_img, m_color_class_map, this};
   m_color_data_handle = color_data_cache.get (p, progress);
