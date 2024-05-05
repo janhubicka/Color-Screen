@@ -61,8 +61,12 @@ in standard way.
     make install 
 
 As a result native Color-Screen library, GTK gui and command line utilities
-will be built.  To make the package stand-alone it is necessary to copy
-all DLL libraries to `~/Color-Screen-nstall/bin/`. To figure out what libraries
+will be built.  Note that `~` does not point to Windows home directory, but to
+a home directory in msys2 tree.
+
+
+To make the package stand-alone it is necessary to copy
+all DLL libraries to `~/Color-Screen-install/bin/`. To figure out what libraries
 are necessary use 
 
     ldd libcolorscreen0.dll
@@ -71,6 +75,7 @@ This will print all libraries used. Copy all DLL files from mingw64 subdirectory
 to bin subdirectory.
 
 ## Usage
+
 There are three programs installed. 
 
 `colorscreen` is an command line utility to render into tiff files. See
