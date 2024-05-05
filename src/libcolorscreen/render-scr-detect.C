@@ -527,8 +527,10 @@ render_scr_detect::analyze_color_proportions (scr_detect_parameters param, rende
 
 render_scr_detect::~render_scr_detect ()
 {
-  color_class_cache.release (m_color_class_map);
-  precomputed_rgbdata_cache.release (m_precomputed_rgbdata);
+  if (m_color_class_map)
+    color_class_cache.release (m_color_class_map);
+  if (m_precomputed_rgbdata)
+    precomputed_rgbdata_cache.release (m_precomputed_rgbdata);
 }
 
 int cmp_entry(const void *p1, const void *p2)

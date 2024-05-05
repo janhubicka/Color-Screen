@@ -1371,109 +1371,110 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
     progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
   auto points = check_points (search_xsteps, search_ysteps);
   for (int s = 0; s < (int)points.size () && !smap; s++)
-    {
-      int xmin = points[s].x * img.width / search_xsteps;
-      int ymin = points[s].y * img.height / search_ysteps;
-      int xmax = (points[s].x + 1) * img.width / search_xsteps;
-      int ymax = (points[s].y + 1) * img.height / search_ysteps;
-      int nattempts = 0;
-      const int  maxattempts = 10;
-      if (report_file)
-        fflush (report_file);
-      if (dsparams->optimize_colors)
-	{
-	  if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
-	    {
-	      if (progress)
-		progress->pause_stdout ();
-	      printf ("Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
-	      if (report_file)
-		fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
-	      if (progress)
-		progress->resume_stdout ();
-	      continue;
-	    }
-	  if (cmap)
-	    {
-	      delete cmap;
-	      cmap = NULL;
-	    }
-	  /* Re-detect screen.  */
-	  delete render;
-	  render = NULL;
-	}
-      if (!render)
-	{
-	  render = new render_scr_detect (dparam, img, empty, 256);
-	  render->precompute_all (false, false, progress);
-	  render->precompute_rgbdata (progress);
-	}
-      /* In Finlay/Paget screen the blue patches touches by borders.
-         Enforce boundaries between patches so flood fill does not overflow.
-       
-	 FIXME: This does not seem to work well since blue patches are too small
-	 and may get eliminated completely.  */
-      if (type != Dufay && 1)
-        {
-	  cmap = new color_class_map;
-	  cmap->allocate (img.width, img.height);
-	  if (progress)
-	    progress->set_task ("pruning screen", img.height);
+    if (!progress || !progress->cancel_requested ())
+      {
+	int xmin = points[s].x * img.width / search_xsteps;
+	int ymin = points[s].y * img.height / search_ysteps;
+	int xmax = (points[s].x + 1) * img.width / search_xsteps;
+	int ymax = (points[s].y + 1) * img.height / search_ysteps;
+	int nattempts = 0;
+	const int  maxattempts = 10;
+	if (report_file)
+	  fflush (report_file);
+	if (dsparams->optimize_colors)
+	  {
+	    if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
+	      {
+		if (progress)
+		  progress->pause_stdout ();
+		printf ("Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+		if (report_file)
+		  fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+		if (progress)
+		  progress->resume_stdout ();
+		continue;
+	      }
+	    if (cmap)
+	      {
+		delete cmap;
+		cmap = NULL;
+	      }
+	    /* Re-detect screen.  */
+	    delete render;
+	    render = NULL;
+	  }
+	if (!render)
+	  {
+	    render = new render_scr_detect (dparam, img, empty, 256);
+	    render->precompute_all (false, false, progress);
+	    render->precompute_rgbdata (progress);
+	  }
+	/* In Finlay/Paget screen the blue patches touches by borders.
+	   Enforce boundaries between patches so flood fill does not overflow.
+	 
+	   FIXME: This does not seem to work well since blue patches are too small
+	   and may get eliminated completely.  */
+	if (type != Dufay && 1)
+	  {
+	    cmap = new color_class_map;
+	    cmap->allocate (img.width, img.height);
+	    if (progress)
+	      progress->set_task ("pruning screen", img.height);
 #pragma omp parallel for default(none) shared(progress,img,cmap,render)
-	  for (int y = 0; y < img.height; y++)
-	    {
-	      for (int x = 0; x < img.width; x++)
-		cmap->set_class (x, y, render->classify_pixel (x, y));
-	    }
-        }
-      if (progress)
-	{
-	  progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
-	  progress->set_progress (s);
-	}
-      if (!progress || !progress->cancel_requested ())
-	for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
-	  for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
-	    {
-	      if (report_file)
-		fflush (report_file);
-	      if (type == Dufay ? try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress)
-		  : try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited, progress))
-		{
-		  nattempts++;
-	          if (report_file && verbose)
-		    {
-		      fprintf (report_file, "Initial grid found at:\n");
-		      sparam.dump (report_file);
-		    }
-		  visited.clear ();
-		  simple_solver (&param, img, sparam, progress);
-		  smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, cmap ? cmap : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
-		  if (!smap)
-		    {
-		      if (progress)
-			{
-			  progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
-			  progress->set_progress (s);
-			}
-		      visited.clear ();
-		      x+= 10;
-		    }
-		  else
-		    break;
-		}
-	    }
-      if (!smap)
-	{
-	  if (progress)
-	    progress->pause_stdout ();
-	  printf ("Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
-	  if (report_file)
-	    fprintf (report_file, "Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
-	  if (progress)
-	    progress->resume_stdout ();
-	}
-    }
+	    for (int y = 0; y < img.height; y++)
+	      {
+		for (int x = 0; x < img.width; x++)
+		  cmap->set_class (x, y, render->classify_pixel (x, y));
+	      }
+	  }
+	if (progress)
+	  {
+	    progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
+	    progress->set_progress (s);
+	  }
+	if (!progress || !progress->cancel_requested ())
+	  for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
+	    for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
+	      {
+		if (report_file)
+		  fflush (report_file);
+		if (type == Dufay ? try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress)
+		    : try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited, progress))
+		  {
+		    nattempts++;
+		    if (report_file && verbose)
+		      {
+			fprintf (report_file, "Initial grid found at:\n");
+			sparam.dump (report_file);
+		      }
+		    visited.clear ();
+		    simple_solver (&param, img, sparam, progress);
+		    smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render, cmap ? cmap : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
+		    if (!smap)
+		      {
+			if (progress)
+			  {
+			    progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
+			    progress->set_progress (s);
+			  }
+			visited.clear ();
+			x+= 10;
+		      }
+		    else
+		      break;
+		  }
+	      }
+	if (!smap)
+	  {
+	    if (progress)
+	      progress->pause_stdout ();
+	    printf ("Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	    if (report_file)
+	      fprintf (report_file, "Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
+	    if (progress)
+	      progress->resume_stdout ();
+	  }
+      }
 #if 0
   int max_diam = std::max (img.width, img.height);
   for (int d = 0; d < max_diam && !smap; d++)
@@ -1514,7 +1515,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 #endif
   if (cmap)
     delete cmap;
-  if (!smap)
+  if (!smap || (progress && progress->cancel_requested ()))
     {
       delete render;
       return ret;
@@ -1532,7 +1533,17 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   ret.param.projection_distance = img.width;
   ret.param.lens_correction = dsparams->lens_correction;
   solver (&ret.param, img, sparam, progress);
+  if (progress && progress->cancel_requested ())
+    {
+      delete render;
+      return ret;
+    }
   summarise_quality (img, smap, ret.param, "homographic", report_file, progress);
+  if (progress && progress->cancel_requested ())
+    {
+      delete render;
+      return ret;
+    }
 
 
   if (report_file)
@@ -1610,6 +1621,12 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   if (dsparams->do_mesh)
     {
       mesh *m = solver_mesh (&ret.param, img, sparam, *smap, progress);
+      if (progress && progress->cancel_requested ())
+        {
+	  delete m;
+          delete render;
+	  return ret;
+        }
       const int xsteps = 50, ysteps = 50;
       m->precompute_inverse ();
       /* Now produce output (regular) grid of solver points.
