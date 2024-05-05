@@ -28,6 +28,9 @@ GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
 by Linda Kimrová
 
 ## Installation
+
+### Linux
+
 On typical Linux distribution it is enough to do the following.
 
 	./configure --prefix=<where_to_install>
@@ -38,7 +41,7 @@ To build the gui use use addition `--enable-gtkgui` option to the configure
 script. `make examples` will download some sample images from the Library
 of Congress webpages and produce color renderings.
 
-### Builting on Windows
+### Windows
 
 Easiest way to install on Windows is to use [MSYS2](https://www.msys2.org/).
 Then start MSYS2 WINGW64 from Windows start menu.  Install all necessary
@@ -47,7 +50,7 @@ packages
     pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make diffutils automake autoconf mingw-w64-x86_64-pkg-config vim gdb libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
 
 Then close the terminal emulation window and open MSYS2 MINGW64 again
-(this is necessary to get PATH set up).  Now Color-Screen can be built
+(this is necessary to get `PATH` set up).  Now Color-Screen can be built
 in standard way.
 
     git clone https://github.com/janhubicka/Color-Screen.git Color-Screen
