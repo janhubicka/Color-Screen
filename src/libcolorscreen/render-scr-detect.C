@@ -427,7 +427,11 @@ render_scr_detect::precompute_all (bool grayscale_needed, bool normalized_patche
 	return false;
     }
   color_class_params p = {m_precomputed_rgbdata ? m_precomputed_rgbdata_id : m_img.id, &m_img, m_precomputed_rgbdata, m_scr_detect.m_param, &m_scr_detect, m_params.gamma};
+  if (progress && progress->cancel_requested ())
+    return false;
   m_color_class_map = color_class_cache.get (p, progress, &m_color_class_map_id);
+  if (progress && progress->cancel_requested ())
+    return false;
   return render::precompute_all (grayscale_needed, normalized_patches, {1/3.0, 1/3.0, 1/3.0}, progress);
 }
 
