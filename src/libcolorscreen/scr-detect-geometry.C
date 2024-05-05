@@ -1033,7 +1033,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     sparam->remove_points ();
   //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
   queue_entry e;
-  while (queue.extract_min (e) /*&& nfound < 500*/)
+  while (queue.extract_min (e)
+	 && (progress || !progress->cancel_requested ()))
     {
       coord_t ix, iy;
       int priority = 0;
@@ -1406,8 +1407,18 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	if (!render)
 	  {
 	    render = new render_scr_detect (dparam, img, empty, 256);
-	    render->precompute_all (false, false, progress);
-	    render->precompute_rgbdata (progress);
+	    if (!render->precompute_all (false, false, progress))
+	      {
+		delete render;
+		render = NULL;
+		continue;
+	      }
+	    if (!render->precompute_rgbdata (progress))
+	      {
+		delete render;
+		render = NULL;
+		continue;
+	      }
 	  }
 	/* In Finlay/Paget screen the blue patches touches by borders.
 	   Enforce boundaries between patches so flood fill does not overflow.
@@ -1446,6 +1457,13 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		      {
 			fprintf (report_file, "Initial grid found at:\n");
 			sparam.dump (report_file);
+		      }
+		    if (progress && progress->cancel_requested ())
+		      {
+			delete render;
+			delete smap;
+			delete cmap;
+			return ret;
 		      }
 		    visited.clear ();
 		    simple_solver (&param, img, sparam, progress);
