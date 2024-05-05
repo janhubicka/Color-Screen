@@ -28,6 +28,7 @@ GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
 by Linda Kimrová
 
 ## Installation
+On typical Linux distribution it is enough to do the following.
 
 	./configure --prefix=<where_to_install>
 	make
@@ -36,6 +37,35 @@ by Linda Kimrová
 To build the gui use use addition `--enable-gtkgui` option to the configure
 script. `make examples` will download some sample images from the Library
 of Congress webpages and produce color renderings.
+
+### Builting on Windows
+
+Easiest way to install on Windows is to use [MSYS2](https://www.msys2.org/).
+Then start MSYS2 WINGW64 from Windows start menu.  Install all necessary
+packages
+
+    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make diffutils automake autoconf mingw-w64-x86_64-pkg-config vim gdb libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
+
+Then close the terminal emulation window and open MSYS2 MINGW64 again
+(this is necessary to get PATH set up).  Now Color-Screen can be built
+in standard way.
+
+    git clone https://github.com/janhubicka/Color-Screen.git Color-Screen
+    mkdir Color-Screen-build
+    cd Color-Screen-build/
+    ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
+    make
+    make install 
+
+As a result native Color-Screen library, GTK gui and command line utilities
+will be built.  To make the package stand-alone it is necessary to copy
+all DLL libraries to `~/Color-Screen-nstall/bin/`. To figure out what libraries
+are necessary use 
+
+    ldd libcolorscreen0.dll
+
+This will print all libraries used. Copy all DLL files from mingw64 subdirectory
+to bin subdirectory.
 
 ## Usage
 There are three programs installed. 
