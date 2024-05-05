@@ -16,7 +16,7 @@
 #define strcpy_s(a,b) strcpy(a,b)
 #endif
 
-static const int debug = 0;
+static const bool debug = false;
 
 std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";
@@ -178,7 +178,7 @@ MapAlloc::MapAllocObject::~MapAllocObject() {
 		free(pointer);
 	} else {
 		if (debug)
-		  printf ("Unmapping file %s of size %liMB\n", filename, (long)size/1024/1024);
+		  printf ("Unmapping file of size %liMB\n", (long)size/1024/1024);
 		munmap(pointer, size);
 		close(file);
 	}
@@ -191,4 +191,10 @@ void* MapAlloc::MapAllocObject::GetPointer() {
 
 bool MapAlloc::MapAllocObject::IsFile() {
 	return !!file;
+}
+
+MapAlloc::~MapAlloc ()
+{
+	if (debug)
+	  printf ("Global destruction\n");
 }

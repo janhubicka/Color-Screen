@@ -380,6 +380,15 @@ static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpene
 
 }
 
+/* Prune render cache.  We need to do this so destruction order of MapAlloc and
+   the cache does not yield an segfault.  */
+
+void
+prune_render_caches ()
+{
+  gray_and_sharpened_data_cache.prune ();
+}
+
 bool
 render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
 {

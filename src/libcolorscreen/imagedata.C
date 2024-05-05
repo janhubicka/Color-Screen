@@ -18,6 +18,7 @@
 #include <libraw/libraw.h>
 #endif
 
+extern void prune_render_caches ();
 
 class image_data_loader
 {
@@ -144,6 +145,7 @@ image_data::~image_data ()
     }
   if (lcc)
     delete lcc;
+  prune_render_caches ();
 }
 
 bool
