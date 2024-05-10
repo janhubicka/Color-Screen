@@ -99,8 +99,6 @@ confirm_strip (color_class_map *color_map,
   patch_entry entries[min_patch_size + 1];
   /* Since strips are not isolated do not mark them as visited so we do not block walk from other spot.  */
   int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), min_patch_size + 1, entries, visited, false);
-  //if (verbose)
-    //printf ("size: %i coord: %f %f color %i\n", size,x,y, (int)c);
   if (size < min_patch_size)
     return false;
   *priority = 7;
@@ -406,13 +404,8 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
       return false;
     }
 
-  //fprintf (report_file, "green %f %f blue +%f +%f green +%f +%f blue +%f +%f\n", gpatches[0][0].x, gpatches[0][0].y, bpatches[0][0].x-gpatches[0][0].x, bpatches[0][0].y-gpatches[0][0].y, gpatches[0][1].x-bpatches[0][0].x, gpatches[0][1].y-bpatches[0][0].y, bpatches[0][1].x-gpatches[0][1].x, bpatches[0][1].y-gpatches[0][1].y);
   if (report_file && verbose)
     fprintf (report_file, "found green patch of size %i and center %f %f guessing patch distance %f %f\n", size, gpatches[0][1].x, gpatches[0][1].y, patch_stepx, patch_stepy);
-#if 0
-  if (!report_file && verbose)
-    report_file = stdout;
-#endif
   for (int p = 2; p < npatches; p++)
     {
       int nx = bpatches[0][p - 1].x + patch_stepx;
@@ -447,23 +440,6 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  return 0;
 	}
 
-#if 0
-      nx = gpatches[0][p].x + opatch_stepx;
-      ny = gpatches[0][p].y + opatch_stepy;
-      size = find_patch (color_map, scr_detect::blue, nx, ny, max_size, entries, NULL);
-      if (size == 0 || size == max_size)
-	{
-	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to guess 2nd blue patch 0, %i with steps %f %f\n", p, opatch_stepx, opatch_stepy);
-	  return 0;
-	}
-      if (!patch_center (entries, size, &bpatches[0][p].x, &bpatches[0][p].y))
-	{
-	  if (report_file && verbose)
-	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
-	  return 0;
-	}
-#endif
       patch_stepx = (gpatches[0][p].x - gpatches[0][0].x) / p / 2;
       patch_stepy = (gpatches[0][p].y - gpatches[0][0].y) / p / 2;
     }
@@ -543,17 +519,16 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
     for (int p = 0; p < npatches; p++)
     {
       sparam.add_point (gpatches[r][p].x, gpatches[r][p].y, (r+p)/2.0, (p-r)/2.0, solver_parameters::green);
-      //sparam.add_point (rpatches[r][p].x, bpatches[r][p].y, r, p, solver_parameters::red);
       sparam.add_point (bpatches[r*2][p].x, bpatches[r*2][p].y, (r+p+0.5)/2.0, (p-r+0.5)/2.0, solver_parameters::blue);
-      //sparam.add_point (bpatches[r*2+1][p].x, bpatches[r*2+1][p].y, r, p, solver_parameters::blue);
     }
   if (verbose)
-    {
-      printf ("Initial screen found\n");
-    }
+    printf ("Initial screen found\n");
 
   return true;
 }
+
+/* Verify that there is patch on coordinates X and Y of color C
+   of size in range of MIN_PATCH_SIZE and MAX_PATCH_SIZE.  */
 
 bool
 confirm_patch (FILE *report_file, color_class_map *color_map,
@@ -574,7 +549,11 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
     fprintf (report_file, "size: %i (expecting %i...%i) coord: %f %f center %f %f color %i%s\n", size, min_patch_size, max_patch_size,x,y, *cx, *cy, (int)c, fail ? fail : "");
   //printf ("center %f %f\n", *cx, *cy);
   if (fail)
-    return false;
+    {
+      for (int i = 0; i < size; i++)
+	visited->clear_bit (entries[i].x, entries[i].y);
+      return false;
+    }
   coord_t dist = (*cx - x) * (*cx - x) + (*cy - y) * (*cy - y);
   if (dist < max_distance * max_distance / 128)
     *priority = 7;
