@@ -24,7 +24,7 @@ the main library and command line utility the following libraries are needed
 
 To build a GTK2 based gui, GTK2 and Glade libraries are needed. Note that the
 GTK2 gui is deprecated and new Java based [Color-Screen
-GUI](https://gitlab.mff.cuni.cz/kimroval/digital-coloring) is being developed
+GUI](https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI) is being developed
 by Linda Kimrová
 
 ## Installation
