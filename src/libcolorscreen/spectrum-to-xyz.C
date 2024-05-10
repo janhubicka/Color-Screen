@@ -4348,12 +4348,12 @@ spectrum_dyes_to_xyz::process_transformation_matrix (spectrum_dyes_to_xyz *from)
   rgbdata colors[n];
   rgbdata targets[n];
   rgbdata res = film_rgb_response (NULL);
-  luminosity_t sum = res.red + res.green + res.blue;
+  //luminosity_t sum = res.red + res.green + res.blue;
   //res.red = res.green = res.blue = sum / 3;
   rgbdata scale = {1 / res.red, 1 / res.green, 1 / res.blue};
 
   rgbdata res2 = from->film_rgb_response (NULL);
-  luminosity_t sum2 = res2.red + res2.green + res2.blue;
+  //luminosity_t sum2 = res2.red + res2.green + res2.blue;
   //res2.red = res2.green = res2.blue = sum2 / 3;
   rgbdata scale2 = {1 / res2.red, 1 / res2.green, 1 / res2.blue};
 

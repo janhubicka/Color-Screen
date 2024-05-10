@@ -551,7 +551,7 @@ get_linearized_pixel (image_data &img, render_parameters &rparam, int xx, int yy
    /* TODO: Stitched projects needs to be accessed in screen coordinates.  */
    if (img.stitch)
      return color;
-   r.precompute_all (false, false,  {1/3.0, 1/3.0, 1/3.0}, progress);
+   r.precompute_all (img.rgbdata ? false : true, false,  {1/3.0, 1/3.0, 1/3.0}, progress);
    for (int y = yy - range; y < yy + range; y++)
      for (int x = xx - range; x < xx + range; x++)
 	if (x >= 0 && x < img.width && y >= 0 && y < img.height)

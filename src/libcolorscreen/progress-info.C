@@ -82,11 +82,6 @@ clear_task (FILE *f, int len)
   if (len)
     fprintf (f, "\r%*s\r", len, "");
 }
-static void
-print_finished (FILE *f, const char *task)
-{
-  fprintf (f, "\r%s: %2.2f%%\n", task, 100.0);
-}
 void
 file_progress_info::pause_stdout (bool final)
 {
