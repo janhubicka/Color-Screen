@@ -88,6 +88,9 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
   return false;
 }
 
+/* Return trie if there is a strip on coordinates X, Y of color C.
+   This is done by checking that there is patch of maximal size.  */
+
 bool
 confirm_strip (color_class_map *color_map,
 	       coord_t x, coord_t y, scr_detect::color_class c,
@@ -110,12 +113,29 @@ struct patch_info
   coord_t x, y;
 };
 
+/* Try to guess Dufaycolor screen on coordinates X and Y.  Return true if sucessful
+   This function only detect grid of NPATCHESxNPATCHES*2 color patches which is strong enough evidence that
+   the scan seems to contain Dufay color screen but this is not enough patches to
+   accurately determine geometry.  Once approximate geometry is detected in next step
+   flood_fill will find remaining patches.  
+   
+   Screen organization is
+
+   GBGBGB
+   RRRRRR
+   GBGBGB
+   RRRRRR
+   
+   */
+
 bool
 try_guess_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
   const int max_size = 200;
   struct patch_info rbpatches[npatches][npatches*2];
   patch_entry entries[max_size];
+
+  /* First try to find a green patch.  */
   int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited, true);
   if (size == 0 || size == max_size)
     return false;
@@ -126,29 +146,33 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 
   bool patch_found = false;
 
+  /* Now find adjacent blue patch.  */
   for (int i = 0; i < size && !patch_found; i++)
-  {
-    int x = entries[i].x;
-    for (y = entries[i].y + 1; y < color_map.height && !patch_found; y++)
-      {
-	scr_detect::color_class t = color_map.get_class (x, y);
-	if (t == scr_detect::blue)
-	  {
-	    /* Do not mark as visited so we can revisit.  */
-	    int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, visited, false);
-	    patch_found = patch_center (entries, size, &rbpatches[0][1].x, &rbpatches[0][1].y);
-	  }
-	else if (t != scr_detect::unknown)
-	  break;
-      }
-  }
+    {
+      int x = entries[i].x;
+      for (y = entries[i].y + 1; y < color_map.height && !patch_found; y++)
+	{
+	  scr_detect::color_class t = color_map.get_class (x, y);
+	  if (t == scr_detect::blue)
+	    {
+	      /* Do not mark as visited so we can revisit.  */
+	      int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, visited, false);
+	      patch_found = patch_center (entries, size, &rbpatches[0][1].x, &rbpatches[0][1].y);
+	    }
+	  else if (t != scr_detect::unknown)
+	    break;
+	}
+    }
 
   if (!patch_found)
-  {
-    if (report_file && verbose)
-      fprintf (report_file, "Blue patch not found\n");
-    return false;
-  }
+    {
+      if (report_file && verbose)
+	fprintf (report_file, "Blue patch not found\n");
+      return false;
+    }
+
+  /* Now find row of alternating green and blue patches;  keep updating screen geometry
+     (patch_stepx, patch_stepy).  */
   coord_t patch_stepx = rbpatches[0][1].x - rbpatches[0][0].x;
   coord_t patch_stepy = rbpatches[0][1].y - rbpatches[0][0].y;
   if (report_file && verbose)
@@ -162,19 +186,21 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	{
 	  if (report_file && verbose)
 	    fprintf (report_file, "Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
-	  return 0;
+	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[0][p].x, &rbpatches[0][p].y))
 	{
 	  if (report_file && verbose)
 	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
-	  return 0;
+	  return false;
 	}
       patch_stepx = (rbpatches[0][p].x - rbpatches[0][0].x) / p;
       patch_stepy = (rbpatches[0][p].y - rbpatches[0][0].y) / p;
     }
   if (report_file && verbose)
    fprintf (report_file, "Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
+
+  /* Now once row is found, extend each entry to an orthogonal row.  */
   for (int r = 1; r < npatches; r++)
     {
       int rx = rbpatches[r - 1][0].x - patch_stepy;
@@ -186,20 +212,20 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	 {
 	  if (report_file && verbose)
 	    fprintf (report_file, "Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
-	  return 0;
+	  return false;
 	 }
       size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
 	    fprintf (report_file, "Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
-	  return 0;
+	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[r][0].x, &rbpatches[r][0].y))
 	{
 	  if (report_file && verbose)
 	    fprintf (report_file, "Center of patch %i,%i is not inside\n", r, 0);
-	  return 0;
+	  return false;
 	}
       for (int p = 1; p < npatches * 2; p++)
 	{
@@ -210,16 +236,17 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	    {
 	      if (report_file && verbose)
 		fprintf (report_file, "Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
-	      return 0;
+	      return false;
 	    }
 	  if (!patch_center (entries, size, &rbpatches[r][p].x, &rbpatches[r][p].y))
 	    {
 	      if (report_file && verbose)
 		fprintf (report_file, "Center of patch %i,%i is not inside\n", r, p);
-	      return 0;
+	      return false;
 	    }
 	}
     }
+
   /* Be sure that every point is unique.  */
   for (int r = 0; r < npatches; r++)
     for (int p = 0; p < npatches * 2; p++)
@@ -227,6 +254,8 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
         for (int p1 = 0; p1 < p; p1++)
 	  if (rbpatches[r][p].x == rbpatches[r1][p1].x && rbpatches[r][p].y == rbpatches[r1][p1].y)
 	    return false;
+
+  /* Add points to solver; this is mostly useful for debugging.  */
   sparam.remove_points ();
   for (int r = 0; r < npatches; r++)
     for (int p = 0; p < npatches * 2; p++)
@@ -234,6 +263,14 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   return true;
 }
 
+/* Same as try_guess_screen but for Paget/Finlay screens.  Screen is organized as follows
+  
+   G   R   G
+ B   B   B
+   R   G   R
+ B   B   B
+
+   */
 bool
 try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
@@ -242,18 +279,27 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   struct patch_info gpatches[npatches][npatches];
   struct patch_info bpatches[npatches*2][npatches];
   patch_entry entries[max_size];
+
+  /* Find initial green patch.  */
   int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited, true);
   if (size == 0 || size == max_size)
     return false;
   if (!patch_center (entries, size, &gpatches[0][0].x, &gpatches[0][0].y))
     return false;
   if (report_file && verbose)
-    {
-      fprintf (report_file, "Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
-    }
+    fprintf (report_file, "Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
 
   bool patch_found = false;
+#if 0
+  bool verbose = 1;
+  report_file = stdout;
+#endif
 
+  /* Find adjacent blue patch below the green one.  
+     G
+       B
+    
+     */
   for (int i = 0; i < size && !patch_found; i++)
     {
       int x = entries[i].x;
@@ -276,7 +322,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	fprintf (report_file, "Blue patch not found\n");
       return false;
     }
-  /* Bellow green dot should be two blue dots.  */
+
+  /* Below green patch should be two blue patches.
+    
+        G
+      B   B
+    
+     Guess coordinates of second one and try to find it.  */
   coord_t b1patch_stepx = bpatches[0][0].x - gpatches[0][0].x;
   coord_t b1patch_stepy = bpatches[0][0].y - gpatches[0][0].y;
   coord_t b2patch_stepx = b1patch_stepy;
@@ -286,7 +338,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!size || size == max_size)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Second Blue patch not found\n");
+	fprintf (report_file, "Second blue patch not found\n");
     }
   patch_found = patch_center (entries, size, &bx, &by);
   if (!patch_found || (bx == bpatches[0][0].x && by == bpatches[0][0].y))
@@ -295,6 +347,8 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	fprintf (report_file, "Center of second Blue patch not found\n");
       return false;
     }
+
+  /* Order the blue patches to the step is positive.  */
   if (b1patch_stepx < 0)
     {
       std::swap (b1patch_stepx, b2patch_stepx);
@@ -302,8 +356,17 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
       std::swap (bpatches[0][0].x, bx);
       std::swap (bpatches[0][0].y, by);
     }
+
+  /* Now determine the dsitance between two green patches
+   
+       G
+     B   B
+           G
+
+     And try to confirm second green patch.  */
   coord_t gpatch_stepx = (bpatches[0][0].x - gpatches[0][0].x) * 2;
   coord_t gpatch_stepy = (bpatches[0][0].y - gpatches[0][0].y) * 2;
+
   size = find_patch (color_map, scr_detect::green, gpatches[0][0].x + gpatch_stepx, gpatches[0][0].y + gpatch_stepy, max_size, entries, visited, false);
   if (!size || size == max_size)
     {
@@ -315,9 +378,15 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Second green patch not found\n");
+	fprintf (report_file, "Center of second green patch not found\n");
       return false;
     }
+
+  /* See if we can predict third blue patch 
+       G
+     B   B
+           G  
+             B  */
   coord_t patch_stepx = (gpatches[0][1].x - gpatches[0][0].x) / 2;
   coord_t patch_stepy = (gpatches[0][1].y - gpatches[0][0].y) / 2;
   coord_t opatch_stepx = patch_stepy;
@@ -333,7 +402,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Third blue patch not found\n");
+	fprintf (report_file, "Center of third blue patch not found\n");
       return false;
     }
 
@@ -1370,6 +1439,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 
   {
     bitmap_2d visited (img.width, img.height);
+    bitmap_2d visited_paget (img.width, img.height);
     std::unique_ptr <render_scr_detect> render = NULL;
     std::unique_ptr <color_class_map> cmap = NULL;
     const int search_xsteps = 6;
@@ -1392,6 +1462,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  const int  maxattempts = 10;
 	  if (report_file)
 	    fflush (report_file);
+	  if (progress)
+	    progress->push ();
 	  if (dsparams->optimize_colors)
 	    {
 	      if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
@@ -1403,6 +1475,11 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		    fprintf (report_file, "Failed to analyze colors on start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
 		  if (progress)
 		    progress->resume_stdout ();
+		  if (progress)
+		    {
+		      progress->pop ();
+		      progress->inc_progress ();
+		    }
 		  continue;
 		}
 	      /* Re-detect screen.  */
@@ -1413,12 +1490,21 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	    {
 	      std::unique_ptr<render_scr_detect> new_render (new render_scr_detect (dparam, img, empty, 256));
 	      if (!new_render)
-		return ret;
+		{
+		  if (progress)
+		    progress->pop ();
+		  return ret;
+		}
 	      render = std::move (new_render);
 	      if (!render->precompute_all (false, false, progress)
 		  || !render->precompute_rgbdata (progress))
 		{
 		  render = NULL;
+		  if (progress)
+		    {
+		      progress->pop ();
+		      progress->inc_progress ();
+		    }
 		  continue;
 		}
 	    }
@@ -1445,7 +1531,11 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		    progress->inc_progress ();
 		}
 	      if (progress && progress->cancel_requested ())
-		return ret;
+		{
+		  if (progress)
+		    progress->pop ();
+		  return ret;
+		}
 	    }
 	  if (progress)
 	    {
@@ -1464,10 +1554,14 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		     if it makes sense, otheriwse default to Paget.  */
 		  if (try_dufay && try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		    current_type = Dufay;
-		  else if (try_paget_finlay && try_guess_paget_screen (report_file, *cmap, sparam, x, y, &visited, progress))
+		  else if (try_paget_finlay && try_guess_paget_screen (report_file, *cmap /**render->get_color_class_map ()*/, sparam, x, y, &visited_paget, progress))
 		    current_type = type == Finlay ? Finlay : Paget;
 		  if (progress && progress->cancel_requested ())
-		    return ret;
+		    {
+		      if (progress)
+			progress->pop ();
+		      return ret;
+		    }
 
 		  if (current_type != Random)
 		    {
@@ -1508,6 +1602,11 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		fprintf (report_file, "Start coordinates %i,%i (translated %i,%i) failed (%i out of %i attempts)\n", points[s].x, points[s].y, xmax, ymax, s + 1, (int)points.size ());
 	      if (progress)
 		progress->resume_stdout ();
+	    }
+	  if (progress)
+	    {
+	      progress->pop ();
+	      progress->inc_progress ();
 	    }
 	}
 #if 0
