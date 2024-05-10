@@ -176,7 +176,7 @@ openimage (const char *name)
   current.lens_center_x = scan.width * 0.5;
   current.lens_center_y = scan.height * 0.5;
 #endif
-  rparams.gamma = scan.gamma;
+  rparams.gamma = scan.gamma != -2 ? scan.gamma : 2.2;
 }
 
 /* Get values displayed in the UI.  */
