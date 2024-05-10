@@ -49,9 +49,9 @@ public:
      CLEN and CMATRIX are precomputed using code above.
      For performance reasons do not use lambda function since it won't get inlined.
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
-  template<typename O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+  template<typename O, typename T>
   inline static void
-  blur_horisontal(O *out, T data, P param, int y, int width, int clen, luminosity_t *cmatrix)
+  blur_horisontal(O *out, O *in, int width, int clen, luminosity_t *cmatrix)
   {
     if (width < clen)
     {
@@ -59,9 +59,9 @@ public:
       for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
         int m = std::max (- clen / 2, -x);
-	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	O sum = in[x + m] * cmatrix[m + clen / 2];
 	for (int d = m; d < std::min (clen / 2, width - x); d++)
-	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
+	  sum += in [x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
       return;
@@ -70,27 +70,27 @@ public:
 #pragma omp simd
     for (int x = 0; x < std::min (width - clen / 2, clen / 2); x++)
       {
-	O sum = getdata (data, 0, y, width, param) * cmatrix[-x + clen / 2];
+	O sum = in[0] * cmatrix[-x + clen / 2];
 	for (int d = -x + 1; d < clen / 2; d++)
-	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
+	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
 #pragma omp simd
     for (int x = clen / 2; x < width - clen / 2; x++)
       {
 	int m = - clen / 2;
-	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	O sum = in[x + m] * cmatrix[m + clen / 2];
 	for (int d = m + 1; d < clen / 2; d++)
-	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
+	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
 #pragma omp simd
     for (int x = width - clen / 2; x < width; x++)
       {
 	int m = - clen / 2;
-	O sum = getdata (data, x + m, y, width, param) * cmatrix[m + clen / 2];
+	O sum = in[x + m] * cmatrix[m + clen / 2];
 	for (int d = m + 1; d < width - x; d++)
-	  sum += getdata (data, x + d, y, width, param) * cmatrix[d + clen / 2];
+	  sum += in[x + d] * cmatrix[d + clen / 2];
 	out[x] = sum;
       }
   }

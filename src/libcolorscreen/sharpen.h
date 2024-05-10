@@ -52,6 +52,7 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 #endif
     int ystart = tn * height / threads;
     int yend = (tn + 1) * height / threads - 1;
+    O *line = (O *)malloc (width * sizeof (O));
 
     for (int d = -clen/2; d < clen/2 - 1; d++)
       {
@@ -60,13 +61,46 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	if (yp < 0 || yp > height)
 	  memset ((void *)(hblur + tp * width), 0, sizeof (O) * width);
 	else
-	  fir_blur::blur_horisontal<O, T, P, getdata> (hblur + tp * width, data, param, yp, width, clen, cmatrix);
+	{
+#pragma omp simd
+	  for (int x = 0; x < width ; x++)
+	    line[x] =getdata (data, x, yp, width, param);
+	  fir_blur::blur_horisontal<O, T> (hblur + tp * width, line, width, clen, cmatrix);
+	}
       }
     if (!progress || !progress->cancel_requested ())
       for (int y = ystart; y <= yend; y++)
 	{
+          if (progress && progress->cancel_requested ())
+	    break;
 	  if (y + clen / 2 - 1 < height)
-	    fir_blur::blur_horisontal<O, T, P, getdata> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, data, param, y + clen / 2 - 1, width, clen, cmatrix);
+#pragma omp simd
+	    for (int x = 0; x < width ; x++)
+	      line[x] =getdata (data, x, y + clen / 2 - 1, width, param);
+	  if (y + clen / 2 - 1 < height)
+	    switch (clen)
+	      {
+	      case 1:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 3:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 5:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 7:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 9:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 11:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 13:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 15:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 17:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 19:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 21:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 23:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 25:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 27:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 29:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      case 31:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
+	      default:
+	        if (clen < 32 || !(clen & 1))
+		  abort ();/*__builtin_unreachable ();*/
+	        fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); 
+	      }
 	  else
 	    memset ((void*)(hblur + ((y + clen / 2 - 1 + clen) % clen) * width), 0, sizeof (O) * width);
 	  for (int d = 0; d < clen; d++)
@@ -101,6 +135,7 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	}
     free (rotated_cmatrix);
     free (hblur);
+    free (line);
   }
 }
 
