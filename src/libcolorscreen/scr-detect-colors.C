@@ -309,7 +309,7 @@ screen_color_solver
   inline luminosity_t
   objfunc_chanel (rgbdata *colors, int n, int chanel, color_matrix &mat)
   {
-    luminosity_t sum;
+    luminosity_t sum = 0;
     int c1, c2;
     if (chanel == 0)
       c1 = 1, c2 = 2;
