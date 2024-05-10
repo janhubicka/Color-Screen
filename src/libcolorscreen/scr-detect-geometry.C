@@ -568,7 +568,7 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
 
 #define N_PRIORITIES 8
 
-  bool
+bool
 confirm (render_scr_detect *render,
 	 coord_t coordinate1_x, coord_t coordinate1_y,
 	 coord_t coordinate2_x, coord_t coordinate2_y,
@@ -676,35 +676,35 @@ confirm (render_scr_detect *render,
 	     }
 	  }
       if (verbose_confirm > 1)
-       {
-	  int xstart = floor (bestcx + xmin);
-	  int ystart = floor (bestcy + ymin);
-	  printf ("best %f %f : %f %f min %f max %f\n  ", bestcx, bestcy, bestcx - x, bestcy - y, min, max);
-	  for (int xx = xstart; xx < floor (bestcx); xx++)
-	    printf (" ");
-          printf ("|\n");
+	{
+	   int xstart = floor (bestcx + xmin);
+	   int ystart = floor (bestcy + ymin);
+	   printf ("best %f %f : %f %f min %f max %f\n  ", bestcx, bestcy, bestcx - x, bestcy - y, min, max);
+	   for (int xx = xstart; xx < floor (bestcx); xx++)
+	     printf (" ");
+	   printf ("|\n");
 
-	  for (int yy = ystart ; yy < ystart + ymax - ymin + 1; yy++)
-	    {
-	      printf (yy == floor (bestcy) ? "->" : "  ");
+	   for (int yy = ystart ; yy < ystart + ymax - ymin + 1; yy++)
+	     {
+	       printf (yy == floor (bestcy) ? "->" : "  ");
 
 #define account(xx, yy, wx, wy)\
-		    { rgbdata color = render->fast_precomputed_get_normalized_pixel (xx, yy);	\
-		      luminosity_t c = color[t];\
-		      luminosity_t d = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);\
-		      c = c / d;							\
-		      putc(".oO*"[(int)((c-min) * 3.9999 / (max - min))], stdout); }
-		      //printf (" %7.4f", c); }
-		      //printf (" %i %i %5.2f*%5.2f*%5.2f", xx, yy, c, (coord_t)wx, wy); }
-	      int xx = xstart;
-	      account (xx, yy, wx, wy);
-	      for (xx = xstart + 1; xx < xstart + xmax - ymin; xx++)
-		account (xx, yy, 1, wy);
-	      account (xx, yy, (1 - wx), wy);
+		     { rgbdata color = render->fast_precomputed_get_normalized_pixel (xx, yy);	\
+		       luminosity_t c = color[t];\
+		       luminosity_t d = std::max (color[0] + color[1] + color[2], (luminosity_t)0.0001);\
+		       c = c / d;							\
+		       putc(".oO*"[(int)((c-min) * 3.9999 / (max - min))], stdout); }
+		       //printf (" %7.4f", c); }
+		       //printf (" %i %i %5.2f*%5.2f*%5.2f", xx, yy, c, (coord_t)wx, wy); }
+	       int xx = xstart;
+	       account (xx, yy, wx, wy);
+	       for (xx = xstart + 1; xx < xstart + xmax - ymin; xx++)
+		 account (xx, yy, 1, wy);
+	       account (xx, yy, (1 - wx), wy);
 #undef account
-	      printf ("\n");
-	    }
-       }
+	       printf ("\n");
+	     }
+	}
 #if 0
       //printf ("%i %i %i %i\n",xmin,xmax,ymin,ymax);
       for (coord_t cy = std::max (y - scaled_max_distance, (coord_t)-ymin); cy <= std::min (y + scaled_max_distance, (coord_t)height - ymax); cy+= pixel_step)
@@ -779,71 +779,71 @@ confirm (render_scr_detect *render,
       printf ("patch_xscale %f %f t %i strip %i corner %i\n", patch_xscale, patch_yscale, t, strip, corners);
     }
   for (int yy = -sample_steps - outer_space; yy <= sample_steps + outer_space; yy++)
-  {
-    /* Make bigger gap between the outer set of points and inner ones so image can be unsharp.  */
-    if (yy == -sample_steps - outer_space + 1 || yy == sample_steps)
-      yy+= outer_space;
-    for (int xx = -sample_steps - outer_space; xx <= sample_steps + outer_space; xx++)
-      {
-        if (xx == -sample_steps - outer_space + 1 || xx == sample_steps)
-	  xx += outer_space;
-	coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_x;
-	coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_y + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_y;
+    {
+      /* Make bigger gap between the outer set of points and inner ones so image can be unsharp.  */
+      if (yy == -sample_steps - outer_space + 1 || yy == sample_steps)
+	yy+= outer_space;
+      for (int xx = -sample_steps - outer_space; xx <= sample_steps + outer_space; xx++)
+	{
+	  if (xx == -sample_steps - outer_space + 1 || xx == sample_steps)
+	    xx += outer_space;
+	  coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_x;
+	  coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_y + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_y;
 
-	rgbdata d = render->get_adjusted_pixel (ax, ay);
-	luminosity_t color[3] = {d.red, d.green, d.blue};
+	  rgbdata d = render->get_adjusted_pixel (ax, ay);
+	  luminosity_t color[3] = {d.red, d.green, d.blue};
 
-	luminosity_t sum = color[0]+color[1]+color[2];
-	color[0] = std::max (color[0], (luminosity_t)0);
-	color[1] = std::max (color[1], (luminosity_t)0);
-	color[2] = std::max (color[2], (luminosity_t)0);
-	sum = std::max (sum, (luminosity_t)0.0001);
-	//sum=1;
-	luminosity_t val = color[t] / sum;
-	min = std::min (val, min);
-	if (verbose_confirm > 2)
-	  printf (" [% 6.2F % 6.2F]:", ax - bestcx, ay - bestcy);
-	if (verbose_confirm > 1)
-	  printf ("   r% 8.3F g% 8.3F b% 8.3F *% 8.3F*", color[0]*100, color[1]*100, color[2]*100, val);
-	if (/*sum > 0 && color[t] > 0*/1)
-	  {
-	    bool lr = (xx == -sample_steps - outer_space || xx == sample_steps + outer_space);
-	    bool ud = (yy == -sample_steps - outer_space || yy == sample_steps + outer_space);
-	    if (lr && ud)
-	      bestouter_corners += val;
-	    else if (lr)
-	      bestouter_lr += val;
-	    else if (ud)
-	      bestouter_ud += val;
-	    else 
-	      bestinner += val;
+	  luminosity_t sum = color[0]+color[1]+color[2];
+	  color[0] = std::max (color[0], (luminosity_t)0);
+	  color[1] = std::max (color[1], (luminosity_t)0);
+	  color[2] = std::max (color[2], (luminosity_t)0);
+	  sum = std::max (sum, (luminosity_t)0.0001);
+	  //sum=1;
+	  luminosity_t val = color[t] / sum;
+	  min = std::min (val, min);
+	  if (verbose_confirm > 2)
+	    printf (" [% 6.2F % 6.2F]:", ax - bestcx, ay - bestcy);
+	  if (verbose_confirm > 1)
+	    printf ("   r% 8.3F g% 8.3F b% 8.3F *% 8.3F*", color[0]*100, color[1]*100, color[2]*100, val);
+	  if (/*sum > 0 && color[t] > 0*/1)
+	    {
+	      bool lr = (xx == -sample_steps - outer_space || xx == sample_steps + outer_space);
+	      bool ud = (yy == -sample_steps - outer_space || yy == sample_steps + outer_space);
+	      if (lr && ud)
+		bestouter_corners += val;
+	      else if (lr)
+		bestouter_lr += val;
+	      else if (ud)
+		bestouter_ud += val;
+	      else 
+		bestinner += val;
 #if 0
-	    if (corners && ((xx == -sample_steps - outer_space || xx == sample_steps + outer_space) && (yy == -sample_steps - outer_space || yy == sample_steps + outer_space)))
-	      {
-	        if (verbose_confirm > 1)
-		  printf ("X");
-	      }
-	    else if ((!strip && (xx == -sample_steps - outer_space || xx == sample_steps + outer_space)) || yy == -sample_steps - outer_space || yy == sample_steps + outer_space)
-	      {
-		if (xx == -sample_steps - outer_space || xx == sample_steps + outer_space)
-		  bestouter_lr += val;
-		if (yy == -sample_steps - outer_space || yy == sample_steps + outer_space)
-		  bestouter_ud += val;
-	        if (verbose_confirm > 1)
-		  printf ("O");
-	      }
-	    else
-	      {
-		bestinner += val;// ninner++;
-	        if (verbose_confirm > 1)
-		  printf ("I");
-	      }
+	      if (corners && ((xx == -sample_steps - outer_space || xx == sample_steps + outer_space) && (yy == -sample_steps - outer_space || yy == sample_steps + outer_space)))
+		{
+		  if (verbose_confirm > 1)
+		    printf ("X");
+		}
+	      else if ((!strip && (xx == -sample_steps - outer_space || xx == sample_steps + outer_space)) || yy == -sample_steps - outer_space || yy == sample_steps + outer_space)
+		{
+		  if (xx == -sample_steps - outer_space || xx == sample_steps + outer_space)
+		    bestouter_lr += val;
+		  if (yy == -sample_steps - outer_space || yy == sample_steps + outer_space)
+		    bestouter_ud += val;
+		  if (verbose_confirm > 1)
+		    printf ("O");
+		}
+	      else
+		{
+		  bestinner += val;// ninner++;
+		  if (verbose_confirm > 1)
+		    printf ("I");
+		}
 #endif
-	  }
-      }
-    if (verbose_confirm > 1)
-      printf("\n");
-  }
+	    }
+	}
+      if (verbose_confirm > 1)
+	printf("\n");
+    }
   //printf ("%f %f %f\n",min, bestinner, bestouter);
 
   *rcx = bestcx;

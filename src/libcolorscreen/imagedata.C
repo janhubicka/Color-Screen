@@ -903,16 +903,16 @@ image_data::parse_icc_profile ()
     return true;
   cmsHPROFILE hInProfile = cmsOpenProfileFromMem (icc_profile, icc_profile_size);
   if (!hInProfile)
-  {
-    fprintf (stderr, "Failed to parse profile\n");
-    return false;
-  }
+    {
+      fprintf (stderr, "Failed to parse profile\n");
+      return false;
+    }
   cmsHTRANSFORM hTransform = cmsCreateTransform(hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT, INTENT_ABSOLUTE_COLORIMETRIC, 0);
   if (!hTransform)
-  {
-    fprintf (stderr, "Failed to do icc profile transform\n");
-    return false;
-  }
+    {
+      fprintf (stderr, "Failed to do icc profile transform\n");
+      return false;
+    }
   float rgb_buffer[] = {0,0,0,
 			1,0,0,
 			0,1,0,
