@@ -1,3 +1,4 @@
+/* This file implement logic to detect regular screen in RGB scan.  */
 #include <memory>
 #include <limits.h>
 #include "include/scr-detect.h"
@@ -18,7 +19,11 @@ struct patch_entry
 };
 
 
-/* Lookup patch of a given color, coordinates and maximal size.  Return number of vertices in patch.  */
+/* Lookup patch of a given color C, coordinates X, Y and maximal size MAX_PATCH_SIZE.
+   Return number of pixels in patch.
+   ENTRIES will be initialized to list all pixels in the patch.  VISITED bitmap is used
+   to mark pixels that belings to already known patches.  If PERMANENT then bitmap is updated
+   to mark all pixels of the patch as visited.  */
 int
 find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y, int max_patch_size, patch_entry *entries, bitmap_2d *visited, bool permanent)
 {
@@ -57,6 +62,10 @@ done:
       visited->clear_bit (entries[i].x, entries[i].y);
   return end;
 }
+
+/* Find center of patch specified by ENTRIES of SIZE.
+   This is a weighted everage of all entries.  Return true if
+   this center is inside of the patch.  */
 
 bool
 patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
@@ -922,7 +931,7 @@ diagonal_coordinates_to_color (int x, int y)
   return (x&1) ? solver_parameters::red : solver_parameters::blue;
 }
 
-screen_map *
+std::unique_ptr <screen_map>
 flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
 {
   double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
@@ -1012,7 +1021,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       width = (xmax - xmin) * 2;
       height = (ymax - ymin) * 2;
     }
-  screen_map *map = new screen_map(param.type, xshift, yshift, width, height);
+  std::unique_ptr <screen_map> map (new screen_map(param.type, xshift, yshift, width, height));
 
   struct queue_entry
   {
@@ -1029,7 +1038,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
   queue_entry e;
   while (queue.extract_min (e)
-	 && (progress || !progress->cancel_requested ()))
+	 && (!progress || !progress->cancel_requested ()))
     {
       coord_t ix, iy;
       int priority = 0;
@@ -1118,13 +1127,12 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 #undef cpatch
 	}
     }
+  if (progress && progress->cancel_requested ())
+    return NULL;
   /* Dufay screen has two points per screen repetetion.  */
   *npatches = nfound;
   if (nfound < 100)
-    {
-      delete map;
-      return NULL;
-    }
+    return NULL;
 
   /* Determine better screen dimension so the overall statistics are meaningfull.  */
   solver_parameters sparam2;
@@ -1134,6 +1142,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   map->determine_solver_points (*npatches, &sparam2);
   param2 = param;
   simple_solver (&param2, img, sparam2, progress);
+  if (progress && progress->cancel_requested ())
+    return NULL;
   screen_xsize = sqrt (param2.coordinate1_x * param2.coordinate1_x + param2.coordinate1_y * param2.coordinate1_y);
   screen_ysize = sqrt (param2.coordinate2_x * param2.coordinate2_x + param2.coordinate2_y * param2.coordinate2_y);
   nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
@@ -1178,6 +1188,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   for (int y = -map->yshift; y < map->height - map->yshift; y++)
     {
       int last_seen = INT_MAX / 2;
+      if (progress && progress->cancel_requested ())
+	return NULL;
       for (int x = -map->xshift; x < map->width - map->xshift; x++, last_seen++)
 	if (!map->known_p (x, y))
 	  {
@@ -1205,7 +1217,6 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 		  {
 		    fprintf (report_file, "Too large unanalyzed unknown screen area around image coordinates %f %f\n", ix, iy);
 		  }
-		delete map;
 		return NULL;
 	      }
 	    //else
@@ -1223,39 +1234,33 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  fprintf (report_file, "Detected screen patches covers only %2.2f%% of the screen\n", nfound * 100.0 / snexpected);
 	  //fprintf (report_file, "Reducing --min-screen-percentage would bypass this error\n");
 	}
-      delete map;
       return NULL;
     }
   if (xmin > std::max (dsparams->border_left, (coord_t)2) * img.width / 100)
     {
       if (report_file)
 	fprintf (report_file, "Detected screen failed to reach left border of the image (limit %f)\n", dsparams->border_left);
-      delete map;
       return NULL;
     }
   if (ymin > std::max (dsparams->border_top, (coord_t)2) * img.height / 100)
     {
       if (report_file)
 	fprintf (report_file, "Detected screen failed to reach top border of the image (limit %f)\n", dsparams->border_top);
-      delete map;
       return NULL;
     }
   if (xmax < std::min (100 - dsparams->border_right, (coord_t)98) * img.width / 100)
     {
       if (report_file)
 	fprintf (report_file, "Detected screen failed to reach right border of the image (limit %f)\n", dsparams->border_right);
-      delete map;
       return NULL;
     }
   if (ymax < std::min (100 - dsparams->border_bottom, (coord_t)98) * img.height / 100)
     {
       if (report_file)
 	fprintf (report_file, "Detected screen failed to reach bottom border of the image (limit %f)\n", dsparams->border_bottom);
-      delete map;
       return NULL;
     }
   return map;
-}
 }
 
 /* List points in range 0...(xstep-1) and 0....(ystep - 1) starting from middle.  */
@@ -1294,7 +1299,7 @@ std::vector<struct int_point>check_points(int xsteps, int ysteps)
   return ret;
 }
 
-static void
+void
 summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &param, const char *type, FILE *report_file, progress_info *progress)
 {
   coord_t max_distance[3] = {0,0,0};
@@ -1338,6 +1343,7 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
   if (progress)
     progress->resume_stdout ();
 }
+}
 
 detected_screen
 detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
@@ -1348,7 +1354,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 
   detected_screen ret;
   render_parameters empty;
-  screen_map *smap = NULL;
+  std::unique_ptr <screen_map> smap = NULL;
 
   if (dsparams->do_mesh)
     sparam.optimize_lens = sparam.optimize_tilt = false;
@@ -1461,10 +1467,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 		  else if (try_paget_finlay && try_guess_paget_screen (report_file, *cmap, sparam, x, y, &visited, progress))
 		    current_type = type == Finlay ? Finlay : Paget;
 		  if (progress && progress->cancel_requested ())
-		    {
-		      delete smap;
-		      return ret;
-		    }
+		    return ret;
 
 		  if (current_type != Random)
 		    {
@@ -1548,7 +1551,6 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   }
   if (!smap || (progress && progress->cancel_requested ()))
     {
-      delete smap;
       return ret;
     }
   /* Obtain more realistic solution so the range chosen for final mesh is likely right.  */
@@ -1566,13 +1568,11 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   solver (&ret.param, img, sparam, progress);
   if (progress && progress->cancel_requested ())
     {
-      delete smap;
       return ret;
     }
-  summarise_quality (img, smap, ret.param, "homographic", report_file, progress);
+  summarise_quality (img, smap.get (), ret.param, "homographic", report_file, progress);
   if (progress && progress->cancel_requested ())
     {
-      delete smap;
       return ret;
     }
 
@@ -1652,7 +1652,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   if (dsparams->do_mesh)
     {
       mesh *m = solver_mesh (&ret.param, img, sparam, *smap, progress);
-      if (progress && progress->cancel_requested ())
+      if (!m || (progress && progress->cancel_requested ()))
         {
 	  delete m;
 	  return ret;
@@ -1678,7 +1678,7 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
 	  }
       ret.mesh_trans = m;
       ret.param.mesh_trans = m;
-      summarise_quality (img, smap, ret.param, "mesh", report_file, progress);
+      summarise_quality (img, smap.get (), ret.param, "mesh", report_file, progress);
       ret.param.mesh_trans = NULL;
     }
   else
@@ -1741,10 +1741,8 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   if (progress)
     progress->resume_stdout ();
   
-  if (!dsparams->return_screen_map)
-    delete smap;
-  else
-    ret.smap = smap;
+  if (dsparams->return_screen_map)
+    ret.smap = smap.release ();
   ret.success = true;
   return ret;
 }
