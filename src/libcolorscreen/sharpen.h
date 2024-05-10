@@ -18,6 +18,20 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
 	  out[y * width + x] = (mem_O) getdata (data, x, y, width, param);
     }
 }
+template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
+inline void
+do_sharpen_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T data,int width, int y, luminosity_t amount, P param)
+{
+#pragma omp simd
+  for (int x = 0; x < width; x++)
+    {
+      O sum = hblur[0 * width + x] * rotated_cmatrix[0];
+      for (int d = 1; d < clen; d++)
+	sum += hblur[d * width + x] * rotated_cmatrix[d];
+      O orig = getdata (data, x, y, width, param);
+      out[y * width + x] = (mem_O) (orig + (orig - sum) * amount);
+    }
+}
 
 /* Kernel for actual shaprening.
    Flattened so avoid doing unnecesary stuff.  */
@@ -55,17 +69,32 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	    fir_blur::blur_horisontal<O, T, P, getdata> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, data, param, y + clen / 2 - 1, width, clen, cmatrix);
 	  else
 	    memset ((void*)(hblur + ((y + clen / 2 - 1 + clen) % clen) * width), 0, sizeof (O) * width);
-#pragma omp simd
 	  for (int d = 0; d < clen; d++)
 	    rotated_cmatrix[(y + d - clen / 2 + clen) % clen] = cmatrix[d];
-#pragma omp simd
-	  for (int x = 0; x < width; x++)
+	  /* Specialize the inner loop for small clens.  */
+	  switch (clen)
 	    {
-	      O sum = hblur[0 * width + x] * rotated_cmatrix[0];
-	      for (int d = 1; d < clen; d++)
-		sum += hblur[d * width + x] * rotated_cmatrix[d];
-	      O orig = getdata (data, x, y, width, param);
-	      out[y * width + x] = (mem_O) (orig + (orig - sum) * amount);
+	      case 1: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 3: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 5: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 7: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 9: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 11: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 13: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 15: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 17: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 19: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 21: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 23: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 25: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 27: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 29: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 31: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      default:
+	       if (clen < 32 || !(clen & 1))
+		 abort ();/*__builtin_unreachable ();*/
+	       do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param);
+	       break;
 	    }
 	  if (progress)
 	     progress->inc_progress ();

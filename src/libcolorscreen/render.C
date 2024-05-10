@@ -310,11 +310,17 @@ struct getdata_params
 
 /* Helper for sharpening template for images with gray data.  */
 inline luminosity_t
-getdata_helper (unsigned short **graydata, int x, int y, int, getdata_params d)
+getdata_helper_no_correction (unsigned short **graydata, int x, int y, int, getdata_params d)
+{
+  return d.table[graydata[y][x]];
+}
+
+/* Helper for sharpening template for images with gray data.  */
+inline luminosity_t
+getdata_helper_correction (unsigned short **graydata, int x, int y, int, getdata_params d)
 {
   luminosity_t v = d.table[graydata[y][x]];
-  if (d.correction)
-    v = d.correction->apply (v, x, y, backlight_correction_parameters::ir);
+  v = d.correction->apply (v, x, y, backlight_correction_parameters::ir);
   return v;
 }
 /* Helper for sharpening template for images with RGB data only.  */
@@ -354,7 +360,10 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
 	  delete ret;
 	  return NULL;
 	}
-      ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **, getdata_params, getdata_helper> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+      if (d.correction)
+        ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **, getdata_params, getdata_helper_correction> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+      else
+        ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **, getdata_params, getdata_helper_no_correction> (out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
       lookup_table_cache.release (d.table);
     }
   else
