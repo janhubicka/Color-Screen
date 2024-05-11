@@ -6,6 +6,7 @@
 #include "sharpen.h"
 #include "render-tile.h"
 #include "render-to-file.h"
+#include "mapalloc.h"
 struct color_data
 {
   luminosity_t *m_data[3];
@@ -28,7 +29,7 @@ color_data::~color_data()
 {
   for (int i = 0; i < 3; i++)
     if (m_data[i])
-      free (m_data[i]);
+      MapAlloc::Free (m_data[i]);
 }
 
 namespace
@@ -126,7 +127,7 @@ getdata_helper (render_scr_detect &r, int x, int y, int, int)
 render_scr_detect::my_mem_rgbdata *
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
-  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata = (render_scr_detect::my_mem_rgbdata *)malloc (p.img->width * p.img->height * sizeof (render_scr_detect::my_mem_rgbdata));
+  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (p.img->width * p.img->height * sizeof (render_scr_detect::my_mem_rgbdata), "HDR RGB data");
   bool ok = true;
   if (!precomputed_rgbdata)
     return NULL;
@@ -148,7 +149,7 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
     }
   if (!ok || (progress && progress->cancelled ()))
     {
-      free (precomputed_rgbdata);
+      MapAlloc::Free (precomputed_rgbdata);
       return NULL;
     }
   return precomputed_rgbdata;
@@ -264,7 +265,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
       delete data;
       return NULL;
     }
-  luminosity_t *tmp = (luminosity_t *)malloc (p.img->width * p.img->height * sizeof (luminosity_t));
+  luminosity_t *tmp = (luminosity_t *)MapAlloc::Alloc (p.img->width * p.img->height * sizeof (luminosity_t), "Demosaiced HDR data");
   if (progress)
     progress->set_task ("demosaicing", p.img->height * 100 * 3);
   for (int color = 0; color < 3; color++)
@@ -297,7 +298,7 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
       if (progress && progress->cancel_requested ())
 	break;
     }
-  free (tmp);
+  MapAlloc::Free (tmp);
   if (progress && progress->cancelled ())
     {
       delete data;

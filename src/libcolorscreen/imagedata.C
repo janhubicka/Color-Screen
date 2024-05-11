@@ -44,7 +44,7 @@ public:
     if (m_jpeg_buf)
       tjFree (m_jpeg_buf);
     if (m_img_buf)
-      tjFree (m_img_buf);
+      MapAlloc::Free (m_img_buf);
     if (m_tj_instance)
       tjDestroy(m_tj_instance);
   }
@@ -464,7 +464,7 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
   rgb = inColorspace == 1;
   int pixelFormat = rgb ? TJPF_RGB : TJPF_GRAY;
   //m_img_buf = (unsigned char *)tjAlloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
-  m_img_buf = (unsigned char *)malloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
+  m_img_buf = (unsigned char *)MapAlloc::Alloc (m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat], "Decompressed jpeg image");
   if (!m_img_buf)
     {
       *error = "can not allocate decompressed image buffer";
