@@ -32,6 +32,27 @@ color_data::~color_data()
       MapAlloc::Free (m_data[i]);
 }
 
+/* A wrapper class around m_precomputed_rgbdata which handles allocation and dealocation.
+   This is needed for the cache.  */
+class precomputed_rgbdata
+{
+public:
+  render_scr_detect::my_mem_rgbdata *m_data;
+  precomputed_rgbdata (int width, int height);
+  ~precomputed_rgbdata();
+};
+
+precomputed_rgbdata::precomputed_rgbdata (int width, int height)
+{
+   m_data = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (width * height * sizeof (render_scr_detect::my_mem_rgbdata), "HDR RGB data");
+}
+precomputed_rgbdata::~precomputed_rgbdata ()
+{
+  if (m_data)
+    MapAlloc::Free (m_data);
+  m_data = NULL;
+}
+
 namespace
 {
 /* Lookup table translates raw input data into linear values.  */
@@ -124,37 +145,42 @@ getdata_helper (render_scr_detect &r, int x, int y, int, int)
 }
 
 
-render_scr_detect::my_mem_rgbdata *
+precomputed_rgbdata *
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
-  render_scr_detect::my_mem_rgbdata *precomputed_rgbdata = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (p.img->width * p.img->height * sizeof (render_scr_detect::my_mem_rgbdata), "HDR RGB data");
+  precomputed_rgbdata *my_precomputed_rgbdata = new precomputed_rgbdata (p.img->width, p.img->height);
   bool ok = true;
-  if (!precomputed_rgbdata)
+  if (!my_precomputed_rgbdata)
     return NULL;
+  if (!my_precomputed_rgbdata->m_data)
+    {
+      delete (my_precomputed_rgbdata);
+      return NULL;
+    }
   if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
-    ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (precomputed_rgbdata, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
+    ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (my_precomputed_rgbdata->m_data, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
   else
     {
       if (progress)
 	progress->set_task ("determining adjusted colors for screen detection", p.img->height);
-#pragma omp parallel for default(none) shared(p,precomputed_rgbdata,progress)
+#pragma omp parallel for default(none) shared(p,my_precomputed_rgbdata,progress)
       for (int y = 0; y < p.img->height; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < p.img->width; x++)
-	      precomputed_rgbdata[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel (x, y);
+	      my_precomputed_rgbdata->m_data[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel (x, y);
 	   if (progress)
 	     progress->inc_progress ();
 	}
     }
   if (!ok || (progress && progress->cancelled ()))
     {
-      MapAlloc::Free (precomputed_rgbdata);
+      delete (my_precomputed_rgbdata);
       return NULL;
     }
-  return precomputed_rgbdata;
+  return my_precomputed_rgbdata;
 }
-static lru_cache <precomputed_rgbdata_params, render_scr_detect::my_mem_rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
+static lru_cache <precomputed_rgbdata_params, precomputed_rgbdata, get_precomputed_rgbdata, 1> precomputed_rgbdata_cache ("precomputed data");
 
 /* Lookup table translates raw input data into linear values.  */
 struct patches_cache_params
@@ -442,7 +468,8 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
   if (m_precomputed_rgbdata)
     return true;
   struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
-  m_precomputed_rgbdata = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
+  m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
+  m_precomputed_rgbdata = m_precomputed_rgbdata_holder->m_data;
   return m_precomputed_rgbdata;
 }
 
@@ -535,7 +562,7 @@ render_scr_detect::~render_scr_detect ()
   if (m_color_class_map)
     color_class_cache.release (m_color_class_map);
   if (m_precomputed_rgbdata)
-    precomputed_rgbdata_cache.release (m_precomputed_rgbdata);
+    precomputed_rgbdata_cache.release (m_precomputed_rgbdata_holder);
 }
 
 int cmp_entry(const void *p1, const void *p2)

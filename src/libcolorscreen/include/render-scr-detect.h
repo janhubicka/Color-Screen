@@ -248,6 +248,7 @@ done:
   static rgbdata analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *p = NULL);
 protected:
   my_mem_rgbdata *m_precomputed_rgbdata;
+  class precomputed_rgbdata *m_precomputed_rgbdata_holder;
   color_class_map *m_color_class_map;
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;

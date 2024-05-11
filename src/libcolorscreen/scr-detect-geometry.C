@@ -9,6 +9,8 @@
 #include "include/render-to-scr.h"
 #include "include/solver.h"
 #include "include/analyze-paget.h"
+
+extern void prune_render_scr_detect_caches ();
 namespace
 {
 const bool verbose = false;
@@ -1466,6 +1468,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	    }
 	  if (!render)
 	    {
+	      prune_render_scr_detect_caches ();
 	      std::unique_ptr<render_scr_detect> new_render (new render_scr_detect (dparam, img, empty, 256));
 	      if (!new_render)
 		{
@@ -1825,12 +1828,10 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 }
 }
 
-extern void prune_render_scr_detect_caches ();
 
 detected_screen
 detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
-  prune_render_scr_detect_caches ();
   detected_screen ret = detect_regular_screen_1 (img, type, dparam, gamma, sparam, dsparams, progress, report_file);
   prune_render_scr_detect_caches ();
   return ret;
