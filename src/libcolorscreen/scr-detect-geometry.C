@@ -1391,10 +1391,9 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
   if (progress)
     progress->resume_stdout ();
 }
-}
 
 detected_screen
-detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
+detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
   /* Try both screen types; it is cheap to do so and seems to work quite reliable now.  */
   const bool try_dufay = true;
@@ -1822,5 +1821,17 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   if (dsparams->return_screen_map)
     ret.smap = smap.release ();
   ret.success = true;
+  return ret;
+}
+}
+
+extern void prune_render_scr_detect_caches ();
+
+detected_screen
+detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
+{
+  prune_render_scr_detect_caches ();
+  detected_screen ret = detect_regular_screen_1 (img, type, dparam, gamma, sparam, dsparams, progress, report_file);
+  prune_render_scr_detect_caches ();
   return ret;
 }

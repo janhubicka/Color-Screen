@@ -600,3 +600,12 @@ render_scr_relax::~render_scr_relax()
 {
   color_data_cache.release (m_color_data_handle);
 }
+/* Prune render scr detect cache.  We need to do this so destruction order of MapAlloc and
+   the cache does not yield an segfault.  */
+
+void
+prune_render_scr_detect_caches ()
+{
+  color_class_cache.prune ();
+  precomputed_rgbdata_cache.prune ();
+}
