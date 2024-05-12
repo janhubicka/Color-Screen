@@ -1014,11 +1014,14 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
   int min_patch_size = (int)(screen_xsize * screen_ysize / 8);
 
-  /* Dufay has 2 square patch and one strip per screen tile, while Paget/Finlay has 8 squares.  */
   if (param.type != Dufay)
     {
-      max_patch_size /= 2;
-      min_patch_size /= 2;
+      /* Dufay has 4 square patches and one strip per screen tile, while Paget/Finlay has 8 squares.  */
+      //max_patch_size /= 2;
+      //min_patch_size /= 2;
+      /* Disable pixels on boundaries.  */
+      min_patch_size = min_patch_size - 4 * sqrt (min_patch_size);
+      //fprintf (stderr, "Computed min patch size %i\n", min_patch_size);
     }
   min_patch_size = std::max (min_patch_size, 1);
   max_patch_size = std::max (max_patch_size, min_patch_size + 1);
@@ -1420,9 +1423,6 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
   render_parameters empty;
   std::unique_ptr <screen_map> smap = NULL;
 
-  if (dsparams->do_mesh)
-    sparam.optimize_lens = sparam.optimize_tilt = false;
-
   empty.gamma = gamma;
   ret.mesh_trans = NULL;
   ret.success = false;
@@ -1534,10 +1534,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		}
 	    }
 	  if (progress)
-	    {
-	      progress->set_task ("Looking for initial grid", search_xsteps * search_ysteps);
-	      progress->set_progress (s);
-	    }
+	    progress->set_task ("Looking for initial green patch", 1);
 	  if (!progress || !progress->cancel_requested ())
 	    for (int y = ymin; y < ymax && !smap && nattempts < maxattempts; y++)
 	      for (int x = xmin; x < xmax && !smap && nattempts < maxattempts; x++)
@@ -1550,7 +1547,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		     if it makes sense, otheriwse default to Paget.  */
 		  if (try_dufay && try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		    current_type = Dufay;
-		  else if (try_paget_finlay && try_guess_paget_screen (report_file, *cmap /**render->get_color_class_map ()*/, sparam, x, y, &visited_paget, progress))
+		  else if (try_paget_finlay && try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited_paget, progress))
 		    current_type = type == Finlay ? Finlay : Paget;
 		  if (progress && progress->cancel_requested ())
 		    {
