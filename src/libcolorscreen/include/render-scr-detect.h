@@ -104,12 +104,15 @@ public:
   static rgbdata
   normalize_color (rgbdata c)
   {
-    luminosity_t min = std::min (std::min (std::min (c.red, c.green), c.blue), (luminosity_t) 0);
-    c.red -= min;
-    c.green -= min;
-    c.blue -= min;
+    c.red = std::max (c.red, (luminosity_t)0);
+    c.green = std::max (c.green, (luminosity_t)0);
+    c.blue = std::max (c.blue, (luminosity_t)0);
+    //luminosity_t min = /*std::max (*/std::min (std::min (c.red, c.green), c.blue)/*, (luminosity_t) 0*/);
+    //c.red -= min;
+    //c.green -= min;
+    //c.blue -= min;
     luminosity_t sum = c.red + c.green + c.blue;
-    if (!sum)
+    if (!(sum > 0))
       return {0, 0, 0};
     luminosity_t adj = 1 / sum;
 #if 1
