@@ -602,7 +602,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
 	  dsparams.slow_floodfill = true;
-	  dsparams.fast_floodfill = false;
+	  dsparams.fast_floodfill = true;
 	  dsparams.return_screen_map = true;
 	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
 	  current.type = detected.param.type;
