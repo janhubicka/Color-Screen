@@ -31,11 +31,11 @@ find_patch (color_class_map &color_map, scr_detect::color_class c, int x, int y,
 {
   if (x < 0 || y < 0 || x >= color_map.width || y >= color_map.height)
     return 0;
-  if (visited->set_bit (x, y))
-    return 0;
   scr_detect::color_class t = color_map.get_class (x, y);
   if (t != c)
      return 0;
+  if (visited->set_bit (x, y))
+    return 0;
   int start = 0, end = 1;
   entries[0].x = x;
   entries[0].y = y;
@@ -538,11 +538,23 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
 	       int min_patch_size, int max_patch_size, coord_t max_distance,
 	       coord_t *cx, coord_t *cy, int *priority, bitmap_2d *visited)
 {
+  //if (x < 0 || y < 0 || x >= color_map->width || y >= color_map->height)
+    //return false;
   patch_entry entries[max_patch_size + 1];
   const char *fail = NULL;
+  bool set_p = 0;//= visited->test_bit ((int)(x + 0.5), (int)(y + 0.5));
   int size = find_patch (*color_map, c, (int)(x + 0.5), (int)(y + 0.5), max_patch_size + 1, entries, visited, true);
-  if (size < min_patch_size || size > max_patch_size)
-    fail = "rejected: bad size";
+  if (size < min_patch_size)
+    {
+      if (set_p)
+        fail = "rejected: already visited";
+      else if (!size)
+        fail = "rejected: zero size";
+      else
+        fail = "rejected: too small";
+    }
+  else if (size > max_patch_size)
+    fail = "rejected: too large";
   else if (!patch_center (entries, size, cx, cy))
     fail = "rejected: center not in patch";
   else if ((*cx - x) * (*cx - x) + (*cy - y) * (*cy - y) > max_distance * max_distance)
@@ -554,6 +566,7 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
     {
       for (int i = 0; i < size; i++)
 	visited->clear_bit (entries[i].x, entries[i].y);
+      //printf ("%s %i %i color %i %i size %i %i...%i\n", fail,(int)(x+0.5),(int)(y+0.5), (int)c, (int)color_map->get_class ((int)(x+0.5),(int)(y+0.5)), size, min_patch_size, max_patch_size);
       return false;
     }
   coord_t dist = (*cx - x) * (*cx - x) + (*cy - y) * (*cy - y);
@@ -999,7 +1012,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   scr_map.set_parameters (param, img);
 
   int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
-  int min_patch_size = std::max ((int)(screen_xsize * screen_ysize / 5), 1);
+  int min_patch_size = (int)(screen_xsize * screen_ysize / 8);
 
   /* Dufay has 2 square patch and one strip per screen tile, while Paget/Finlay has 8 squares.  */
   if (param.type != Dufay)
@@ -1007,6 +1020,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       max_patch_size /= 2;
       min_patch_size /= 2;
     }
+  min_patch_size = std::max (min_patch_size, 1);
+  max_patch_size = std::max (max_patch_size, min_patch_size + 1);
   coord_t max_distance = (screen_xsize + screen_ysize) * 0.1;
   int nfound = 1;
 
@@ -1103,10 +1118,10 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    sparam->add_point (e.img_x, e.img_y, e.scr_x / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
   // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
-#define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false, dsparams->min_patch_contrast)))
-#define cstrip(x,y,t, priority) ((!slow && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
-				 || (!fast && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
+#define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
+				 || (slow && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false, dsparams->min_patch_contrast)))
+#define cstrip(x,y,t, priority) ((fast && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
+				 || (slow && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
 	  if (!map->known_p (e.scr_x - 1, e.scr_y)
 	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
@@ -1148,8 +1163,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  coord_t c1_y = (-param.coordinate1_y + param.coordinate2_y);
 	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x);
 	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y);
-#define cpatch(x,y,t, priority) ((!slow && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue, dsparams->min_patch_contrast)))
+#define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
+				 || (slow && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue, dsparams->min_patch_contrast)))
 				 //|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.33 / 2, 0.33 / 2, false)))
 	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
@@ -1556,7 +1571,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		      param.type = current_type;
 		      simple_solver (&param, img, sparam, progress);
 		      smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get (),
-				         cmap ? cmap.get () : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
+				         cmap && current_type != Dufay ? cmap.get () : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		      if (!smap)
 			{
 			  if (progress)
@@ -1832,6 +1847,9 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 detected_screen
 detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
+  //dsparams->slow_floodfill = false;
+  //dsparams->fast_floodfill = true;
+  //dsparams->optimize_colors = false;
   detected_screen ret = detect_regular_screen_1 (img, type, dparam, gamma, sparam, dsparams, progress, report_file);
   prune_render_scr_detect_caches ();
   return ret;
