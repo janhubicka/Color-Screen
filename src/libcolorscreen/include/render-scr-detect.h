@@ -77,9 +77,14 @@ public:
     if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
       {
 	rgbdata d[4][4];
-        for (int yy = -1; yy <= 2; yy++)
-          for (int xx = -1; xx <= 2; xx++)
-  	    d[yy+1][xx+1] = /*fast_get_adjusted_pixel (sx + xx, sy + yy);*/ m_precomputed_rgbdata[(yy + sy) * m_img.width + (xx + sx)];
+	if (m_precomputed_rgbdata)
+	  for (int yy = -1; yy <= 2; yy++)
+	    for (int xx = -1; xx <= 2; xx++)
+	      d[yy+1][xx+1] = fast_precomputed_get_adjusted_pixel (xx + sx, yy + sy);
+	else
+	  for (int yy = -1; yy <= 2; yy++)
+	    for (int xx = -1; xx <= 2; xx++)
+	      d[yy+1][xx+1] =  fast_nonprecomputed_get_adjusted_pixel (xx + sx, yy + sy);
 	luminosity_t rr,gg, bb;
 	rr = cubic_interpolate (cubic_interpolate (d[0][0].red, d[1][0].red, d[2][0].red, d[3][0].red, ry),
 				cubic_interpolate (d[0][1].red, d[1][1].red, d[2][1].red, d[3][1].red, ry),
