@@ -4,6 +4,7 @@
 #include "dufaycolor.h"
 #include "wratten.h"
 #include "include/spectrum-to-xyz.h"
+#include "render-interpolate.h"
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
@@ -573,4 +574,40 @@ render_parameters::get_tile_adjustment (int x, int y)
 {
   assert (x >= 0 && x < tile_adjustments_width && y >= 0 && y < tile_adjustments_height);
   return tile_adjustments[y * tile_adjustments_width + x];
+}
+
+/* Set reasonable color model for screen of TYPE.  */
+bool
+render_parameters::auto_color_model (enum scr_type type)
+{
+  if (type == Dufay)
+    color_model = color_model_dufay_color_cinematography_spectra;
+  else if (type == Paget || type == Finlay)
+    color_model = color_model_miethe_goerz_reconstructed_wager;
+  else
+    return false;
+  return true;
+}
+
+/* Determine black and brightness by analysing tile of a scan.  */
+bool
+render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
+{
+  rgb_histogram hist;
+  render_parameters rparam = *this;
+  rparam.precise = true;
+  render_interpolate render (param, img, rparam, 256);
+  render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+  if (progress && progress->cancel_requested ())
+    return false;
+  render.collect_histogram (hist, xmin, xmax, ymin, ymax, progress);
+  if (hist.num_samples () < 2 || (progress && progress->cancel_requested ()))
+    return false;
+  rgbdata minvals = hist.find_min (dark_cut);
+  rgbdata maxvals = hist.find_max (light_cut);
+  minvals.print (stdout);
+  maxvals.print (stdout);
+  dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
+  brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
+  return true;
 }

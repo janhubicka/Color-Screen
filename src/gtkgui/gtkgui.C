@@ -605,8 +605,21 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  dsparams.fast_floodfill = true;
 	  dsparams.return_screen_map = true;
 	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
-	  current.type = detected.param.type;
-	  current_mesh = detected.mesh_trans;
+	  if (detected.success)
+	    {
+	      current.type = detected.param.type;
+	      current_mesh = detected.mesh_trans;
+	      current.mesh_trans = current_mesh;
+	      if (rparams.color_model == render_parameters::color_model_none)
+		rparams.auto_color_model (current.type);
+	      if (rparams.dark_point == 0 && rparams.brightness == 1)
+	      {
+		rparams.auto_dark_brightness (scan, current, scan.width / 3, scan.height / 3, 2 * scan.width / 3, 2 * scan.height / 3);
+		setvals ();
+	      }
+	      if (!display_type)
+		display_type = (int)render_type_interpolated;
+	    }
 	  display_scheduled = true;
 	  preview_display_scheduled = true;
 

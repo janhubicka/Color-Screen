@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <limits>
 #include "lru-cache.h"
 #include "dufaycolor.h"
 #include "render-interpolate.h"
@@ -358,4 +359,47 @@ void
 render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
 {
   downscale<render_interpolate, rgbdata, &render_interpolate::sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
+}
+
+/* Collect histogram of intensities.  */
+void
+render_interpolate::collect_histogram (rgb_histogram &histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+{
+  luminosity_t min_red = std::numeric_limits<luminosity_t>::max (), min_green = std::numeric_limits<luminosity_t>::max (), min_blue = std::numeric_limits<luminosity_t>::max ();
+  luminosity_t max_red = std::numeric_limits<luminosity_t>::min (), max_green = std::numeric_limits<luminosity_t>::min (), max_blue = std::numeric_limits<luminosity_t>::min ();
+  if (m_scr_to_img.get_type () == Dufay)
+    {
+      for (int y = 0; y < m_dufay->get_height (); y++)
+        for (int x = 0; x < m_dufay->get_width (); x++)
+	  {
+	    coord_t xp, yp;
+	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+	      continue;
+	    min_red = std::min (min_red, m_dufay->red (2*x, y));
+	    min_red = std::min (min_red, m_dufay->red (2*x+1, y));
+	    max_red = std::max (max_red, m_dufay->red (2*x, y));
+	    max_red = std::max (max_red, m_dufay->red (2*x+1, y));
+
+	    min_green = std::min (min_green, m_dufay->green (x, y));
+	    max_green = std::max (max_green, m_dufay->green (x, y));
+
+	    min_blue = std::min (min_blue, m_dufay->blue (x, y));
+	    max_blue = std::max (max_blue, m_dufay->blue (x, y));
+	  }
+      histogram.set_range ({min_red, min_green, min_blue},{max_red, max_green, max_blue}, 65536);
+      for (int y = 0; y < m_dufay->get_height (); y++)
+        for (int x = 0; x < m_dufay->get_width (); x++)
+	  {
+	    coord_t xp, yp;
+	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+	      continue;
+	    rgbdata color = {(m_dufay->red (2*x, y) + m_dufay->red (2*x+1, y)) / 2, m_dufay->green (x, y), m_dufay->blue (x, y)};
+	    histogram.account (color);
+	  }
+    }
+  else
+    abort ();
+  histogram.finalize ();
 }

@@ -115,6 +115,14 @@ public:
   {
     return m_yshift;
   }
+  int get_width ()
+  {
+    return m_width;
+  }
+  int get_height ()
+  {
+    return m_height;
+  }
   contrast_info &get_contrast (int x, int y)
   {
     return m_contrast[y * m_width + x];

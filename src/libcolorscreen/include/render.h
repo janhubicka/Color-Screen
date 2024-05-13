@@ -13,6 +13,7 @@
 #include "sensitivity.h"
 #include "backlight-correction.h"
 #include "tone-curve.h"
+#include "scr-to-img.h"
 
 enum render_type_t
 {
@@ -570,6 +571,8 @@ struct DLL_PUBLIC render_parameters
 	printf ("%f %f\n", profiled_blue.red * mix_red + profiled_blue.green * mix_green + profiled_blue.blue * mix_blue, patch_proportions.blue);
       }
   }
+  bool auto_color_model (enum scr_type type);
+  bool auto_dark_brightness (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.01, luminosity_t light_cut = 0.01);
 private:
   static const bool debug = false;
   color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized, image_data *img);

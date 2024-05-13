@@ -721,7 +721,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
   if (progress)
-    progress->set_task ("computing mesh", height);
+    progress->set_task ("computing mesh from detected points", height);
   mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
 #pragma omp parallel for default(none) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap)
   for (int y = 0; y < height; y++)

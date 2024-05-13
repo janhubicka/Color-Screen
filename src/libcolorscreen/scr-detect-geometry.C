@@ -83,10 +83,8 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
   *y = (2 * ysum + size) / (coord_t)(2 * size);
   /* Confirm that the center is inside of the patch.  */
   for (int i = 0; i < size; i++)
-    {
-      if ((int)*x == entries[i].x && (int)*y == entries[i].y)
-	return true;
-    }
+    if ((int)(*x+0.5) == entries[i].x && (int)(*y+0.5) == entries[i].y)
+      return true;
   return false;
 }
 
@@ -270,6 +268,11 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
    R   G   R
  B   B   B
 
+ Detection works in diagonal coordinates, so the grid is rorated 45 degrees.
+
+   G B G B
+   B R B R
+   G B G B
    */
 bool
 try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
@@ -942,6 +945,10 @@ confirm (render_scr_detect *render,
     printf ("given:%f %f best:%f %f inner:%f outer:%f %f ratio:%f priority:%i color:%i\n", x, y, bestcx-x, bestcy-y, bestinner, bestouter_lr, bestouter_ud, bestinner/bestouter, *priority, (int)t);
   return true;
 }
+
+/* Flood fill is controlled withpriority queue with fixed
+   number of priorities.  This reduces chances that misdetected
+   patches will be used as seeds to identify large parts of screen.  */
 
 template<int N, typename T>
 class priority_queue
