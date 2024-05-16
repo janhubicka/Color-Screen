@@ -593,21 +593,36 @@ render_parameters::auto_color_model (enum scr_type type)
 bool
 render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
-  rgb_histogram hist;
   render_parameters rparam = *this;
   rparam.precise = true;
-  render_interpolate render (param, img, rparam, 256);
-  render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
-  if (progress && progress->cancel_requested ())
-    return false;
-  render.collect_histogram (hist, xmin, xmax, ymin, ymax, progress);
-  if (hist.num_samples () < 2 || (progress && progress->cancel_requested ()))
-    return false;
-  rgbdata minvals = hist.find_min (dark_cut);
-  rgbdata maxvals = hist.find_max (light_cut);
-  minvals.print (stdout);
-  maxvals.print (stdout);
-  dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
-  brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
+
+  {
+    rgb_histogram hist;
+    render_interpolate render (param, img, rparam, 256);
+    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+    if (progress && progress->cancel_requested ())
+      return false;
+    render.collect_histogram (hist, xmin, xmax, ymin, ymax, progress);
+    if (hist.num_samples () < 2 || (progress && progress->cancel_requested ()))
+      return false;
+    rgbdata minvals = hist.find_min (dark_cut);
+    rgbdata maxvals = hist.find_max (light_cut);
+    minvals.print (stdout);
+    maxvals.print (stdout);
+    dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
+    brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
+  }
+  {
+    rgb_histogram hist_red, hist_green, hist_blue;
+    render_interpolate render (param, img, rparam, 256);
+    render.set_precise_rgb ();
+    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+    if (progress && progress->cancel_requested ())
+      return false;
+    render.collect_rgb_histograms (hist_red, hist_green, hist_blue, xmin, xmax, ymin, ymax, progress);
+  }
+
+
+
   return true;
 }

@@ -18,6 +18,10 @@ public:
     return sample_pixel_scr (xx, yy);
   }
   void set_render_type (render_type_parameters rtparam);
+  void set_precise_rgb ()
+  {
+    m_precise_rgb = true;
+  }
   void set_unadjusted ()
   {
     m_unadjusted = true;
@@ -72,6 +76,7 @@ private:
   bool m_original_color;
   bool m_unadjusted;
   bool m_profiled;
+  bool m_precise_rgb;
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
   color_matrix profile_matrix;

@@ -1,25 +1,41 @@
 #ifndef HISTOGRAM_H
 #define HISTOGrAM_H
+#include <limits>
 
 /* Basic datastructure to hols various value histograms.  */
 class histogram
 {
 public:
   histogram()
-  : m_minval (0), m_maxval (0), m_inv (0), m_entries (), m_total (-1)
+  : m_minval (std::numeric_limits<luminosity_t>::max ()), m_maxval (std::numeric_limits<luminosity_t>::min ()), m_inv (0), m_entries (), m_total (-1)
   {
   }
 
+  /* Adjust range so VAL will fit in.  */
+  inline void
+  pre_account (luminosity_t val)
+  {
+    m_minval = std::min (m_minval, val);
+    m_maxval = std::max (m_minval, val);
+  }
+
+  /* Once range is known allocate the histogram.  */
+  inline void finalize_range (int nvals)
+  {
+    if (m_minval == m_maxval)
+      m_maxval = m_minval + 0.00001;
+    m_inv = nvals / (m_maxval - m_minval);
+    m_entries.resize (nvals, 0);
+  }
+
+  /* Alternative way to initialize histogram if range is known.  */
   inline void set_range (luminosity_t minval, luminosity_t maxval, int nvals)
   {
     if (m_minval != m_maxval)
       abort ();
-    if (minval == maxval)
-      maxval = minval + 0.00001;
     m_minval = minval;
     m_maxval = maxval;
-    m_inv = nvals / (maxval - minval);
-    m_entries.resize (nvals, 0);
+    finalize_range (nvals);
     //std::fill (m_entries.begin (), m_entries.end (), 0);
   }
 
@@ -137,6 +153,20 @@ rgb_histogram
 public:
   rgb_histogram()
   { }
+  inline void
+  pre_account (rgbdata val)
+  {
+    m_histogram[0].pre_account (val[0]);
+    m_histogram[1].pre_account (val[1]);
+    m_histogram[2].pre_account (val[2]);
+  }
+  inline void
+  finalize_range (int nvals)
+  {
+    m_histogram[0].finalize_range (nvals);
+    m_histogram[1].finalize_range (nvals);
+    m_histogram[2].finalize_range (nvals);
+  }
   inline void
   set_range (rgbdata minval, rgbdata maxval, int nvals)
   {

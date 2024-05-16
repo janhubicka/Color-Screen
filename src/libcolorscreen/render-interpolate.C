@@ -66,7 +66,7 @@ static lru_tile_cache <analyzer_params, analyze_paget, get_new_paget_analysis, 1
 }
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (false), m_profiled (false), m_dufay (NULL), m_paget (NULL)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (false), m_profiled (false), m_precise_rgb (false), m_dufay (NULL), m_paget (NULL)
 {
 }
 void
@@ -86,9 +86,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   /* When doing profiled matrix, we need to pre-scale the profile so black point corretion goes right.
      Without doing so, for exmaple black from red pixels would be subtracted too agressively, since
      we account for every pixel in image, not only red patch portion.  */
-  if (!render_to_scr::precompute (!m_original_color, !m_original_color || m_profiled, xmin, ymin, xmax, ymax, progress))
+  if (!render_to_scr::precompute (!m_original_color && !m_precise_rgb, !m_original_color || m_profiled, xmin, ymin, xmax, ymax, progress))
     return false;
-  if (m_screen_compensation || m_params.precise)
+  if (m_screen_compensation || m_params.precise | m_precise_rgb)
     {
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
       m_screen = get_screen (m_scr_to_img.get_type (), false, radius, progress, &screen_id);
@@ -129,7 +129,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_img.id,
       m_gray_data_id,
       screen_id,
-      m_original_color ? analyze_base::color : (!m_params.precise ? analyze_base::fast : analyze_base::precise),
+      m_original_color ? analyze_base::color : (m_precise_rgb ? analyze_base::precise_rgb : (!m_params.precise ? analyze_base::fast : analyze_base::precise)),
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
@@ -365,6 +365,70 @@ render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y, int wid
 void
 render_interpolate::collect_histogram (rgb_histogram &histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
+  if (m_scr_to_img.get_type () == Dufay)
+    {
+      for (int y = 0; y < m_dufay->get_height (); y++)
+        for (int x = 0; x < m_dufay->get_width (); x++)
+	  {
+	    coord_t xp, yp;
+	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+	      continue;
+	    histogram.pre_account (m_dufay->screen_tile_color (x, y));
+	  }
+      histogram.finalize_range (65536);
+      for (int y = 0; y < m_dufay->get_height (); y++)
+        for (int x = 0; x < m_dufay->get_width (); x++)
+	  {
+	    coord_t xp, yp;
+	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+	      continue;
+	    histogram.account (m_dufay->screen_tile_color (x, y));
+	  }
+    }
+  else
+    abort ();
+  histogram.finalize ();
+}
+void
+render_interpolate::collect_rgb_histograms (rgb_histogram &histogram_red, rgb_histogram &histogram_greem, rgb_histogram &histogram_blue, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+{
+  FILE *rf = fopen ("/tmp/red.txt", "wt");
+  FILE *gf = fopen ("/tmp/green.txt", "wt");
+  FILE *bf = fopen ("/tmp/blue.txt", "wt");
+  FILE *nrf = fopen ("/tmp/norm_red.txt", "wt");
+  FILE *ngf = fopen ("/tmp/norm_green.txt", "wt");
+  FILE *nbf = fopen ("/tmp/norm_blue.txt", "wt");
+  if (m_scr_to_img.get_type () == Dufay)
+    {
+      for (int y = 0; y < m_dufay->get_height (); y++)
+        for (int x = 0; x < m_dufay->get_width (); x++)
+	  {
+	    coord_t xp, yp;
+	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+	      continue;
+	    rgbdata r,g,b;
+	    m_dufay->screen_tile_rgb_color (r, g, b, x, y);
+	    fprintf (rf, "%f %f %f\n", r.red, r.green, r.blue);
+	    fprintf (gf, "%f %f %f\n", g.red, g.green, g.blue);
+	    fprintf (bf, "%f %f %f\n", b.red, b.green, b.blue);
+	    r=r.normalize ();
+	    g=g.normalize ();
+	    b=b.normalize ();
+	    fprintf (nrf, "%f %f %f\n", r.red, r.green, r.blue);
+	    fprintf (ngf, "%f %f %f\n", g.red, g.green, g.blue);
+	    fprintf (nbf, "%f %f %f\n", b.red, b.green, b.blue);
+	  }
+    }
+  fclose (rf);
+  fclose (gf);
+  fclose (bf);
+  fclose (nrf);
+  fclose (ngf);
+  fclose (nbf);
+#if 0
   luminosity_t min_red = std::numeric_limits<luminosity_t>::max (), min_green = std::numeric_limits<luminosity_t>::max (), min_blue = std::numeric_limits<luminosity_t>::max ();
   luminosity_t max_red = std::numeric_limits<luminosity_t>::min (), max_green = std::numeric_limits<luminosity_t>::min (), max_blue = std::numeric_limits<luminosity_t>::min ();
   if (m_scr_to_img.get_type () == Dufay)
@@ -376,16 +440,15 @@ render_interpolate::collect_histogram (rgb_histogram &histogram, int xmin, int x
 	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
 	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
 	      continue;
-	    min_red = std::min (min_red, m_dufay->red (2*x, y));
-	    min_red = std::min (min_red, m_dufay->red (2*x+1, y));
-	    max_red = std::max (max_red, m_dufay->red (2*x, y));
-	    max_red = std::max (max_red, m_dufay->red (2*x+1, y));
+	    rgbdata c = m_dufay->screen_tile_color (x, y);
+	    min_red = std::min (min_red, c.red);
+	    max_red = std::max (max_red, c.red);
 
-	    min_green = std::min (min_green, m_dufay->green (x, y));
-	    max_green = std::max (max_green, m_dufay->green (x, y));
+	    min_green = std::min (min_green, c.green);
+	    max_green = std::max (max_green, c.green);
 
-	    min_blue = std::min (min_blue, m_dufay->blue (x, y));
-	    max_blue = std::max (max_blue, m_dufay->blue (x, y));
+	    min_blue = std::min (min_blue, c.blue);
+	    max_blue = std::max (max_blue, c.blue);
 	  }
       histogram.set_range ({min_red, min_green, min_blue},{max_red, max_green, max_blue}, 65536);
       for (int y = 0; y < m_dufay->get_height (); y++)
@@ -395,11 +458,11 @@ render_interpolate::collect_histogram (rgb_histogram &histogram, int xmin, int x
 	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
 	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
 	      continue;
-	    rgbdata color = {(m_dufay->red (2*x, y) + m_dufay->red (2*x+1, y)) / 2, m_dufay->green (x, y), m_dufay->blue (x, y)};
-	    histogram.account (color);
+	    histogram.account (m_dufay->screen_tile_color (x, y));
 	  }
     }
   else
     abort ();
   histogram.finalize ();
+#endif
 }

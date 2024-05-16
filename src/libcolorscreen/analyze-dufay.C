@@ -6,29 +6,6 @@
 bool flatten_attr
 analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
-#if 0
-  printf ("\n");
-  for (int y = 0; y < screen::size; y++)
-  {
-	  for (int x = 0; x < screen::size; x++)
-		  printf (" %.1f", screen->mult[y][x][0]);
-	  printf ("\n");
-  }
-	  printf ("\n");
-  for (int y = 0; y < screen::size; y++)
-  {
-	  for (int x = 0; x < screen::size; x++)
-		  printf (" %.1f", screen->mult[y][x][1]);
-	  printf ("\n");
-  }
-	  printf ("\n");
-  for (int y = 0; y < screen::size; y++)
-  {
-	  for (int x = 0; x < screen::size; x++)
-		  printf (" %.1f", screen->mult[y][x][2]);
-	  printf ("\n");
-  }
-#endif
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
 #pragma omp for 
@@ -114,6 +91,103 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	    for (int x = 0; x < m_width; x++)
 	      if (w_blue [y * m_width + x] != 0)
 		blue (x,y) /= w_blue [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  }
+  return !progress || !progress->cancelled ();
+}
+/* Collect luminosity of individual color patches.
+   Function is flattened so it should do only necessary work.  */
+bool flatten_attr
+analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+{
+#pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  {
+#pragma omp for 
+    for (int y = miny ; y < maxy; y++)
+      {
+	if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	  for (int x = minx; x < maxx; x++)
+	    {
+	      coord_t scr_x, scr_y;
+	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+	      scr_x += m_xshift;
+	      scr_y += m_yshift;
+	      if (scr_x < 0 || scr_x > m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		continue;
+
+	      rgbdata d = render->get_unadjusted_rgb_pixel (x, y);
+	      int ix = (uint64_t) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+	      int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	      if (screen->mult[iy][ix][0] > collection_threshold)
+		{
+		  int xx = nearest_int (scr_x * 2 - (coord_t)0.5);
+		  int yy = nearest_int (scr_y - (coord_t)0.5);
+		  luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
+		  rgb_red_atomic_add (xx, yy, d * val);
+		  luminosity_t &l = w_red [yy * m_width * 2 + xx];
+#pragma omp atomic
+		  l += val;
+		}
+	      if (screen->mult[iy][ix][1] > collection_threshold)
+		{
+		  int xx = nearest_int (scr_x);
+		  int yy = nearest_int (scr_y);
+		  luminosity_t val = (screen->mult[iy][ix][1] - collection_threshold);
+		  rgb_green_atomic_add (xx, yy, d * val);
+		  luminosity_t &l = w_green [yy * m_width + xx];
+#pragma omp atomic
+		  l += val;
+		}
+	      if (screen->mult[iy][ix][2] > collection_threshold)
+		{
+		  int xx = nearest_int (scr_x-(coord_t)0.5);
+		  int yy = nearest_int (scr_y);
+		  luminosity_t val = (screen->mult[iy][ix][2] - collection_threshold);
+		  rgb_blue_atomic_add (xx, yy, d * val);
+		  luminosity_t &l = w_blue [yy * m_width + xx];
+#pragma omp atomic
+		  l += val;
+		}
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
+  if (!progress || !progress->cancel_requested ())
+    {
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width * 2; x++)
+	      if (w_red [y * m_width * 2 + x] != 0)
+		rgb_red (x,y) *= 1 / w_red [y * m_width * 2 + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width; x++)
+	      if (w_green [y * m_width + x] != 0)
+		rgb_green (x,y) *= 1 / w_green [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width; x++)
+	      if (w_blue [y * m_width + x] != 0)
+		rgb_blue (x,y) *= 1 / w_blue [y * m_width + x];
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -321,12 +395,23 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
   /* G B .
      R R .
      . . .  */
-  m_red = (luminosity_t *)calloc (m_width * m_height * 2,  sizeof (luminosity_t));
-  m_green = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
-  m_blue = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
-  if (!m_red || !m_green || !m_blue)
-    return false;
-  if (mode == precise || mode == color)
+  if (mode != precise_rgb)
+    {
+      m_red = (luminosity_t *)calloc (m_width * m_height * 2,  sizeof (luminosity_t));
+      m_green = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
+      m_blue = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
+      if (!m_red || !m_green || !m_blue)
+	return false;
+    }
+  else
+    {
+      m_rgb_red = (rgbdata *)calloc (m_width * m_height * 2,  sizeof (rgbdata));
+      m_rgb_green = (rgbdata *)calloc (m_width * m_height, sizeof (rgbdata));
+      m_rgb_blue = (rgbdata *)calloc (m_width * m_height, sizeof (rgbdata));
+      if (!m_rgb_red || !m_rgb_green || !m_rgb_blue)
+	return false;
+    }
+  if (mode == precise || mode == precise_rgb || mode == color)
     {
       luminosity_t *w_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
       luminosity_t *w_green = (luminosity_t *)calloc (m_width * m_height, sizeof (luminosity_t));
@@ -371,6 +456,8 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 
       if (mode == precise)
         analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      else if (mode == precise_rgb)
+        analyze_precise_rgb (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
       else
         analyze_color (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 
