@@ -59,6 +59,7 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	if (progress)
 	  progress->inc_progress ();
       }
+#define pixel(xo,yo,width,height) render->get_unadjusted_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
   if (!progress || !progress->cancel_requested ())
     {
 #pragma omp for nowait
@@ -66,9 +67,17 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 	{
 	  if (!progress || !progress->cancel_requested ())
 #pragma omp simd
-	    for (int x = 0; x < m_width * 2; x++)
-	      if (w_red [y * m_width * 2 + x] != 0)
-		red (x,y) /= w_red [y * m_width * 2 + x];
+	    for (int x = 0; x < m_width; x++)
+	      {
+		if (w_red [y * m_width * 2 + x * 2] != 0)
+		  red (2 * x, y) /= w_red [y * m_width * 2 + x * 2];
+		else
+		  red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
+		if (w_red [y * m_width * 2 + x * 2 + 1] != 0)
+		  red (2 * x + 1, y) /= w_red [y * m_width * 2 + x * 2 + 1];
+		else
+		  red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
+	      }
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -76,10 +85,14 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
       for (int y = 0; y < m_height; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+	    {
 #pragma omp simd
-	    for (int x = 0; x < m_width; x++)
-	      if (w_green [y * m_width + x] != 0)
-		green (x,y) /= w_green [y * m_width + x];
+	      for (int x = 0; x < m_width; x++)
+		if (w_green [y * m_width + x] != 0)
+		  green (x,y) /= w_green [y * m_width + x];
+		else
+		  green (x, y) = pixel (0, 0, 0.5, 0.5);
+	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -87,15 +100,20 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
       for (int y = 0; y < m_height; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+	    {
 #pragma omp simd
-	    for (int x = 0; x < m_width; x++)
-	      if (w_blue [y * m_width + x] != 0)
-		blue (x,y) /= w_blue [y * m_width + x];
+	      for (int x = 0; x < m_width; x++)
+		if (w_blue [y * m_width + x] != 0)
+		  blue (x,y) /= w_blue [y * m_width + x];
+		else
+		  blue (x,y) = pixel (0.5, 0, 0.5, 0.5);
+	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
     }
   }
+#undef pixel
   return !progress || !progress->cancelled ();
 }
 /* Collect luminosity of individual color patches.
@@ -153,9 +171,11 @@ analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
 		  l += val;
 		}
 	    }
+#undef pixel
 	if (progress)
 	  progress->inc_progress ();
       }
+#define pixel(xo,yo,width,height) render->get_unadjusted_rgb_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
   if (!progress || !progress->cancel_requested ())
     {
 #pragma omp for nowait
@@ -163,9 +183,17 @@ analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
 	{
 	  if (!progress || !progress->cancel_requested ())
 #pragma omp simd
-	    for (int x = 0; x < m_width * 2; x++)
-	      if (w_red [y * m_width * 2 + x] != 0)
-		rgb_red (x,y) *= 1 / w_red [y * m_width * 2 + x];
+	    for (int x = 0; x < m_width; x++)
+	      {
+		if (w_red [y * m_width * 2 + x * 2] != 0)
+		  rgb_red (2 * x, y) /= w_red [y * m_width * 2 + x * 2];
+		else
+		  rgb_red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
+		if (w_red [y * m_width * 2 + x * 2 + 1] != 0)
+		  rgb_red (2 * x + 1, y) /= w_red [y * m_width * 2 + x * 2 + 1];
+		else
+		  rgb_red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
+	      }
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -173,10 +201,14 @@ analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
       for (int y = 0; y < m_height; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+	    {
 #pragma omp simd
-	    for (int x = 0; x < m_width; x++)
-	      if (w_green [y * m_width + x] != 0)
-		rgb_green (x,y) *= 1 / w_green [y * m_width + x];
+	      for (int x = 0; x < m_width; x++)
+		if (w_green [y * m_width + x] != 0)
+		  rgb_green (x,y) /= w_green [y * m_width + x];
+		else
+		  rgb_green (x, y) = pixel (0, 0, 0.5, 0.5);
+	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
@@ -184,13 +216,18 @@ analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
       for (int y = 0; y < m_height; y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
+	    {
 #pragma omp simd
-	    for (int x = 0; x < m_width; x++)
-	      if (w_blue [y * m_width + x] != 0)
-		rgb_blue (x,y) *= 1 / w_blue [y * m_width + x];
+	      for (int x = 0; x < m_width; x++)
+		if (w_blue [y * m_width + x] != 0)
+		  rgb_blue (x,y) /= w_blue [y * m_width + x];
+		else
+		  rgb_blue (x,y) = pixel (0.5, 0, 0.5, 0.5);
+	    }
 	  if (progress)
 	    progress->inc_progress ();
 	}
+#undef pixel
     }
   }
   return !progress || !progress->cancelled ();

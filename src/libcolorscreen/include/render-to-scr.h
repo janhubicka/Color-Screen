@@ -19,6 +19,7 @@ public:
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x, coord_t y);
+  inline rgbdata get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y);
   coord_t pixel_size ();
   DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
   DLL_PUBLIC bool precompute (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
@@ -180,6 +181,18 @@ render_to_scr::get_unadjusted_img_pixel_scr (coord_t x, coord_t y)
   coord_t xp, yp;
   m_scr_to_img.to_img (x, y, &xp, &yp);
   return get_unadjusted_img_pixel (xp, yp);
+}
+
+/* Determine RGB value at a given position in the image.
+   The position is in the screen coordinates.  */
+inline rgbdata
+render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y)
+{
+  coord_t xp, yp;
+  m_scr_to_img.to_img (x, y, &xp, &yp);
+  rgbdata ret;
+  render::get_unadjusted_img_rgb_pixel (xp, yp, &ret.red, &ret.green, &ret.blue);
+  return ret;
 }
 
 struct scr_detect_parameters;

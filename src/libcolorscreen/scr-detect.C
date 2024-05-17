@@ -31,6 +31,8 @@ scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int
   //t.print(stdout);
   //printf ("Backward color transform:\n");
 #endif
+
+  /* Same logic is also in scr-detect-colors.C.  */
   color_matrix subtract_dark (1, 0, 0, -m_param.black.red,
 			      0, 1, 0, -m_param.black.green,
 			      0, 0, 1, -m_param.black.blue,

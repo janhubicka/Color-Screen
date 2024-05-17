@@ -661,14 +661,6 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 				fprintf (ngf, "%f %f %f\n", gg.Y, gg.Pb/gg.Y, gg.Pr/gg.Y);
 				YPbPr bb(b);
 				fprintf (nbf, "%f %f %f\n", bb.Y, bb.Pb/bb.Y, bb.Pr/bb.Y);
-#if 0
-				r=r.normalize ();
-				g=g.normalize ();
-				b=b.normalize ();
-				fprintf (nrf, "%f %f %f %f\n", r.red, r.green, r.blue, rlum);
-				fprintf (ngf, "%f %f %f %f\n", g.red, g.green, g.blue, 10+glum);
-				fprintf (nbf, "%f %f %f %f\n", b.red, b.green, b.blue, 20+blum);
-#endif
 				return true;
 			      },
 			      "collecting tile colors",
@@ -707,19 +699,6 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     fclose (agf);
     fclose (abf);
   }
-#if 0
-  {
-    rgb_histogram hist_red, hist_green, hist_blue;
-    render_interpolate render (param, img, rparam, 256);
-    render.set_precise_rgb ();
-    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
-    if (progress && progress->cancel_requested ())
-      return false;
-    render.collect_rgb_histograms (hist_red, hist_green, hist_blue, xmin, xmax, ymin, ymax, progress);
-  }
-#endif
-
-
 
   return true;
 }
