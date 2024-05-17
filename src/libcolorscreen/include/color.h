@@ -710,7 +710,7 @@ xyz_to_xyY (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *rx, l
 struct YPbPr
 {
   constexpr
-  YPbPr(rgbdata d, luminosity_t kr=0.333, luminosity_t kg=0.333, luminosity_t kb=0.333)
+  YPbPr(rgbdata d, luminosity_t kr=1/3.0, luminosity_t kg=1/3.0, luminosity_t kb=1/3.0)
   : Y (kr * d.red + kg * d.green + kb * d.blue),
     Pb ((d.blue - Y) / (1 - kb)),
     Pr ((d.red - Y) / (1 - kr))

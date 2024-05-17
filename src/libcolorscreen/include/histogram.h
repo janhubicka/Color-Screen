@@ -16,7 +16,7 @@ public:
   pre_account (luminosity_t val)
   {
     m_minval = std::min (m_minval, val);
-    m_maxval = std::max (m_minval, val);
+    m_maxval = std::max (m_maxval, val);
   }
 
   /* Once range is known allocate the histogram.  */
