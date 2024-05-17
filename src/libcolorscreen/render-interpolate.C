@@ -33,7 +33,7 @@ struct analyzer_params
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
-	if (img_id == o.img_id
+	if (img_id != o.img_id
 	    || gamma != o.gamma)
 	  return false;
       }

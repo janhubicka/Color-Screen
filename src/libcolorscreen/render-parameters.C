@@ -595,10 +595,10 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 {
   render_parameters rparam = *this;
   rparam.precise = true;
-
   {
     render_interpolate render (param, img, rparam, 256);
-    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+    if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+      return false;
     if (progress && progress->cancel_requested ())
       return false;
 
@@ -626,12 +626,17 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
       return false;
     rgbdata minvals = hist.find_min (dark_cut);
     rgbdata maxvals = hist.find_max (light_cut);
+#if 0
     fprintf (stdout, "Darkest color :");
     minvals.print (stdout);
     fprintf (stdout, "Lightest color :");
     maxvals.print (stdout);
+#endif
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
+#if 0
+    fprintf (stdout, "Dark point %f brightness %f\n", dark_point, brightness);
+#endif
   }
 #if 0
   {
@@ -714,7 +719,8 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
   rparam.precise = true;
   render_interpolate render (param, img, rparam, 256);
   render.set_precise_rgb ();
-  render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+  if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+    return false;
   rgb_histogram hist_red, hist_green, hist_blue;
   render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
 			    {

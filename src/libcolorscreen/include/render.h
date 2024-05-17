@@ -572,7 +572,7 @@ struct DLL_PUBLIC render_parameters
       }
   }
   bool auto_color_model (enum scr_type type);
-  bool auto_dark_brightness (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.05, luminosity_t light_cut = 0.05);
+  bool auto_dark_brightness (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.01, luminosity_t light_cut = 0.01);
   bool auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 private:
   static const bool debug = false;
