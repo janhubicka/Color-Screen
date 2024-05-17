@@ -114,7 +114,7 @@ public:
       abort ();
     int threshold = (m_total * skip) + 0.5;
     int sum = 0;
-    for (int i = (int)m_entries.size (); i >= 0; i++)
+    for (int i = (int)m_entries.size () - 1; i >= 0; i--)
       {
 	sum += m_entries[i];
 	if (sum > threshold)
@@ -122,16 +122,37 @@ public:
       }
     return m_maxval;
   }
-  /* return average.  */
+  /* return robust average skiping skip_min & skip_max ratio of extreme points.  */
   luminosity_t
-  find_avg ()
+  find_avg (luminosity_t skip_min = 0, luminosity_t skip_max = 0)
   {
     if (m_total == -1)
       abort ();
     int wsum = 0;
-    for (int i = 0; i < (int)m_entries.size (); i++)
+    int mini, maxi;
+    int sum1 = 0;
+    int threshold = (m_total * skip_min) + 0.5;
+    for (mini = 0; mini < (int)m_entries.size (); mini++)
+      {
+	sum1 += m_entries[mini];
+	if (sum1 > threshold)
+	  break;
+      }
+    int sum2 = 0;
+    threshold = (m_total * skip_max) + 0.5;
+    for (maxi = (int)m_entries.size () - 1; maxi >= 0; maxi--)
+      {
+	sum2 += m_entries[maxi];
+	if (sum2 > threshold)
+	  break;
+      }
+    if (sum1 + sum2 >= m_total)
+      abort ();
+    if (mini > maxi)
+      abort ();
+    for (int i = mini; i <= maxi; i++)
       wsum += m_entries[i] * i;
-    return index_to_val (wsum / (luminosity_t)m_total );
+    return index_to_val (wsum / ((luminosity_t)m_total - sum1 - sum2));
   }
 
   int num_samples ()
@@ -201,6 +222,13 @@ public:
     return {m_histogram[0].find_max (skip),
             m_histogram[1].find_max (skip),
             m_histogram[2].find_max (skip)};
+  }
+  rgbdata
+  find_avg (luminosity_t skipmin = 0, luminosity_t skipmax = 0)
+  {
+    return {m_histogram[0].find_avg (skipmin,skipmax),
+            m_histogram[1].find_avg (skipmin,skipmax),
+            m_histogram[2].find_avg (skipmin,skipmax)};
   }
 
   int

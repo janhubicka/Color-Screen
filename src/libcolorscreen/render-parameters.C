@@ -631,6 +631,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
   }
+#if 0
   {
     std::vector<rgbdata> reds;
     std::vector<rgbdata> greens;
@@ -699,6 +700,75 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     fclose (agf);
     fclose (abf);
   }
+#endif
 
+  return true;
+}
+
+bool 
+render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  render_parameters rparam = *this;
+  rparam.precise = true;
+  render_interpolate render (param, img, rparam, 256);
+  render.set_precise_rgb ();
+  render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+  rgb_histogram hist_red, hist_green, hist_blue;
+  render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
+			    {
+			      hist_red.pre_account (r);
+			      hist_green.pre_account (g);
+			      hist_blue.pre_account (b);
+			      return true;
+			    },
+			    "determining RGB value ranges",
+			    xmin, xmax, ymin, ymax, progress);
+  hist_red.finalize_range (65536);
+  hist_green.finalize_range (65536);
+  hist_blue.finalize_range (65536);
+  render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
+			    {
+			      hist_red.account (r);
+			      hist_green.account (g);
+			      hist_blue.account (b);
+			      return true;
+			    },
+			    "determining RGB value ranges",
+			    xmin, xmax, ymin, ymax, progress);
+  hist_red.finalize ();
+  hist_green.finalize ();
+  hist_blue.finalize ();
+
+  /* Give up if the number of samples is too small.  */
+  if (hist_red.num_samples () < 2 || hist_green.num_samples () < 2 || hist_blue.num_samples () < 2
+      || (progress && progress->cancel_requested ()))
+    return false;
+
+  rgbdata gray_red = hist_red.find_avg (0.05, 0.05) - mix_dark;
+  rgbdata gray_green = hist_green.find_avg (0.05, 0.05) - mix_dark;
+  rgbdata gray_blue = hist_blue.find_avg (0.05, 0.05) - mix_dark;
+
+  color_matrix process_colors (gray_red.red,   gray_green.red,   gray_blue.red, 0,
+			       gray_red.green, gray_green.green, gray_blue.green, 0,
+			       gray_red.blue,  gray_green.blue,  gray_blue.blue, 0,
+			       0, 0, 0, 1);
+  process_colors.transpose ();
+  process_colors.invert ().apply_to_rgb (1/3.0, 1/3.0, 1/3.0, &mix_red, &mix_green, &mix_blue);
+  bool verbose = true;
+  if (verbose)
+    {
+      printf ("mix dark");
+      mix_dark.print (stdout);
+      printf ("gray red ");
+      gray_red.print (stdout);
+      printf ("gray green ");
+      gray_green.print (stdout);
+      printf ("gray blue ");
+      gray_blue.print (stdout);
+      printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
+      printf ("adjusted red %f\n", gray_red.red * mix_red + gray_red.green * mix_green + gray_red.blue * mix_blue);
+      printf ("adjusted green %f\n", gray_green.red * mix_red + gray_green.green * mix_green + gray_green.blue * mix_blue);
+      printf ("adjusted blue %f\n", gray_blue.red * mix_red + gray_blue.green * mix_green + gray_blue.blue * mix_blue);
+    }
   return true;
 }

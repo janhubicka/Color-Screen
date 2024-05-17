@@ -612,11 +612,16 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      current.mesh_trans = current_mesh;
 	      if (rparams.color_model == render_parameters::color_model_none)
 		rparams.auto_color_model (current.type);
+	      if (!scan.data || rparams.ignore_infrared)
+	        {
+		  rparams.auto_mix_weights (scan, current, sel1x, sel1y, sel2x, sel2y, &progress);
+		  setvals ();
+	        }
 	      if (rparams.dark_point == 0 && rparams.brightness == 1)
-	      {
-		rparams.auto_dark_brightness (scan, current, scan.width / 3, scan.height / 3, 2 * scan.width / 3, 2 * scan.height / 3);
-		setvals ();
-	      }
+		{
+		  rparams.auto_dark_brightness (scan, current, scan.width / 3, scan.height / 3, 2 * scan.width / 3, 2 * scan.height / 3, &progress);
+		  setvals ();
+		}
 	      if (!display_type)
 		display_type = (int)render_type_interpolated;
 	    }
@@ -637,6 +642,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       {
 	current_solver.weighted = false;
 	file_progress_info progress (stdout);
+	if (current_mesh)
+	  {
+	      delete current_mesh;
+	      current.mesh_trans = NULL;
+	      current_mesh = NULL;
+	  }
 	solver (&current, scan, current_solver, &progress);
 	preview_display_scheduled = true;
 	display_scheduled = true;
@@ -1570,12 +1581,28 @@ handle_drag (int x, int y, int button)
       coord_t yy = (y + shift_y) / scale_y;
       if (xx != xpress && yy != ypress && button == 1)
         {
-	  sel1x = xpress;
-	  sel1y = ypress;
-	  sel2x = xx;
-	  sel2y = yy;
+	  if (xpress < xx)
+	    {
+	      sel1x = xpress;
+	      sel2x = xx;
+	    }
+	  else
+	    {
+	      sel2x = xpress;
+	      sel1x = xx;
+	    }
+	  if (ypress < yy)
+	    {
+	      sel1y = ypress;
+	      sel2y = yy;
+	    }
+	  else
+	    {
+	      sel2y = ypress;
+	      sel1y = yy;
+	    }
 	  display_scheduled = true;
-	  printf ("Selcetion %f %f %f %f\n",sel1x, sel1y,sel2x,sel2y);
+	  printf ("selection %f %f %f %f\n",sel1x, sel1y,sel2x,sel2y);
         }
       return;
     }
