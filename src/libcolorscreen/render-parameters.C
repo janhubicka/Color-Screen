@@ -611,7 +611,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
 			  },
 			  "determining value ranges",
 			  xmin, xmax, ymin, ymax, progress);
-    hist.finalize_range (65536);
+    hist.finalize_range (65536*256);
     render.analyze_tiles ([&] (coord_t x, coord_t y, rgbdata c)
 			  {
 			    hist.account (c);
@@ -626,7 +626,9 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
       return false;
     rgbdata minvals = hist.find_min (dark_cut);
     rgbdata maxvals = hist.find_max (light_cut);
+    fprintf (stdout, "Darkest color :");
     minvals.print (stdout);
+    fprintf (stdout, "Lightest color :");
     maxvals.print (stdout);
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
@@ -754,6 +756,10 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			       0, 0, 0, 1);
   process_colors.transpose ();
   process_colors.invert ().apply_to_rgb (1/3.0, 1/3.0, 1/3.0, &mix_red, &mix_green, &mix_blue);
+  luminosity_t sum = mix_red + mix_green + mix_blue;
+  mix_red /= sum;
+  mix_green /= sum;
+  mix_blue /= sum;
   bool verbose = true;
   if (verbose)
     {

@@ -11,6 +11,7 @@ struct analyzer_params
   uint64_t img_id;
   uint64_t graydata_id;
   uint64_t screen_id;
+  luminosity_t gamma;
   //int width, height, xshift, yshift;
   enum analyze_base::mode mode;
   luminosity_t collection_threshold;
@@ -30,11 +31,15 @@ struct analyzer_params
 	|| (!mesh_trans_id && params != o.params)
 	|| (params.type == Dufay) != (o.params.type == Dufay))
       return false;
-    if (mode == analyze_base::color)
-      return img_id == o.img_id;
-    if (graydata_id != o.graydata_id)
+    if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
+      {
+	if (img_id == o.img_id
+	    || gamma != o.gamma)
+	  return false;
+      }
+    else if (graydata_id != o.graydata_id)
       return false;
-    if (mode == analyze_base::fast)
+    if (mode == analyze_base::fast || mode == analyze_base::color)
       return true;
     return screen_id == o.screen_id
 	   && collection_threshold == o.collection_threshold;
@@ -129,6 +134,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_img.id,
       m_gray_data_id,
       screen_id,
+      m_params.gamma,
       m_original_color ? analyze_base::color : (m_precise_rgb ? analyze_base::precise_rgb : (!m_params.precise ? analyze_base::fast : analyze_base::precise)),
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,

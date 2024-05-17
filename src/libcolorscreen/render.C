@@ -285,8 +285,8 @@ struct sharpen_params
   bool
   operator==(sharpen_params &o)
   {
-    return radius == o.radius
-	   && amount == o.amount;
+    return ((!radius || !amount) && (!o.radius || !o.amount))
+	   || (radius == o.radius && amount == o.amount);
   }
 };
 
