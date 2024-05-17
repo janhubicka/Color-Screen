@@ -597,12 +597,31 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
   rparam.precise = true;
 
   {
-    rgb_histogram hist;
     render_interpolate render (param, img, rparam, 256);
     render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
     if (progress && progress->cancel_requested ())
       return false;
-    render.collect_histogram (hist, xmin, xmax, ymin, ymax, progress);
+
+    /* Produce histogram.  */
+    rgb_histogram hist;
+    render.analyze_tiles ([&] (coord_t x, coord_t y, rgbdata c)
+			  {
+			    hist.pre_account (c);
+			    return true;
+			  },
+			  "determining value ranges",
+			  xmin, xmax, ymin, ymax, progress);
+    hist.finalize_range (65536);
+    render.analyze_tiles ([&] (coord_t x, coord_t y, rgbdata c)
+			  {
+			    hist.account (c);
+			    return true;
+			  },
+			  "producing histograms",
+			  xmin, xmax, ymin, ymax, progress);
+    hist.finalize ();
+
+    /* Give up if the number of samples is too small.  */
     if (hist.num_samples () < 2 || (progress && progress->cancel_requested ()))
       return false;
     rgbdata minvals = hist.find_min (dark_cut);
@@ -613,6 +632,83 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
   }
   {
+    std::vector<rgbdata> reds;
+    std::vector<rgbdata> greens;
+    std::vector<rgbdata> blues;
+    FILE *rf = fopen ("/tmp/red.txt", "wt");
+    FILE *gf = fopen ("/tmp/green.txt", "wt");
+    FILE *bf = fopen ("/tmp/blue.txt", "wt");
+    FILE *nrf = fopen ("/tmp/norm_red.txt", "wt");
+    FILE *ngf = fopen ("/tmp/norm_green.txt", "wt");
+    FILE *nbf = fopen ("/tmp/norm_blue.txt", "wt");
+    render_interpolate render (param, img, rparam, 256);
+    render.set_precise_rgb ();
+    render.precompute_img_range (xmin, ymin, xmax, ymax, progress);
+    render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
+			      {
+				reds.push_back (r);
+				greens.push_back (g);
+				blues.push_back (b);
+				fprintf (rf, "%f %f %f\n", r.red, r.green, r.blue);
+				fprintf (gf, "%f %f %f\n", g.red, g.green, g.blue);
+				fprintf (bf, "%f %f %f\n", b.red, b.green, b.blue);
+				luminosity_t rlum = r.red + r.green + r.blue;
+				luminosity_t glum = g.red + g.green + g.blue;
+				luminosity_t blum = b.red + b.green + b.blue;
+				YPbPr rr(r);
+				fprintf (nrf, "%f %f %f\n", rr.Y, rr.Pb/rr.Y, rr.Pr/rr.Y);
+				YPbPr gg(g);
+				fprintf (ngf, "%f %f %f\n", gg.Y, gg.Pb/gg.Y, gg.Pr/gg.Y);
+				YPbPr bb(b);
+				fprintf (nbf, "%f %f %f\n", bb.Y, bb.Pb/bb.Y, bb.Pr/bb.Y);
+#if 0
+				r=r.normalize ();
+				g=g.normalize ();
+				b=b.normalize ();
+				fprintf (nrf, "%f %f %f %f\n", r.red, r.green, r.blue, rlum);
+				fprintf (ngf, "%f %f %f %f\n", g.red, g.green, g.blue, 10+glum);
+				fprintf (nbf, "%f %f %f %f\n", b.red, b.green, b.blue, 20+blum);
+#endif
+				return true;
+			      },
+			      "collecting tile colors",
+			      xmin, xmax, ymin, ymax, progress);
+    fclose (rf);
+    fclose (gf);
+    fclose (bf);
+    fclose (nrf);
+    fclose (ngf);
+    fclose (nbf);
+    scr_detect_parameters dparam;
+    optimize_screen_colors (&dparam, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, stdout);
+    render_scr_detect ddrender (dparam, img, rparam, 256);
+    FILE *arf = fopen ("/tmp/adj_red.txt", "wt");
+    FILE *agf = fopen ("/tmp/adj_green.txt", "wt");
+    FILE *abf = fopen ("/tmp/adj_blue.txt", "wt");
+    for (rgbdata r : reds)
+      {
+	r = ddrender.adjust_linearized_color (r);
+	YPbPr rr(r);
+	fprintf (arf, "%f %f %f\n", rr.Y, rr.Pb/rr.Y, rr.Pr/rr.Y);
+      }
+    for (rgbdata r : greens)
+      {
+	r = ddrender.adjust_linearized_color (r);
+	YPbPr rr(r);
+	fprintf (agf, "%f %f %f\n", rr.Y, rr.Pb/rr.Y, rr.Pr/rr.Y);
+      }
+    for (rgbdata r : blues)
+      {
+	r = ddrender.adjust_linearized_color (r);
+	YPbPr rr(r);
+	fprintf (abf, "%f %f %f\n", rr.Y, rr.Pb/rr.Y, rr.Pr/rr.Y);
+      }
+    fclose (arf);
+    fclose (agf);
+    fclose (abf);
+  }
+#if 0
+  {
     rgb_histogram hist_red, hist_green, hist_blue;
     render_interpolate render (param, img, rparam, 256);
     render.set_precise_rgb ();
@@ -621,6 +717,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
       return false;
     render.collect_rgb_histograms (hist_red, hist_green, hist_blue, xmin, xmax, ymin, ymax, progress);
   }
+#endif
 
 
 

@@ -52,10 +52,15 @@ public:
     blue,
     unknown
   };
+  void adjust_linearized_color (luminosity_t r, luminosity_t g, luminosity_t b,
+				luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+  {
+    m_color_adjust.apply_to_rgb (r, g, b, rr, gg, bb);
+  }
   void adjust_color (int r, int g, int b,
 		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
   {
-   m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
+    m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
   }
   enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b)
   {

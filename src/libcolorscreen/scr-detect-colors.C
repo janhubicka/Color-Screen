@@ -133,7 +133,7 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
       fprintf (stderr, "Failed to find enough samples\n");
       abort ();
     }
-  optimize_screen_colors (param, gamma, reds, nnr, greens, nng, blues, nnb, progress, report);
+  optimize_screen_colors (param, reds, nnr, greens, nng, blues, nnb, progress, report);
 }
 
 
@@ -215,7 +215,7 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   if (!reds.size () || !greens.size () || !blues.size ()
       || (reds.size () + greens.size () + blues.size ()) < 4 * 3)
     return false;
-  optimize_screen_colors (param, gamma, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
+  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
   return true;
 }
 
@@ -364,7 +364,6 @@ screen_color_solver
    and store resulting black, red, green and blue colors to PARAM.  */
 void
 optimize_screen_colors (scr_detect_parameters *param,
-			luminosity_t gamma,
 			rgbdata *reds,
 			int nreds,
 			rgbdata *greens,
@@ -613,7 +612,7 @@ optimize_screen_colors (scr_detect_parameters *param,
 #endif
   if (report)
     {
-      fprintf (report, "Color optimization:\n  Dark %f %f %f (gamma %f lum %f %f %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, gamma, bestrlum, bestglum, bestblum, min_chisq);
+      fprintf (report, "Color optimization:\n  Dark %f %f %f (lum %f %f %f chisq %f)\n", bestdark.red, bestdark.green, bestdark.blue, bestrlum, bestglum, bestblum, min_chisq);
       fprintf (report, "  Red %f %f %f\n", bestred.red, bestred.green, bestred.blue);
       fprintf (report, "  Green %f %f %f\n", bestgreen.red, bestgreen.green, bestgreen.blue);
       fprintf (report, "  Blue %f %f %f\n", bestblue.red, bestblue.green, bestblue.blue);

@@ -361,38 +361,73 @@ render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y, int wid
   downscale<render_interpolate, rgbdata, &render_interpolate::sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
-/* Collect histogram of intensities.  */
+/* Run ANALYZE on every screen point in the given (image) range, pass infared value of tile color.
+   Rendering must be initialized in precise mode from infrared channel.  */
 void
-render_interpolate::collect_histogram (rgb_histogram &histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+render_interpolate::analyze_tiles (analyzer analyze,
+				   const char *task,
+				   int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
+  assert (!m_precise_rgb && !m_original_color);
   if (m_scr_to_img.get_type () == Dufay)
     {
+      if (progress)
+	progress->set_task (task, m_dufay->get_height ());
       for (int y = 0; y < m_dufay->get_height (); y++)
-        for (int x = 0; x < m_dufay->get_width (); x++)
-	  {
-	    coord_t xp, yp;
-	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
-	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
-	      continue;
-	    histogram.pre_account (m_dufay->screen_tile_color (x, y));
-	  }
-      histogram.finalize_range (65536);
-      for (int y = 0; y < m_dufay->get_height (); y++)
-        for (int x = 0; x < m_dufay->get_width (); x++)
-	  {
-	    coord_t xp, yp;
-	    m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
-	    if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
-	      continue;
-	    histogram.account (m_dufay->screen_tile_color (x, y));
-	  }
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_dufay->get_width (); x++)
+	      {
+		coord_t xp, yp;
+		m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		  continue;
+		if (!analyze (x, y, m_dufay->screen_tile_color (x, y)))
+		  return;
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
     }
   else
     abort ();
-  histogram.finalize ();
 }
+/* Run ANALYZE on every screen point in the given (image) range, pass RGB value of every tile color.
+   Rendering must be initialized in precise_rgb mode from infrared channel.  */
 void
-render_interpolate::collect_rgb_histograms (rgb_histogram &histogram_red, rgb_histogram &histogram_greem, rgb_histogram &histogram_blue, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
+				       const char *task,
+				       int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+{
+  assert (m_precise_rgb && !m_original_color);
+  if (m_scr_to_img.get_type () == Dufay)
+    {
+      if (progress)
+	progress->set_task (task, m_dufay->get_height ());
+      for (int y = 0; y < m_dufay->get_height (); y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_dufay->get_width (); x++)
+	      {
+		coord_t xp, yp;
+		m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		  continue;
+		rgbdata r,g,b;
+		m_dufay->screen_tile_rgb_color (r, g, b, x, y);
+		if (!analyze (x, y, r, g, b))
+		  return;
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  else
+    abort ();
+}
+#if 0
+void
+render_interpolate::ect_rgb_histograms (rgb_histogram &histogram_red, rgb_histogram &histogram_greem, rgb_histogram &histogram_blue, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
   FILE *rf = fopen ("/tmp/red.txt", "wt");
   FILE *gf = fopen ("/tmp/green.txt", "wt");
@@ -428,7 +463,6 @@ render_interpolate::collect_rgb_histograms (rgb_histogram &histogram_red, rgb_hi
   fclose (nrf);
   fclose (ngf);
   fclose (nbf);
-#if 0
   luminosity_t min_red = std::numeric_limits<luminosity_t>::max (), min_green = std::numeric_limits<luminosity_t>::max (), min_blue = std::numeric_limits<luminosity_t>::max ();
   luminosity_t max_red = std::numeric_limits<luminosity_t>::min (), max_green = std::numeric_limits<luminosity_t>::min (), max_blue = std::numeric_limits<luminosity_t>::min ();
   if (m_scr_to_img.get_type () == Dufay)
@@ -464,5 +498,5 @@ render_interpolate::collect_rgb_histograms (rgb_histogram &histogram_red, rgb_hi
   else
     abort ();
   histogram.finalize ();
-#endif
 }
+#endif

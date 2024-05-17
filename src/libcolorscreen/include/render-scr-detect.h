@@ -141,6 +141,12 @@ public:
   {
     return normalize_color (m_precomputed_rgbdata[y * m_img.width + x]);
   }
+  rgbdata adjust_linearized_color (rgbdata c)
+  {
+    rgbdata d;
+    m_scr_detect.adjust_linearized_color (c.red, c.green, c.blue, &d.red, &d.green, &d.blue);
+    return d;
+  }
   rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y)
   {
     rgbdata d;

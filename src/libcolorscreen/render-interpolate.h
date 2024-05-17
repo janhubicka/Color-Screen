@@ -1,5 +1,6 @@
 #ifndef RENDEINTERPOLATE_H
 #define RENDEINTERPOLATE_H
+#include <functional>
 #include "include/render-to-scr.h"
 #include "include/screen.h"
 #include "include/analyze-dufay.h"
@@ -67,8 +68,11 @@ public:
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
-  void collect_histogram (rgb_histogram &histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
-  void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
+  typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
+  void analyze_tiles (analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  void analyze_rgb_tiles (rgb_analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  //void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
 private:
   screen *m_screen;
   bool m_screen_compensation;
