@@ -1,3 +1,5 @@
+#include <gsl/gsl_multifit.h>
+#include <gsl/gsl_linalg.h>
 #include "include/render.h"
 #include "include/stitch.h"
 #include "icc.h"
@@ -782,5 +784,71 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
       printf ("adjusted green %f\n", gray_green.red * mix_red + gray_green.green * mix_green + gray_green.blue * mix_blue);
       printf ("adjusted blue %f\n", gray_blue.red * mix_red + gray_blue.green * mix_green + gray_blue.blue * mix_blue);
     }
+  return true;
+}
+
+/* Use IR to tune mixing weights to simulate IR channel from RGB to match actual IR channel.  */
+
+bool 
+render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  xmin = std::max (0, xmin);
+  xmax = std::min (img.width, xmax);
+  ymin = std::max (0, ymin);
+  ymax = std::min (img.height, ymax);
+  if (!img.data || !img.rgbdata || xmax <= xmin || ymax <= ymin)
+    return false;
+  int nvariables = 4;
+  long nequations = (((long)xmax - xmin) * ((long)ymax - ymin));
+  int step = 1;
+  if (nequations > 100000)
+    step = sqrt (nequations / 100000);
+  nequations = ((((long)xmax - xmin + step - 1) / step) * (((long)ymax - ymin + step - 1) / step));
+  gsl_matrix *X = gsl_matrix_alloc (nequations, nvariables);
+  gsl_vector *y = gsl_vector_alloc (nequations);
+  gsl_vector *w = gsl_vector_alloc (nequations);
+  gsl_vector *c = gsl_vector_alloc (nvariables);
+  gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
+
+  int n = 0;
+  {
+    render_parameters rparam = *this;
+    rparam.ignore_infrared = 0;
+    rparam.sharpen_radius = 0;
+    rparam.invert = false;
+    render render (img, rparam, 256);
+    if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+      return false;
+    for (int yy = ymin; yy < ymax; yy += step)
+      for (int x = xmin; x < xmax; x += step)
+	{
+	  luminosity_t l = render.get_unadjusted_data (x, yy);
+	  rgbdata c = render.get_unadjusted_rgb_pixel (x, yy);
+	  gsl_matrix_set (X, n, 0, 1);
+	  gsl_matrix_set (X, n, 1, c.red);
+	  gsl_matrix_set (X, n, 2, c.green);
+	  gsl_matrix_set (X, n, 3, c.blue);
+	  gsl_vector_set (y, n, l);
+	  gsl_vector_set (w, n, /*l > 0 ? 1/l : 1*/ 1);
+	  n++;
+	}
+      assert (n == nequations);
+  }
+  double chisq;
+  gsl_multifit_linear_workspace * work
+    = gsl_multifit_linear_alloc (nequations, nvariables);
+  gsl_multifit_wlinear (X, w, y, c, cov,
+			&chisq, work);
+  gsl_multifit_linear_free (work);
+  gsl_matrix_free (X);
+  gsl_vector_free (y);
+  gsl_vector_free (w);
+  gsl_matrix_free (cov);
+  mix_red = gsl_vector_get (c, 1);
+  mix_green = gsl_vector_get (c, 2);
+  mix_blue = gsl_vector_get (c, 3);
+  printf ("solution using %i samples step %i: red:%f green:%f blue:%f dark:%f chi %f\n", n, step, mix_red, mix_green, mix_blue, gsl_vector_get (c, 0), chisq);
+  mix_dark = {-gsl_vector_get (c, 0) / mix_red, 0, 0};
+  gsl_vector_free (c);
   return true;
 }

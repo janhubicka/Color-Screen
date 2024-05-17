@@ -202,6 +202,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   luminosity_t green = p.green;
   luminosity_t blue = p.blue;
   rgbdata dark = p.dark;
+#if 0
   luminosity_t sum = (red < 0 ? 0 : red) + (green < 0 ? 0 : green) + (blue < 0 ? 0 : blue);
 
   if (!sum)
@@ -213,6 +214,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   red /= sum / 3;
   green /= sum / 3;
   blue /= sum / 3;
+#endif
 
   /* Normally the lookup tables contains red, green, blue weights.
      However with backlight correction we need to apply them only after
@@ -226,13 +228,13 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   par.gamma = p.gamma;
   par.maxval = p.img->maxval;
   par.scan_exposure = correction ? 1 : red;
-  par.dark_point = dark.red;
+  par.dark_point = correction ? 0 : dark.red;
   par.invert = p.invert;
   ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
-  par.dark_point = dark.green;
+  par.dark_point = correction ? 0 : dark.green;
   ret.gtable = lookup_table_cache.get (par, progress);
   if (!ret.gtable)
     {
@@ -242,7 +244,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
     }
   par.scan_exposure = correction ? 1 : blue;
   ret.btable = lookup_table_cache.get (par, progress);
-  par.dark_point = dark.blue;
+  par.dark_point = correction ? 0 : dark.blue;
   if (!ret.btable)
     {
       lookup_table_cache.release (ret.rtable);
@@ -270,9 +272,9 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y, int
   luminosity_t l3 = t.btable[b];
   if (t.correction)
     {
-      l1 = t.correction->apply (l1, x, y, backlight_correction_parameters::red) * t.red;
-      l2 = t.correction->apply (l2, x, y, backlight_correction_parameters::green) * t.green;
-      l3 = t.correction->apply (l3, x, y, backlight_correction_parameters::blue) * t.blue;
+      l1 = (t.correction->apply (l1, x, y, backlight_correction_parameters::red) - t.dark.red) * t.red;
+      l2 = (t.correction->apply (l2, x, y, backlight_correction_parameters::green) - t.dark.green) * t.green;
+      l3 = (t.correction->apply (l3, x, y, backlight_correction_parameters::blue) - t.dark.blue ) * t.blue;
     }
   luminosity_t val = l1 + l2 + l3;
   return val;

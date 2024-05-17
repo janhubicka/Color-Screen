@@ -327,7 +327,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'i')
+  if (k == 'i' && !(event->state & GDK_CONTROL_MASK))
     {
       rparams.invert = !rparams.invert;
       display_scheduled = true;
@@ -590,6 +590,15 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    else
 	      n++;
 	  display_scheduled = true;
+        }
+      if (k == 'i' && (event->state & GDK_CONTROL_MASK))
+        {
+	  file_progress_info progress (stdout);
+	  if (rparams.auto_mix_weights_using_ir (scan, current, sel1x, sel1y, sel2x, sel2y, &progress))
+	    {
+	      display_scheduled = true;
+	      setvals ();
+	    }
         }
       if (k == 'D')
 	{
