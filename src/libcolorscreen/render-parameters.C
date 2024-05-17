@@ -801,8 +801,9 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   int nvariables = 4;
   long nequations = (((long)xmax - xmin) * ((long)ymax - ymin));
   int step = 1;
-  if (nequations > 100000)
-    step = sqrt (nequations / 100000);
+  const int maxpoints = 10000000;
+  if (nequations > maxpoints)
+    step = sqrt (nequations / maxpoints);
   nequations = ((((long)xmax - xmin + step - 1) / step) * (((long)ymax - ymin + step - 1) / step));
   gsl_matrix *X = gsl_matrix_alloc (nequations, nvariables);
   gsl_vector *y = gsl_vector_alloc (nequations);
@@ -812,6 +813,8 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
 
   int n = 0;
   {
+    if (progress)
+      progress->set_task ("collecting color and IR data", (ymax-ymin + step - 1)/step);
     render_parameters rparam = *this;
     rparam.ignore_infrared = 0;
     rparam.sharpen_radius = 0;
@@ -819,24 +822,42 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
     render render (img, rparam, 256);
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
+//Need to avoid n
+//#pragma omp parallel for default(none) shared(progress, xmin, xmax, ymin, ymax, step, X, y, w, render, n)
     for (int yy = ymin; yy < ymax; yy += step)
-      for (int x = xmin; x < xmax; x += step)
-	{
-	  luminosity_t l = render.get_unadjusted_data (x, yy);
-	  rgbdata c = render.get_unadjusted_rgb_pixel (x, yy);
-	  gsl_matrix_set (X, n, 0, 1);
-	  gsl_matrix_set (X, n, 1, c.red);
-	  gsl_matrix_set (X, n, 2, c.green);
-	  gsl_matrix_set (X, n, 3, c.blue);
-	  gsl_vector_set (y, n, l);
-	  gsl_vector_set (w, n, /*l > 0 ? 1/l : 1*/ 1);
-	  n++;
-	}
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int x = xmin; x < xmax; x += step)
+	    {
+	      luminosity_t l = render.get_unadjusted_data (x, yy);
+	      rgbdata c = render.get_unadjusted_rgb_pixel (x, yy);
+	      gsl_matrix_set (X, n, 0, 1);
+	      gsl_matrix_set (X, n, 1, c.red);
+	      gsl_matrix_set (X, n, 2, c.green);
+	      gsl_matrix_set (X, n, 3, c.blue);
+	      gsl_vector_set (y, n, l);
+	      gsl_vector_set (w, n, l > 0 ? 1/l : 1);
+	      n++;
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
       assert (n == nequations);
   }
+  if (progress && progress->cancel_requested ())
+    {
+      gsl_matrix_free (X);
+      gsl_vector_free (y);
+      gsl_vector_free (w);
+      gsl_matrix_free (cov);
+      gsl_vector_free (c);
+      return false;
+    }
   double chisq;
   gsl_multifit_linear_workspace * work
     = gsl_multifit_linear_alloc (nequations, nvariables);
+  if (progress)
+    progress->set_task ("optimizing mixing weights", 1);
   gsl_multifit_wlinear (X, w, y, c, cov,
 			&chisq, work);
   gsl_multifit_linear_free (work);
@@ -849,6 +870,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   mix_blue = gsl_vector_get (c, 3);
   printf ("solution using %i samples step %i: red:%f green:%f blue:%f dark:%f chi %f\n", n, step, mix_red, mix_green, mix_blue, gsl_vector_get (c, 0), chisq);
   mix_dark = {-gsl_vector_get (c, 0) / mix_red, 0, 0};
+  mix_dark.print (stdout);
   gsl_vector_free (c);
   return true;
 }

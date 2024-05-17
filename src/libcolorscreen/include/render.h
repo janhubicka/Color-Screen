@@ -392,6 +392,7 @@ struct DLL_PUBLIC render_parameters
 	   && saturation == other.saturation
 	   && brightness == other.brightness
 	   && collection_threshold == other.collection_threshold
+	   && mix_dark == other.mix_dark
 	   && mix_red == other.mix_red
 	   && mix_green == other.mix_green
 	   && mix_blue == other.mix_blue
@@ -491,6 +492,7 @@ struct DLL_PUBLIC render_parameters
       white_balance = rparam.white_balance;
     else
       {
+	mix_dark = rparam.mix_dark;
 	mix_red = rparam.mix_red;
 	mix_green = rparam.mix_green;
 	mix_blue = rparam.mix_blue;

@@ -231,6 +231,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   par.dark_point = correction ? 0 : dark.red;
   par.invert = p.invert;
   ret.rtable = lookup_table_cache.get (par, progress);
+  dark.print (stdout);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
