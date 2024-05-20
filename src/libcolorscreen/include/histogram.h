@@ -1,5 +1,5 @@
 #ifndef HISTOGRAM_H
-#define HISTOGrAM_H
+#define HISTOGRAM_H
 #include <limits>
 
 /* Basic datastructure to hols various value histograms.  */
