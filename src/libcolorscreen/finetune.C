@@ -1,4 +1,5 @@
 #include <memory>
+#include <gsl/gsl_multifit.h>
 #include "include/solver.h"
 #include "include/colorscreen.h"
 #include "nmsimplex.h"
@@ -25,6 +26,7 @@ struct finetune_solver
 
   coord_t fixed_blur, fixed_width, fixed_height;
 
+  //const coord_t range = 0.2;
   const coord_t range = 0.2;
 
   screen scr1;
@@ -34,7 +36,10 @@ struct finetune_solver
 
   bool optimize_position;
   bool optimize_screen;
+  bool least_squares;
   bool normalize;
+
+  luminosity_t maxgray;
 
   int color_index;
   int screen_index;
@@ -51,7 +56,7 @@ struct finetune_solver
   }
   coord_t scale ()
   {
-    return 2 * rgbscale;
+    return /*2 * rgbscale*/0.1;
   }
   bool verbose ()
   {
@@ -84,18 +89,6 @@ struct finetune_solver
       return fixed_height;
     return v[screen_index + 2];
   }
-  rgbdata get_red (coord_t *v)
-  {
-    return {v[color_index], v[color_index + 1], v[color_index + 2]};
-  }
-  rgbdata get_green (coord_t *v)
-  {
-    return {v[color_index + 3], v[color_index + 4], v[color_index + 5]};
-  }
-  rgbdata get_blue (coord_t *v)
-  {
-    return {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
-  }
 
   void
   print_values (coord_t *v)
@@ -116,30 +109,36 @@ struct finetune_solver
       }
     if (tile)
       {
-	rgbdata red = get_red (v);
+	rgbdata red, green, blue;
+	get_colors (v, &red, &green, &blue);
+
 	printf ("Red :");
 	red.print (stdout);
 	printf ("Normalized red :");
 	luminosity_t sum = red.red + red.green + red.blue;
 	(red / sum).print (stdout);
-	rgbdata green = get_green (v);
+
 	printf ("Green :");
 	green.print (stdout);
 	printf ("Normalized green :");
-	sum = green.green + green.green + green.blue;
+	sum = green.red + green.green + green.blue;
 	(green / sum).print (stdout);
-	rgbdata blue = get_blue (v);
+
 	printf ("Blue :");
 	blue.print (stdout);
 	printf ("Normalized blue :");
-	sum = blue.blue + blue.blue + blue.blue;
+	sum = blue.red + blue.green + blue.blue;
 	(blue / sum).print (stdout);
       }
     if (bwtile)
       {
+	printf ("Max gray %f\n", maxgray);
 	rgbdata color = {v[color_index], v[color_index+1], v[color_index+2]};
 	printf ("Intensities :");
 	color.print (stdout);
+	printf ("Normalized :");
+	luminosity_t sum = color.red + color.green + color.blue;
+	(color / sum).print (stdout);
       }
   }
 
@@ -149,10 +148,19 @@ struct finetune_solver
     /* x and y adjustments.  */
     if (optimize_position)
       {
-	v[0] = std::min (v[0], range);
-	v[0] = std::max (v[0], -range);
-	v[1] = std::min (v[1], range);
-	v[1] = std::max (v[1], -range);
+	v[0] = std::min (v[0], type == Dufay ? range : range / 2);
+	v[0] = std::max (v[0], type == Dufay ? -range : -range / 2);
+	v[1] = std::min (v[1], type == Dufay ? range : range / 2);
+	v[1] = std::max (v[1], type == Dufay ? -range : -range / 2);
+      }
+    if (bwtile)
+      {
+	v[color_index] = std::min (v[color_index], (coord_t)2);
+	v[color_index] = std::max (v[color_index], (coord_t)0);
+	v[color_index + 1] = std::min (v[color_index + 1], (coord_t)2);
+	v[color_index + 1] = std::max (v[color_index + 1], (coord_t)0);
+	v[color_index + 2] = std::min (v[color_index + 2], (coord_t)2);
+	v[color_index + 2] = std::max (v[color_index + 2], (coord_t)0);
       }
 
     if (optimize_screen)
@@ -163,10 +171,10 @@ struct finetune_solver
 	/* Dufaycolor red strip width and height.  */
 	if (type == Dufay)
 	  {
-	    v[screen_index + 1] = std::min (v[screen_index + 1], 0.7);
-	    v[screen_index + 1] = std::max (v[screen_index + 1], 0.3);
-	    v[screen_index + 2] = std::min (v[screen_index + 2], 0.7);
-	    v[screen_index + 2] = std::max (v[screen_index + 2], 0.3);
+	    v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)0.7);
+	    v[screen_index + 1] = std::max (v[screen_index + 1], (coord_t)0.3);
+	    v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)0.7);
+	    v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0.3);
 	  }
       }
   }
@@ -179,13 +187,17 @@ struct finetune_solver
     if (optimize_position)
       n_values += 2;
 
-    color_index = n_values;
-    /* 3*3 values for color.
-       3 intensitied for B&W  */
-    if (tile)
-      n_values += 9;
-    else
-      n_values += 3;
+
+    if (!least_squares)
+      {
+	color_index = n_values;
+	/* 3*3 values for color.
+	   3 intensitied for B&W  */
+	if (tile)
+	  n_values += 9;
+	else
+	  n_values += 3;
+      }
 
     screen_index = n_values;
     /* screen blur and for Dufaycolor also strip widths.  */
@@ -206,25 +218,28 @@ struct finetune_solver
 	start[1] = 0;
       }
 
-    if (tile)
+    if (!least_squares)
       {
-	start[color_index] = finetune_solver::rgbscale;
-	start[color_index + 1] = 0;
-	start[color_index + 2] = 0;
+	if (tile)
+	  {
+	    start[color_index] = finetune_solver::rgbscale;
+	    start[color_index + 1] = 0;
+	    start[color_index + 2] = 0;
 
-	start[color_index + 3] = 0;
-	start[color_index + 4] = finetune_solver::rgbscale;
-	start[color_index + 5] = 0;
+	    start[color_index + 3] = 0;
+	    start[color_index + 4] = finetune_solver::rgbscale;
+	    start[color_index + 5] = 0;
 
-	start[color_index + 6] = 0;
-	start[color_index + 7] = 0;
-	start[color_index + 8] = finetune_solver::rgbscale;
-      }
-    else
-      {
-	start[color_index] = 0;
-	start[color_index + 1] = 0;
-	start[color_index + 2] = 0;
+	    start[color_index + 6] = 0;
+	    start[color_index + 7] = 0;
+	    start[color_index + 8] = finetune_solver::rgbscale;
+	  }
+	else
+	  {
+	    start[color_index] = 0;
+	    start[color_index + 1] = 0;
+	    start[color_index + 2] = 0;
+	  }
       }
 
     /* Starting from blur 0 seems to work better, since other parameters
@@ -234,13 +249,19 @@ struct finetune_solver
     fixed_height = dufaycolor::green_height;
     if (optimize_screen)
       {
-        start[screen_index] = 0;
+        start[screen_index] = 0.8;
 	if (type == Dufay)
 	  {
 	    start[screen_index + 1] = dufaycolor::red_width;
 	    start[screen_index + 2] = dufaycolor::green_height;
 	  }
       }
+
+    maxgray = 0;
+    if (bwtile)
+      for (int y = 0; y < theight; y++)
+	for (int x = 0; x < twidth; x++)
+	  maxgray = std::max (maxgray, bw_get_pixel (x, y));
     constrain (start);
   }
 
@@ -264,28 +285,27 @@ struct finetune_solver
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   inline rgbdata
-  evaulate_pixel (int x, int y, coord_t *v, point_t off)
+  evaulate_pixel (rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off)
   {
     point_t p = tile_pos [y * twidth + x];
     p.x += off.x;
     p.y += off.y;
     /* Interpolation here is necessary to ensure smoothness.  */
     rgbdata m = scr.interpolated_mult (p);
-    return ((get_red (v) * m.red + get_green (v) * m.green + get_blue (v) * m.blue) * ((coord_t)1.0 / rgbscale));
+    return ((red * m.red + green * m.green + blue * m.blue) * ((coord_t)1.0 / rgbscale));
   }
 
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   inline luminosity_t
-  bw_evaulate_pixel (int x, int y, coord_t *v, point_t off)
+  bw_evaulate_pixel (rgbdata color, int x, int y, point_t off)
   {
     point_t p = tile_pos [y * twidth + x];
     p.x += off.x;
     p.y += off.y;
     /* Interpolation here is necessary to ensure smoothness.  */
     rgbdata m = scr.interpolated_mult (p);
-    v += color_index;
-    return (m.red * v[0] + m.green * v[1] + m.blue + v[2]);
+    return ((m.red * color.red + m.green * color.green + m.blue * color.blue) * (2 * maxgray));
   }
 
   rgbdata
@@ -307,6 +327,124 @@ struct finetune_solver
      return bwtile[y * twidth + x];
   }
 
+  void
+  determine_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
+  {
+    int matrixw = 3;
+    int matrixh = twidth * theight;
+    point_t off = get_offset (v);
+
+    gsl_multifit_linear_workspace * work
+      = gsl_multifit_linear_alloc (matrixh, matrixw);
+    gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
+    gsl_vector *yy = gsl_vector_alloc (matrixh);
+    gsl_vector *w = gsl_vector_alloc (matrixh);
+    gsl_vector *c = gsl_vector_alloc (matrixw);
+    gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
+
+    for (int ch = 0; ch < 3; ch++)
+      {
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    {
+	      int e = x + y * twidth;
+	      point_t p = tile_pos [y * twidth + x];
+	      p.x += off.x;
+	      p.y += off.y;
+	      rgbdata c = scr.interpolated_mult (p);
+	      gsl_matrix_set (X, e, 0, c.red);
+	      gsl_matrix_set (X, e, 1, c.green);
+	      gsl_matrix_set (X, e, 2, c.blue);
+	      gsl_vector_set (yy, e, get_pixel (x, y) /*/ (2 * maxgray)*/[ch]);
+	      gsl_vector_set (w, e, 1);
+	    }
+	double chisq;
+	gsl_multifit_wlinear (X, w, yy, c, cov,
+			      &chisq, work);
+	(*red)[ch] = gsl_vector_get (c, 0);
+	(*green)[ch] = gsl_vector_get (c, 1);
+	(*blue)[ch] = gsl_vector_get (c, 2);
+#if 0
+	rgbdata cc = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
+	if (!ch)
+	  *red = cc;
+	else if (ch == 1)
+	  *green = cc;
+	else
+	  *blue = cc;
+#endif
+      }
+    gsl_multifit_linear_free (work);
+    gsl_matrix_free (X);
+    gsl_vector_free (yy);
+    gsl_vector_free (w);
+    gsl_vector_free (c);
+    gsl_matrix_free (cov);
+  }
+
+  rgbdata
+  bw_determine_color (coord_t *v)
+  {
+    int matrixw = 3;
+    int matrixh = twidth * theight;
+    point_t off = get_offset (v);
+
+    gsl_multifit_linear_workspace * work
+      = gsl_multifit_linear_alloc (matrixh, matrixw);
+    gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
+    gsl_vector *yy = gsl_vector_alloc (matrixh);
+    gsl_vector *w = gsl_vector_alloc (matrixh);
+    gsl_vector *c = gsl_vector_alloc (matrixw);
+    gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
+
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+        {
+	  int e = x + y * twidth;
+	  point_t p = tile_pos [y * twidth + x];
+	  p.x += off.x;
+	  p.y += off.y;
+	  rgbdata c = scr.interpolated_mult (p);
+	  gsl_matrix_set (X, e, 0, c.red);
+	  gsl_matrix_set (X, e, 1, c.green);
+	  gsl_matrix_set (X, e, 2, c.blue);
+	  gsl_vector_set (yy, e, bw_get_pixel (x, y) / (2 * maxgray));
+	  gsl_vector_set (w, e, 1);
+        }
+    double chisq;
+    gsl_multifit_wlinear (X, w, yy, c, cov,
+			  &chisq, work);
+    gsl_multifit_linear_free (work);
+    rgbdata ret = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
+    gsl_matrix_free (X);
+    gsl_vector_free (yy);
+    gsl_vector_free (w);
+    gsl_vector_free (c);
+    gsl_matrix_free (cov);
+    return ret;
+  }
+
+  rgbdata
+  bw_get_color (coord_t *v)
+  {
+    if (!least_squares)
+      return {v[color_index], v[color_index + 1], v[color_index + 2]};
+    else
+      return bw_determine_color (v);
+  }
+  void
+  get_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
+  {
+    if (!least_squares)
+      {
+	*red = {v[color_index], v[color_index + 1], v[color_index + 2]};
+	*green = {v[color_index + 3], v[color_index + 4], v[color_index + 5]};
+	*green = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
+      }
+    else
+      return determine_colors (v, red, green, blue);
+  }
+
   coord_t
   objfunc (coord_t *v)
   {
@@ -314,22 +452,30 @@ struct finetune_solver
     coord_t sum = 0;
     point_t off = get_offset (v);
     if (tile)
-      for (int y = 0; y < theight; y++)
-	for (int x = 0; x < twidth; x++)
-	  {
-	    rgbdata c = evaulate_pixel (x, y, v, off);
-	    rgbdata d = get_pixel (x, y);
-	    sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
-		    /*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) * (c.green - d.green) + (c.blue - d.blue) * (c.blue - d.blue)*/
-	  }
+      {
+	rgbdata red, green, blue;
+	get_colors (v, &red, &green, &blue);
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    {
+	      rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+	      rgbdata d = get_pixel (x, y);
+	      sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+		      /*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) * (c.green - d.green) + (c.blue - d.blue) * (c.blue - d.blue)*/
+	    }
+      }
     else if (bwtile)
-      for (int y = 0; y < theight; y++)
-	for (int x = 0; x < twidth; x++)
-	  {
-	    luminosity_t c = bw_evaulate_pixel (x, y, v, off);
-	    luminosity_t d = bw_get_pixel (x, y);
-	    sum += fabs (c - d);
-	  }
+      {
+	rgbdata color = bw_get_color (v);
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    {
+	      luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+	      luminosity_t d = bw_get_pixel (x, y);
+	      sum += fabs (c - d);
+	    }
+	sum /= maxgray;
+      }
     //printf ("%f\n", sum);
     return sum;
   }
@@ -362,10 +508,12 @@ struct finetune_solver
     if (tile)
       {
 	luminosity_t rmax = 0, gmax = 0, bmax = 0;
+	rgbdata red, green, blue;
+	get_colors (v, &red, &green, &blue);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      rgbdata c = evaulate_pixel (x, y, v, off);
+	      rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
 	      rmax = std::max (c.red, rmax);
 	      gmax = std::max (c.green, gmax);
 	      bmax = std::max (c.blue, bmax);
@@ -379,7 +527,7 @@ struct finetune_solver
 	  {
 	    for (int x = 0; x < twidth; x++)
 	      {
-		rgbdata c = evaulate_pixel (x, y, v, off);
+		rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
 		rendered.put_pixel (x, c.red * 65535 / rmax, c.green * 65535 / gmax, c.blue * 65535 / bmax);
 		rgbdata d = get_pixel (x, y);
 		orig.put_pixel (x, d.red * 65535 / rmax, d.green * 65535 / gmax, d.blue * 65535 / bmax);
@@ -393,10 +541,11 @@ struct finetune_solver
     if (bwtile)
       {
 	luminosity_t lmax = 0;
+	rgbdata color = bw_get_color (v);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      lmax = std::max (bw_evaulate_pixel (x, y, v, off), lmax);
+	      lmax = std::max (bw_evaulate_pixel (color, x, y, off), lmax);
 	      lmax = std::max (bw_get_pixel (x, y), lmax);
 	    }
 
@@ -404,7 +553,7 @@ struct finetune_solver
 	  {
 	    for (int x = 0; x < twidth; x++)
 	      {
-		luminosity_t c = bw_evaulate_pixel (x, y, v, off);
+		luminosity_t c = bw_evaulate_pixel (color, x, y, off);
 		rendered.put_pixel (x, c * 65535 / lmax, c * 65535 / lmax, c * 65535 / lmax);
 		luminosity_t d = bw_get_pixel (x, y);
 		orig.put_pixel (x, d * 65535 / lmax, d * 65535 / lmax, d * 65535 / lmax);
@@ -426,6 +575,10 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
 {
   scr_to_img map;
   map.set_parameters (param, img, 0, false);
+  bool bw = false;
+
+  if (!bw && !img.rgbdata)
+    bw = true;
 
   /* Determine tile to analyze.  */
   coord_t tx, ty;
@@ -434,6 +587,7 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   int sy = nearest_int (ty);
   bool verbose = true;
 
+#if 0
   coord_t range = 0.3;
 
   map.to_img (sx - range, sy - range, &tx, &ty);
@@ -456,6 +610,7 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
 
   coord_t test_range = 6;
   coord_t rangex = (rxmax - rxmin), rangey = (rymax - rymin);
+
 
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
@@ -500,25 +655,68 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
       fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
       progress->resume_stdout ();
     }
+#endif
+  coord_t test_range = 5;
+  map.to_img (sx - test_range, sy - test_range, &tx, &ty);
+  coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
+  map.to_img (sx + test_range, sy - test_range, &tx, &ty);
+  sxmin = std::min (sxmin, tx);
+  sxmax = std::max (sxmax, tx);
+  symin = std::min (symin, ty);
+  symax = std::max (symax, ty);
+  map.to_img (sx + test_range, sy + test_range, &tx, &ty);
+  sxmin = std::min (sxmin, tx);
+  sxmax = std::max (sxmax, tx);
+  symin = std::min (symin, ty);
+  symax = std::max (symax, ty);
+  map.to_img (sx - test_range, sy + test_range, &tx, &ty);
+  sxmin = std::min (sxmin, tx);
+  sxmax = std::max (sxmax, tx);
+  symin = std::min (symin, ty);
+  symax = std::max (symax, ty);
+
+#if 0
+  if (verbose)
+  {
+    progress->pause_stdout ();
+    fprintf (stderr, "\nScan range %f-%f %f-%f\n", sxmin, sxmax, symin, symax);
+    progress->resume_stdout ();
+  }
+#endif
+
+  int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax), tymax = ceil (symax);
+  if (txmin < 0)
+    txmin = 0;
+  if (txmax > img.width)
+    txmax = img.width;
+  if (tymin < 0)
+    tymin = 0;
+  if (tymax > img.height)
+    tymax = img.height;
+  if (txmin + 10 > txmax || tymin + 10 > tymax)
+    return false;
+  int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
+  if (verbose)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+      progress->resume_stdout ();
+    }
 
   std::unique_ptr <rgbdata[]> tile;
   std::unique_ptr <luminosity_t[]> bwtile;
  
-  if (img.rgbdata)
-    {
-      tile = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
-    }
+  if (!bw)
+    tile = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
   else
-    {
-      bwtile = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
-    }
+    bwtile = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
 
   std::unique_ptr <point_t[]> tile_pos (new  (std::nothrow) point_t [twidth * theight]);
   if ((!tile && !bwtile) || !tile_pos)
     return false;
 
   render_to_scr render (param, img, rparam, 256);
-  if (!render.precompute_img_range (false /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, progress))
+  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, progress))
     return false;
   for (int y = 0; y < theight; y++)
     for (int x = 0; x < twidth; x++)
@@ -527,7 +725,7 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
 	if (tile)
 	  tile[y * twidth + x] = render.get_unadjusted_rgb_pixel (x + txmin, y + tymin);
 	if (bwtile)
-	  bwtile[y * twidth + x] = render.get_unadjusted_img_pixel (x + txmin, y + tymin);
+	  bwtile[y * twidth + x] = render.get_unadjusted_data (x + txmin, y + tymin);
       }
   finetune_solver solver;
   solver.twidth = twidth;
@@ -537,8 +735,9 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   solver.tile_pos = tile_pos.get ();
   solver.type = map.get_type ();
   solver.pixel_size = render.pixel_size ();
-  solver.optimize_position = true;
+  solver.optimize_position = false;
   solver.optimize_screen = true;
+  solver.least_squares = true;
   solver.normalize = true;
   solver.init (rparam.screen_blur_radius);
 
@@ -556,8 +755,11 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   if (solver.optimize_screen)
     {
       rparam.screen_blur_radius = solver.start[solver.screen_index];
-      rparam.dufay_red_strip_width = solver.start[solver.screen_index + 1];
-      rparam.dufay_green_strip_width = solver.start[solver.screen_index + 2];
+      if (solver.type == Dufay)
+        {
+          rparam.dufay_red_strip_width = solver.start[solver.screen_index + 1];
+          rparam.dufay_green_strip_width = solver.start[solver.screen_index + 2];
+        }
     }
   return true;
 }
