@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/spectrum-to-xyz.h"
 #include "../libcolorscreen/dufaycolor.h"
 #include "../libcolorscreen/wratten.h"
+#include "../libcolorscreen/include/tiff-writer.h"
 
 static bool verbose = false;
 const char *binname;
@@ -489,7 +490,7 @@ export_lcc (int argc, char **argv)
 void
 read_chemcad (int argc, char **argv)
 {
-  FILE *f;
+  FILE *f = NULL;
   spectrum s;
   spectrum sum;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
@@ -974,6 +975,107 @@ digital_laboratory (int argc, char **argv)
   else
     print_help ();
 }
+void
+analyze_sharpness (int argc, char **argv)
+{
+  const char *error = NULL;
+
+  printf ("%i\n",argc);
+  if (argc < 2 || argc > 3)
+    print_help ();
+  verbose = 1;
+  file_progress_info progress (verbose ? stdout : NULL);
+  image_data scan;
+  if (!scan.load (argv[0], false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      exit (1);
+    }
+
+  FILE *in = fopen (argv[1], "rt");
+  if (!in)
+    {
+      progress.pause_stdout ();
+      perror (argv[1]);
+      exit (1);
+    }
+
+  scr_to_img_parameters param;
+  render_parameters rparam;
+  if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+      exit (1);
+    }
+  fclose (in);
+
+  int xsteps = 16;
+  int ysteps = xsteps * scan.height / scan.width;
+  int border = 10;
+
+  coord_t radius [xsteps][ysteps];
+  progress.set_task ("analyzing samples", ysteps * xsteps);
+  for (int y = 0; y < ysteps; y++)
+    for (int x = 0; x < xsteps; x++)
+      {
+	render_parameters my_rparam = rparam;
+	int xborder = scan.width * border / 100;
+	int yborder = scan.height * border / 100;
+	int xpos = xborder + x * (scan.width - 2 * xborder) / xsteps;
+	int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
+	solver_parameters::point_t p;
+	int stack = progress.push ();
+	finetune (my_rparam, param, scan, p, xpos, ypos, &progress);
+	progress.pop (stack);
+	if (verbose)
+	  {
+	    progress.pause_stdout ();
+	    printf ("%i %i pos %i %i %f\n", x, y, xpos, ypos, my_rparam.screen_blur_radius);
+	    progress.resume_stdout ();
+	  }
+	radius[y][x] = my_rparam.screen_blur_radius;
+	progress.inc_progress ();
+      }
+  progress.pause_stdout ();
+  for (int y = 0; y < ysteps; y++)
+    {
+      for (int x = 0; x < xsteps; x++)
+	printf ("  %5.2f", radius[y][x]);
+      printf ("\n");
+    }
+  if (argc == 3)
+    {
+      tiff_writer_params p;
+      p.filename = argv[2];
+      p.width = xsteps;
+      p.height = ysteps;
+      p.depth = 16;
+      const char *error;
+      tiff_writer sharpness (p, &error);
+      if (error)
+        {
+          progress.pause_stdout ();
+	  fprintf (stderr, "Can not open tiff file %s: %s\n", argv[2], error);
+	  exit (1);
+        }
+      for (int y = 0; y < ysteps; y++)
+        {
+	  for (int x = 0; x < xsteps; x++)
+	  {
+	    int v = std::min (radius[y][x] / 2 * 65535, (coord_t)65535);
+	    sharpness.put_pixel (x, v, v, v);
+	  }
+	  if (!sharpness.write_row ())
+	    {
+	      progress.pause_stdout ();
+	      fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+	      exit (1);
+	    }
+        }
+    }
+}
 
 int
 main (int argc, char **argv)
@@ -985,6 +1087,8 @@ main (int argc, char **argv)
     render (argc-2, argv+2);
   else if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
+  else if (!strcmp (argv[1], "analyze-sharpness"))
+    analyze_sharpness (argc-2, argv+2);
   else if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-lcc"))
