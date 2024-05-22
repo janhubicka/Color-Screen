@@ -153,7 +153,7 @@ struct finetune_solver
 	v[1] = std::min (v[1], type == Dufay ? range : range / 2);
 	v[1] = std::max (v[1], type == Dufay ? -range : -range / 2);
       }
-    if (bwtile)
+    if (bwtile && !least_squares)
       {
 	v[color_index] = std::min (v[color_index], (coord_t)2);
 	v[color_index] = std::max (v[color_index], (coord_t)0);
@@ -574,8 +574,8 @@ bool
 finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &img, solver_parameters::point_t &point, int x, int y, progress_info *progress)
 {
   scr_to_img map;
-  map.set_parameters (param, img, 0, false);
-  bool bw = false;
+  map.set_parameters (param, img);
+  bool bw = true;
 
   if (!bw && !img.rgbdata)
     bw = true;
@@ -656,7 +656,8 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
       progress->resume_stdout ();
     }
 #endif
-  coord_t test_range = 5;
+  coord_t test_range = bw ? 1 : 5;
+  map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
   map.to_img (sx + test_range, sy - test_range, &tx, &ty);
@@ -694,7 +695,15 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   if (tymax > img.height)
     tymax = img.height;
   if (txmin + 10 > txmax || tymin + 10 > tymax)
-    return false;
+    {
+      if (verbose)
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+	  progress->resume_stdout ();
+	}
+      return false;
+    }
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
   if (verbose)
     {
@@ -713,11 +722,27 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
 
   std::unique_ptr <point_t[]> tile_pos (new  (std::nothrow) point_t [twidth * theight]);
   if ((!tile && !bwtile) || !tile_pos)
-    return false;
+    {
+      if (verbose)
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Failed to allocate tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+	  progress->resume_stdout ();
+	}
+      return false;
+    }
 
   render_to_scr render (param, img, rparam, 256);
   if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, progress))
-    return false;
+    {
+      if (verbose)
+	{
+	  progress->pause_stdout ();
+	  fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+	  progress->resume_stdout ();
+	}
+      return false;
+    }
   for (int y = 0; y < theight; y++)
     for (int x = 0; x < twidth; x++)
       {
