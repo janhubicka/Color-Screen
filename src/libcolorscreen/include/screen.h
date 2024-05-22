@@ -8,6 +8,8 @@ struct DLL_PUBLIC screen
 {
   /* Size of the arrays holding the screen.  Must be power of 2.  */
   static const int size=128;
+  /* blur radius is in screen coordiates. 0.25 makes almost invisible.  */
+  constexpr static const coord_t max_blur_radius = 0.25;
   /* Mult specify how much one should multiply, add how much add
      and keep how much keep in the color.  */
   luminosity_t mult[size][size][3];
@@ -52,5 +54,6 @@ private:
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
   void preview_dufay ();
+  __attribute__ ((always_inline)) inline void initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur);
 };
 #endif

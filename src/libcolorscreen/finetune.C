@@ -92,7 +92,7 @@ struct finetune_solver
 	/* Screen blur radius.  */
 	v[11] = std::max (v[11], (coord_t)0);
 	/* 0.356399 is way too large with pixel size 0.128323)  */
-	v[11] = std::min (v[11], (coord_t)2);
+	v[11] = std::min (v[11], screen::max_blur_radius / pixel_size);
 	/* Dufaycolor red strip widht and height.  */
 	v[12] = std::min (v[12], 0.7);
 	v[12] = std::max (v[12], 0.3);
