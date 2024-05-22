@@ -28,7 +28,7 @@ public:
   bool precompute_all (progress_info *progress)
   {
     coord_t radius = m_preview ? 0 : m_params.screen_blur_radius * pixel_size ();
-    m_screen = get_screen (m_scr_to_img.get_type (), m_preview, radius, NULL);
+    m_screen = get_screen (m_scr_to_img.get_type (), m_preview, radius, m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress);
     return render_to_scr::precompute_all (!m_color, m_preview, progress);
   }
   bool precompute_img_range (int, int, int, int, progress_info *progress = NULL)

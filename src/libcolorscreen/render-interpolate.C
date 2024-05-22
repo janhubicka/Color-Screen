@@ -1,8 +1,11 @@
 #include <assert.h>
+#include <memory>
 #include <limits>
+#include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "dufaycolor.h"
 #include "render-interpolate.h"
+#include "nmsimplex.h"
 
 namespace {
 
@@ -96,7 +99,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
   if (m_screen_compensation || m_params.precise | m_precise_rgb)
     {
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
-      m_screen = get_screen (m_scr_to_img.get_type (), false, radius, progress, &screen_id);
+      m_screen = get_screen (m_scr_to_img.get_type (), false, radius, m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
       if (!m_screen)
 	return false;
     }

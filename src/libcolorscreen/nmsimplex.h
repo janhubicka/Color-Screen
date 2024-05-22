@@ -77,10 +77,12 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL)
 	}
     }
 
-  c.constrain (v[j]);
   /* find the initial function values */
   for (j = 0; j <= n; j++)
+  {
+    c.constrain (v[j]);
     f[j] = c.objfunc (v[j]);
+  }
 
   k = n + 1;
 

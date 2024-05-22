@@ -13,6 +13,27 @@ struct DLL_PUBLIC screen
   luminosity_t mult[size][size][3];
   luminosity_t add[size][size][3];
 
+  /* Return multiplicative factor of point p with bilinear interpolation.  */
+  inline pure_attr rgbdata
+  interpolated_mult (point_t p)
+  {
+    int sx, sy;
+    coord_t rx = my_modf (p.x * size, &sx);
+    coord_t ry = my_modf (p.y * size, &sy);
+    int sx1 = ((unsigned)sx + 1u) & (unsigned)(size - 1);
+    int sy1 = ((unsigned)sy + 1u) & (unsigned)(size - 1);
+    sx = (unsigned)sx & (unsigned)(size - 1);
+    sy = (unsigned)sy & (unsigned)(size - 1);
+    //printf ("%i %i %i %i\n",sx,sx1,sy,sy1);
+    rgbdata d1 = {mult[sy][sx][0], mult[sy][sx][1], mult[sy][sx][2]};
+    rgbdata d2 = {mult[sy][sx1][0], mult[sy][sx1][1], mult[sy][sx1][2]};
+    rgbdata i1 = d1 * (1 - rx) + d2 * rx;
+    rgbdata dd1 = {mult[sy1][sx][0], mult[sy1][sx][1], mult[sy1][sx][2]};
+    rgbdata dd2 = {mult[sy1][sx1][0], mult[sy1][sx1][1], mult[sy1][sx1][2]};
+    rgbdata i2 = dd1 * (1 - rx) + dd2 * rx;
+    return i1 * (1 - ry) + i2 * ry;
+  }
+
   /* Initialize empty screen (so rendering will show original image).  */
   void empty ();
   /* Initialize to a given screen.  */

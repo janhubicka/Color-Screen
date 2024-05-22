@@ -804,7 +804,9 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   const int maxpoints = 10000000;
   if (nequations > maxpoints)
     step = sqrt (nequations / maxpoints);
-  nequations = ((((long)xmax - xmin + step - 1) / step) * (((long)ymax - ymin + step - 1) / step));
+  int xsteps = (xmax - xmin + step - 1) / step;
+  int ysteps = (ymax - ymin + step - 1) / step;
+  nequations =  ((long)xsteps) * ysteps;
   gsl_matrix *X = gsl_matrix_alloc (nequations, nvariables);
   gsl_vector *y = gsl_vector_alloc (nequations);
   gsl_vector *w = gsl_vector_alloc (nequations);
@@ -814,7 +816,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   int n = 0;
   {
     if (progress)
-      progress->set_task ("collecting color and IR data", (ymax-ymin + step - 1)/step);
+      progress->set_task ("collecting color and IR data", ysteps);
     render_parameters rparam = *this;
     rparam.ignore_infrared = 0;
     rparam.sharpen_radius = 0;
@@ -822,15 +824,18 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
     render render (img, rparam, 256);
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
-//Need to avoid n
-//#pragma omp parallel for default(none) shared(progress, xmin, xmax, ymin, ymax, step, X, y, w, render, n)
-    for (int yy = ymin; yy < ymax; yy += step)
+
+#pragma omp parallel for default(none) shared(progress, xmin, ymin, xsteps, ysteps, step, X, y, w, render, n)
+    for (int yy = 0; yy < ysteps; yy ++)
       {
 	if (!progress || !progress->cancel_requested ())
-	  for (int x = xmin; x < xmax; x += step)
+	  for (int xx = 0; xx < xsteps; xx ++)
 	    {
-	      luminosity_t l = render.get_unadjusted_data (x, yy);
-	      rgbdata c = render.get_unadjusted_rgb_pixel (x, yy);
+	      int cx = xx * step + xmin;
+	      int cy = yy * step + ymin;
+	      luminosity_t l = render.get_unadjusted_data (cx, cy);
+	      rgbdata c = render.get_unadjusted_rgb_pixel (cx, cy);
+	      int n = yy * xsteps + xx;
 	      gsl_matrix_set (X, n, 0, 1);
 	      gsl_matrix_set (X, n, 1, c.red);
 	      gsl_matrix_set (X, n, 2, c.green);
@@ -842,7 +847,6 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
 	if (progress)
 	  progress->inc_progress ();
       }
-      assert (n == nequations);
   }
   if (progress && progress->cancel_requested ())
     {

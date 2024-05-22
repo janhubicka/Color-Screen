@@ -146,7 +146,7 @@ am__libcolorscreen_la_SOURCES_DIST = render.C render-to-scr.C \
 	dufaycolor.C wratten.C spectrum.C spectrum-dyes.C \
 	spectrum-illuminants.C spectrum-responses.C tone-curve.C \
 	lens-warp-correction.C matrix-profile.C scr-detect-colors.C \
-	render-extra/render-extra.C
+	finetune.C render-extra/render-extra.C
 @RENDER_EXTRA_TRUE@am__objects_1 = libcolorscreen_la-render-extra.lo
 am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-render-to-scr.lo \
@@ -183,7 +183,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-tone-curve.lo \
 	libcolorscreen_la-lens-warp-correction.lo \
 	libcolorscreen_la-matrix-profile.lo \
-	libcolorscreen_la-scr-detect-colors.lo $(am__objects_1)
+	libcolorscreen_la-scr-detect-colors.lo \
+	libcolorscreen_la-finetune.lo $(am__objects_1)
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -217,6 +218,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo \
 	./$(DEPDIR)/libcolorscreen_la-color.Plo \
 	./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo \
+	./$(DEPDIR)/libcolorscreen_la-finetune.Plo \
 	./$(DEPDIR)/libcolorscreen_la-icc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
 	./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo \
@@ -452,7 +454,7 @@ libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C \
 	parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C \
 	spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C \
 	tone-curve.C lens-warp-correction.C matrix-profile.C \
-	scr-detect-colors.C $(am__append_1)
+	scr-detect-colors.C finetune.C $(am__append_1)
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -570,6 +572,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-color.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-finetune.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-icc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo@am__quote@ # am--include-marker
@@ -930,6 +933,13 @@ libcolorscreen_la-scr-detect-colors.lo: scr-detect-colors.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-scr-detect-colors.lo `test -f 'scr-detect-colors.C' || echo '$(srcdir)/'`scr-detect-colors.C
 
+libcolorscreen_la-finetune.lo: finetune.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-finetune.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-finetune.Tpo -c -o libcolorscreen_la-finetune.lo `test -f 'finetune.C' || echo '$(srcdir)/'`finetune.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-finetune.Tpo $(DEPDIR)/libcolorscreen_la-finetune.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='finetune.C' object='libcolorscreen_la-finetune.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-finetune.lo `test -f 'finetune.C' || echo '$(srcdir)/'`finetune.C
+
 libcolorscreen_la-render-extra.lo: render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-render-extra.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-render-extra.Tpo -c -o libcolorscreen_la-render-extra.lo `test -f 'render-extra/render-extra.C' || echo '$(srcdir)/'`render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-render-extra.Tpo $(DEPDIR)/libcolorscreen_la-render-extra.Plo
@@ -1097,6 +1107,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-finetune.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo
@@ -1186,6 +1197,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-backlight-correction.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-color.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-finetune.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-lens-warp-correction.Plo

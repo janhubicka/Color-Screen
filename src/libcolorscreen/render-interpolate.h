@@ -6,6 +6,7 @@
 #include "include/analyze-dufay.h"
 #include "include/analyze-paget.h"
 #include "include/histogram.h"
+#include "include/solver.h"
 class render_interpolate : public render_to_scr
 {
 public:
@@ -72,6 +73,7 @@ public:
   typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
   void analyze_tiles (analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
   void analyze_rgb_tiles (rgb_analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  //bool finetune (render_parameters &rparam, solver_parameters::point_t &point, int x, int y, progress_info *progress);
   //void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
 private:
   screen *m_screen;

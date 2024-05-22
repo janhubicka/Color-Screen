@@ -190,6 +190,7 @@ struct color_match
 };
 color_matrix determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts = 0, std::vector <color_match> *report = NULL, render *r = NULL, rgbdata proportions = {1, 1, 1}, progress_info *progress = NULL);
 bool optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress);
+DLL_PUBLIC bool finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &img, solver_parameters::point_t &point, int x, int y, progress_info *progress);
 
 
 #endif

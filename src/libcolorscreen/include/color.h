@@ -407,6 +407,8 @@ struct rgbdata
   constexpr rgbdata (luminosity_t red1, luminosity_t green1, luminosity_t blue1)
   : red (red1), green (green1), blue (blue1)
   { }
+  rgbdata (const std::nothrow_t&)
+  { }
   bool operator== (rgbdata &other) const
   {
     return red == other.red

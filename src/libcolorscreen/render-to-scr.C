@@ -10,13 +10,16 @@ struct screen_params
   enum scr_type t;
   bool preview;
   coord_t radius;
+  coord_t dufay_red_strip_width, dufay_green_strip_height;
 
   bool
   operator==(screen_params &o)
   {
     return t == o.t
 	   && preview == o.preview
-	   && fabs (radius - o.radius) < 0.01;
+	   && fabs (radius - o.radius) < 0.01
+	   && dufay_red_strip_width == o.dufay_red_strip_width
+	   && dufay_green_strip_height == o.dufay_green_strip_height;
   }
 };
 
@@ -29,7 +32,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   if (p.preview)
     s->initialize_preview (p.t);
   else
-    s->initialize (p.t);
+    s->initialize (p.t, p.dufay_red_strip_width, p.dufay_green_strip_height);
   if (!p.radius)
     return s;
   screen *blurred = new screen;
@@ -66,9 +69,9 @@ render_to_scr::precompute_img_range (bool grayscale_needed, bool normalized_patc
 }
 
 screen *
-render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius, progress_info *progress, uint64_t *id)
+render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius, coord_t red_strip_width, coord_t green_strip_width, progress_info *progress, uint64_t *id)
 {
-  screen_params p = {t, preview, radius};
+  screen_params p = {t, preview, radius, red_strip_width, green_strip_width};
   return screen_cache.get (p, progress, id);
 }
 

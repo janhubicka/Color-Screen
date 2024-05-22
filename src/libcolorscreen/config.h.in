@@ -63,7 +63,7 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* "include extra render from extenral source tree" */
+/* "include render extra from extenral source tree" */
 #undef RENDER_EXTRA
 
 /* Define to 1 if all of the C89 standard headers exist (not just the ones
