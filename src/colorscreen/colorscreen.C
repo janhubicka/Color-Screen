@@ -77,8 +77,20 @@ print_help ()
   fprintf (stderr, "    Dump information in CaptureOne LLC file\n");
   fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
   fprintf (stderr, "    Dump patch densities in text format for external processing. Requires parameters with screen geometry.\n");
-  fprintf (stderr, "  finetune <scan> <prameters> <output>\n");
+  fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
   fprintf (stderr, "    Finetune parameters of different parts of the input scan. Requires parameters with screen geometry.\n");
+  fprintf (stderr, "    Supported args:\n");
+  fprintf (stderr, "      --help                    print help\n");
+  fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --width=n                 analyze n samples horisontally (number of vertical samples depeends on aspect ratio)\n");
+  fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
+  fprintf (stderr, "      --optimize-screen-blur    enable finetuning of screen blur radius\n");
+  fprintf (stderr, "      --screen-blur-tiff=name   write finetuned blur radius parameters as tiff file\n");
+  fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of dufay screen strip widths\n");
+  fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
+  fprintf (stderr, "      --use-monochrome-channel  analyse using monochrome channel even when RGB is available\n");
+  fprintf (stderr, "      --no-least-squares        do not use least squares to optimize screen colors\n");
+  fprintf (stderr, "      --no-normalize            do not normalize colors\n");
   fprintf (stderr, "  lab <subcommnad>\n");
   fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
   fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
@@ -200,6 +212,24 @@ parse_float_param (int argc, char **argv, int *i, const char *arg, float &val, f
   if (val < min || val > max)
     {
       fprintf (stderr, "parameter %s=%f is out of range %f...%f\n", arg, val, min, max);
+      print_help ();
+    }
+  return true;
+}
+static bool
+parse_int_param (int argc, char **argv, int *i, const char *arg, int &val, int min, int max)
+{
+  const char *param = arg_with_param (argc, argv, i, arg);
+  if (!param)
+    return false;
+  if (!sscanf (param, "%i",&val))
+    {
+      fprintf (stderr, "invalid parameter of %s\n", param);
+      print_help ();
+    }
+  if (val < min || val > max)
+    {
+      fprintf (stderr, "parameter %s=%i is out of range %i...%i\n", arg, val, min, max);
       print_help ();
     }
   return true;
@@ -985,23 +1015,71 @@ finetune (int argc, char **argv)
 {
   const char *error = NULL;
 
-  if (argc < 2 || argc > 3)
+  const char *infname = NULL;
+  const char *cspname = NULL;
+  const char *screen_blur_tiff_name = NULL;
+  const char *strip_width_tiff_name = NULL;
+  int xsteps = 32;
+  int border = 5;
+  int flags = 0;
+  //*finetune_no_progress_report | finetune_screen_blur| finetune_dufay_strips;
+  
+  for (int i = 0; i < argc; i++)
+    {
+      if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
+	print_help();
+      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
+	verbose = true;
+      else if (!strcmp (argv[i], "--optimize-position"))
+	flags |= finetune_position;
+      else if (!strcmp (argv[i], "--optimize-screen-blur"))
+	flags |= finetune_screen_blur;
+      else if (!strcmp (argv[i], "--use-monochrome-channel"))
+	flags |= finetune_bw;
+      else if (!strcmp (argv[i], "--optimize-dufay-strips"))
+	flags |= finetune_dufay_strips;
+      else if (!strcmp (argv[i], "--no-normalize"))
+	flags |= finetune_no_normalize;
+      else if (!strcmp (argv[i], "--no-least-squares"))
+	flags |= finetune_no_least_squares;
+      else if (const char *str = arg_with_param (argc, argv, &i, "screen-blur-tiff"))
+	screen_blur_tiff_name = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "dufay-strips-tiff"))
+	strip_width_tiff_name = str;
+      else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 65536/2))
+	;
+      else if (!infname)
+	infname = argv[i];
+      else if (!cspname)
+	cspname = argv[i];
+      else
+        print_help ();
+    }
+
+  if (!infname || !cspname || !flags)
     print_help ();
-  verbose = 1;
+  flags |= finetune_no_progress_report;
   file_progress_info progress (verbose ? stdout : NULL);
   image_data scan;
-  if (!scan.load (argv[0], false, &error, &progress))
+  if (verbose)
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      printf ("Loading scan %s\n", infname);
+      record_time ();
+      progress.resume_stdout ();
+    }
+  if (!scan.load (infname, false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
 
-  FILE *in = fopen (argv[1], "rt");
+  FILE *in = fopen (cspname, "rt");
   if (!in)
     {
       progress.pause_stdout ();
-      perror (argv[1]);
+      perror (cspname);
       exit (1);
     }
 
@@ -1010,19 +1088,18 @@ finetune (int argc, char **argv)
   if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
       exit (1);
     }
   fclose (in);
 
-  int xsteps = 32;
   int ysteps = xsteps * scan.height / scan.width;
-  int border = 5;
 
   coord_t radius [ysteps][xsteps];
+  coord_t strip_widths [ysteps][xsteps][2];
+  point_t positions [ysteps][xsteps][2];
   progress.set_task ("analyzing samples", ysteps * xsteps);
-  int flags = finetune_no_progress_report | finetune_screen_blur | finetune_dufay_strips;
-#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border, progress,param,stderr,radius)
+#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1049,44 +1126,93 @@ finetune (int argc, char **argv)
 	  }
 #endif
 	radius[y][x] = my_rparam.screen_blur_radius;
+	strip_widths[y][x][0] = my_rparam.dufay_red_strip_width;
+	strip_widths[y][x][1] = my_rparam.dufay_green_strip_width;
 	progress.inc_progress ();
       }
   progress.pause_stdout ();
-  for (int y = 0; y < ysteps; y++)
+
+  if (flags & finetune_screen_blur)
     {
-      for (int x = 0; x < xsteps; x++)
-	printf ("  %5.2f", radius[y][x]);
-      printf ("\n");
-    }
-  if (argc == 3)
-    {
-      tiff_writer_params p;
-      p.filename = argv[2];
-      p.width = xsteps;
-      p.height = ysteps;
-      p.depth = 16;
-      const char *error;
-      tiff_writer sharpness (p, &error);
-      if (error)
-        {
-          progress.pause_stdout ();
-	  fprintf (stderr, "Can not open tiff file %s: %s\n", argv[2], error);
-	  exit (1);
-        }
+      printf ("Detected screen blurs\n");
       for (int y = 0; y < ysteps; y++)
-        {
+	{
 	  for (int x = 0; x < xsteps; x++)
-	  {
-	    int v = std::min (radius[y][x] / 2 * 65535, (coord_t)65535);
-	    sharpness.put_pixel (x, v, v, v);
-	  }
-	  if (!sharpness.write_row ())
+	    printf ("  %6.3f", radius[y][x]);
+	  printf ("\n");
+	}
+      if (screen_blur_tiff_name)
+	{
+	  tiff_writer_params p;
+	  p.filename = screen_blur_tiff_name;
+	  p.width = xsteps;
+	  p.height = ysteps;
+	  p.depth = 16;
+	  const char *error;
+	  tiff_writer sharpness (p, &error);
+	  if (error)
 	    {
 	      progress.pause_stdout ();
-	      fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+	      fprintf (stderr, "Can not open tiff file %s: %s\n", screen_blur_tiff_name, error);
 	      exit (1);
 	    }
-        }
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
+	      {
+		int v = std::min (radius[y][x] / 2 * 65535, (coord_t)65535);
+		sharpness.put_pixel (x, v, v, v);
+	      }
+	      if (!sharpness.write_row ())
+		{
+		  progress.pause_stdout ();
+		  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		  exit (1);
+		}
+	    }
+	}
+    }
+  if ((flags & finetune_dufay_strips) && param.type == Dufay)
+    {
+      printf ("Detected screen strip widths (red, green)\n");
+      for (int y = 0; y < ysteps; y++)
+	{
+	  for (int x = 0; x < xsteps; x++)
+	    printf ("  %.3f,%.3f", strip_widths[y][x][0],strip_widths[y][x][1]);
+	  printf ("\n");
+	}
+      if (strip_width_tiff_name)
+	{
+	  tiff_writer_params p;
+	  p.filename = strip_width_tiff_name;
+	  p.width = xsteps;
+	  p.height = ysteps;
+	  p.depth = 16;
+	  const char *error;
+	  tiff_writer sharpness (p, &error);
+	  if (error)
+	    {
+	      progress.pause_stdout ();
+	      fprintf (stderr, "Can not open tiff file %s: %s\n", strip_width_tiff_name, error);
+	      exit (1);
+	    }
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
+	      {
+		coord_t r = strip_widths[y][x][0];
+		coord_t g = strip_widths[y][x][1] * (1-r);
+		coord_t b = (1-strip_widths[y][x][1]) * (1-r);
+		sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
+	      }
+	      if (!sharpness.write_row ())
+		{
+		  progress.pause_stdout ();
+		  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		  exit (1);
+		}
+	    }
+	}
     }
 }
 
