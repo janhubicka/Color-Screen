@@ -324,11 +324,13 @@ screen::preview_dufay ()
       }
 }
 
-void
+__attribute__ ((always_inline))
+inline void
 screen::initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur)
 {
   for (int c = 0; c < 3; c++)
     {
+//#pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
       for (int y = 0; y < size; y++)
 	{
 	  luminosity_t mmult[size + clen];
@@ -344,6 +346,7 @@ screen::initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, lumi
 	      hblur[x + y * size] = sum;
 	    }
 	}
+//#pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
       for (int x = 0; x < size; x++)
 	{
 	  luminosity_t mmult[size + clen];

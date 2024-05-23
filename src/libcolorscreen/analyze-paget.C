@@ -417,3 +417,31 @@ analyze_paget::find_best_match (int percentage, int max_percentage, analyze_base
   /* TODO: Implement brute forcing.  */
   return false;
 }
+
+bool
+analyze_paget::dump_patch_density (FILE *out)
+{
+  fprintf (out, "Paget dimenstion: %i %i\n", m_width, m_height);
+  fprintf (out, "Red %i %i\n", m_width , 2*m_height);
+  for (int y = 0; y < m_height * 2; y++)
+    {
+      for (int x = 0; x < m_width; x++)
+	fprintf (out, "  %f", red (x, y));
+      fprintf (out, "\n");
+    }
+  fprintf (out, "Green %i %i\n", m_width , 2*m_height);
+  for (int y = 0; y < m_height * 2; y++)
+    {
+      for (int x = 0; x < m_width; x++)
+	fprintf (out, "  %f", green (x, y));
+      fprintf (out, "\n");
+    }
+  fprintf (out, "Blue %i %i\n", m_width * 2, m_height * 2);
+  for (int y = 0; y < m_height * 2; y++)
+    {
+      for (int x = 0; x < m_width * 2; x++)
+	fprintf (out, "  %f", blue (x, y));
+      fprintf (out, "\n");
+    }
+  return true;
+}

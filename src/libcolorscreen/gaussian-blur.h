@@ -12,7 +12,8 @@
 class fir_blur
 {
 public:
-  static int
+  __attribute__ ((always_inline))
+  static inline int
   gen_convolve_matrix (luminosity_t sigma, luminosity_t **cmatrix)
     {
       int    clen;

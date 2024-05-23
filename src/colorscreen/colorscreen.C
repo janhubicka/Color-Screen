@@ -4,6 +4,7 @@
 #include "../libcolorscreen/dufaycolor.h"
 #include "../libcolorscreen/wratten.h"
 #include "../libcolorscreen/include/tiff-writer.h"
+#include "../libcolorscreen/render-interpolate.h"
 
 static bool verbose = false;
 const char *binname;
@@ -1082,6 +1083,58 @@ analyze_sharpness (int argc, char **argv)
     }
 }
 
+void
+dump_patch_density (int argc, char **argv)
+{
+  const char *error = NULL;
+
+  if (argc != 3)
+    print_help ();
+  verbose = 1;
+  file_progress_info progress (verbose ? stdout : NULL);
+  image_data scan;
+  if (!scan.load (argv[0], false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      exit (1);
+    }
+
+  FILE *in = fopen (argv[1], "rt");
+  if (!in)
+    {
+      progress.pause_stdout ();
+      perror (argv[1]);
+      exit (1);
+    }
+
+  scr_to_img_parameters param;
+  render_parameters rparam;
+  if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+      exit (1);
+    }
+  fclose (in);
+  render_interpolate render (param, scan, rparam, 256);
+  if (!render.precompute_all (&progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Precomputing failed");
+      exit (1);
+    }
+  FILE *out = fopen (argv[2], "wt");
+  if (!out)
+    {
+      progress.pause_stdout ();
+      perror (argv[2]);
+      exit (1);
+    }
+  render.dump_patch_density (out);
+  fclose (out);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1098,6 +1151,8 @@ main (int argc, char **argv)
     export_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-lcc"))
     dump_lcc (argc-2, argv+2);
+  else if (!strcmp (argv[1], "dump-patch-density"))
+    dump_patch_density (argc-2, argv+2);
   else if (!strcmp (argv[1], "digital-laboratory")
 	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);

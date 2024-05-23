@@ -434,6 +434,17 @@ render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
   else
     abort ();
 }
+
+bool
+render_interpolate::dump_patch_density (FILE *out)
+{
+  if (!m_paget)
+    {
+      fprintf (stderr, "Unsuported screen format\n");
+      return false;
+    }
+  return m_paget->dump_patch_density (out);
+}
 #if 0
 void
 render_interpolate::ect_rgb_histograms (rgb_histogram &histogram_red, rgb_histogram &histogram_greem, rgb_histogram &histogram_blue, int xmin, int xmax, int ymin, int ymax, progress_info *progress)

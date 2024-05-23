@@ -2,6 +2,8 @@
 #include <locale>
 #include <climits>
 #include <limits>
+#define HAVE_INLINE
+#define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "include/stitch.h"

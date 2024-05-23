@@ -1,4 +1,6 @@
 #include <memory>
+#define HAVE_INLINE
+#define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
 #include "include/solver.h"
 #include "include/colorscreen.h"
@@ -575,7 +577,7 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
 {
   scr_to_img map;
   map.set_parameters (param, img);
-  bool bw = true;
+  bool bw = false;
 
   if (!bw && !img.rgbdata)
     bw = true;

@@ -1,3 +1,5 @@
+#define HAVE_INLINE
+#define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
 #include <tiffio.h>
 #include "include/stitch.h"
