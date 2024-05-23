@@ -5,6 +5,7 @@
 #include "../libcolorscreen/wratten.h"
 #include "../libcolorscreen/include/tiff-writer.h"
 #include "../libcolorscreen/render-interpolate.h"
+#include "../libcolorscreen/include/finetune.h"
 
 static bool verbose = false;
 const char *binname;
@@ -38,7 +39,7 @@ print_help ()
   fprintf (stderr, "Supported commands and parameters are:\n\n");
   fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
   fprintf (stderr, "    render scan into tiff\n");
-  fprintf (stderr, "    <scan> is image, <parametrs> is the ColorScreen parametr file\n");
+  fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen parametr file\n");
   fprintf (stderr, "    <output> is tiff file to be produced\n");
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
@@ -74,6 +75,10 @@ print_help ()
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "  dump-lcc <filename>\n");
   fprintf (stderr, "    Dump information in CaptureOne LLC file\n");
+  fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
+  fprintf (stderr, "    Dump patch densities in text format for external processing. Requires parameters with screen geometry.\n");
+  fprintf (stderr, "  finetune <scan> <prameters> <output>\n");
+  fprintf (stderr, "    Finetune parameters of different parts of the input scan. Requires parameters with screen geometry.\n");
   fprintf (stderr, "  lab <subcommnad>\n");
   fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
   fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
@@ -384,7 +389,6 @@ analyze_backlight (int argc, char **argv)
 {
   const char *error = NULL;
 
-  printf ("%i\n",argc);
   if (argc < 2 || argc > 3)
     print_help ();
   file_progress_info progress (verbose ? stdout : NULL);
@@ -445,7 +449,6 @@ export_lcc (int argc, char **argv)
 {
   const char *error = NULL;
 
-  printf ("%i\n",argc);
   if (argc < 2 || argc > 3)
     print_help ();
   file_progress_info progress (verbose ? stdout : NULL);
@@ -976,12 +979,12 @@ digital_laboratory (int argc, char **argv)
   else
     print_help ();
 }
+
 void
-analyze_sharpness (int argc, char **argv)
+finetune (int argc, char **argv)
 {
   const char *error = NULL;
 
-  printf ("%i\n",argc);
   if (argc < 2 || argc > 3)
     print_help ();
   verbose = 1;
@@ -1018,6 +1021,8 @@ analyze_sharpness (int argc, char **argv)
 
   coord_t radius [ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
+  int flags = finetune_no_progress_report | finetune_screen_blur | finetune_dufay_strips;
+#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border, progress,param,stderr,radius)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1027,20 +1032,22 @@ analyze_sharpness (int argc, char **argv)
 	int xpos = xborder + x * (scan.width - 2 * xborder) / xsteps;
 	int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
 	solver_parameters::point_t p;
-	int stack = progress.push ();
-	if (!finetune (my_rparam, param, scan, p, xpos, ypos, &progress))
+	//int stack = progress.push ();
+	if (!finetune (&my_rparam, &p, NULL, param, scan, xpos, ypos, flags, &progress))
 	  {
             progress.pause_stdout ();
             fprintf (stderr, "Failed to analyze spit %i %i\n", xpos, ypos);
             exit (1);
 	  }
-	progress.pop (stack);
+	//progress.pop (stack);
+#if 0
 	if (verbose)
 	  {
 	    progress.pause_stdout ();
 	    printf ("%i %i pos %i %i %f\n", x, y, xpos, ypos, my_rparam.screen_blur_radius);
 	    progress.resume_stdout ();
 	  }
+#endif
 	radius[y][x] = my_rparam.screen_blur_radius;
 	progress.inc_progress ();
       }
@@ -1145,8 +1152,8 @@ main (int argc, char **argv)
     render (argc-2, argv+2);
   else if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
-  else if (!strcmp (argv[1], "analyze-sharpness"))
-    analyze_sharpness (argc-2, argv+2);
+  else if (!strcmp (argv[1], "finetune"))
+    finetune (argc-2, argv+2);
   else if (!strcmp (argv[1], "export-lcc"))
     export_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-lcc"))
