@@ -21,8 +21,8 @@ struct analyzer_params
   uint64_t mesh_trans_id;
   scr_to_img_parameters params;
 
-  image_data *img;
-  screen *scr;
+  const image_data *img;
+  const screen *scr;
   render_to_scr *render;
   scr_to_img *scr_to_img_map;
 

@@ -4,7 +4,7 @@
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
-analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
@@ -119,7 +119,7 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, s
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
-analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
@@ -422,7 +422,7 @@ analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, lum
 }
 
 bool
-analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
+analyze_dufay::analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
   m_width = width;
@@ -512,7 +512,7 @@ analyze_dufay::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_
 }
 
 bool
-analyze_dufay::analyze_contrast (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, progress_info *progress)
+analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress)
 {
   m_contrast = (contrast_info *)malloc (m_width * m_height * sizeof (contrast_info));
   if (!m_contrast)

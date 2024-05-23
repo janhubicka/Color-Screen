@@ -4,7 +4,7 @@
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
-analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
   /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
@@ -242,7 +242,7 @@ analyze_paget::analyze_fast (render_to_scr *render,progress_info *progress)
   return !progress || !progress->cancelled ();
 }
 bool
-analyze_paget::analyze (render_to_scr *render, image_data *img, scr_to_img *scr_to_img, screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
+analyze_paget::analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
   m_width = width;

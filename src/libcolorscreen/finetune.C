@@ -2,12 +2,11 @@
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
-#include "include/solver.h"
-#include "include/colorscreen.h"
-#include "nmsimplex.h"
+#include "include/finetune.h"
 #include "render-interpolate.h"
 #include "dufaycolor.h"
 #include "include/tiff-writer.h"
+#include "nmsimplex.h"
 
 namespace {
 
@@ -37,7 +36,8 @@ struct finetune_solver
   scr_type type;
 
   bool optimize_position;
-  bool optimize_screen;
+  bool optimize_screen_blur;
+  bool optimize_dufay_strips;
   bool least_squares;
   bool normalize;
 
@@ -45,6 +45,7 @@ struct finetune_solver
 
   int color_index;
   int screen_index;
+  int dufay_strips_index;
   int n_values;
 
   int num_values ()
@@ -75,21 +76,21 @@ struct finetune_solver
 
   coord_t get_blur_radius (coord_t *v)
   {
-    if (!optimize_screen)
+    if (!optimize_screen_blur)
       return fixed_blur;
     return v[screen_index];
   }
   coord_t get_red_strip_width (coord_t *v)
   {
-    if (!optimize_screen || type != Dufay)
+    if (!optimize_dufay_strips)
       return fixed_width;
-    return v[screen_index + 1];
+    return v[dufay_strips_index];
   }
   coord_t get_green_strip_width (coord_t *v)
   {
-    if (!optimize_screen || type != Dufay)
+    if (!optimize_dufay_strips)
       return fixed_height;
-    return v[screen_index + 2];
+    return v[dufay_strips_index + 1];
   }
 
   void
@@ -100,14 +101,12 @@ struct finetune_solver
 	point_t p = get_offset (v);
         printf ("Center %f %f in pixels %f %f\n", p.x, p.y, p.x/pixel_size, p.y/pixel_size);
       }
-    if (optimize_screen)
+    if (optimize_screen_blur)
+      printf ("Screen blur %f (pixel size %f, scaled %f)\n", get_blur_radius (v), pixel_size, get_blur_radius (v) * pixel_size);
+    if (optimize_dufay_strips)
       {
-        printf ("Screen blur %f (pixel size %f, scaled %f)\n", get_blur_radius (v), pixel_size, get_blur_radius (v) * pixel_size);
-	if (type == Dufay)
-	  {
-	    printf ("Red strip width: %f\n", get_red_strip_width (v));
-	    printf ("Green strip width: %f\n", get_green_strip_width (v));
-	  }
+	printf ("Red strip width: %f\n", get_red_strip_width (v));
+	printf ("Green strip width: %f\n", get_green_strip_width (v));
       }
     if (tile)
       {
@@ -165,18 +164,21 @@ struct finetune_solver
 	v[color_index + 2] = std::max (v[color_index + 2], (coord_t)0);
       }
 
-    if (optimize_screen)
+    if (optimize_screen_blur)
       {
 	/* Screen blur radius.  */
 	v[screen_index] = std::max (v[screen_index], (coord_t)0);
 	v[screen_index] = std::min (v[screen_index], screen::max_blur_radius / pixel_size);
+      }
+    if (optimize_dufay_strips)
+      {
 	/* Dufaycolor red strip width and height.  */
 	if (type == Dufay)
 	  {
-	    v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)0.7);
-	    v[screen_index + 1] = std::max (v[screen_index + 1], (coord_t)0.3);
-	    v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)0.7);
-	    v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0.3);
+	    v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.7);
+	    v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.3);
+	    v[dufay_strips_index + 1] = std::min (v[dufay_strips_index + 1], (coord_t)0.7);
+	    v[dufay_strips_index + 1] = std::max (v[dufay_strips_index + 1], (coord_t)0.3);
 	  }
       }
   }
@@ -202,14 +204,12 @@ struct finetune_solver
       }
 
     screen_index = n_values;
-    /* screen blur and for Dufaycolor also strip widths.  */
-    if (optimize_screen)
-      {
-	if (type == Dufay)
-	  n_values += 3;
-	else
-	  n_values++;
-      }
+    if (optimize_screen_blur)
+      n_values++;
+
+    dufay_strips_index = n_values;
+    if (optimize_dufay_strips)
+      n_values += 2;
 
     last_blur = -1;
     last_width = -1;
@@ -249,14 +249,12 @@ struct finetune_solver
     fixed_blur = blur_radius;
     fixed_width = dufaycolor::red_width;
     fixed_height = dufaycolor::green_height;
-    if (optimize_screen)
+    if (optimize_screen_blur)
+      start[screen_index] = 0.8;
+    if (optimize_dufay_strips)
       {
-        start[screen_index] = 0.8;
-	if (type == Dufay)
-	  {
-	    start[screen_index + 1] = dufaycolor::red_width;
-	    start[screen_index + 2] = dufaycolor::green_height;
-	  }
+	start[dufay_strips_index + 0] = dufaycolor::red_width;
+	start[dufay_strips_index + 1] = dufaycolor::green_height;
       }
 
     maxgray = 0;
@@ -573,11 +571,12 @@ struct finetune_solver
 /* Finetune parameters and update RPARAM.  */
 
 bool
-finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &img, solver_parameters::point_t &point, int x, int y, progress_info *progress)
+finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t *badness, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress)
 {
   scr_to_img map;
   map.set_parameters (param, img);
-  bool bw = false;
+  bool bw = flags & finetune_bw;
+  bool verbose = flags & finetune_verbose;
 
   if (!bw && !img.rgbdata)
     bw = true;
@@ -587,77 +586,7 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   map.to_scr (x, y, &tx, &ty);
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
-  bool verbose = true;
 
-#if 0
-  coord_t range = 0.3;
-
-  map.to_img (sx - range, sy - range, &tx, &ty);
-  coord_t rxmin = tx, rxmax = tx, rymin = ty, rymax = ty;
-  map.to_img (sx + range, sy - range, &tx, &ty);
-  rxmin = std::min (rxmin, tx);
-  rxmax = std::max (rxmax, tx);
-  rymin = std::min (rymin, ty);
-  rymax = std::max (rymax, ty);
-  map.to_img (sx + range, sy + range, &tx, &ty);
-  rxmin = std::min (rxmin, tx);
-  rxmax = std::max (rxmax, tx);
-  rymin = std::min (rymin, ty);
-  rymax = std::max (rymax, ty);
-  map.to_img (sx - range, sy + range, &tx, &ty);
-  rxmin = std::min (rxmin, tx);
-  rxmax = std::max (rxmax, tx);
-  rymin = std::min (rymin, ty);
-  rymax = std::max (rymax, ty);
-
-  coord_t test_range = 6;
-  coord_t rangex = (rxmax - rxmin), rangey = (rymax - rymin);
-
-
-  map.to_img (sx - test_range, sy - test_range, &tx, &ty);
-  coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
-  map.to_img (sx + test_range, sy - test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
-  map.to_img (sx + test_range, sy + test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
-  map.to_img (sx - test_range, sy + test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
-
-  if (verbose)
-  {
-    progress->pause_stdout ();
-    fprintf (stderr, "\nScan range %f-%f %f-%f\n", sxmin, sxmax, symin, symax);
-    progress->resume_stdout ();
-  }
-
-  int txmin = floor (sxmin - rangex), tymin = floor (symin - rangey), txmax = ceil (sxmax + rangex), tymax = ceil (symax + rangey);
-  if (txmin < 0)
-    txmin = 0;
-  if (txmax > img.width)
-    txmax = img.width;
-  if (tymin < 0)
-    tymin = 0;
-  if (tymax > img.height)
-    tymax = img.height;
-  if (txmin + 10 > txmax || tymin + 10 > tymax)
-    return false;
-  int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
-  if (verbose)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
-      progress->resume_stdout ();
-    }
-#endif
   coord_t test_range = bw ? 1 : 5;
   map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
@@ -677,15 +606,6 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
   symax = std::max (symax, ty);
-
-#if 0
-  if (verbose)
-  {
-    progress->pause_stdout ();
-    fprintf (stderr, "\nScan range %f-%f %f-%f\n", sxmin, sxmax, symin, symax);
-    progress->resume_stdout ();
-  }
-#endif
 
   int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax), tymax = ceil (symax);
   if (txmin < 0)
@@ -734,8 +654,8 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
       return false;
     }
 
-  render_to_scr render (param, img, rparam, 256);
-  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, progress))
+  render_to_scr render (param, img, *rparam, 256);
+  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, !(flags & finetune_no_progress_report) ? progress : NULL))
     {
       if (verbose)
 	{
@@ -762,15 +682,18 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
   solver.tile_pos = tile_pos.get ();
   solver.type = map.get_type ();
   solver.pixel_size = render.pixel_size ();
-  solver.optimize_position = false;
-  solver.optimize_screen = true;
-  solver.least_squares = true;
-  solver.normalize = true;
-  solver.init (rparam.screen_blur_radius);
+  solver.optimize_position = flags & finetune_position;
+  solver.optimize_screen_blur = flags & finetune_screen_blur;
+  solver.optimize_dufay_strips = (flags & finetune_dufay_strips) && solver.type == Dufay;
+  solver.least_squares = !(flags & finetune_no_least_squares);
+  solver.normalize = !(flags & finetune_no_normalize);
+  solver.init (rparam->screen_blur_radius);
 
   //if (verbose)
     //solver.print_values (solver.start);
-  simplex<coord_t, finetune_solver>(solver, "finetuning", progress);
+  simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(flags & finetune_no_progress_report));
+  if (badness)
+    *badness = solver.objfunc (solver.start);
 
   if (verbose)
     {
@@ -779,14 +702,12 @@ finetune (render_parameters &rparam, scr_to_img_parameters &param, image_data &i
       progress->resume_stdout ();
     }
   solver.write_debug_files (solver.start);
-  if (solver.optimize_screen)
+  if (solver.optimize_screen_blur)
+    rparam->screen_blur_radius = solver.start[solver.screen_index];
+  if (solver.optimize_dufay_strips)
     {
-      rparam.screen_blur_radius = solver.start[solver.screen_index];
-      if (solver.type == Dufay)
-        {
-          rparam.dufay_red_strip_width = solver.start[solver.screen_index + 1];
-          rparam.dufay_green_strip_width = solver.start[solver.screen_index + 2];
-        }
+      rparam->dufay_red_strip_width = solver.start[solver.dufay_strips_index + 0];
+      rparam->dufay_green_strip_width = solver.start[solver.dufay_strips_index + 1];
     }
   return true;
 }

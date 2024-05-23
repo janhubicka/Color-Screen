@@ -252,7 +252,7 @@ class image_data;
 class DLL_PUBLIC scr_to_img
 {
 public:
-  void set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment = 0, bool need_inverse = true);
+  void set_parameters (const scr_to_img_parameters &param, const image_data &img, coord_t rotation_adjustment = 0, bool need_inverse = true);
   void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle);
   void get_range (int img_width, int img_height,

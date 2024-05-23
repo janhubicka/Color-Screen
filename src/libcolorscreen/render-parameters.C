@@ -102,7 +102,7 @@ apply_balance_to_model (render_parameters::color_model_t color_model)
    If OPTIMIZED is true, then the matrix is optimized camera matrix construted from
    process simulation and both temperature and backlight_temperature parameters are handled correctly.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image_data *img)
+render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img)
 {
   spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
   color_matrix dyes;
@@ -392,7 +392,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, image
    default is D50 for XYZ_D50.  */
 
 color_matrix
-render_parameters::get_balanced_dyes_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
+render_parameters::get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
 {
   bool optimized;
   bool spectrum_based;
@@ -513,7 +513,7 @@ render_parameters::get_rgb_adjustment_matrix (bool normalized_patches, rgbdata p
    size (as in interpolated rendering) and the dye matrix channels needs to be scaled by
    PATCH_PROPORTIONS.  */
 color_matrix
-render_parameters::get_rgb_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
+render_parameters::get_rgb_to_xyz_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint)
 {
   color_matrix color = get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
   color = get_balanced_dyes_matrix (img, normalized_patches, patch_proportions, target_whitepoint) * color;

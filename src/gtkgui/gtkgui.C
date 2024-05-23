@@ -1297,6 +1297,19 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 					&shift_y);
   if (!initialized)
     return;
+  printf ("Press %i\n", event->button);
+#if 0
+  if (event->button == 1 && 0)
+    {
+      double newcenter_x = (event->x + shift_x) / scale_x;
+      double newcenter_y = (event->y + shift_y) / scale_y;
+      solver_parameters::point_t p;
+      file_progress_info progress (stdout);
+      finetune (rparams, current, scan, p, newcenter_x, newcenter_y, &progress);
+      setvals ();
+      display_scheduled = true;
+    }
+#endif
   //printf ("Press %i\n",ui_mode == color_profiling);
   if (ui_mode == color_profiling)
     {

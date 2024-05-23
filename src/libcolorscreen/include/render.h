@@ -366,7 +366,7 @@ struct DLL_PUBLIC render_parameters
   /* Accessors.  */
 
 
-  color_matrix get_rgb_to_xyz_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
+  color_matrix get_rgb_to_xyz_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
   color_matrix get_rgb_adjustment_matrix (bool normalized_patches, rgbdata patch_proportions);
   size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
   const tile_adjustment& get_tile_adjustment (stitch_project *stitch, int x, int y) const;
@@ -579,8 +579,8 @@ struct DLL_PUBLIC render_parameters
   bool auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 private:
   static const bool debug = false;
-  color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized, image_data *img);
-  color_matrix get_balanced_dyes_matrix (image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
+  color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img);
+  color_matrix get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
 };
 
 /* Helper for downscaling template for color rendering
@@ -609,7 +609,7 @@ account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
 class DLL_PUBLIC render
 {
 public:
-  render (image_data &img, render_parameters &rparam, int dstmaxval)
+  render (const image_data &img, const render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
     m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_tone_curve (NULL)
   {
@@ -710,7 +710,7 @@ protected:
   bool downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
 
   /* Scanned image.  */
-  image_data &m_img;
+  const image_data &m_img;
   /* Rendering parameters.
      Make local copy for performance reasons and also because render-tile releases rparam
      after constructing renderer.  */

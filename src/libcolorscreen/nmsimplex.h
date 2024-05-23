@@ -1,7 +1,10 @@
 /* Based on nmsimplex.c by Michael F. Hutt used by dcamprof.  */
+
+/* If progress_report is false, do not report progress about solving, but still honor cancel.
+   This is useful when running multiple solvers in parallel.  */
 template<typename T,typename C>
 double
-simplex (C &c, const char *task = NULL, progress_info *progress = NULL)
+simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool progress_report = true)
 {
   const T ALPHA = 1;
   const T BETA = 0.5;
@@ -32,7 +35,7 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL)
 
   T fsum, favg, s, cent;
 
-  if (progress)
+  if (progress && progress_report)
     progress->set_task(task, MAX_IT);
 
   /* dynamically allocate arrays */
@@ -285,12 +288,10 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL)
       s = my_sqrt (s);
       if (s < EPSILON)
 	break;
-      if (progress)
-        {
-	  progress->inc_progress ();
-	  if (progress->cancel_requested ())
-	    break;
-        }
+      if (progress && progress_report)
+	progress->inc_progress ();
+      if (progress && progress->cancel_requested ())
+	break;
     }
   /* end main loop of the minimization */
 

@@ -55,7 +55,7 @@ struct lens_warp_correction
   ~lens_warp_correction ();
 
   void
-  set_parameters (lens_warp_correction_parameters &p)
+  set_parameters (const lens_warp_correction_parameters &p)
   {
     m_params = p;
   }

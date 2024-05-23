@@ -155,7 +155,7 @@ struct graydata_params
   /* Pointers in image_data may become stale if image is freed. Use ID
      to check cache entries.  */
   uint64_t image_id;
-  image_data *img;
+  const image_data *img;
   luminosity_t gamma;
   /* Dark point for mixing. */
   rgbdata dark;
@@ -328,7 +328,7 @@ getdata_helper_correction (unsigned short **graydata, int x, int y, int, getdata
 }
 /* Helper for sharpening template for images with RGB data only.  */
 inline luminosity_t
-getdata_helper2 (image_data *img, int x, int y, int, gray_data_tables t)
+getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables t)
 {
   luminosity_t val = compute_gray_data (t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
   return val;
@@ -377,7 +377,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       else
 	{
 	  t.correction = p.gp.backlight;
-	  ok = sharpen<luminosity_t, mem_luminosity_t, image_data *, gray_data_tables, getdata_helper2> (out, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
+	  ok = sharpen<luminosity_t, mem_luminosity_t, const image_data *, gray_data_tables, getdata_helper2> (out, p.gp.img, t, p.gp.img->width, p.gp.img->height, p.sp.radius, p.sp.amount, progress);
 	  free_gray_data_tables (t);
 	}
     }
@@ -555,7 +555,7 @@ render_increase_lru_cache_sizes_for_stitch_projects (int n)
 }
 
 DLL_PUBLIC rgbdata
-get_linearized_pixel (image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
+get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
 {
    render r (img, rparam, 255);
    rgbdata color = {0,0,0};

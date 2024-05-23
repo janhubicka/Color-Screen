@@ -208,7 +208,7 @@ scr_to_img::initialize ()
 
 /* Initilalize the translation matrix to PARAM.  */
 void
-scr_to_img::set_parameters (scr_to_img_parameters &param, image_data &img, coord_t rotation_adjustment, bool need_inverse)
+scr_to_img::set_parameters (const scr_to_img_parameters &param, const image_data &img, coord_t rotation_adjustment, bool need_inverse)
 {
   /* We do not need to copy motor corrections since we already constructed the function.  */
   m_param.copy_from_cheap (param);

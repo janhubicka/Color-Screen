@@ -11,7 +11,7 @@ struct render_to_file_params;
 class render_to_scr : public render
 {
 public:
-  render_to_scr (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
+  render_to_scr (const scr_to_img_parameters &param, const image_data &img, render_parameters &rparam, int dstmaxval)
     : render (img, rparam, dstmaxval)
   {
     m_scr_to_img.set_parameters (param, img);

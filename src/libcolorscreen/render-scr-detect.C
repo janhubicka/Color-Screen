@@ -59,7 +59,7 @@ namespace
 struct color_class_params
 {
   uint64_t image_id;
-  image_data *img;
+  const image_data *img;
   render_scr_detect::my_mem_rgbdata *precomputed_rgbdata;
   scr_detect_parameters p;
   scr_detect *d;
@@ -76,7 +76,7 @@ struct color_class_params
 
 color_class_map *get_color_class_map(color_class_params &p, progress_info *progress)
 {
-  image_data &img = *p.img;
+  const image_data &img = *p.img;
   color_class_map *map = new color_class_map;
   map->allocate (img.width, img.height);
   //printf ("New color map\n");
@@ -120,7 +120,7 @@ struct precomputed_rgbdata_params
   scr_detect_parameters p;
   luminosity_t gamma;
 
-  image_data *img;
+  const image_data *img;
   scr_detect *d;
   render_scr_detect *r;
 
@@ -188,7 +188,7 @@ struct patches_cache_params
   uint64_t scr_map_id;
   uint64_t gray_data_id;
   color_class_map *map;
-  image_data *img;
+  const image_data *img;
   render *r;
 
   /* TODO: render parameters affects luminosity.  */
@@ -217,7 +217,7 @@ struct color_data_params
 {
   uint64_t color_class_map_id;
   uint64_t graydata_id;
-  image_data *img;
+  const image_data *img;
   color_class_map *map;
   render *r;
 
