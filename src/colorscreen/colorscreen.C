@@ -1019,6 +1019,7 @@ finetune (int argc, char **argv)
   const char *cspname = NULL;
   const char *screen_blur_tiff_name = NULL;
   const char *strip_width_tiff_name = NULL;
+  const char *position_tiff_name = NULL;
   int xsteps = 32;
   int border = 5;
   int flags = 0;
@@ -1046,6 +1047,8 @@ finetune (int argc, char **argv)
 	screen_blur_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "dufay-strips-tiff"))
 	strip_width_tiff_name = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "position-tiff"))
+	position_tiff_name = str;
       else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 65536/2))
 	;
       else if (!infname)
@@ -1097,20 +1100,19 @@ finetune (int argc, char **argv)
 
   coord_t radius [ysteps][xsteps];
   coord_t strip_widths [ysteps][xsteps][2];
-  point_t positions [ysteps][xsteps][2];
+  point_t positions [ysteps][xsteps];
+  coord_t badness[ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions)
+#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
-	render_parameters my_rparam = rparam;
 	int xborder = scan.width * border / 100;
 	int yborder = scan.height * border / 100;
 	int xpos = xborder + x * (scan.width - 2 * xborder) / xsteps;
 	int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
-	solver_parameters::point_t p;
-	//int stack = progress.push ();
-	if (!finetune (&my_rparam, &p, NULL, param, scan, xpos, ypos, flags, &progress))
+	finetune_result ret = finetune (rparam, param, scan, xpos, ypos, flags, &progress);
+	if (!ret.success)
 	  {
             progress.pause_stdout ();
             fprintf (stderr, "Failed to analyze spit %i %i\n", xpos, ypos);
@@ -1125,12 +1127,21 @@ finetune (int argc, char **argv)
 	    progress.resume_stdout ();
 	  }
 #endif
-	radius[y][x] = my_rparam.screen_blur_radius;
-	strip_widths[y][x][0] = my_rparam.dufay_red_strip_width;
-	strip_widths[y][x][1] = my_rparam.dufay_green_strip_width;
+	radius[y][x] = ret.screen_blur_radius;
+	strip_widths[y][x][0] = ret.dufay_red_strip_width;
+	strip_widths[y][x][1] = ret.dufay_green_strip_width;
+	positions[y][x] = ret.screen_coord_adjust;
+	badness[y][x] = ret.badness;
 	progress.inc_progress ();
       }
   progress.pause_stdout ();
+  printf ("Detecting badness\n");
+  for (int y = 0; y < ysteps; y++)
+    {
+      for (int x = 0; x < xsteps; x++)
+	printf ("  %6.3f", badness[y][x]);
+      printf ("\n");
+    }
 
   if (flags & finetune_screen_blur)
     {
@@ -1199,10 +1210,52 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
+		{
+		  coord_t r = strip_widths[y][x][0];
+		  coord_t g = strip_widths[y][x][1] * (1-r);
+		  coord_t b = (1-strip_widths[y][x][1]) * (1-r);
+		  sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
+		}
+	      if (!sharpness.write_row ())
+		{
+		  progress.pause_stdout ();
+		  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		  exit (1);
+		}
+	    }
+	}
+    }
+  if ((flags & finetune_position))
+    {
+      printf ("Detected position adjustment (in screen coordinates)\n");
+      for (int y = 0; y < ysteps; y++)
+	{
+	  for (int x = 0; x < xsteps; x++)
+	    printf ("  %.3f,%.3f", positions[y][x].x,positions[y][x].y);
+	  printf ("\n");
+	}
+      if (position_tiff_name)
+	{
+	  tiff_writer_params p;
+	  p.filename = position_tiff_name;
+	  p.width = xsteps;
+	  p.height = ysteps;
+	  p.depth = 16;
+	  const char *error;
+	  tiff_writer sharpness (p, &error);
+	  if (error)
+	    {
+	      progress.pause_stdout ();
+	      fprintf (stderr, "Can not open tiff file %s: %s\n", position_tiff_name, error);
+	      exit (1);
+	    }
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
 	      {
-		coord_t r = strip_widths[y][x][0];
-		coord_t g = strip_widths[y][x][1] * (1-r);
-		coord_t b = (1-strip_widths[y][x][1]) * (1-r);
+		coord_t r = std::min (fabs (positions[y][x].x * 10), (coord_t)1);
+		coord_t g = std::min (fabs (positions[y][x].y * 10), (coord_t)1);
+		coord_t b = 0;
 		sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
 	      }
 	      if (!sharpness.write_row ())

@@ -12,5 +12,16 @@ enum finetune_flags
   finetune_no_normalize = 64,
   finetune_verbose = 128
 };
-DLL_PUBLIC bool finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t *badness, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress);
+struct finetune_result
+{
+  bool success;
+  coord_t badness;
+  coord_t screen_blur_radius;
+  coord_t dufay_red_strip_width;
+  coord_t dufay_green_strip_width;
+  point_t screen_coord_adjust;
+  rgbdata color;
+  rgbdata screen_red, screen_green, screen_blue;
+};
+DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress);
 #endif

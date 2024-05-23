@@ -570,13 +570,14 @@ struct finetune_solver
 
 /* Finetune parameters and update RPARAM.  */
 
-bool
-finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t *badness, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress)
+finetune_result
+finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress)
 {
   scr_to_img map;
   map.set_parameters (param, img);
   bool bw = flags & finetune_bw;
   bool verbose = flags & finetune_verbose;
+  finetune_result ret = {false, -1, -1, -1, -1, {-1, -1}};
 
   if (!bw && !img.rgbdata)
     bw = true;
@@ -624,7 +625,7 @@ finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t 
 	  fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
 	  progress->resume_stdout ();
 	}
-      return false;
+      return ret;
     }
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
   if (verbose)
@@ -651,10 +652,10 @@ finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t 
 	  fprintf (stderr, "Failed to allocate tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
 	  progress->resume_stdout ();
 	}
-      return false;
+      return ret;
     }
 
-  render_to_scr render (param, img, *rparam, 256);
+  render_to_scr render (param, img, rparam, 256);
   if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, !(flags & finetune_no_progress_report) ? progress : NULL))
     {
       if (verbose)
@@ -663,7 +664,7 @@ finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t 
 	  fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
 	  progress->resume_stdout ();
 	}
-      return false;
+      return ret;
     }
   for (int y = 0; y < theight; y++)
     for (int x = 0; x < twidth; x++)
@@ -687,13 +688,11 @@ finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t 
   solver.optimize_dufay_strips = (flags & finetune_dufay_strips) && solver.type == Dufay;
   solver.least_squares = !(flags & finetune_no_least_squares);
   solver.normalize = !(flags & finetune_no_normalize);
-  solver.init (rparam->screen_blur_radius);
+  solver.init (rparam.screen_blur_radius);
 
   //if (verbose)
     //solver.print_values (solver.start);
   simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(flags & finetune_no_progress_report));
-  if (badness)
-    *badness = solver.objfunc (solver.start);
 
   if (verbose)
     {
@@ -702,12 +701,19 @@ finetune (render_parameters *rparam, solver_parameters::point_t *point, coord_t 
       progress->resume_stdout ();
     }
   solver.write_debug_files (solver.start);
+  ret.success = true;
+  ret.badness = solver.objfunc (solver.start);
   if (solver.optimize_screen_blur)
-    rparam->screen_blur_radius = solver.start[solver.screen_index];
+    ret.screen_blur_radius = solver.start[solver.screen_index];
   if (solver.optimize_dufay_strips)
     {
-      rparam->dufay_red_strip_width = solver.start[solver.dufay_strips_index + 0];
-      rparam->dufay_green_strip_width = solver.start[solver.dufay_strips_index + 1];
+      ret.dufay_red_strip_width = solver.start[solver.dufay_strips_index + 0];
+      ret.dufay_green_strip_width = solver.start[solver.dufay_strips_index + 1];
     }
-  return true;
+  if (solver.optimize_position)
+    {
+      ret.screen_coord_adjust.x = solver.start[0];
+      ret.screen_coord_adjust.y = solver.start[1];
+    }
+  return ret;
 }
