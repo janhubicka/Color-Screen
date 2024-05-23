@@ -1011,11 +1011,11 @@ analyze_sharpness (int argc, char **argv)
     }
   fclose (in);
 
-  int xsteps = 16;
+  int xsteps = 32;
   int ysteps = xsteps * scan.height / scan.width;
-  int border = 10;
+  int border = 5;
 
-  coord_t radius [xsteps][ysteps];
+  coord_t radius [ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
@@ -1027,7 +1027,12 @@ analyze_sharpness (int argc, char **argv)
 	int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
 	solver_parameters::point_t p;
 	int stack = progress.push ();
-	finetune (my_rparam, param, scan, p, xpos, ypos, &progress);
+	if (!finetune (my_rparam, param, scan, p, xpos, ypos, &progress))
+	  {
+            progress.pause_stdout ();
+            fprintf (stderr, "Failed to analyze spit %i %i\n", xpos, ypos);
+            exit (1);
+	  }
 	progress.pop (stack);
 	if (verbose)
 	  {
