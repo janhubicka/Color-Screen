@@ -48,6 +48,31 @@ struct finetune_solver
   int dufay_strips_index;
   int n_values;
 
+
+  gsl_multifit_linear_workspace *gsl_work;
+  gsl_matrix *gsl_X;
+  gsl_vector *gsl_y[3];
+  gsl_vector *gsl_w;
+  gsl_vector *gsl_c;
+  gsl_matrix *gsl_cov;
+  ~finetune_solver ()
+  {
+    if (least_squares)
+    {
+      gsl_multifit_linear_free (gsl_work);
+      gsl_matrix_free (gsl_X);
+      gsl_vector_free (gsl_y[0]);
+      if (tile)
+	{
+	  gsl_vector_free (gsl_y[1]);
+	  gsl_vector_free (gsl_y[2]);
+	}
+      gsl_vector_free (gsl_w);
+      gsl_vector_free (gsl_c);
+      gsl_matrix_free (gsl_cov);
+    }
+  }
+
   int num_values ()
   {
     return n_values;
@@ -263,6 +288,43 @@ struct finetune_solver
 	for (int x = 0; x < twidth; x++)
 	  maxgray = std::max (maxgray, bw_get_pixel (x, y));
     constrain (start);
+
+    if (least_squares)
+      {
+	int matrixw = 3;
+	int matrixh = twidth * theight;
+	gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
+	gsl_X = gsl_matrix_alloc (matrixh, matrixw);
+	gsl_w = gsl_vector_alloc (matrixh);
+	gsl_y[0] = gsl_vector_alloc (matrixh);
+	if (tile)
+	  {
+	    gsl_y[1] = gsl_vector_alloc (matrixh);
+	    gsl_y[2] = gsl_vector_alloc (matrixh);
+	    for (int y = 0; y < theight; y++)
+	      for (int x = 0; x < twidth; x++)
+		{
+		  rgbdata c = get_pixel (x, y);
+		  int e = x + y * twidth;
+		  gsl_vector_set (gsl_y[0], e, c.red);
+		  gsl_vector_set (gsl_y[1], e, c.green);
+		  gsl_vector_set (gsl_y[2], e, c.blue);
+		  gsl_vector_set (gsl_w, e, 1);
+		}
+	  }
+	else
+	  {
+	    for (int y = 0; y < theight; y++)
+	      for (int x = 0; x < twidth; x++)
+		{
+		  int e = x + y * twidth;
+		  gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
+		  gsl_vector_set (gsl_w, e, 1);
+		}
+	  }
+	gsl_c = gsl_vector_alloc (matrixw);
+	gsl_cov = gsl_matrix_alloc (matrixw, matrixw);
+      }
   }
 
   void
@@ -327,20 +389,12 @@ struct finetune_solver
      return bwtile[y * twidth + x];
   }
 
-  void
+  coord_t
   determine_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
   {
-    int matrixw = 3;
-    int matrixh = twidth * theight;
     point_t off = get_offset (v);
+    coord_t sqsum = 0;
 
-    gsl_multifit_linear_workspace * work
-      = gsl_multifit_linear_alloc (matrixh, matrixw);
-    gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
-    gsl_vector *yy = gsl_vector_alloc (matrixh);
-    gsl_vector *w = gsl_vector_alloc (matrixh);
-    gsl_vector *c = gsl_vector_alloc (matrixw);
-    gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
 
     for (int ch = 0; ch < 3; ch++)
       {
@@ -352,18 +406,17 @@ struct finetune_solver
 	      p.x += off.x;
 	      p.y += off.y;
 	      rgbdata c = scr.interpolated_mult (p);
-	      gsl_matrix_set (X, e, 0, c.red);
-	      gsl_matrix_set (X, e, 1, c.green);
-	      gsl_matrix_set (X, e, 2, c.blue);
-	      gsl_vector_set (yy, e, get_pixel (x, y) /*/ (2 * maxgray)*/[ch]);
-	      gsl_vector_set (w, e, 1);
+	      gsl_matrix_set (gsl_X, e, 0, c.red);
+	      gsl_matrix_set (gsl_X, e, 1, c.green);
+	      gsl_matrix_set (gsl_X, e, 2, c.blue);
 	    }
 	double chisq;
-	gsl_multifit_wlinear (X, w, yy, c, cov,
-			      &chisq, work);
-	(*red)[ch] = gsl_vector_get (c, 0);
-	(*green)[ch] = gsl_vector_get (c, 1);
-	(*blue)[ch] = gsl_vector_get (c, 2);
+	gsl_multifit_wlinear (gsl_X, gsl_w, gsl_y[ch], gsl_c, gsl_cov,
+			      &chisq, gsl_work);
+	sqsum += chisq;
+	(*red)[ch] = gsl_vector_get (gsl_c, 0);
+	(*green)[ch] = gsl_vector_get (gsl_c, 1);
+	(*blue)[ch] = gsl_vector_get (gsl_c, 2);
 #if 0
 	rgbdata cc = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
 	if (!ch)
@@ -374,28 +427,13 @@ struct finetune_solver
 	  *blue = cc;
 #endif
       }
-    gsl_multifit_linear_free (work);
-    gsl_matrix_free (X);
-    gsl_vector_free (yy);
-    gsl_vector_free (w);
-    gsl_vector_free (c);
-    gsl_matrix_free (cov);
+    return sqsum;
   }
 
   rgbdata
   bw_determine_color (coord_t *v)
   {
-    int matrixw = 3;
-    int matrixh = twidth * theight;
     point_t off = get_offset (v);
-
-    gsl_multifit_linear_workspace * work
-      = gsl_multifit_linear_alloc (matrixh, matrixw);
-    gsl_matrix *X = gsl_matrix_alloc (matrixh, matrixw);
-    gsl_vector *yy = gsl_vector_alloc (matrixh);
-    gsl_vector *w = gsl_vector_alloc (matrixh);
-    gsl_vector *c = gsl_vector_alloc (matrixw);
-    gsl_matrix *cov = gsl_matrix_alloc (matrixw, matrixw);
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
@@ -405,22 +443,14 @@ struct finetune_solver
 	  p.x += off.x;
 	  p.y += off.y;
 	  rgbdata c = scr.interpolated_mult (p);
-	  gsl_matrix_set (X, e, 0, c.red);
-	  gsl_matrix_set (X, e, 1, c.green);
-	  gsl_matrix_set (X, e, 2, c.blue);
-	  gsl_vector_set (yy, e, bw_get_pixel (x, y) / (2 * maxgray));
-	  gsl_vector_set (w, e, 1);
+	  gsl_matrix_set (gsl_X, e, 0, c.red);
+	  gsl_matrix_set (gsl_X, e, 1, c.green);
+	  gsl_matrix_set (gsl_X, e, 2, c.blue);
+	  //gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
         }
     double chisq;
-    gsl_multifit_wlinear (X, w, yy, c, cov,
-			  &chisq, work);
-    gsl_multifit_linear_free (work);
-    rgbdata ret = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
-    gsl_matrix_free (X);
-    gsl_vector_free (yy);
-    gsl_vector_free (w);
-    gsl_vector_free (c);
-    gsl_matrix_free (cov);
+    gsl_multifit_wlinear (gsl_X, gsl_w, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
+    rgbdata ret = {gsl_vector_get (gsl_c, 0), gsl_vector_get (gsl_c, 1), gsl_vector_get (gsl_c, 2)};
     return ret;
   }
 
@@ -442,7 +472,7 @@ struct finetune_solver
 	*green = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
       }
     else
-      return determine_colors (v, red, green, blue);
+      determine_colors (v, red, green, blue);
   }
 
   coord_t
