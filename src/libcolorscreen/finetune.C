@@ -3,15 +3,32 @@
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
 #include "include/finetune.h"
+#include "include/histogram.h"
 #include "render-interpolate.h"
 #include "dufaycolor.h"
 #include "include/tiff-writer.h"
 #include "nmsimplex.h"
+#include "include/bitmap.h"
 
 namespace {
 
 struct finetune_solver
 {
+private:
+  gsl_multifit_linear_workspace *gsl_work;
+  gsl_matrix *gsl_X;
+  gsl_vector *gsl_y[3];
+  gsl_vector *gsl_w;
+  gsl_vector *gsl_c;
+  gsl_matrix *gsl_cov;
+  int noutliers;
+  std::unique_ptr <bitmap_2d> outliers;
+
+public:
+  finetune_solver ()
+    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_w (NULL), gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
+  {
+  }
   /* Tile dimensions */
   int twidth, theight;
   /* Tile colors */
@@ -20,8 +37,8 @@ struct finetune_solver
   luminosity_t *bwtile;
   /* Tile position  */
   point_t *tile_pos;
-  /* 2 coordinates, blur radius, 3 * 3 colors, strip widths  */
-  coord_t start[14];
+  /* 2 coordinates, blur radius, 3 * 3 colors, strip widths, fog  */
+  coord_t start[17];
   coord_t last_blur;
   coord_t last_width, last_height;
 
@@ -34,43 +51,25 @@ struct finetune_solver
   screen scr;
   coord_t pixel_size;
   scr_type type;
+  rgbdata fog_range;
 
   bool optimize_position;
   bool optimize_screen_blur;
   bool optimize_dufay_strips;
+  bool optimize_fog;
   bool least_squares;
   bool normalize;
 
   luminosity_t maxgray;
 
+  int fog_index;
   int color_index;
   int screen_index;
   int dufay_strips_index;
   int n_values;
-
-
-  gsl_multifit_linear_workspace *gsl_work;
-  gsl_matrix *gsl_X;
-  gsl_vector *gsl_y[3];
-  gsl_vector *gsl_w;
-  gsl_vector *gsl_c;
-  gsl_matrix *gsl_cov;
   ~finetune_solver ()
   {
-    if (least_squares)
-    {
-      gsl_multifit_linear_free (gsl_work);
-      gsl_matrix_free (gsl_X);
-      gsl_vector_free (gsl_y[0]);
-      if (tile)
-	{
-	  gsl_vector_free (gsl_y[1]);
-	  gsl_vector_free (gsl_y[2]);
-	}
-      gsl_vector_free (gsl_w);
-      gsl_vector_free (gsl_c);
-      gsl_matrix_free (gsl_cov);
-    }
+    free_least_squares ();
   }
 
   int num_values ()
@@ -97,6 +96,11 @@ struct finetune_solver
     if (!optimize_position)
       return {0, 0};
     return {v[0], v[1]};
+  }
+
+  bool has_outliers ()
+  {
+    return noutliers;
   }
 
   coord_t get_blur_radius (coord_t *v)
@@ -179,6 +183,15 @@ struct finetune_solver
 	v[1] = std::min (v[1], type == Dufay ? range : range / 2);
 	v[1] = std::max (v[1], type == Dufay ? -range : -range / 2);
       }
+    if (optimize_fog)
+      {
+	v[fog_index] = std::min (v[fog_index], (coord_t)1);
+	v[fog_index] = std::max (v[fog_index], (coord_t)0);
+	v[fog_index+1] = std::min (v[fog_index+1], (coord_t)1);
+	v[fog_index+1] = std::max (v[fog_index+1], (coord_t)0);
+	v[fog_index+2] = std::min (v[fog_index+2], (coord_t)1);
+	v[fog_index+2] = std::max (v[fog_index+2], (coord_t)0);
+      }
     if (bwtile && !least_squares)
       {
 	v[color_index] = std::min (v[color_index], (coord_t)2);
@@ -207,6 +220,74 @@ struct finetune_solver
 	  }
       }
   }
+  void
+  free_least_squares ()
+  {
+    if (gsl_work)
+      {
+	gsl_multifit_linear_free (gsl_work);
+	gsl_work = NULL;
+	gsl_matrix_free (gsl_X);
+	gsl_vector_free (gsl_y[0]);
+	if (tile)
+	  {
+	    gsl_vector_free (gsl_y[1]);
+	    gsl_vector_free (gsl_y[2]);
+	  }
+	gsl_vector_free (gsl_w);
+	gsl_vector_free (gsl_c);
+	gsl_matrix_free (gsl_cov);
+      }
+  }
+  void
+  alloc_least_squares ()
+  {
+    int matrixw = 3;
+    int matrixh = twidth * theight - noutliers;
+    gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
+    gsl_X = gsl_matrix_alloc (matrixh, matrixw);
+    gsl_w = gsl_vector_alloc (matrixh);
+    gsl_y[0] = gsl_vector_alloc (matrixh);
+    if (tile)
+      {
+	gsl_y[1] = gsl_vector_alloc (matrixh);
+	gsl_y[2] = gsl_vector_alloc (matrixh);
+      }
+    gsl_c = gsl_vector_alloc (matrixw);
+    gsl_cov = gsl_matrix_alloc (matrixw, matrixw);
+  }
+  void
+  init_least_squares (coord_t *v)
+  {
+    if (tile)
+      {
+	int e = 0;
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    if (!noutliers || !outliers->test_bit (x, y))
+	      {
+		rgbdata c = get_pixel (v, x, y);
+		gsl_vector_set (gsl_y[0], e, c.red);
+		gsl_vector_set (gsl_y[1], e, c.green);
+		gsl_vector_set (gsl_y[2], e, c.blue);
+		gsl_vector_set (gsl_w, e, 1);
+		e++;
+	      }
+      }
+    else
+      {
+	int e = 0;
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    if (!noutliers || !outliers->test_bit (x, y))
+	      {
+		gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
+		gsl_vector_set (gsl_w, e, 1);
+		e++;
+	      }
+      }
+  }
+
 
   void
   init (coord_t blur_radius)
@@ -227,6 +308,10 @@ struct finetune_solver
 	else
 	  n_values += 3;
       }
+
+    fog_index = n_values;
+    if (optimize_fog)
+      n_values += tile ? 3 : 1;
 
     screen_index = n_values;
     if (optimize_screen_blur)
@@ -288,42 +373,37 @@ struct finetune_solver
 	for (int x = 0; x < twidth; x++)
 	  maxgray = std::max (maxgray, bw_get_pixel (x, y));
     constrain (start);
+    if (optimize_fog)
+      {
+	fog_range = tile[0];
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    {
+	      fog_range.red = std::min (fog_range.red, tile[y * twidth + x].red);
+	      fog_range.green = std::min (fog_range.green, tile[y * twidth + x].green);
+	      fog_range.blue = std::min (fog_range.blue, tile[y * twidth + x].blue);
+	    }
+	start[fog_index] = 0;
+	start[fog_index + 1] = 0;
+	start[fog_index + 2] = 0;
+      }
+
+    if (tile && normalize && !optimize_fog)
+      for (int y = 0; y < theight; y++)
+	for (int x = 0; x < twidth; x++)
+	  {
+	    rgbdata &c = tile[y * twidth + x];
+	    luminosity_t sum = c.red + c.green + c.blue;
+	    if (sum > 0)
+	      c /= sum;
+	  }
 
     if (least_squares)
       {
-	int matrixw = 3;
-	int matrixh = twidth * theight;
-	gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
-	gsl_X = gsl_matrix_alloc (matrixh, matrixw);
-	gsl_w = gsl_vector_alloc (matrixh);
-	gsl_y[0] = gsl_vector_alloc (matrixh);
-	if (tile)
-	  {
-	    gsl_y[1] = gsl_vector_alloc (matrixh);
-	    gsl_y[2] = gsl_vector_alloc (matrixh);
-	    for (int y = 0; y < theight; y++)
-	      for (int x = 0; x < twidth; x++)
-		{
-		  rgbdata c = get_pixel (x, y);
-		  int e = x + y * twidth;
-		  gsl_vector_set (gsl_y[0], e, c.red);
-		  gsl_vector_set (gsl_y[1], e, c.green);
-		  gsl_vector_set (gsl_y[2], e, c.blue);
-		  gsl_vector_set (gsl_w, e, 1);
-		}
-	  }
-	else
-	  {
-	    for (int y = 0; y < theight; y++)
-	      for (int x = 0; x < twidth; x++)
-		{
-		  int e = x + y * twidth;
-		  gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
-		  gsl_vector_set (gsl_w, e, 1);
-		}
-	  }
-	gsl_c = gsl_vector_alloc (matrixw);
-	gsl_cov = gsl_matrix_alloc (matrixw, matrixw);
+	free_least_squares ();
+	alloc_least_squares ();
+	if (!optimize_fog)
+	  init_least_squares (NULL);
       }
   }
 
@@ -371,9 +451,11 @@ struct finetune_solver
   }
 
   rgbdata
-  get_pixel (int x, int y)
+  get_pixel (coord_t *v, int x, int y)
   {
-     rgbdata d = tile[y * twidth + x];
+     if (!optimize_fog)
+       return tile[y * twidth + x];
+     rgbdata d = tile[y * twidth + x] - get_fog (v);
      if (normalize)
        {
 	 luminosity_t ssum = d.red + d.green + d.blue;
@@ -398,18 +480,20 @@ struct finetune_solver
 
     for (int ch = 0; ch < 3; ch++)
       {
+	int e = 0;
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
-	    {
-	      int e = x + y * twidth;
-	      point_t p = tile_pos [y * twidth + x];
-	      p.x += off.x;
-	      p.y += off.y;
-	      rgbdata c = scr.interpolated_mult (p);
-	      gsl_matrix_set (gsl_X, e, 0, c.red);
-	      gsl_matrix_set (gsl_X, e, 1, c.green);
-	      gsl_matrix_set (gsl_X, e, 2, c.blue);
-	    }
+	    if (!noutliers || !outliers->test_bit (x, y))
+	      {
+		point_t p = tile_pos [y * twidth + x];
+		p.x += off.x;
+		p.y += off.y;
+		rgbdata c = scr.interpolated_mult (p);
+		gsl_matrix_set (gsl_X, e, 0, c.red);
+		gsl_matrix_set (gsl_X, e, 1, c.green);
+		gsl_matrix_set (gsl_X, e, 2, c.blue);
+		e++;
+	      }
 	double chisq;
 	gsl_multifit_wlinear (gsl_X, gsl_w, gsl_y[ch], gsl_c, gsl_cov,
 			      &chisq, gsl_work);
@@ -434,24 +518,34 @@ struct finetune_solver
   bw_determine_color (coord_t *v)
   {
     point_t off = get_offset (v);
+    int e = 0;
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
-        {
-	  int e = x + y * twidth;
-	  point_t p = tile_pos [y * twidth + x];
-	  p.x += off.x;
-	  p.y += off.y;
-	  rgbdata c = scr.interpolated_mult (p);
-	  gsl_matrix_set (gsl_X, e, 0, c.red);
-	  gsl_matrix_set (gsl_X, e, 1, c.green);
-	  gsl_matrix_set (gsl_X, e, 2, c.blue);
-	  //gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
-        }
+	if (!noutliers || !outliers->test_bit (x, y))
+	  {
+	    point_t p = tile_pos [y * twidth + x];
+	    p.x += off.x;
+	    p.y += off.y;
+	    rgbdata c = scr.interpolated_mult (p);
+	    gsl_matrix_set (gsl_X, e, 0, c.red);
+	    gsl_matrix_set (gsl_X, e, 1, c.green);
+	    gsl_matrix_set (gsl_X, e, 2, c.blue);
+	    e++;
+	    //gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
+	  }
     double chisq;
-    gsl_multifit_wlinear (gsl_X, gsl_w, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
+    gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
     rgbdata ret = {gsl_vector_get (gsl_c, 0), gsl_vector_get (gsl_c, 1), gsl_vector_get (gsl_c, 2)};
     return ret;
+  }
+
+  rgbdata
+  get_fog (coord_t *v)
+  {
+    if (!optimize_fog)
+      return {0, 0, 0};
+    return {v[fog_index] * fog_range.red, v[fog_index+1] * fog_range.green, v[fog_index+2] * fog_range.blue};
   }
 
   rgbdata
@@ -472,7 +566,11 @@ struct finetune_solver
 	*green = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
       }
     else
-      determine_colors (v, red, green, blue);
+      {
+	if (least_squares && optimize_fog)
+	  init_least_squares (v);
+	determine_colors (v, red, green, blue);
+      }
   }
 
   coord_t
@@ -487,53 +585,106 @@ struct finetune_solver
 	get_colors (v, &red, &green, &blue);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
-	    {
-	      rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
-	      rgbdata d = get_pixel (x, y);
-	      sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
-		      /*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) * (c.green - d.green) + (c.blue - d.blue) * (c.blue - d.blue)*/
-	    }
+	    if (!noutliers || !outliers->test_bit (x, y))
+	      {
+		rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+		rgbdata d = get_pixel (v, x, y);
+		sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+			/*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) * (c.green - d.green) + (c.blue - d.blue) * (c.blue - d.blue)*/
+	      }
       }
     else if (bwtile)
       {
 	rgbdata color = bw_get_color (v);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
-	    {
-	      luminosity_t c = bw_evaulate_pixel (color, x, y, off);
-	      luminosity_t d = bw_get_pixel (x, y);
-	      sum += fabs (c - d);
-	    }
+	    if (!noutliers || !outliers->test_bit (x, y))
+	      {
+		luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+		luminosity_t d = bw_get_pixel (x, y);
+		sum += fabs (c - d);
+	      }
 	sum /= maxgray;
       }
     //printf ("%f\n", sum);
     return sum;
   }
 
-  void
-  write_debug_files (coord_t *v)
+  int
+  determine_outliers (coord_t *v, coord_t ratio)
+  {
+    histogram hist;
+    rgbdata red, green, blue;
+    point_t off = get_offset (v);
+    get_colors (v, &red, &green, &blue);
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+	  rgbdata d = get_pixel (v, x, y);
+	  coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+	  hist.pre_account (err);
+	}
+    hist.finalize_range (65535);
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+	  rgbdata d = get_pixel (v, x, y);
+	  coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+	  hist.account (err);
+	}
+    hist.finalize ();
+    coord_t merr = hist.find_max (ratio) * 2;
+    outliers = std::unique_ptr <bitmap_2d> (new bitmap_2d (twidth, theight));
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+	  rgbdata d = get_pixel (v, x, y);
+	  coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+	  if (err > merr)
+	    {
+	      noutliers++;
+	      outliers->set_bit (x, y);
+	    }
+	}
+    if (!noutliers)
+      return 0;
+#if 0
+    if (optimize_screen_blur)
+      v[screen_index] = 0.8;
+    if (optimize_dufay_strips)
+      {
+	v[dufay_strips_index + 0] = dufaycolor::red_width;
+	v[dufay_strips_index + 1] = dufaycolor::green_height;
+      }
+#endif
+    if (least_squares)
+      {
+	alloc_least_squares ();
+	if (!optimize_fog)
+	  init_least_squares (NULL);
+      }
+    return noutliers;
+  }
+
+  bool
+  write_file (coord_t *v, const char *name, int type)
   {
     init_screen (v);
     point_t off = get_offset (v);
 
     tiff_writer_params p;
-    p.filename = "/tmp/rendered.tif";
+    p.filename = name;
     p.width = twidth;
     p.height = theight;
     p.depth = 16;
     const char *error;
     tiff_writer rendered (p, &error);
     if (error)
-      return;
+      return false;
 
-    tiff_writer_params p2;
-    p2.filename = "/tmp/orig.tif";
-    p2.width = twidth;
-    p2.height = theight;
-    p2.depth = 16;
-    tiff_writer orig (p2, &error);
-    if (error)
-      return;
 
     if (tile)
       {
@@ -547,7 +698,7 @@ struct finetune_solver
 	      rmax = std::max (c.red, rmax);
 	      gmax = std::max (c.green, gmax);
 	      bmax = std::max (c.blue, bmax);
-	      rgbdata d = get_pixel (x, y);
+	      rgbdata d = get_pixel (v, x, y);
 	      rmax = std::max (d.red, rmax);
 	      gmax = std::max (d.green, gmax);
 	      bmax = std::max (d.blue, bmax);
@@ -556,16 +707,26 @@ struct finetune_solver
 	for (int y = 0; y < theight; y++)
 	  {
 	    for (int x = 0; x < twidth; x++)
-	      {
-		rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
-		rendered.put_pixel (x, c.red * 65535 / rmax, c.green * 65535 / gmax, c.blue * 65535 / bmax);
-		rgbdata d = get_pixel (x, y);
-		orig.put_pixel (x, d.red * 65535 / rmax, d.green * 65535 / gmax, d.blue * 65535 / bmax);
-	      }
+	      if (type == 1 || !noutliers || !outliers->test_bit (x, y))
+		switch (type)
+		  {
+		  case 0:
+		    {
+		      rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+		      rendered.put_pixel (x, c.red * 65535 / rmax, c.green * 65535 / gmax, c.blue * 65535 / bmax);
+		    }
+		    break;
+		  case 1:
+		    {
+		      rgbdata d = get_pixel (v, x, y);
+		      rendered.put_pixel (x, d.red * 65535 / rmax, d.green * 65535 / gmax, d.blue * 65535 / bmax);
+		    }
+		    break;
+		  }
+	      else
+		rendered.put_pixel (x, 0, 0, 0);
 	    if (!rendered.write_row ())
-	      return;
-	    if (!orig.write_row ())
-	      return;
+	      return false;
 	  }
       }
     if (bwtile)
@@ -582,18 +743,29 @@ struct finetune_solver
 	for (int y = 0; y < theight; y++)
 	  {
 	    for (int x = 0; x < twidth; x++)
-	      {
-		luminosity_t c = bw_evaulate_pixel (color, x, y, off);
-		rendered.put_pixel (x, c * 65535 / lmax, c * 65535 / lmax, c * 65535 / lmax);
-		luminosity_t d = bw_get_pixel (x, y);
-		orig.put_pixel (x, d * 65535 / lmax, d * 65535 / lmax, d * 65535 / lmax);
-	      }
+	      if (type == 1 || !noutliers || !outliers->test_bit (x, y))
+		switch (type)
+		  {
+		  case 0:
+		    {
+		      luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+		      rendered.put_pixel (x, c * 65535 / lmax, c * 65535 / lmax, c * 65535 / lmax);
+		    }
+		    break;
+		  case 1:
+		    {
+		      luminosity_t d = bw_get_pixel (x, y);
+		      rendered.put_pixel (x, d * 65535 / lmax, d * 65535 / lmax, d * 65535 / lmax);
+		    }
+		    break;
+		  }
+	      else
+		rendered.put_pixel (x, 0, 0, 0);
 	    if (!rendered.write_row ())
-	      return;
-	    if (!orig.write_row ())
-	      return;
+	      return false;
 	  }
       }
+    return true;
   }
 };
 }
@@ -601,13 +773,13 @@ struct finetune_solver
 /* Finetune parameters and update RPARAM.  */
 
 finetune_result
-finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, int flags, progress_info *progress)
+finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress)
 {
   scr_to_img map;
   map.set_parameters (param, img);
-  bool bw = flags & finetune_bw;
-  bool verbose = flags & finetune_verbose;
-  finetune_result ret = {false, -1, -1, -1, -1, {-1, -1}};
+  bool bw = fparams.flags & finetune_bw;
+  bool verbose = fparams.flags & finetune_verbose;
+  finetune_result ret = {false, -1, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
 
   if (!bw && !img.rgbdata)
     bw = true;
@@ -618,7 +790,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
-  coord_t test_range = bw ? 1 : 5;
+  coord_t test_range = fparams.range ? fparams.range : (bw ? 1 : 5);
   map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
@@ -686,7 +858,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     }
 
   render_to_scr render (param, img, rparam, 256);
-  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, !(flags & finetune_no_progress_report) ? progress : NULL))
+  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
     {
       if (verbose)
 	{
@@ -713,16 +885,23 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   solver.tile_pos = tile_pos.get ();
   solver.type = map.get_type ();
   solver.pixel_size = render.pixel_size ();
-  solver.optimize_position = flags & finetune_position;
-  solver.optimize_screen_blur = flags & finetune_screen_blur;
-  solver.optimize_dufay_strips = (flags & finetune_dufay_strips) && solver.type == Dufay;
-  solver.least_squares = !(flags & finetune_no_least_squares);
-  solver.normalize = !(flags & finetune_no_normalize);
+  solver.optimize_position = fparams.flags & finetune_position;
+  solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
+  solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
+  solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;
+  //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
+  solver.least_squares = !(fparams.flags & finetune_no_least_squares);
+  solver.normalize = !(fparams.flags & finetune_no_normalize);
   solver.init (rparam.screen_blur_radius);
 
   //if (verbose)
     //solver.print_values (solver.start);
-  simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(flags & finetune_no_progress_report));
+  simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report));
+  if (solver.tile && fparams.ignore_outliers > 0)
+    solver.determine_outliers (solver.start, fparams.ignore_outliers);
+  if (solver.has_outliers ())
+    simplex<coord_t, finetune_solver>(solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
+
 
   if (verbose)
     {
@@ -730,20 +909,29 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       solver.print_values (solver.start);
       progress->resume_stdout ();
     }
-  solver.write_debug_files (solver.start);
+  if (fparams.simulated_file)
+    solver.write_file (solver.start, fparams.simulated_file, 0);
+  if (fparams.orig_file)
+    solver.write_file (solver.start, fparams.orig_file, 1);
+  if (fparams.diff_file)
+    solver.write_file (solver.start, fparams.diff_file, 2);
   ret.success = true;
-  ret.badness = solver.objfunc (solver.start);
-  if (solver.optimize_screen_blur)
-    ret.screen_blur_radius = solver.start[solver.screen_index];
+  ret.badness = solver.objfunc (solver.start) / (twidth * theight);
+  //if (solver.optimize_screen_blur)
+    //ret.screen_blur_radius = solver.start[solver.screen_index];
   if (solver.optimize_dufay_strips)
     {
       ret.dufay_red_strip_width = solver.start[solver.dufay_strips_index + 0];
       ret.dufay_green_strip_width = solver.start[solver.dufay_strips_index + 1];
     }
+  if (solver.optimize_screen_blur)
+    ret.screen_blur_radius = solver.start[solver.screen_index];
   if (solver.optimize_position)
     {
       ret.screen_coord_adjust.x = solver.start[0];
       ret.screen_coord_adjust.y = solver.start[1];
     }
+  if (solver.optimize_fog)
+    ret.fog = solver.get_fog (solver.start);
   return ret;
 }
