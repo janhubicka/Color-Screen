@@ -1,4 +1,5 @@
 #include <sys/time.h>
+#include <string>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/spectrum-to-xyz.h"
 #include "../libcolorscreen/dufaycolor.h"
@@ -1018,8 +1019,12 @@ finetune (int argc, char **argv)
   const char *infname = NULL;
   const char *cspname = NULL;
   const char *screen_blur_tiff_name = NULL;
+  const char *fog_tiff_name = NULL;
   const char *strip_width_tiff_name = NULL;
   const char *position_tiff_name = NULL;
+  const char *orig_tiff_base = NULL;
+  const char *simulated_tiff_base = NULL;
+  const char *diff_tiff_base = NULL;
   int xsteps = 32;
   int border = 5;
   int flags = 0;
@@ -1033,6 +1038,8 @@ finetune (int argc, char **argv)
 	verbose = true;
       else if (!strcmp (argv[i], "--optimize-position"))
 	flags |= finetune_position;
+      else if (!strcmp (argv[i], "--optimize-fog"))
+	flags |= finetune_fog;
       else if (!strcmp (argv[i], "--optimize-screen-blur"))
 	flags |= finetune_screen_blur;
       else if (!strcmp (argv[i], "--use-monochrome-channel"))
@@ -1043,12 +1050,20 @@ finetune (int argc, char **argv)
 	flags |= finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-least-squares"))
 	flags |= finetune_no_least_squares;
+      else if (const char *str = arg_with_param (argc, argv, &i, "fog-tiff"))
+	fog_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "screen-blur-tiff"))
 	screen_blur_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "dufay-strips-tiff"))
 	strip_width_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "position-tiff"))
 	position_tiff_name = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "orig-tiff-base"))
+	orig_tiff_base = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "simulated-tiff-base"))
+	simulated_tiff_base = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "diff-tiff-base"))
+	diff_tiff_base = str;
       else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 65536/2))
 	;
       else if (!infname)
@@ -1098,12 +1113,13 @@ finetune (int argc, char **argv)
 
   int ysteps = xsteps * scan.height / scan.width;
 
+  rgbdata fog[ysteps][xsteps];
   coord_t radius [ysteps][xsteps];
   coord_t strip_widths [ysteps][xsteps][2];
   point_t positions [ysteps][xsteps];
   coord_t badness[ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness)
+#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness,orig_tiff_base,simulated_tiff_base,diff_tiff_base)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1111,7 +1127,29 @@ finetune (int argc, char **argv)
 	int yborder = scan.height * border / 100;
 	int xpos = xborder + x * (scan.width - 2 * xborder) / xsteps;
 	int ypos = yborder + y * (scan.height - 2 * yborder) / ysteps;
-	finetune_result ret = finetune (rparam, param, scan, xpos, ypos, flags, &progress);
+	char pos[256];
+	std::string orig_file;
+	std::string simulated_file;
+	std::string diff_file;
+	sprintf (pos, "-%04i-%04i.tif", y, x);
+	finetune_parameters fparam;
+	fparam.flags = flags;
+	if (orig_tiff_base)
+	  {
+	    orig_file = (std::string)orig_tiff_base + (std::string)pos;
+	    fparam.orig_file = orig_file.c_str ();
+	  }
+	if (simulated_tiff_base)
+	  {
+	    simulated_file = (std::string)simulated_tiff_base + (std::string)pos;
+	    fparam.simulated_file = simulated_file.c_str ();
+	  }
+	if (diff_tiff_base)
+	  {
+	    diff_file = (std::string)diff_tiff_base + (std::string)pos;
+	    fparam.diff_file = diff_file.c_str ();
+	  }
+	finetune_result ret = finetune (rparam, param, scan, xpos, ypos, fparam, &progress);
 	if (!ret.success)
 	  {
             progress.pause_stdout ();
@@ -1170,10 +1208,49 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-	      {
-		int v = std::min (radius[y][x] / 2 * 65535, (coord_t)65535);
-		sharpness.put_pixel (x, v, v, v);
-	      }
+		{
+		  int v = std::min (radius[y][x] / 2 * 65535, (coord_t)65535);
+		  sharpness.put_pixel (x, v, v, v);
+		}
+	      if (!sharpness.write_row ())
+		{
+		  progress.pause_stdout ();
+		  fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		  exit (1);
+		}
+	    }
+	}
+    }
+  if (flags & finetune_fog)
+    {
+      printf ("Detected fog\n");
+      for (int y = 0; y < ysteps; y++)
+	{
+	  for (int x = 0; x < xsteps; x++)
+	    fog[y][x].print (stdout);
+	  printf ("\n");
+	}
+      if (fog_tiff_name)
+	{
+	  tiff_writer_params p;
+	  p.filename = fog_tiff_name;
+	  p.width = xsteps;
+	  p.height = ysteps;
+	  p.depth = 16;
+	  const char *error;
+	  tiff_writer sharpness (p, &error);
+	  if (error)
+	    {
+	      progress.pause_stdout ();
+	      fprintf (stderr, "Can not open tiff file %s: %s\n", screen_blur_tiff_name, error);
+	      exit (1);
+	    }
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
+		{
+		  sharpness.put_pixel (x, fog[y][x].red * 65535, fog[y][x].green * 65535, fog[y][x].blue * 65535);
+		}
 	      if (!sharpness.write_row ())
 		{
 		  progress.pause_stdout ();
@@ -1252,12 +1329,12 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-	      {
-		coord_t r = std::min (fabs (positions[y][x].x * 10), (coord_t)1);
-		coord_t g = std::min (fabs (positions[y][x].y * 10), (coord_t)1);
-		coord_t b = 0;
-		sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
-	      }
+		{
+		  coord_t r = std::min (fabs (positions[y][x].x * 10), (coord_t)1);
+		  coord_t g = std::min (fabs (positions[y][x].y * 10), (coord_t)1);
+		  coord_t b = 0;
+		  sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
+		}
 	      if (!sharpness.write_row ())
 		{
 		  progress.pause_stdout ();
