@@ -626,7 +626,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 		  rparams.auto_mix_weights (scan, current, sel1x, sel1y, sel2x, sel2y, &progress);
 		  setvals ();
 	        }
-	      if (rparams.dark_point == 0 && rparams.brightness == 1)
+	      //if (rparams.dark_point == 0 && rparams.brightness == 1)
 		{
 		  rparams.auto_dark_brightness (scan, current, scan.width / 3, scan.height / 3, 2 * scan.width / 3, 2 * scan.height / 3, &progress);
 		  setvals ();
