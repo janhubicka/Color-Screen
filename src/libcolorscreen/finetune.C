@@ -835,18 +835,19 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
       progress->resume_stdout ();
     }
-  const int maxtiles = 3;
+  const int maxtiles = 5;
   finetune_solver solvers[maxtiles][maxtiles], *best_solver = NULL;
-  bool multitile = fparams.flags & finetune_multitile;
+  coord_t best_uncertainity = 0;
+  bool multitile = /*fparams.flags & finetune_multitile */ true;
   {
     render_to_scr render (param, img, rparam, 256);
     int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
     if (multitile)
       {
-	rxmin = std::max (txmin - twidth, 0);
-	rymin = std::max (tymin - theight, 0);
-	rxmax = std::max (txmax + twidth, img.width - 1);
-	rymax = std::max (tymax + theight, img.height - 1);
+	rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
+	rymin = std::max (tymin - theight * (maxtiles / 2), 0);
+	rxmax = std::max (txmax + (twidth * maxtiles / 2), img.width - 1);
+	rymax = std::max (tymax + (theight * maxtiles / 2), img.height - 1);
       }
     if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
       {
@@ -862,8 +863,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       for (int ty = multitile ? 0 : 1; ty < (multitile ? maxtiles : 2); ty++)
 	for (int tx = multitile ? 0 : 1; tx < (multitile ? maxtiles : 2); tx++)
 	  {
-	    int cur_txmin = std::min (std::max (txmin - twidth + tx * twidth, 0), img.width - twidth - 1);
-	    int cur_tymin = std::min (std::max (tymin - twidth + ty * twidth, 0), img.height - twidth - 1);
+	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), img.width - twidth - 1);
+	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), img.height - theight - 1);
 	    int cur_txmax = cur_txmin + twidth;
 	    int cur_tymax = cur_tymin + theight;
 	    finetune_solver &solver = solvers[ty][tx];
@@ -912,7 +913,22 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      solver.determine_outliers (solver.start, fparams.ignore_outliers);
 	    if (solver.has_outliers ())
 	      simplex<coord_t, finetune_solver>(solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
-	    best_solver = &solver;
+	    coord_t uncertainity = solver.objfunc (solver.start) / (twidth * theight);
+	    if (solver.bwtile)
+	      {
+		rgbdata c = solver.bw_get_color (solver.start);
+		coord_t mmin = std::min (std::min (c.red, c.green), c.blue);
+		coord_t mmax = std::max (std::max (c.red, c.green), c.blue);
+		if (mmin != mmax)
+		  uncertainity /= (mmin - mmax);
+		else
+		  uncertainity = 100000000;
+	      }
+	    if (!best_solver || best_uncertainity > uncertainity)
+	      {
+		best_solver = &solver;
+		best_uncertainity = uncertainity;
+	      }
 	  }
     }
 
