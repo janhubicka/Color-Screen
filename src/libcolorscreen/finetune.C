@@ -370,14 +370,16 @@ public:
     constrain (start);
     if (optimize_fog)
       {
-	fog_range = tile[0];
+	rgb_histogram hist;
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
-	    {
-	      fog_range.red = std::min (fog_range.red, tile[y * twidth + x].red);
-	      fog_range.green = std::min (fog_range.green, tile[y * twidth + x].green);
-	      fog_range.blue = std::min (fog_range.blue, tile[y * twidth + x].blue);
-	    }
+	    hist.pre_account (tile[y * twidth + x]);
+	hist.finalize_range (65535);
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    hist.account (tile[y * twidth + x]);
+	hist.finalize ();
+	fog_range = hist.find_min (0.01);
 	start[fog_index] = 0;
 	start[fog_index + 1] = 0;
 	start[fog_index + 2] = 0;
@@ -453,9 +455,10 @@ public:
      rgbdata d = tile[y * twidth + x] - get_fog (v);
      if (normalize)
        {
-	 luminosity_t ssum = d.red + d.green + d.blue;
-	 if (ssum > 0)
-	   d /= ssum;
+	 luminosity_t ssum = fabs (d.red + d.green + d.blue);
+	 if (ssum == 0)
+	   ssum = 0.0000001;
+         d /= ssum;
        }
      return d;
   }

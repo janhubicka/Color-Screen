@@ -667,9 +667,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "collection_threshold"))
 	{
-	  if (!read_scalar (f, rparam_check (screen_blur_radius)))
+	  if (!read_scalar (f, rparam_check (collection_threshold)))
 	    {
-	      *error = "error parsing screen_blur_radius";
+	      *error = "error parsing collection_threshold";
 	      return false;
 	    }
 	}
