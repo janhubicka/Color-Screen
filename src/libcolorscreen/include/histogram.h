@@ -94,6 +94,8 @@ public:
   {
     if (m_total == -1)
       abort ();
+    if (!skip)
+      return m_minval;
     int threshold = (m_total * skip) + 0.5;
     int sum = 0;
     //printf ("Threshold %i total %i\n", threshold, m_total);
@@ -112,6 +114,8 @@ public:
   {
     if (m_total == -1)
       abort ();
+    if (!skip)
+      return m_maxval;
     int threshold = (m_total * skip) + 0.5;
     int sum = 0;
     for (int i = (int)m_entries.size () - 1; i >= 0; i--)
@@ -150,8 +154,12 @@ public:
       abort ();
     if (mini > maxi)
       abort ();
+    int sum = 0;
     for (int i = mini; i <= maxi; i++)
-      wsum += m_entries[i] * i;
+      {
+        wsum += m_entries[i] * i;
+	sum += m_entries[i];
+      }
     return index_to_val (wsum / ((luminosity_t)m_total - sum1 - sum2));
   }
 
