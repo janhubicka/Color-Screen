@@ -11,7 +11,8 @@ enum finetune_flags
   finetune_no_least_squares = 32,
   finetune_no_progress_report = 64,
   finetune_no_normalize = 128,
-  finetune_verbose = 256
+  finetune_verbose = 256,
+  finetune_multitile = 512
 };
 struct finetune_parameters
 {

@@ -31,11 +31,11 @@ public:
   /* Tile dimensions */
   int twidth, theight;
   /* Tile colors */
-  rgbdata *tile;
+  std::unique_ptr <rgbdata []> tile;
   /* Black and white tile.  */
-  luminosity_t *bwtile;
+  std::unique_ptr <luminosity_t []> bwtile;
   /* Tile position  */
-  point_t *tile_pos;
+  std::unique_ptr <point_t []> tile_pos;
   /* 2 coordinates, blur radius, 3 * 3 colors, strip widths, fog  */
   coord_t start[17];
   coord_t last_blur;
@@ -835,102 +835,117 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
       progress->resume_stdout ();
     }
-
-  std::unique_ptr <rgbdata[]> tile;
-  std::unique_ptr <luminosity_t[]> bwtile;
- 
-  if (!bw)
-    tile = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
-  else
-    bwtile = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
-
-  std::unique_ptr <point_t[]> tile_pos (new  (std::nothrow) point_t [twidth * theight]);
-  if ((!tile && !bwtile) || !tile_pos)
-    {
-      if (verbose)
-	{
-	  progress->pause_stdout ();
-	  fprintf (stderr, "Failed to allocate tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
-	  progress->resume_stdout ();
-	}
-      return ret;
-    }
-
-  render_to_scr render (param, img, rparam, 256);
-  if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, txmin, tymin, txmax + 1, tymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
-    {
-      if (verbose)
-	{
-	  progress->pause_stdout ();
-	  fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
-	  progress->resume_stdout ();
-	}
-      return ret;
-    }
-  for (int y = 0; y < theight; y++)
-    for (int x = 0; x < twidth; x++)
+  const int maxtiles = 3;
+  finetune_solver solvers[maxtiles][maxtiles], *best_solver = NULL;
+  bool multitile = fparams.flags & finetune_multitile;
+  {
+    render_to_scr render (param, img, rparam, 256);
+    int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
+    if (multitile)
       {
-       	map.to_scr (txmin + x + 0.5, tymin + y + 0.5, &tile_pos [y * twidth + x].x, &tile_pos [y * twidth + x].y);
-	if (tile)
-	  tile[y * twidth + x] = render.get_unadjusted_rgb_pixel (x + txmin, y + tymin);
-	if (bwtile)
-	  bwtile[y * twidth + x] = render.get_unadjusted_data (x + txmin, y + tymin);
+	rxmin = std::max (txmin - twidth, 0);
+	rymin = std::max (tymin - theight, 0);
+	rxmax = std::max (txmax + twidth, img.width - 1);
+	rymax = std::max (tymax + theight, img.height - 1);
       }
-  finetune_solver solver;
-  solver.twidth = twidth;
-  solver.theight = theight;
-  solver.tile = tile.get ();
-  solver.bwtile = bwtile.get ();
-  solver.tile_pos = tile_pos.get ();
-  solver.type = map.get_type ();
-  solver.pixel_size = render.pixel_size ();
-  solver.optimize_position = fparams.flags & finetune_position;
-  solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
-  solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
-  solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;
-  //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
-  solver.least_squares = !(fparams.flags & finetune_no_least_squares);
-  solver.normalize = !(fparams.flags & finetune_no_normalize);
-  solver.init (rparam.screen_blur_radius);
+    if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
+      {
+	if (verbose)
+	  {
+	    progress->pause_stdout ();
+	    fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+	    progress->resume_stdout ();
+	  }
+	return ret;
+      }
 
-  //if (verbose)
-    //solver.print_values (solver.start);
-  simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report));
-  if (solver.tile && fparams.ignore_outliers > 0)
-    solver.determine_outliers (solver.start, fparams.ignore_outliers);
-  if (solver.has_outliers ())
-    simplex<coord_t, finetune_solver>(solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
+      for (int ty = multitile ? 0 : 1; ty < (multitile ? maxtiles : 2); ty++)
+	for (int tx = multitile ? 0 : 1; tx < (multitile ? maxtiles : 2); tx++)
+	  {
+	    int cur_txmin = std::min (std::max (txmin - twidth + tx * twidth, 0), img.width - twidth - 1);
+	    int cur_tymin = std::min (std::max (tymin - twidth + ty * twidth, 0), img.height - twidth - 1);
+	    int cur_txmax = cur_txmin + twidth;
+	    int cur_tymax = cur_tymin + theight;
+	    finetune_solver &solver = solvers[ty][tx];
+	    if (!bw)
+	      solver.tile = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
+	    else
+	      solver.bwtile = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
+
+	    solver.tile_pos = (std::unique_ptr <point_t[]>)(new  (std::nothrow) point_t [twidth * theight]);
+	    if ((!solver.tile && !solver.bwtile) || !solver.tile_pos)
+	      {
+		if (verbose)
+		  {
+		    progress->pause_stdout ();
+		    fprintf (stderr, "Failed to allocate tile %i-%i %i-%i\n", cur_txmin, cur_txmax, cur_tymin, cur_tymax);
+		    progress->resume_stdout ();
+		  }
+		return ret;
+	      }
+	    for (int y = 0; y < theight; y++)
+	      for (int x = 0; x < twidth; x++)
+		{
+		  map.to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &solver.tile_pos [y * twidth + x].x, &solver.tile_pos[y * twidth + x].y);
+		  if (solver.tile)
+		    solver.tile[y * twidth + x] = render.get_unadjusted_rgb_pixel (x + cur_txmin, y + cur_tymin);
+		  if (solver.bwtile)
+		    solver.bwtile[y * twidth + x] = render.get_unadjusted_data (x + cur_txmin, y + cur_tymin);
+		}
+	    solver.twidth = twidth;
+	    solver.theight = theight;
+	    solver.type = map.get_type ();
+	    solver.pixel_size = render.pixel_size ();
+	    solver.optimize_position = fparams.flags & finetune_position;
+	    solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
+	    solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
+	    solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;
+	    //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
+	    solver.least_squares = !(fparams.flags & finetune_no_least_squares);
+	    solver.normalize = !(fparams.flags & finetune_no_normalize);
+	    solver.init (rparam.screen_blur_radius);
+
+	    //if (verbose)
+	      //solver.print_values (solver.start);
+	    simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report));
+	    if (solver.tile && fparams.ignore_outliers > 0)
+	      solver.determine_outliers (solver.start, fparams.ignore_outliers);
+	    if (solver.has_outliers ())
+	      simplex<coord_t, finetune_solver>(solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
+	    best_solver = &solver;
+	  }
+    }
 
 
   if (verbose)
     {
       progress->pause_stdout ();
-      solver.print_values (solver.start);
+      best_solver->print_values (best_solver->start);
       progress->resume_stdout ();
     }
   if (fparams.simulated_file)
-    solver.write_file (solver.start, fparams.simulated_file, 0);
+    best_solver->write_file (best_solver->start, fparams.simulated_file, 0);
   if (fparams.orig_file)
-    solver.write_file (solver.start, fparams.orig_file, 1);
+    best_solver->write_file (best_solver->start, fparams.orig_file, 1);
   if (fparams.diff_file)
-    solver.write_file (solver.start, fparams.diff_file, 2);
+    best_solver->write_file (best_solver->start, fparams.diff_file, 2);
   ret.success = true;
-  ret.badness = solver.objfunc (solver.start) / (twidth * theight);
-  //if (solver.optimize_screen_blur)
-    //ret.screen_blur_radius = solver.start[solver.screen_index];
-  if (solver.optimize_dufay_strips)
+  ret.badness = best_solver->objfunc (best_solver->start) / (twidth * theight);
+  //if (best_solver->optimize_screen_blur)
+    //ret.screen_blur_radius = best_solver->start[best_solver->screen_index];
+  if (best_solver->optimize_dufay_strips)
     {
-      ret.dufay_red_strip_width = solver.start[solver.dufay_strips_index + 0];
-      ret.dufay_green_strip_width = solver.start[solver.dufay_strips_index + 1];
+      ret.dufay_red_strip_width = best_solver->start[best_solver->dufay_strips_index + 0];
+      ret.dufay_green_strip_width = best_solver->start[best_solver->dufay_strips_index + 1];
     }
-  if (solver.optimize_screen_blur)
-    ret.screen_blur_radius = solver.start[solver.screen_index];
-  if (solver.optimize_position)
+  if (best_solver->optimize_screen_blur)
+    ret.screen_blur_radius = best_solver->start[best_solver->screen_index];
+  if (best_solver->optimize_position)
     {
-      ret.screen_coord_adjust.x = solver.start[0];
-      ret.screen_coord_adjust.y = solver.start[1];
+      ret.screen_coord_adjust.x = best_solver->start[0];
+      ret.screen_coord_adjust.y = best_solver->start[1];
     }
-  if (solver.optimize_fog)
-    ret.fog = solver.get_fog (solver.start);
+  if (best_solver->optimize_fog)
+    ret.fog = best_solver->get_fog (best_solver->start);
   return ret;
 }
