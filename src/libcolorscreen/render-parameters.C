@@ -1,5 +1,6 @@
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
+#include <memory>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "include/render.h"
@@ -104,7 +105,7 @@ apply_balance_to_model (render_parameters::color_model_t color_model)
 color_matrix
 render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img)
 {
-  spectrum_dyes_to_xyz *m_spectrum_dyes_to_xyz = NULL;
+  std::unique_ptr <spectrum_dyes_to_xyz> spect = NULL;
   color_matrix dyes;
   bool is_srgb = false;
   xyz dye_whitepoint = srgb_white;
@@ -220,8 +221,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_wratten_25_58_47_spectra:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
       case render_parameters::color_model_miethe_goerz_original_wager:
@@ -233,22 +234,22 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_autochrome:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::cinecolor);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::cinecolor);
 	  break;
 	}
       case render_parameters::color_model_autochrome2:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::autochrome_reconstructed,
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_reconstructed,
 					    spectrum_dyes_to_xyz::autochrome_reconstructed_aged,
 					    age);
 	  break;
 	}
       case render_parameters::color_model_dufay_manual:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual);
 	  break;
 	}
       case render_parameters::color_model_dufay_color_cinematography_xyY:
@@ -272,8 +273,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
 	}
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra_correction:
@@ -284,8 +285,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_harrison_horner_spectra:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
 	}
 	break;
       case render_parameters::color_model_dufay_harrison_horner_spectra_correction:
@@ -296,8 +297,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
 	}
 	break;
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra_correction:
@@ -308,8 +309,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_collins_giles_spectra:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_collins_giles);
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_collins_giles);
 	}
 	break;
       case render_parameters::color_model_dufay_collins_giles_spectra_correction:
@@ -323,8 +324,8 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       case render_parameters::color_model_dufay4:
       case render_parameters::color_model_dufay5:
 	{
-	  m_spectrum_dyes_to_xyz = new (spectrum_dyes_to_xyz);
-	  m_spectrum_dyes_to_xyz->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography,
+	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography,
 					    (spectrum_dyes_to_xyz::dyes)((int)color_model - (int)render_parameters::color_model_dufay1 + (int)spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor), age);
 	  break;
 	}
@@ -342,17 +343,17 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       srgb_xyz_matrix m;
       dyes = m * dyes;
     }
-  if (m_spectrum_dyes_to_xyz)
+  if (spect)
     {
-      m_spectrum_dyes_to_xyz->set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
+      spect->set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
       /* At the moment all conversion we do are linear conversions.  In that case
          we can build XYZ matrix and proceed with that.  */
-      if (debug && !m_spectrum_dyes_to_xyz->is_linear ())
+      if (debug && !spect->is_linear ())
 	abort ();
       else
 	{
 	  *spectrum_based = true;
-	  dyes = m_spectrum_dyes_to_xyz->xyz_matrix ();
+	  dyes = spect->xyz_matrix ();
 	}
     }
   /* dye_whitepoint is the whitepoint xyz values of dyes was measured for.
