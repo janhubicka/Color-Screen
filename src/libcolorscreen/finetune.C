@@ -657,6 +657,7 @@ public:
 #endif
     if (least_squares)
       {
+	free_least_squares ();
 	alloc_least_squares ();
 	if (!optimize_fog)
 	  init_least_squares (NULL);
@@ -785,7 +786,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
-  coord_t test_range = fparams.range ? fparams.range : (bw ? 1 : 10);
+  coord_t test_range = fparams.range ? fparams.range || (fparams.flags & finetune_no_normalize) : (bw ? 1 : 2);
   map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;

@@ -1119,7 +1119,7 @@ finetune (int argc, char **argv)
   point_t positions [ysteps][xsteps];
   coord_t badness[ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness,orig_tiff_base,simulated_tiff_base,diff_tiff_base,fog)
+#pragma omp parallel for default (none) collapse(2) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness,orig_tiff_base,simulated_tiff_base,diff_tiff_base,fog)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1200,7 +1200,7 @@ finetune (int argc, char **argv)
 	    printf ("  %6.3f", radius[y][x]);
 	  printf ("\n");
 	}
-      printf ("Robust average of screen blur %f\n", hist.find_avg (0.1,0.1));
+      printf ("Screen blur robust min %f, avg %f, max %f\n", hist.find_min (0.1), hist.find_avg (0.1,0.1), hist.find_max (0.1));
       if (screen_blur_tiff_name)
 	{
 	  tiff_writer_params p;
@@ -1287,13 +1287,13 @@ finetune (int argc, char **argv)
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
 	  {
-	    histr.pre_account (strip_widths[y][x][0]);
-	    histg.pre_account (strip_widths[y][x][1]);
+	    histr.account (strip_widths[y][x][0]);
+	    histg.account (strip_widths[y][x][1]);
 	  }
       histr.finalize ();
       histg.finalize ();
-      printf ("Robust average of red strip width %f\n", histr.find_avg (0.1,0.1));
-      printf ("Robust average of green strip width %f\n", histr.find_avg (0.1,0.1));
+      printf ("Red strip width robust min %f, avg %f, max %f\n", histr.find_min (0.1), histr.find_avg (0.1,0.1), histr.find_max (0.1));
+      printf ("Green strip width robust min %f, avg %f, max %f\n", histg.find_min (0.1), histg.find_avg (0.1,0.1), histg.find_max (0.1));
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
