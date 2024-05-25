@@ -90,6 +90,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
+	  || fprintf (f, "dufay_red_strip_width: %f\n", rparam->dufay_red_strip_width) < 0
+	  || fprintf (f, "dufay_green_strip_width: %f\n", rparam->dufay_green_strip_width) < 0
+	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
@@ -570,6 +573,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, rparam_check (brightness)))
 	    {
 	      *error = "error parsing brightness";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "dufay_red_strip_width"))
+	{
+	  if (!read_luminosity (f, rparam_check (dufay_red_strip_width)))
+	    {
+	      *error = "error parsing red strip width";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "dufay_green_strip_width"))
+	{
+	  if (!read_luminosity (f, rparam_check (dufay_green_strip_width)))
+	    {
+	      *error = "error parsing green strip width";
 	      return false;
 	    }
 	}

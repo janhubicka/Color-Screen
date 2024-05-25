@@ -18,7 +18,6 @@ private:
   gsl_multifit_linear_workspace *gsl_work;
   gsl_matrix *gsl_X;
   gsl_vector *gsl_y[3];
-  gsl_vector *gsl_w;
   gsl_vector *gsl_c;
   gsl_matrix *gsl_cov;
   int noutliers;
@@ -26,7 +25,7 @@ private:
 
 public:
   finetune_solver ()
-    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_w (NULL), gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
+    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
   {
   }
   /* Tile dimensions */
@@ -234,7 +233,6 @@ public:
 	    gsl_vector_free (gsl_y[1]);
 	    gsl_vector_free (gsl_y[2]);
 	  }
-	gsl_vector_free (gsl_w);
 	gsl_vector_free (gsl_c);
 	gsl_matrix_free (gsl_cov);
       }
@@ -246,7 +244,6 @@ public:
     int matrixh = twidth * theight - noutliers;
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
-    gsl_w = gsl_vector_alloc (matrixh);
     gsl_y[0] = gsl_vector_alloc (matrixh);
     if (tile)
       {
@@ -270,7 +267,6 @@ public:
 		gsl_vector_set (gsl_y[0], e, c.red);
 		gsl_vector_set (gsl_y[1], e, c.green);
 		gsl_vector_set (gsl_y[2], e, c.blue);
-		gsl_vector_set (gsl_w, e, 1);
 		e++;
 	      }
       }
@@ -282,7 +278,6 @@ public:
 	    if (!noutliers || !outliers->test_bit (x, y))
 	      {
 		gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
-		gsl_vector_set (gsl_w, e, 1);
 		e++;
 	      }
       }
@@ -495,8 +490,8 @@ public:
 		e++;
 	      }
 	double chisq;
-	gsl_multifit_wlinear (gsl_X, gsl_w, gsl_y[ch], gsl_c, gsl_cov,
-			      &chisq, gsl_work);
+	gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov,
+			     &chisq, gsl_work);
 	sqsum += chisq;
 	(*red)[ch] = gsl_vector_get (gsl_c, 0);
 	(*green)[ch] = gsl_vector_get (gsl_c, 1);
@@ -635,7 +630,7 @@ public:
 	  hist.account (err);
 	}
     hist.finalize ();
-    coord_t merr = hist.find_max (ratio) * 2;
+    coord_t merr = hist.find_max (ratio) * 1.3;
     outliers = std::unique_ptr <bitmap_2d> (new bitmap_2d (twidth, theight));
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
@@ -790,7 +785,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
-  coord_t test_range = fparams.range ? fparams.range : (bw ? 1 : 5);
+  coord_t test_range = fparams.range ? fparams.range : (bw ? 1 : 10);
   map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;

@@ -1119,7 +1119,7 @@ finetune (int argc, char **argv)
   point_t positions [ysteps][xsteps];
   coord_t badness[ysteps][xsteps];
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness,orig_tiff_base,simulated_tiff_base,diff_tiff_base)
+#pragma omp parallel for default (none) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,radius,strip_widths,positions,badness,orig_tiff_base,simulated_tiff_base,diff_tiff_base,fog)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1170,6 +1170,7 @@ finetune (int argc, char **argv)
 	strip_widths[y][x][1] = ret.dufay_green_strip_width;
 	positions[y][x] = ret.screen_coord_adjust;
 	badness[y][x] = ret.badness;
+	fog[y][x] = ret.fog;
 	progress.inc_progress ();
       }
   progress.pause_stdout ();
@@ -1184,12 +1185,22 @@ finetune (int argc, char **argv)
   if (flags & finetune_screen_blur)
     {
       printf ("Detected screen blurs\n");
+      histogram hist;
+      for (int y = 0; y < ysteps; y++)
+	for (int x = 0; x < xsteps; x++)
+	  hist.pre_account (radius[y][x]);
+      hist.finalize_range (65536);
+      for (int y = 0; y < ysteps; y++)
+	for (int x = 0; x < xsteps; x++)
+	  hist.account (radius[y][x]);
+      hist.finalize ();
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
 	    printf ("  %6.3f", radius[y][x]);
 	  printf ("\n");
 	}
+      printf ("Robust average of screen blur %f\n", hist.find_avg (0.1,0.1));
       if (screen_blur_tiff_name)
 	{
 	  tiff_writer_params p;
@@ -1263,6 +1274,26 @@ finetune (int argc, char **argv)
   if ((flags & finetune_dufay_strips) && param.type == Dufay)
     {
       printf ("Detected screen strip widths (red, green)\n");
+      histogram histr;
+      histogram histg;
+      for (int y = 0; y < ysteps; y++)
+	for (int x = 0; x < xsteps; x++)
+	  {
+	    histr.pre_account (strip_widths[y][x][0]);
+	    histg.pre_account (strip_widths[y][x][1]);
+	  }
+      histr.finalize_range (65536);
+      histg.finalize_range (65536);
+      for (int y = 0; y < ysteps; y++)
+	for (int x = 0; x < xsteps; x++)
+	  {
+	    histr.pre_account (strip_widths[y][x][0]);
+	    histg.pre_account (strip_widths[y][x][1]);
+	  }
+      histr.finalize ();
+      histg.finalize ();
+      printf ("Robust average of red strip width %f\n", histr.find_avg (0.1,0.1));
+      printf ("Robust average of green strip width %f\n", histr.find_avg (0.1,0.1));
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
