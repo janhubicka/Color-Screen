@@ -14,6 +14,8 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/screen-map.h"
 #include "../libcolorscreen/include/stitch.h"
+#include "../libcolorscreen/include/finetune.h"
+#include "../libcolorscreen/include/histogram.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
@@ -61,6 +63,7 @@ static int scr_detect_display_type = 0;
 static bool display_scheduled = true;
 static bool preview_display_scheduled = true;
 static bool autosolving = false;
+static bool finetuning = true;
 
 /* How much is the image scaled in the small view.  */
 #define SCALE 16
@@ -638,8 +641,37 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  preview_display_scheduled = true;
 
 	}
-      if (k == 'a')
+      if (k == 'a' && !(event->state & GDK_CONTROL_MASK))
 	autosolving = false;
+      if (k == 'a' && (event->state & GDK_CONTROL_MASK))
+        {
+	  const int xsteps = 20 * 3;
+	  const int ysteps = 20 * 3;
+	  file_progress_info progress (stdout);
+	  progress.set_task ("analyzing samples", ysteps * xsteps);
+	  std::vector <finetune_result> res(xsteps * ysteps);
+	  
+#pragma omp parallel for default (none) collapse(2) shared (xsteps, ysteps, rparams, current,progress,scan, current_solver, res)
+	  for (int x = 0; x < xsteps; x++)
+	    for (int y = 0; y < ysteps; y++)
+	      {
+		finetune_parameters fparam;
+		fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
+		res[x+y*xsteps] = finetune (rparams, current, scan, (x + 0.5) * scan.width / xsteps, (y + 0.5) * scan.height /ysteps, fparam, &progress);
+		progress.inc_progress ();
+	      }
+	  std::sort (res.begin(), res.end(), [] (finetune_result &a, finetune_result &b) { return a.uncertainity > b.uncertainity;});
+	  coord_t max_uncertainity = res[(xsteps * ysteps) * 0.2].uncertainity;
+	  for (int x = 0; x < xsteps; x++)
+	    for (int y = 0; y < ysteps; y++)
+	      {
+		finetune_result &r = res[x+y*xsteps];
+		if (r.success && r.uncertainity <= max_uncertainity)
+	          current_solver.add_point (r.solver_point_img_location.x, r.solver_point_img_location.y, r.solver_point_screen_location.x, r.solver_point_screen_location.y, r.solver_point_color);
+	      }
+	  autosolving = true;
+	  display_scheduled = true;
+	}
       if (k == 'A')
       {
 	autosolving = true;
@@ -1692,6 +1724,22 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       coord_t x = (event->x + shift_x) / scale_x;
       coord_t y = (event->y + shift_y) / scale_y;
+      if (finetuning)
+        {
+	  printf ("Finetuning %f %f\n",x,y);
+	  finetune_parameters fparam;
+	  fparam.flags |= finetune_position | finetune_multitile | finetune_bw | finetune_verbose;
+	  file_progress_info progress (stdout);
+	  finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	  if (res.success)
+	    {
+	      current_solver.add_point (res.solver_point_img_location.x, res.solver_point_img_location.y, res.solver_point_screen_location.x, res.solver_point_screen_location.y, res.solver_point_color);
+	      display_scheduled = true;
+	      maybe_solve ();
+	    }
+          button1_pressed = false;
+	  return;
+        }
       if (x == xpress && y == ypress)
 	{
 	  const int desired_zoom = 16;

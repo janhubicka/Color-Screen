@@ -160,7 +160,7 @@ public:
         wsum += m_entries[i] * i;
 	sum += m_entries[i];
       }
-    return index_to_val (wsum / ((luminosity_t)m_total - sum1 - sum2));
+    return index_to_val (wsum / ((luminosity_t)sum));
   }
 
   int num_samples ()

@@ -30,6 +30,7 @@ struct finetune_result
 {
   bool success;
   coord_t badness;
+  coord_t uncertainity;
   coord_t screen_blur_radius;
   coord_t dufay_red_strip_width;
   coord_t dufay_green_strip_width;
@@ -37,6 +38,11 @@ struct finetune_result
   rgbdata color;
   rgbdata screen_red, screen_green, screen_blue;
   rgbdata fog;
+
+  /* Solver point data.  */
+  point_t solver_point_img_location;
+  point_t solver_point_screen_location;
+  enum solver_parameters::point_color solver_point_color;
 };
 DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress);
 #endif
