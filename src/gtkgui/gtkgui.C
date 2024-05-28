@@ -645,8 +645,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	autosolving = false;
       if (k == 'a' && (event->state & GDK_CONTROL_MASK))
         {
-	  const int xsteps = 20 * 3;
-	  const int ysteps = 20 * 3;
+	  int xsteps = 100;
+	  int ysteps = 100;
+	  if (current.scanner_type == lens_move_horisontally)
+	    xsteps *= 3, ysteps /= 3;
+	  else if (current.scanner_type == lens_move_vertically)
+	    ysteps *= 3, xsteps /= 3;
 	  file_progress_info progress (stdout);
 	  progress.set_task ("analyzing samples", ysteps * xsteps);
 	  std::vector <finetune_result> res(xsteps * ysteps);

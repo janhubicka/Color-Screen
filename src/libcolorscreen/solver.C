@@ -535,12 +535,12 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
   if (param->mesh_trans)
     abort ();
 
-  bool optimize_k1 = sparam.optimize_lens && sparam.npoints > 100;
+  bool optimize_lens = sparam.optimize_lens && sparam.npoints > 100;
   bool optimize_rotation = sparam.optimize_tilt && sparam.npoints > 10;
   coord_t chimin;
 
 
-  if (optimize_k1)
+  if (optimize_lens)
     {
       lens_solver s (*param, img_data, sparam, progress);
       simplex<coord_t, lens_solver>(s, "optimizing lens correction", progress);
@@ -661,12 +661,20 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	for (int x = 0; x < width; x++)
 	  {
 	    coord_t xx, yy;
-	    solver (&lparam, img_data, sparam.npoints, sparam.point, x * step - xshift, y * step - yshift, homography::solve_screen_weights);
+	    coord_t sx = x * step - xshift;
+	    coord_t sy = y * step - yshift;
+#if 0
+	    solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, homography::solve_screen_weights);
 	    {
 	      scr_to_img map2;
 	      map2.set_parameters (lparam, img_data);
-	      map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	      map2.to_img (sx, sy, &xx, &yy);
 	    }
+#else
+	    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+							 lparam.scanner_type, NULL, sx, sy, NULL);
+	    h.perspective_transform (sx, sy, xx, yy);
+#endif
 
 	    /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
 	       distance we can not set one, so iteratively find right one.  */
@@ -676,10 +684,16 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 		for (i = 0; i < 100; i++)
 		  {
 		    coord_t last_xx = xx, last_yy = yy;
+#if 0
 		    solver (&lparam, img_data, sparam.npoints, sparam.point, xx, yy, homography::solve_image_weights);
 		    scr_to_img map3;
 		    map3.set_parameters (lparam, img_data);
-		    map3.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+		    map3.to_img (sx, sy, &xx, &yy);
+#else
+		    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+								 lparam.scanner_type, NULL, xx, yy, NULL);
+		    h.perspective_transform (sx, sy, xx, yy);
+#endif
 		    if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
 		      break;
 		  }
@@ -719,13 +733,40 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
     }
   else
     {
-       trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/ 0,
-						   fixed_lens, NULL, sx, sy, NULL);
-      //solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, homography::solve_limit_ransac_iterations);
-      //scr_to_img map2;
-      //map2.set_parameters (lparam, img_data);
-      //map2.to_img (sx, sy, &xx, &yy);
-        h.perspective_transform (sx, sy, xx, yy);
+#if 0
+      solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, /*homography::solve_limit_ransac_iterations |*/ homography::solve_screen_weights);
+      scr_to_img map2;
+      map2.set_parameters (lparam, img_data);
+      map2.to_img (sx, sy, &xx, &yy);
+#else
+      trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+						   lparam.scanner_type, NULL, sx, sy, NULL);
+      h.perspective_transform (sx, sy, xx, yy);
+#endif
+      /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
+	 distance we can not set one, so iteratively find right one.  */
+      if (lparam.scanner_type != fixed_lens)
+	{
+	  int i;
+	  for (i = 0; i < 100; i++)
+	    {
+	      coord_t last_xx = xx, last_yy = yy;
+#if 0
+	      solver (&lparam, img_data, sparam.npoints, sparam.point, xx, yy, homography::solve_image_weights);
+	      scr_to_img map3;
+	      map3.set_parameters (lparam, img_data);
+	      map3.to_img (sx, sy, &xx, &yy);
+#else
+	      trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+							   lparam.scanner_type, NULL, xx, yy, NULL);
+	      h.perspective_transform (sx, sy, xx, yy);
+#endif
+	      if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
+		break;
+	    }
+	  if (i == 100)
+	    printf ("Osclation instability\n");
+	}
 	//h.print (stdout);
        //printf ("%f %f %f %f\n",sx,sy,xx,yy);
     }
@@ -984,19 +1025,14 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	  colinear = gsl_linalg_HH_svx (A, v);
 	else
 	  {
-	    gsl_vector *w = gsl_vector_alloc (nsamples * 2);
 	    gsl_vector *c = gsl_vector_alloc (nvariables);
 	    gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
 	    double chisq;
-	    for (int i = 0; i < nsamples * 2; i ++)
-	      gsl_vector_set (w, i, 1);
 	    gsl_multifit_linear_workspace * work
 	      = gsl_multifit_linear_alloc (nsamples * 2, nvariables);
-	    gsl_multifit_wlinear (A, w, v, c, cov,
-				  &chisq, work);
+	    gsl_multifit_linear (A, v, c, cov, &chisq, work);
             gsl_multifit_linear_free (work);
 	    gsl_vector_memcpy (v, c);
-	    gsl_vector_free (w);
 	    gsl_vector_free (c);
 	    gsl_matrix_free (cov);
 	  }
@@ -1057,7 +1093,6 @@ exit:
     {
       gsl_matrix *X = gsl_matrix_alloc (max_inliners * 2, nvariables);
       gsl_vector *y = gsl_vector_alloc (max_inliners * 2);
-      gsl_vector *w = gsl_vector_alloc (max_inliners * 2);
       gsl_vector *c = gsl_vector_alloc (nvariables);
       gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
 
@@ -1100,19 +1135,15 @@ exit:
 	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
 	    {
 	      init_equation (X, y, p, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
-	      gsl_vector_set (w, p * 2, 1.0);
-	      gsl_vector_set (w, p * 2 + 1, 1.0);
 	      p++;
 	    }
 	}
       gsl_multifit_linear_workspace * work
 	= gsl_multifit_linear_alloc (n*2, nvariables);
-      gsl_multifit_wlinear (X, w, y, c, cov,
-			    &min_chisq, work);
+      gsl_multifit_linear (X, y, c, cov, &min_chisq, work);
       gsl_multifit_linear_free (work);
       gsl_matrix_free (X);
       gsl_vector_free (y);
-      gsl_vector_free (w);
       gsl_matrix_free (cov);
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
       min_chisq = compute_chisq (tpoints, n, ret);
