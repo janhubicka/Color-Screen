@@ -662,9 +662,30 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	  {
 	    coord_t xx, yy;
 	    solver (&lparam, img_data, sparam.npoints, sparam.point, x * step - xshift, y * step - yshift, homography::solve_screen_weights);
-	    scr_to_img map2;
-	    map2.set_parameters (lparam, img_data);
-	    map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	    {
+	      scr_to_img map2;
+	      map2.set_parameters (lparam, img_data);
+	      map2.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+	    }
+
+	    /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
+	       distance we can not set one, so iteratively find right one.  */
+	    if (param->scanner_type != fixed_lens)
+	      {
+		int i;
+		for (i = 0; i < 100; i++)
+		  {
+		    coord_t last_xx = xx, last_yy = yy;
+		    solver (&lparam, img_data, sparam.npoints, sparam.point, xx, yy, homography::solve_image_weights);
+		    scr_to_img map3;
+		    map3.set_parameters (lparam, img_data);
+		    map3.to_img (x * step - xshift, y * step - yshift, &xx, &yy);
+		    if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
+		      break;
+		  }
+		if (i == 100)
+		  printf ("Osclation instability\n");
+	      }
 	    mesh_trans->set_point (x,y, xx, yy);
 	  }
       if (progress)
@@ -1120,10 +1141,11 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 {
   int nvariables = equation_variables (flags);
   gsl_matrix *X, *cov;
-  gsl_vector *y, *w, *c;
+  gsl_vector *y, *w = NULL, *c;
   X = gsl_matrix_alloc (n * 2, nvariables);
   y = gsl_vector_alloc (n * 2);
-  w = gsl_vector_alloc (n * 2);
+  if (flags & (solve_screen_weights | solve_image_weights))
+    w = gsl_vector_alloc (n * 2);
   c = gsl_vector_alloc (nvariables);
   cov = gsl_matrix_alloc (nvariables, nvariables);
   normalize_points scrnorm (n), imgnorm (n);
@@ -1155,6 +1177,36 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
     }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
+  coord_t xscale = 1;
+  coord_t yscale = 1;
+  /* For moving lens, take into account that in one direction geometry changes a lot
+     more than in the other.  */
+  if (scanner_type == lens_move_horisontally)
+    xscale = 100;
+  if (scanner_type == lens_move_vertically)
+    yscale = 100;
+  coord_t normscale = 0;
+  if (flags & solve_image_weights)
+    for (int i = 0; i < n; i++)
+      {
+	coord_t dist = /*sqrt*/ ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) * (xscale * xscale) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y) * (yscale * yscale));
+	double weight = 1 / (dist + 0.5);
+	gsl_vector_set (w, i * 2, weight);
+	gsl_vector_set (w, i * 2 + 1, weight);
+	normscale = std::max (normscale, weight);
+      }
+  else if (flags & solve_screen_weights)
+    for (int i = 0; i < n; i++)
+      {
+	coord_t dist = sqrt ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
+	double weight = 1 / (dist + 0.5);
+	gsl_vector_set (w, i * 2, weight);
+	gsl_vector_set (w, i * 2 + 1, weight);
+	normscale = std::max (normscale, weight);
+      }
+  if (normscale != 0)
+    normscale = 1 / normscale;
+  
   for (int i = 0; i < n; i++)
     {
       coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
@@ -1167,47 +1219,25 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 
       init_equation (X, y, i, false, flags, scanner_type, {xs, ys}, {xt, yt}, ts, td);
 
-      /* Weight should be 1 / (error^2).  */
-      if (!(flags & (solve_screen_weights | solve_image_weights)))
-	{
-	  gsl_vector_set (w, i * 2, 1.0);
-	  gsl_vector_set (w, i * 2 + 1, 1.0);
-	}
-      if (flags & solve_image_weights)
-	{
-	  coord_t dist = sqrt ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y));
-	  double weight = 1 / (dist + 0.5);
-	  gsl_vector_set (w, i * 2, weight);
-	  gsl_vector_set (w, i * 2 + 1, weight);
-	}
-      else 
-	{
-	  //coord_t dist = /*sqrt*/ pow ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y), 4);
-	  coord_t dist = /*sqrt*/ ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
-	  double weight = 1 / (dist + 0.5);
-	  gsl_vector_set (w, i * 2, weight);
-	  gsl_vector_set (w, i * 2 + 1, weight);
-	}
+      if (w)
+        {
+	  gsl_vector_set (w, i * 2, gsl_vector_get (w, i * 2) * normscale);
+	  gsl_vector_set (w, i * 2 + 1, gsl_vector_get (w, i * 2 + 1) * normscale);
+        }
     }
   gsl_multifit_linear_workspace * work
     = gsl_multifit_linear_alloc (n*2, nvariables);
   double chisq;
-  gsl_multifit_wlinear (X, w, y, c, cov,
-			&chisq, work);
+  if (w)
+    gsl_multifit_wlinear (X, w, y, c, cov,
+			  &chisq, work);
+  else
+    gsl_multifit_linear (X, y, c, cov, &chisq, work);
   gsl_multifit_linear_free (work);
-  /* TODO: robust solvers does not seem to work in practice.  Replace them by RANSAC?  */
-#if 0
-  gsl_multifit_robust_workspace * work
-    = gsl_multifit_robust_alloc (gsl_multifit_robust_default, n*2, 6);
-  work->maxiter = 10000;
-  gsl_multifit_robust (X, y, c, cov,
-		      work);
-  chisq = 0;
-  gsl_multifit_robust_free (work);
-#endif
   gsl_matrix_free (X);
   gsl_vector_free (y);
-  gsl_vector_free (w);
+  if (w)
+    gsl_vector_free (w);
   gsl_matrix_free (cov);
   trans_4d_matrix ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
   /* We normalize equations and thus chisq is unnaturaly small.
