@@ -928,8 +928,6 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   int nvariables = equation_variables (flags);
   int nsamples = nvariables / 2;
   trans_4d_matrix ret;
-  gsl_matrix *A = gsl_matrix_alloc (nvariables, nvariables);
-  gsl_vector *v = gsl_vector_alloc (nvariables);
   solver_parameters::point_t *tpoints = points;
   int max_inliners = 0;
   double min_chisq = INT_MAX;
@@ -942,6 +940,8 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   if ((flags & homography::solve_rotation)
       && scanner_type != fixed_lens)
     nsamples *= 2;
+  gsl_matrix *A = gsl_matrix_alloc (nsamples * 2, nvariables);
+  gsl_vector *v = gsl_vector_alloc (nsamples * 2);
   if (map)
     {
       tpoints = (solver_parameters::point_t *)malloc (sizeof (solver_parameters::point_t) * n);
