@@ -603,7 +603,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      setvals ();
 	    }
         }
-      if (k == 'D')
+      if (k == 'D' && scan.rgbdata)
 	{
 	  save_parameters ();
 	  file_progress_info progress (stdout);

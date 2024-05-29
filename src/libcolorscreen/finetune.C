@@ -42,6 +42,8 @@ public:
   coord_t last_blur;
   coord_t last_width, last_height;
 
+  rgbdata last_red, last_green, last_blue, last_color;
+
   coord_t fixed_blur, fixed_width, fixed_height;
 
   //const coord_t range = 0.2;
@@ -563,9 +565,10 @@ public:
   bw_get_color (coord_t *v)
   {
     if (!least_squares)
-      return {v[color_index], v[color_index + 1], v[color_index + 2]};
+      last_color = {v[color_index], v[color_index + 1], v[color_index + 2]};
     else
-      return bw_determine_color (v);
+      last_color = bw_determine_color (v);
+    return last_color;
   }
   void
   get_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
@@ -582,6 +585,9 @@ public:
 	  init_least_squares (v);
 	determine_colors (v, red, green, blue);
       }
+    last_red = *red;
+    last_green = *green;
+    last_blue = *blue;
   }
 
   coord_t
@@ -662,15 +668,56 @@ public:
 	}
     if (!noutliers)
       return 0;
-#if 0
-    if (optimize_screen_blur)
-      v[screen_index] = 0.8;
-    if (optimize_dufay_strips)
+    if (least_squares)
       {
-	v[dufay_strips_index + 0] = dufaycolor::red_width;
-	v[dufay_strips_index + 1] = dufaycolor::green_height;
+	free_least_squares ();
+	alloc_least_squares ();
+	if (!optimize_fog)
+	  init_least_squares (NULL);
       }
-#endif
+    return noutliers;
+  }
+
+  int
+  bw_determine_outliers (coord_t *v, coord_t ratio)
+  {
+    histogram hist;
+    point_t off = get_offset (v);
+    rgbdata color = bw_get_color (v);
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+	  luminosity_t d = bw_get_pixel (x, y);
+	  coord_t err = fabs (c - d);
+	  hist.pre_account (err);
+	}
+    hist.finalize_range (65535);
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+	  luminosity_t d = bw_get_pixel (x, y);
+	  coord_t err = fabs (c - d);
+	  hist.account (err);
+	}
+    hist.finalize ();
+    coord_t merr = hist.find_max (ratio) * 1.3;
+    outliers = std::unique_ptr <bitmap_2d> (new bitmap_2d (twidth, theight));
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+	  luminosity_t d = bw_get_pixel (x, y);
+	  coord_t err = fabs (c - d);
+	  if (err > merr)
+	    {
+	      noutliers++;
+	      outliers->set_bit (x, y);
+	    }
+	}
+    if (!noutliers)
+      return 0;
     if (least_squares)
       {
 	free_least_squares ();
@@ -949,7 +996,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    coord_t uncertainity = solver.objfunc (solver.start) / (twidth * theight);
 	    if (solver.bwtile)
 	      {
-		rgbdata c = solver.bw_get_color (solver.start);
+		rgbdata c = solver.last_color;
 		coord_t mmin = std::min (std::min (c.red, c.green), c.blue);
 		coord_t mmax = std::max (std::max (c.red, c.green), c.blue);
 		if (mmin != mmax)
@@ -971,8 +1018,16 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   if (best_uncertainity < 0)
     return ret;
 
+  if (best_solver.least_squares)
+    {
+      best_solver.alloc_least_squares ();
+      if (!best_solver.optimize_fog)
+        best_solver.init_least_squares (best_solver.start);
+    }
   if (best_solver.tile && fparams.ignore_outliers > 0)
     best_solver.determine_outliers (best_solver.start, fparams.ignore_outliers);
+  else if (fparams.ignore_outliers > 0)
+    best_solver.bw_determine_outliers (best_solver.start, fparams.ignore_outliers);
   if (best_solver.has_outliers ())
     simplex<coord_t, finetune_solver>(best_solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
 
@@ -982,14 +1037,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     best_solver.write_file (best_solver.start, fparams.orig_file, 1);
   if (fparams.diff_file)
     best_solver.write_file (best_solver.start, fparams.diff_file, 2);
-  ret.success = true;
   ret.uncertainity = best_uncertainity;
-  if (best_solver.least_squares)
-    {
-      best_solver.alloc_least_squares ();
-      if (!best_solver.optimize_fog)
-        best_solver.init_least_squares (best_solver.start);
-    }
   if (verbose)
     {
       progress->pause_stdout ();
@@ -1036,7 +1084,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       //printf ("\n");
     }
   if (!bx || bx == twidth - 1 || !by || by == theight - 1)
-    abort ();
+    {
+      printf ("Solver point is out of tile\n");
+      return ret;
+    }
   point_t fp;
 
   bool found = false;
@@ -1085,7 +1136,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       }
   /* TODO: If we did not find the tile we could try some non-integer location.  */
   if (!found)
-    abort ();
+    {
+      printf ("Failed to find solver point\n");
+      return ret;
+    }
+  ret.success = true;
   ret.solver_point_img_location = {fp.x + best_solver.txmin + 0.5, fp.y + best_solver.tymin + 0.5};
   ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
   ret.solver_point_color = solver_parameters::green;
