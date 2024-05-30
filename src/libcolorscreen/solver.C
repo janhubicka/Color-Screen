@@ -310,9 +310,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
   if (flags & homography::solve_rotation)
     {
-      coord_t tilt_x_min=-3, tilt_x_max=3;
+      coord_t tilt_x_min=-0.003, tilt_x_max=0.003;
       int tilt_x_steps = 21;
-      coord_t tilt_y_min=-3, tilt_y_max=3;
+      coord_t tilt_y_min=-0.003, tilt_y_max=0.003;
       int tilt_y_steps = 21;
       coord_t minsq = INT_MAX;
       coord_t best_tilt_x = 1, best_tilt_y = 1;
@@ -527,6 +527,7 @@ public:
   coord_t
   objfunc (coord_t *vals)
   {
+    static const coord_t bad_val = 100000000;
     m_param.center_x = 0;
     m_param.center_y = 0;
     m_param.coordinate1_x = 1;
@@ -537,6 +538,11 @@ public:
     m_param.lens_correction.kr[1] = vals[2] * (1 / scale_kr);
     m_param.lens_correction.kr[2] = vals[3] * (1 / scale_kr);
     m_param.lens_correction.kr[3] = vals[4] * (1 / scale_kr);
+    if (!m_param.lens_correction.is_monotone ())
+      {
+	printf ("Non monotone lens correction %f %f %f\n", m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2]);
+	return bad_val;
+      }
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
     coord_t chi = 5;
@@ -546,6 +552,8 @@ public:
 #endif
     homography::get_matrix (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 			    m_param.scanner_type, &map, 0, 0, &chi);
+    if (!(chi >= 0 && chi < bad_val))
+      printf ("Bad chi %f\n", chi);
     return chi;
   }
 };
@@ -561,7 +569,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     abort ();
 
   bool optimize_lens = sparam.optimize_lens && sparam.npoints > 100;
-  bool optimize_rotation = sparam.optimize_tilt && sparam.npoints > 10;
+  bool optimize_rotation = (sparam.optimize_tilt && sparam.npoints > 10) /*&& param->scanner_type == fixed_lens*/;
   coord_t chimin;
 
 
@@ -1044,8 +1052,6 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	    coord_t xi = tpoints[p].img_x, yi = tpoints[p].img_y, xs = tpoints[p].screen_x, ys = tpoints[p].screen_y;
 	    init_equation (A, v, i, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
 	  }
-	if (0)
-	  print_system(stdout, A, v);
 	if (nsamples * 2 == nvariables && 0)
 	  colinear = gsl_linalg_HH_svx (A, v);
 	else
@@ -1057,7 +1063,9 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	      = gsl_multifit_linear_alloc (nsamples * 2, nvariables);
 	    gsl_multifit_linear (A, v, c, cov, &chisq, work);
             gsl_multifit_linear_free (work);
-	    gsl_vector_memcpy (v, c);
+	    /* This can not be vector_memcpy since sizes of vectors does not match.  */
+	    for (int i = 0; i < nvariables; i++)
+	      gsl_vector_set (v, i, gsl_vector_get (c, i));
 	    gsl_vector_free (c);
 	    gsl_matrix_free (cov);
 	  }
@@ -1088,6 +1096,8 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	      cur_inliner_chisq += (xt - xi) * (xt - xi) + (yt - yi) * (yt - yi);
 	    }
 	}
+      if (ninliners < 5)
+        printf ("Bad number of RANSAC inliners:%i\n",ninliners);
       if ((ninliners > max_inliners)
 	  || (ninliners == max_inliners && cur_inliner_chisq < min_inliner_chisq))
 	{
@@ -1488,7 +1498,7 @@ print_system (FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w, gsl_ve
   printf ("Solution:\n");
 
   if (c)
-    for (size_t i = 0; i < m->size1; i++)
+    for (size_t i = 0; i < m->size2; i++)
       {
 	if ((status = fprintf (f, "%+7.4f ", gsl_vector_get (c, i))) < 0)
 	  return -1;

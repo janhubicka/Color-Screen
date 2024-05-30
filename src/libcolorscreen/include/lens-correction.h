@@ -37,6 +37,20 @@ struct lens_warp_correction_parameters
       rsq = 1;
     return kr[0] + rsq * (kr[1] + rsq * (kr[2] + rsq * kr[3]));
   }
+
+  pure_attr bool
+  is_monotone ()
+  {
+    coord_t l = 0;
+    for (int i = 1; i < 1024; i++)
+      {
+	coord_t p = i * (1/1024);
+	coord_t nl = p * get_ratio (p);
+	if (!(nl > l))
+	  return false;
+      }
+    return true;
+  }
 };
 
 struct lens_warp_correction

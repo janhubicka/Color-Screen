@@ -210,13 +210,14 @@ scr_to_img::initialize ()
       m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, m_param.scanner_type, zero, x, y, xpy, txpy);
       if (m_do_homography)
         m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, m_param.scanner_type, zero, x, y, xpy, txpy);
-      //printf ("Matrix\n");
-      //m_matrix.print (stdout);
-      //printf ("Perspective\n");
-      //m_perspective_matrix.print (stdout);
-      //printf ("Homography\n");
-      //m_scr_to_img_homography_matrix.print (stdout);
-      //
+#if  0
+      printf ("Matrix\n");
+      m_matrix.print (stdout);
+      printf ("Perspective\n");
+      m_perspective_matrix.print (stdout);
+      printf ("Homography\n");
+      m_scr_to_img_homography_matrix.print (stdout);
+#endif
       if (debug || 1)
 	{
 	  bool found = false;
