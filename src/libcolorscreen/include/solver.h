@@ -116,7 +116,7 @@ public:
     solve_limit_ransac_iterations = 16
   };
   static trans_4d_matrix get_matrix_4points (bool invert, scanner_type type, point_t zero, point_t x, point_t y, point_t xpy);
-  static trans_4d_matrix get_matrix_5points (bool invert, point_t zero, point_t x, point_t y, point_t xpy, point_t txpy);
+  static trans_4d_matrix get_matrix_5points (bool invert, scanner_type type, point_t zero, point_t x, point_t y, point_t xpy, point_t txpy);
   static trans_4d_matrix get_matrix_ransac (solver_parameters::point_t *points, int n, int flags,
 					    scanner_type type,
 					    scr_to_img *map,

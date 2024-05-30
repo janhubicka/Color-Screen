@@ -65,10 +65,13 @@ public:
   }
 
   void
-  account1 (point_t p)
+  account1 (point_t p, enum scanner_type type)
   {
-    avg_x += p.x;
-    avg_y += p.y;
+    if (type == fixed_lens)
+      {
+	avg_x += p.x;
+	avg_y += p.y;
+      }
   }
   void
   finish1 ()
@@ -212,11 +215,33 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type, bool inver
   ret.m_elements[3][3] = 1;
   if (!keep_vector)
     gsl_vector_free (v);
+  //printf ("Pre\n");
   if (debug_output)
     ret.print (stdout);
+  //printf ("Td\n");
+  //td.print (stdout);
+  //printf ("TS\n");
+  //ts.print (stdout);
   td = td.invert ();
   ret = td * ret;
   ret = ret * ts;
+
+  //printf ("Unnorm\n");
+    //ret.print (stdout);
+  /* Make things prettier. There is a redundancy between thrid and 4th row.  */
+  ret.m_elements[2][0] += ret.m_elements[3][0];
+  ret.m_elements[3][0] = 0;
+  ret.m_elements[3][1] += ret.m_elements[2][1];
+  ret.m_elements[2][1] = 0;
+  ret.m_elements[2][2] += ret.m_elements[3][2];
+  ret.m_elements[3][2] = 0;
+  ret.m_elements[3][3] += ret.m_elements[2][3];
+  ret.m_elements[2][3] = 0;
+  for (int x = 0; x < 4; x++)
+    for (int y = 0; y < 4; y++)
+      ret.m_elements[x][y]/=ret.m_elements[3][3];
+  //printf ("Unnorm2\n");
+    //ret.print (stdout);
   return ret;
 }
 
@@ -404,7 +429,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       printf ("New coordinate1 %f %f\n", param->coordinate1_x, param->coordinate1_y);
       printf ("New coordinate2 %f %f\n", param->coordinate2_x, param->coordinate2_y);
     }
-  if (final && (debug || debug_output))
+  if (final /*&& ((debug || debug_output)*/)
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
@@ -996,8 +1021,8 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	for (int i = 0; i < nsamples; i ++)
 	  {
 	    int p = sample[i];
-	    scrnorm.account1 ({tpoints[p].screen_x, tpoints[p].screen_y});
-	    imgnorm.account1 ({tpoints[p].img_x, tpoints[p].img_y});
+	    scrnorm.account1 ({tpoints[p].screen_x, tpoints[p].screen_y}, scanner_type);
+	    imgnorm.account1 ({tpoints[p].img_x, tpoints[p].img_y}, scanner_type);
 	  }
 	scrnorm.finish1();
 	imgnorm.finish1();
@@ -1106,8 +1131,8 @@ exit:
 	  ret.perspective_transform (xs, ys, xt, yt);
 	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
 	    {
-	      scrnorm.account1 ({xs, ys});
-	      imgnorm.account1 ({xi, yi});
+	      scrnorm.account1 ({xs, ys}, scanner_type);
+	      imgnorm.account1 ({xi, yi}, scanner_type);
 	    }
 	}
       scrnorm.finish1();
@@ -1189,8 +1214,8 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
         map->to_scr (xi, yi, &xt, &yt);
       else
 	xt = xi, yt = yi;
-      scrnorm.account1 ({xs, ys});
-      imgnorm.account1 ({xt, yt});
+      scrnorm.account1 ({xs, ys}, scanner_type);
+      imgnorm.account1 ({xt, yt}, scanner_type);
     }
   scrnorm.finish1();
   imgnorm.finish1();
@@ -1310,14 +1335,14 @@ homography::get_matrix_4points (bool invert, enum scanner_type type, point_t zer
   gsl_vector *v = gsl_vector_alloc (8);
   trans_4d_matrix id;
   normalize_points scrnorm (5), imgnorm (5);
-  scrnorm.account1 ({0, 0});
-  imgnorm.account1 (zero);
-  scrnorm.account1 ({1000, 0});
-  imgnorm.account1 (x);
-  scrnorm.account1 ({0, 1000});
-  imgnorm.account1 (y);
-  scrnorm.account1 ({1000, 1000});
-  imgnorm.account1 (xpy);
+  scrnorm.account1 ({0, 0}, type);
+  imgnorm.account1 (zero, type);
+  scrnorm.account1 ({1000, 0}, type);
+  imgnorm.account1 (x, type);
+  scrnorm.account1 ({0, 1000}, type);
+  imgnorm.account1 (y, type);
+  scrnorm.account1 ({1000, 1000}, type);
+  imgnorm.account1 (xpy, type);
   scrnorm.finish1();
   imgnorm.finish1();
   scrnorm.account2 ({0, 0});
@@ -1358,7 +1383,7 @@ homography::get_matrix_4points (bool invert, enum scanner_type type, point_t zer
    
    This works for either scanner type.  */
 trans_4d_matrix
-homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y, point_t xpy, point_t txpy)
+homography::get_matrix_5points (bool invert, enum scanner_type scanner_type, point_t zero, point_t x, point_t y, point_t xpy, point_t txpy)
 {
   gsl_matrix *A = gsl_matrix_alloc (10, 10);
   gsl_vector *v = gsl_vector_alloc (10);
@@ -1377,16 +1402,16 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, false, id, id);
 #endif
   normalize_points scrnorm (5), imgnorm (5);
-  scrnorm.account1 ({0, 0});
-  imgnorm.account1 (zero);
-  scrnorm.account1 ({1000, 0});
-  imgnorm.account1 (x);
-  scrnorm.account1 ({0, 1000});
-  imgnorm.account1 (y);
-  scrnorm.account1 ({1000, 1000});
-  imgnorm.account1 (xpy);
-  scrnorm.account1 ({2000, 3000});
-  imgnorm.account1 (txpy);
+  scrnorm.account1 ({0, 0}, scanner_type);
+  imgnorm.account1 (zero, scanner_type);
+  scrnorm.account1 ({1000, 0}, scanner_type);
+  imgnorm.account1 (x, scanner_type);
+  scrnorm.account1 ({0, 1000}, scanner_type);
+  imgnorm.account1 (y, scanner_type);
+  scrnorm.account1 ({1000, 1000}, scanner_type);
+  imgnorm.account1 (xpy, scanner_type);
+  scrnorm.account1 ({2000, 3000}, scanner_type);
+  imgnorm.account1 (txpy, scanner_type);
   scrnorm.finish1();
   imgnorm.finish1();
   scrnorm.account2 ({0, 0});
@@ -1411,6 +1436,21 @@ homography::get_matrix_5points (bool invert, point_t zero, point_t x, point_t y,
     print_system (stdout, A,v);
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_linalg_HH_svx (A, v);
+#if 0
+	  {
+	    gsl_vector *c = gsl_vector_alloc (10);
+	    gsl_matrix *cov = gsl_matrix_alloc (10, 10);
+	    double chisq;
+	    gsl_multifit_linear_workspace * work
+	      = gsl_multifit_linear_alloc (10, 10);
+	    gsl_multifit_linear (A, v, c, cov, &chisq, work);
+  print_system (stdout, A, v, NULL, c);
+            gsl_multifit_linear_free (work);
+	    gsl_vector_memcpy (v, c);
+	    gsl_vector_free (c);
+	    gsl_matrix_free (cov);
+	  }
+#endif
   gsl_set_error_handler (old_handler);
   gsl_matrix_free (A);
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, invert, ts, td);
@@ -1450,7 +1490,7 @@ print_system (FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w, gsl_ve
   if (c)
     for (size_t i = 0; i < m->size1; i++)
       {
-	if ((status = fprintf (f, "%4.4f ", gsl_vector_get (c, i))) < 0)
+	if ((status = fprintf (f, "%+7.4f ", gsl_vector_get (c, i))) < 0)
 	  return -1;
 	n += status;
       }
@@ -1461,27 +1501,27 @@ print_system (FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w, gsl_ve
       double sol = 0;
       for (size_t j = 0; j < m->size2; j++)
 	{
-	  if ((status = fprintf (f, "%4.4f ", gsl_matrix_get (m, i, j))) < 0)
+	  if ((status = fprintf (f, "%+7.4f ", gsl_matrix_get (m, i, j))) < 0)
 	    return -1;
 	  n += status;
 	  if (c)
 	    sol += gsl_vector_get (c, j) * gsl_matrix_get (m, i, j);
 	}
 
-      if ((status = fprintf (f, "| %4.4f", gsl_vector_get (v, i))) < 0)
+      if ((status = fprintf (f, "| %+7.4f", gsl_vector_get (v, i))) < 0)
 	return -1;
       n += status;
 
       if (w)
 	{
 	  if ((status =
-	       fprintf (f, " (weight %4.4f)", gsl_vector_get (w, i))) < 0)
+	       fprintf (f, " (weight %+7.4f)", gsl_vector_get (w, i))) < 0)
 	    return -1;
 	  n += status;
 	}
       if (c)
 	{
-	  if ((status = fprintf (f, " (solution %4.4f)", sol) < 0))
+	  if ((status = fprintf (f, " (solution %+7.4f; error %f)", sol, sol - gsl_vector_get (v, i)) < 0))
 	    return -1;
 	  n += status;
 	}

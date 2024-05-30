@@ -184,24 +184,67 @@ scr_to_img::initialize ()
   m_matrix = mm;
   m_inverse_matrix = m_matrix.invert ();
 
-  point_t zero;
-  point_t x;
-  point_t y;
-  point_t xpy;
-  point_t txpy;
-  coord_t tx, ty;
-  m_matrix.apply (0, 0, &tx, &ty);
-  m_perspective_matrix.perspective_transform (tx, ty, zero.x, zero.y);
-  m_matrix.apply (1000, 0, &tx, &ty);
-  m_perspective_matrix.perspective_transform (tx, ty, x.x, x.y);
-  m_matrix.apply (0, 1000, &tx, &ty);
-  m_perspective_matrix.perspective_transform (tx, ty, y.x, y.y);
-  m_matrix.apply (1000, 1000, &tx, &ty);
-  m_perspective_matrix.perspective_transform (tx, ty, xpy.x, xpy.y);
-  m_matrix.apply (2000, 3000, &tx, &ty);
-  m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
-  m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, zero, x, y, xpy, txpy);
-  m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, zero, x, y, xpy, txpy);
+  /* TODO: We support homography matrix only for true homography transformations
+     (which maps lines to lines).
+     If scanner has moving lens, straight lines are not preserved. However we probably
+     still do 6 point based matrix rather than manually doing direct and inverse
+     transforms.  */
+    {
+      m_do_homography = (m_param.scanner_type == fixed_lens || (m_param.tilt_x == 0 && m_param.tilt_y == 0));
+      point_t zero;
+      point_t x;
+      point_t y;
+      point_t xpy;
+      point_t txpy;
+      coord_t tx, ty;
+      m_matrix.apply (0, 0, &tx, &ty);
+      m_perspective_matrix.perspective_transform (tx, ty, zero.x, zero.y);
+      m_matrix.apply (1000, 0, &tx, &ty);
+      m_perspective_matrix.perspective_transform (tx, ty, x.x, x.y);
+      m_matrix.apply (0, 1000, &tx, &ty);
+      m_perspective_matrix.perspective_transform (tx, ty, y.x, y.y);
+      m_matrix.apply (1000, 1000, &tx, &ty);
+      m_perspective_matrix.perspective_transform (tx, ty, xpy.x, xpy.y);
+      m_matrix.apply (2000, 3000, &tx, &ty);
+      m_perspective_matrix.perspective_transform (tx, ty, txpy.x, txpy.y);
+      m_scr_to_img_homography_matrix = homography::get_matrix_5points (false, m_param.scanner_type, zero, x, y, xpy, txpy);
+      if (m_do_homography)
+        m_img_to_scr_homography_matrix = homography::get_matrix_5points (true, m_param.scanner_type, zero, x, y, xpy, txpy);
+      //printf ("Matrix\n");
+      //m_matrix.print (stdout);
+      //printf ("Perspective\n");
+      //m_perspective_matrix.print (stdout);
+      //printf ("Homography\n");
+      //m_scr_to_img_homography_matrix.print (stdout);
+      //
+      if (debug || 1)
+	{
+	  bool found = false;
+	  for (int x = 0; x <= 1000 && ! found; x+=10)
+	    for (int y = 0; y <= 1000 && ! found; y+=10)
+	      {
+		coord_t px, py;
+		coord_t xt, yt;
+		m_matrix.apply (x, y, &px, &py);
+		m_perspective_matrix.perspective_transform (px, py, px, py);
+		m_scr_to_img_homography_matrix.perspective_transform (x, y, xt, yt);
+		if (fabs (px - xt) > 1 || fabs (py - yt) > 1)
+		  {
+		    printf ("scr-to-img forward mismatch %i %i: %f %f should be %f %f\n",x,y,px,py,xt,yt);
+		    found = true;
+		  }
+		if (!m_do_homography)
+		  continue;
+		coord_t bx,by;
+		m_img_to_scr_homography_matrix.perspective_transform (px,py, bx, by);
+		if (fabs (x - bx) > 1 || fabs (y - by) > 1)
+		  {
+		    printf ("scr-to-img backward mismatch %i %i: %f %f should be %f %f\n",x,y,px,py,bx,by);
+		    found = true;
+		  }
+	      }
+	}
+    }
 
   update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
 }
