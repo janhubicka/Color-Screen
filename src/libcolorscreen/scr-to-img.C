@@ -262,9 +262,9 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param, const image_data
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;
-  if (param.n_motor_corrections && param.scanner_type != fixed_lens)
+  if (param.n_motor_corrections && !is_fixed_lens (param.scanner_type))
     {
-      int len = param.scanner_type == lens_move_horisontally ? img.width : img.height;
+      int len = param.scanner_type == lens_move_horisontally || param.scanner_type == fixed_lens_sensor_move_horisontally ? img.width : img.height;
       if (param.n_motor_corrections > 2 && 0)
 	{
 	  spline<coord_t> spline (param.motor_correction_x, param.motor_correction_y, param.n_motor_corrections);

@@ -102,7 +102,16 @@ solve ()
       current.mesh_trans = NULL;
       mesh = true;
   }
+  bool old_optimize_lens = current_solver.optimize_lens;
+  bool old_optimize_tilt = current_solver.optimize_tilt;
+  if (mesh)
+  {
+    current_solver.optimize_lens = false;
+    //current_solver.optimize_tilt = false;
+  }
   coord_t sq = solver (&current, scan, current_solver, &progress);
+  current_solver.optimize_lens = old_optimize_lens;
+  current_solver.optimize_tilt = old_optimize_tilt;
   printf ("Solver %f\n", sq);
   if (mesh)
     {
@@ -645,36 +654,24 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	autosolving = false;
       if (k == 'a' && (event->state & GDK_CONTROL_MASK))
         {
-	  int xsteps = 100;
-	  int ysteps = 100;
-	  if (current.scanner_type == lens_move_horisontally)
-	    xsteps *= 3, ysteps /= 3;
-	  else if (current.scanner_type == lens_move_vertically)
-	    ysteps *= 3, xsteps /= 3;
+	  int xmin = std::min (sel1x, sel2x);
+	  int ymin = std::min (sel1y, sel2y);
+	  int xmax = std::max (sel1x, sel2x);
+	  int ymax = std::max (sel1y, sel2y);
 	  file_progress_info progress (stdout);
-	  progress.set_task ("analyzing samples", ysteps * xsteps);
-	  std::vector <finetune_result> res(xsteps * ysteps);
-	  
-#pragma omp parallel for default (none) collapse(2) shared (xsteps, ysteps, rparams, current,progress,scan, current_solver, res)
-	  for (int x = 0; x < xsteps; x++)
-	    for (int y = 0; y < ysteps; y++)
-	      {
-		finetune_parameters fparam;
-		fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
-		res[x+y*xsteps] = finetune (rparams, current, scan, (x + 0.5) * scan.width / xsteps, (y + 0.5) * scan.height /ysteps, fparam, &progress);
-		progress.inc_progress ();
-	      }
-	  std::sort (res.begin(), res.end(), [] (finetune_result &a, finetune_result &b) { return a.uncertainity > b.uncertainity;});
-	  coord_t max_uncertainity = res[(xsteps * ysteps) * 0.2].uncertainity;
-	  for (int x = 0; x < xsteps; x++)
-	    for (int y = 0; y < ysteps; y++)
-	      {
-		finetune_result &r = res[x+y*xsteps];
-		if (r.success && r.uncertainity <= max_uncertainity)
-	          current_solver.add_point (r.solver_point_img_location.x, r.solver_point_img_location.y, r.solver_point_screen_location.x, r.solver_point_screen_location.y, r.solver_point_color);
-	      }
-	  autosolving = true;
-	  display_scheduled = true;
+
+	  if (xmin == xmax && ymin == ymax)
+	    {
+	      xmin = 0;
+	      ymin = 0;
+	      xmax = scan.width;
+	      ymax = scan.height;
+	    }
+	  if (!scan.stitch && finetune_area (&current_solver, rparams, current, scan, xmin, ymin, xmax, ymax, &progress))
+	    {
+	      autosolving = true;
+	      display_scheduled = true;
+	    }
 	}
       if (k == 'A')
       {
@@ -1216,12 +1213,12 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
   if (current.n_motor_corrections && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
     for (int i = 0; i < current.n_motor_corrections; i++)
       {
-	if (current.scanner_type == lens_move_horisontally)
+	if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
 	  {
 	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_x[i], 0, current.motor_correction_x[i], scan.height, 1, 1, 0);
 	    draw_line (surface, bigscale, xoffset, yoffset, current.motor_correction_y[i], 0, current.motor_correction_y[i], scan.height, 0, 1, 1);
 	  }
-	else if (current.scanner_type == lens_move_vertically)
+	else if (current.scanner_type == lens_move_vertically || current.scanner_type == fixed_lens_sensor_move_vertically)
 	  {
 	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_x[i], scan.width, current.motor_correction_x[i], 1, 1, 0);
 	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
@@ -1433,7 +1430,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       double y = (event->y + shift_y) / scale_y;
       double click;
       double scale;
-      if (current.scanner_type == lens_move_horisontally)
+      if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
 	{
 	  click = x;
 	  scale = scale_x;
@@ -1618,7 +1615,7 @@ handle_drag (int x, int y, int button)
 	{
 	  double xoffset = (x - xpress1) / scale_x;
 	  double yoffset = (y - ypress1) / scale_y;
-	  if (current.scanner_type == lens_move_horisontally)
+	  if (current.scanner_type == lens_move_horisontally || current.scanner_type == fixed_lens_sensor_move_horisontally)
 	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + xoffset;
 	  else
 	    current.motor_correction_x[current_motor_correction] = current_motor_correction_val + yoffset;
@@ -1728,7 +1725,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       coord_t x = (event->x + shift_x) / scale_x;
       coord_t y = (event->y + shift_y) / scale_y;
-      if (finetuning)
+      if (finetuning && x == xpress && y == ypress)
         {
 	  printf ("Finetuning %f %f\n",x,y);
 	  finetune_parameters fparam;

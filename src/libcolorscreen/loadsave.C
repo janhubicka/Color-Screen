@@ -17,6 +17,8 @@ static const char * const scr_names[max_scr_type] =
 const char * const scanner_type_names[max_scanner_type] =
 {
   "fixed-lens",
+  "fixed-lens-horisontally-moving-sensor",
+  "fixed-lens-vertically-moving-sensor",
   "horisontally-moving-lens",
   "vertically-moving-lens"
 };

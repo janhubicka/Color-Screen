@@ -939,6 +939,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  }
 	return ret;
       }
+    if (progress && progress->cancel_requested ()) 
+      return ret;
 
 #pragma omp parallel for default(none) collapse (2) shared(fparams,multitile,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (multitile && !(fparams.flags & finetune_no_progress_report))
       for (int ty = multitile ? 0 : 1; ty < (multitile ? maxtiles : 2); ty++)
@@ -949,6 +951,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    int cur_txmax = cur_txmin + twidth;
 	    int cur_tymax = cur_tymin + theight;
 	    finetune_solver solver;
+	    if (progress && progress->cancel_requested ()) 
+	      continue;
 	    if (!bw)
 	      solver.tile = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
 	    else
@@ -1015,6 +1019,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      }
 	  }
     }
+  if (progress && progress->cancel_requested ()) 
+    return ret; 
   if (best_uncertainity < 0)
     return ret;
 
@@ -1030,6 +1036,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     best_solver.bw_determine_outliers (best_solver.start, fparams.ignore_outliers);
   if (best_solver.has_outliers ())
     simplex<coord_t, finetune_solver>(best_solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
+  if (progress && progress->cancel_requested ()) 
+    return ret; 
 
   if (fparams.simulated_file)
     best_solver.write_file (best_solver.start, fparams.simulated_file, 0);
@@ -1146,4 +1154,60 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   ret.solver_point_color = solver_parameters::green;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;
+}
+
+bool
+finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  if (xmin < 0)
+    xmin = 0;
+  if (xmin > img.width - 1)
+    return false;
+  if (ymin < 0)
+    ymin = 0;
+  if (ymin > img.height - 1)
+    return false;
+  if (xmax > img.width - 1)
+    xmax = img.width - 1;
+  if (ymax > img.height - 1)
+    ymax = img.height - 1;
+  if (xmax < xmin || ymax < ymin)
+    return false;
+  const int steps = 100;
+  int overall_xsteps = steps;
+  int overall_ysteps = steps;
+  if (param.scanner_type == lens_move_horisontally || param.scanner_type == fixed_lens_sensor_move_horisontally)
+    overall_xsteps *= 3, overall_ysteps /= 3;
+  else if (param.scanner_type == lens_move_vertically || param.scanner_type == fixed_lens_sensor_move_vertically)
+    overall_ysteps *= 3, overall_xsteps /= 3;
+  int xstep = img.width / overall_xsteps;
+  int ystep = img.width / overall_ysteps;
+  int xsteps = (xmax - xmin + xstep) / xstep;
+  int ysteps = (ymax - ymin + ystep) / ystep;
+  std::vector <finetune_result> res(xsteps * ysteps);
+  if (progress)
+    progress->set_task ("finetuning grid", ysteps * xsteps);
+#pragma omp parallel for default (none) collapse(2) shared (xsteps, ysteps, rparam, param,progress,img, solver, res, xmin, ymin, xstep, ystep)
+  for (int x = 0; x < xsteps; x++)
+    for (int y = 0; y < ysteps; y++)
+      {
+	if (progress && progress->cancel_requested ()) 
+	   continue; 
+	finetune_parameters fparam;
+	fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
+	res[x+y*xsteps] = finetune (rparam, param, img, xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep, fparam, progress);
+	progress->inc_progress ();
+      }
+  if (progress && progress->cancel_requested ()) 
+    return false; 
+  std::sort (res.begin(), res.end(), [] (finetune_result &a, finetune_result &b) { return a.uncertainity > b.uncertainity;});
+  coord_t max_uncertainity = res[(xsteps * ysteps) * 0.2].uncertainity;
+  for (int x = 0; x < xsteps; x++)
+    for (int y = 0; y < ysteps; y++)
+      {
+	finetune_result &r = res[x+y*xsteps];
+	if (r.success && r.uncertainity <= max_uncertainity)
+	  solver->add_point (r.solver_point_img_location.x, r.solver_point_img_location.y, r.solver_point_screen_location.x, r.solver_point_screen_location.y, r.solver_point_color);
+      }
+  return true;
 }

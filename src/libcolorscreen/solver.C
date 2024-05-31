@@ -67,7 +67,7 @@ public:
   void
   account1 (point_t p, enum scanner_type type)
   {
-    if (type == fixed_lens)
+    if (is_fixed_lens (type))
       {
 	avg_x += p.x;
 	avg_y += p.y;
@@ -482,15 +482,22 @@ public:
   lens_solver (scr_to_img_parameters &param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
   : m_param (param), m_img_data (img_data), m_sparam (sparam), m_progress (progress), start {0.5,0.5,0,0,0}
   {
+    if (num_coordinates () == 1)
+      start[1] = 0;
   }
   scr_to_img_parameters &m_param;
   image_data &m_img_data;
   solver_parameters &m_sparam;
   progress_info *m_progress;
-  static const constexpr coord_t scale_kr = 100;
+  static const constexpr coord_t scale_kr = 128;
+
+  int num_coordinates ()
+  {
+    return is_fixed_lens (m_param.scanner_type) ? 2 : 1;
+  }
   int num_values ()
   {
-    return 5;
+    return num_coordinates () + 3;
   }
   coord_t start[5];
   coord_t epsilon ()
@@ -508,20 +515,24 @@ public:
   void
   constrain (coord_t *vals)
   {
+    int n = num_coordinates ();
     if (vals[0] < 0)
       vals[0] = 0;
     if (vals[0] > 1)
       vals[0] = 1;
-    if (vals[1] < 0)
-      vals[1] = 0;
-    if (vals[1] > 1)
-      vals[1] = 1;
-    for (int i = 2; i < 5; i++)
+    if (n == 2)
       {
-      if (vals[i] < -0.1 * scale_kr)
-	vals[i] = -0.1 * scale_kr;
-      if (vals[i] > 0.1 * scale_kr)
-	vals[i] = 0.1 * scale_kr;
+	if (vals[1] < 0)
+	  vals[1] = 0;
+	if (vals[1] > 1)
+	  vals[1] = 1;
+      }
+    for (int i = n; i < n+3; i++)
+      {
+	if (vals[i] < -0.1 * scale_kr)
+	  vals[i] = -0.1 * scale_kr;
+	if (vals[i] > 0.1 * scale_kr)
+	  vals[i] = 0.1 * scale_kr;
       }
   }
   coord_t
@@ -534,15 +545,23 @@ public:
     m_param.coordinate1_y = 0;
     m_param.coordinate2_x = 0;
     m_param.coordinate2_y = 1;
-    m_param.lens_correction.center = {vals[0], vals[1]};
-    m_param.lens_correction.kr[1] = vals[2] * (1 / scale_kr);
-    m_param.lens_correction.kr[2] = vals[3] * (1 / scale_kr);
-    m_param.lens_correction.kr[3] = vals[4] * (1 / scale_kr);
+    int n = num_coordinates ();
+    if (is_fixed_lens (m_param.scanner_type))
+      m_param.lens_correction.center = {vals[0], vals[1]};
+    else if (m_param.scanner_type == lens_move_horisontally)
+      m_param.lens_correction.center = {0, vals[0]};
+    else if (m_param.scanner_type == lens_move_vertically)
+      m_param.lens_correction.center = {vals[0], 0};
+    m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
+    m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
+    m_param.lens_correction.kr[3] = vals[n + 2] * (1 / scale_kr);
     if (!m_param.lens_correction.is_monotone ())
       {
-	printf ("Non monotone lens correction %f %f %f\n", m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2]);
+	printf ("Non monotone lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
 	return bad_val;
       }
+    else
+	printf ("Lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
     coord_t chi = 5;
@@ -577,10 +596,16 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     {
       lens_solver s (*param, img_data, sparam, progress);
       simplex<coord_t, lens_solver>(s, "optimizing lens correction", progress);
-      param->lens_correction.center = {s.start[0], s.start[1]};
-      param->lens_correction.kr[1] = s.start[2] * (1 / lens_solver::scale_kr);
-      param->lens_correction.kr[2] = s.start[3] * (1 / lens_solver::scale_kr);
-      param->lens_correction.kr[3] = s.start[4] * (1 / lens_solver::scale_kr);
+      int n = s.num_coordinates ();
+      if (is_fixed_lens (param->scanner_type))
+	param->lens_correction.center = {s.start[0], s.start[1]};
+      else if (param->scanner_type == lens_move_horisontally)
+	param->lens_correction.center = {0, s.start[0]};
+      else if (param->scanner_type == lens_move_vertically)
+      param->lens_correction.center = {s.start[0], 0};
+      param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
+      param->lens_correction.kr[2] = s.start[n + 1] * (1 / lens_solver::scale_kr);
+      param->lens_correction.kr[3] = s.start[n + 2] * (1 / lens_solver::scale_kr);
 #if 0
       coord_t k1min = -0.01;
       coord_t k1max = 0.01;
@@ -969,10 +994,11 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   coord_t dist = 1;
 
   /* Fix non-fixed lens the rotations are specified only by X or Y coordinates.
-     We need enough variables in that system, so just double number of samples.  */
+     We need enough variables in that system, so just double number of samples.
+     ??? 5 values are enough  */
   if ((flags & homography::solve_rotation)
-      && scanner_type != fixed_lens)
-    nsamples *= 2;
+      && !is_fixed_lens (scanner_type))
+    nsamples ++;
   gsl_matrix *A = gsl_matrix_alloc (nsamples * 2, nvariables);
   gsl_vector *v = gsl_vector_alloc (nsamples * 2);
   if (map)
@@ -997,6 +1023,16 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
 
+  gsl_vector *i_c = NULL;
+  gsl_matrix *i_cov = NULL;
+  gsl_multifit_linear_workspace * i_work = NULL;
+
+  if (nsamples * 2 != nvariables)
+    {
+      i_c = gsl_vector_alloc (nvariables);
+      i_cov = gsl_matrix_alloc (nvariables, nvariables);
+      i_work = gsl_multifit_linear_alloc (nsamples * 2, nvariables);
+    }
 
   for (iteration = 0; iteration < niterations; iteration++)
     {
@@ -1043,8 +1079,6 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 
 	ts = scrnorm.get_matrix ();
 	td = imgnorm.get_matrix ();
-	//ts.print (stdout);
-	//td.print (stdout);
 	/* Proudce equations.  */
 	for (int i = 0; i < nsamples; i ++)
 	  {
@@ -1052,33 +1086,24 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	    coord_t xi = tpoints[p].img_x, yi = tpoints[p].img_y, xs = tpoints[p].screen_x, ys = tpoints[p].screen_y;
 	    init_equation (A, v, i, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
 	  }
-	if (nsamples * 2 == nvariables && 0)
+	if (nsamples * 2 == nvariables)
 	  colinear = gsl_linalg_HH_svx (A, v);
 	else
 	  {
-	    gsl_vector *c = gsl_vector_alloc (nvariables);
-	    gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
 	    double chisq;
-	    gsl_multifit_linear_workspace * work
-	      = gsl_multifit_linear_alloc (nsamples * 2, nvariables);
-	    gsl_multifit_linear (A, v, c, cov, &chisq, work);
-            gsl_multifit_linear_free (work);
+	    gsl_multifit_linear (A, v, i_c, i_cov, &chisq, i_work);
 	    /* This can not be vector_memcpy since sizes of vectors does not match.  */
 	    for (int i = 0; i < nvariables; i++)
-	      gsl_vector_set (v, i, gsl_vector_get (c, i));
-	    gsl_vector_free (c);
-	    gsl_matrix_free (cov);
+	      gsl_vector_set (v, i, gsl_vector_get (i_c, i));
 	  }
-	//if (colinear)
-	  //printf ("Colinear\n");
-	if (nattempts > 10000)
-	  {
-	    printf ("Points are always colinear");
-	    abort ();
-	    goto exit;
-	  }
-      }
-      while (colinear);
+	}
+      while (colinear && nattempts < 10000);
+
+      if (nattempts > 10000)
+	{
+	  printf ("Points are always colinear");
+	  break;
+	}
 
       trans_4d_matrix cur = solution_to_matrix (v, flags, scanner_type, false, ts, td, true);
       //cur.print (stdout);
@@ -1096,8 +1121,8 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	      cur_inliner_chisq += (xt - xi) * (xt - xi) + (yt - yi) * (yt - yi);
 	    }
 	}
-      if (ninliners < 5)
-        printf ("Bad number of RANSAC inliners:%i\n",ninliners);
+      if (ninliners < nsamples)
+	continue;
       if ((ninliners > max_inliners)
 	  || (ninliners == max_inliners && cur_inliner_chisq < min_inliner_chisq))
 	{
@@ -1111,13 +1136,18 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	    break;
 	  if (flags & solve_limit_ransac_iterations)
 	    {
-	      niterations = log (1-0.99) / log (1 - pow(ninliners / (coord_t)n, 4));
+	      niterations = log (1 - 0.99) / log (1 - pow(ninliners / (coord_t)n, 4));
 	      if (cur_chisq < n)
 		break;
 	    }
 	}
     }
-exit:
+  if (i_c)
+    {
+      gsl_multifit_linear_free (i_work);
+      gsl_vector_free (i_c);
+      gsl_matrix_free (i_cov);
+    }
   gsl_set_error_handler (old_handler);
   gsl_matrix_free (A);
   gsl_vector_free (v);
@@ -1183,6 +1213,8 @@ exit:
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
       min_chisq = compute_chisq (tpoints, n, ret);
     }
+  else if (final)
+    printf ("Failed to find inliners for ransac\n");
   //if (final)
     //printf ("chisq %f after least squares\n", min_chisq);
 
@@ -1206,14 +1238,9 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 			coord_t *chisq_ret)
 {
   int nvariables = equation_variables (flags);
+  int nequations = n * 2;
   gsl_matrix *X, *cov;
   gsl_vector *y, *w = NULL, *c;
-  X = gsl_matrix_alloc (n * 2, nvariables);
-  y = gsl_vector_alloc (n * 2);
-  if (flags & (solve_screen_weights | solve_image_weights))
-    w = gsl_vector_alloc (n * 2);
-  c = gsl_vector_alloc (nvariables);
-  cov = gsl_matrix_alloc (nvariables, nvariables);
   normalize_points scrnorm (n), imgnorm (n);
   for (int i = 0; i < n; i++)
     {
@@ -1251,30 +1278,78 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
     xscale = 100;
   if (scanner_type == lens_move_vertically)
     yscale = 100;
-  coord_t normscale = 0;
+  coord_t normscale = 0, sumscale = 0;
+  std::vector <coord_t> weights ((flags & (solve_screen_weights | solve_image_weights)) ? n : 0);
   if (flags & solve_image_weights)
     for (int i = 0; i < n; i++)
       {
 	coord_t dist = /*sqrt*/ ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) * (xscale * xscale) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y) * (yscale * yscale));
 	double weight = 1 / (dist + 0.5);
-	gsl_vector_set (w, i * 2, weight);
-	gsl_vector_set (w, i * 2 + 1, weight);
+	weights[i] = weight;
 	normscale = std::max (normscale, weight);
+	sumscale += weight;
       }
   else if (flags & solve_screen_weights)
     for (int i = 0; i < n; i++)
       {
 	coord_t dist = sqrt ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
 	double weight = 1 / (dist + 0.5);
-	gsl_vector_set (w, i * 2, weight);
-	gsl_vector_set (w, i * 2 + 1, weight);
+	weights[i] = weight;
 	normscale = std::max (normscale, weight);
+	sumscale += weight;
       }
-  if (normscale != 0)
-    normscale = 1 / normscale;
-  
-  for (int i = 0; i < n; i++)
+  if (flags & (solve_screen_weights | solve_image_weights))
     {
+      coord_t minscale = sumscale / 100;
+      if (n > 500)
+	{
+	  do {
+	    nequations = 0;
+	    for (int i = 0; i < n; i++)
+	      if (weights[i] >= minscale)
+		nequations += 2;
+	    if (nequations >= 2 * 100)
+	      break;
+	    minscale *= (coord_t)(1.0/8);
+	  } while (true);
+	}
+      else
+	minscale = 0;
+
+      if (normscale != 0)
+	normscale = 1 / normscale;
+      nequations = 0;
+      for (int i = 0; i < n; i++)
+	{
+	  if (weights[i] >= minscale)
+	    {
+	      weights[i] *= normscale;
+	      nequations += 2;
+	      if (!weights[i])
+		abort ();
+	    }
+	  else
+	    weights[i] = 0;
+	}
+      if (!nequations)
+	{
+	  printf ("bad: %i %f %f\n", n, minscale, normscale);
+	  trans_4d_matrix ret;
+	  return ret;
+	}
+    }
+
+  X = gsl_matrix_alloc (nequations, nvariables);
+  y = gsl_vector_alloc (nequations);
+  if (flags & (solve_screen_weights | solve_image_weights))
+    w = gsl_vector_alloc (nequations);
+  c = gsl_vector_alloc (nvariables);
+  cov = gsl_matrix_alloc (nvariables, nvariables);
+  
+  for (int i = 0, eq = 0; i < n; i++)
+    {
+      if (w && !weights[i])
+	continue;
       coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
       coord_t xt, yt;
       /* Apply non-linear transformations.  */
@@ -1283,16 +1358,17 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
       else
 	xt = xi, yt = yi;
 
-      init_equation (X, y, i, false, flags, scanner_type, {xs, ys}, {xt, yt}, ts, td);
+      init_equation (X, y, eq, false, flags, scanner_type, {xs, ys}, {xt, yt}, ts, td);
 
       if (w)
         {
-	  gsl_vector_set (w, i * 2, gsl_vector_get (w, i * 2) * normscale);
-	  gsl_vector_set (w, i * 2 + 1, gsl_vector_get (w, i * 2 + 1) * normscale);
+	  gsl_vector_set (w, eq * 2, weights[i]);
+	  gsl_vector_set (w, eq * 2 + 1, weights[i]);
         }
+      eq++;
     }
   gsl_multifit_linear_workspace * work
-    = gsl_multifit_linear_alloc (n*2, nvariables);
+    = gsl_multifit_linear_alloc (nequations, nvariables);
   double chisq;
   if (w)
     gsl_multifit_wlinear (X, w, y, c, cov,

@@ -37,10 +37,17 @@ rgbdata patch_proportions (enum scr_type t);
 /* Type of a scanner used.  */
 enum scanner_type {
 	fixed_lens,
+	fixed_lens_sensor_move_horisontally,
+	fixed_lens_sensor_move_vertically,
 	lens_move_horisontally,
 	lens_move_vertically,
 	max_scanner_type
 };
+
+inline bool is_fixed_lens (scanner_type type)
+{
+  return type == fixed_lens || type == fixed_lens_sensor_move_horisontally || type == fixed_lens_sensor_move_vertically;
+}
 
 extern const char * const scanner_type_names[max_scanner_type];
 
@@ -328,14 +335,26 @@ public:
   void
   apply_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-    point_t p = m_lens_correction.corrected_to_scan ({x,y});
+    point_t sp = {x,y};
+    point_t shift = {0, 0};
+    if (m_param.scanner_type == lens_move_horisontally)
+      shift.x = sp.x;
+    if (m_param.scanner_type == lens_move_vertically)
+      shift.y = sp.y;
+    point_t p = m_lens_correction.corrected_to_scan (sp-shift)+shift;
     *xr = p.x;
     *yr = p.y;
   }
   void
   inverse_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
   {
-    point_t p = m_lens_correction.scan_to_corrected ({x,y});
+    point_t sp = {x,y};
+    point_t shift = {0, 0};
+    if (m_param.scanner_type == lens_move_horisontally)
+      shift.x = sp.x;
+    if (m_param.scanner_type == lens_move_vertically)
+      shift.y = sp.y;
+    point_t p = m_lens_correction.scan_to_corrected (sp-shift)+shift;
     *xr = p.x;
     *yr = p.y;
   }
@@ -505,7 +524,7 @@ private:
     *yr = y;
     if (!m_motor_correction)
       return;
-    if (m_param.scanner_type == lens_move_horisontally)
+    if (m_param.scanner_type == lens_move_horisontally || m_param.scanner_type == fixed_lens_sensor_move_horisontally)
       *xr = m_motor_correction->apply (x);
     else
       *yr = m_motor_correction->apply (y);
@@ -517,7 +536,7 @@ private:
     *yr = y;
     if (!m_motor_correction)
       return;
-    if (m_param.scanner_type == lens_move_horisontally)
+    if (m_param.scanner_type == lens_move_horisontally || m_param.scanner_type == fixed_lens_sensor_move_vertically)
       *xr = m_motor_correction->invert (x);
     else
       *yr = m_motor_correction->invert (y);
