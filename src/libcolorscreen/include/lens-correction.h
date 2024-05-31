@@ -56,12 +56,23 @@ struct lens_warp_correction_parameters
       }
     return true;
   }
+  void normalize ()
+  {
+    coord_t c = 1 / get_ratio (1);
+    kr[0] *= c;
+    kr[1] *= c;
+    kr[2] *= c;
+    kr[3] *= c;
+    if (fabs (1 - get_ratio (1)) > 0.00001)
+      abort ();
+  }
+
 };
 
 struct lens_warp_correction
 {
   static constexpr const bool debug = false;
-  /* Size of table for inverse function.  16(1024 is probably overkill but
+  /* Size of table for inverse function.  16*1024 is probably overkill but
      should have one entry for every pixel.  */
   static constexpr const int size = 16 * 1024;
   /* Error tolerated when looking for inverse.  */
@@ -104,15 +115,16 @@ struct lens_warp_correction
   {
     if (m_noop)
       return p;
+    bool too_far = false;
     coord_t dist = p.dist_from (m_center);
     if (dist > m_max_dist)
-      dist = m_max_dist;
-    point_t ret = (p - m_center) * m_inverted_ratio->apply (p.dist_from (m_center)) + m_center;
-    if (debug)
+      dist = m_max_dist, too_far = true;
+    point_t ret = (p - m_center) * m_inverted_ratio->apply (dist) + m_center;
+    if (debug && !too_far)
       {
 	point_t orig = corrected_to_scan (ret);
 	if (!p.almost_eq (orig, epsilon))
-	  fprintf (stderr, "Lens correction inverse broken %f, %f -> %f, %f -> %f, %f\n", p.x - m_center.x, p.y - m_center.y, ret.x - m_center.x, ret.y - m_center.y, orig.x - m_center.x, orig.y - m_center.y);
+	  fprintf (stderr, "Lens correction inverse broken %f, %f -> %f, %f -> %f, %f; dist %f ratio %f\n", p.x - m_center.x, p.y - m_center.y, ret.x - m_center.x, ret.y - m_center.y, orig.x - m_center.x, orig.y - m_center.y, dist, m_inverted_ratio->apply (p.dist_from (m_center)));
       }
     return ret;
   }

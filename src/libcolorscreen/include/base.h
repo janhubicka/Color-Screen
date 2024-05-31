@@ -35,51 +35,51 @@ typedef double coord_t;
 struct point_t
 {
   coord_t x, y;
-  pure_attr coord_t
+  pure_attr inline coord_t
   dist_sq2_from (point_t p)
   {
     return (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y);
   }
-  pure_attr coord_t
+  pure_attr inline coord_t
   dist_from (point_t p)
   {
     return my_sqrt (dist_sq2_from (p));
   }
-  point_t &operator+=(const point_t other)
+  point_t inline &operator+=(const point_t other)
   {
     x += other.x;
     y += other.y;
     return *this;
   }
-  pure_attr point_t operator+(const point_t other)
+  pure_attr inline point_t operator+(const point_t other)
   {
     return {x + other.x, y + other.y};
   }
-  point_t &operator-=(const point_t other)
+  point_t inline &operator-=(const point_t other)
   {
     x -= other.x;
     y -= other.y;
     return *this;
   }
-  pure_attr point_t operator-(const point_t other)
+  pure_attr inline point_t operator-(const point_t other)
   {
     return {x - other.x, y - other.y};
   }
-  point_t &operator*=(const coord_t other)
+  point_t inline &operator*=(const coord_t other)
   {
     x *= other;
     y *= other;
     return *this;
   }
-  pure_attr point_t operator*(const coord_t other)
+  pure_attr inline point_t operator*(const coord_t other)
   {
     return {x * other, y * other};
   }
-  const_attr bool almost_eq(point_t other, coord_t epsilon = 0.001)
+  const_attr inline bool almost_eq(point_t other, coord_t epsilon = 0.001)
   {
     return (fabs (x-other.x) < epsilon && fabs (y - other.y) < epsilon);
   }
-  pure_attr bool operator== (point_t &other) const
+  pure_attr inline bool operator== (point_t &other) const
   {
     return x == other.x && y == other.y;
   }
