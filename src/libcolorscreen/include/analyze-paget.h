@@ -31,6 +31,19 @@ public:
       y = std::min (std::max (y, 0), m_height * 2 - 1);
       return m_green [y * m_width + x];
     }
+  rgbdata screen_tile_color (int x, int y)
+  {
+    return {(red (x, 2*y) + red (x, 2*y+1)) * 0.5, (green (x, 2*y) + green (x, 2*y+1)) * 0.5, (blue (2*x, 2*y) + blue (2*x +1, 2*y) + blue (2*x, 2*y+1) + blue (2*x+1, 2*y+1)) * 0.25};
+  }
+  void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
+  {
+	  abort ();
+#if 0
+    red = 
+    green = rgb_green (x, y);
+    blue = rgb_blue (x, y);
+#endif
+  }
   inline void red_atomic_add (int x, int y, luminosity_t val)
   {
     luminosity_t &addr = red(x, y);

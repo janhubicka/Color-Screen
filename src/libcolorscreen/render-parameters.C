@@ -599,6 +599,8 @@ bool
 render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
   render_parameters rparam = *this;
+  rparam.dark_point = 0;
+  rparam.brightness = 1;
   rparam.precise = true;
   {
     render_interpolate render (param, img, rparam, 256);
@@ -638,7 +640,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     maxvals.print (stdout);
 #endif
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
-    brightness = 1 / (std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point);
+    brightness = 1 / ((std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point) * rparam.scan_exposure);
 #if 0
     fprintf (stdout, "Dark point %f brightness %f\n", dark_point, brightness);
 #endif

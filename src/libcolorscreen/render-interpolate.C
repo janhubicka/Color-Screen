@@ -399,7 +399,25 @@ render_interpolate::analyze_tiles (analyzer analyze,
 	}
     }
   else
-    abort ();
+    {
+      if (progress)
+	progress->set_task (task, m_paget->get_height ());
+      for (int y = 0; y < m_paget->get_height (); y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_paget->get_width (); x++)
+	      {
+		coord_t xp, yp;
+		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		  continue;
+		if (!analyze (x, y, m_paget->screen_tile_color (x, y)))
+		  return;
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
 }
 /* Run ANALYZE on every screen point in the given (image) range, pass RGB value of every tile color.
    Rendering must be initialized in precise_rgb mode from infrared channel.  */
@@ -432,7 +450,27 @@ render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
 	}
     }
   else
-    abort ();
+    {
+      if (progress)
+	progress->set_task (task, m_paget->get_height ());
+      for (int y = 0; y < m_paget->get_height (); y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = 0; x < m_paget->get_width (); x++)
+	      {
+		coord_t xp, yp;
+		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		  continue;
+		rgbdata r,g,b;
+		m_paget->screen_tile_rgb_color (r, g, b, x, y);
+		if (!analyze (x, y, r, g, b))
+		  return;
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
 }
 
 bool

@@ -281,7 +281,9 @@ print_help()
 	   printf ("Solver editing mode\n"
 	           "w   - switch to screen editing mode\n"
 		   "D   - detect regular screen                   a A - autosolve                     L - set lens center\n"
-		   "l   - disable lens center			  dek - remove points in selected region\n");
+		   "      (finetune mixing in selection)\n"
+		   "l   - disable lens center			  dek - remove points in selected region\n"
+		   "ctrl+A - finetune selection                   ctrl+L - autodetect brightness in selection\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");
@@ -574,7 +576,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  rparams.precise = true;
 	  display_scheduled = true;
 	}
-      if (k == 'l')
+      if (k == 'l' && !(event->state & GDK_CONTROL_MASK))
         {
 	  if (rparams.dye_balance == render_parameters::dye_balance_none)
 	    rparams.dye_balance = (render_parameters::dye_balance_t)((int)render_parameters::dye_balance_max - 1);
@@ -584,7 +586,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  display_scheduled = true;
 	  preview_display_scheduled = true;
         }
-      if (k == 'L')
+      if (k == 'L' && !(event->state & GDK_CONTROL_MASK))
         {
 	  rparams.dye_balance = (render_parameters::dye_balance_t)((int)rparams.dye_balance + 1);
 	  if (rparams.dye_balance == render_parameters::dye_balance_max)
@@ -644,7 +646,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	        }
 	      //if (rparams.dark_point == 0 && rparams.brightness == 1)
 		{
-		  rparams.auto_dark_brightness (scan, current, scan.width / 3, scan.height / 3, 2 * scan.width / 3, 2 * scan.height / 3, &progress);
+		  rparams.auto_dark_brightness (scan, current, scan.width / 10, scan.height / 10, 9 * scan.width / 10, 9 * scan.height / 10, &progress);
 		  setvals ();
 		}
 	      if (!display_type)
@@ -654,6 +656,18 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  preview_display_scheduled = true;
 
 	}
+      if (k == 'l' && (event->state & GDK_CONTROL_MASK))
+        {
+	  int xmin = std::min (sel1x, sel2x);
+	  int ymin = std::min (sel1y, sel2y);
+	  int xmax = std::max (sel1x, sel2x);
+	  int ymax = std::max (sel1y, sel2y);
+	  file_progress_info progress (stdout);
+	  rparams.auto_dark_brightness (scan, current, xmin, ymin, xmax, ymax, &progress);
+	  setvals ();
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+        }
       if (k == 'a' && !(event->state & GDK_CONTROL_MASK))
 	autosolving = false;
       if (k == 'a' && (event->state & GDK_CONTROL_MASK))
@@ -682,9 +696,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	autosolving = true;
 	maybe_solve ();
       }
-      if (k == 'L')
+      if (k == 'L' && !!(event->state & GDK_CONTROL_MASK))
 	set_solver_center = true;
-      if (k == 'l')
+      if (k == 'l' && !(event->state & GDK_CONTROL_MASK))
       {
 	current_solver.weighted = false;
 	file_progress_info progress (stdout);
