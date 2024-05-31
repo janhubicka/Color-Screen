@@ -42,12 +42,17 @@ struct lens_warp_correction_parameters
   is_monotone ()
   {
     coord_t l = 0;
-    for (int i = 1; i < 1024; i++)
+    for (int i = 1; true; i++)
       {
-	coord_t p = i * (1/1024);
+	if (i > 1024*1024)
+	  return false;
+	coord_t p = i * (((coord_t)1)/1024);
 	coord_t nl = p * get_ratio (p);
 	if (!(nl > l))
 	  return false;
+	if (nl > 1)
+	  break;
+	l = nl;
       }
     return true;
   }

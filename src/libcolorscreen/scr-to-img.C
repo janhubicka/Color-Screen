@@ -283,6 +283,10 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param, const image_data
   apply_motor_correction (0, img.height, &c3.x, &c3.y);
   apply_motor_correction (img.width, img.height, &c4.x, &c4.y);
   m_lens_correction.set_parameters (param.lens_correction);
+  if (m_param.scanner_type == lens_move_horisontally)
+    c1.x = c2.x = c3.x = c4.x = center.x = param.lens_correction.center.x;
+  if (m_param.scanner_type == lens_move_vertically)
+    c1.y = c2.y = c3.y = c4.y = center.y = param.lens_correction.center.y;
   m_lens_correction.precompute (center, c1, c2, c3, c4, need_inverse);
   initialize ();
 }

@@ -548,8 +548,10 @@ public:
 	printf ("Non monotone lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
 	return bad_val;
       }
+#if 0
     else
 	printf ("Lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
+#endif
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
     coord_t chi = 5;
@@ -1208,12 +1210,11 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 	  trans_4d_matrix ret;
 	  return ret;
 	}
+       w = gsl_vector_alloc (nequations);
     }
 
   X = gsl_matrix_alloc (nequations, nvariables);
   y = gsl_vector_alloc (nequations);
-  if (flags & (solve_screen_weights | solve_image_weights))
-    w = gsl_vector_alloc (nequations);
   c = gsl_vector_alloc (nvariables);
   cov = gsl_matrix_alloc (nvariables, nvariables);
   
