@@ -1119,7 +1119,7 @@ finetune (int argc, char **argv)
 
   std::vector <finetune_result> results (ysteps * xsteps);
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) collapse(2) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results)
+#pragma omp parallel for default (none) collapse(2) schedule (dynamic) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
