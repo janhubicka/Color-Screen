@@ -95,7 +95,6 @@ solve ()
 {
   bool mesh = false;
   save_parameters ();
-  file_progress_info progress (stdout);
   if (current_mesh)
   {
       delete current_mesh;
@@ -109,12 +108,17 @@ solve ()
     current_solver.optimize_lens = false;
     //current_solver.optimize_tilt = false;
   }
-  coord_t sq = solver (&current, scan, current_solver, &progress);
+  coord_t sq;
+  {
+    file_progress_info progress (stdout);
+    sq = solver (&current, scan, current_solver, &progress);
+  }
   current_solver.optimize_lens = old_optimize_lens;
   current_solver.optimize_tilt = old_optimize_tilt;
   printf ("Solver %f\n", sq);
   if (mesh)
     {
+      file_progress_info progress (stdout);
       current_mesh = solver_mesh (&current, scan, current_solver, &progress);
     }
   setvals ();
@@ -1330,7 +1334,6 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 					&shift_y);
   if (!initialized)
     return;
-  printf ("Press %i\n", event->button);
 #if 0
   if (event->button == 1 && 0)
     {
@@ -1355,7 +1358,6 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       if (event->button == 1)
 	{
 	  color_optimizer_points.push_back ({screenx, screeny});
-	  printf ("Added\n");
           display_scheduled = true;
 	  return;
 	}
