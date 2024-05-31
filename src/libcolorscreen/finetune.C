@@ -942,7 +942,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     if (progress && progress->cancel_requested ()) 
       return ret;
 
-#pragma omp parallel for default(none) collapse (2) shared(fparams,multitile,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (multitile && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,multitile,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (multitile && !(fparams.flags & finetune_no_progress_report))
       for (int ty = multitile ? 0 : 1; ty < (multitile ? maxtiles : 2); ty++)
 	for (int tx = multitile ? 0 : 1; tx < (multitile ? maxtiles : 2); tx++)
 	  {
@@ -1187,7 +1187,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
   std::vector <finetune_result> res(xsteps * ysteps);
   if (progress)
     progress->set_task ("finetuning grid", ysteps * xsteps);
-#pragma omp parallel for default (none) collapse(2) shared (xsteps, ysteps, rparam, param,progress,img, solver, res, xmin, ymin, xstep, ystep)
+#pragma omp parallel for default (none) collapse(2) schedule(dynamic) shared (xsteps, ysteps, rparam, param,progress,img, solver, res, xmin, ymin, xstep, ystep)
   for (int x = 0; x < xsteps; x++)
     for (int y = 0; y < ysteps; y++)
       {

@@ -218,7 +218,7 @@ scr_to_img::initialize ()
       printf ("Homography\n");
       m_scr_to_img_homography_matrix.print (stdout);
 #endif
-      if (debug || 1)
+      if (debug)
 	{
 	  bool found = false;
 	  for (int x = 0; x <= 1000 && ! found; x+=10)

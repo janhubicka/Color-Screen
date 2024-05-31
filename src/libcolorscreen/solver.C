@@ -340,25 +340,13 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 			sq += (px - xt) * (px - xt) + (py - yt) * (py - yt);
 		      }
 
-#if 0
-		    for (int i = 0; i < n; i++)
-		      {
-			coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-			coord_t xt, yt;
-			map2.to_img (xs, ys, &xt, &yt);
-			coord_t px, py;
-			h.perspective_transform (xs, ys, px, py);
-			map.to_img (px, py, &px, &py);
-			sq += (px - xt) * (px - xt) + (py - yt) * (py - yt);
-		      }
-#endif
-		    if (sq < minsq)
-		      {
-			minsq = sq;
-			best_tilt_x = param->tilt_x;
-			best_tilt_y = param->tilt_y;
-			//printf ("Tilts %f %f %f %i\n", best_tilt_x, best_tilt_y, minsq, i);
-		      }
+		  if (sq < minsq)
+		    {
+		      minsq = sq;
+		      best_tilt_x = param->tilt_x;
+		      best_tilt_y = param->tilt_y;
+		      //printf ("Tilts %f %f %f %i\n", best_tilt_x, best_tilt_y, minsq, i);
+		    }
 		  }
 	    param->tilt_x = best_tilt_x;
 	    param->tilt_y = best_tilt_y;
@@ -429,7 +417,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       printf ("New coordinate1 %f %f\n", param->coordinate1_x, param->coordinate1_y);
       printf ("New coordinate2 %f %f\n", param->coordinate2_x, param->coordinate2_y);
     }
-  if (final /*&& ((debug || debug_output)*/)
+  if (final && ((debug || debug_output)))
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
@@ -566,6 +554,7 @@ public:
     map.set_parameters (m_param, m_img_data);
     coord_t chi = 5;
 #if 0
+    /* Ransac is unstable.  */
     homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 				   m_param.scanner_type, &map, 0, 0, &chi, false);
 #endif
@@ -588,8 +577,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     abort ();
 
   bool optimize_lens = sparam.optimize_lens && sparam.npoints > 100;
-  bool optimize_rotation = (sparam.optimize_tilt && sparam.npoints > 10) /*&& param->scanner_type == fixed_lens*/;
-  coord_t chimin;
+  bool optimize_rotation = (sparam.optimize_tilt && sparam.npoints > 10);
 
 
   if (optimize_lens)
@@ -606,92 +594,10 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
       param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[2] = s.start[n + 1] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[3] = s.start[n + 2] * (1 / lens_solver::scale_kr);
-#if 0
-      coord_t k1min = -0.01;
-      coord_t k1max = 0.01;
-      coord_t best_k1 = param->lens_correction.kr[1];
-      int k1steps = 1000;
-      if (progress)
-	progress->set_task ("optimizing lens correction", k1steps);
-      for (int k = 0; k < k1steps; k++)
-	{
-	  param->center_x = 0;
-	  param->center_y = 0;
-	  param->coordinate1_x = 1;
-	  param->coordinate1_y = 0;
-	  param->coordinate2_x = 0;
-	  param->coordinate2_y = 1;
-	  param->lens_correction.kr[1] = k * (k1max - k1min) / (k1steps - 1) + k1min;
-	  scr_to_img map;
-	  map.set_parameters (*param, img_data);
-	  coord_t chi;
-	  homography::get_matrix_ransac (sparam.point, sparam.npoints,  (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
-					 param->scanner_type, &map, 0, 0, &chi, false);
-	  if (chi < chimin)
-	    {
-	      chimin = chi;
-	      best_k1 = param->lens_correction.kr[1];
-	    }
-	  if (progress)
-	    progress->inc_progress ();
-	}
-      param->lens_correction.kr[1] = best_k1;
-      chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (sparam.npoints > 10 ? homography::solve_rotation : 0), true);
-#endif
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
-  chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
-
-#if  0
-  coord_t best_tiltx = param->tilt_x, best_tilty = param->tilt_y;
-  coord_t tilt_x_min=-3, tilt_x_max=3;
-  int tilt_x_steps = 21;
-  coord_t tilt_y_min=-3, tilt_y_max=3;
-  int tilt_y_steps = 21;
-  int nbest = 0;
-  int iterations = 10;
-  printf ("Chimin1 %f\n", chimin);
-  chimin = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
-  if (sparam.npoints > 10)
-    {
-      if (progress)
-	progress->set_task ("optimizing", tilt_x_steps * tilt_y_steps * iterations);
-      for (int i = 0; i < 10; i++)
-	{
-	  coord_t txstep = (tilt_x_max - tilt_x_min) / (tilt_x_steps - 1);
-	  coord_t tystep = (tilt_y_max - tilt_y_min) / (tilt_y_steps - 1);
-	  if (!progress || !progress->cancel_requested ())
-	    for (int tx = 0; tx < tilt_x_steps; tx++)
-	      if (!progress || !progress->cancel_requested ())
-		for (int ty = 0; ty < tilt_y_steps; ty++)
-		  {
-		    param->tilt_x = tilt_x_min + txstep * tx;
-		    param->tilt_y = tilt_y_min + tystep * ty;
-		    coord_t chi = solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0));
-		    if (chi < chimin)
-		      {
-			chimin = chi;
-			best_tiltx = param->tilt_x;
-			best_tilty = param->tilt_y;
-			nbest++;
-		      }
-		    if (progress)
-		      progress->inc_progress ();
-		  }
-	  param->tilt_x = best_tiltx;
-	  param->tilt_y = best_tilty;
-	  tilt_x_min = best_tiltx - txstep;
-	  tilt_x_max = best_tiltx + txstep;
-	  tilt_y_min = best_tilty - tystep;
-	  tilt_y_max = best_tilty + tystep;
-	}
-      //printf ("Found %i\n", nbest);
-      return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y,  (sparam.weighted ? homography::solve_image_weights : 0), true);
-    }
-  else
-#endif
-    return chimin;
+  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 }
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
@@ -708,31 +614,20 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
   if (progress)
-    progress->set_task ("computing mesh", height);
+    progress->set_task ("computing mesh", width * height);
   mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
-#pragma omp parallel for default(none) shared(progress, xshift, yshift, step, width, height, sparam, img_data, mesh_trans, param)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(progress, xshift, yshift, step, width, height, sparam, img_data, mesh_trans, param)
   for (int y = 0; y < height; y++)
-    {
-      // TODO: copying motor corrections is unnecesary and expensive.
-      scr_to_img_parameters lparam = *param;
-      if (!progress || !progress->cancel_requested ())
-	for (int x = 0; x < width; x++)
+    for (int x = 0; x < width; x++)
+       if (!progress || !progress->cancel_requested ())
 	  {
+            scr_to_img_parameters lparam = *param;
 	    coord_t xx, yy;
 	    coord_t sx = x * step - xshift;
 	    coord_t sy = y * step - yshift;
-#if 0
-	    solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, homography::solve_screen_weights);
-	    {
-	      scr_to_img map2;
-	      map2.set_parameters (lparam, img_data);
-	      map2.to_img (sx, sy, &xx, &yy);
-	    }
-#else
 	    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
 							 lparam.scanner_type, NULL, sx, sy, NULL);
 	    h.perspective_transform (sx, sy, xx, yy);
-#endif
 
 	    /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
 	       distance we can not set one, so iteratively find right one.  */
@@ -742,16 +637,9 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 		for (i = 0; i < 100; i++)
 		  {
 		    coord_t last_xx = xx, last_yy = yy;
-#if 0
-		    solver (&lparam, img_data, sparam.npoints, sparam.point, xx, yy, homography::solve_image_weights);
-		    scr_to_img map3;
-		    map3.set_parameters (lparam, img_data);
-		    map3.to_img (sx, sy, &xx, &yy);
-#else
 		    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
 								 lparam.scanner_type, NULL, xx, yy, NULL);
 		    h.perspective_transform (sx, sy, xx, yy);
-#endif
 		    if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
 		      break;
 		  }
@@ -759,10 +647,9 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 		  printf ("Osclation instability\n");
 	      }
 	    mesh_trans->set_point (x,y, xx, yy);
+	    if (progress)
+	      progress->inc_progress ();
 	  }
-      if (progress)
-	progress->inc_progress ();
-    }
   if (progress && progress->cancel_requested ())
     {
       delete mesh_trans;
@@ -791,16 +678,9 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
     }
   else
     {
-#if 0
-      solver (&lparam, img_data, sparam.npoints, sparam.point, sx, sy, /*homography::solve_limit_ransac_iterations |*/ homography::solve_screen_weights);
-      scr_to_img map2;
-      map2.set_parameters (lparam, img_data);
-      map2.to_img (sx, sy, &xx, &yy);
-#else
       trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
 						   lparam.scanner_type, NULL, sx, sy, NULL);
       h.perspective_transform (sx, sy, xx, yy);
-#endif
       /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
 	 distance we can not set one, so iteratively find right one.  */
       if (lparam.scanner_type != fixed_lens)
@@ -809,16 +689,9 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
 	  for (i = 0; i < 100; i++)
 	    {
 	      coord_t last_xx = xx, last_yy = yy;
-#if 0
-	      solver (&lparam, img_data, sparam.npoints, sparam.point, xx, yy, homography::solve_image_weights);
-	      scr_to_img map3;
-	      map3.set_parameters (lparam, img_data);
-	      map3.to_img (sx, sy, &xx, &yy);
-#else
 	      trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
 							   lparam.scanner_type, NULL, xx, yy, NULL);
 	      h.perspective_transform (sx, sy, xx, yy);
-#endif
 	      if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
 		break;
 	    }
@@ -843,25 +716,24 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   width = (width + step - 1) / step;
   height = (height + step - 1) / step;
   if (progress)
-    progress->set_task ("computing mesh from detected points", height);
+    progress->set_task ("computing mesh from detected points", width * height);
   mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
-#pragma omp parallel for default(none) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap)
   for (int y = 0; y < height; y++)
-    {
-      // TODO: copying motor corrections is unnecesary and expensive.
-      scr_to_img_parameters lparam = *param;
-      solver_parameters sparam;/* = sparam2;*/
+    for (int x = 0; x < width; x++)
       if (!progress || !progress->cancel_requested ())
-	for (int x = 0; x < width; x++)
+	{
+	  // TODO: copying motor corrections is unnecesary and expensive.
+	  scr_to_img_parameters lparam = *param;
+	  solver_parameters sparam;/* = sparam2;*/
 	  compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, y);
-      if (progress)
-	progress->inc_progress ();
-    }
+	  if (progress)
+	    progress->inc_progress ();
+	}
   if (progress)
     progress->set_task ("growing mesh", height);
   scr_to_img_parameters lparam = *param;
   int miter = width + height;
-#if 1
   while (miter > 0)
     {
       int grow_left = mesh_trans->need_to_grow_left (img_data.width, img_data.height) ? 1 : 0;
@@ -903,7 +775,6 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
       if (progress)
 	progress->resume_stdout ();
     }
-#endif
   if (progress && progress->cancel_requested ())
     {
       delete mesh_trans;
@@ -1404,6 +1275,8 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
   return ret;
 }
 
+/* Unused and bitrotten.  */
+#if 0
 /* Return homography matrix M.
    Applying M.perspective_transofrm on (0,0) will yield to ZERO.
    Applying M.perspective_transofrm on (1,0) will yield to X.
@@ -1458,6 +1331,7 @@ homography::get_matrix_4points (bool invert, enum scanner_type type, point_t zer
   gsl_matrix_free (A);
   return solution_to_matrix (v, solve_rotation, type, false, id, id);
 }
+#endif
 
 /* Return homography matrix M.
    Applying M.perspective_transofrm on (0,0) will yield to ZERO.
@@ -1473,20 +1347,6 @@ homography::get_matrix_5points (bool invert, enum scanner_type scanner_type, poi
 {
   gsl_matrix *A = gsl_matrix_alloc (10, 10);
   gsl_vector *v = gsl_vector_alloc (10);
-#if 0
-  trans_4d_matrix id;
-  init_equation (A, v, 0, invert, solve_free_rotation, fixed_lens, {0, 0}, zero, id, id);
-  init_equation (A, v, 1, invert, solve_free_rotation, fixed_lens, {1000, 0}, x, id, id);
-  init_equation (A, v, 2, invert, solve_free_rotation, fixed_lens, {0, 1000}, y, id, id);
-  init_equation (A, v, 3, invert, solve_free_rotation, fixed_lens, {1000, 1000}, xpy, id, id);
-  init_equation (A, v, 4, invert, solve_free_rotation, fixed_lens, {2000, 3000}, txpy, id, id);
-
-  if (debug_output)
-    print_system (stdout, A,v);
-  gsl_linalg_HH_svx (A, v);
-  gsl_matrix_free (A);
-  return solution_to_matrix (v, solve_free_rotation, fixed_lens, false, id, id);
-#endif
   normalize_points scrnorm (5), imgnorm (5);
   scrnorm.account1 ({0, 0}, scanner_type);
   imgnorm.account1 (zero, scanner_type);
@@ -1522,21 +1382,6 @@ homography::get_matrix_5points (bool invert, enum scanner_type scanner_type, poi
     print_system (stdout, A,v);
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   gsl_linalg_HH_svx (A, v);
-#if 0
-	  {
-	    gsl_vector *c = gsl_vector_alloc (10);
-	    gsl_matrix *cov = gsl_matrix_alloc (10, 10);
-	    double chisq;
-	    gsl_multifit_linear_workspace * work
-	      = gsl_multifit_linear_alloc (10, 10);
-	    gsl_multifit_linear (A, v, c, cov, &chisq, work);
-  print_system (stdout, A, v, NULL, c);
-            gsl_multifit_linear_free (work);
-	    gsl_vector_memcpy (v, c);
-	    gsl_vector_free (c);
-	    gsl_matrix_free (cov);
-	  }
-#endif
   gsl_set_error_handler (old_handler);
   gsl_matrix_free (A);
   return solution_to_matrix (v, solve_free_rotation, fixed_lens, invert, ts, td);
