@@ -1,5 +1,6 @@
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
+#include <memory>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "gsl-utils.h"
@@ -548,13 +549,10 @@ public:
 	printf ("Non monotone lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
 	return bad_val;
       }
-#if 0
-    else
-	printf ("Lens correction %f %f: %f %f %f %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
-#endif
+    m_param.lens_correction.normalize ();
     scr_to_img map;
     map.set_parameters (m_param, m_img_data);
-    coord_t chi = 5;
+    coord_t chi = -5;
 #if 0
     /* Ransac is unstable.  */
     homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
@@ -562,8 +560,14 @@ public:
 #endif
     homography::get_matrix (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 			    m_param.scanner_type, &map, 0, 0, &chi);
+#if 0
+    printf ("Lens correction center %f,%f: k0 %f k1 %f k2 %f k3 %f chi %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3], chi);
+#endif
     if (!(chi >= 0 && chi < bad_val))
-      printf ("Bad chi %f\n", chi);
+      {
+        printf ("Bad chi %f\n", chi);
+	return bad_val;
+      }
     return chi;
   }
 };
@@ -596,6 +600,14 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
       param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[2] = s.start[n + 1] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[3] = s.start[n + 2] * (1 / lens_solver::scale_kr);
+      param->lens_correction.normalize ();
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Lens correction center: %f,%f k0 %f k1 %f k2 %f k3 %f\n",
+	      param->lens_correction.center.x, param->lens_correction.center.y,
+	      param->lens_correction.kr[0], param->lens_correction.kr[1], param->lens_correction.kr[2], param->lens_correction.kr[3]);
+      if (progress)
+	progress->resume_stdout ();
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
@@ -841,6 +853,24 @@ compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homogr
   return chisq;
 }
 
+static double
+screen_compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homography)
+{
+  double chisq = 0;
+  for (int i = 0; i < n; i++)
+    {
+      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
+      coord_t xt, yt;
+      homography.inverse_perspective_transform (xi, yi, xt, yt);
+      coord_t dist = (xt - xs) * (xt - xs) + (yt - ys) * (yt - ys);
+      if (dist > 10000)
+	dist = 10000;
+      chisq += dist;
+    }
+  return chisq;
+}
+
+
 
 /* Return homography matrix determined from POINTS using least squares
    method.  Trainsform image coordinates by MAP if non-NULL.
@@ -900,6 +930,7 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   gsl_matrix *i_cov = NULL;
   gsl_multifit_linear_workspace * i_work = NULL;
 
+  /* FIXME: HH method does not seem to work.  */
   if (nsamples * 2 != nvariables)
     {
       i_c = gsl_vector_alloc (nvariables);
@@ -959,12 +990,12 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
 	    coord_t xi = tpoints[p].img_x, yi = tpoints[p].img_y, xs = tpoints[p].screen_x, ys = tpoints[p].screen_y;
 	    init_equation (A, v, i, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
 	  }
-	if (nsamples * 2 == nvariables)
-	  colinear = gsl_linalg_HH_svx (A, v);
+	if (!i_work)
+	  colinear = (gsl_linalg_HH_svx (A, v) != GSL_SUCCESS);
 	else
 	  {
 	    double chisq;
-	    gsl_multifit_linear (A, v, i_c, i_cov, &chisq, i_work);
+	    colinear = (gsl_multifit_linear (A, v, i_c, i_cov, &chisq, i_work)) != GSL_SUCCESS;
 	    /* This can not be vector_memcpy since sizes of vectors does not match.  */
 	    for (int i = 0; i < nvariables; i++)
 	      gsl_vector_set (v, i, gsl_vector_get (i_c, i));
@@ -1084,7 +1115,8 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
       gsl_vector_free (y);
       gsl_matrix_free (cov);
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
-      min_chisq = compute_chisq (tpoints, n, ret);
+      /* Use screen so we do not get biass with lens correction.  */
+      min_chisq = screen_compute_chisq (tpoints, n, ret);
     }
   else if (final)
     printf ("Failed to find inliners for ransac\n");
@@ -1204,12 +1236,8 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 	  else
 	    weights[i] = 0;
 	}
-      if (!nequations)
-	{
-	  printf ("bad: %i %f %f\n", n, minscale, normscale);
-	  trans_4d_matrix ret;
-	  return ret;
-	}
+      if (nequations * 2 < nvariables )
+	abort ();
        w = gsl_vector_alloc (nequations);
     }
 
@@ -1258,8 +1286,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
      To make get same range as in ransac we need to recompute.  */
   if (chisq_ret)
     {
-      solver_parameters::point_t *tpoints = points;
-      tpoints = (solver_parameters::point_t *)malloc (sizeof (solver_parameters::point_t) * n);
+      std::unique_ptr <solver_parameters::point_t []> tpoints (new solver_parameters::point_t[n]);
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
@@ -1270,8 +1297,8 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
 	  tpoints[i].screen_x = xs;
 	  tpoints[i].screen_y = ys;
 	}
-      *chisq_ret = compute_chisq (tpoints, n, ret);
-      free (tpoints);
+      /* Use screen so we do not get biass with lens correction.  */
+      *chisq_ret = screen_compute_chisq (tpoints.get(), n, ret);
     }
   return ret;
 }
