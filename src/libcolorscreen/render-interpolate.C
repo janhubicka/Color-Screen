@@ -408,7 +408,7 @@ render_interpolate::analyze_tiles (analyzer analyze,
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_paget->get_yshift (), &xp, &yp);
 		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
 		  continue;
 		if (!analyze (x, y, m_paget->screen_tile_color (x, y)))
@@ -459,7 +459,7 @@ render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
+		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_paget->get_yshift (), &xp, &yp);
 		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
 		  continue;
 		rgbdata r,g,b;
