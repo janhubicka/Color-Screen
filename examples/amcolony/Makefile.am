@@ -1,5 +1,5 @@
 %-color.tif: %.par %.tif
-	../../src/colorscreen/colorscreen `basename $< .par`.tif $< $@
+	../../src/colorscreen/colorscreen render --mode interpolated `basename $< .par`.tif $< $@
 %u.tif:
 	echo $@
 	wget --retry-connrefused https://cdn.loc.gov/master/pnp/matpc/`echo $@ | sed s/master-pnp-matpc-//g | sed s/-.*//g`/`echo $@ | sed s/master-pnp-matpc-[0-9]*-//g | sed s/\\\\..*//g`.tif -O $@
