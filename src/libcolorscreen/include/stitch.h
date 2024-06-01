@@ -160,6 +160,11 @@ class stitch_image
     *sx = xx + xpos;
     *sy = yy + ypos;
   }
+  void img_scr_to_common_scr (coord_t tsx, coord_t tsy, coord_t *sx, coord_t *sy)
+  {
+    *sx = tsx + xpos;
+    *sy = tsy + ypos;
+  }
   void common_scr_to_img_scr (coord_t sx, coord_t sy, coord_t *isx, coord_t *isy)
   {
     *isx = sx - xpos;
@@ -300,6 +305,13 @@ public:
 	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
 
   }
+
+  struct tile_range
+  {
+    int tile_x, tile_y;
+    coord_t xmin, ymin, xmax, ymax;
+  };
+  std::vector <tile_range> find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t ymax, bool only_loaded, bool screen_ranges);
 private:
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */

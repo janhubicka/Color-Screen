@@ -367,7 +367,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'm' || k == 'M')
+  if ((k == 'm' || k == 'M') && !(event->state & GDK_CONTROL_MASK))
     {
       if (k == 'm')
 	{
@@ -634,6 +634,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
 	  if (detected.success)
 	    {
+	      int xmin = std::min (sel1x, sel2x);
+	      int ymin = std::min (sel1y, sel2y);
+	      int xmax = std::max (sel1x, sel2x);
+	      int ymax = std::max (sel1y, sel2y);
 	      current.type = detected.param.type;
 	      current_mesh = detected.mesh_trans;
 	      current.mesh_trans = current_mesh;
@@ -641,7 +645,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 		rparams.auto_color_model (current.type);
 	      if (!scan.data || rparams.ignore_infrared)
 	        {
-		  rparams.auto_mix_weights (scan, current, sel1x, sel1y, sel2x, sel2y, &progress);
+		  rparams.auto_mix_weights (scan, current, xmin, ymin, xmax, ymax, &progress);
 		  setvals ();
 	        }
 	      //if (rparams.dark_point == 0 && rparams.brightness == 1)
@@ -662,8 +666,22 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  int ymin = std::min (sel1y, sel2y);
 	  int xmax = std::max (sel1x, sel2x);
 	  int ymax = std::max (sel1y, sel2y);
+	  printf ("Auto levels in selection %i %i %i %i\n",xmin,ymin,xmax,ymax);
 	  file_progress_info progress (stdout);
 	  rparams.auto_dark_brightness (scan, current, xmin, ymin, xmax, ymax, &progress);
+	  setvals ();
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+        }
+      if (k == 'm' && (event->state & GDK_CONTROL_MASK))
+        {
+	  int xmin = std::min (sel1x, sel2x);
+	  int ymin = std::min (sel1y, sel2y);
+	  int xmax = std::max (sel1x, sel2x);
+	  int ymax = std::max (sel1y, sel2y);
+	  printf ("Auto mix weights in selection %i %i %i %i\n",xmin,ymin,xmax,ymax);
+	  file_progress_info progress (stdout);
+	  rparams.auto_mix_weights (scan, current, xmin, ymin, xmax, ymax, &progress);
 	  setvals ();
 	  display_scheduled = true;
 	  preview_display_scheduled = true;

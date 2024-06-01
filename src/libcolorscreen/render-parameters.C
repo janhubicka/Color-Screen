@@ -603,29 +603,27 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
   rparam.brightness = 1;
   rparam.precise = true;
   {
-    render_interpolate render (param, img, rparam, 256);
-    if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
-      return false;
-    if (progress && progress->cancel_requested ())
-      return false;
-
     /* Produce histogram.  */
     rgb_histogram hist;
-    render.analyze_tiles ([&] (coord_t x, coord_t y, rgbdata c)
+    if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
 			  {
 			    hist.pre_account (c);
 			    return true;
 			  },
 			  "determining value ranges",
-			  xmin, xmax, ymin, ymax, progress);
+			  img, rparam, param, false,
+			  xmin, xmax, ymin, ymax, progress))
+      return false;
     hist.finalize_range (65536*256);
-    render.analyze_tiles ([&] (coord_t x, coord_t y, rgbdata c)
+    if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
 			  {
 			    hist.account (c);
 			    return true;
 			  },
 			  "producing histograms",
-			  xmin, xmax, ymin, ymax, progress);
+			  img, rparam, param, false,
+			  xmin, xmax, ymin, ymax, progress))
+      return false;
     hist.finalize ();
 
     /* Give up if the number of samples is too small.  */
@@ -724,12 +722,8 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 {
   render_parameters rparam = *this;
   rparam.precise = true;
-  render_interpolate render (param, img, rparam, 256);
-  render.set_precise_rgb ();
-  if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
-    return false;
   rgb_histogram hist_red, hist_green, hist_blue;
-  render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
+  if (!analyze_rgb_patches ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
 			    {
 			      hist_red.pre_account (r);
 			      hist_green.pre_account (g);
@@ -737,11 +731,13 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			      return true;
 			    },
 			    "determining RGB value ranges",
-			    xmin, xmax, ymin, ymax, progress);
+			    img, rparam, param, false,
+			    xmin, xmax, ymin, ymax, progress))
+    return false;
   hist_red.finalize_range (65536);
   hist_green.finalize_range (65536);
   hist_blue.finalize_range (65536);
-  render.analyze_rgb_tiles ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
+  if (!analyze_rgb_patches ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
 			    {
 			      hist_red.account (r);
 			      hist_green.account (g);
@@ -749,7 +745,9 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
 			      return true;
 			    },
 			    "determining RGB value ranges",
-			    xmin, xmax, ymin, ymax, progress);
+			    img, rparam, param, false,
+			    xmin, xmax, ymin, ymax, progress))
+    return false;
   hist_red.finalize ();
   hist_green.finalize ();
   hist_blue.finalize ();

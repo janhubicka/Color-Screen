@@ -1310,3 +1310,56 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int fl
     }
   return true;
 }
+
+
+/* Given range in final coordinates find set of tiles which are needed to render it
+   and ranges (either screen or img) that needs to be precomputed.  */
+std::vector <stitch_project::tile_range>
+stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t ymax, bool only_loaded, bool screen_ranges)
+{
+  struct range {coord_t xmin, xmax, ymin, ymax; bool seen;};
+  std::vector <struct range> ranges (params.width * params.height);
+  for (int i = 0; i < params.width * params.height; i++)
+    ranges[i].seen = false;
+  for (int y = ymin; y <= ymax; y++)
+    for (int x = xmin; x <= xmax; x++)
+      {
+	coord_t sx, sy;
+	int tx, ty;
+	common_scr_to_img.final_to_scr (x, y, &sx, &sy);
+	if (!tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	  continue;
+	coord_t tsx, tsy;
+	images[ty][tx].common_scr_to_img_scr (sx, sy, &tsx, &tsy);
+	int i = ty * params.width + tx;
+	if (!screen_ranges)
+	  images[ty][tx].scr_to_img_map.to_img (tsx, tsy, &tsx, &tsy);
+	if (ranges[i].seen)
+	  {
+	    ranges[i].xmin = std::min (ranges[i].xmin, (coord_t)tsx);
+	    ranges[i].xmax = std::max (ranges[i].xmax, (coord_t)tsx);
+	    ranges[i].ymin = std::min (ranges[i].ymin, (coord_t)tsy);
+	    ranges[i].ymax = std::max (ranges[i].ymax, (coord_t)tsy);
+	  }
+	else
+	  {
+	    ranges[i].xmin = tsx;
+	    ranges[i].xmax = tsx;
+	    ranges[i].ymin = tsy;
+	    ranges[i].ymax = tsy;
+	  }
+	ranges[i].seen = true;
+      }
+  std::vector <tile_range> ret;
+  for (int ty = 0; ty < params.width; ty++)
+    for (int tx = 0; tx < params.height; tx++)
+      {
+        int i = ty * params.width + tx;
+	if (ranges[i].seen)
+	{
+	  ret.push_back ({ty,tx, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax});
+	  printf ("need tile %i %i %f %f %f %f\n",tx,ty, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax);
+	}
+      }
+  return ret;
+}

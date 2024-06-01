@@ -6,6 +6,7 @@
 #include "dufaycolor.h"
 #include "render-interpolate.h"
 #include "nmsimplex.h"
+#include "include/stitch.h"
 
 namespace {
 
@@ -372,10 +373,10 @@ render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y, int wid
 
 /* Run ANALYZE on every screen point in the given (image) range, pass infared value of tile color.
    Rendering must be initialized in precise mode from infrared channel.  */
-void
-render_interpolate::analyze_tiles (analyzer analyze,
-				   const char *task,
-				   int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+bool
+render_interpolate::analyze_patches (analyzer analyze,
+				     const char *task, bool screen,
+				     int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
   assert (!m_precise_rgb && !m_original_color);
   if (m_scr_to_img.get_type () == Dufay)
@@ -388,11 +389,17 @@ render_interpolate::analyze_tiles (analyzer analyze,
 	    for (int x = 0; x < m_dufay->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
-		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
+		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
-		if (!analyze (x, y, m_dufay->screen_tile_color (x, y)))
-		  return;
+		if (!screen)
+		  {
+		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
+		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		      continue;
+		  }
+		if (!analyze (xs, ys, m_dufay->screen_tile_color (x, y)))
+		  return false;
 	      }
 	  if (progress)
 	    progress->inc_progress ();
@@ -408,23 +415,30 @@ render_interpolate::analyze_tiles (analyzer analyze,
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_paget->get_yshift (), &xp, &yp);
-		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		coord_t xs = x - m_paget->get_xshift (), ys = y - m_paget->get_yshift ();
+		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
-		if (!analyze (x, y, m_paget->screen_tile_color (x, y)))
-		  return;
+		if (!screen)
+		  {
+		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
+		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		      continue;
+		  }
+		if (!analyze (xs, ys, m_paget->screen_tile_color (x, y)))
+		  return false;
 	      }
 	  if (progress)
 	    progress->inc_progress ();
 	}
     }
+  return !progress || !progress->cancelled ();
 }
 /* Run ANALYZE on every screen point in the given (image) range, pass RGB value of every tile color.
    Rendering must be initialized in precise_rgb mode from infrared channel.  */
-void
-render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
-				       const char *task,
-				       int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+bool
+render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
+					 const char *task, bool screen,
+					 int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
   assert (m_precise_rgb && !m_original_color);
   if (m_scr_to_img.get_type () == Dufay)
@@ -437,13 +451,19 @@ render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
 	    for (int x = 0; x < m_dufay->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_dufay->get_xshift (), y - m_dufay->get_yshift (), &xp, &yp);
-		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
+		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
+		if (!screen)
+		  {
+		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
+		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		      continue;
+		  }
 		rgbdata r,g,b;
 		m_dufay->screen_tile_rgb_color (r, g, b, x, y);
-		if (!analyze (x, y, r, g, b))
-		  return;
+		if (!analyze (xs, ys, r, g, b))
+		  return false;
 	      }
 	  if (progress)
 	    progress->inc_progress ();
@@ -459,18 +479,25 @@ render_interpolate::analyze_rgb_tiles (rgb_analyzer analyze,
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
 		coord_t xp, yp;
-		m_scr_to_img.to_img (x - m_paget->get_xshift (), y - m_paget->get_yshift (), &xp, &yp);
-		if (xp < xmin || yp < ymin || xp > xmax || yp > ymax)
+		coord_t xs = x - m_paget->get_xshift (), ys = y - m_paget->get_yshift ();
+		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
+		if (!screen)
+		  {
+		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
+		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		      continue;
+		  }
 		rgbdata r,g,b;
 		m_paget->screen_tile_rgb_color (r, g, b, x, y);
-		if (!analyze (x, y, r, g, b))
-		  return;
+		if (!analyze (xs, ys, r, g, b))
+		  return false;
 	      }
 	  if (progress)
 	    progress->inc_progress ();
 	}
     }
+  return !progress || !progress->cancelled ();
 }
 
 bool
@@ -482,4 +509,145 @@ render_interpolate::dump_patch_density (FILE *out)
       return false;
     }
   return m_paget->dump_patch_density (out);
+}
+
+bool
+analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+{
+  if (img.stitch)
+    {
+      stitch_project &stitch = *img.stitch;
+      xmin += img.xmin;
+      ymin += img.ymin;
+      xmax += img.xmin;
+      ymax += img.ymin;
+      if (progress)
+	progress->set_task ("searching for tiles", 1);
+      std::vector <stitch_project::tile_range> ranges = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
+      if (progress)
+	progress->set_task (task, ranges.size ());
+      for (auto r : ranges)
+	{
+	  int tx = r.tile_x;
+	  int ty = r.tile_y;
+	  coord_t sx, sy;
+	  image_data &tile = *stitch.images[ty][tx].img;
+	  int stack = 0;
+	  if (progress)
+	    stack = progress->push ();
+	  if (!analyze_patches ([&] (coord_t tsx, coord_t tsy, rgbdata c)
+				{
+				  coord_t sx, sy;
+				  int ttx, tty;
+				  coord_t fx, fy;
+				  stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
+				  stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
+				  if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
+				      || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
+				      || ttx != tx || tty != ty)
+				    return true;
+				  return analyze (fx - img.xmin, fy - img.ymin, c);
+				},
+				"analyzing tile",
+				tile, rparam, stitch.images[ty][tx].param,
+				true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+	    {
+	      if (progress)
+		progress->pop (stack);
+	      return false;
+	    }
+	  if (progress)
+	    progress->pop (stack);
+	  if (progress)
+	    progress->inc_progress ();
+	}
+      return true;
+    }
+  render_interpolate render (param, img, rparam, 256);
+  if (!screen)
+    {
+      if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+	return false;
+    }
+  else
+    {
+      if (!render.precompute (xmin, ymin, xmax, ymax, progress))
+	return false;
+    }
+  if (progress && progress->cancel_requested ())
+    return false;
+  return render.analyze_patches (analyze,
+				 task, screen,
+				 xmin, xmax, ymin, ymax, progress);
+}
+
+bool
+analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
+{
+  if (img.stitch)
+    {
+      stitch_project &stitch = *img.stitch;
+      xmin += img.xmin;
+      ymin += img.ymin;
+      xmax += img.xmin;
+      ymax += img.ymin;
+      if (progress)
+	progress->set_task ("searching for tiles", 1);
+      std::vector <stitch_project::tile_range> ranges = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
+      if (progress)
+	progress->set_task (task, ranges.size ());
+      for (auto r : ranges)
+	{
+	  int tx = r.tile_x;
+	  int ty = r.tile_y;
+	  coord_t sx, sy;
+	  image_data &tile = *stitch.images[ty][tx].img;
+	  int stack = 0;
+	  if (progress)
+	    stack = progress->push ();
+	  if (!analyze_rgb_patches ([&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g, rgbdata b)
+				    {
+				      coord_t sx, sy;
+				      int ttx, tty;
+				      coord_t fx, fy;
+				      stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
+				      stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
+				      if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
+					  || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
+					  || ttx != tx || tty != ty)
+					return true;
+				      return analyze (fx - img.xmin, fy - img.ymin, r, g, b);
+				    },
+				    "analyzing tile",
+				    tile, rparam, stitch.images[ty][tx].param,
+				    true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+	    {
+	      if (progress)
+		progress->pop (stack);
+	      return false;
+	    }
+	  if (progress)
+	    progress->pop (stack);
+	  if (progress)
+	    progress->inc_progress ();
+	}
+      return true;
+    }
+  render_interpolate render (param, img, rparam, 256);
+  render.set_precise_rgb ();
+  if (!screen)
+    {
+      if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
+	return false;
+    }
+  else
+    {
+      if (!render.precompute (xmin, ymin, xmax, ymax, progress))
+	return false;
+    }
+  if (progress && progress->cancel_requested ())
+    return false;
+  return render.analyze_rgb_patches (analyze,
+				     task, screen,
+				     xmin, xmax, ymin, ymax, progress);
 }

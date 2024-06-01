@@ -7,6 +7,8 @@
 #include "include/analyze-paget.h"
 #include "include/histogram.h"
 #include "include/solver.h"
+typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
+typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 class render_interpolate : public render_to_scr
 {
 public:
@@ -69,10 +71,8 @@ public:
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
-  typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
-  typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
-  void analyze_tiles (analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
-  void analyze_rgb_tiles (rgb_analyzer, const char *, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  bool analyze_patches (analyzer, const char *, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
+  bool analyze_rgb_patches (rgb_analyzer, const char *, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
 
   bool dump_patch_density (FILE *);
   //bool finetune (render_parameters &rparam, solver_parameters::point_t &point, int x, int y, progress_info *progress);
@@ -89,4 +89,6 @@ private:
   analyze_paget *m_paget;
   color_matrix profile_matrix;
 };
+bool analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
+bool analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 #endif
