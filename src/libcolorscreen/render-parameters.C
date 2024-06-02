@@ -875,9 +875,9 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   mix_red = gsl_vector_get (c, 1);
   mix_green = gsl_vector_get (c, 2);
   mix_blue = gsl_vector_get (c, 3);
-  printf ("solution using %i samples step %i: red:%f green:%f blue:%f dark:%f chi %f\n", n, step, mix_red, mix_green, mix_blue, gsl_vector_get (c, 0), chisq);
+  //printf ("solution using %i samples step %i: red:%f green:%f blue:%f dark:%f chi %f\n", n, step, mix_red, mix_green, mix_blue, gsl_vector_get (c, 0), chisq);
   mix_dark = {-gsl_vector_get (c, 0) / mix_red, 0, 0};
-  mix_dark.print (stdout);
+  //mix_dark.print (stdout);
   gsl_vector_free (c);
   return true;
 }

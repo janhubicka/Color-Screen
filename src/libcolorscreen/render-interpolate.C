@@ -92,6 +92,7 @@ bool
 render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
+  //printf ("Precomputing %f %f %f %f\n",xmin,ymin,xmax,ymax);
   /* When doing profiled matrix, we need to pre-scale the profile so black point corretion goes right.
      Without doing so, for exmaple black from red pixels would be subtracted too agressively, since
      we account for every pixel in image, not only red patch portion.  */
@@ -445,6 +446,7 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
     {
       if (progress)
 	progress->set_task (task, m_dufay->get_height ());
+      //printf ("Shift %i %i size %i %i\n", m_dufay->get_xshift (), m_dufay->get_yshift (), m_dufay->get_width (), m_dufay->get_height ());
       for (int y = 0; y < m_dufay->get_height (); y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
@@ -452,6 +454,7 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 	      {
 		coord_t xp, yp;
 		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
+		//printf ("%f %f; %i %i %i %i\n",xs,ys,xmin,xmax,ymin,ymax);
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
 		if (!screen)
@@ -533,6 +536,8 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
+	  bool needed0 = false;
+	  bool needed = false;
 	  if (progress)
 	    stack = progress->push ();
 	  if (!analyze_patches ([&] (coord_t tsx, coord_t tsy, rgbdata c)
@@ -542,10 +547,12 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 				  coord_t fx, fy;
 				  stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
 				  stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
+				  needed = true;
 				  if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
 				      || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 				      || ttx != tx || tty != ty)
 				    return true;
+				  needed = true;
 				  return analyze (fx - img.xmin, fy - img.ymin, c);
 				},
 				"analyzing tile",
@@ -555,6 +562,12 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	      if (progress)
 		progress->pop (stack);
 	      return false;
+	    }
+	  if (!needed)
+	    {
+	      //printf ("Wrong set of needed patches %i\n", needed0);
+	      //fflush (stdout);
+	      abort ();
 	    }
 	  if (progress)
 	    progress->pop (stack);
@@ -572,6 +585,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
   else
     {
       if (!render.precompute (xmin, ymin, xmax, ymax, progress))
+      //if (!render.precompute_img_range (0, 0, img.width, img.height, progress))
 	return false;
     }
   if (progress && progress->cancel_requested ())
@@ -603,6 +617,8 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
+	  bool needed = false;
+	  bool needed0 = false;
 	  if (progress)
 	    stack = progress->push ();
 	  if (!analyze_rgb_patches ([&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g, rgbdata b)
@@ -612,10 +628,13 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 				      coord_t fx, fy;
 				      stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
 				      stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
+				      needed0 = true;
+				      //printf ("tile %i %i tilescreen %f %f screen %f %f final %f %f range %i:%i %i:%i\n",tx,ty, tsx,tsy,sx,sy,fx,fy,xmin,xmax,ymin,ymax);
 				      if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
 					  || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 					  || ttx != tx || tty != ty)
 					return true;
+				      needed = true;
 				      return analyze (fx - img.xmin, fy - img.ymin, r, g, b);
 				    },
 				    "analyzing tile",
@@ -626,6 +645,12 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 		progress->pop (stack);
 	      return false;
 	    }
+	  if (!needed)
+	    {
+	      //printf ("Wrong set of needed patches %i\n", needed0);
+	      //fflush (stdout);
+	      abort ();
+	    }
 	  if (progress)
 	    progress->pop (stack);
 	  if (progress)
@@ -635,6 +660,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
     }
   render_interpolate render (param, img, rparam, 256);
   render.set_precise_rgb ();
+  //printf ("Screen %i\n",screen);
   if (!screen)
     {
       if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
@@ -642,6 +668,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
     }
   else
     {
+      //if (!render.precompute_img_range (0, 0, img.width, img.height, progress))
       if (!render.precompute (xmin, ymin, xmax, ymax, progress))
 	return false;
     }

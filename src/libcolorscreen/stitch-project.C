@@ -1334,6 +1334,7 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
 	int i = ty * params.width + tx;
 	if (!screen_ranges)
 	  images[ty][tx].scr_to_img_map.to_img (tsx, tsy, &tsx, &tsy);
+	//printf ("tile %i %i final %i %i scr %f %f tile scr %f %f\n",tx,ty,x,y,sx,sy,tsx,tsy);
 	if (ranges[i].seen)
 	  {
 	    ranges[i].xmin = std::min (ranges[i].xmin, (coord_t)tsx);
@@ -1357,8 +1358,8 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
         int i = ty * params.width + tx;
 	if (ranges[i].seen)
 	{
-	  ret.push_back ({ty,tx, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax});
-	  printf ("need tile %i %i %f %f %f %f\n",tx,ty, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax);
+	  ret.push_back ({tx,ty, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax});
+	  //printf ("need tile %i %i %f %f %f %f\n",tx,ty, ranges[i].xmin, ranges[i].ymin, ranges[i].xmax, ranges[i].ymax);
 	}
       }
   return ret;
