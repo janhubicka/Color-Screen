@@ -666,12 +666,21 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  int ymin = std::min (sel1y, sel2y);
 	  int xmax = std::max (sel1x, sel2x);
 	  int ymax = std::max (sel1y, sel2y);
-	  printf ("Auto levels in selection %i %i %i %i\n",xmin,ymin,xmax,ymax);
-	  file_progress_info progress (stdout);
-	  rparams.auto_dark_brightness (scan, current, xmin, ymin, xmax, ymax, &progress);
-	  setvals ();
-	  display_scheduled = true;
-	  preview_display_scheduled = true;
+	  bool ret;
+	  printf ("Auto levels in selection in selection %i %i %i %i old darkpoint %f old brightness %f\n",xmin,ymin,xmax,ymax, rparams.dark_point, rparams.brightness);
+	    {
+	      file_progress_info progress (stdout);
+	      ret = rparams.auto_dark_brightness (scan, current, xmin, ymin, xmax, ymax, &progress);
+	    }
+	  if (ret)
+	    {
+	      printf ("New old darkpoint %f old brightness %f\n", rparams.dark_point, rparams.brightness);
+	      setvals ();
+	      display_scheduled = true;
+	      preview_display_scheduled = true;
+	    }
+	  else
+	    printf ("Analysis failed\n");
         }
       if (k == 'm' && (event->state & GDK_CONTROL_MASK))
         {
