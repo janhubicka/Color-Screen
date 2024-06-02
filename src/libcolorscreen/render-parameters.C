@@ -774,13 +774,13 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
   bool verbose = true;
   if (verbose)
     {
-      printf ("mix dark");
+      printf ("mix dark: ");
       mix_dark.print (stdout);
-      printf ("gray red ");
+      printf ("gray red: ");
       gray_red.print (stdout);
-      printf ("gray green ");
+      printf ("gray green: ");
       gray_green.print (stdout);
-      printf ("gray blue ");
+      printf ("gray blue: ");
       gray_blue.print (stdout);
       printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
       printf ("adjusted red %f\n", gray_red.red * mix_red + gray_red.green * mix_green + gray_red.blue * mix_blue);
