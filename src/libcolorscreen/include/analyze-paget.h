@@ -31,13 +31,63 @@ public:
       y = std::min (std::max (y, 0), m_height * 2 - 1);
       return m_green [y * m_width + x];
     }
+  rgbdata &rgb_blue (int x, int y)
+    {
+      x = std::min (std::max (x, 0), m_width * 2 - 1);
+      y = std::min (std::max (y, 0), m_height * 2 - 1);
+      return m_rgb_blue [y * m_width * 2 + x];
+    }
+  rgbdata &rgb_red (int x, int y)
+    { 
+      x = std::min (std::max (x, 0), m_width - 1);
+      y = std::min (std::max (y, 0), m_height * 2 - 1);
+      return m_rgb_red [y * m_width + x];
+    }
+  rgbdata &rgb_green (int x, int y) 
+    {
+      x = std::min (std::max (x, 0), m_width - 1);
+      y = std::min (std::max (y, 0), m_height * 2 - 1);
+      return m_rgb_green [y * m_width + x];
+    }
+  inline void rgb_red_atomic_add (int x, int y, rgbdata val)
+  {
+    rgbdata &addr = rgb_red(x, y);
+#pragma omp atomic
+    addr.red += val.red;
+#pragma omp atomic
+    addr.green += val.green;
+#pragma omp atomic
+    addr.blue += val.blue;
+  }
+  inline void rgb_green_atomic_add (int x, int y, rgbdata val)
+  {
+    rgbdata &addr = rgb_green(x, y);
+#pragma omp atomic
+    addr.red += val.red;
+#pragma omp atomic
+    addr.green += val.green;
+#pragma omp atomic
+    addr.blue += val.blue;
+  }
+  inline void rgb_blue_atomic_add (int x, int y, rgbdata val)
+  {
+    rgbdata &addr = rgb_blue(x, y);
+#pragma omp atomic
+    addr.red += val.red;
+#pragma omp atomic
+    addr.green += val.green;
+#pragma omp atomic
+    addr.blue += val.blue;
+  }
   rgbdata screen_tile_color (int x, int y)
   {
     return {(red (x, 2*y) + red (x, 2*y+1)) * 0.5, (green (x, 2*y) + green (x, 2*y+1)) * 0.5, (blue (2*x, 2*y) + blue (2*x +1, 2*y) + blue (2*x, 2*y+1) + blue (2*x+1, 2*y+1)) * 0.25};
   }
   void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
   {
-	  abort ();
+     red = (rgb_red (x, 2*y) + rgb_red (x, 2*y+1)) * 0.5;
+     green = (rgb_green (x, 2*y) + rgb_green (x, 2*y+1)) * 0.5;
+     blue = (rgb_blue (2*x, 2*y) + rgb_blue (2*x +1, 2*y) + rgb_blue (2*x, 2*y+1) + rgb_blue (2*x+1, 2*y+1)) * 0.25;
 #if 0
     red = 
     green = rgb_green (x, y);
@@ -103,6 +153,7 @@ public:
   bool dump_patch_density (FILE *out);
 private:
   bool flatten_attr analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  bool flatten_attr analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
   bool flatten_attr analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
   bool flatten_attr analyze_fast (render_to_scr *render,progress_info *progress);
 };

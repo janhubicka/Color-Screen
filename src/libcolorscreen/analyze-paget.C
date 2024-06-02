@@ -113,6 +113,116 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, c
   }
   return !progress || !progress->cancelled ();
 }
+bool flatten_attr
+analyze_paget::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
+{
+  /* Collect luminosity of individual color patches.  */
+#pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
+  {
+#pragma omp for 
+    for (int y = miny ; y < maxy; y++)
+      {
+	if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	  for (int x = minx; x < maxx; x++)
+	    {
+	      coord_t scr_x, scr_y;
+	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
+	      scr_x += m_xshift;
+	      scr_y += m_yshift;
+	      if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
+		continue;
+
+	      rgbdata d = render->get_unadjusted_rgb_pixel (x, y);
+	      int ix = (uint64_t) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
+	      int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	      if (screen->mult[iy][ix][0] > collection_threshold)
+		{
+		  coord_t xd, yd;
+		  to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
+		  xd = nearest_int (xd);
+		  yd = nearest_int (yd);
+		  int xx = ((int)xd + (int)yd) / 2;
+		  int yy = -(int)xd + (int)yd;
+		  if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		    {
+		      luminosity_t &l = w_red [yy * m_width + xx];
+		      luminosity_t val = screen->mult[iy][ix][0] - collection_threshold;
+		      rgb_red_atomic_add (xx, yy, d * val);
+#pragma omp atomic
+		      l+=val;
+		    }
+		}
+	      if (screen->mult[iy][ix][1] > collection_threshold)
+		{
+		  coord_t xd, yd;
+		  to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
+		  xd = nearest_int (xd);
+		  yd = nearest_int (yd);
+		  int xx = ((int)xd + (int)yd) / 2;
+		  int yy = -(int)xd + (int)yd;
+		  if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
+		    {
+		      luminosity_t &l = w_green [yy * m_width + xx];
+		      luminosity_t val = screen->mult[iy][ix][1] - collection_threshold;
+		      rgb_green_atomic_add (xx, yy, d * val);
+#pragma omp atomic
+		      l+=val;
+		    }
+		}
+	      if (screen->mult[iy][ix][2] > collection_threshold)
+		{
+		  int xx = nearest_int (2*(scr_x-(coord_t)0.25));
+		  int yy = nearest_int (2*(scr_y-(coord_t)0.25));
+		  luminosity_t &l = w_blue [yy * m_width * 2 + xx];
+		  luminosity_t val = screen->mult[iy][ix][2] - collection_threshold;
+		  rgb_blue_atomic_add (xx, yy, d * val);
+#pragma omp atomic
+		  l+=val;
+		}
+	    }
+	if (progress)
+	  progress->inc_progress ();
+      }
+  if (!progress || !progress->cancel_requested ())
+    {
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width; x++)
+	      if (w_red [y * m_width + x] != 0)
+		rgb_red (x,y) /= w_red [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width; x++)
+	      if (w_green [y * m_width + x] != 0)
+		rgb_green (x,y) /= w_green [y * m_width + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+#pragma omp for nowait
+      for (int y = 0; y < m_height * 2; y++)
+	{
+	  if (!progress || !progress->cancel_requested ())
+#pragma omp simd
+	    for (int x = 0; x < m_width * 2; x++)
+	      if (w_blue [y * m_width * 2 + x] != 0)
+		rgb_blue (x,y) /= w_blue [y * m_width * 2 + x];
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  }
+  return !progress || !progress->cancelled ();
+}
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
@@ -249,11 +359,22 @@ analyze_paget::analyze (render_to_scr *render, const image_data *img, scr_to_img
   m_height = height;
   m_xshift = xshift;
   m_yshift = yshift;
-  m_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
-  m_green = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
-  m_blue = (luminosity_t *)calloc (m_width * m_height * 4, sizeof (luminosity_t));
-  if (!m_red || !m_green || !m_blue)
-    return false;
+  if (mode != precise_rgb)
+    {
+      m_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
+      m_green = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
+      m_blue = (luminosity_t *)calloc (m_width * m_height * 4, sizeof (luminosity_t));
+      if (!m_red || !m_green || !m_blue)
+	return false;
+    }
+  else
+    {
+      m_rgb_red = (rgbdata *)calloc (m_width * m_height * 2, sizeof (rgbdata));
+      m_rgb_green = (rgbdata *)calloc (m_width * m_height * 2, sizeof (rgbdata));
+      m_rgb_blue = (rgbdata *)calloc (m_width * m_height * 4, sizeof (rgbdata));
+      if (!m_rgb_red || !m_rgb_green || !m_rgb_blue)
+	return false;
+    }
   /* Thames, Finlay and Paget screen are organized as follows:
     
      G   R   .
@@ -262,7 +383,7 @@ analyze_paget::analyze (render_to_scr *render, const image_data *img, scr_to_img
        B   B
      .   .   .  
      2 reds and greens per one screen tile while there are 4 blues.  */
-  if (mode == precise || mode == color)
+  if (mode == precise || mode == precise_rgb || mode == color)
     {
       luminosity_t *w_red = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
       luminosity_t *w_green = (luminosity_t *)calloc (m_width * m_height * 2, sizeof (luminosity_t));
@@ -307,6 +428,8 @@ analyze_paget::analyze (render_to_scr *render, const image_data *img, scr_to_img
 
       if (mode == precise)
         analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+      else if (mode == precise_rgb)
+        analyze_precise_rgb (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
       else
         analyze_color (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 

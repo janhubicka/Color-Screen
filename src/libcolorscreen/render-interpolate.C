@@ -446,7 +446,6 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
     {
       if (progress)
 	progress->set_task (task, m_dufay->get_height ());
-      //printf ("Shift %i %i size %i %i\n", m_dufay->get_xshift (), m_dufay->get_yshift (), m_dufay->get_width (), m_dufay->get_height ());
       for (int y = 0; y < m_dufay->get_height (); y++)
 	{
 	  if (!progress || !progress->cancel_requested ())
@@ -454,7 +453,6 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 	      {
 		coord_t xp, yp;
 		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
-		//printf ("%f %f; %i %i %i %i\n",xs,ys,xmin,xmax,ymin,ymax);
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
 		if (!screen)
