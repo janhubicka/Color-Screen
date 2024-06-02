@@ -22,6 +22,62 @@ render_to_scr::render_tile (render_type_parameters rtparam,
 {
   if (width <= 0 || height <= 0)
     return true;
+
+  /* Avoid rendering outside of image area.  This saves some time but also ugly artifacts.  */
+  if ((int)xoffset < 0)
+    {
+      int border = -xoffset;
+      if (border > width)
+	border = width;
+      for (int y = 0; y < height; y++)
+	for (int x = 0; x < border; x++)
+	  putpixel (pixels, pixelbytes, rowstride, x, y, 128, 128, 128);
+      pixels += border * pixelbytes;
+      xoffset += border;
+      width -= border;
+      if (!width)
+	return true;
+    }
+  if ((int)yoffset < 0)
+    {
+      int border = -yoffset;
+      if (border > height)
+	border = height;
+      for (int y = 0; y < border; y++)
+	for (int x = 0; x < width; x++)
+	  putpixel (pixels, pixelbytes, rowstride, x, y, 128, 128, 128);
+      pixels += border * rowstride;
+      yoffset += border;
+      height -= border;
+      if (!height)
+	return true;
+    }
+  if ((int)((xoffset + width) - img.width / step) > 0)
+    {
+      int border = (int)((xoffset + width) - img.width / step);
+      if (border > width)
+	border = width;
+      for (int y = 0; y < height; y++)
+	for (int x = width - border; x < width; x++)
+	  putpixel (pixels, pixelbytes, rowstride, x, y, 128, 128, 128);
+      width -= border;
+      if (!width)
+	return true;
+    }
+  if ((int)((yoffset + height) - img.height / step) > 0)
+    {
+      int border = (int)((yoffset + height) - img.height / step);
+      if (border > height)
+	border = height;
+      for (int y = height - border; y < height; y++)
+	for (int x = 0; x < width; x++)
+	  putpixel (pixels, pixelbytes, rowstride, x, y, 128, 128, 128);
+      height -= border;
+      if (!height)
+	return true;
+    }
+
+  /* Do not render out of scan area; it is slow.  */
   if (stats == -1)
     stats = getenv ("CSSTATS") != NULL;
   struct timeval start_time;
