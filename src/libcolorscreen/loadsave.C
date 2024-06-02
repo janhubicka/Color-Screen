@@ -46,9 +46,11 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
 	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
-	  || fprintf (f, "tilt: %f %f\n", param->tilt_x, param->tilt_y) < 0
+	  /* Needs large precision close to zero - so use %g.  */
+	  || fprintf (f, "tilt: %g %g\n", param->tilt_x, param->tilt_y) < 0
 	  || fprintf (f, "final_rotation: %f\n", param->final_rotation) < 0
-	  || fprintf (f, "lens_warp_rectilinear: 1 %f %f %f %f 0 0 %f %f\n",
+	  /* Needs large precision close to zero - so use %g.  */
+	  || fprintf (f, "lens_warp_rectilinear: 1 %g %g %g %g 0 0 %g %g\n",
 		      param->lens_correction.kr[0],
 		      param->lens_correction.kr[1],
 		      param->lens_correction.kr[2],
