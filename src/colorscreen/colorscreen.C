@@ -53,6 +53,7 @@ print_help ()
     fprintf (stderr, " %s", render_type_properties[j].name);
   }
   fprintf (stderr, "\n");
+  fprintf (stderr, "      --solver                  run solver if solver points are present");
   fprintf (stderr, "      --hdr                     output HDR tiff\n");
   fprintf (stderr, "      --dng                     output DNG\n");
   fprintf (stderr, "      --output-profile=profile  specify output profile\n");
@@ -244,6 +245,7 @@ render (int argc, char **argv)
   enum render_parameters::output_profile_t output_profile = render_parameters::output_profile_max;
   render_parameters::color_model_t color_model = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance = render_parameters::dye_balance_max;
+  bool solver = false;
   struct solver_parameters solver_param;
   render_to_file_params rfparams;
   render_type_parameters rtparam;
@@ -266,6 +268,8 @@ render (int argc, char **argv)
 	rfparams.hdr = true;
       else if (!strcmp (argv[i], "--dng"))
 	rfparams.dng = true;
+      else if (!strcmp (argv[i], "--solver"))
+	solver = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "output-profile"))
 	output_profile = parse_output_profile (str);
       else if (parse_float_param (argc, argv, &i, "scan-ppi", scan_dpi, 1, 1000000)
@@ -371,7 +375,7 @@ render (int argc, char **argv)
       //detected_screen d = detect_regular_screen (scan, dparam, rparam.gamma, solver_param, false, false, false, NULL);
       //param.mesh_trans = d.mesh_trans;
     }
-  else if (solver_param.npoints
+  else if (solver && solver_param.npoints
 	   && !param.mesh_trans)
     {
       if (verbose)

@@ -357,6 +357,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       undo_parameters ();	
       setvals ();
+      maybe_solve ();
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -364,6 +365,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     {
       redo_parameters ();
       setvals ();
+      maybe_solve ();
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -598,7 +600,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == solver_editing)
     {
-      if (k == GDK_KEY_Delete || k == GDK_KEY_BackSpace)
+      if ((k == GDK_KEY_Delete || k == GDK_KEY_BackSpace) && !(event->state & GDK_CONTROL_MASK))
         {
  	  printf ("Deleting %f %f %f %f\n", sel1x, sel1y, sel2x, sel2y);
 	  for (int n = 0; n < current_solver.npoints;)
@@ -607,6 +609,48 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      current_solver.remove_point (n);
 	    else
 	      n++;
+	  maybe_solve ();
+	  display_scheduled = true;
+        }
+      if ((k == GDK_KEY_Delete || k == GDK_KEY_BackSpace) && (event->state & GDK_CONTROL_MASK))
+        {
+	  histogram hist;
+	  scr_to_img map;
+	  map.set_parameters (current, scan);
+	  for (int n = 0; n < current_solver.npoints;n++)
+	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
+	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	      {
+		coord_t sx, sy;
+		map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
+		coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+		hist.pre_account (dist);
+	      }
+	  hist.finalize_range (65536);
+	  for (int n = 0; n < current_solver.npoints;n++)
+	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
+	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	      {
+		coord_t sx, sy;
+		map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
+		coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+		hist.account (dist);
+	      }
+	  hist.finalize ();
+	  coord_t thresholt = hist.find_max (0.1);
+	  for (int n = 0; n < current_solver.npoints;)
+	    {
+	      coord_t sx, sy;
+	      map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
+	      coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+	      if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
+		  && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y
+		  && dist > thresholt)
+		current_solver.remove_point (n);
+	      else
+		n++;
+	    }
+	  maybe_solve ();
 	  display_scheduled = true;
         }
       if (k == 'i' && (event->state & GDK_CONTROL_MASK))
@@ -674,7 +718,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    }
 	  if (ret)
 	    {
-	      printf ("New old darkpoint %f old brightness %f\n", rparams.dark_point, rparams.brightness);
+	      printf ("New darkpoint %f; new brightness %f\n", rparams.dark_point, rparams.brightness);
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;
@@ -1700,7 +1744,7 @@ handle_drag (int x, int y, int button)
 	      sel1y = yy;
 	    }
 	  display_scheduled = true;
-	  printf ("selection %f %f %f %f\n",sel1x, sel1y,sel2x,sel2y);
+	  //printf ("selection %f %f %f %f\n",sel1x, sel1y,sel2x,sel2y);
         }
       return;
     }

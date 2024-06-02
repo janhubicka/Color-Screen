@@ -1,0 +1,59 @@
+screen_alignment_version: 1
+screen_type: Finlay
+scanner_type: fixed-lens
+screen_shift: 3076.854677 2513.651980
+coordinate_x: 8.777196 0.020661
+coordinate_y: -0.019474 8.753789
+projection_distance: 1.000000
+tilt: 0.000013 0.000008
+final_rotation: 0.000000
+lens_warp_rectilinear: 1 1.000000 0.000000 0.000000 0.000000 0 0 0.500000 0.500000
+gamma: 2.200000
+film_gamma: 1.000000
+target_film_gamma: 1.000000
+white_balance: 1.000000 1.000000 1.000000
+sharpen_radius: 0.000000
+sharpen_amount: 0.000000
+presaturation: 1.000000
+saturation: 1.000000
+brightness: 1.000000
+dufay_red_strip_width: 0.000000
+dufay_green_strip_width: 0.000000
+collection_threshold: 0.800000
+screen_blur_radius: 0.500000
+collection_threshold: 0.800000
+color_model: Miethe_Goerz_reconstructed_by_Wagner
+backlight_temperature: 5000.000000
+temperature: 5000.000000
+dye_balance: bradford
+scan_exposure: 1.000000
+dark_point: 0.000000
+backlight_correction_black: 0.000000
+invert: no
+precise: yes
+mix_weights: 0.300000 0.100000 1.000000
+profiled_dark: 0.000000 0.000000 0.000000
+profiled_red: 1.000000 0.000000 0.000000
+profiled_green: 0.000000 1.000000 0.000000
+profiled_blue: 0.000000 0.000000 1.000000
+scanner_red: 0.000000 0.000000 0.000000
+scanner_green: 0.000000 0.000000 0.000000
+scanner_blue: 0.000000 0.000000 0.000000
+solver_optimize_lens: yes
+solver_optimize_tilt: yes
+solver_point: 3033.254644 2382.288375 -5.000000 -15.000000 green
+solver_point: 2962.607346 2548.376526 -13.000000 4.000000 green
+solver_point: 3164.491453 2583.843622 10.000000 8.000000 green
+solver_point: 2488.929564 2450.935950 -67.000000 -7.000000 green
+solver_point: 2041.542217 2414.929683 -118.000000 -11.000000 green
+solver_point: 1269.156131 2684.235638 -206.000000 20.000000 green
+solver_point: 2946.358343 2005.601128 -15.000000 -58.000000 green
+solver_point: 2622.914765 1356.863093 -52.000000 -132.000000 green
+solver_point: 3606.084031 1464.213620 60.000000 -120.000000 green
+solver_point: 4089.019594 1429.965258 115.000000 -124.000000 green
+solver_point: 4353.434492 1063.085979 145.000000 -166.000000 green
+solver_point: 922.047152 758.207141 -246.000000 -200.000000 green
+solver_point: 202.849103 835.598288 -328.000000 -191.000000 green
+solver_point: 856.337528 2893.410820 -253.000000 44.000000 green
+solver_point: 558.142005 3234.013190 -287.000000 83.000000 green
+screen_alignment_end
