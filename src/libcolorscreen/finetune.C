@@ -84,6 +84,8 @@ public:
   /* Optimize colors using least squares method.
      Probably useful only for debugging and better to be true.  */
   bool least_squares;
+  /* Determine color using data collection same as used by analyze_paget/analyze_dufay.  */
+  bool data_collection;
   /* Normalize colors for simulation to uniform intensity.  This is useful
      in RGB simulation to eliminate underlying silver image (which works as
      netural density filter) of the input scan is linear.  */
@@ -226,7 +228,7 @@ public:
 	v[fog_index+2] = std::min (v[fog_index+2], (coord_t)1);
 	v[fog_index+2] = std::max (v[fog_index+2], (coord_t)0);
       }
-    if (bwtile && !least_squares)
+    if (bwtile && !least_squares && !data_collection)
       {
 	v[color_index] = std::min (v[color_index], (coord_t)2);
 	v[color_index] = std::max (v[color_index], (coord_t)0);
@@ -333,8 +335,10 @@ public:
     if (optimize_position)
       n_values += 2;
 
+    if (data_collection)
+      least_squares = false;
 
-    if (!least_squares)
+    if (!least_squares && !data_collection)
       {
 	color_index = n_values;
 	/* 3*3 values for color.
@@ -366,7 +370,7 @@ public:
 	start[1] = 0;
       }
 
-    if (!least_squares)
+    if (!least_squares && !data_collection)
       {
 	if (tile)
 	  {
@@ -509,9 +513,86 @@ public:
   {
      return bwtile[y * twidth + x];
   }
+  void
+  determine_colors_using_data_collection (coord_t *v, rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue)
+  {
+    rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
+    rgbdata color_red = {0,0,0}, color_green = {0,0,0}, color_blue = {0,0,0};
+    luminosity_t threshold = 0;
+    coord_t wr = 0, wg = 0, wb = 0;
+
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	if (!noutliers || !outliers->test_bit (x, y))
+	  {
+	    point_t p = get_pos (v, x, y);
+	    rgbdata m = scr.interpolated_mult (p);
+	    rgbdata d = get_pixel (v, x, y);
+	    if (m.red > threshold)
+	      {
+		coord_t val = m.red - threshold;
+		wr += val;
+		red += m * val;
+		color_red += d * val;
+	      }
+	    if (m.green > threshold)
+	      {
+		coord_t val = m.green - threshold;
+		wg += val;
+		green += m * val;
+		color_green += d * val;
+	      }
+	    if (m.blue > threshold)
+	      {
+		coord_t val = m.blue - threshold;
+		wb += val;
+		blue += m * val;
+		color_blue += d * val;
+	      }
+	  }
+  if (!wr || !wg || !wb)
+    {
+      *ret_red = *ret_green = *ret_blue = {-15,-15,-15};
+      return;
+    }
+
+  red /= wr;
+  green /= wg;
+  blue /= wb;
+  color_red /= wr;
+  color_green /= wg;
+  color_blue /= wb;
+  //sum /= n;
+  //sum.print (stdout);
+  rgbdata cred = (rgbdata){red.red, green.red, blue.red};
+  rgbdata cgreen = (rgbdata){red.green, green.green, blue.green};
+  rgbdata cblue = (rgbdata){red.blue, green.blue, blue.blue};
+  color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+		    cred.green, cgreen.green, cblue.green, 0,
+		    cred.blue , cgreen.blue , cblue.blue , 0,
+		    0         , 0           , 0          , 1);
+  sat = sat.invert ();
+  //sat.apply_to_rgb (color.red / (2 * maxgray), color.green / (2 * maxgray), color.blue / (2 * maxgray), &color.red, &color.green, &color.blue);
+  sat.apply_to_rgb (color_red.red, color_green.red, color_blue.red, &color_red.red, &color_green.red, &color_blue.red);
+  sat.apply_to_rgb (color_red.green, color_green.green, color_blue.green, &color_red.green, &color_green.green, &color_blue.green);
+  sat.apply_to_rgb (color_red.blue, color_green.blue, color_blue.blue, &color_red.blue, &color_green.blue, &color_blue.blue);
+#if 0
+  sat.apply_to_rgb (color.red, color.green, color.blue, &color.red, &color.green, &color.blue);
+  if (color.red < 0)
+    color.red = 0;
+  if (color.green < 0)
+    color.green = 0;
+  if (color.blue < 0)
+    color.blue = 0;
+  return color;
+#endif
+   *ret_red = color_red;
+   *ret_green = color_green;
+   *ret_blue = color_blue;
+  }
 
   coord_t
-  determine_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
+  determine_colors_using_least_squares (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
   {
     point_t off = get_offset (v);
     coord_t sqsum = 0;
@@ -554,15 +635,12 @@ public:
   }
 
   rgbdata
-  bw_determine_color (coord_t *v)
+  bw_determine_color_using_data_collection (coord_t *v)
   {
-#if 1
     rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
     rgbdata color = {0,0,0};
     luminosity_t threshold = 0;
     coord_t wr = 0, wg = 0, wb = 0;
-    rgbdata sum = {0,0,0};
-    int n = 0;
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
@@ -570,8 +648,6 @@ public:
 	  {
 	    point_t p = get_pos (v, x, y);
 	    rgbdata m = scr.interpolated_mult (p);
-	    n++;
-	    sum += m;
 	    luminosity_t l = bw_get_pixel (x, y);
 	    if (m.red > threshold)
 	      {
@@ -622,13 +698,12 @@ public:
     color.green = 0;
   if (color.blue < 0)
     color.blue = 0;
-#if 0
-  color.red *= sum.red;
-  color.green *= sum.green;
-  color.blue *= sum.blue;
-#endif
   return color;
-#else
+  }
+
+  rgbdata
+  bw_determine_color_using_least_squares (coord_t *v)
+  {
     int e = 0;
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
@@ -646,7 +721,6 @@ public:
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
     rgbdata ret = {gsl_vector_get (gsl_c, 0) * (2 * maxgray), gsl_vector_get (gsl_c, 1) * (2 * maxgray), gsl_vector_get (gsl_c, 2) * (2 * maxgray)};
     return ret;
-#endif
   }
 
   rgbdata
@@ -660,26 +734,30 @@ public:
   rgbdata
   bw_get_color (coord_t *v)
   {
-    if (!least_squares)
+    if (!least_squares && !data_collection)
       last_color = {v[color_index], v[color_index + 1], v[color_index + 2]};
+    if (data_collection)
+      last_color = bw_determine_color_using_data_collection (v);
     else
-      last_color = bw_determine_color (v);
+      last_color = bw_determine_color_using_least_squares (v);
     return last_color;
   }
   void
   get_colors (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
   {
-    if (!least_squares)
+    if (!least_squares && !data_collection)
       {
 	*red = {v[color_index], v[color_index + 1], v[color_index + 2]};
 	*green = {v[color_index + 3], v[color_index + 4], v[color_index + 5]};
 	*green = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
       }
+    else if (data_collection)
+      determine_colors_using_data_collection (v, red, green, blue);
     else
       {
 	if (least_squares && optimize_fog)
 	  init_least_squares (v);
-	determine_colors (v, red, green, blue);
+	determine_colors_using_data_collection (v, red, green, blue);
       }
     last_red = *red;
     last_green = *green;
@@ -1090,6 +1168,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;
 	    //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
 	    solver.least_squares = !(fparams.flags & finetune_no_least_squares);
+	    solver.data_collection = true;
 	    solver.normalize = !(fparams.flags & finetune_no_normalize);
 	    solver.init (rparam.screen_blur_radius);
 
