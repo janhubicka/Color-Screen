@@ -105,7 +105,7 @@ screen::paget_finlay ()
 
 	d1 = fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc))));
 	d3 = fmin (dl, fmin (dr, fmin (dt, db)));
-	if (d1 < ((size/2) - PDG))
+	if (d1 < ((size/2) - PDG) && d1 < d3)
 	  {
 	    /* Green.  */
 	    mult[yy][xx][0] = 0;
