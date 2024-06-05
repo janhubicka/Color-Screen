@@ -7,6 +7,7 @@
 #include "render-interpolate.h"
 #include "nmsimplex.h"
 #include "include/stitch.h"
+#include "include/finetune.h"
 
 namespace {
 
@@ -98,12 +99,27 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
      we account for every pixel in image, not only red patch portion.  */
   if (!render_to_scr::precompute (!m_original_color && !m_precise_rgb, !m_original_color || m_profiled, xmin, ymin, xmax, ymax, progress))
     return false;
-  if (m_screen_compensation || m_params.precise | m_precise_rgb)
+  if (m_screen_compensation || m_params.precise || m_precise_rgb)
     {
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
       m_screen = get_screen (m_scr_to_img.get_type (), false, radius, m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
       if (!m_screen)
 	return false;
+      rgbdata cred, cgreen, cblue;
+      if (!m_original_color && !m_precise_rgb
+	  && determine_color_loss (&cred, &cgreen, &cblue, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
+        {
+	  color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+			    cred.green, cgreen.green, cblue.green, 0,
+			    cred.blue , cgreen.blue , cblue.blue , 0,
+			    0         , 0           , 0          , 1);
+	  printf ("Matrix \n");
+	  sat.print (stdout);
+	  m_saturation_matrix = sat.invert ();
+	  printf ("Saturation \n");
+	  m_saturation_matrix.print (stdout);
+	  rgbdata r;
+        }
     }
   int xshift = -xmin;
   int yshift = -ymin;
@@ -247,6 +263,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
     }
+  if (!m_original_color)
+    m_saturation_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
   if (m_unadjusted)
     ;
   else if (!m_original_color)
@@ -534,8 +552,6 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
-	  bool needed0 = false;
-	  bool needed = false;
 	  if (progress)
 	    stack = progress->push ();
 	  if (!analyze_patches ([&] (coord_t tsx, coord_t tsy, rgbdata c)
@@ -545,12 +561,10 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 				  coord_t fx, fy;
 				  stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
 				  stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
-				  needed = true;
 				  if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
 				      || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 				      || ttx != tx || tty != ty)
 				    return true;
-				  needed = true;
 				  return analyze (fx - img.xmin, fy - img.ymin, c);
 				},
 				"analyzing tile",
@@ -560,12 +574,6 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	      if (progress)
 		progress->pop (stack);
 	      return false;
-	    }
-	  if (!needed)
-	    {
-	      //printf ("Wrong set of needed patches %i\n", needed0);
-	      //fflush (stdout);
-	      abort ();
 	    }
 	  if (progress)
 	    progress->pop (stack);
@@ -615,8 +623,6 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
-	  bool needed = false;
-	  bool needed0 = false;
 	  if (progress)
 	    stack = progress->push ();
 	  if (!analyze_rgb_patches ([&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g, rgbdata b)
@@ -626,13 +632,11 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 				      coord_t fx, fy;
 				      stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
 				      stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
-				      needed0 = true;
 				      //printf ("tile %i %i tilescreen %f %f screen %f %f final %f %f range %i:%i %i:%i\n",tx,ty, tsx,tsy,sx,sy,fx,fy,xmin,xmax,ymin,ymax);
 				      if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
 					  || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 					  || ttx != tx || tty != ty)
 					return true;
-				      needed = true;
 				      return analyze (fx - img.xmin, fy - img.ymin, r, g, b);
 				    },
 				    "analyzing tile",
@@ -642,12 +646,6 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 	      if (progress)
 		progress->pop (stack);
 	      return false;
-	    }
-	  if (!needed)
-	    {
-	      //printf ("Wrong set of needed patches %i\n", needed0);
-	      //fflush (stdout);
-	      abort ();
 	    }
 	  if (progress)
 	    progress->pop (stack);

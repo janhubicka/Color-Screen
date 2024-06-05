@@ -1,6 +1,7 @@
 #ifndef FINETUNE_H
 #define FINETUNE_H
 #include "solver.h"
+struct screen;
 enum finetune_flags
 {
   finetune_position = 1,
@@ -46,4 +47,5 @@ struct finetune_result
 };
 DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress);
 DLL_PUBLIC bool finetune_area (solver_parameters *sparam, render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
+bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
 #endif

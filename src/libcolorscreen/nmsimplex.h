@@ -9,7 +9,7 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool pro
   const T ALPHA = 1;
   const T BETA = 0.5;
   const T GAMMA = 2;
-  const int MAX_IT =100000;     /* maximum number of iterations */
+  const int MAX_IT =10000;      /* maximum number of iterations */
   int vs;			/* vertex with smallest value */
   int vh;			/* vertex with next smallest value */
   int vg;			/* vertex with largest value */

@@ -87,6 +87,7 @@ private:
   bool m_precise_rgb;
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
+  color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
 };
 bool analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);

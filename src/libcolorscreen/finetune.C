@@ -12,6 +12,11 @@
 
 namespace {
 
+/* Solver used to find parameters of simulated scan (position of the grid,
+   color of individual patches, lens blur ...) to match given scan tile
+   (described tile and tile_pos) as well as possible.
+   It is possible to match eitehr in BW or RGB and choose set of parameters
+   to optimize for.  */
 struct finetune_solver
 {
 private:
@@ -23,6 +28,24 @@ private:
   int noutliers;
   std::shared_ptr <bitmap_2d> outliers;
 
+  /* Unblured screen.  */
+  screen scr1;
+  /* Blured screen used to render simulated scan.  */
+  screen scr;
+
+  /* Indexes into optimized values array to fetch individual parameters  */
+  int fog_index;
+  int color_index;
+  int screen_index;
+  int dufay_strips_index;
+  /* Number of values needed.  */
+  int n_values;
+
+  rgbdata fog_range;
+  luminosity_t maxgray;
+
+  coord_t last_blur;
+  coord_t last_width, last_height;
 public:
   finetune_solver ()
     : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
@@ -37,38 +60,41 @@ public:
   std::shared_ptr <luminosity_t []> bwtile;
   /* Tile position  */
   std::shared_ptr <point_t []> tile_pos;
+
   /* 2 coordinates, blur radius, 3 * 3 colors, strip widths, fog  */
   coord_t start[17];
-  coord_t last_blur;
-  coord_t last_width, last_height;
 
-  rgbdata last_red, last_green, last_blue, last_color;
-
+  /* Screen blur and duffay red strip widht and green strip height. */
   coord_t fixed_blur, fixed_width, fixed_height;
 
   //const coord_t range = 0.2;
   constexpr static const coord_t range = 0.2;
 
-  screen scr1;
-  screen scr;
   coord_t pixel_size;
   scr_type type;
-  rgbdata fog_range;
 
+  /* Try to adjust position of center of the patches (+- range)  */
   bool optimize_position;
+  /* Try to optimize screen blur attribute (othervise fixed_blur is used.  */
   bool optimize_screen_blur;
+  /* Try to optimize dufay strip widths (otherwise fixed_width, fixed_height is used).  */
   bool optimize_dufay_strips;
+  /* Try to optimize dark point.  */
   bool optimize_fog;
+  /* Optimize colors using least squares method.
+     Probably useful only for debugging and better to be true.  */
   bool least_squares;
+  /* Normalize colors for simulation to uniform intensity.  This is useful
+     in RGB simulation to eliminate underlying silver image (which works as
+     netural density filter) of the input scan is linear.  */
   bool normalize;
 
-  luminosity_t maxgray;
+  /* Optimized values of red, green, blue for RGB simulation
+     and optimized intensities for BW simulation.
+     Initialized by objfunc and can be reused after it
+     since get_colors is expensive.  */
+  rgbdata last_red, last_green, last_blue, last_color;
 
-  int fog_index;
-  int color_index;
-  int screen_index;
-  int dufay_strips_index;
-  int n_values;
   ~finetune_solver ()
   {
     free_least_squares ();
@@ -459,7 +485,7 @@ public:
     p.y += off.y;
     /* Interpolation here is necessary to ensure smoothness.  */
     rgbdata m = scr.interpolated_mult (p);
-    return ((m.red * color.red + m.green * color.green + m.blue * color.blue) * (2 * maxgray));
+    return ((m.red * color.red + m.green * color.green + m.blue * color.blue) /** (2 * maxgray)*/);
   }
 
   rgbdata
@@ -530,16 +556,85 @@ public:
   rgbdata
   bw_determine_color (coord_t *v)
   {
-    point_t off = get_offset (v);
-    int e = 0;
+#if 1
+    rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
+    rgbdata color = {0,0,0};
+    luminosity_t threshold = 0;
+    coord_t wr = 0, wg = 0, wb = 0;
+    rgbdata sum = {0,0,0};
+    int n = 0;
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    point_t p = tile_pos [y * twidth + x];
-	    p.x += off.x;
-	    p.y += off.y;
+	    point_t p = get_pos (v, x, y);
+	    rgbdata m = scr.interpolated_mult (p);
+	    n++;
+	    sum += m;
+	    luminosity_t l = bw_get_pixel (x, y);
+	    if (m.red > threshold)
+	      {
+		coord_t val = m.red - threshold;
+		wr += val;
+		red += m * val;
+		color.red += l * val;
+	      }
+	    if (m.green > threshold)
+	      {
+		coord_t val = m.green - threshold;
+		wg += val;
+		green += m * val;
+		color.green += l * val;
+	      }
+	    if (m.blue > threshold)
+	      {
+		coord_t val = m.blue - threshold;
+		wb += val;
+		blue += m * val;
+		color.blue += l * val;
+	      }
+	  }
+  if (!wr || !wg || !wb)
+    return {-10,-10,-10};
+
+  red /= wr;
+  green /= wg;
+  blue /= wb;
+  color.red /= wr;
+  color.green /= wg;
+  color.blue /= wb;
+  //sum /= n;
+  //sum.print (stdout);
+  rgbdata cred = (rgbdata){red.red, green.red, blue.red};
+  rgbdata cgreen = (rgbdata){red.green, green.green, blue.green};
+  rgbdata cblue = (rgbdata){red.blue, green.blue, blue.blue};
+  color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+		    cred.green, cgreen.green, cblue.green, 0,
+		    cred.blue , cgreen.blue , cblue.blue , 0,
+		    0         , 0           , 0          , 1);
+  sat = sat.invert ();
+  //sat.apply_to_rgb (color.red / (2 * maxgray), color.green / (2 * maxgray), color.blue / (2 * maxgray), &color.red, &color.green, &color.blue);
+  sat.apply_to_rgb (color.red, color.green, color.blue, &color.red, &color.green, &color.blue);
+  if (color.red < 0)
+    color.red = 0;
+  if (color.green < 0)
+    color.green = 0;
+  if (color.blue < 0)
+    color.blue = 0;
+#if 0
+  color.red *= sum.red;
+  color.green *= sum.green;
+  color.blue *= sum.blue;
+#endif
+  return color;
+#else
+    int e = 0;
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	if (!noutliers || !outliers->test_bit (x, y))
+	  {
+	    point_t p = get_pos (v, x, y);
 	    rgbdata c = scr.interpolated_mult (p);
 	    gsl_matrix_set (gsl_X, e, 0, c.red);
 	    gsl_matrix_set (gsl_X, e, 1, c.green);
@@ -549,8 +644,9 @@ public:
 	  }
     double chisq;
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
-    rgbdata ret = {gsl_vector_get (gsl_c, 0), gsl_vector_get (gsl_c, 1), gsl_vector_get (gsl_c, 2)};
+    rgbdata ret = {gsl_vector_get (gsl_c, 0) * (2 * maxgray), gsl_vector_get (gsl_c, 1) * (2 * maxgray), gsl_vector_get (gsl_c, 2) * (2 * maxgray)};
     return ret;
+#endif
   }
 
   rgbdata
@@ -826,6 +922,7 @@ public:
       }
     return true;
   }
+
 };
 
 static coord_t
@@ -920,7 +1017,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   {
     ///* FIXME: Hack; render is too large for stack in openmp thread.  */
     //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
-    render_to_scr render (param, img, rparam, 256);
+    render_parameters rparam2 = rparam;
+    rparam2.invert = 0;
+    render_to_scr render (param, img, rparam2, 256);
     int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
     if (multitile)
       {
@@ -1057,101 +1156,101 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     //ret.screen_blur_radius = best_solver.start[best_solver.screen_index];
   if (best_solver.optimize_dufay_strips)
     {
-      ret.dufay_red_strip_width = best_solver.start[best_solver.dufay_strips_index + 0];
-      ret.dufay_green_strip_width = best_solver.start[best_solver.dufay_strips_index + 1];
+      ret.dufay_red_strip_width = best_solver.get_red_strip_width (best_solver.start);
+      ret.dufay_green_strip_width = best_solver.get_green_strip_width (best_solver.start);
     }
   if (best_solver.optimize_screen_blur)
-    ret.screen_blur_radius = best_solver.start[best_solver.screen_index];
+    ret.screen_blur_radius = best_solver.get_blur_radius (best_solver.start);
   if (best_solver.optimize_position)
-    {
-      ret.screen_coord_adjust.x = best_solver.start[0];
-      ret.screen_coord_adjust.y = best_solver.start[1];
-    }
+    ret.screen_coord_adjust = best_solver.get_offset (best_solver.start);
   if (best_solver.optimize_fog)
     ret.fog = best_solver.get_fog (best_solver.start);
 
-  /* Construct solver point.  Try to get closest point to the center of analyzed tile.  */
-  int fsx = nearest_int (best_solver.get_pos (best_solver.start, twidth/2, theight/2).x);
-  int fsy = nearest_int (best_solver.get_pos (best_solver.start, twidth/2, theight/2).y);
-  int bx = - 1, by = -1;
-  coord_t bdist = 0;
-  for (int y = 0; y < theight; y++)
+  if (best_solver.optimize_position)
     {
-      for (int x = 0; x < twidth; x++)
+      /* Construct solver point.  Try to get closest point to the center of analyzed tile.  */
+      int fsx = nearest_int (best_solver.get_pos (best_solver.start, twidth/2, theight/2).x);
+      int fsy = nearest_int (best_solver.get_pos (best_solver.start, twidth/2, theight/2).y);
+      int bx = - 1, by = -1;
+      coord_t bdist = 0;
+      for (int y = 0; y < theight; y++)
 	{
-	  point_t p = best_solver.get_pos (best_solver.start, x, y);
-	  //printf ("  %-5.2f,%-5.2f", p.x, p.y);
-	  coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
-	  if (bx < 0 || dist < bdist)
+	  for (int x = 0; x < twidth; x++)
 	    {
-	      bx = x;
-	      by = y;
-	      bdist = dist;
+	      point_t p = best_solver.get_pos (best_solver.start, x, y);
+	      //printf ("  %-5.2f,%-5.2f", p.x, p.y);
+	      coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
+	      if (bx < 0 || dist < bdist)
+		{
+		  bx = x;
+		  by = y;
+		  bdist = dist;
+		}
 	    }
+	  //printf ("\n");
 	}
-      //printf ("\n");
-    }
-  if (!bx || bx == twidth - 1 || !by || by == theight - 1)
-    {
-      printf ("Solver point is out of tile\n");
-      return ret;
-    }
-  point_t fp;
+      if (!bx || bx == twidth - 1 || !by || by == theight - 1)
+	{
+	  printf ("Solver point is out of tile\n");
+	  return ret;
+	}
+      point_t fp;
 
-  bool found = false;
-  //printf ("%i %i %i %i %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y);
-  for (int y = by - 1; y <= by + 1; y++)
-    for (int x = bx - 1; x <= bx + 1; x++)
-      {
-	/* Determine cell corners.  */
-	point_t p = {(coord_t)fsx, (coord_t)fsy};
-	point_t p1 = best_solver.get_pos (best_solver.start, x, y);
-	point_t p2 = best_solver.get_pos (best_solver.start, x + 1, y);
-	point_t p3 = best_solver.get_pos (best_solver.start, x, y + 1);
-	point_t p4 = best_solver.get_pos (best_solver.start, x + 1, y + 1);
-	/* Check if point is above or bellow diagonal.  */
-	coord_t sgn1 = sign (p, p1, p4);
-	if (sgn1 > 0)
+      bool found = false;
+      //printf ("%i %i %i %i %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y);
+      for (int y = by - 1; y <= by + 1; y++)
+	for (int x = bx - 1; x <= bx + 1; x++)
 	  {
-	    /* Check if point is inside of the triangle.  */
-	    if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
-	      continue;
-	    coord_t rx, ry;
-	    intersect_vectors (p1.x, p1.y,
-			       p.x - p1.x, p.y - p1.y,
-			       p3.x, p3.y,
-			       p4.x - p3.x, p4.y - p3.y,
-			       &rx, &ry);
-	    rx = 1 / rx;
-	    found = true;
-	    fp = {(ry * rx + x), (rx + y)};
+	    /* Determine cell corners.  */
+	    point_t p = {(coord_t)fsx, (coord_t)fsy};
+	    point_t p1 = best_solver.get_pos (best_solver.start, x, y);
+	    point_t p2 = best_solver.get_pos (best_solver.start, x + 1, y);
+	    point_t p3 = best_solver.get_pos (best_solver.start, x, y + 1);
+	    point_t p4 = best_solver.get_pos (best_solver.start, x + 1, y + 1);
+	    /* Check if point is above or bellow diagonal.  */
+	    coord_t sgn1 = sign (p, p1, p4);
+	    if (sgn1 > 0)
+	      {
+		/* Check if point is inside of the triangle.  */
+		if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
+		  continue;
+		coord_t rx, ry;
+		intersect_vectors (p1.x, p1.y,
+				   p.x - p1.x, p.y - p1.y,
+				   p3.x, p3.y,
+				   p4.x - p3.x, p4.y - p3.y,
+				   &rx, &ry);
+		rx = 1 / rx;
+		found = true;
+		fp = {(ry * rx + x), (rx + y)};
+	      }
+	    else
+	      {
+		/* Check if point is inside of the triangle.  */
+		if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
+		  continue;
+		coord_t rx, ry;
+		intersect_vectors (p1.x, p1.y,
+				   p.x - p1.x, p.y - p1.y,
+				   p2.x, p2.y,
+				   p4.x - p2.x, p4.y - p2.y,
+				   &rx, &ry);
+		rx = 1 / rx;
+		found = true;
+		fp = {(rx + x), (ry * rx + y)};
+	      }
 	  }
-	else
-	  {
-	    /* Check if point is inside of the triangle.  */
-	    if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
-	      continue;
-	    coord_t rx, ry;
-	    intersect_vectors (p1.x, p1.y,
-			       p.x - p1.x, p.y - p1.y,
-			       p2.x, p2.y,
-			       p4.x - p2.x, p4.y - p2.y,
-			       &rx, &ry);
-	    rx = 1 / rx;
-	    found = true;
-	    fp = {(rx + x), (ry * rx + y)};
-	  }
-      }
-  /* TODO: If we did not find the tile we could try some non-integer location.  */
-  if (!found)
-    {
-      printf ("Failed to find solver point\n");
-      return ret;
+      /* TODO: If we did not find the tile we could try some non-integer location.  */
+      if (!found)
+	{
+	  printf ("Failed to find solver point\n");
+	  return ret;
+	}
+      ret.solver_point_img_location = {fp.x + best_solver.txmin + 0.5, fp.y + best_solver.tymin + 0.5};
+      ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
+      ret.solver_point_color = solver_parameters::green;
     }
   ret.success = true;
-  ret.solver_point_img_location = {fp.x + best_solver.txmin + 0.5, fp.y + best_solver.tymin + 0.5};
-  ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
-  ret.solver_point_color = solver_parameters::green;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;
 }
@@ -1209,5 +1308,61 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
 	if (r.success && r.uncertainity <= max_uncertainity)
 	  solver->add_point (r.solver_point_img_location.x, r.solver_point_img_location.y, r.solver_point_screen_location.x, r.solver_point_screen_location.y, r.solver_point_color);
       }
+  return true;
+}
+
+/* Simulate data collection of scan of given color screen (assumed to be blurred) and
+   return colected red, green and blue.  This can be used to increase color saturation
+   to compensate loss caused by the collection.  */
+
+bool
+determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax)
+{
+  rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
+  coord_t wr = 0, wg = 0, wb = 0;
+#pragma omp declare reduction (+:rgbdata:omp_out=omp_out+omp_in)
+#pragma omp parallel for default(none) collapse (2) shared (ymin,ymax,xmin,xmax,threshold,map,scr) reduction(+:wr,wg,wb,red,green,blue)
+  for (int y = ymin; y <= ymax; y++)
+    for (int x = xmin; x <= xmax; x++)
+      {
+	point_t p;
+        map.to_scr (x, y, &p.x, &p.y);
+	rgbdata m = scr.interpolated_mult (p);
+	if (m.red > threshold)
+	  {
+	    coord_t val = m.red - threshold;
+	    wr += val;
+	    red += m * val;
+	  }
+	if (m.green > threshold)
+	  {
+	    coord_t val = m.green - threshold;
+	    wg += val;
+	    green += m * val;
+	  }
+	if (m.blue > threshold)
+	  {
+	    coord_t val = m.blue - threshold;
+	    wb += val;
+	    blue += m * val;
+	  }
+      }
+  if (!(wr >0 && wg > 0 && wb > 0))
+    return false;
+  red /= wr;
+  green /= wg;
+  blue /= wb;
+  *ret_red = (rgbdata){red.red, green.red, blue.red};
+  *ret_green = (rgbdata){red.green, green.green, blue.green};
+  *ret_blue = (rgbdata){red.blue, green.blue, blue.blue};
+#if 0
+  *ret_red = red / wr;
+  *ret_green = green / wg;
+  *ret_blue = blue / wb;
+#endif
+  printf ("Color loss info\n");
+  ret_red->print (stdout);
+  ret_green->print (stdout);
+  ret_blue->print (stdout);
   return true;
 }
