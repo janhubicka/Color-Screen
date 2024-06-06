@@ -91,7 +91,9 @@ print_help ()
   fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of dufay screen strip widths\n");
   fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
   fprintf (stderr, "      --use-monochrome-channel  analyse using monochrome channel even when RGB is available\n");
+  fprintf (stderr, "      --no-data-collection      do not determine colors by data collection\n");
   fprintf (stderr, "      --no-least-squares        do not use least squares to optimize screen colors\n");
+  fprintf (stderr, "      --multi-tile=n            analyse n times n samples and choose best result on each spot\n");
   fprintf (stderr, "      --no-normalize            do not normalize colors\n");
   fprintf (stderr, "  lab <subcommnad>\n");
   fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
@@ -1029,6 +1031,7 @@ finetune (int argc, char **argv)
   const char *orig_tiff_base = NULL;
   const char *simulated_tiff_base = NULL;
   const char *diff_tiff_base = NULL;
+  int multitile = 1;
   int xsteps = 32;
   int border = 5;
   int flags = 0;
@@ -1054,8 +1057,8 @@ finetune (int argc, char **argv)
 	flags |= finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-least-squares"))
 	flags |= finetune_no_least_squares;
-      else if (!strcmp (argv[i], "--multi-tile"))
-	flags |= finetune_multitile;
+      else if (parse_int_param (argc, argv, &i, "multitile", multitile, 1, 100))
+        ;
       else if (const char *str = arg_with_param (argc, argv, &i, "fog-tiff"))
 	fog_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "screen-blur-tiff"))
@@ -1107,8 +1110,8 @@ finetune (int argc, char **argv)
       exit (1);
     }
 
-  scr_to_img_parameters param;
   render_parameters rparam;
+  scr_to_img_parameters param;
   if (!load_csp (in, &param, NULL, &rparam, NULL, &error))
     {
       progress.pause_stdout ();
@@ -1123,7 +1126,7 @@ finetune (int argc, char **argv)
 
   std::vector <finetune_result> results (ysteps * xsteps);
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) collapse(2) schedule (dynamic) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results)
+#pragma omp parallel for default (none) collapse(2) schedule (dynamic) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results,multitile)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1138,6 +1141,7 @@ finetune (int argc, char **argv)
 	sprintf (pos, "-%04i-%04i.tif", y, x);
 	finetune_parameters fparam;
 	fparam.flags = flags;
+	fparam.multitile = multitile;
 	if (orig_tiff_base)
 	  {
 	    orig_file = (std::string)orig_tiff_base + (std::string)pos;

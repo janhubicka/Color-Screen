@@ -762,6 +762,46 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      display_scheduled = true;
 	    }
 	}
+      if (k == 'f' && (event->state & GDK_CONTROL_MASK))
+      {
+	int x = (sel1x + sel2x)/2;
+	int y = (sel1y + sel2y)/2;
+	printf ("Finetuning focus on %i %i\n",x,y);
+	finetune_parameters fparam;
+	fparam.simulated_file = "/tmp/bwsimulated.tif";
+	fparam.orig_file = "/tmp/bworig.tif";
+	fparam.diff_file = "/tmp/bwdiff.tif";
+	fparam.multitile = 3;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	if (res.success)
+	  {
+	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    display_scheduled = true;
+	    setvals ();
+	  }
+      }
+      if (k == 'F' && (event->state & GDK_CONTROL_MASK))
+      {
+	int x = (sel1x + sel2x)/2;
+	int y = (sel1y + sel2y)/2;
+	printf ("Finetuning focus on %i %i\n",x,y);
+	finetune_parameters fparam;
+	fparam.simulated_file = "/tmp/colorsimulated.tif";
+	fparam.orig_file = "/tmp/colororig.tif";
+	fparam.diff_file = "/tmp/colordiff.tif";
+	fparam.multitile = 3;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	if (res.success)
+	  {
+	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    display_scheduled = true;
+	    setvals ();
+	  }
+      }
       if (k == 'A')
       {
 	autosolving = true;
@@ -836,7 +876,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	display_scheduled = true;
 	preview_display_scheduled = true;
       }
-      if (k == 'f' && current.type != Finlay)
+      if (k == 'f' && current.type != Finlay && !(event->state & GDK_CONTROL_MASK))
       {
 	save_parameters ();
 	current.type = Finlay;
@@ -1816,7 +1856,8 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
         {
 	  printf ("Finetuning %f %f\n",x,y);
 	  finetune_parameters fparam;
-	  fparam.flags |= finetune_position | finetune_multitile | finetune_bw | finetune_verbose;
+	  fparam.multitile = 3;
+	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose;
 	  file_progress_info progress (stdout);
 	  finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
 	  if (res.success)

@@ -9,22 +9,23 @@ enum finetune_flags
   finetune_dufay_strips = 4,
   finetune_fog = 8,
   finetune_bw = 16,
-  finetune_no_least_squares = 32,
-  finetune_no_progress_report = 64,
-  finetune_no_normalize = 128,
-  finetune_verbose = 256,
-  finetune_multitile = 512
+  finetune_no_data_collection = 32,
+  finetune_no_least_squares = 64,
+  finetune_no_progress_report = 128,
+  finetune_no_normalize = 256,
+  finetune_verbose = 512
 };
 struct finetune_parameters
 {
   int flags;
   int range;
+  int multitile;
   coord_t ignore_outliers;
   const char *simulated_file;
   const char *orig_file;
   const char *diff_file;
   finetune_parameters ()
-  : flags (0), range (0), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL)
+  : flags (0), range (0), multitile (1), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL)
   { }
 };
 struct finetune_result

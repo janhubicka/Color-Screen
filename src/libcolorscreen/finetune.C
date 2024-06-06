@@ -91,6 +91,9 @@ public:
      netural density filter) of the input scan is linear.  */
   bool normalize;
 
+  /* Threshold for data collection.  */
+  luminosity_t collection_threshold;
+
   /* Optimized values of red, green, blue for RGB simulation
      and optimized intensities for BW simulation.
      Initialized by objfunc and can be reused after it
@@ -249,8 +252,8 @@ public:
 	/* Dufaycolor red strip width and height.  */
 	if (type == Dufay)
 	  {
-	    v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.7);
-	    v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.3);
+	    v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.5);
+	    v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.1);
 	    v[dufay_strips_index + 1] = std::min (v[dufay_strips_index + 1], (coord_t)0.7);
 	    v[dufay_strips_index + 1] = std::max (v[dufay_strips_index + 1], (coord_t)0.3);
 	  }
@@ -360,6 +363,8 @@ public:
     dufay_strips_index = n_values;
     if (optimize_dufay_strips)
       n_values += 2;
+    if ((unsigned)n_values > sizeof (start) / sizeof (start[0]))
+      abort ();
 
     last_blur = -1;
     last_width = -1;
@@ -518,7 +523,7 @@ public:
   {
     rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
     rgbdata color_red = {0,0,0}, color_green = {0,0,0}, color_blue = {0,0,0};
-    luminosity_t threshold = 0;
+    luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
 
     for (int y = 0; y < theight; y++)
@@ -639,7 +644,7 @@ public:
   {
     rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
     rgbdata color = {0,0,0};
-    luminosity_t threshold = 0;
+    luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
 
     for (int y = 0; y < theight; y++)
@@ -955,6 +960,13 @@ public:
 		      rendered.put_pixel (x, d.red * 65535 / rmax, d.green * 65535 / gmax, d.blue * 65535 / bmax);
 		    }
 		    break;
+		  case 2:
+		    {
+		      rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
+		      rgbdata d = get_pixel (v, x, y);
+		      rendered.put_pixel (x, (c.red - d.red) * 65535 / rmax + 65536/2, (c.green - d.green) * 65535 / gmax + 65536/2, (c.blue - d.blue) * 65535 / bmax + 65536/2);
+		    }
+		    break;
 		  }
 	      else
 		rendered.put_pixel (x, 0, 0, 0);
@@ -991,9 +1003,16 @@ public:
 		      rendered.put_pixel (x, d * 65535 / lmax, d * 65535 / lmax, d * 65535 / lmax);
 		    }
 		    break;
+		  case 2:
+		    {
+		      luminosity_t c = bw_evaulate_pixel (color, x, y, off);
+		      luminosity_t d = bw_get_pixel (x, y);
+		      rendered.put_pixel (x, (c-d) * 65535 / lmax + 65536/2, (c-d) * 65535 / lmax + 65536/2, (c-d) * 65535 / lmax + 65536/2);
+		    }
+		    break;
 		  }
 	      else
-		rendered.put_pixel (x, 0, 0, 0);
+		rendered.put_pixel (x, 65535, 0, 0);
 	    if (!rendered.write_row ())
 	      return false;
 	  }
@@ -1088,10 +1107,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
       progress->resume_stdout ();
     }
-  const int maxtiles = 3;
   finetune_solver best_solver;
   coord_t best_uncertainity = -1;
-  bool multitile = fparams.flags & finetune_multitile;
   {
     ///* FIXME: Hack; render is too large for stack in openmp thread.  */
     //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
@@ -1099,7 +1116,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     rparam2.invert = 0;
     render_to_scr render (param, img, rparam2, 256);
     int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
-    if (multitile)
+    int maxtiles = fparams.multitile;
+    if (maxtiles < 1)
+      maxtiles = 1;
+    if (!(maxtiles & 1))
+      maxtiles++;
+    if (maxtiles > 1)
       {
 	rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
 	rymin = std::max (tymin - theight * (maxtiles / 2), 0);
@@ -1119,9 +1141,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     if (progress && progress->cancel_requested ()) 
       return ret;
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,multitile,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (multitile && !(fparams.flags & finetune_no_progress_report))
-      for (int ty = multitile ? 0 : 1; ty < (multitile ? maxtiles : 2); ty++)
-	for (int tx = multitile ? 0 : 1; tx < (multitile ? maxtiles : 2); tx++)
+    if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+      progress->set_task ("finetuning samples", maxtiles * maxtiles);
+
+
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+      for (int ty = 0; ty < maxtiles; ty++)
+	for (int tx = 0; tx < maxtiles; tx++)
 	  {
 	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), img.width - twidth - 1);
 	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), img.height - theight - 1);
@@ -1166,16 +1192,19 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
 	    solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
 	    solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;
+	    solver.collection_threshold = rparam.collection_threshold;
 	    //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
 	    solver.least_squares = !(fparams.flags & finetune_no_least_squares);
-	    solver.data_collection = true;
+	    solver.data_collection = !(fparams.flags & finetune_no_data_collection);
 	    solver.normalize = !(fparams.flags & finetune_no_normalize);
 	    solver.init (rparam.screen_blur_radius);
 
 	    //if (verbose)
 	      //solver.print_values (solver.start);
-	    simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report));
+	    simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
 	    coord_t uncertainity = solver.objfunc (solver.start) / (twidth * theight);
+	    if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report) && progress)
+	      progress->inc_progress ();
 	    if (solver.bwtile)
 	      {
 		rgbdata c = solver.last_color;

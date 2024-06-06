@@ -549,7 +549,6 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	{
 	  int tx = r.tile_x;
 	  int ty = r.tile_y;
-	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
 	  if (progress)
@@ -620,7 +619,6 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 	{
 	  int tx = r.tile_x;
 	  int ty = r.tile_y;
-	  coord_t sx, sy;
 	  image_data &tile = *stitch.images[ty][tx].img;
 	  int stack = 0;
 	  if (progress)
