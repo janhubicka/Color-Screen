@@ -957,7 +957,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
         }
       if (k == 'X' && scan.has_rgb ())
         {
-	  rparams.compute_mix_weights (patch_proportions (current.type));
+	  rparams.compute_mix_weights (patch_proportions (current.type, &rparams));
           setvals ();
         }
     }

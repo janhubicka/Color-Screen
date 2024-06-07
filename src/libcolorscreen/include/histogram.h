@@ -104,7 +104,7 @@ public:
 	sum += m_entries[i];
 	//printf ("%i %i %i %f\n",i,sum, m_entries[i], index_to_val (i));
 	if (sum > threshold)
-	  return index_to_val (i);
+	  return i ? index_to_val (i - 1) : m_minval;
       }
     return m_minval;
   }
@@ -122,7 +122,7 @@ public:
       {
 	sum += m_entries[i];
 	if (sum > threshold)
-	  return index_to_val (i);
+	  return i ==  (int)m_entries.size () - 1 ? m_maxval : index_to_val (i + 1);
       }
     return m_maxval;
   }

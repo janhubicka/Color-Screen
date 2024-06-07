@@ -342,7 +342,7 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
    /* Set up scr-to-img map.  */
    scr_to_img map;
    map.set_parameters (*param, img);
-   rgbdata proportions = map.patch_proportions ();
+   rgbdata proportions = map.patch_proportions (&rparam);
 
    render_parameters my_rparam = rparam;
    my_rparam.output_profile = render_parameters::output_profile_xyz;

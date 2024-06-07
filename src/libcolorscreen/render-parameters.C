@@ -59,7 +59,7 @@ const char * render_parameters::output_profile_names [] = {
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue
    patches respectively. It should have sum at most 1.  */
-rgbdata patch_proportions (enum scr_type t)
+rgbdata patch_proportions (enum scr_type t, render_parameters *rparam)
 {
   switch (t)
     {
@@ -69,7 +69,11 @@ rgbdata patch_proportions (enum scr_type t)
       /* TODO: Measure actual portions.  */
       return {1/3.0,1/3.0,1/3.0};
     case Dufay:
-      return {dufaycolor::red_portion, dufaycolor::green_portion, dufaycolor::blue_portion};
+      {
+	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : dufaycolor::red_strip_width;
+	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : dufaycolor::green_strip_width;
+        return {red_strip_width, green_strip_width * (1 - red_strip_width), (1 - green_strip_width) *  (1 - red_strip_width)};
+      }
     default:
       abort ();
     }
@@ -594,11 +598,10 @@ render_parameters::auto_color_model (enum scr_type type)
   return true;
 }
 static rgbdata
-get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata color, progress_info *progress)
+get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata c, progress_info *progress)
 {
   render r(img, rparam, 256);
-  r.precompute_all (false, true, patch_proportions (param.type), progress);
-  rgbdata c = r.adjust_rgb (color);
+  r.precompute_all (false, true, patch_proportions (param.type, &rparam), progress);
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
   c.blue = r.adjust_luminosity_ir (c.blue);
@@ -617,8 +620,6 @@ bool
 render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
   render_parameters rparam = *this;
-  rparam.dark_point = 0;
-  rparam.brightness = 1;
   rparam.precise = true;
   {
     /* Produce histogram.  */
@@ -651,18 +652,21 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     rgbdata maxvals = hist.find_max (light_cut);
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / ((std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point) * rparam.scan_exposure);
+    printf ("Initial color %f\n",get_max_color (img, *this, param, maxvals, progress));
     /* Finetune brightness so color is white after whitepoint adjustments.  */
-    while (get_max_color (img, *this, param, maxvals, progress) < 1 - 1.0 / 256)
+    int n = 0;
+    while (get_max_color (img, *this, param, maxvals, progress) < 1 - 1.0 / 256 && n < 65535)
     {
-    //printf ("Brightness %i Color %f\n", brightness,get_max_color (img, *this, param, maxvals, progress));
       brightness *= 1 + 1.0 / 65536;
+      n++;
     }
-    while (get_max_color (img, *this, param, maxvals, progress) > 1 - 1.0 / 256)
+    while (get_max_color (img, *this, param, maxvals, progress) > 1 - 1.0 / 256 && n < 65535)
     {
     //printf ("Brightness2 %i Color %f\n", brightness,get_max_color (img, *this, param, maxvals, progress));
       brightness *= 1 - 1.0 / 65536;
+      n++;
     }
-    printf ("Color %f\n",get_max_color (img, *this, param, maxvals, progress));
+    printf ("Color %f attepts %i\n",get_max_color (img, *this, param, maxvals, progress), n);
   }
 #if 0
   {
@@ -837,7 +841,6 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   gsl_vector *c = gsl_vector_alloc (nvariables);
   gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
 
-  int n = 0;
   {
     if (progress)
       progress->set_task ("collecting color and IR data", ysteps);
@@ -849,7 +852,7 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
       return false;
 
-#pragma omp parallel for default(none) shared(progress, xmin, ymin, xsteps, ysteps, step, X, y, w, render, n)
+#pragma omp parallel for default(none) shared(progress, xmin, ymin, xsteps, ysteps, step, X, y, w, render)
     for (int yy = 0; yy < ysteps; yy ++)
       {
 	if (!progress || !progress->cancel_requested ())

@@ -76,7 +76,7 @@ public:
 	     Without doing so, for exmaple black from red pixels would be subtracted too agressively, since
 	     we account for every pixel in image, not only red patch portion.  */
 	if (profiled)
-	  profile_matrix = m_params.get_profile_matrix (m_scr_to_img.patch_proportions ());
+	  profile_matrix = m_params.get_profile_matrix (m_scr_to_img.patch_proportions (&m_params));
       }
   }
   void set_render_type (render_type_parameters rtparam)

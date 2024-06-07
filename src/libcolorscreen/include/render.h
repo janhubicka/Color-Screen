@@ -326,7 +326,7 @@ struct DLL_PUBLIC render_parameters
     film_gamma (1),
     precise (true), 
     screen_blur_radius (0.5),
-    collection_threshold (0.8),
+    collection_threshold (0.2),
     dufay_red_strip_width (0), dufay_green_strip_width (0),
 
     /* Scanner profile.  */
@@ -574,7 +574,7 @@ struct DLL_PUBLIC render_parameters
       }
   }
   bool auto_color_model (enum scr_type type);
-  bool auto_dark_brightness (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.04, luminosity_t light_cut = 0.01);
+  bool auto_dark_brightness (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.01, luminosity_t light_cut = 0.001);
   bool auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
   bool auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 private:

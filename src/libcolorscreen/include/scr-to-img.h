@@ -32,7 +32,8 @@ enum scr_type
    Dufay,
    max_scr_type
 };
-rgbdata patch_proportions (enum scr_type t);
+struct render_parameters;
+rgbdata patch_proportions (enum scr_type t, render_parameters *);
 
 /* Type of a scanner used.  */
 enum scanner_type {
@@ -476,9 +477,9 @@ public:
   {
     return m_param;
   }
-  rgbdata patch_proportions ()
+  rgbdata patch_proportions (render_parameters *rparam)
   {
-    return ::patch_proportions (m_param.type);
+    return ::patch_proportions (m_param.type, rparam);
   }
   pure_attr coord_t
   pixel_size (int img_width, int img_height)
