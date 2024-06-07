@@ -1061,7 +1061,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
-  coord_t test_range = fparams.range ? fparams.range || (fparams.flags & finetune_no_normalize) : (bw ? 1 : 2);
+  coord_t test_range = fparams.range ? fparams.range : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
   map.to_img (sx, sy, &tx, &ty);
   map.to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
@@ -1468,9 +1468,11 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
   *ret_green = green / wg;
   *ret_blue = blue / wb;
 #endif
+#if 0
   printf ("Color loss info\n");
   ret_red->print (stdout);
   ret_green->print (stdout);
   ret_blue->print (stdout);
+#endif
   return true;
 }

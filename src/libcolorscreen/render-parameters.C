@@ -593,6 +593,24 @@ render_parameters::auto_color_model (enum scr_type type)
     return false;
   return true;
 }
+static rgbdata
+get_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata color, progress_info *progress)
+{
+  render r(img, rparam, 256);
+  r.precompute_all (false, true, patch_proportions (param.type), progress);
+  rgbdata c = r.adjust_rgb (color);
+  c.red = r.adjust_luminosity_ir (c.red);
+  c.green = r.adjust_luminosity_ir (c.green);
+  c.blue = r.adjust_luminosity_ir (c.blue);
+  r.set_hdr_color (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+  return c;
+}
+static luminosity_t
+get_max_color (image_data &img, render_parameters &rparam, scr_to_img_parameters &param, rgbdata color, progress_info *progress)
+{
+  rgbdata c = get_color (img, rparam, param, color, progress);
+  return std::max (c.red, std::max (c.green, c.blue));
+}
 
 /* Determine black and brightness by analysing tile of a scan.  */
 bool
@@ -631,17 +649,14 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
       return false;
     rgbdata minvals = hist.find_min (dark_cut);
     rgbdata maxvals = hist.find_max (light_cut);
-#if 0
-    fprintf (stdout, "Darkest color :");
-    minvals.print (stdout);
-    fprintf (stdout, "Lightest color :");
-    maxvals.print (stdout);
-#endif
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / ((std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point) * rparam.scan_exposure);
-#if 0
-    fprintf (stdout, "Dark point %f brightness %f\n", dark_point, brightness);
-#endif
+    /* Finetune brightness so color is white after whitepoint adjustments.  */
+    while (get_max_color (img, *this, param, maxvals, progress) < 1 - 1.0 / 256)
+      brightness *= 1 + 1.0 / 65536;
+    while (get_max_color (img, *this, param, maxvals, progress) > 1 - 1.0 / 256)
+      brightness *= 1 - 1.0 / 65536;
+    printf ("Color %f\n",get_max_color (img, *this, param, maxvals, progress));
   }
 #if 0
   {

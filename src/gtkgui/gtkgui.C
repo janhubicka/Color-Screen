@@ -772,7 +772,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.orig_file = "/tmp/bworig.tif";
 	fparam.diff_file = "/tmp/bwdiff.tif";
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	fparam.range = 4;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
 	if (res.success)

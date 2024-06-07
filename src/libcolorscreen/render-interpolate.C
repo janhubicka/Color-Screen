@@ -113,11 +113,15 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			    cred.green, cgreen.green, cblue.green, 0,
 			    cred.blue , cgreen.blue , cblue.blue , 0,
 			    0         , 0           , 0          , 1);
+#if 0
 	  printf ("Matrix \n");
 	  sat.print (stdout);
+#endif
 	  m_saturation_matrix = sat.invert ();
+#if 0
 	  printf ("Saturation \n");
 	  m_saturation_matrix.print (stdout);
+#endif
 	  rgbdata r;
         }
     }
@@ -530,6 +534,9 @@ render_interpolate::dump_patch_density (FILE *out)
   return m_paget->dump_patch_density (out);
 }
 
+/* Cool ANALYZE with unadjusted luminosity of every screen tile in range xmin,ymin,xmax,ymmax.
+   For normal images range can be either in image or screen coordinates (specified for screen).
+   For stitch project image is always in final coordinates.  */
 bool
 analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
@@ -542,6 +549,8 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
       ymax += img.ymin;
       if (progress)
 	progress->set_task ("searching for tiles", 1);
+      /* It is easy to add support for screen coordinates if needed.  */
+      assert (!screen);
       std::vector <stitch_project::tile_range> ranges = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
       if (progress)
 	progress->set_task (task, ranges.size ());
@@ -582,6 +591,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
       return true;
     }
   render_interpolate render (param, img, rparam, 256);
+  render.set_unadjusted ();
   if (!screen)
     {
       if (!render.precompute_img_range (xmin, ymin, xmax, ymax, progress))
@@ -600,6 +610,9 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 				 xmin, xmax, ymin, ymax, progress);
 }
 
+/* Cool ANALYZE with unadjusted RGB value of every screen tile in range xmin,ymin,xmax,ymmax.
+   For normal images range can be either in image or screen coordinates (specified for screen).
+   For stitch project image is always in final coordinates.  */
 bool
 analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int xmax, int ymin, int ymax, progress_info *progress)
 {
@@ -610,6 +623,8 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
       ymin += img.ymin;
       xmax += img.xmin;
       ymax += img.ymin;
+      /* It is easy to add support for screen coordinates if needed.  */
+      assert (!screen);
       if (progress)
 	progress->set_task ("searching for tiles", 1);
       std::vector <stitch_project::tile_range> ranges = stitch.find_ranges (xmin, xmax, ymin, ymax, true, true);
@@ -654,6 +669,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
     }
   render_interpolate render (param, img, rparam, 256);
   render.set_precise_rgb ();
+  render.set_unadjusted ();
   //printf ("Screen %i\n",screen);
   if (!screen)
     {
