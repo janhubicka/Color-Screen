@@ -4316,7 +4316,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   return true;
 }
 color_matrix
-spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec)
+spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec, progress_info  *progress)
 {
   if (observing_spec == NULL)
     observing_spec = this;
@@ -4335,7 +4335,7 @@ spectrum_dyes_to_xyz::optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec
       colors[i] = film_rgb_response (tile) * scale;
       targets[i] = get_xyz_old_observer (observing_spec->backlight, tile);
     }
-  color_matrix m1 = determine_color_matrix (colors, targets, NULL, n, observing_spec->whitepoint_xyz ());
+  color_matrix m1 = determine_color_matrix (colors, targets, NULL, n, observing_spec->whitepoint_xyz (), 0, NULL, NULL, {1,1,1}, progress);
   m1.scale_channels (1/rscale, 1/gscale, 1/bscale);
   
   return m1;

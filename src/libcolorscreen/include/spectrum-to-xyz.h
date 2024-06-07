@@ -10,6 +10,7 @@
 #define SPECTRUM_SIZE ((SPECTRUM_END - SPECTRUM_START) / SPECTRUM_STEP + 1)
 
 typedef luminosity_t spectrum[SPECTRUM_SIZE];
+class progress_info;
 extern const DLL_PUBLIC spectrum cie_cmf_x;
 extern const DLL_PUBLIC spectrum cie_cmf_y;
 extern const DLL_PUBLIC spectrum cie_cmf_z;
@@ -303,7 +304,7 @@ public:
 		      0  , 0  , 0  , 1);
       return m;
     }
-  color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = NULL);
+  color_matrix optimized_xyz_matrix (spectrum_dyes_to_xyz *observing_spec = NULL, progress_info * = NULL);
   color_matrix process_transformation_matrix (spectrum_dyes_to_xyz *);
 
   /* Figure out relative sizes of patches which makes screen to look neutral with current dyes
@@ -412,10 +413,10 @@ public:
     }
 };
 
-color_matrix dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
-color_matrix dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
-color_matrix dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
-color_matrix dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temeperature);
+color_matrix dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temeperature, progress_info *progress = NULL);
+color_matrix dufaycolor_correction_harrison_horner_matrix (luminosity_t temperature, luminosity_t backlight_temeperature, progress_info *progress = NULL);
+color_matrix dufaycolor_correction_photography_its_materials_and_processes_matrix (luminosity_t temperature, luminosity_t backlight_temeperature, progress_info *progress = NULL);
+color_matrix dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temeperature, progress_info *progress = NULL);
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
 
