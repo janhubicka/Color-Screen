@@ -568,7 +568,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  freeze_x = false;
 	  freeze_y = false;
 	}
-      if (k == 's')
+      if (k == 's' && !(event->state & GDK_CONTROL_MASK))
 	{
 	  rparams.precise = false;
 	  display_scheduled = true;
@@ -799,6 +799,28 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    display_scheduled = true;
+	    setvals ();
+	  }
+      }
+      if (k == 's' && (event->state & GDK_CONTROL_MASK))
+      {
+	int x = (sel1x + sel2x)/2;
+	int y = (sel1y + sel2y)/2;
+	printf ("Finetuning focus on %i %i\n",x,y);
+	finetune_parameters fparam;
+	fparam.simulated_file = "/tmp/colorsimulated.tif";
+	fparam.orig_file = "/tmp/colororig.tif";
+	fparam.diff_file = "/tmp/colordiff.tif";
+	fparam.multitile = 3;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	if (res.success)
+	  {
+	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    rparams.dufay_red_strip_width = res.dufay_red_strip_width;
+	    rparams.dufay_green_strip_width = res.dufay_green_strip_width;
 	    display_scheduled = true;
 	    setvals ();
 	  }
