@@ -156,6 +156,8 @@ public:
 
   coord_t get_blur_radius (coord_t *v)
   {
+    if (optimize_screen_channel_blurs)
+      return (v[screen_index] + v[screen_index + 1] + v[screen_index + 2]) * screen::max_blur_radius / (pixel_size * 4);
     if (!optimize_screen_blur)
       return fixed_blur;
     return v[screen_index] * screen::max_blur_radius / pixel_size;
@@ -460,6 +462,8 @@ public:
     fixed_blur = blur_radius;
     fixed_width = dufaycolor::red_width;
     fixed_height = dufaycolor::green_height;
+    if (tile && normalize)
+      optimize_emulsion_blur = false;
     if (optimize_emulsion_blur)
       start[screen_index] = 0.8;
     if (optimize_screen_blur)
@@ -1119,7 +1123,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   map.set_parameters (param, img);
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
-  finetune_result ret = {false, -1, -1, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
+  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
 
   if (!bw && !img.rgbdata)
     bw = true;
@@ -1336,6 +1340,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   ret.dufay_red_strip_width = best_solver.get_red_strip_width (best_solver.start);
   ret.dufay_green_strip_width = best_solver.get_green_strip_width (best_solver.start);
   ret.screen_blur_radius = best_solver.get_blur_radius (best_solver.start);
+  ret.screen_channel_blur_radius = best_solver.get_channel_blur_radius (best_solver.start);
+  ret.emulsion_blur_radius = best_solver.get_emulsion_blur_radius (best_solver.start);
   ret.screen_coord_adjust = best_solver.get_offset (best_solver.start);
   ret.fog = best_solver.get_fog (best_solver.start);
 
