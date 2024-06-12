@@ -1068,7 +1068,7 @@ finetune (int argc, char **argv)
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "fog-tiff"))
 	fog_tiff_name = str;
-      else if (const char *str = arg_with_param (argc, argv, &i, "screen-blur-tiff"))
+      else if (const char *str = arg_with_param (argc, argv, &i, "blur-tiff"))
 	screen_blur_tiff_name = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "dufay-strips-tiff"))
 	strip_width_tiff_name = str;
@@ -1220,6 +1220,8 @@ finetune (int argc, char **argv)
 	    channel_hist.account (results[y * xsteps + x].screen_channel_blur_radius);
 	  }
       hist.finalize ();
+      emulsion_hist.finalize ();
+      channel_hist.finalize ();
       if (flags & finetune_screen_blur)
 	{
 	  printf ("Detected screen blurs\n");
