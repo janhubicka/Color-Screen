@@ -6,14 +6,16 @@ enum finetune_flags
 {
   finetune_position = 1,
   finetune_screen_blur = 2,
-  finetune_dufay_strips = 4,
-  finetune_fog = 8,
-  finetune_bw = 16,
-  finetune_no_data_collection = 32,
-  finetune_no_least_squares = 64,
-  finetune_no_progress_report = 128,
-  finetune_no_normalize = 256,
-  finetune_verbose = 512
+  finetune_screen_channel_blurs = 4,
+  finetune_dufay_strips = 8,
+  finetune_fog = 16,
+  finetune_bw = 32,
+  finetune_no_data_collection = 64,
+  finetune_no_least_squares = 128,
+  finetune_no_progress_report = 256,
+  finetune_no_normalize = 512,
+  finetune_emulsion_blur = 1024,
+  finetune_verbose = 2048
 };
 struct finetune_parameters
 {

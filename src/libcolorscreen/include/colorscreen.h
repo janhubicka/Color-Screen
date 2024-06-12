@@ -42,5 +42,5 @@ DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, s
 			render_to_file_params rfarams, render_type_parameters &rtparam, progress_info *progress, const char **error);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p);
-DLL_PUBLIC rgbdata get_linearized_pixel (image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
+DLL_PUBLIC rgbdata get_linearized_pixel (const image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
 #endif

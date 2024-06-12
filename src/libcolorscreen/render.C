@@ -89,6 +89,8 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
     }
   else if (!p.film_characteristic_curve)
     {
+      luminosity_t v = 1/apply_gamma ((0.5 * p.maxval / 256) * mul, gamma);
+      scan_exposure *= 1/v;
       for (int i = 0; i <= p.maxval; i++)
 	lookup_table[i] = (1/apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
     }

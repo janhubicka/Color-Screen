@@ -1189,6 +1189,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
     for (int i = 0; i < n; i++)
       {
 	coord_t dist = /*sqrt*/ ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) * (xscale * xscale) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y) * (yscale * yscale));
+	dist *= dist;
 	double weight = 1 / (dist + 0.5);
 	weights[i] = weight;
 	normscale = std::max (normscale, weight);

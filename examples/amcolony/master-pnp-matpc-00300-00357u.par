@@ -5,9 +5,9 @@ screen_shift: 2315.278214 290.304010
 coordinate_x: 8.749799 -0.049819
 coordinate_y: 0.047191 8.769005
 projection_distance: 1.000000
-tilt: 0.000010 -0.000011
+tilt: 1e-05 -1.1e-05
 final_rotation: 0.000000
-lens_warp_rectilinear: 1 1.000000 0.000000 0.000000 0.000000 0 0 0.500000 0.500000
+lens_warp_rectilinear: 1 1 0 0 0 0 0 0.5 0.5
 mesh: yes
   mesh_dimensions: 46 60
   mesh_shifts: 266.000000 33.000000
@@ -76,17 +76,17 @@ mesh: yes
 gamma: 2.200000
 film_gamma: 1.000000
 target_film_gamma: 1.000000
-white_balance: 0.900000 0.800000 1.000000
-sharpen_radius: 1.000000
+white_balance: 0.950000 0.850000 1.000000
+sharpen_radius: 0.000000
 sharpen_amount: 2.000000
-presaturation: 1.000000
+presaturation: 2.000000
 saturation: 1.000000
 brightness: 1.202694
 dufay_red_strip_width: 0.000000
 dufay_green_strip_width: 0.000000
-collection_threshold: 0.800000
-screen_blur_radius: 0.500000
-collection_threshold: 0.800000
+collection_threshold: 0.200000
+screen_blur_radius: 0.771896
+collection_threshold: 0.200000
 color_model: Miethe_Goerz_reconstructed_by_Wagner
 backlight_temperature: 5000.000000
 temperature: 5000.000000

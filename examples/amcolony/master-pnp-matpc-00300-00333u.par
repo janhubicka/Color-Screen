@@ -5,9 +5,9 @@ screen_shift: 3070.550168 2178.257160
 coordinate_x: 8.778609 -0.061780
 coordinate_y: 0.059655 8.753206
 projection_distance: 1.000000
-tilt: 0.000008 0.000009
+tilt: 8e-06 9e-06
 final_rotation: 0.000000
-lens_warp_rectilinear: 1 1.000000 0.000000 0.000000 0.000000 0 0 0.500000 0.500000
+lens_warp_rectilinear: 1 1 0 0 0 0 0 0.5 0.5
 mesh: yes
   mesh_dimensions: 59 45
   mesh_shifts: 350.000000 250.000000
@@ -66,18 +66,18 @@ sharpen_radius: 1.000000
 sharpen_amount: 1.000000
 presaturation: 1.000000
 saturation: 1.000000
-brightness: 1.000000
+brightness: 1.142821
 dufay_red_strip_width: 0.000000
 dufay_green_strip_width: 0.000000
-collection_threshold: 0.800000
-screen_blur_radius: 0.500000
-collection_threshold: 0.800000
+collection_threshold: 0.200000
+screen_blur_radius: 0.593988
+collection_threshold: 0.200000
 color_model: Miethe_Goerz_reconstructed_by_Wagner
 backlight_temperature: 5000.000000
 temperature: 5000.000000
 dye_balance: bradford
 scan_exposure: 1.000000
-dark_point: 0.000000
+dark_point: 0.001777
 backlight_correction_black: 0.000000
 invert: no
 precise: yes
@@ -5368,4 +5368,5 @@ solver_point: 2531.360291 360.918383 -60.000000 -208.000000 green
 solver_point: 3929.026117 578.643811 99.000000 -182.000000 green
 solver_point: 3928.047887 429.906099 99.000000 -199.000000 green
 solver_point: 4085.494332 341.258258 117.000000 -209.000000 green
+solver_point: 1902.595498 838.118359 -132.000000 -154.000000 green
 screen_alignment_end

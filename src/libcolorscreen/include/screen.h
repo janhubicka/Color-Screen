@@ -51,6 +51,8 @@ struct DLL_PUBLIC screen
   void initialize_preview (enum scr_type type);
   /* Initialize imitating lens blur.  */
   void initialize_with_blur (screen &scr, coord_t blur_radius);
+  /* Same but specify different blur for each color.  */
+  void initialize_with_blur (screen &scr, rgbdata blur_radius);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
 private:
@@ -61,6 +63,7 @@ private:
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
   void preview_dufay ();
-  __attribute__ ((always_inline)) inline void initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur);
+  __attribute__ ((always_inline)) inline void initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int channel);
+  void initialize_with_blur (screen &scr, coord_t blur_radius, int channel);
 };
 #endif

@@ -762,6 +762,27 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      display_scheduled = true;
 	    }
 	}
+      if (k == 'f' && (event->state & GDK_MOD1_MASK))
+      {
+	int x = (sel1x + sel2x)/2;
+	int y = (sel1y + sel2y)/2;
+	printf ("Finetuning focus on %i %i\n",x,y);
+	finetune_parameters fparam;
+	fparam.simulated_file = "/tmp/bwsimulated.tif";
+	fparam.orig_file = "/tmp/bworig.tif";
+	fparam.diff_file = "/tmp/bwdiff.tif";
+	fparam.multitile = 3;
+	fparam.range = 4;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_emulsion_blur /*| finetune_dufay_strips | finetune_fog*/;
+	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	if (res.success)
+	  {
+	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    display_scheduled = true;
+	    setvals ();
+	  }
+      }
       if (k == 'f' && (event->state & GDK_CONTROL_MASK))
       {
 	int x = (sel1x + sel2x)/2;
@@ -813,7 +834,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.orig_file = "/tmp/colororig.tif";
 	fparam.diff_file = "/tmp/colordiff.tif";
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
 	if (res.success)
@@ -899,7 +920,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	display_scheduled = true;
 	preview_display_scheduled = true;
       }
-      if (k == 'f' && current.type != Finlay && !(event->state & GDK_CONTROL_MASK))
+      if (k == 'f' && current.type != Finlay && !(event->state & (GDK_CONTROL_MASK | GDK_MOD1_MASK)))
       {
 	save_parameters ();
 	current.type = Finlay;

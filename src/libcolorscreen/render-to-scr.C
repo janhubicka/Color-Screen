@@ -17,9 +17,9 @@ struct screen_params
   {
     return t == o.t
 	   && preview == o.preview
-	   && fabs (radius - o.radius) < 0.01
-	   && dufay_red_strip_width == o.dufay_red_strip_width
-	   && dufay_green_strip_height == o.dufay_green_strip_height;
+	   && fabs (radius - o.radius) < 0.001
+	   && (t != Dufay || (dufay_red_strip_width == o.dufay_red_strip_width
+			      && dufay_green_strip_height == o.dufay_green_strip_height));
   }
 };
 

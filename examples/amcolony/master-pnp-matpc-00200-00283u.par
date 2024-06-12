@@ -5,9 +5,9 @@ screen_shift: 4873.903761 2273.848219
 coordinate_x: 8.780580 0.004541
 coordinate_y: -0.006967 8.752031
 projection_distance: 1.000000
-tilt: 0.000003 0.000012
+tilt: 3e-06 1.2e-05
 final_rotation: 0.000000
-lens_warp_rectilinear: 1 1.000837 0.000057 -0.001346 0.000452 0 0 1.000000 0.713861
+lens_warp_rectilinear: 1 1.00084 5.7e-05 -0.001346 0.000452 0 0 1 0.713861
 mesh: yes
   mesh_dimensions: 59 45
   mesh_shifts: 554.000000 258.000000
@@ -61,23 +61,23 @@ mesh: yes
 gamma: 2.200000
 film_gamma: 1.000000
 target_film_gamma: 1.000000
-white_balance: 0.800000 1.000000 1.000000
-sharpen_radius: 1.000000
+white_balance: 1.000000 1.000000 1.000000
+sharpen_radius: 0.000000
 sharpen_amount: 1.500000
-presaturation: 1.500000
+presaturation: 1.000000
 saturation: 1.000000
-brightness: 1.000000
+brightness: 1.441155
 dufay_red_strip_width: 0.000000
 dufay_green_strip_width: 0.000000
-collection_threshold: 0.800000
-screen_blur_radius: 0.500000
-collection_threshold: 0.800000
+collection_threshold: 0.200000
+screen_blur_radius: 0.700000
+collection_threshold: 0.200000
 color_model: Wratten_25_58_47_spectra
 backlight_temperature: 5000.000000
 temperature: 5000.000000
 dye_balance: bradford
 scan_exposure: 1.000000
-dark_point: 0.000000
+dark_point: 0.001788
 backlight_correction_black: 0.000000
 invert: no
 precise: yes
