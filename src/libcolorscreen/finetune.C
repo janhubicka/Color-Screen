@@ -654,16 +654,44 @@ public:
   sat.apply_to_rgb (color_red.red, color_green.red, color_blue.red, &color_red.red, &color_green.red, &color_blue.red);
   sat.apply_to_rgb (color_red.green, color_green.green, color_blue.green, &color_red.green, &color_green.green, &color_blue.green);
   sat.apply_to_rgb (color_red.blue, color_green.blue, color_blue.blue, &color_red.blue, &color_green.blue, &color_blue.blue);
-#if 0
-  sat.apply_to_rgb (color.red, color.green, color.blue, &color.red, &color.green, &color.blue);
-  if (color.red < 0)
-    color.red = 0;
-  if (color.green < 0)
-    color.green = 0;
-  if (color.blue < 0)
-    color.blue = 0;
-  return color;
-#endif
+  /* Colors should be real reactions of scanner, so no negative values and also no excessively large values. Allow some overexposure.  */
+  if (color_red.red < 0)
+    color_red.red = 0;
+  if (color_red.green < 0)
+    color_red.green = 0;
+  if (color_red.blue < 0)
+    color_red.blue = 0;
+  if (color_red.red > 2)
+    color_red.red = 2;
+  if (color_red.green > 2)
+    color_red.green = 2;
+  if (color_red.blue > 2)
+    color_red.blue = 2;
+  if (color_green.red < 0)
+    color_green.red = 0;
+  if (color_green.green < 0)
+    color_green.green = 0;
+  if (color_green.blue < 0)
+    color_green.blue = 0;
+  if (color_green.red > 2)
+    color_green.red = 2;
+  if (color_green.green > 2)
+    color_green.green = 2;
+  if (color_green.blue > 2)
+    color_green.blue = 2;
+  if (color_blue.red < 0)
+    color_blue.red = 0;
+  if (color_blue.green < 0)
+    color_blue.green = 0;
+  if (color_blue.blue < 0)
+    color_blue.blue = 0;
+  if (color_blue.red > 2)
+    color_blue.red = 2;
+  if (color_blue.green > 2)
+    color_blue.green = 2;
+  if (color_blue.blue > 2)
+    color_blue.blue = 2;
+
    *ret_red = color_red;
    *ret_green = color_green;
    *ret_blue = color_blue;
