@@ -886,7 +886,17 @@ public:
 	      {
 		rgbdata c = evaulate_pixel (red, green, blue, x, y, off);
 		rgbdata d = get_pixel (v, x, y);
+
+		/* Bayer pattern. */
+		if (!(x&1) && !(y&1))
+		  sum += fabs (c.red - d.red) * 2;
+		else if ((x&1) && (y&1))
+		  sum += fabs (c.blue - d.blue) * 2;
+		else
+		  sum += fabs (c.green - d.green);
+#if 0
 		sum += fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
+#endif
 			/*(c.red - d.red) * (c.red - d.red) + (c.green - d.green) * (c.green - d.green) + (c.blue - d.blue) * (c.blue - d.blue)*/
 	      }
       }
@@ -1250,8 +1260,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
 	  {
-	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), img.width - twidth - 1);
-	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), img.height - theight - 1);
+	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), img.width - twidth - 1) & ~1;
+	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), img.height - theight - 1) & ~1;
 	    int cur_txmax = cur_txmin + twidth;
 	    int cur_tymax = cur_tymin + theight;
 	    finetune_solver solver;
