@@ -68,8 +68,13 @@ public:
   /* Screen blur and duffay red strip widht and green strip height. */
   coord_t fixed_blur, fixed_width, fixed_height;
 
-  //const coord_t range = 0.2;
-  constexpr static const coord_t range = 0.2;
+  /* Range of position adjustment.  Dufay screen has squares about size of 0.5 screen
+     coordinates.  adjusting within -0.2 to 0.2 makes sure we do not exchange green for
+     blue.  */
+  constexpr static const coord_t dufay_range = 0.2;
+  /* Paget range is smaller since there are more squares per screen period.
+     Especially blue elements are small  */
+  constexpr static const coord_t paget_range = 0.1;
 
   coord_t pixel_size;
   scr_type type;
@@ -127,13 +132,18 @@ public:
   {
     return false;
   }
+  int sample_points ()
+  {
+    return twidth * theight - noutliers;
+  }
 
   point_t
   get_offset (coord_t *v)
   {
     if (!optimize_position)
       return {0, 0};
-    return {v[0], v[1]};
+    coord_t range = type == Dufay ? dufay_range : paget_range;
+    return {v[0] * range, v[1] * range};
   }
 
   point_t
@@ -248,10 +258,10 @@ public:
     /* x and y adjustments.  */
     if (optimize_position)
       {
-	v[0] = std::min (v[0], type == Dufay ? range : range / 2);
-	v[0] = std::max (v[0], type == Dufay ? -range : -range / 2);
-	v[1] = std::min (v[1], type == Dufay ? range : range / 2);
-	v[1] = std::max (v[1], type == Dufay ? -range : -range / 2);
+	v[0] = std::min (v[0], (coord_t)1);
+	v[0] = std::max (v[0], (coord_t)-1);
+	v[1] = std::min (v[1], (coord_t)1);
+	v[1] = std::max (v[1], (coord_t)-1);
       }
     if (optimize_fog)
       {
@@ -334,7 +344,7 @@ public:
   alloc_least_squares ()
   {
     int matrixw = 3;
-    int matrixh = twidth * theight - noutliers;
+    int matrixh = sample_points ();
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
     gsl_y[0] = gsl_vector_alloc (matrixh);
@@ -914,7 +924,7 @@ public:
 	sum /= maxgray;
       }
     //printf ("%f\n", sum);
-    return sum;
+    return sum / sample_points ();
   }
 
   int
@@ -1315,7 +1325,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    //if (verbose)
 	      //solver.print_values (solver.start);
 	    simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
-	    coord_t uncertainity = solver.objfunc (solver.start) / (twidth * theight);
+	    coord_t uncertainity = solver.objfunc (solver.start);
 	    if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report) && progress)
 	      progress->inc_progress ();
 	    if (solver.bwtile)
@@ -1372,7 +1382,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       best_solver.print_values (best_solver.start);
       progress->resume_stdout ();
     }
-  ret.badness = best_solver.objfunc (best_solver.start) / (twidth * theight);
+  ret.badness = best_solver.objfunc (best_solver.start);
   //if (best_solver.optimize_screen_blur)
     //ret.screen_blur_radius = best_solver.start[best_solver.screen_index];
   ret.dufay_red_strip_width = best_solver.get_red_strip_width (best_solver.start);
