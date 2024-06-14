@@ -157,30 +157,30 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 #endif
       case render_parameters::color_model_red:
 	{
-	  color_matrix m (1, 0, 0, 0,
-			  0.5, 0, 0, 0,
-			  0.5, 0, 0, 0,
-			  0, 0, 0, 1);
+	  color_matrix m (1,  0, 0, 0,
+			  0.5,0, 0, 0,
+			  0.5,0, 0, 0,
+			  0,  0, 0, 1);
 	  dyes = m;
 	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_green:
 	{
-	  color_matrix m (0, 0.5,  0, 0,
-			  0, 1,0, 0,
+	  color_matrix m (0, 0.5,0, 0,
+			  0, 1,  0, 0,
 			  0, 0.5,0, 0,
-			  0, 0, 0,1);
+			  0, 0,  0, 1);
 	  dyes = m;
 	  is_srgb = true;
 	}
 	break;
       case render_parameters::color_model_blue:
 	{
-	  color_matrix m (0, 0, 0.5,  0,
+	  color_matrix m (0, 0, 0.5,0,
 			  0, 0, 0.5,0,
-			  0, 0, 1,0,
-			  0, 0, 0, 1);
+			  0, 0, 1,  0,
+			  0, 0, 0,  1);
 	  dyes = m;
 	  is_srgb = true;
 	}
