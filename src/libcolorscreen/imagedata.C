@@ -621,6 +621,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.use_auto_wb = 0;
   RawProcessor.imgdata.params.use_camera_wb = 0;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
+  if (getenv ("CSHALFRAW"))
+    RawProcessor.imgdata.params.half_size = 1;
   RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.fbdd_noiserd = 0;
   /* TODO figure out threshold.  */

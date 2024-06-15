@@ -167,7 +167,7 @@ public:
   coord_t get_blur_radius (coord_t *v)
   {
     if (optimize_screen_channel_blurs)
-      return (v[screen_index] + v[screen_index + 1] + v[screen_index + 2]) * screen::max_blur_radius / (pixel_size * 4);
+      return (v[screen_index] + v[screen_index + 1] + v[screen_index + 2]) * screen::max_blur_radius / (pixel_size * 3);
     if (!optimize_screen_blur)
       return fixed_blur;
     return v[screen_index] * screen::max_blur_radius / pixel_size;
@@ -554,33 +554,54 @@ public:
       }
   }
 
-  /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
-     compensating coordates stored in tole_pos.  */
-  inline rgbdata
-  evaulate_pixel (rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off)
+  /* Determine color of screen at pixel X,Y with offset OFF.  */
+  pure_attr inline rgbdata
+  evaulate_screen_pixel (int x, int y, point_t off)
   {
     point_t p = tile_pos [y * twidth + x];
     p.x += off.x;
     p.y += off.y;
-    /* Interpolation here is necessary to ensure smoothness.  */
-    rgbdata m = scr.interpolated_mult (p);
+    if (0)
+      {
+	/* Interpolation here is necessary to ensure smoothness.  */
+	return scr.interpolated_mult (p);
+      }
+    int dx = x == twidth - 1 ? -1 : 1;
+    point_t px = tile_pos [y * twidth + (x + dx)];
+    px.x += off.x;
+    px.y += off.y;
+    int dy = y == theight - 1 ? -1 : 1;
+    point_t py = tile_pos [(y + dy) * twidth + x];
+    py.x += off.x;
+    py.y += off.y;
+    point_t pdx = (px - p) * (1.0 / 6.0) * dx;
+    point_t pdy = (py - p) * (1.0 / 6.0) * dy;
+    rgbdata m = {0,0,0};
+    for (int yy = -2; yy <= 2; yy++)
+      for (int xx = -2; xx <= 2; xx++)
+	m+= scr.interpolated_mult (p + pdx * xx + pdy * yy);
+    return m * ((coord_t)1.0 / 25);
+  }
+
+  /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
+     compensating coordates stored in tole_pos.  */
+  pure_attr inline rgbdata
+  evaulate_pixel (rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off)
+  {
+    rgbdata m = evaulate_screen_pixel (x, y, off);
     return ((red * m.red + green * m.green + blue * m.blue) * ((coord_t)1.0 / rgbscale));
   }
 
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
-  inline luminosity_t
+  pure_attr inline luminosity_t
   bw_evaulate_pixel (rgbdata color, int x, int y, point_t off)
   {
-    point_t p = tile_pos [y * twidth + x];
-    p.x += off.x;
-    p.y += off.y;
-    /* Interpolation here is necessary to ensure smoothness.  */
-    rgbdata m = scr.interpolated_mult (p);
+    rgbdata m = evaulate_screen_pixel (x, y, off);
     return ((m.red * color.red + m.green * color.green + m.blue * color.blue) /** (2 * maxgray)*/);
   }
 
-  rgbdata
+  pure_attr rgbdata
   get_pixel (coord_t *v, int x, int y)
   {
      if (!optimize_fog)
@@ -608,13 +629,13 @@ public:
     rgbdata color_red = {0,0,0}, color_green = {0,0,0}, color_blue = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
+    point_t off = get_offset (v);
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    point_t p = get_pos (v, x, y);
-	    rgbdata m = scr.interpolated_mult (p);
+	    rgbdata m = evaulate_screen_pixel (x, y, off);
 	    rgbdata d = get_pixel (v, x, y);
 	    if (m.red > threshold)
 	      {
@@ -721,10 +742,7 @@ public:
 	  for (int x = 0; x < twidth; x++)
 	    if (!noutliers || !outliers->test_bit (x, y))
 	      {
-		point_t p = tile_pos [y * twidth + x];
-		p.x += off.x;
-		p.y += off.y;
-		rgbdata c = scr.interpolated_mult (p);
+		rgbdata c = evaulate_screen_pixel (x, y, off);
 		gsl_matrix_set (gsl_X, e, 0, c.red);
 		gsl_matrix_set (gsl_X, e, 1, c.green);
 		gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -757,13 +775,13 @@ public:
     rgbdata color = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
+    point_t off = get_offset (v);
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    point_t p = get_pos (v, x, y);
-	    rgbdata m = scr.interpolated_mult (p);
+	    rgbdata m = evaulate_screen_pixel (x, y, off);
 	    luminosity_t l = bw_get_pixel (x, y);
 	    if (m.red > threshold)
 	      {
@@ -821,12 +839,12 @@ public:
   bw_determine_color_using_least_squares (coord_t *v)
   {
     int e = 0;
+    point_t off = get_offset (v);
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    point_t p = get_pos (v, x, y);
-	    rgbdata c = scr.interpolated_mult (p);
+	    rgbdata c = evaulate_screen_pixel (x, y, off);
 	    gsl_matrix_set (gsl_X, e, 0, c.red);
 	    gsl_matrix_set (gsl_X, e, 1, c.green);
 	    gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -873,7 +891,7 @@ public:
       {
 	if (least_squares && optimize_fog)
 	  init_least_squares (v);
-	determine_colors_using_data_collection (v, red, green, blue);
+	determine_colors_using_least_squares (v, red, green, blue);
       }
     last_red = *red;
     last_green = *green;
@@ -924,7 +942,7 @@ public:
 	sum /= maxgray;
       }
     //printf ("%f\n", sum);
-    return sum / sample_points ();
+    return (sum / sample_points ()) /** (1 + get_blur_radius (v))*/;
   }
 
   int
@@ -1552,26 +1570,44 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
   for (int y = ymin; y <= ymax; y++)
     for (int x = xmin; x <= xmax; x++)
       {
+#if 0
 	point_t p;
-        map.to_scr (x, y, &p.x, &p.y);
+        map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
 	rgbdata m = scr.interpolated_mult (p);
+	rgbdata am = m;
+#else
+	point_t p;
+        map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
+	point_t px;
+        map.to_scr (x + 1.5, y + 0.5, &px.x, &px.y);
+	point_t py;
+        map.to_scr (x + 0.5, y + 1.5, &py.x, &py.y);
+	rgbdata am = {0, 0, 0};
+	point_t pdx = (px - p) * (1.0 / 6.0);
+	point_t pdy = (py - p) * (1.0 / 6.0);
+	for (int yy = -2; yy <= 2; yy++)
+	  for (int xx = -2; xx <= 2; xx++)
+	    am+= scr.interpolated_mult (p + pdx * xx + pdy * yy);
+	am *= ((coord_t)1.0 / 25);
+	rgbdata m = scr.noninterpolated_mult (p);
+#endif
 	if (m.red > threshold)
 	  {
 	    coord_t val = m.red - threshold;
 	    wr += val;
-	    red += m * val;
+	    red += am * val;
 	  }
 	if (m.green > threshold)
 	  {
 	    coord_t val = m.green - threshold;
 	    wg += val;
-	    green += m * val;
+	    green += am * val;
 	  }
 	if (m.blue > threshold)
 	  {
 	    coord_t val = m.blue - threshold;
 	    wb += val;
-	    blue += m * val;
+	    blue += am * val;
 	  }
       }
   if (!(wr >0 && wg > 0 && wb > 0))
