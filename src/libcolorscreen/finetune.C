@@ -61,6 +61,11 @@ public:
   std::shared_ptr <luminosity_t []> bwtile;
   /* Tile position  */
   std::shared_ptr <point_t []> tile_pos;
+  int simulated_screen_border;
+  int simulated_screen_width;
+  int simulated_screen_height;
+  /* Tile colors */
+  std::shared_ptr <rgbdata []> simulated_screen;
 
   /* 2 coordinates, 3* blur radius, 3 * 3 colors, strip widths, fog  */
   coord_t start[19];
@@ -526,6 +531,16 @@ public:
 	if (!optimize_fog)
 	  init_least_squares (NULL);
       }
+    simulated_screen_border = 0;
+    simulated_screen_width = twidth;
+    simulated_screen_height = theight;
+    simulated_screen = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height]);
+  }
+
+  rgbdata
+  get_simulated_screen_pixel (int x, int y)
+  {
+    return simulated_screen [y * simulated_screen_width + x];
   }
 
   void
@@ -588,8 +603,18 @@ public:
   pure_attr inline rgbdata
   evaulate_pixel (rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off)
   {
-    rgbdata m = evaulate_screen_pixel (x, y, off);
+    rgbdata m = get_simulated_screen_pixel (x, y);
     return ((red * m.red + green * m.green + blue * m.blue) * ((coord_t)1.0 / rgbscale));
+  }
+
+  void
+  simulate_screen (coord_t *v)
+  {
+    rgbdata red, green, blue;
+    point_t off = get_offset (v);
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	simulated_screen [y * simulated_screen_width + x] = evaulate_screen_pixel (x, y, off);
   }
 
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
@@ -597,7 +622,7 @@ public:
   pure_attr inline luminosity_t
   bw_evaulate_pixel (rgbdata color, int x, int y, point_t off)
   {
-    rgbdata m = evaulate_screen_pixel (x, y, off);
+    rgbdata m = get_simulated_screen_pixel (x, y);
     return ((m.red * color.red + m.green * color.green + m.blue * color.blue) /** (2 * maxgray)*/);
   }
 
@@ -629,13 +654,12 @@ public:
     rgbdata color_red = {0,0,0}, color_green = {0,0,0}, color_blue = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
-    point_t off = get_offset (v);
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    rgbdata m = evaulate_screen_pixel (x, y, off);
+	    rgbdata m = get_simulated_screen_pixel (x, y);
 	    rgbdata d = get_pixel (v, x, y);
 	    if (m.red > threshold)
 	      {
@@ -731,7 +755,6 @@ public:
   coord_t
   determine_colors_using_least_squares (coord_t *v, rgbdata *red, rgbdata *green, rgbdata *blue)
   {
-    point_t off = get_offset (v);
     coord_t sqsum = 0;
 
 
@@ -742,7 +765,7 @@ public:
 	  for (int x = 0; x < twidth; x++)
 	    if (!noutliers || !outliers->test_bit (x, y))
 	      {
-		rgbdata c = evaulate_screen_pixel (x, y, off);
+		rgbdata c = get_simulated_screen_pixel (x, y);
 		gsl_matrix_set (gsl_X, e, 0, c.red);
 		gsl_matrix_set (gsl_X, e, 1, c.green);
 		gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -775,13 +798,12 @@ public:
     rgbdata color = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
-    point_t off = get_offset (v);
 
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    rgbdata m = evaulate_screen_pixel (x, y, off);
+	    rgbdata m = get_simulated_screen_pixel (x, y);
 	    luminosity_t l = bw_get_pixel (x, y);
 	    if (m.red > threshold)
 	      {
@@ -839,12 +861,11 @@ public:
   bw_determine_color_using_least_squares (coord_t *v)
   {
     int e = 0;
-    point_t off = get_offset (v);
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	if (!noutliers || !outliers->test_bit (x, y))
 	  {
-	    rgbdata c = evaulate_screen_pixel (x, y, off);
+	    rgbdata c = get_simulated_screen_pixel (x, y);
 	    gsl_matrix_set (gsl_X, e, 0, c.red);
 	    gsl_matrix_set (gsl_X, e, 1, c.green);
 	    gsl_matrix_set (gsl_X, e, 2, c.blue);
@@ -904,6 +925,7 @@ public:
     init_screen (v);
     coord_t sum = 0;
     point_t off = get_offset (v);
+    simulate_screen (v);
     if (tile)
       {
 	rgbdata red, green, blue;

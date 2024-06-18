@@ -536,14 +536,20 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 	  *error = "can not open eip zip archive";
 	  return false;
 	}
-      zip_file = zip_fopen (zip, "0.iiq", 0);
+      name = "0.iiq";
+      zip_file = zip_fopen (zip, name, 0);
+      if (!zip_file)
+        {
+	  name = "0.IIQ";
+          zip_file = zip_fopen (zip, name, 0);
+        }
       if (!zip_file)
 	{
 	  *error = "can not find 0.iiq in the eip zip archive";
 	  return false;
 	}
       zip_stat_t stat;
-      if (zip_stat (zip, "0.iiq", 0, &stat))
+      if (zip_stat (zip, name, 0, &stat))
         {
 	  *error = "can not determine length of 0.iiq in the eip zip archive";
 	  return false;
@@ -571,14 +577,14 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 	    {
 	      if (zip_stat (zip, name, 0, &stat))
 		{
-		  *error = "can not determine length of 0.iiq in the eip zip archive";
+		  *error = "can not determine length of LLC file in the eip zip archive";
 		  free (buffer);
 		  return false;
 		}
 	      zip_file = zip_fopen (zip, name, 0);
 	      if (!zip_file)
 		{
-		  *error = "can not find 0.iiq in the eip zip archive";
+		  *error = "can not find LLC file in the eip zip archive";
 		  return false;
 		}
 	      memory_buffer mbuffer = {NULL, 0, 0};
