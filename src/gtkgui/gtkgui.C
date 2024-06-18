@@ -1900,7 +1900,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
         {
 	  printf ("Finetuning %f %f\n",x,y);
 	  finetune_parameters fparam;
-	  fparam.multitile = 3;
+	  fparam.multitile = scale_x > 1 ? 3 : 1;
 	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose;
 	  file_progress_info progress (stdout);
 	  finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
