@@ -53,8 +53,11 @@ struct DLL_PUBLIC screen
   void initialize_with_blur (screen &scr, coord_t blur_radius);
   /* Same but specify different blur for each color.  */
   void initialize_with_blur (screen &scr, rgbdata blur_radius);
+  void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
+  void initialize_with_fft_blur (screen &scr, coord_t blur_radius);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
+  bool save_tiff (const char *filename);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

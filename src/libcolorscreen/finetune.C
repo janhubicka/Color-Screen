@@ -4,6 +4,7 @@
 #include <gsl/gsl_multifit.h>
 #include "include/finetune.h"
 #include "include/histogram.h"
+#include "include/stitch.h"
 #include "render-interpolate.h"
 #include "dufaycolor.h"
 #include "include/tiff-writer.h"
@@ -28,11 +29,6 @@ private:
   int noutliers;
   std::shared_ptr <bitmap_2d> outliers;
 
-  /* Unblured screen.  */
-  screen scr1;
-  /* Blured screen used to render simulated scan.  */
-  screen scr;
-
   /* Indexes into optimized values array to fetch individual parameters  */
   int fog_index;
   int color_index;
@@ -48,6 +44,11 @@ private:
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
 public:
+  /* Unblured screen.  */
+  screen scr1;
+  /* Blured screen used to render simulated scan.  */
+  screen scr;
+
   finetune_solver ()
     : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
   {
@@ -558,10 +559,10 @@ public:
 	if (emulsion_blur > 0)
 	  {
 	    screen scr2;
-	    scr2.initialize_with_blur (scr1, emulsion_blur);
+	    scr2.initialize_with_fft_blur (scr1, emulsion_blur);
 	    scr1 = scr2;
 	  }
-	scr.initialize_with_blur (scr1, blur * pixel_size);
+	scr.initialize_with_fft_blur (scr1, blur * pixel_size);
 	last_blur = blur;
 	last_emulsion_blur = emulsion_blur;
 	last_width = red_strip_width;
@@ -1207,13 +1208,28 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress)
 {
+  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
+  const image_data *imgp = &img;
   scr_to_img map;
-  map.set_parameters (param, img);
+  if (img.stitch)
+    {
+      coord_t sx, sy;
+      int tx, ty;
+      img.stitch->common_scr_to_img.final_to_scr (x + img.xmin, y + img.ymin, &sx, &sy);
+      if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	return ret;
+      img.stitch->images[ty][tx].common_scr_to_img_scr (sx, sy, &sx, &sy);
+      x = nearest_int (sx);
+      y = nearest_int (sy);
+      imgp = img.stitch->images[ty][tx].img;
+      map.set_parameters (img.stitch->images[ty][tx].param, *imgp);
+    }
+  else
+    map.set_parameters (param, *imgp);
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
-  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
 
-  if (!bw && !img.rgbdata)
+  if (!bw && !imgp->rgbdata)
     bw = true;
 
   /* Determine tile to analyze.  */
@@ -1245,12 +1261,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax), tymax = ceil (symax);
   if (txmin < 0)
     txmin = 0;
-  if (txmax > img.width)
-    txmax = img.width;
+  if (txmax > imgp->width)
+    txmax = imgp->width;
   if (tymin < 0)
     tymin = 0;
-  if (tymax > img.height)
-    tymax = img.height;
+  if (tymax > imgp->height)
+    tymax = imgp->height;
   if (txmin + 10 > txmax || tymin + 10 > tymax)
     {
       if (verbose)
@@ -1275,7 +1291,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
     render_parameters rparam2 = rparam;
     rparam2.invert = 0;
-    render_to_scr render (param, img, rparam2, 256);
+    render_to_scr render (param, *imgp, rparam2, 256);
     int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
     int maxtiles = fparams.multitile;
     if (maxtiles < 1)
@@ -1286,8 +1302,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       {
 	rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
 	rymin = std::max (tymin - theight * (maxtiles / 2), 0);
-	rxmax = std::max (txmax + (twidth * maxtiles / 2), img.width - 1);
-	rymax = std::max (tymax + (theight * maxtiles / 2), img.height - 1);
+	rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp->width - 1);
+	rymax = std::max (tymax + (theight * maxtiles / 2), imgp->height - 1);
       }
     if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
       {
@@ -1306,12 +1322,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,img,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
 	  {
-	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), img.width - twidth - 1) & ~1;
-	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), img.height - theight - 1) & ~1;
+	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp->width - twidth - 1) & ~1;
+	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp->height - theight - 1) & ~1;
 	    int cur_txmax = cur_txmin + twidth;
 	    int cur_tymax = cur_tymin + theight;
 	    finetune_solver solver;
@@ -1517,6 +1533,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
       ret.solver_point_color = solver_parameters::green;
     }
+  best_solver.scr1.save_tiff ("/tmp/scr.tif");
+  //best_solver.scr.initialize_with_fft_blur (best_solver.scr1, ret.screen_channel_blur_radius);
+  best_solver.scr.save_tiff ("/tmp/scr-fft.tif");
   ret.success = true;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;

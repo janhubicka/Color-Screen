@@ -1,7 +1,9 @@
 #include <math.h>
+#include "include/tiff-writer.h"
 #include "dufaycolor.h"
 #include "include/screen.h"
 #include "gaussian-blur.h"
+#include "dj_fft.h"
 
 /* Produce empty screen.  */
 void
@@ -86,17 +88,17 @@ screen::paget_finlay ()
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {
-#define dist(x, y) fabs (xx-(x)*size) + fabs (yy-(y)*size)
-	int d11 = dist (0, 0);
-	int d21 = dist (1, 0);
-	int d22 = dist (1, 1);
-	int d23 = dist (0, 1);
-	int dc = dist (0.5, 0.5);
-	int dl = dist (0, 0.5);
-	int dr = dist (1, 0.5);
-	int dt = dist (0.5, 0);
-	int db = dist (0.5, 1);
-	int d1, d3;
+#define dist(x, y) fabs (xx + 0.5-(x)*size) + fabs (yy + 0.5-(y)*size)
+	float d11 = dist (0, 0);
+	float d21 = dist (1, 0);
+	float d22 = dist (1, 1);
+	float d23 = dist (0, 1);
+	float dc = dist (0.5, 0.5);
+	float dl = dist (0, 0.5);
+	float dr = dist (1, 0.5);
+	float dt = dist (0.5, 0);
+	float db = dist (0.5, 1);
+	float d1, d3;
 #undef dist
 
 	add[yy][xx][0] = 0;
@@ -509,19 +511,13 @@ screen::initialize_with_blur (screen &scr, coord_t blur_radius, int channel)
      case 245: initialize_with_blur (scr, 245, cmatrix, &hblur[0][0], channel); break;
      case 247: initialize_with_blur (scr, 247, cmatrix, &hblur[0][0], channel); break;
      case 249: initialize_with_blur (scr, 249, cmatrix, &hblur[0][0], channel); break;
-	printf ("unspecialized clen %i %f\n", clen, blur_radius, channel);
 #endif
      default:
+	printf ("unspecialized clen %i %f %i\n", clen, blur_radius, channel);
         initialize_with_blur (scr, clen, cmatrix, &hblur[0][0], channel);
     }
 
-  for (int y = 0; y < size; y++)
-    for (int x = 0; x < size; x++)
-      {
-	add[y][x][0] = scr.add[y][x][0];
-	add[y][x][1] = scr.add[y][x][1];
-	add[y][x][2] = scr.add[y][x][2];
-      }
+  memcpy (add, scr.add, sizeof (add));
 
   //free (hblur);
   free (cmatrix);
@@ -632,4 +628,157 @@ if (type == Dufay)
   preview_dufay ();
 else
   preview ();
+}
+
+bool
+screen::save_tiff (const char *filename)
+{
+  tiff_writer_params p;
+  p.filename = filename;
+  p.width = size * 3;
+  p.height = size * 3;
+  p.depth = 16;
+  const char *error;
+  tiff_writer out (p, &error);
+  if (error)
+    return false;
+  for (int y = 0; y < size * 3; y++)
+    {
+      for (int x = 0; x < size * 3; x++)
+	{
+	  int r = mult[y % size][x % size][0] * 65536;
+	  if (r < 0)
+	    r = 0;
+	  if (r > 65535)
+	    r = 65535;
+	  int g = mult[y % size][x % size][1] * 65536;
+	  if (g < 0)
+	    g = 0;
+	  if (g > 65535)
+	    g = 65535;
+	  int b = mult[y % size][x % size][2] * 65536;
+	  if (b < 0)
+	    b = 0;
+	  if (b > 65535)
+	    b = 65535;
+	  out.put_pixel (x, r, g, b );
+	}
+      if (!out.write_row ())
+	return false;
+    }
+  return true;
+}
+void
+screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
+{
+  luminosity_t data[][2] = {
+      { 0.0085, 0.98585},
+      { 0.0221, 0.94238}, 
+      { 0.0357, 0.89398}, 
+      { 0.0493, 0.83569}, 
+      { 0.0629, 0.76320},
+      { 0.0765, 0.69735},
+      { 0.0901, 0.63647},
+      { 0.1037, 0.56575},
+      { 0.1173, 0.49876},
+      { 0.1310, 0.43843},
+      { 0.1446, 0.38424},
+      { 0.1582, 0.34210},
+      { 0.1718, 0.30289},
+      { 0.1854, 0.26933},
+      { 0.1990, 0.23836},
+      { 0.2126, 0.21318},
+      { 0.2262, 0.18644},
+      { 0.2398, 0.15756},
+      { 0.2534, 0.14863},
+      { 0.2670, 0.12485},
+      { 0.2806, 0.11436},
+      { 0.2942, 0.09183},
+      { 0.3078, 0.08277},
+      { 0.3214, 0.07021},
+      { 0.3350, 0.05714},
+      { 0.3486, 0.04388},
+      { 0.3622, 0.03955},
+      { 0.3759, 0.03367},
+      { 0.3895, 0.02844},
+      { 0.4031, 0.02107},
+      { 0.4167, 0.02031},
+      { 0.4303, 0.01796},
+      { 0.4439, 0.00999},
+      { 0.4575, 0.01103},
+      { 0.4711, 0.00910},
+      { 0.4898, 0.00741}
+  };
+  precomputed_function<luminosity_t> v (0, 0.5, 256, data, sizeof (data) / sizeof (luminosity_t) / 2);
+  dj::fft_arg<double> imgData;
+  imgData.resize (size * size);
+  for (int c = 0; c < 3; c++)
+    {
+      luminosity_t weight[size];
+      if (blur_radius[c]<= 0)
+	{
+	  for (int y = 0; y < size; y++)
+	    for (int x = 0; x < size; x++)
+	      mult[y][x][c] = scr.mult[y][x][c];
+	}
+      for (int x = 0; x < size; x++)
+	{
+          int xd = std::min (x, size - x);
+	  if (!xd)
+	    {
+	      weight[x] = 1;
+	      continue;
+	    }
+          double f = (pow (2, xd-1))/* / size*/;
+#if 0
+	  if (f * (blur_radius[c]*0.03) == 0)
+	    weight[x] = 1;
+	  else
+	    {
+#endif
+	      weight[x] = v.apply (f * (blur_radius[c]*0.5));
+	      if (weight[x] > 1)
+		weight[x] = 1;
+	      if (weight[x] < 0)
+		weight[x] = 0;
+#if 0
+	    }
+#endif
+	}
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  imgData[y * size + x] = scr.mult[y][x][c];
+      dj::fft_arg<double> imgDataFFT = dj::fft2d(imgData, dj::fft_dir::DIR_FWD);
+
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
+	      ///** std::complex<double>(/*1.0/((x + y)-128)*/0.5*/);
+
+      dj::fft_arg<double> imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
+      //imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  {
+	    mult[y][x][c] = imgDataInvFFT[y * size + x].real ();
+	    if (mult[y][x][c] < 0)
+	      mult[y][x][c] = 0;
+#if 0
+	    if (mult[y][x][c] > 1)
+	      mult[y][x][c] = 1;
+#endif
+	  }
+    }
+}
+
+void
+screen::initialize_with_fft_blur (screen &scr, coord_t blur_radius)
+{
+  memcpy (add, scr.add, sizeof (add));
+  if (blur_radius <= 0)
+    {
+      memcpy (mult, scr.mult, sizeof (mult));
+      return;
+    }
+  initialize_with_fft_blur (scr, {blur_radius, blur_radius, blur_radius});
 }

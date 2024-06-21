@@ -87,6 +87,50 @@ template<typename T> class precomputed_function
     free (yy);
   }
 
+  /* Construct linear interpolation between known X and Y values but organized in
+     single array of pairs instead of two separated arrays.  */
+  precomputed_function<T> (T min_x, T max_x, int len, const T table[][2], int npoints)
+  : m_min_x (min_x), m_max_x (max_x)
+  {
+    /* Sanitize input. */
+    if (m_min_x < table[0][0])
+      m_min_x = table[0][0];
+    if (m_max_x > table[npoints - 1][0])
+      m_max_x = table[npoints - 1][0];
+    if (m_min_x >= m_max_x)
+      m_max_x = m_min_x + 1;
+    /* If there are only 2 npoints we represent linear function.  */
+    if (npoints <= 2)
+      {
+	m_entries = 1;
+	len = 2;
+      }
+    T *yy = (T *)malloc (sizeof (entry) * len);
+    T step = (m_max_x - m_min_x) / (T)(len - 1);
+    /* If there is no control point just define function as f(x)=x.  */
+    if (!npoints)
+      {
+	for (int i = 0; i < len; i++)
+	  yy[i] = m_min_x + i * step;
+      }
+    /* If there is one control point, use f(x) = x + c.  */
+    else if (npoints == 1)
+      {
+	for (int i = 0; i < len; i++)
+	  yy[i] = m_min_x + i * step + table[0][0] - table[0][0];
+      }
+    else
+      for (int i = 0, p = 0; i < len; i++)
+	{
+	  T xx = m_min_x + i * step;
+	  while (p < npoints - 1 && table[p+1][0] < xx)
+	    p++;
+	  yy[i] = table[p][1] + (table[p+1][1]-table[p][1]) * (xx - table[p][0]) / (table[p+1][0]-table[p][0]);
+	}
+    init_by_y_values (yy, len);
+    free (yy);
+  }
+
   ~precomputed_function<T> ()
     {
       if (m_entries)
