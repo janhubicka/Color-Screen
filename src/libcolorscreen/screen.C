@@ -756,7 +756,7 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 	  imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
 	      ///** std::complex<double>(/*1.0/((x + y)-128)*/0.5*/);
 
-      dj::fft_arg<double> imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
+      dj::fft_arg<double> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
       //imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
