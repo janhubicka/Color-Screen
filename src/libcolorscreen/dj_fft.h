@@ -268,7 +268,7 @@ private:
   std::array<std::complex<T>,cnt> zs;
 };
 
-template <typename T, int cnt> __attribute__ ((always_inline)) fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
+template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
 {
     DJ_ASSERT((xi.size() & (xi.size() - 1)) == 0 && "invalid input size");
     const int cnt2 = cnt*cnt;

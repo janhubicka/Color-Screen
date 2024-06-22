@@ -672,7 +672,10 @@ screen::save_tiff (const char *filename)
 void
 screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 {
-  luminosity_t data[][2] = {
+  /* This is sample MTF curve of a camera taken from IMOD's mtffliter.
+     first column are spartial frequencies in reciprocal pixels and second column
+     is a contrast loss.  */
+  const static luminosity_t data[][2] = {
       { 0.0085, 0.98585},
       { 0.0221, 0.94238}, 
       { 0.0357, 0.89398}, 
@@ -710,51 +713,74 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
       { 0.4711, 0.00910},
       { 0.4898, 0.00741}
   };
-  precomputed_function<luminosity_t> v (0, 0.5, 256, data, sizeof (data) / sizeof (luminosity_t) / 2);
+  int data_size = sizeof (data) / sizeof (luminosity_t) / 2 - 1;
   dj::fft_arg<double> imgData;
   imgData.resize (size * size);
   for (int c = 0; c < 3; c++)
     {
-      luminosity_t weight[size];
       if (blur_radius[c]<= 0)
 	{
 	  for (int y = 0; y < size; y++)
 	    for (int x = 0; x < size; x++)
 	      mult[y][x][c] = scr.mult[y][x][c];
 	}
-      for (int x = 0; x < size; x++)
-	{
-          int xd = std::min (x, size - x);
-	  if (!xd)
-	    {
-	      weight[x] = 1;
-	      continue;
-	    }
-          double f = (pow (2, xd-1))/* / size*/;
-#if 0
-	  if (f * (blur_radius[c]*0.03) == 0)
-	    weight[x] = 1;
-	  else
-	    {
-#endif
-	      weight[x] = v.apply (f * (blur_radius[c]*0.5));
-	      if (weight[x] > 1)
-		weight[x] = 1;
-	      if (weight[x] < 0)
-		weight[x] = 0;
-#if 0
-	    }
-#endif
-	}
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
 	  imgData[y * size + x] = scr.mult[y][x][c];
       dj::fft_arg<double> imgDataFFT = dj::fft2d_fix<double,size>(imgData, dj::fft_dir::DIR_FWD);
 
+      /* blur_radius is blur in the screen dimensions.
+         step should be 1 / size, but blur_radius of 1 corresponds to size so this evens out.
+         Compensate so the blur is approximately same as gaussian blur.	 */
+      luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
+      /* Do weighting in every direction independently.  */
+#if 0
+      luminosity_t weight[size];
+      weight[size/2] = 1;
+      luminosity_t f = step;
+      for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
+        {
+	  while (p < data_size - 1 && data[p + 1][0] < f)
+	    p++;
+	  luminosity_t w = data[p][1] + (data[p + 1][1] - data[p][1]) * (f - data[p][0]) / (data[p + 1][0] - data[p][0]);
+	  //printf ("%f %i %f d1 %f %f d2 %f %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
+	  if (w < 0)
+	    w = 0;
+	  if (w > 1)
+	    w = 1;
+	  if (x == size / 2)
+	    weight [x] = w;
+	  else
+	    weight [x] = weight[size - x] = w;
+        }
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
 	  imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
-	      ///** std::complex<double>(/*1.0/((x + y)-128)*/0.5*/);
+#else
+      /* Weight based on euclidean distance.  This seems to be done by mtffilter.  */
+      static precomputed_function<luminosity_t> v (0, 0.5, size, data, data_size);
+      for (int y = 0; y <= size / 2; y++)
+        for (int x = 0; x <= size / 2; x++)
+	  if (!x && !y)
+	    ;
+	  else
+	    {
+	      luminosity_t w = v.apply (sqrt (x * x + y * y) * step);
+	      if (w < 0)
+	        w = 0;
+	      if (w > 1)
+	        w = 1;
+	      imgDataFFT [y * size + x] *= w;
+	      if (x && (x != size / 2))
+	        imgDataFFT [y * size + (size - x)] *= w;
+	      if (y && (y != size / 2))
+		{
+		  imgDataFFT [(size - y) * size + x] *= w;
+		  if (x && (x != size / 2))
+		    imgDataFFT [(size - y) * size + (size - x)] *= w;
+		}
+	    }
+#endif
 
       dj::fft_arg<double> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
       //imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
