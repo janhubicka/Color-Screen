@@ -12,6 +12,7 @@ by Jonathan Dupuy
 #ifndef DJ_INCLUDE_FFT_H
 #define DJ_INCLUDE_FFT_H
 
+#include <utility>
 #include <complex> // std::complex
 #include <vector>  // std::vector
 
@@ -68,7 +69,8 @@ constexpr auto Pi = 3.141592653589793238462643383279502884;
  */
 inline int findMSB(int x)
 {
-    DJ_ASSERT(x > 0 && "invalid input");
+#if 0
+    //DJ_ASSERT(x > 0 && "invalid input");
     int p = 0;
 
     while (x > 1) {
@@ -77,6 +79,15 @@ inline int findMSB(int x)
     }
 
     return p;
+#endif
+    static const unsigned int bval[] =
+    {0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4};
+
+    unsigned int r = 0;
+    if (x & 0xFFFF0000) { r += 16/1; x >>= 16/1; }
+    if (x & 0x0000FF00) { r += 16/2; x >>= 16/2; }
+    if (x & 0x000000F0) { r += 16/4; x >>= 16/4; }
+    return r + bval[x];
 }
 
 
@@ -91,7 +102,7 @@ inline int findMSB(int x)
  */
 inline int bitr(uint32_t x, int nb)
 {
-    DJ_ASSERT(nb > 0 && 32 > nb && "invalid bit count");
+    //DJ_ASSERT(nb > 0 && 32 > nb && "invalid bit count");
     x = ( x               << 16) | ( x               >> 16);
     x = ((x & 0x00FF00FF) <<  8) | ((x & 0xFF00FF00) >>  8);
     x = ((x & 0x0F0F0F0F) <<  4) | ((x & 0xF0F0F0F0) >>  4);
@@ -121,18 +132,29 @@ template <typename T> fft_arg<T> fft1d(const fft_arg<T> &xi, const fft_dir &dir)
     for (int j = 0; j < cnt; ++j)
         xo[j] = nrm * xi[bitr(j, msb)];
 
+    std::complex<T> zs[cnt];
+    for (int i = 0; i < cnt; i++)
+      zs[i] = std::polar(T(1), i * 2 * Pi / cnt);
+
     // fft passes
     for (int i = 0; i < msb; ++i) {
         int bm = 1 << i; // butterfly mask
         int bw = 2 << i; // butterfly width
-        T ang = T(dir) * Pi / T(bm); // precomputation
+        //T ang = T(dir) * Pi / T(bm); // precomputation
+	int angstep = T(dir) * cnt / (2 * bm);
 
         // fft butterflies
         for (int j = 0; j < (cnt/2); ++j) {
             int i1 = ((j >> i) << (i + 1)) + j % bm; // left wing
             int i2 = i1 ^ bm;                        // right wing
-            std::complex<T> z1 = std::polar(T(1), ang * T(i1 ^ bw)); // left wing rotation
-            std::complex<T> z2 = std::polar(T(1), ang * T(i2 ^ bw)); // right wing rotation
+#if 0
+            //std::complex<T> z1 = std::polar(T(1), ang * T(i1 ^ bw)); // left wing rotation
+            //std::complex<T> z2 = std::polar(T(1), ang * T(i2 ^ bw)); // right wing rotation
+#else
+	    std::complex<T> z1 = zs[((i1 ^ bw) * angstep) & (cnt - 1)];
+	    std::complex<T> z2 = zs[((i2 ^ bw) * angstep) & (cnt - 1)];
+#endif
+
             std::complex<T> tmp = xo[i1];
 
             xo[i1]+= z1 * xo[i2];
@@ -168,11 +190,18 @@ template <typename T> fft_arg<T> fft2d(const fft_arg<T> &xi, const fft_dir &dir)
         xo[j1 + cnt * j2] = nrm * xi[k1 + cnt * k2];
     }
 
+    std::complex<T> zs[cnt];
+    for (int i = 0; i < cnt; i++)
+      zs[i] = std::polar(T(1), i * (2 * Pi / cnt));
+
     // fft passes
     for (int i = 0; i < msb; ++i) {
         int bm = 1 << i; // butterfly mask
         int bw = 2 << i; // butterfly width
+#if 0
         float ang = T(dir) * Pi / T(bm); // precomputation
+#endif
+	int angstep = T(dir) * cnt / (2 * bm);
 
         // fft butterflies
         for (int j2 = 0; j2 < (cnt/2); ++j2)
@@ -187,8 +216,13 @@ template <typename T> fft_arg<T> fft2d(const fft_arg<T> &xi, const fft_dir &dir)
             int k22 = i12 + cnt * i22; // array offset
 
             // FFT-X
+#if 0
             std::complex<T> z11 = std::polar(T(1), ang * T(i11 ^ bw)); // left rotation
             std::complex<T> z12 = std::polar(T(1), ang * T(i12 ^ bw)); // right rotation
+#else
+	    std::complex<T> z11 = zs[((i11 ^ bw) * angstep) & (cnt - 1)];
+	    std::complex<T> z12 = zs[((i12 ^ bw) * angstep) & (cnt - 1)];
+#endif
             std::complex<T> tmp1 = xo[k11];
             std::complex<T> tmp2 = xo[k21];
 
@@ -198,8 +232,96 @@ template <typename T> fft_arg<T> fft2d(const fft_arg<T> &xi, const fft_dir &dir)
             xo[k22] = tmp2 + z12 * xo[k22];
 
             // FFT-Y
+#if 0
             std::complex<T> z21 = std::polar(T(1), ang * T(i21 ^ bw)); // top rotation
             std::complex<T> z22 = std::polar(T(1), ang * T(i22 ^ bw)); // bottom rotation
+#else
+	    std::complex<T> z21 = zs[((i21 ^ bw) * angstep) & (cnt - 1)];
+	    std::complex<T> z22 = zs[((i22 ^ bw) * angstep) & (cnt - 1)];
+#endif
+            std::complex<T> tmp3 = xo[k11];
+            std::complex<T> tmp4 = xo[k12];
+
+            xo[k11]+= z21 * xo[k21];
+            xo[k21] = tmp3 + z22 * xo[k21];
+            xo[k12]+= z21 * xo[k22];
+            xo[k22] = tmp4 + z22 * xo[k22];
+        }
+    }
+
+    return xo;
+}
+
+template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
+{
+    DJ_ASSERT((xi.size() & (xi.size() - 1)) == 0 && "invalid input size");
+    const int cnt2 = cnt*cnt;
+    DJ_ASSERT (cnt2 == (int)xi.size());
+    int msb = findMSB(cnt2) / 2; // lg2(N) = lg2(sqrt(NxN))
+    T nrm = T(1) / T(cnt);
+    fft_arg<T> xo(cnt2);
+
+    // pre-process the input data
+    for (int j2 = 0; j2 < cnt; ++j2)
+    for (int j1 = 0; j1 < cnt; ++j1) {
+        int k2 = bitr(j2, msb);
+        int k1 = bitr(j1, msb);
+
+        xo[j1 + cnt * j2] = nrm * xi[k1 + cnt * k2];
+    }
+
+    static const std::array<std::complex<T>,cnt> zs = []{
+      std::array<std::complex<T>,cnt> ret{};
+      for (std::size_t i = 0; i < ret.size(); i++)
+	ret[i] = std::polar(T(1), i * (2 * Pi / cnt));
+      return ret;
+    }();
+
+    // fft passes
+    for (int i = 0; i < msb; ++i) {
+        int bm = 1 << i; // butterfly mask
+        int bw = 2 << i; // butterfly width
+#if 0
+        float ang = T(dir) * Pi / T(bm); // precomputation
+#endif
+	int angstep = T(dir) * cnt / (2 * bm);
+
+        // fft butterflies
+        for (int j2 = 0; j2 < (cnt/2); ++j2)
+        for (int j1 = 0; j1 < (cnt/2); ++j1) {
+            int i11 = ((j1 >> i) << (i + 1)) + j1 % bm; // xmin wing
+            int i21 = ((j2 >> i) << (i + 1)) + j2 % bm; // ymin wing
+            int i12 = i11 ^ bm;                         // xmax wing
+            int i22 = i21 ^ bm;                         // ymax wing
+            int k11 = i11 + cnt * i21; // array offset
+            int k12 = i12 + cnt * i21; // array offset
+            int k21 = i11 + cnt * i22; // array offset
+            int k22 = i12 + cnt * i22; // array offset
+
+            // FFT-X
+#if 0
+            std::complex<T> z11 = std::polar(T(1), ang * T(i11 ^ bw)); // left rotation
+            std::complex<T> z12 = std::polar(T(1), ang * T(i12 ^ bw)); // right rotation
+#else
+	    std::complex<T> z11 = zs[((i11 ^ bw) * angstep) & (cnt - 1)];
+	    std::complex<T> z12 = zs[((i12 ^ bw) * angstep) & (cnt - 1)];
+#endif
+            std::complex<T> tmp1 = xo[k11];
+            std::complex<T> tmp2 = xo[k21];
+
+            xo[k11]+= z11 * xo[k12];
+            xo[k12] = tmp1 + z12 * xo[k12];
+            xo[k21]+= z11 * xo[k22];
+            xo[k22] = tmp2 + z12 * xo[k22];
+
+            // FFT-Y
+#if 0
+            std::complex<T> z21 = std::polar(T(1), ang * T(i21 ^ bw)); // top rotation
+            std::complex<T> z22 = std::polar(T(1), ang * T(i22 ^ bw)); // bottom rotation
+#else
+	    std::complex<T> z21 = zs[((i21 ^ bw) * angstep) & (cnt - 1)];
+	    std::complex<T> z22 = zs[((i22 ^ bw) * angstep) & (cnt - 1)];
+#endif
             std::complex<T> tmp3 = xo[k11];
             std::complex<T> tmp4 = xo[k12];
 

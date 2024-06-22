@@ -4,6 +4,7 @@
 #include "include/screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
+#include <array>
 
 /* Produce empty screen.  */
 void
@@ -748,7 +749,7 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
 	  imgData[y * size + x] = scr.mult[y][x][c];
-      dj::fft_arg<double> imgDataFFT = dj::fft2d(imgData, dj::fft_dir::DIR_FWD);
+      dj::fft_arg<double> imgDataFFT = dj::fft2d_fix<double,size>(imgData, dj::fft_dir::DIR_FWD);
 
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
