@@ -1217,7 +1217,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       int tx, ty;
       img.stitch->common_scr_to_img.final_to_scr (x + img.xmin, y + img.ymin, &sx, &sy);
       if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
-	return ret;
+        {
+	  ret.err = "no tile for given coordinates";
+	  return ret;
+        }
       img.stitch->images[ty][tx].common_scr_to_img_scr (sx, sy, &sx, &sy);
       x = nearest_int (sx);
       y = nearest_int (sy);
@@ -1275,6 +1278,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  fprintf (stderr, "Too small tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
 	  progress->resume_stdout ();
 	}
+      ret.err = "too small tile";
       return ret;
     }
   int twidth = txmax - txmin + 1, theight = tymax - tymin + 1;
@@ -1313,10 +1317,14 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
 	    progress->resume_stdout ();
 	  }
+        ret.err = "precompting failed";
 	return ret;
       }
     if (progress && progress->cancel_requested ()) 
-      return ret;
+      {
+	ret.err = "cancelled";
+	return ret;
+      }
 
     if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
       progress->set_task ("finetuning samples", maxtiles * maxtiles);
@@ -1406,9 +1414,15 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  }
     }
   if (progress && progress->cancel_requested ()) 
-    return ret; 
+    {
+      ret.err = "cancelled";
+      return ret; 
+    }
   if (best_uncertainity < 0)
-    return ret;
+    {
+      ret.err = "negative uncertaininty";
+      return ret;
+    }
 
   if (best_solver.least_squares)
     {
@@ -1423,7 +1437,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   if (best_solver.has_outliers ())
     simplex<coord_t, finetune_solver>(best_solver, "finetuning with outliers", progress, !(fparams.flags & finetune_no_progress_report));
   if (progress && progress->cancel_requested ()) 
-    return ret; 
+    {
+      ret.err = "cancelled";
+      return ret; 
+    }
 
   if (fparams.simulated_file)
     best_solver.write_file (best_solver.start, fparams.simulated_file, 0);
@@ -1474,7 +1491,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	}
       if (!bx || bx == twidth - 1 || !by || by == theight - 1)
 	{
-	  printf ("Solver point is out of tile\n");
+	  if (verbose)
+	    {
+	      progress->pause_stdout ();
+	      printf ("Solver point is out of tile\n");
+	      progress->resume_stdout ();
+	    }
+	  ret.err = "Solver point is out of tile";
 	  return ret;
 	}
       point_t fp;
@@ -1526,7 +1549,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       /* TODO: If we did not find the tile we could try some non-integer location.  */
       if (!found)
 	{
-	  printf ("Failed to find solver point\n");
+	  if (verbose)
+	    {
+	      progress->pause_stdout ();
+	      printf ("Failed to find solver point\n");
+	      progress->resume_stdout ();
+	    }
+	  ret.err = "Failed to find solver point";
 	  return ret;
 	}
       ret.solver_point_img_location = {fp.x + best_solver.txmin + 0.5, fp.y + best_solver.tymin + 0.5};

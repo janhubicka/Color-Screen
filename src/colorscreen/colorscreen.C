@@ -1168,8 +1168,8 @@ finetune (int argc, char **argv)
 	if (!results[y * xsteps + x].success)
 	  {
             progress.pause_stdout ();
-            fprintf (stderr, "Failed to analyze spit %i %i\n", xpos, ypos);
-            exit (1);
+            fprintf (stderr, "Failed to analyze point %i %i:%s\n", xpos, ypos,results[y * xsteps + x].err.c_str ());
+            progress.resume_stdout ();
 	  }
 	//progress.pop (stack);
 #if 0
@@ -1182,19 +1182,36 @@ finetune (int argc, char **argv)
 #endif
 	progress.inc_progress ();
       }
+  int nok = 0;
+  for (int y = 0; y < ysteps; y++)
+    for (int x = 0; x < xsteps; x++)
+      if (results[y * xsteps + x].success)
+	nok++;
+  if (!nok)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "All points failed\n");
+      exit (1);
+    }
   progress.pause_stdout ();
   printf ("Badness\n");
   for (int y = 0; y < ysteps; y++)
     {
       for (int x = 0; x < xsteps; x++)
-	printf ("  %6.3f", results[y * xsteps + x].badness);
+	if (results[y * xsteps + x].success)
+	  printf ("  %6.3f", results[y * xsteps + x].badness);
+	else
+	  printf ("  ------");
       printf ("\n");
     }
   printf ("Uncertainity\n");
   for (int y = 0; y < ysteps; y++)
     {
       for (int x = 0; x < xsteps; x++)
-	printf ("  %6.3f", results[y * xsteps + x].badness);
+	if (results[y * xsteps + x].success)
+	  printf ("  %6.3f", results[y * xsteps + x].badness);
+	else
+	  printf ("  ------");
       printf ("\n");
     }
 
@@ -1204,21 +1221,23 @@ finetune (int argc, char **argv)
       rgb_histogram channel_hist;
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
-	  {
-	    hist.pre_account (results[y * xsteps + x].screen_blur_radius);
-	    emulsion_hist.pre_account (results[y * xsteps + x].emulsion_blur_radius);
-	    channel_hist.pre_account (results[y * xsteps + x].screen_channel_blur_radius);
-	  }
+	  if (results[y * xsteps + x].success)
+	    {
+	      hist.pre_account (results[y * xsteps + x].screen_blur_radius);
+	      emulsion_hist.pre_account (results[y * xsteps + x].emulsion_blur_radius);
+	      channel_hist.pre_account (results[y * xsteps + x].screen_channel_blur_radius);
+	    }
       hist.finalize_range (65536);
       emulsion_hist.finalize_range (65536);
       channel_hist.finalize_range (65536);
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
-	  {
-	    hist.account (results[y * xsteps + x].screen_blur_radius);
-	    emulsion_hist.account (results[y * xsteps + x].emulsion_blur_radius);
-	    channel_hist.account (results[y * xsteps + x].screen_channel_blur_radius);
-	  }
+	  if (results[y * xsteps + x].success)
+	    {
+	      hist.account (results[y * xsteps + x].screen_blur_radius);
+	      emulsion_hist.account (results[y * xsteps + x].emulsion_blur_radius);
+	      channel_hist.account (results[y * xsteps + x].screen_channel_blur_radius);
+	    }
       hist.finalize ();
       emulsion_hist.finalize ();
       channel_hist.finalize ();
@@ -1239,7 +1258,10 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		printf ("  %6.3f,%6.3f,%6.3f", results[y * xsteps + x].screen_channel_blur_radius.red, results[y * xsteps + x].screen_channel_blur_radius.green, results[y * xsteps + x].screen_channel_blur_radius.blue);
+		if (results[y * xsteps + x].success)
+		  printf ("  %6.3f,%6.3f,%6.3f", results[y * xsteps + x].screen_channel_blur_radius.red, results[y * xsteps + x].screen_channel_blur_radius.green, results[y * xsteps + x].screen_channel_blur_radius.blue);
+		else
+		  printf ("  ------");
 	      printf ("\n");
 	    }
 	  printf ("Red screen blur robust min %f, avg %f, max %f\n", channel_hist.find_min (0.1).red, channel_hist.find_avg (0.1,0.1).red, channel_hist.find_max (0.1).red);
@@ -1252,7 +1274,10 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		printf ("  %6.3f", results[y * xsteps + x].emulsion_blur_radius);
+		if (results[y * xsteps + x].success)
+		  printf ("  %6.3f", results[y * xsteps + x].emulsion_blur_radius);
+		else
+		  printf ("  ------");
 	      printf ("\n");
 	    }
 	  printf ("Emsulion robust min %f, avg %f, max %f\n", emulsion_hist.find_min (0.1), emulsion_hist.find_avg (0.1,0.1), emulsion_hist.find_max (0.1));
@@ -1275,7 +1300,9 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		if (flags & finetune_screen_blur)
+		if (!results[y * xsteps + x].success)
+	          sharpness.put_pixel (x, 65535, 0, 0);
+		else if (flags & finetune_screen_blur)
 		  {
 		    int v = std::min (results[y * xsteps + x].screen_blur_radius / 2 * 65535, (coord_t)65535);
 		    sharpness.put_pixel (x, v, v, v);
@@ -1307,7 +1334,10 @@ finetune (int argc, char **argv)
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
-	    results[y * xsteps + x].fog.print (stdout);
+	    if (results[y * xsteps + x].success)
+	      results[y * xsteps + x].fog.print (stdout);
+	    else
+	      printf ("  ------");
 	  printf ("\n");
 	}
       if (fog_tiff_name)
@@ -1328,9 +1358,10 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		{
+		if (!results[y * xsteps + x].success)
+		  sharpness.put_pixel (x, 65535, 0, 0);
+		else
 		  sharpness.put_pixel (x, results[y * xsteps + x].fog.red * 65535, results[y * xsteps + x].fog.green * 65535, results[y * xsteps + x].fog.blue * 65535);
-		}
 	      if (!sharpness.write_row ())
 		{
 		  progress.pause_stdout ();
@@ -1347,18 +1378,20 @@ finetune (int argc, char **argv)
       histogram histg;
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
-	  {
-	    histr.pre_account (results[y * xsteps + x].dufay_red_strip_width);
-	    histg.pre_account (results[y * xsteps + x].dufay_green_strip_width);
-	  }
+	  if (results[y * xsteps + x].success)
+	    {
+	      histr.pre_account (results[y * xsteps + x].dufay_red_strip_width);
+	      histg.pre_account (results[y * xsteps + x].dufay_green_strip_width);
+	    }
       histr.finalize_range (65536);
       histg.finalize_range (65536);
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
-	  {
-	    histr.account (results[y * xsteps + x].dufay_red_strip_width);
-	    histg.account (results[y * xsteps + x].dufay_green_strip_width);
-	  }
+	  if (results[y * xsteps + x].success)
+	    {
+	      histr.account (results[y * xsteps + x].dufay_red_strip_width);
+	      histg.account (results[y * xsteps + x].dufay_green_strip_width);
+	    }
       histr.finalize ();
       histg.finalize ();
       printf ("Red strip width robust min %f, avg %f, max %f\n", histr.find_min (0.1), histr.find_avg (0.1,0.1), histr.find_max (0.1));
@@ -1366,7 +1399,10 @@ finetune (int argc, char **argv)
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
-	    printf ("  %.3f,%.3f", results[y * xsteps + x].dufay_red_strip_width,results[y * xsteps + x].dufay_green_strip_width);
+	    if (results[y * xsteps + x].success)
+	      printf ("  %.3f,%.3f", results[y * xsteps + x].dufay_red_strip_width,results[y * xsteps + x].dufay_green_strip_width);
+	    else
+	      printf ("  ------");
 	  printf ("\n");
 	}
       if (strip_width_tiff_name)
@@ -1387,12 +1423,15 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		{
-		  coord_t r = results[y * xsteps + x].dufay_red_strip_width;
-		  coord_t g = results[y * xsteps + x].dufay_green_strip_width * (1-r);
-		  coord_t b = (1-results[y * xsteps + x].dufay_green_strip_width) * (1-r);
-		  sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
-		}
+		if (results[y * xsteps + x].success)
+		  {
+		    coord_t r = results[y * xsteps + x].dufay_red_strip_width;
+		    coord_t g = results[y * xsteps + x].dufay_green_strip_width * (1-r);
+		    coord_t b = (1-results[y * xsteps + x].dufay_green_strip_width) * (1-r);
+		    sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
+		  }
+		else
+		  sharpness.put_pixel (x, 65535, 0, 0);
 	      if (!sharpness.write_row ())
 		{
 		  progress.pause_stdout ();
@@ -1408,7 +1447,10 @@ finetune (int argc, char **argv)
       for (int y = 0; y < ysteps; y++)
 	{
 	  for (int x = 0; x < xsteps; x++)
-	    printf ("  %.3f,%.3f", results[y * xsteps + x].screen_coord_adjust.x,results[y * xsteps + x].screen_coord_adjust.y);
+	    if (results[y * xsteps + x].success)
+	      printf ("  %.3f,%.3f", results[y * xsteps + x].screen_coord_adjust.x,results[y * xsteps + x].screen_coord_adjust.y);
+	    else
+	      printf ("  ------");
 	  printf ("\n");
 	}
       if (position_tiff_name)
@@ -1429,12 +1471,15 @@ finetune (int argc, char **argv)
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		{
-		  coord_t r = std::min (fabs (results[y * xsteps + x].screen_coord_adjust.x * 10), (coord_t)1);
-		  coord_t g = std::min (fabs (results[y * xsteps + x].screen_coord_adjust.y * 10), (coord_t)1);
-		  coord_t b = 0;
-		  sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
-		}
+		if (results[y * xsteps + x].success)
+		  sharpness.put_pixel (x, 65535, 0, 1);
+		else
+		  {
+		    coord_t r = std::min (fabs (results[y * xsteps + x].screen_coord_adjust.x * 10), (coord_t)1);
+		    coord_t g = std::min (fabs (results[y * xsteps + x].screen_coord_adjust.y * 10), (coord_t)1);
+		    coord_t b = 0;
+		    sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
+		  }
 	      if (!sharpness.write_row ())
 		{
 		  progress.pause_stdout ();

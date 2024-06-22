@@ -1,5 +1,6 @@
 #ifndef FINETUNE_H
 #define FINETUNE_H
+#include <string>
 #include "solver.h"
 struct screen;
 enum finetune_flags
@@ -44,6 +45,7 @@ struct finetune_result
   rgbdata color;
   rgbdata screen_red, screen_green, screen_blue;
   rgbdata fog;
+  std::string err;
 
   /* Solver point data.  */
   point_t solver_point_img_location;

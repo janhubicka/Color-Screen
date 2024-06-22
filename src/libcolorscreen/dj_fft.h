@@ -268,8 +268,7 @@ private:
   std::array<std::complex<T>,cnt> zs;
 };
 
-
-template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
+template <typename T, int cnt> __attribute__ ((always_inline)) fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
 {
     DJ_ASSERT((xi.size() & (xi.size() - 1)) == 0 && "invalid input size");
     const int cnt2 = cnt*cnt;
@@ -287,23 +286,12 @@ template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const 
         xo[j1 + cnt * j2] = nrm * xi[k1 + cnt * k2];
     }
 
-#if 0
-    static const std::array<std::complex<T>,cnt> zs = []{
-      std::array<std::complex<T>,cnt> ret{};
-      for (std::size_t i = 0; i < ret.size(); i++)
-	ret[i] = std::polar(T(1), i * (2 * Pi / cnt));
-      return ret;
-    }();
-#endif
     static const fft_angles<T, cnt> zs;
 
     // fft passes
     for (int i = 0; i < msb; ++i) {
         int bm = 1 << i; // butterfly mask
         int bw = 2 << i; // butterfly width
-#if 0
-        float ang = T(dir) * Pi / T(bm); // precomputation
-#endif
 	int angstep = T(dir) * cnt / (2 * bm);
 
         // fft butterflies
