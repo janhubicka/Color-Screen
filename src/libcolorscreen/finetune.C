@@ -1211,6 +1211,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
   const image_data *imgp = &img;
   scr_to_img map;
+  scr_to_img *mapp;
   if (img.stitch)
     {
       coord_t sx, sy;
@@ -1225,10 +1226,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       x = nearest_int (sx);
       y = nearest_int (sy);
       imgp = img.stitch->images[ty][tx].img;
-      map.set_parameters (img.stitch->images[ty][tx].param, *imgp);
+      mapp = &img.stitch->images[ty][tx].scr_to_img_map;
     }
   else
-    map.set_parameters (param, *imgp);
+    {
+      map.set_parameters (param, *imgp);
+      mapp = &map;
+    }
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
 
@@ -1237,25 +1241,25 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 
   /* Determine tile to analyze.  */
   coord_t tx, ty;
-  map.to_scr (x, y, &tx, &ty);
+  mapp->to_scr (x, y, &tx, &ty);
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
   coord_t test_range = fparams.range ? fparams.range : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
-  map.to_img (sx, sy, &tx, &ty);
-  map.to_img (sx - test_range, sy - test_range, &tx, &ty);
+  mapp->to_img (sx, sy, &tx, &ty);
+  mapp->to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
-  map.to_img (sx + test_range, sy - test_range, &tx, &ty);
+  mapp->to_img (sx + test_range, sy - test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
   symax = std::max (symax, ty);
-  map.to_img (sx + test_range, sy + test_range, &tx, &ty);
+  mapp->to_img (sx + test_range, sy + test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
   symax = std::max (symax, ty);
-  map.to_img (sx - test_range, sy + test_range, &tx, &ty);
+  mapp->to_img (sx - test_range, sy + test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
@@ -1330,7 +1334,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,stderr,map,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,stderr,mapp,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
 	  {
@@ -1361,7 +1365,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    for (int y = 0; y < theight; y++)
 	      for (int x = 0; x < twidth; x++)
 		{
-		  map.to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &solver.tile_pos [y * twidth + x].x, &solver.tile_pos[y * twidth + x].y);
+		  mapp->to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &solver.tile_pos [y * twidth + x].x, &solver.tile_pos[y * twidth + x].y);
 		  if (solver.tile)
 		    solver.tile[y * twidth + x] = render.get_unadjusted_rgb_pixel (x + cur_txmin, y + cur_tymin);
 		  if (solver.bwtile)
@@ -1371,7 +1375,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.tymin = cur_tymin;
 	    solver.twidth = twidth;
 	    solver.theight = theight;
-	    solver.type = map.get_type ();
+	    solver.type = mapp->get_type ();
 	    solver.pixel_size = render.pixel_size ();
 	    solver.optimize_position = fparams.flags & finetune_position;
 	    solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
