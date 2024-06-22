@@ -1225,7 +1225,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  ret.err = "no tile for given coordinates";
 	  return ret;
         }
-      img.stitch->images[ty][tx].common_scr_to_img_scr (sx, sy, &sx, &sy);
+      img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
       x = nearest_int (sx);
       y = nearest_int (sy);
       imgp = img.stitch->images[ty][tx].img;
