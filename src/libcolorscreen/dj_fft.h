@@ -252,6 +252,23 @@ template <typename T> fft_arg<T> fft2d(const fft_arg<T> &xi, const fft_dir &dir)
     return xo;
 }
 
+template <typename T, int cnt> class fft_angles
+{
+public:
+  fft_angles ()
+  {
+    for (int i = 0 ; i < cnt; i++)
+      zs[i] = std::polar(T(1), i * (2 * Pi / cnt));
+  }
+  inline std::complex<T> get (int i) const
+  {
+    return zs[i];
+  }
+private:
+  std::array<std::complex<T>,cnt> zs;
+};
+
+
 template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
 {
     DJ_ASSERT((xi.size() & (xi.size() - 1)) == 0 && "invalid input size");
@@ -270,12 +287,15 @@ template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const 
         xo[j1 + cnt * j2] = nrm * xi[k1 + cnt * k2];
     }
 
+#if 0
     static const std::array<std::complex<T>,cnt> zs = []{
       std::array<std::complex<T>,cnt> ret{};
       for (std::size_t i = 0; i < ret.size(); i++)
 	ret[i] = std::polar(T(1), i * (2 * Pi / cnt));
       return ret;
     }();
+#endif
+    static const fft_angles<T, cnt> zs;
 
     // fft passes
     for (int i = 0; i < msb; ++i) {
@@ -299,13 +319,8 @@ template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const 
             int k22 = i12 + cnt * i22; // array offset
 
             // FFT-X
-#if 0
-            std::complex<T> z11 = std::polar(T(1), ang * T(i11 ^ bw)); // left rotation
-            std::complex<T> z12 = std::polar(T(1), ang * T(i12 ^ bw)); // right rotation
-#else
-	    std::complex<T> z11 = zs[((i11 ^ bw) * angstep) & (cnt - 1)];
-	    std::complex<T> z12 = zs[((i12 ^ bw) * angstep) & (cnt - 1)];
-#endif
+	    std::complex<T> z11 = zs.get (((i11 ^ bw) * angstep) & (cnt - 1));
+	    std::complex<T> z12 = zs.get (((i12 ^ bw) * angstep) & (cnt - 1));
             std::complex<T> tmp1 = xo[k11];
             std::complex<T> tmp2 = xo[k21];
 
@@ -315,13 +330,8 @@ template <typename T, int cnt> fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const 
             xo[k22] = tmp2 + z12 * xo[k22];
 
             // FFT-Y
-#if 0
-            std::complex<T> z21 = std::polar(T(1), ang * T(i21 ^ bw)); // top rotation
-            std::complex<T> z22 = std::polar(T(1), ang * T(i22 ^ bw)); // bottom rotation
-#else
-	    std::complex<T> z21 = zs[((i21 ^ bw) * angstep) & (cnt - 1)];
-	    std::complex<T> z22 = zs[((i22 ^ bw) * angstep) & (cnt - 1)];
-#endif
+	    std::complex<T> z21 = zs.get (((i21 ^ bw) * angstep) & (cnt - 1));
+	    std::complex<T> z22 = zs.get (((i22 ^ bw) * angstep) & (cnt - 1));
             std::complex<T> tmp3 = xo[k11];
             std::complex<T> tmp4 = xo[k12];
 
