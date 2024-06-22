@@ -79,14 +79,14 @@ target_film_gamma: 1.000000
 white_balance: 0.950000 0.850000 1.000000
 sharpen_radius: 0.000000
 sharpen_amount: 2.000000
-presaturation: 2.000000
+presaturation: 1.000000
 saturation: 1.000000
 brightness: 1.202694
 dufay_red_strip_width: 0.000000
 dufay_green_strip_width: 0.000000
-collection_threshold: 0.200000
-screen_blur_radius: 0.771896
-collection_threshold: 0.200000
+collection_threshold: 0.500000
+screen_blur_radius: 1.000000
+collection_threshold: 0.500000
 color_model: Miethe_Goerz_reconstructed_by_Wagner
 backlight_temperature: 5000.000000
 temperature: 5000.000000

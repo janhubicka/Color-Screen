@@ -965,7 +965,10 @@ public:
 	sum /= maxgray;
       }
     //printf ("%f\n", sum);
-    return (sum / sample_points ()) /** (1 + get_blur_radius (v))*/;
+    /* Avoid solver from increasing blur past point it is no longer useful.
+       Otherwise it will pick solutions with too large blur and very contrasty
+       colors.  */
+    return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.1);
   }
 
   int

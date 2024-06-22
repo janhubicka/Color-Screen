@@ -62,7 +62,7 @@ gamma: 2.200000
 film_gamma: 1.180000
 target_film_gamma: 1.000000
 white_balance: 1.000000 0.800000 1.100000
-sharpen_radius: 1.000000
+sharpen_radius: 0.000000
 sharpen_amount: 1.000000
 presaturation: 1.000000
 saturation: 1.000000
