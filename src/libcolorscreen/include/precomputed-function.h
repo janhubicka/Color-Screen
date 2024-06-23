@@ -22,7 +22,7 @@ template<typename T> class precomputed_function
 {
   public:
   constexpr
-  precomputed_function<T> ()
+  precomputed_function ()
   : m_min_x (0), m_max_x (0), m_entries (0)
   {
   }
@@ -33,18 +33,18 @@ template<typename T> class precomputed_function
     m_max_x = max;
   }
   constexpr
-  precomputed_function<T> (T min_x, T max_x)
+  precomputed_function (T min_x, T max_x)
   : m_min_x (min_x), m_max_x (max_x), m_entries (0)
   {
   }
   /* Constructor based on a known table of LEN values rangling from MIN_X to MAX_X.  */
-  precomputed_function<T> (T min_x, T max_x, const T *y, int len)
+  precomputed_function (T min_x, T max_x, const T *y, int len)
   : m_min_x (min_x), m_max_x (max_x)
     {
       init_by_y_values (y, len);
     }
   /* Construct linear interpolation between known X and Y values.  */
-  precomputed_function<T> (T min_x, T max_x, int len, const T *x, const T *y, int npoints)
+  precomputed_function (T min_x, T max_x, int len, const T *x, const T *y, int npoints)
   : m_min_x (min_x), m_max_x (max_x)
   {
     /* Sanitize input. */
@@ -89,7 +89,7 @@ template<typename T> class precomputed_function
 
   /* Construct linear interpolation between known X and Y values but organized in
      single array of pairs instead of two separated arrays.  */
-  precomputed_function<T> (T min_x, T max_x, int len, const T table[][2], int npoints)
+  precomputed_function (T min_x, T max_x, int len, const T table[][2], int npoints)
   : m_min_x (min_x), m_max_x (max_x)
   {
     /* Sanitize input. */
@@ -131,7 +131,7 @@ template<typename T> class precomputed_function
     free (yy);
   }
 
-  ~precomputed_function<T> ()
+  ~precomputed_function ()
     {
       if (m_entries)
 	free (m_entry);

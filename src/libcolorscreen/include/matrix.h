@@ -161,12 +161,12 @@ class matrix3x3 : public matrix<T, 3>
 {
   typedef matrix<T, 3> B;
 public:
-  matrix3x3<T> () { }
+  matrix3x3 () { }
 
   inline
-  matrix3x3<T> (T e00, T e10, T e20,
-	        T e01, T e11, T e21,
-	        T e02, T e12, T e22)
+  matrix3x3 (T e00, T e10, T e20,
+	     T e01, T e11, T e21,
+	     T e02, T e12, T e22)
   {
     B::m_elements[0][0]=e00; B::m_elements[1][0]=e10; B::m_elements[2][0]=e20;
     B::m_elements[0][1]=e01; B::m_elements[1][1]=e11; B::m_elements[2][1]=e21;
@@ -209,7 +209,7 @@ class matrix4x4 : public matrix<T, 4>
 {
   typedef matrix<T, 4> B;
 public:
-  matrix4x4<T> () { }
+  matrix4x4 () { }
 
 #if 0
   inline
@@ -225,10 +225,10 @@ public:
   }
 #else
   inline
-  matrix4x4<T> (T e00, T e10, T e20, T e30,
-	        T e01, T e11, T e21, T e31,
-	        T e02, T e12, T e22, T e32,
-	        T e03, T e13, T e23, T e33)
+  matrix4x4 (T e00, T e10, T e20, T e30,
+	     T e01, T e11, T e21, T e31,
+	     T e02, T e12, T e22, T e32,
+	     T e03, T e13, T e23, T e33)
   {
     B::m_elements[0][0]=e00; B::m_elements[1][0]=e10; B::m_elements[2][0]=e20; B::m_elements[3][0]=e30;
     B::m_elements[0][1]=e01; B::m_elements[1][1]=e11; B::m_elements[2][1]=e21; B::m_elements[3][1]=e31;
