@@ -276,6 +276,7 @@ template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg<T>
     int msb = findMSB(cnt2) / 2; // lg2(N) = lg2(sqrt(NxN))
     T nrm = T(1) / T(cnt);
     fft_arg<T> xo(cnt2);
+    bool debug = false;
 
     // pre-process the input data
     for (int j2 = 0; j2 < cnt; ++j2)
@@ -309,6 +310,24 @@ template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg<T>
             // FFT-X
 	    std::complex<T> z11 = zs.get (((i11 ^ bw) * angstep) & (cnt - 1));
 	    std::complex<T> z12 = zs.get (((i12 ^ bw) * angstep) & (cnt - 1));
+	    if (debug)
+	      {
+		T ang = T(dir) * Pi / T(bm); // precomputation
+		std::complex<T> zz11 = std::polar(T(1), ang * T(i11 ^ bw));
+		if (fabs(z11.real () - zz11.real ()) > 0.00001
+		    || fabs(z11.imag () - zz11.imag ()) > 0.00001)
+		  {
+		     printf ("%i %f %f %f %f\n",i11, z11.real (), z11.imag (), zz11.real (), zz11.imag ());
+		     abort ();
+		  }
+		std::complex<T> zz12 = std::polar(T(1), ang * T(i12 ^ bw));
+		if (fabs(z12.real () - zz12.real ()) > 0.00001
+		    || fabs(z12.imag () - zz12.imag ()) > 0.00001)
+		  {
+		     printf ("%i %f %f %f %f\n",i12, z12.real (), z12.imag (), zz12.real (), zz12.imag ());
+		     abort ();
+		  }
+	      }
             std::complex<T> tmp1 = xo[k11];
             std::complex<T> tmp2 = xo[k21];
 

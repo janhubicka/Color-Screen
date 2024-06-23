@@ -716,6 +716,9 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
   int data_size = sizeof (data) / sizeof (luminosity_t) / 2 - 1;
   dj::fft_arg<double> imgData;
   imgData.resize (size * size);
+
+  static const bool use_sqrt = false;
+
   for (int c = 0; c < 3; c++)
     {
       if (blur_radius[c]<= 0)
@@ -734,53 +737,56 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
          Compensate so the blur is approximately same as gaussian blur.	 */
       luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
       /* Do weighting in every direction independently.  */
-#if 0
-      luminosity_t weight[size];
-      weight[size/2] = 1;
-      luminosity_t f = step;
-      for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
-        {
-	  while (p < data_size - 1 && data[p + 1][0] < f)
-	    p++;
-	  luminosity_t w = data[p][1] + (data[p + 1][1] - data[p][1]) * (f - data[p][0]) / (data[p + 1][0] - data[p][0]);
-	  //printf ("%f %i %f d1 %f %f d2 %f %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
-	  if (w < 0)
-	    w = 0;
-	  if (w > 1)
-	    w = 1;
-	  if (x == size / 2)
-	    weight [x] = w;
-	  else
-	    weight [x] = weight[size - x] = w;
-        }
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
-#else
-      /* Weight based on euclidean distance.  This seems to be done by mtffilter.  */
-      static precomputed_function<luminosity_t> v (0, 0.5, size, data, data_size);
-      for (int y = 0; y <= size / 2; y++)
-        for (int x = 0; x <= size / 2; x++)
-	  if (!x && !y)
-	    ;
-	  else
+      if (!use_sqrt)
+	{
+	  luminosity_t weight[size];
+	  weight[size/2] = 1;
+	  luminosity_t f = step;
+	  for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
 	    {
-	      luminosity_t w = v.apply (sqrt (x * x + y * y) * step);
+	      while (p < data_size - 1 && data[p + 1][0] < f)
+		p++;
+	      luminosity_t w = data[p][1] + (data[p + 1][1] - data[p][1]) * (f - data[p][0]) / (data[p + 1][0] - data[p][0]);
+	      //printf ("%f %i %f d1 %f %f d2 %f %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
 	      if (w < 0)
-	        w = 0;
+		w = 0;
 	      if (w > 1)
-	        w = 1;
-	      imgDataFFT [y * size + x] *= w;
-	      if (x && (x != size / 2))
-	        imgDataFFT [y * size + (size - x)] *= w;
-	      if (y && (y != size / 2))
-		{
-		  imgDataFFT [(size - y) * size + x] *= w;
-		  if (x && (x != size / 2))
-		    imgDataFFT [(size - y) * size + (size - x)] *= w;
-		}
+		w = 1;
+	      if (x == size / 2)
+		weight [x] = w;
+	      else
+		weight [x] = weight[size - x] = w;
 	    }
-#endif
+	  for (int y = 0; y < size; y++)
+	    for (int x = 0; x < size; x++)
+	      imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
+	}
+      else
+	{
+	  /* Weight based on euclidean distance.  This seems to be done by mtffilter.  */
+	  static precomputed_function<luminosity_t> v (0, 0.5, size, data, data_size);
+	  for (int y = 0; y <= size / 2; y++)
+	    for (int x = 0; x <= size / 2; x++)
+	      if (!x && !y)
+		;
+	      else
+		{
+		  luminosity_t w = v.apply (sqrt (x * x + y * y) * step);
+		  if (w < 0)
+		    w = 0;
+		  if (w > 1)
+		    w = 1;
+		  imgDataFFT [y * size + x] *= w;
+		  if (x && (x != size / 2))
+		    imgDataFFT [y * size + (size - x)] *= w;
+		  if (y && (y != size / 2))
+		    {
+		      imgDataFFT [(size - y) * size + x] *= w;
+		      if (x && (x != size / 2))
+			imgDataFFT [(size - y) * size + (size - x)] *= w;
+		    }
+		}
+	}
 
       dj::fft_arg<double> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
       //imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
