@@ -740,8 +740,8 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
       if (!use_sqrt)
 	{
 	  luminosity_t weight[size];
-	  weight[size/2] = 1;
 	  luminosity_t f = step;
+	  weight[0] = 1;
 	  for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
 	    {
 	      while (p < data_size - 1 && data[p + 1][0] < f)
@@ -759,7 +759,7 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 	    }
 	  for (int y = 0; y < size; y++)
 	    for (int x = 0; x < size; x++)
-	      imgDataFFT [y * size + x] = imgDataFFT[y * size + x] * weight[x] * weight[y];
+	      imgDataFFT [y * size + x] *= weight[x] * weight[y];
 	}
       else
 	{
