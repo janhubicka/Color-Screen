@@ -38,7 +38,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   screen *blurred = new screen;
   if (progress)
     progress->set_task ("bluring screen", 1);
-  blurred->initialize_with_fft_blur (*s, p.radius);
+  blurred->initialize_with_blur (*s, p.radius);
   delete s;
   return blurred;
 }

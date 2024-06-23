@@ -49,12 +49,15 @@ struct DLL_PUBLIC screen
   void initialize (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
   /* Initialize to a given screen for preview window.  */
   void initialize_preview (enum scr_type type);
+  enum blur_type
+  {
+    blur_gaussian,
+    blur_mtffliter
+  };
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, coord_t blur_radius);
+  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = blur_gaussian);
   /* Same but specify different blur for each color.  */
-  void initialize_with_blur (screen &scr, rgbdata blur_radius);
-  void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
-  void initialize_with_fft_blur (screen &scr, coord_t blur_radius);
+  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = blur_gaussian);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   bool save_tiff (const char *filename);
@@ -66,7 +69,9 @@ private:
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
   void preview_dufay ();
-  __attribute__ ((always_inline)) inline void initialize_with_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int channel);
-  void initialize_with_blur (screen &scr, coord_t blur_radius, int channel);
+  __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int channel);
+  void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int channel);
+  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius);
+  void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
 };
 #endif

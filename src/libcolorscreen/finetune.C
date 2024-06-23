@@ -559,10 +559,10 @@ public:
 	if (emulsion_blur > 0)
 	  {
 	    screen scr2;
-	    scr2.initialize_with_fft_blur (scr1, emulsion_blur);
+	    scr2.initialize_with_blur (scr1, emulsion_blur);
 	    scr1 = scr2;
 	  }
-	scr.initialize_with_fft_blur (scr1, blur * pixel_size);
+	scr.initialize_with_blur (scr1, blur * pixel_size);
 	last_blur = blur;
 	last_emulsion_blur = emulsion_blur;
 	last_width = red_strip_width;
