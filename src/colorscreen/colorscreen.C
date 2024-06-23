@@ -1102,7 +1102,7 @@ finetune (int argc, char **argv)
       record_time ();
       progress.resume_stdout ();
     }
-  if (!scan.load (infname, false, &error, &progress))
+  if (!scan.load (infname, true, &error, &progress))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
