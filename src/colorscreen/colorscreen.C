@@ -1265,7 +1265,10 @@ finetune (int argc, char **argv)
 		  printf ("  ------,------,------,------");
 	      printf ("\n");
 	    }
-	  printf ("Screen blur robust min %f, avg %f, max %f\n", hist.find_min (0.1), hist.find_avg (0.1,0.1), hist.find_max (0.1));
+	  printf ("Screen mtf75 robust min %f, avg %f, max %f\n", mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1,0.1), mtf_hist[0].find_max (0.1));
+	  printf ("Screen mtf50 robust min %f, avg %f, max %f\n", mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1,0.1), mtf_hist[1].find_max (0.1));
+	  printf ("Screen mtf25 robust min %f, avg %f, max %f\n", mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1,0.1), mtf_hist[2].find_max (0.1));
+	  printf ("Screen mtf0  robust min %f, avg %f, max %f\n", mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1,0.1), mtf_hist[3].find_max (0.1));
 	}
       if (flags & finetune_screen_blur)
 	{
