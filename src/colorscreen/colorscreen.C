@@ -1270,7 +1270,7 @@ finetune (int argc, char **argv)
 	  printf ("Screen mtf25 robust min %f, avg %f, max %f\n", mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1,0.1), mtf_hist[2].find_max (0.1));
 	  printf ("Screen mtf0  robust min %f, avg %f, max %f\n", mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1,0.1), mtf_hist[3].find_max (0.1));
 	}
-      if (flags & finetune_screen_blur)
+      else if (flags & finetune_screen_blur)
 	{
 	  printf ("Detected screen blurs\n");
 	  for (int y = 0; y < ysteps; y++)
