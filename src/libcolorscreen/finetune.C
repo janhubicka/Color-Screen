@@ -68,8 +68,8 @@ public:
   /* Tile colors */
   std::shared_ptr <rgbdata []> simulated_screen;
 
-  /* 2 coordinates, 3* blur radius, 3 * 3 colors, strip widths, fog  */
-  coord_t start[19];
+  /* 2 coordinates, 3* blur radius or 4 * mtf blur, 3 * 3 colors, strip widths, fog  */
+  coord_t start[20];
 
   /* Screen blur and duffay red strip widht and green strip height. */
   coord_t fixed_blur, fixed_width, fixed_height;
@@ -91,6 +91,8 @@ public:
   bool optimize_screen_blur;
   /* Try to optimize screen blur independently in each channel.  */
   bool optimize_screen_channel_blurs;
+  /* Try to optimize screen blur guessing lens MTF.  */
+  bool optimize_screen_mtf_blur;
   /* Try to optimize dufay strip widths (otherwise fixed_width, fixed_height is used).  */
   bool optimize_dufay_strips;
   /* Try to optimize dark point.  */
@@ -199,6 +201,14 @@ public:
     return v[dufay_strips_index + 1];
   }
 
+  void get_mtf (luminosity_t mtf[4], coord_t *v)
+  {
+    mtf[0] = v[screen_index] * 128;
+    mtf[1] = mtf[0]+v[screen_index + 1] * 128 + 1;
+    mtf[2] = mtf[1]+v[screen_index + 2] * 128 + 1;
+    mtf[3] = mtf[2]+v[screen_index + 3] * 128 + 1;
+  }
+
   void
   print_values (coord_t *v)
   {
@@ -209,6 +219,12 @@ public:
       }
     if (optimize_emulsion_blur)
       printf ("Emulsion blur %f (%f pixels)\n", get_emulsion_blur_radius (v), get_emulsion_blur_radius (v) / pixel_size);
+    if (optimize_screen_mtf_blur)
+      {
+	luminosity_t mtf[4];
+	get_mtf (mtf, v);
+	screen::print_mtf (stdout, mtf);
+      }
     if (optimize_screen_blur)
       printf ("Screen blur %f (pixel size %f, scaled %f)\n", get_blur_radius (v), pixel_size, get_blur_radius (v) * pixel_size);
     if (optimize_screen_channel_blurs)
@@ -309,6 +325,17 @@ public:
 	v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)1);
 	v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0);
 	v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)1);
+      }
+    if (optimize_screen_mtf_blur)
+      {
+	v[screen_index] = std::max (v[screen_index], (coord_t)0);
+	v[screen_index] = std::min (v[screen_index], (coord_t)1);
+	v[screen_index + 1] = std::max (v[screen_index], (coord_t)0);
+	v[screen_index + 1] = std::min (v[screen_index], (coord_t)1);
+	v[screen_index + 2] = std::max (v[screen_index], (coord_t)0);
+	v[screen_index + 2] = std::min (v[screen_index], (coord_t)1);
+	v[screen_index + 3] = std::max (v[screen_index], (coord_t)0);
+	v[screen_index + 3] = std::min (v[screen_index], (coord_t)1);
       }
     if (optimize_dufay_strips)
       {
@@ -422,8 +449,14 @@ public:
     screen_index = n_values;
     if (optimize_emulsion_blur)
       {
-	optimize_screen_blur = optimize_screen_channel_blurs = false;
+	optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = false;
 	n_values += 1;
+      }
+    if (optimize_screen_mtf_blur)
+      {
+	n_values += 4;
+	optimize_screen_blur = false;
+	optimize_screen_channel_blurs = false;
       }
     if (optimize_screen_channel_blurs)
       {
@@ -484,6 +517,13 @@ public:
       start[screen_index] = 0.8;
     if (optimize_screen_blur)
       start[screen_index] = 0.8;
+    if (optimize_screen_mtf_blur)
+      {
+        start[screen_index] = 0;
+        start[screen_index + 1] = 0;
+        start[screen_index + 2] = 0;
+        start[screen_index + 3] = 0;
+      }
     if (optimize_screen_channel_blurs)
       start[screen_index] = start[screen_index + 1] = start[screen_index + 2]= 0.8;
     if (optimize_dufay_strips)
@@ -552,7 +592,7 @@ public:
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
     
-    if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height)
+    if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height || optimize_screen_mtf_blur)
       {
         scr1.initialize (type, red_strip_width, green_strip_height);
 	//printf ("eblur %f\n", emulsion_blur);
@@ -562,7 +602,14 @@ public:
 	    scr2.initialize_with_blur (scr1, emulsion_blur);
 	    scr1 = scr2;
 	  }
-	scr.initialize_with_blur (scr1, blur * pixel_size);
+	if (optimize_screen_mtf_blur)
+	  {
+	    luminosity_t mtf[4];
+	    get_mtf (mtf, v);
+	    scr.initialize_with_blur (scr1, mtf);
+	  }
+	else
+	  scr.initialize_with_blur (scr1, blur * pixel_size);
 	last_blur = blur;
 	last_emulsion_blur = emulsion_blur;
 	last_width = red_strip_width;
@@ -1383,6 +1430,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.optimize_position = fparams.flags & finetune_position;
 	    solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
 	    solver.optimize_screen_channel_blurs = fparams.flags & finetune_screen_channel_blurs;
+	    solver.optimize_screen_mtf_blur = fparams.flags & finetune_screen_mtf_blur;
 	    solver.optimize_emulsion_blur = fparams.flags & finetune_emulsion_blur;
 	    solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
 	    solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile;

@@ -1,10 +1,12 @@
 #include <math.h>
+#include <memory>
 #include "include/tiff-writer.h"
 #include "dufaycolor.h"
 #include "include/screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
 #include <array>
+#include <include/spline.h>
 
 /* Produce empty screen.  */
 void
@@ -654,6 +656,109 @@ screen::save_tiff (const char *filename)
     }
   return true;
 }
+
+void
+screen::initialize_with_1D_fft(screen &scr, luminosity_t *weights[3])
+{
+  dj::fft_arg_fix<double, size * size> imgData;
+  for (int c = 0; c < 3; c++)
+    {
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  imgData[y * size + x] = scr.mult[y][x][c];
+      dj::fft_arg_fix<double, size * size> imgDataFFT = dj::fft2d_fix<double,size>(imgData, dj::fft_dir::DIR_FWD);
+      for (int y = 0; y < size; y++)
+	for (int x = 0; x < size; x++)
+	  imgDataFFT [y * size + x] *= weights[c][x] * weights[c][y];
+      dj::fft_arg_fix<double, size * size> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  {
+	    mult[y][x][c] = imgDataInvFFT[y * size + x].real ();
+	    if (mult[y][x][c] < 0)
+	      mult[y][x][c] = 0;
+	  }
+    }
+}
+
+/* Specify mtf75, mtf50, mtf25 and mtf8.  */
+static precomputed_function<luminosity_t> *
+mtf_by_4_vals (luminosity_t mtf[4])
+{
+  luminosity_t y[] = {1, 0.75, 0.5, 0.25, 0, 0, 0};
+  luminosity_t x[] = {0, mtf[0], mtf[1], mtf[2], mtf[3], mtf[3] + 0.01, mtf[3] + 0.02};
+  spline<luminosity_t> p(x, y, 7);
+  return p.precompute (0, 1, 1024);
+}
+
+static const int tiles = 1;
+
+void
+screen::print_mtf (FILE *f, luminosity_t mtf[4])
+{
+  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(mtf_by_4_vals (mtf));
+  luminosity_t step = 1.0 / tiles;
+  printf ("mtf75:%f mtf50:%f mtf25:%f mtf0:%f\n", mtf[0], mtf[1], mtf[2], mtf[3]);
+  for (int x = 0; x <= (size * tiles) / 2; x++)
+    {
+      luminosity_t w = mtfc->apply (x * step);
+      if (w > 0)
+	{
+	  printf ("%4.2f:",x*step);
+	  for (int i = 0; i < 80 * w; i++)
+	    printf (" ");
+	  printf ("*\n");
+	}
+    }
+}
+
+void
+screen::initialize_with_2D_fft(screen &scr, precomputed_function<luminosity_t> *mtf[3], rgbdata scale)
+{
+  dj::fft_arg_fix<double, size * size * tiles * tiles> imgData;
+  for (int c = 0; c < 3; c++)
+    {
+      for (int yy = 0; yy < tiles; yy++)
+        for (int y = 0; y < size; y++)
+	  for (int xx = 0; xx < tiles; xx++)
+            for (int x = 0; x < size; x++)
+	      imgData[(y + yy * size) * size * tiles + x + xx * size] = scr.mult[y][x][c];
+      dj::fft_arg_fix<double, size * size * tiles * tiles> imgDataFFT = dj::fft2d_fix<double,size * tiles>(imgData, dj::fft_dir::DIR_FWD);
+      luminosity_t step = scale[c] / tiles;
+
+
+      for (int y = 0; y <= size * tiles / 2; y++)
+	for (int x = 0; x <= size * tiles / 2; x++)
+	  if (!x && !y)
+	    ;
+	  else
+	    {
+	      luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
+	      if (w < 0)
+		w = 0;
+	      if (w > 1)
+		w = 1;
+	      imgDataFFT [y * size * tiles + x] *= w;
+	      if (x && (x != size * tiles / 2))
+		imgDataFFT [y * size * tiles + (size * tiles - x)] *= w;
+	      if (y && (y != size * tiles / 2))
+		{
+		  imgDataFFT [(size * tiles - y) * size * tiles + x] *= w;
+		  if (x && (x != size * tiles / 2))
+		    imgDataFFT [(size * tiles - y) * size * tiles + (size * tiles - x)] *= w;
+		}
+	    }
+      dj::fft_arg_fix<double, size * size * tiles * tiles> imgDataInvFFT = dj::fft2d_fix<double,size * tiles>(imgDataFFT, dj::fft_dir::DIR_BWD);
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  {
+	    mult[y][x][c] = imgDataInvFFT[y * size * tiles + x].real ();
+	    if (mult[y][x][c] < 0)
+	      mult[y][x][c] = 0;
+	  }
+    }
+}
+
 void
 screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 {
@@ -699,34 +804,20 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
       { 0.4898, 0.00741}
   };
   int data_size = sizeof (data) / sizeof (luminosity_t) / 2 - 1;
-  dj::fft_arg<double> imgData;
-  imgData.resize (size * size);
+  bool use_sqrt = true;
+  memcpy (add, scr.add, sizeof (add));
 
-  static const bool use_sqrt = false;
-
-  for (int c = 0; c < 3; c++)
+  if (!use_sqrt)
     {
-      if (blur_radius[c]<= 0)
-	{
-	  for (int y = 0; y < size; y++)
-	    for (int x = 0; x < size; x++)
-	      mult[y][x][c] = scr.mult[y][x][c];
-	}
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  imgData[y * size + x] = scr.mult[y][x][c];
-      dj::fft_arg<double> imgDataFFT = dj::fft2d_fix<double,size>(imgData, dj::fft_dir::DIR_FWD);
-
-      /* blur_radius is blur in the screen dimensions.
-         step should be 1 / size, but blur_radius of 1 corresponds to size so this evens out.
-         Compensate so the blur is approximately same as gaussian blur.	 */
-      luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
-      /* Do weighting in every direction independently.  */
-      if (!use_sqrt)
-	{
-	  luminosity_t weight[size];
+      luminosity_t weights[3][size];
+      for (int c = 0; c < 3; c++)
+        {
+	  /* blur_radius is blur in the screen dimensions.
+	     step should be 1 / size, but blur_radius of 1 corresponds to size so this evens out.
+	     Compensate so the blur is approximately same as gaussian blur.	 */
+	  luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
 	  luminosity_t f = step;
-	  weight[0] = 1;
+	  weights[c][0] = 1;
 	  for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
 	    {
 	      while (p < data_size - 1 && data[p + 1][0] < f)
@@ -738,54 +829,19 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 	      if (w > 1)
 		w = 1;
 	      if (x == size / 2)
-		weight [x] = w;
+		weights[c][x] = w;
 	      else
-		weight [x] = weight[size - x] = w;
+		weights[c][x] = weights[c][size - x] = w;
 	    }
-	  for (int y = 0; y < size; y++)
-	    for (int x = 0; x < size; x++)
-	      imgDataFFT [y * size + x] *= weight[x] * weight[y];
-	}
-      else
-	{
-	  /* Weight based on euclidean distance.  This seems to be done by mtffilter.  */
-	  static precomputed_function<luminosity_t> v (0, 0.5, size, data, data_size);
-	  for (int y = 0; y <= size / 2; y++)
-	    for (int x = 0; x <= size / 2; x++)
-	      if (!x && !y)
-		;
-	      else
-		{
-		  luminosity_t w = v.apply (sqrt (x * x + y * y) * step);
-		  if (w < 0)
-		    w = 0;
-		  if (w > 1)
-		    w = 1;
-		  imgDataFFT [y * size + x] *= w;
-		  if (x && (x != size / 2))
-		    imgDataFFT [y * size + (size - x)] *= w;
-		  if (y && (y != size / 2))
-		    {
-		      imgDataFFT [(size - y) * size + x] *= w;
-		      if (x && (x != size / 2))
-			imgDataFFT [(size - y) * size + (size - x)] *= w;
-		    }
-		}
-	}
-
-      dj::fft_arg<double> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
-      //imgDataInvFFT = dj::fft2d(imgDataFFT, dj::fft_dir::DIR_BWD);
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  {
-	    mult[y][x][c] = imgDataInvFFT[y * size + x].real ();
-	    if (mult[y][x][c] < 0)
-	      mult[y][x][c] = 0;
-#if 0
-	    if (mult[y][x][c] > 1)
-	      mult[y][x][c] = 1;
-#endif
-	  }
+        }
+      luminosity_t *w[3] = {weights[0],weights[1],weights[2]};
+      initialize_with_1D_fft (scr, w);
+    }
+  else
+    {
+      static precomputed_function<luminosity_t> v (0, 0.5, size, data, data_size);
+      precomputed_function<luminosity_t> *vv[3] = {&v,&v,&v};
+      initialize_with_2D_fft (scr, vv, blur_radius * 0.5 * (0.75 / 0.61));
     }
 }
 
@@ -801,4 +857,11 @@ screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type t
     initialize_with_gaussian_blur (scr, blur_radius);
   else
     initialize_with_fft_blur (scr, blur_radius);
+}
+void
+screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
+{
+  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(mtf_by_4_vals (mtf));
+  precomputed_function<luminosity_t> *vv[3] = {mtfc.get (), mtfc.get (), mtfc.get ()};
+  initialize_with_2D_fft (scr, vv, {1.0, 1.0, 1.0});
 }

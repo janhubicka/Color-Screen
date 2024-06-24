@@ -2,6 +2,7 @@
 #define SCREEN_H
 #include "color.h"
 #include "scr-to-img.h"
+template<typename T> class precomputed_function;
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
 struct DLL_PUBLIC screen
@@ -51,16 +52,20 @@ struct DLL_PUBLIC screen
   void initialize_preview (enum scr_type type);
   enum blur_type
   {
+    /* Gaussian blur.  */
     blur_gaussian,
-    blur_mtffliter
+    /* MTF from IMOD's mtffliter.  */
+    blur_mtffilter
   };
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = blur_gaussian);
+  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = blur_mtffilter);
   /* Same but specify different blur for each color.  */
-  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = blur_gaussian);
+  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = blur_mtffilter);
+  void initialize_with_blur (screen &scr, luminosity_t mtf[4]);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   bool save_tiff (const char *filename);
+  static void print_mtf (FILE *f, luminosity_t mtf[4]);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();
@@ -72,6 +77,8 @@ private:
   __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int channel);
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int channel);
   void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius);
+  void initialize_with_1D_fft (screen &scr, luminosity_t *weights[3]);
+  void initialize_with_2D_fft (screen &scr, precomputed_function<luminosity_t> *mft[3], rgbdata scale);
   void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
 };
 #endif

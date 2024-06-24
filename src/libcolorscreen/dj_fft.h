@@ -20,6 +20,7 @@ namespace dj {
 
 // FFT argument: std::vector<std::complex>
 template <typename T> using fft_arg = std::vector<std::complex<T>>;
+template <typename T, int size> using fft_arg_fix = std::array<std::complex<T>, size>;
 
 // FFT direction specifier
 enum class fft_dir {DIR_FWD = +1, DIR_BWD = -1};
@@ -268,14 +269,12 @@ private:
   std::array<std::complex<T>,cnt> zs;
 };
 
-template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg<T> fft2d_fix(const fft_arg<T> &xi, const fft_dir &dir)
+template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg_fix<T,cnt * cnt> fft2d_fix(const fft_arg_fix<T, cnt * cnt> &xi, const fft_dir &dir)
 {
-    DJ_ASSERT((xi.size() & (xi.size() - 1)) == 0 && "invalid input size");
-    const int cnt2 = cnt*cnt;
-    DJ_ASSERT (cnt2 == (int)xi.size());
+    const int cnt2 = cnt * cnt;
     int msb = findMSB(cnt2) / 2; // lg2(N) = lg2(sqrt(NxN))
     T nrm = T(1) / T(cnt);
-    fft_arg<T> xo(cnt2);
+    fft_arg_fix<T, cnt2> xo;
     bool debug = false;
 
     // pre-process the input data
