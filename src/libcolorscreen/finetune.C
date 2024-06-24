@@ -203,10 +203,15 @@ public:
 
   void get_mtf (luminosity_t mtf[4], coord_t *v)
   {
-    mtf[0] = v[screen_index] * 128;
-    mtf[1] = mtf[0]+v[screen_index + 1] * 128 + 1;
-    mtf[2] = mtf[1]+v[screen_index + 2] * 128 + 1;
-    mtf[3] = mtf[2]+v[screen_index + 3] * 128 + 1;
+    if (optimize_screen_mtf_blur)
+      {
+	mtf[0] = v[screen_index] * 128;
+	mtf[1] = mtf[0]+v[screen_index + 1] * 128 + 1;
+	mtf[2] = mtf[1]+v[screen_index + 2] * 128 + 1;
+	mtf[3] = mtf[2]+v[screen_index + 3] * 128 + 1;
+      }
+    else
+      mtf[0] = mtf[1] = mtf[2] = mtf[3] = -1;
   }
 
   void
@@ -1258,7 +1263,7 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress)
 {
-  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
+  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, {-1, -1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
   const image_data *imgp = &img;
   scr_to_img map;
   scr_to_img *mapp;
@@ -1518,6 +1523,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   ret.screen_blur_radius = best_solver.get_blur_radius (best_solver.start);
   ret.screen_channel_blur_radius = best_solver.get_channel_blur_radius (best_solver.start);
   ret.emulsion_blur_radius = best_solver.get_emulsion_blur_radius (best_solver.start);
+  best_solver.get_mtf (ret.screen_mtf_blur, best_solver.start);
   ret.screen_coord_adjust = best_solver.get_offset (best_solver.start);
   ret.fog = best_solver.get_fog (best_solver.start);
 
@@ -1617,9 +1623,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
       ret.solver_point_color = solver_parameters::green;
     }
-  best_solver.scr1.save_tiff ("/tmp/scr.tif");
+  //best_solver.scr1.save_tiff ("/tmp/scr.tif");
   //best_solver.scr.initialize_with_fft_blur (best_solver.scr1, ret.screen_channel_blur_radius);
-  best_solver.scr.save_tiff ("/tmp/scr-fft.tif");
+  //best_solver.scr.save_tiff ("/tmp/scr-fft.tif");
   ret.success = true;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;

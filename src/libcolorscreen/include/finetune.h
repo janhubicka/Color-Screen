@@ -39,6 +39,7 @@ struct finetune_result
   coord_t uncertainity;
   coord_t screen_blur_radius;
   rgbdata screen_channel_blur_radius;
+  luminosity_t screen_mtf_blur[4];
   coord_t emulsion_blur_radius;
   coord_t dufay_red_strip_width;
   coord_t dufay_green_strip_width;

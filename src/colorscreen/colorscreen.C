@@ -88,6 +88,7 @@ print_help ()
   fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
   fprintf (stderr, "      --optimize-screen-blur    enable finetuning of screen blur radius\n");
   fprintf (stderr, "      --optimize-screen-channel-blur  enable finetuning of screen blur radius with each channel independently\n");
+  fprintf (stderr, "      --optimize-screen-mtf-blur  enable finetuning of screen MTF\n");
   fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of emulsion blur radius\n");
   fprintf (stderr, "                                requres known screen blur, mixing weights in input file and monochrome chanel use\n");
   fprintf (stderr, "      --blur-tiff=name          write finetuned blur radius (eithr screen, screen channel or emulsion) parameters as tiff file\n");
@@ -1052,6 +1053,8 @@ finetune (int argc, char **argv)
 	flags |= finetune_fog;
       else if (!strcmp (argv[i], "--optimize-screen-blur"))
 	flags |= finetune_screen_blur;
+      else if (!strcmp (argv[i], "--optimize-screen-mtf-blur"))
+	flags |= finetune_screen_mtf_blur;
       else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
 	flags |= finetune_screen_channel_blurs;
       else if (!strcmp (argv[i], "--optimize-emulsion-blur"))
@@ -1215,10 +1218,11 @@ finetune (int argc, char **argv)
       printf ("\n");
     }
 
-  if (flags & (finetune_screen_blur | finetune_screen_channel_blurs | finetune_emulsion_blur))
+  if (flags & (finetune_screen_mtf_blur | finetune_screen_blur | finetune_screen_channel_blurs | finetune_emulsion_blur))
     {
       histogram hist, emulsion_hist;
       rgb_histogram channel_hist;
+      histogram mtf_hist[4];
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
 	  if (results[y * xsteps + x].success)
@@ -1226,10 +1230,14 @@ finetune (int argc, char **argv)
 	      hist.pre_account (results[y * xsteps + x].screen_blur_radius);
 	      emulsion_hist.pre_account (results[y * xsteps + x].emulsion_blur_radius);
 	      channel_hist.pre_account (results[y * xsteps + x].screen_channel_blur_radius);
+	      for (int i = 0; i < 4 ; i++)
+	        mtf_hist[i].pre_account (results[y * xsteps + x].screen_mtf_blur[i]);
 	    }
       hist.finalize_range (65536);
       emulsion_hist.finalize_range (65536);
       channel_hist.finalize_range (65536);
+      for (int i = 0; i < 4 ; i++)
+        mtf_hist[i].finalize_range (65536);
       for (int y = 0; y < ysteps; y++)
 	for (int x = 0; x < xsteps; x++)
 	  if (results[y * xsteps + x].success)
@@ -1237,17 +1245,38 @@ finetune (int argc, char **argv)
 	      hist.account (results[y * xsteps + x].screen_blur_radius);
 	      emulsion_hist.account (results[y * xsteps + x].emulsion_blur_radius);
 	      channel_hist.account (results[y * xsteps + x].screen_channel_blur_radius);
+	      for (int i = 0; i < 4 ; i++)
+	        mtf_hist[i].account (results[y * xsteps + x].screen_mtf_blur[i]);
 	    }
       hist.finalize ();
       emulsion_hist.finalize ();
       channel_hist.finalize ();
+      for (int i = 0; i < 4 ; i++)
+        mtf_hist[i].finalize ();
+      if (flags & finetune_screen_mtf_blur)
+	{
+	  printf ("Detected screen mtf (mtf75,mtf50,mtf25,mtf0)\n");
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
+		if (results[y * xsteps + x].success)
+		  printf ("  %6.3f,%6.3f,%6.3f,%6.3f", results[y * xsteps + x].screen_mtf_blur[0], results[y * xsteps + x].screen_mtf_blur[1], results[y * xsteps + x].screen_mtf_blur[2], results[y * xsteps + x].screen_mtf_blur[3]);
+		else
+		  printf ("  ------,------,------,------");
+	      printf ("\n");
+	    }
+	  printf ("Screen blur robust min %f, avg %f, max %f\n", hist.find_min (0.1), hist.find_avg (0.1,0.1), hist.find_max (0.1));
+	}
       if (flags & finetune_screen_blur)
 	{
 	  printf ("Detected screen blurs\n");
 	  for (int y = 0; y < ysteps; y++)
 	    {
 	      for (int x = 0; x < xsteps; x++)
-		printf ("  %6.3f", results[y * xsteps + x].screen_blur_radius);
+		if (results[y * xsteps + x].success)
+		  printf ("  %6.3f", results[y * xsteps + x].screen_blur_radius);
+		else
+		  printf ("  ------");
 	      printf ("\n");
 	    }
 	  printf ("Screen blur robust min %f, avg %f, max %f\n", hist.find_min (0.1), hist.find_avg (0.1,0.1), hist.find_max (0.1));
@@ -1302,6 +1331,13 @@ finetune (int argc, char **argv)
 	      for (int x = 0; x < xsteps; x++)
 		if (!results[y * xsteps + x].success)
 	          sharpness.put_pixel (x, 65535, 0, 0);
+		else if (flags & finetune_screen_mtf_blur)
+		  {
+		    int vr = std::min (results[y * xsteps + x].screen_mtf_blur[0] / 10 * 65535, (coord_t)65535);
+		    int vg = std::min (results[y * xsteps + x].screen_mtf_blur[1] / 10 * 65535, (coord_t)65535);
+		    int vb = std::min (results[y * xsteps + x].screen_mtf_blur[2] / 10 * 65535, (coord_t)65535);
+		    sharpness.put_pixel (x, vr, vg, vb);
+		  }
 		else if (flags & finetune_screen_blur)
 		  {
 		    int v = std::min (results[y * xsteps + x].screen_blur_radius / 2 * 65535, (coord_t)65535);
