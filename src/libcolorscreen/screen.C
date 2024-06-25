@@ -688,7 +688,7 @@ mtf_by_4_vals (luminosity_t mtf[4])
   luminosity_t y[] = {1, 0.75, 0.5, 0.25, 0, 0, 0};
   luminosity_t x[] = {0, mtf[0], mtf[1], mtf[2], mtf[3], mtf[3] + 0.01, mtf[3] + 0.02};
   spline<luminosity_t> p(x, y, 7);
-  return p.precompute (0, 1, 1024);
+  return p.precompute (0, 128, 1024);
 }
 
 static const int tiles = 2;
