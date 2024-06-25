@@ -41,6 +41,7 @@ private:
   luminosity_t maxgray;
 
   rgbdata last_blur;
+  luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
 public:
@@ -205,10 +206,14 @@ public:
   {
     if (optimize_screen_mtf_blur)
       {
-	mtf[0] = v[screen_index] * 128;
-	mtf[1] = mtf[0]+v[screen_index + 1] * 128 + 1;
-	mtf[2] = mtf[1]+v[screen_index + 2] * 128 + 1;
-	mtf[3] = mtf[2]+v[screen_index + 3] * 128 + 1;
+	/* Frequency should drop to 0 after reaching pixel size.  */
+	coord_t maxfreq = 128 / pixel_size;
+	if (maxfreq > 128)
+	   maxfreq = 128;
+	mtf[0] = v[screen_index] * maxfreq+0.1;
+	mtf[1] = mtf[0]+v[screen_index + 1] * maxfreq + 0.1;
+	mtf[2] = mtf[1]+v[screen_index + 2] * maxfreq + 0.1;
+	mtf[3] = mtf[2]+v[screen_index + 3] * maxfreq + 0.1;
       }
     else
       mtf[0] = mtf[1] = mtf[2] = mtf[3] = -1;
@@ -478,6 +483,8 @@ public:
       abort ();
 
     last_blur = {-1, -1,-1};
+    for (int i = 0; i < 4; i++)
+      last_mtf[i] = -1;
     last_emulsion_blur = -1;
     last_width = -1;
     last_height = -1;
@@ -589,6 +596,15 @@ public:
     return simulated_screen [y * simulated_screen_width + x];
   }
 
+  bool
+  mtf_differs (luminosity_t mtf[4], luminosity_t last_mtf[4])
+  {
+    for (int i = 0; i < 4; i++)
+      if (mtf[i] != last_mtf[i])
+	return true;
+    return false;
+  }
+
   void
   init_screen (coord_t *v)
   {
@@ -596,8 +612,10 @@ public:
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
+    luminosity_t mtf[4];
+    get_mtf (mtf, v);
     
-    if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height || optimize_screen_mtf_blur)
+    if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf))
       {
         scr1.initialize (type, red_strip_width, green_strip_height);
 	//printf ("eblur %f\n", emulsion_blur);
@@ -609,8 +627,6 @@ public:
 	  }
 	if (optimize_screen_mtf_blur)
 	  {
-	    luminosity_t mtf[4];
-	    get_mtf (mtf, v);
 	    scr.initialize_with_blur (scr1, mtf);
 	  }
 	else
