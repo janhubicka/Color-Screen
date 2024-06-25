@@ -691,7 +691,7 @@ mtf_by_4_vals (luminosity_t mtf[4])
   return p.precompute (0, 1, 1024);
 }
 
-static const int tiles = 1;
+static const int tiles = 2;
 
 void
 screen::print_mtf (FILE *f, luminosity_t mtf[4])

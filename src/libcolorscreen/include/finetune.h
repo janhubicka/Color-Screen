@@ -28,6 +28,8 @@ struct finetune_parameters
   const char *simulated_file;
   const char *orig_file;
   const char *diff_file;
+  const char *screen_file;
+  const char *screen_blur_file;
   finetune_parameters ()
   : flags (0), range (0), multitile (1), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL)
   { }

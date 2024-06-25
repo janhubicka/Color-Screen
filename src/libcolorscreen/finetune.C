@@ -340,12 +340,12 @@ public:
       {
 	v[screen_index] = std::max (v[screen_index], (coord_t)0);
 	v[screen_index] = std::min (v[screen_index], (coord_t)1);
-	v[screen_index + 1] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index + 1] = std::min (v[screen_index], (coord_t)1);
-	v[screen_index + 2] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index + 2] = std::min (v[screen_index], (coord_t)1);
-	v[screen_index + 3] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index + 3] = std::min (v[screen_index], (coord_t)1);
+	v[screen_index + 1] = std::max (v[screen_index + 1], (coord_t)0);
+	v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)1);
+	v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0);
+	v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)1);
+	v[screen_index + 3] = std::max (v[screen_index + 3], (coord_t)0);
+	v[screen_index + 3] = std::min (v[screen_index + 3], (coord_t)1);
       }
     if (optimize_dufay_strips)
       {
@@ -1639,9 +1639,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
       ret.solver_point_color = solver_parameters::green;
     }
-  //best_solver.scr1.save_tiff ("/tmp/scr.tif");
-  //best_solver.scr.initialize_with_fft_blur (best_solver.scr1, ret.screen_channel_blur_radius);
-  //best_solver.scr.save_tiff ("/tmp/scr-fft.tif");
+  if (fparams.screen_file)
+    best_solver.scr1.save_tiff (fparams.screen_file);
+  if (fparams.screen_blur_file)
+    best_solver.scr.save_tiff (fparams.screen_blur_file);
   ret.success = true;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;
