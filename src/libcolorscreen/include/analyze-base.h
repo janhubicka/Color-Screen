@@ -205,7 +205,9 @@ public:
   : analyze_base (rwscl, rhscl, gwscl, ghscl, bwscl, bhscl)
   {
   }
-  inline pure_attr rgbdata bicubic_interpolate (point_t scr);
+  inline pure_attr rgbdata bicubic_bw_interpolate (point_t scr);
+  inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
+  inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
 
   luminosity_t &
   red (int x, int y) const
@@ -300,10 +302,84 @@ protected:
   bool analyze_fast (render_to_scr *render,progress_info *progress);
 
 };
+template<typename GEOMETRY>
+inline pure_attr rgbdata
+analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions)
+{
+  int64_t red_minx = -4, red_miny = -4, green_minx = -4, green_miny = -4, blue_minx = -4, blue_miny = -4;
+  int64_t red_maxx = 4, red_maxy = 4, green_maxx = 4, green_maxy = 4, blue_maxx = 4, blue_maxy = 4;
+
+  scr.x += m_xshift;
+  scr.y += m_yshift;
+  point_t off;
+
+  data_entry e = GEOMETRY::red_scr_to_entry (scr, &off);
+  rgbdata intred = {0, 0, 0};
+  if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * GEOMETRY::red_width_scale
+      && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
+    {
+#define get_red_p(xx, yy) m_rgb_red [GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y * m_width * GEOMETRY::red_width_scale + GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x]
+      intred.red = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).red, get_red_p (-1, 0).red, get_red_p (-1, 1).red, get_red_p (-1, 2).red, off.y),
+				      cubic_interpolate (get_red_p ( 0, -1).red, get_red_p ( 0, 0).red, get_red_p ( 0, 1).red, get_red_p ( 0, 2).red, off.y),
+				      cubic_interpolate (get_red_p ( 1, -1).red, get_red_p ( 1, 0).red, get_red_p ( 1, 1).red, get_red_p ( 1, 2).red, off.y),
+				      cubic_interpolate (get_red_p ( 2, -1).red, get_red_p ( 2, 0).red, get_red_p ( 2, 1).red, get_red_p ( 2, 2).red, off.y), off.x);
+      intred.green = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).green, get_red_p (-1, 0).green, get_red_p (-1, 1).green, get_red_p (-1, 2).green, off.y),
+				        cubic_interpolate (get_red_p ( 0, -1).green, get_red_p ( 0, 0).green, get_red_p ( 0, 1).green, get_red_p ( 0, 2).green, off.y),
+				        cubic_interpolate (get_red_p ( 1, -1).green, get_red_p ( 1, 0).green, get_red_p ( 1, 1).green, get_red_p ( 1, 2).green, off.y),
+				        cubic_interpolate (get_red_p ( 2, -1).green, get_red_p ( 2, 0).green, get_red_p ( 2, 1).green, get_red_p ( 2, 2).green, off.y), off.x);
+      intred.blue = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).blue, get_red_p (-1, 0).blue, get_red_p (-1, 1).blue, get_red_p (-1, 2).blue, off.y),
+				       cubic_interpolate (get_red_p ( 0, -1).blue, get_red_p ( 0, 0).blue, get_red_p ( 0, 1).blue, get_red_p ( 0, 2).blue, off.y),
+				       cubic_interpolate (get_red_p ( 1, -1).blue, get_red_p ( 1, 0).blue, get_red_p ( 1, 1).blue, get_red_p ( 1, 2).blue, off.y),
+				       cubic_interpolate (get_red_p ( 2, -1).blue, get_red_p ( 2, 0).blue, get_red_p ( 2, 1).blue, get_red_p ( 2, 2).blue, off.y), off.x);
+#undef get_red_p
+    }
+  rgbdata intgreen = {0, 0, 0};
+  e = GEOMETRY::green_scr_to_entry (scr, &off);
+  if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * GEOMETRY::green_width_scale
+      && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
+    {
+#define get_green_p(xx, yy) m_rgb_green [GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y * m_width * GEOMETRY::green_width_scale + GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x]
+      intgreen.red = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).red, get_green_p (-1, 0).red, get_green_p (-1, 1).red, get_green_p (-1, 2).red, off.y),
+					cubic_interpolate (get_green_p ( 0, -1).red, get_green_p ( 0, 0).red, get_green_p ( 0, 1).red, get_green_p ( 0, 2).red, off.y),
+					cubic_interpolate (get_green_p ( 1, -1).red, get_green_p ( 1, 0).red, get_green_p ( 1, 1).red, get_green_p ( 1, 2).red, off.y),
+					cubic_interpolate (get_green_p ( 2, -1).red, get_green_p ( 2, 0).red, get_green_p ( 2, 1).red, get_green_p ( 2, 2).red, off.y), off.x);
+      intgreen.green = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).green, get_green_p (-1, 0).green, get_green_p (-1, 1).green, get_green_p (-1, 2).green, off.y),
+					  cubic_interpolate (get_green_p ( 0, -1).green, get_green_p ( 0, 0).green, get_green_p ( 0, 1).green, get_green_p ( 0, 2).green, off.y),
+					  cubic_interpolate (get_green_p ( 1, -1).green, get_green_p ( 1, 0).green, get_green_p ( 1, 1).green, get_green_p ( 1, 2).green, off.y),
+					  cubic_interpolate (get_green_p ( 2, -1).green, get_green_p ( 2, 0).green, get_green_p ( 2, 1).green, get_green_p ( 2, 2).green, off.y), off.x);
+      intgreen.blue = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).blue, get_green_p (-1, 0).blue, get_green_p (-1, 1).blue, get_green_p (-1, 2).blue, off.y),
+					 cubic_interpolate (get_green_p ( 0, -1).blue, get_green_p ( 0, 0).blue, get_green_p ( 0, 1).blue, get_green_p ( 0, 2).blue, off.y),
+					 cubic_interpolate (get_green_p ( 1, -1).blue, get_green_p ( 1, 0).blue, get_green_p ( 1, 1).blue, get_green_p ( 1, 2).blue, off.y),
+					 cubic_interpolate (get_green_p ( 2, -1).blue, get_green_p ( 2, 0).blue, get_green_p ( 2, 1).blue, get_green_p ( 2, 2).blue, off.y), off.x);
+#undef get_green_p
+    }
+  rgbdata intblue = {0, 0, 0};
+  e = GEOMETRY::blue_scr_to_entry (scr, &off);
+  if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * GEOMETRY::blue_width_scale
+      && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
+    {
+#define get_blue_p(xx, yy) m_rgb_blue [GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y * m_width * GEOMETRY::blue_width_scale + GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x]
+      intblue.red = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).red, get_blue_p (-1, 0).red, get_blue_p (-1, 1).red, get_blue_p (-1, 2).red, off.y),
+				       cubic_interpolate (get_blue_p ( 0, -1).red, get_blue_p ( 0, 0).red, get_blue_p ( 0, 1).red, get_blue_p ( 0, 2).red, off.y),
+				       cubic_interpolate (get_blue_p ( 1, -1).red, get_blue_p ( 1, 0).red, get_blue_p ( 1, 1).red, get_blue_p ( 1, 2).red, off.y),
+				       cubic_interpolate (get_blue_p ( 2, -1).red, get_blue_p ( 2, 0).red, get_blue_p ( 2, 1).red, get_blue_p ( 2, 2).red, off.y), off.x);
+      intblue.green = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).green, get_blue_p (-1, 0).green, get_blue_p (-1, 1).green, get_blue_p (-1, 2).green, off.y),
+					 cubic_interpolate (get_blue_p ( 0, -1).green, get_blue_p ( 0, 0).green, get_blue_p ( 0, 1).green, get_blue_p ( 0, 2).green, off.y),
+					 cubic_interpolate (get_blue_p ( 1, -1).green, get_blue_p ( 1, 0).green, get_blue_p ( 1, 1).green, get_blue_p ( 1, 2).green, off.y),
+					 cubic_interpolate (get_blue_p ( 2, -1).green, get_blue_p ( 2, 0).green, get_blue_p ( 2, 1).green, get_blue_p ( 2, 2).green, off.y), off.x);
+      intblue.blue = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).blue, get_blue_p (-1, 0).blue, get_blue_p (-1, 1).blue, get_blue_p (-1, 2).blue, off.y),
+					cubic_interpolate (get_blue_p ( 0, -1).blue, get_blue_p ( 0, 0).blue, get_blue_p ( 0, 1).blue, get_blue_p ( 0, 2).blue, off.y),
+					cubic_interpolate (get_blue_p ( 1, -1).blue, get_blue_p ( 1, 0).blue, get_blue_p ( 1, 1).blue, get_blue_p ( 1, 2).blue, off.y),
+					cubic_interpolate (get_blue_p ( 2, -1).blue, get_blue_p ( 2, 0).blue, get_blue_p ( 2, 1).blue, get_blue_p ( 2, 2).blue, off.y), off.x);
+#undef get_blue_p
+    }
+
+  return intred * patch_proportions.red + intgreen * patch_proportions.green + intblue * patch_proportions.blue;
+}
 
 template<typename GEOMETRY>
 inline pure_attr rgbdata
-analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr)
+analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
 {
   int64_t red_minx = -4, red_miny = -4, green_minx = -4, green_miny = -4, blue_minx = -4, blue_miny = -4;
   int64_t red_maxx = 4, red_maxy = 4, green_maxx = 4, green_maxy = 4, blue_maxx = 4, blue_maxy = 4;
@@ -346,5 +422,14 @@ analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr)
 #undef get_blue_p
     }
   return ret;
+}
+template<typename GEOMETRY>
+inline pure_attr rgbdata
+analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_proportions)
+{
+  if (m_red)
+    return bicubic_bw_interpolate (scr);
+  else
+    return bicubic_rgb_interpolate (scr, patch_proportions);
 }
 #endif

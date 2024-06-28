@@ -631,7 +631,14 @@ analyze_base_worker<GEOMETRY>::analyze (render_to_scr *render, const image_data 
       maxy = std::min (maxy, img->height);
 
       if (progress)
-	progress->set_task ("determining intensities of color screen patches (precise mode)", maxy - miny + m_height * 3);
+      {
+	if (mode == precise)
+	  progress->set_task ("determining intensities of color screen patches (precise mode)", maxy - miny + m_height * 3);
+	else if (mode == color)
+	  progress->set_task ("determining intensities of color screen patches (original color mode)", maxy - miny + m_height * 3);
+	else 
+	  progress->set_task ("determining intensities of color screen patches (precise RGB mode)", maxy - miny + m_height * 3);
+      }
 
       if (mode == precise)
         ok = analyze_precise (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);

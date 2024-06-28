@@ -160,7 +160,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_gray_data_id,
       screen_id,
       m_params.gamma,
-      m_original_color ? analyze_base::color : (m_precise_rgb ? analyze_base::precise_rgb : (!m_params.precise ? analyze_base::fast : analyze_base::precise)),
+      m_original_color ? analyze_base::/*color*/precise_rgb : (m_precise_rgb ? analyze_base::precise_rgb : (!m_params.precise ? analyze_base::fast : analyze_base::precise)),
       m_params.collection_threshold,
       m_scr_to_img.get_param ().mesh_trans ? m_scr_to_img.get_param ().mesh_trans->id : 0,
       m_scr_to_img.get_param (),
@@ -190,9 +190,9 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
   rgbdata c;
 
   if (m_scr_to_img.get_type () != Dufay)
-    c = m_paget->bicubic_interpolate ({x,y});
+    c = m_paget->bicubic_interpolate ({x,y}, m_scr_to_img.patch_proportions (&m_params));
   else
-    c = m_dufay->bicubic_interpolate ({x,y});
+    c = m_dufay->bicubic_interpolate ({x,y}, m_scr_to_img.patch_proportions (&m_params));
   if (!m_original_color)
     m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
   if (m_unadjusted)
