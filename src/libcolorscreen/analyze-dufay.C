@@ -6,6 +6,8 @@
 bool flatten_attr
 analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  return analyze_base::analyze_precise<dufay_geometry> (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+#if 0
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
 #pragma omp for 
@@ -115,12 +117,15 @@ analyze_dufay::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, c
   }
 #undef pixel
   return !progress || !progress->cancelled ();
+#endif
 }
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
 analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  return analyze_base::analyze_precise<dufay_geometry> (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+#if 0
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
 #pragma omp for 
@@ -231,36 +236,20 @@ analyze_dufay::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
     }
   }
   return !progress || !progress->cancelled ();
+#endif
 }
 bool flatten_attr
 analyze_dufay::analyze_fast (render_to_scr *render,progress_info *progress)
 {
-  /* Old precise code is always disabled.  */
-  const bool precise = false;
-#define pixel(xo,yo,width,height) precise ? render->sample_scr_square ((x - m_xshift) + xo, (y - m_yshift) + yo, width, height)\
-		     : render->get_unadjusted_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
-#pragma omp parallel for default (none) shared (precise,render,progress)
-  for (int x = 0; x < m_width; x++)
-    {
-      if (!progress || !progress->cancel_requested ())
-	for (int y = 0 ; y < m_height; y++)
-	  {
-	    red (2 * x, y) = pixel (0.25, 0.5, 0.5, 0.5);
-	    red (2 * x + 1, y) = pixel (0.75, 0.5,0.5, 0.5);
-	    green (x, y) = pixel (0, 0, 0.5, 0.5);
-	    blue (x, y) = pixel (0.5, 0, 0.5, 0.5);
-	  }
-      if (progress)
-	progress->inc_progress ();
-    }
-#undef pixel
-  return !progress || !progress->cancelled ();
+  return analyze_base::analyze_fast<dufay_geometry> (render, progress);
 }
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
 analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  return analyze_base::analyze_color<dufay_geometry> (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+#if 0
   luminosity_t weights[256];
   luminosity_t half_weights[256];
   coord_t pixel_size = render->pixel_size ();
@@ -419,6 +408,7 @@ analyze_dufay::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, lum
     }
   }
   return !progress || !progress->cancelled ();
+#endif
 }
 
 bool

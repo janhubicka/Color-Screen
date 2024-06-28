@@ -57,6 +57,8 @@ struct DLL_PUBLIC screen
     /* MTF from IMOD's mtffliter.  */
     blur_mtffilter
   };
+  /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
+  void initialize_dot ();
   /* Initialize imitating lens blur.  */
   void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = blur_mtffilter);
   /* Same but specify different blur for each color.  */
@@ -64,8 +66,8 @@ struct DLL_PUBLIC screen
   void initialize_with_blur (screen &scr, luminosity_t mtf[4]);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
-  bool save_tiff (const char *filename);
-  static void print_mtf (FILE *f, luminosity_t mtf[4]);
+  bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
+  static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

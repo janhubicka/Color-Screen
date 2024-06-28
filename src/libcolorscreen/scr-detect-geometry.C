@@ -1061,32 +1061,31 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     }
   else
     {
-      coord_t cx, cy;
       int xmin, ymin, xmax, ymax;
-      analyze_paget::to_diagonal_coordinates (-xshift, -yshift, &cx, &cy);
-      int ix = cx / 2;
-      int iy = cy / 2;
+      analyze_base::data_entry p = paget_geometry::to_diagonal_coordinates ((analyze_base::data_entry){-xshift, -yshift});
+      int ix = p.x / 2;
+      int iy = p.y / 2;
       xmin = ix - 1;
       xmax = ix + 1;
       ymin = iy - 1;
       ymax = iy + 1;
-      analyze_paget::to_diagonal_coordinates (-xshift + width, -yshift, &cx, &cy);
-      ix = cx / 2;
-      iy = cy / 2;
+      p = paget_geometry::to_diagonal_coordinates ((analyze_base::data_entry){-xshift + width, -yshift});
+      ix = p.x / 2;
+      iy = p.y / 2;
       xmin = std::min (xmin, ix - 1);
       xmax = std::max (xmax, ix + 1);
       ymin = std::min (ymin, iy - 1);
       ymax = std::max (ymax, iy + 1);
-      analyze_paget::to_diagonal_coordinates (-xshift, -yshift + height, &cx, &cy);
-      ix = cx / 2;
-      iy = cy / 2;
+      p = paget_geometry::to_diagonal_coordinates ((analyze_base::data_entry){-xshift, -yshift + height});
+      ix = p.x / 2;
+      iy = p.y / 2;
       xmin = std::min (xmin, ix - 1);
       xmax = std::max (xmax, ix + 1);
       ymin = std::min (ymin, iy - 1);
       ymax = std::max (ymax, iy + 1);
-      analyze_paget::to_diagonal_coordinates (-xshift + width, -yshift + height, &cx, &cy);
-      ix = cx / 2;
-      iy = cy / 2;
+      p = paget_geometry::to_diagonal_coordinates ((analyze_base::data_entry){-xshift + width, -yshift + height});
+      ix = p.x / 2;
+      iy = p.y / 2;
       xmin = std::min (xmin, ix - 1);
       xmax = std::max (xmax, ix + 1);
       ymin = std::min (ymin, iy - 1);
@@ -1176,23 +1175,21 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 #define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
 				 || (slow && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue, dsparams->min_patch_contrast)))
 				 //|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.33 / 2, 0.33 / 2, false)))
-	  int normal_scr_x, normal_scr_y;
 	  if (sparam)
 	    {
-	      analyze_paget::from_diagonal_coordinates (e.scr_x, e.scr_y, &normal_scr_x, &normal_scr_y);
+	      analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){e.scr_x, e.scr_y});
 	      solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x, e.scr_y);
 	      if (sparam)
-		sparam->add_point (e.img_x, e.img_y, normal_scr_x / 2.0, normal_scr_y / 2.0, color);
+		sparam->add_point (e.img_x, e.img_y, p.x / 2.0, p.y / 2.0, color);
 	    }
 	  for (int xx = -1; xx <= 1; xx++)
 	    for (int yy = -1; yy <= 1; yy++)
 	      if ((xx || yy)// && ((xx != 0) + (yy != 0)) == 1
 	          && !map->known_p (e.scr_x + xx, e.scr_y + yy))
 		{
-		  int ax, ay;
-	          analyze_paget::from_diagonal_coordinates (xx, yy, &ax, &ay);
+	          analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){xx, yy});
 		  solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x + xx, e.scr_y + yy);
-		  if (cpatch (e.img_x + ax * param.coordinate1_x / 4 + ay * param.coordinate2_x / 4, e.img_y + ax * param.coordinate1_y / 4 + ay * param.coordinate2_y / 4, (scr_detect::color_class)color, priority))
+		  if (cpatch (e.img_x + p.x * param.coordinate1_x / 4 + p.y * param.coordinate2_x / 4, e.img_y + p.x * param.coordinate1_y / 4 + p.y * param.coordinate2_y / 4, (scr_detect::color_class)color, priority))
 		    {
 		      map->safe_set_coord (e.scr_x + xx, e.scr_y + yy, ix, iy);
 		      queue.insert ((struct queue_entry){e.scr_x + xx, e.scr_y + yy, ix, iy}, priority);

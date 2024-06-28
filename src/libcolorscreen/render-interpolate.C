@@ -208,8 +208,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
 
-      coord_t xd, yd;
-      analyze_paget::to_diagonal_coordinates (x, y, &xd, &yd);
+      point_t p = paget_geometry::to_diagonal_coordinates ((point_t){x, y});
+      coord_t xd = p.x, yd = p.y;
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
 
@@ -219,7 +219,9 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
 				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
 #undef get_green
-      analyze_paget::to_diagonal_coordinates (x + (coord_t)0.5, y, &xd, &yd);
+      p = paget_geometry::to_diagonal_coordinates ((point_t){x + (coord_t)0.5, y});
+      xd = p.x;
+      yd = p.y;
       xo = my_modf (xd, &xp);
       yo = my_modf (yd, &yp);
 #define get_red(xx, yy) m_paget->diag_red (xp + (xx), yp + (yy))

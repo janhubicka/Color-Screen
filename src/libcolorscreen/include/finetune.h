@@ -30,8 +30,9 @@ struct finetune_parameters
   const char *diff_file;
   const char *screen_file;
   const char *screen_blur_file;
+  const char *dot_spread_file;
   finetune_parameters ()
-  : flags (0), range (0), multitile (1), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL), screen_file (NULL), screen_blur_file (NULL)
+  : flags (0), range (0), multitile (1), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL), screen_file (NULL), screen_blur_file (NULL), dot_spread_file (NULL)
   { }
 };
 struct finetune_result

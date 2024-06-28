@@ -6,6 +6,8 @@
 bool flatten_attr
 analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  return analyze_base::analyze_precise<paget_geometry> (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+#if 0
   /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
@@ -112,10 +114,13 @@ analyze_paget::analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, c
     }
   }
   return !progress || !progress->cancelled ();
+#endif
 }
 bool flatten_attr
 analyze_paget::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
+  return analyze_base::analyze_precise_rgb<paget_geometry> (scr_to_img, render, screen, collection_threshold, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
+#if 0
   /* Collect luminosity of individual color patches.  */
 #pragma omp parallel shared(progress, render, scr_to_img, screen, collection_threshold, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
   {
@@ -222,134 +227,19 @@ analyze_paget::analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *rende
     }
   }
   return !progress || !progress->cancelled ();
+#endif
 }
 /* Collect luminosity of individual color patches.
    Function is flattened so it should do only necessary work.  */
 bool flatten_attr
 analyze_paget::analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress)
 {
-  printf ("TODO: implement more precise data collection.");
-
-  /* Collect luminosity of individual color patches.  */
-#pragma omp parallel shared(progress, render, scr_to_img, w_blue, w_red, w_green, minx, miny, maxx, maxy) default(none)
-  {
-#pragma omp for 
-    for (int y = miny ; y < maxy; y++)
-      {
-	if (!progress || !progress->cancel_requested ())
-	  for (int x = minx; x < maxx; x++)
-	    {
-	      rgbdata d = render->get_unadjusted_rgb_pixel (x, y);
-	      coord_t scr_x, scr_y;
-	      scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
-	      scr_x += m_xshift;
-	      scr_y += m_yshift;
-	      if (scr_x < 0 || scr_x >= m_width - 1 || scr_y < 0 || scr_y > m_height - 1)
-		continue;
-
-	      {
-		coord_t xd, yd;
-		to_diagonal_coordinates (scr_x + (coord_t)0.5, scr_y, &xd, &yd);
-		xd = nearest_int (xd);
-		yd = nearest_int (yd);
-		int xx = ((int)xd + (int)yd) / 2;
-		int yy = -(int)xd + (int)yd;
-		if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
-		  {
-		    red_atomic_add (xx, yy, d.red);
-		    luminosity_t &l = w_red [yy * m_width + xx];
-#pragma omp atomic
-		    l+=1;
-		  }
-	      }
-	      {
-		coord_t xd, yd;
-		to_diagonal_coordinates (scr_x, scr_y, &xd, &yd);
-		xd = nearest_int (xd);
-		yd = nearest_int (yd);
-		int xx = ((int)xd + (int)yd) / 2;
-		int yy = -(int)xd + (int)yd;
-		if (xx >= 0 && xx < m_width && yy >= 0 && yy < m_height * 2)
-		  {
-		    green_atomic_add (xx, yy, d.green);
-		    luminosity_t &l = w_green [yy * m_width + xx];
-#pragma omp atomic
-		    l+=1;
-		  }
-	      }
-	      {
-		int xx = nearest_int (2*(scr_x-(coord_t)0.25));
-		int yy = nearest_int (2*(scr_y-(coord_t)0.25));
-		blue_atomic_add (xx, yy, d.blue);
-		luminosity_t &l = w_blue [yy * m_width * 2 + xx];
-#pragma omp atomic
-		l+=1;
-	      }
-	    }
-	if (progress)
-	  progress->inc_progress ();
-      }
-  if (!progress || !progress->cancel_requested ())
-    {
-#pragma omp for nowait
-      for (int y = 0; y < m_height * 2; y++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int x = 0; x < m_width; x++)
-	      if (w_red [y * m_width + x] != 0)
-		red (x,y) /= w_red [y * m_width + x];
-	  if (progress)
-	    progress->inc_progress ();
-	}
-#pragma omp for nowait
-      for (int y = 0; y < m_height * 2; y++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int x = 0; x < m_width; x++)
-	      if (w_green [y * m_width + x] != 0)
-		green (x,y) /= w_green [y * m_width + x];
-	  if (progress)
-	    progress->inc_progress ();
-	}
-#pragma omp for nowait
-      for (int y = 0; y < m_height * 2; y++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int x = 0; x < m_width * 2; x++)
-	      if (w_blue [y * m_width * 2 + x] != 0)
-		blue (x,y) /= w_blue [y * m_width * 2 + x];
-	  if (progress)
-	    progress->inc_progress ();
-	}
-    }
-  }
-  return !progress || !progress->cancelled ();
+  return analyze_base::analyze_color<paget_geometry> (scr_to_img, render, w_red, w_green, w_blue, minx, miny, maxx, maxy, progress);
 }
 bool flatten_attr
 analyze_paget::analyze_fast (render_to_scr *render,progress_info *progress)
 {
-	/* TODO: Use unadjusted data  */
-#define pixel(xo,yo,diag) render->get_unadjusted_img_pixel_scr ((x - m_xshift) + xo, (y - m_yshift) + yo)
-#pragma omp parallel for default (none) shared (progress, render)
-  for (int x = 0; x < m_width; x++)
-    {
-      if (!progress || !progress->cancel_requested ())
-	for (int y = 0 ; y < m_height; y++)
-	  {
-	    red (x, 2 * y) = pixel (-0.5, 0, 0.5);
-	    red (x, 2 * y + 1) = pixel (0, 0.5, 0.5);
-	    green (x, 2 * y) = pixel (0.0, 0, 0.5);
-	    green (x, 2 * y + 1) = pixel (0.5, 0.5, 0.5);
-	    blue (2 * x, 2 * y) = pixel (0.25, 0.25, 0.3);
-	    blue (2 * x + 1, 2 * y) = pixel (0.75, 0.25, 0.3);
-	    blue (2 * x, 2 * y + 1) = pixel (0.25, 0.75, 0.3);
-	    blue (2 * x + 1, 2 * y + 1) = pixel (0.75, 0.75, 0.3);
-	  }
-      if (progress)
-	progress->inc_progress ();
-    }
-#undef pixel
-  return !progress || !progress->cancelled ();
+  return analyze_base::analyze_fast<paget_geometry> (render, progress);
 }
 bool
 analyze_paget::analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress)

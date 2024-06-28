@@ -97,9 +97,9 @@ public:
       }
     else
       {
-        analyze_paget::from_diagonal_coordinates (x, y, scr_x, scr_y);
-	*scr_x /= 4.0;
-	*scr_y /= 4.0;
+        analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){x, y});
+	*scr_x = p.x / 4.0;
+	*scr_y = p.y / 4.0;
 	if (!color)
 	  return;
         if (!(y & 1))
@@ -121,10 +121,9 @@ public:
       }
     else
       {
-	coord_t dx, dy;
-        analyze_paget::to_diagonal_coordinates (sx, sy, &dx, &dy);
-	x = dx * 2;
-	y = dy * 2;
+        point_t p = paget_geometry::to_diagonal_coordinates ((point_t){sx, sy});
+	x = p.x * 2;
+	y = p.y * 2;
       }
     x += xshift;
     y += yshift;

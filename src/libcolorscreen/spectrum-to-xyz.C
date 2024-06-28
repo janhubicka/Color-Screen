@@ -4833,7 +4833,7 @@ spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response (const char *filena
     free (buffer);
     return false;
   }
-  luminosity_t gamma = 1;
+  luminosity_t gamma = 1.8;
 
   rgbdata dred = film_rgb_response (red);
   rgbdata dgreen = film_rgb_response (green);

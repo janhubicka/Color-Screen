@@ -7,6 +7,7 @@
 #include "dj_fft.h"
 #include <array>
 #include <include/spline.h>
+#include "icc.h"
 
 /* Produce empty screen.  */
 void
@@ -618,33 +619,60 @@ else
   preview ();
 }
 
+void
+screen::initialize_dot ()
+{
+  for (int y = 0; y < size; y++)
+   for (int x = 0; x < size; x++)
+     for (int c = 0; c < 3; c++)
+       {
+	 mult[y][x][c] = 0;
+	 add[y][x][c] = 0;
+       }
+  mult[size/2][size/2][0] = mult[size/2][size/2][1] = mult[size/2][size/2][2] = 1;
+}
+
 bool
-screen::save_tiff (const char *filename)
+screen::save_tiff (const char *filename, bool normalize, int tiles)
 {
   tiff_writer_params p;
+  rgbdata max = {0,0,0};
+  void *buffer;
+  size_t len = create_linear_srgb_profile (&buffer);
+  if (!normalize)
+    max.red = max.green = max.blue = 1;
+  else
+    for (int y = 0; y < size; y++)
+      for (int x = 0; x < size; x++)
+	{
+	  max.red = std::max (mult[y][x][0], max.red);
+	  max.green = std::max (mult[y][x][0], max.green);
+	  max.blue = std::max (mult[y][x][0], max.blue);
+	}
   p.filename = filename;
-  p.width = size * 3;
-  p.height = size * 3;
+  p.width = size * tiles;
+  p.height = size * tiles;
   p.depth = 16;
   const char *error;
   tiff_writer out (p, &error);
+  free (buffer);
   if (error)
     return false;
-  for (int y = 0; y < size * 3; y++)
+  for (int y = 0; y < size * tiles; y++)
     {
-      for (int x = 0; x < size * 3; x++)
+      for (int x = 0; x < size * tiles; x++)
 	{
-	  int r = mult[y % size][x % size][0] * 65536;
+	  int r = mult[y % size][x % size][0] / max.red * 65536;
 	  if (r < 0)
 	    r = 0;
 	  if (r > 65535)
 	    r = 65535;
-	  int g = mult[y % size][x % size][1] * 65536;
+	  int g = mult[y % size][x % size][1] / max.green * 65536;
 	  if (g < 0)
 	    g = 0;
 	  if (g > 65535)
 	    g = 65535;
-	  int b = mult[y % size][x % size][2] * 65536;
+	  int b = mult[y % size][x % size][2] / max.blue * 65536;
 	  if (b < 0)
 	    b = 0;
 	  if (b > 65535)
@@ -694,23 +722,27 @@ mtf_by_4_vals (luminosity_t mtf[4])
   return new precomputed_function<luminosity_t> (0, screen::size, 1024, x, y, 7);
 }
 
-static const int tiles = 2;
+static const int tiles = 1;
 
 void
-screen::print_mtf (FILE *f, luminosity_t mtf[4])
+screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 {
   std::unique_ptr <precomputed_function<luminosity_t>> mtfc(mtf_by_4_vals (mtf));
   luminosity_t step = 1.0 / tiles;
-  printf ("mtf75:%f mtf50:%f mtf25:%f mtf0:%f\n", mtf[0], mtf[1], mtf[2], mtf[3]);
+  coord_t dpi = 4500;
+  printf ("mtf75:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f lp/mm at %f DPI\n", mtf[0], mtf[0] * pixel_size, mtf[0] * pixel_size * dpi / 25.4, dpi);
+  printf ("mtf50:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f lp/mm at %f DPI\n", mtf[1], mtf[1] * pixel_size, mtf[1] * pixel_size * dpi / 25.4, dpi);
+  printf ("mtf25:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f lp/mm at %f DPI\n", mtf[2], mtf[2] * pixel_size, mtf[2] * pixel_size * dpi / 25.4, dpi);
+  printf ("mtf0: %f (screen reciprocal pixels) %f (scan reciprocal pixels) %f lp/mm at %f DPI\n", mtf[3], mtf[3] * pixel_size, mtf[3] * pixel_size * dpi / 25.4, dpi);
   for (int x = 0; x <= (size * tiles) / 2; x++)
     {
       luminosity_t w = mtfc->apply (x * step);
       if (w > 0)
 	{
-	  printf ("%4.2f:",x*step);
+	  printf ("%4.2f %6.3f:",x * step, x * step * pixel_size);
 	  for (int i = 0; i < 80 * w; i++)
 	    printf (" ");
-	  printf ("*\n");
+	  printf ("* %2.2f\n", w * 100);
 	}
     }
 }
@@ -726,6 +758,7 @@ screen::initialize_with_2D_fft(screen &scr, precomputed_function<luminosity_t> *
 	  for (int xx = 0; xx < tiles; xx++)
             for (int x = 0; x < size; x++)
 	      imgData[(y + yy * size) * size * tiles + x + xx * size] = scr.mult[y][x][c];
+
       dj::fft_arg_fix<double, size * size * tiles * tiles> imgDataFFT = dj::fft2d_fix<double,size * tiles>(imgData, dj::fft_dir::DIR_FWD);
       luminosity_t step = scale[c] / tiles;
 

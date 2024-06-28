@@ -687,10 +687,16 @@ xyz_to_pro_photo_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosit
 {
   xyz_pro_photo_rgb_matrix m;
   m.apply_to_rgb (x, y, z, r, g, b);
-  /*TODO: Fix also in spectrum_dyes_to_xyz::tiff_with_overlapping_filters_response.  */
-  /**r = invert_gamma (*r, 1.8);
+  *r = invert_gamma (*r, 1.8);
   *g = invert_gamma (*g, 1.8);
-  *b = invert_gamma (*b, 1.8);*/
+  *b = invert_gamma (*b, 1.8);
+}
+/* Add gamma function.  */
+inline void
+xyz_to_pro_linear_photo_rgb (luminosity_t x, luminosity_t y, luminosity_t z,  luminosity_t *r, luminosity_t *g, luminosity_t *b)
+{
+  xyz_pro_photo_rgb_matrix m;
+  m.apply_to_rgb (x, y, z, r, g, b);
 }
 
 inline xyz

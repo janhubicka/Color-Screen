@@ -233,7 +233,7 @@ public:
       {
 	luminosity_t mtf[4];
 	get_mtf (mtf, v);
-	screen::print_mtf (stdout, mtf);
+	screen::print_mtf (stdout, mtf, pixel_size);
       }
     if (optimize_screen_blur)
       printf ("Screen blur %f (pixel size %f, scaled %f)\n", get_blur_radius (v), pixel_size, get_blur_radius (v) * pixel_size);
@@ -604,6 +604,27 @@ public:
 	return true;
     return false;
   }
+  void
+  apply_blur (coord_t *v, screen *dst_scr, screen *src_scr)
+  {
+    luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
+    rgbdata blur = get_channel_blur_radius (v);
+    luminosity_t mtf[4];
+    get_mtf (mtf, v);
+    screen scr2;
+    //printf ("eblur %f\n", emulsion_blur);
+    if (emulsion_blur > 0)
+      {
+	scr2.initialize_with_blur (*src_scr, emulsion_blur);
+	src_scr = &scr2;
+      }
+    if (optimize_screen_mtf_blur)
+      {
+	dst_scr->initialize_with_blur (*src_scr, mtf);
+      }
+    else
+      dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
+  }
 
   void
   init_screen (coord_t *v)
@@ -618,23 +639,12 @@ public:
     if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf))
       {
         scr1.initialize (type, red_strip_width, green_strip_height);
-	//printf ("eblur %f\n", emulsion_blur);
-	if (emulsion_blur > 0)
-	  {
-	    screen scr2;
-	    scr2.initialize_with_blur (scr1, emulsion_blur);
-	    scr1 = scr2;
-	  }
-	if (optimize_screen_mtf_blur)
-	  {
-	    scr.initialize_with_blur (scr1, mtf);
-	  }
-	else
-	  scr.initialize_with_blur (scr1, blur * pixel_size);
+	apply_blur (v, &scr, &scr1);
 	last_blur = blur;
 	last_emulsion_blur = emulsion_blur;
 	last_width = red_strip_width;
 	last_height = green_strip_height;
+	memcpy (last_mtf, mtf, sizeof (last_mtf));
       }
   }
 
@@ -1643,6 +1653,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     best_solver.scr1.save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)
     best_solver.scr.save_tiff (fparams.screen_blur_file);
+  if (fparams.dot_spread_file)
+    {
+      screen scr, scr1;
+      scr1.initialize_dot ();
+      best_solver.apply_blur (best_solver.start, &scr, &scr1);
+      scr.save_tiff (fparams.dot_spread_file, true, 1);
+    }
   ret.success = true;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;

@@ -97,7 +97,17 @@ create_wide_gammut_rgb_profile (void **buffer)
 		  {0.7161046 + 0.1009296 + 0.1471858, 0.2581874 + 0.7249378 + 0.0168748, 0.0517813 + 0.7734287}, 2.2, buffer);
 }
 size_t
+create_linear_pro_photo_rgb_profile (void **buffer, xyz whitepoint)
+{
+  return create_profile ("Colorscreen linear pro photo derived RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, whitepoint, 1, buffer);
+}
+size_t
 create_pro_photo_rgb_profile (void **buffer, xyz whitepoint)
 {
-  return create_profile ("Colorscreen pro photo RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, whitepoint, /*1.8*/1, buffer);
+  return create_profile ("Colorscreen pro photo RGB", {0.79767, 0.28804, 0.00000}, {0.13519, 0.71188, 0.00000}, {0.03134, 0.00009, 0.82491}, whitepoint, 1.8, buffer);
+}
+size_t
+create_linear_srgb_profile (void **buffer, xyz whitepoint)
+{
+  return create_profile ("Colorscreen linear sRGB", {0.4124564, 0.2126729, 0.0193339}, {0.3575761, 0.7151522, 0.1191920}, {0.1804375, 0.0721750, 0.9503041}, whitepoint, 1, buffer);
 }
