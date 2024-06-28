@@ -23,17 +23,17 @@ struct dufay_geometry
 
   /* Used to compute grid for interpolation between neighbouring values.
      Everything is orthogonal, so no translation necessary  */
-  inline static analyze_base::data_entry offset_for_interpolation_red (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_red (analyze_base::data_entry e, analyze_base::data_entry off)
   {
-    return e;
+    return e + off;
   }
-  inline static analyze_base::data_entry offset_for_interpolation_green (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_green (analyze_base::data_entry e, analyze_base::data_entry off)
   {
-    return e;
+    return e + off;
   }
-  inline static analyze_base::data_entry offset_for_interpolation_blue (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_blue (analyze_base::data_entry e, analyze_base::data_entry off)
   {
-    return e;
+    return e + off;
   }
 
   /* Convert screen coordinates to data entry, possibly with offset for interpolation.
@@ -206,6 +206,11 @@ public:
     red = (rgb_red (2*x, y) + rgb_red (2*x+1, y)) * 0.5;
     green = rgb_green (x, y);
     blue = rgb_blue (x, y);
+  }
+  inline pure_attr rgbdata
+  bicubic_interpolate (point_t scr)
+  {
+    return bicubic_interpolate2<dufay_geometry> (scr);
   }
 
   bool analyze(render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, screen const *screen, int width, int height, int xshift, int yshift, enum mode mode, luminosity_t collection_threshold, progress_info *progress = NULL);

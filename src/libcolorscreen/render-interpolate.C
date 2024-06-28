@@ -192,6 +192,11 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 
   if (m_scr_to_img.get_type () != Dufay)
     {
+      rgbdata c = m_paget->bicubic_interpolate ({x,y});
+      red = c.red;
+      green = c.green;
+      blue = c.blue;
+#if 0
       xshift = m_paget->get_xshift ();
       yshift = m_paget->get_yshift ();
       x += xshift;
@@ -230,9 +235,15 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
 			       cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo), xo);
 #undef get_red
+#endif
     }
   else
     {
+      rgbdata c = m_dufay->bicubic_interpolate ({x,y});
+      red = c.red;
+      green = c.green;
+      blue = c.blue;
+#if 0
       xshift = m_dufay->get_xshift ();
       yshift = m_dufay->get_yshift ();
       x += xshift;
@@ -268,6 +279,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
 				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
 #undef get_blue
+#endif
     }
   if (!m_original_color)
     m_saturation_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);

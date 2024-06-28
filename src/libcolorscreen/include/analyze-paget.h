@@ -73,19 +73,26 @@ struct paget_geometry
   }
 
   /* Red and green are diagonal, so when doing interpolation we need to account that.  */
-  inline static analyze_base::data_entry offset_for_interpolation_red (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_red (analyze_base::data_entry e, analyze_base::data_entry off)
   {
-    return offset_for_interpolation_green (e);
+    return offset_for_interpolation_green (e, off);
   }
-  inline static analyze_base::data_entry offset_for_interpolation_green (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_green (analyze_base::data_entry e, analyze_base::data_entry off)
   {
+    /* Undo division by 2.  We know parity from y.  */
+    e.x = e.x * 2 + (e.y & 1);
+    /* Undo from_diagonal_coordinates.  */
+    e.x = (e.x - e.y) / 2;
+    e.y = e.y + e.x;
+    /* Offset and convert back.  */
+    e = e + off;
     e = from_diagonal_coordinates (e);
     e.x /= 2;
     return e;
   }
-  inline static analyze_base::data_entry offset_for_interpolation_blue (analyze_base::data_entry e)
+  inline static analyze_base::data_entry offset_for_interpolation_blue (analyze_base::data_entry e, analyze_base::data_entry off)
   {
-    return e;
+    return e + off;
   }
 
   static inline
@@ -300,6 +307,11 @@ public:
      unsigned int xx = x + y;
      unsigned int yy = -x + y;
      return red (xx / 2, yy);
+  }
+  inline pure_attr rgbdata
+  bicubic_interpolate (point_t scr)
+  {
+    return bicubic_interpolate2<paget_geometry> (scr);
   }
   bool analyze(render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress = NULL);
   virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);

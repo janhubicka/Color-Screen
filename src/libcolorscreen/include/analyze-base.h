@@ -528,6 +528,9 @@ protected:
 #pragma omp for 
       for (int y = miny ; y < maxy; y++)
 	{
+	  int64_t red_minx = -2, red_miny = -2, green_minx = -2, green_miny = -2, blue_minx = -2, blue_miny = -2;
+	  int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2, blue_maxx = 2, blue_maxy = 2;
+#if 0
 	  /* This will optimize to constants; be sure that those are not hidden by openmp runtime.  */
 	  int64_t red_minx = 0, red_miny = 0, red_maxx = 0, red_maxy = 0;
 	  data_entry o = T::offset_for_interpolation_red ({0, 1});
@@ -585,6 +588,7 @@ protected:
 	  blue_maxx = std::max (o.x, blue_maxx);
 	  blue_miny = std::min (o.y, blue_miny);
 	  blue_maxy = std::max (o.y, blue_maxy);
+#endif
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = minx; x < maxx; x++)
 	      {
@@ -610,25 +614,25 @@ protected:
 		    l1 += val1;
 #pragma omp atomic
 		    v1 += d.red * val1;
-		    data_entry o = T::offset_for_interpolation_red ({1, 0});
-		    luminosity_t &l2 = w_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
-		    luminosity_t &v2 = m_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
+		    data_entry o = T::offset_for_interpolation_red (e, {1, 0});
+		    luminosity_t &l2 = w_red [o.y * m_width * T::red_width_scale + o.x];
+		    luminosity_t &v2 = m_red [o.y * m_width * T::red_width_scale + o.x];
 		    luminosity_t val2 = (off.x) * (1 - off.y);
 #pragma omp atomic
 		    l2 += val2;
 #pragma omp atomic
 		    v2 += d.red * val2;
-		    o = T::offset_for_interpolation_red ({0, 1});
-		    luminosity_t &l3 = w_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
-		    luminosity_t &v3 = m_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_red (e, {0, 1});
+		    luminosity_t &l3 = w_red [o.y * m_width * T::red_width_scale + o.x];
+		    luminosity_t &v3 = m_red [o.y * m_width * T::red_width_scale + o.x];
 		    luminosity_t val3 = (1 - off.x) * (off.y);
 #pragma omp atomic
 		    l3 += val3;
 #pragma omp atomic
 		    v3 += d.red * val3;
-		    o = T::offset_for_interpolation_red ({1, 1});
-		    luminosity_t &l4 = w_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
-		    luminosity_t &v4 = m_red [(e.y + o.y) * m_width * T::red_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_red (e, {1, 1});
+		    luminosity_t &l4 = w_red [o.y * m_width * T::red_width_scale + o.x];
+		    luminosity_t &v4 = m_red [o.y * m_width * T::red_width_scale + o.x];
 		    luminosity_t val4 = (off.x) * (off.y);
 #pragma omp atomic
 		    l4 += val4;
@@ -648,25 +652,25 @@ protected:
 		    l1 += val1;
 #pragma omp atomic
 		    v1 += d.green * val1;
-		    data_entry o = T::offset_for_interpolation_green ({1, 0});
-		    luminosity_t &l2 = w_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
-		    luminosity_t &v2 = m_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
+		    data_entry o = T::offset_for_interpolation_green (e, {1, 0});
+		    luminosity_t &l2 = w_green [o.y * m_width * T::green_width_scale + o.x];
+		    luminosity_t &v2 = m_green [o.y * m_width * T::green_width_scale + o.x];
 		    luminosity_t val2 = (off.x) * (1 - off.y);
 #pragma omp atomic
 		    l2 += val2;
 #pragma omp atomic
 		    v2 += d.green * val2;
-		    o = T::offset_for_interpolation_green ({0, 1});
-		    luminosity_t &l3 = w_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
-		    luminosity_t &v3 = m_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_green (e, {0, 1});
+		    luminosity_t &l3 = w_green [o.y * m_width * T::green_width_scale + o.x];
+		    luminosity_t &v3 = m_green [o.y * m_width * T::green_width_scale + o.x];
 		    luminosity_t val3 = (1 - off.x) * (off.y);
 #pragma omp atomic
 		    l3 += val3;
 #pragma omp atomic
 		    v3 += d.green * val3;
-		    o = T::offset_for_interpolation_green ({1, 1});
-		    luminosity_t &l4 = w_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
-		    luminosity_t &v4 = m_green [(e.y + o.y) * m_width * T::green_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_green (e, {1, 1});
+		    luminosity_t &l4 = w_green [o.y * m_width * T::green_width_scale + o.x];
+		    luminosity_t &v4 = m_green [o.y * m_width * T::green_width_scale + o.x];
 		    luminosity_t val4 = (off.x) * (off.y);
 #pragma omp atomic
 		    l4 += val4;
@@ -686,25 +690,25 @@ protected:
 		    l1 += val1;
 #pragma omp atomic
 		    v1 += d.blue * val1;
-		    data_entry o = T::offset_for_interpolation_blue ({1, 0});
-		    luminosity_t &l2 = w_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
-		    luminosity_t &v2 = m_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
+		    data_entry o = T::offset_for_interpolation_blue (e, {1, 0});
+		    luminosity_t &l2 = w_blue [o.y * m_width * T::blue_width_scale + o.x];
+		    luminosity_t &v2 = m_blue [o.y * m_width * T::blue_width_scale + o.x];
 		    luminosity_t val2 = (off.x) * (1 - off.y);
 #pragma omp atomic
 		    l2 += val2;
 #pragma omp atomic
 		    v2 += d.blue * val2;
-		    o = T::offset_for_interpolation_blue ({0, 1});
-		    luminosity_t &l3 = w_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
-		    luminosity_t &v3 = m_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_blue (e, {0, 1});
+		    luminosity_t &l3 = w_blue [o.y * m_width * T::blue_width_scale + o.x];
+		    luminosity_t &v3 = m_blue [o.y * m_width * T::blue_width_scale + o.x];
 		    luminosity_t val3 = (1 - off.x) * (off.y);
 #pragma omp atomic
 		    l3 += val3;
 #pragma omp atomic
 		    v3 += d.blue * val3;
-		    o = T::offset_for_interpolation_blue ({1, 1});
-		    luminosity_t &l4 = w_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
-		    luminosity_t &v4 = m_blue [(e.y + o.y) * m_width * T::blue_width_scale + e.x + o.x];
+		    o = T::offset_for_interpolation_blue (e, {1, 1});
+		    luminosity_t &l4 = w_blue [o.y * m_width * T::blue_width_scale + o.x];
+		    luminosity_t &v4 = m_blue [o.y * m_width * T::blue_width_scale + o.x];
 		    luminosity_t val4 = (off.x) * (off.y);
 #pragma omp atomic
 		    l4 += val4;
@@ -808,6 +812,128 @@ protected:
       }
 #undef pixel
     return !progress || !progress->cancelled ();
+  }
+  template<typename T>
+  inline pure_attr rgbdata
+  bicubic_interpolate2 (point_t scr)
+  {
+    int64_t red_minx = -4, red_miny = -4, green_minx = -4, green_miny = -4, blue_minx = -4, blue_miny = -4;
+    int64_t red_maxx = 4, red_maxy = 4, green_maxx = 4, green_maxy = 4, blue_maxx = 4, blue_maxy = 4;
+    rgbdata ret = {1,0,0};
+#if 0
+    int64_t red_minx = 0, red_miny = 0, red_maxx = 0, red_maxy = 0;
+    data_entry o = T::offset_for_interpolation_red ({-1, -1});
+    red_minx = std::min (o.x, red_minx);
+    red_maxx = std::max (o.x, red_maxx);
+    red_miny = std::min (o.y, red_miny);
+    red_maxy = std::max (o.y, red_maxy);
+
+    o = T::offset_for_interpolation_red ({2, -1});
+    red_minx = std::min (o.x, red_minx);
+    red_maxx = std::max (o.x, red_maxx);
+    red_miny = std::min (o.y, red_miny);
+    red_maxy = std::max (o.y, red_maxy);
+
+    o = T::offset_for_interpolation_red ({-1, -2});
+    red_minx = std::min (o.x, red_minx);
+    red_maxx = std::max (o.x, red_maxx);
+    red_miny = std::min (o.y, red_miny);
+    red_maxy = std::max (o.y, red_maxy);
+
+    o = T::offset_for_interpolation_red ({2, 2});
+    red_minx = std::min (o.x, red_minx);
+    red_maxx = std::max (o.x, red_maxx);
+    red_miny = std::min (o.y, red_miny);
+    red_maxy = std::max (o.y, red_maxy);
+
+    int64_t green_minx = 0, green_miny = 0, green_maxx = 0, green_maxy = 0;
+    o = T::offset_for_interpolation_green ({-1, -1});
+    green_minx = std::min (o.x, green_minx);
+    green_maxx = std::max (o.x, green_maxx);
+    green_miny = std::min (o.y, green_miny);
+    green_maxy = std::max (o.y, green_maxy);
+
+    o = T::offset_for_interpolation_green ({-1, 2});
+    green_minx = std::min (o.x, green_minx);
+    green_maxx = std::max (o.x, green_maxx);
+    green_miny = std::min (o.y, green_miny);
+    green_maxy = std::max (o.y, green_maxy);
+
+    o = T::offset_for_interpolation_green ({2, -1});
+    green_minx = std::min (o.x, green_minx);
+    green_maxx = std::max (o.x, green_maxx);
+    green_miny = std::min (o.y, green_miny);
+    green_maxy = std::max (o.y, green_maxy);
+
+    o = T::offset_for_interpolation_green ({2, 2});
+    green_minx = std::min (o.x, green_minx);
+    green_maxx = std::max (o.x, green_maxx);
+    green_miny = std::min (o.y, green_miny);
+    green_maxy = std::max (o.y, green_maxy);
+
+    int64_t blue_minx = 0, blue_miny = 0, blue_maxx = 0, blue_maxy = 0;
+    o = T::offset_for_interpolation_blue ({-1, -1});
+    blue_minx = std::min (o.x, blue_minx);
+    blue_maxx = std::max (o.x, blue_maxx);
+    blue_miny = std::min (o.y, blue_miny);
+    blue_maxy = std::max (o.y, blue_maxy);
+
+    o = T::offset_for_interpolation_blue ({-1, 2});
+    blue_minx = std::min (o.x, blue_minx);
+    blue_maxx = std::max (o.x, blue_maxx);
+    blue_miny = std::min (o.y, blue_miny);
+    blue_maxy = std::max (o.y, blue_maxy);
+
+    o = T::offset_for_interpolation_blue ({2, -1});
+    blue_minx = std::min (o.x, blue_minx);
+    blue_maxx = std::max (o.x, blue_maxx);
+    blue_miny = std::min (o.y, blue_miny);
+    blue_maxy = std::max (o.y, blue_maxy);
+
+    o = T::offset_for_interpolation_blue ({2, 2});
+    blue_minx = std::min (o.x, blue_minx);
+    blue_maxx = std::max (o.x, blue_maxx);
+    blue_miny = std::min (o.y, blue_miny);
+    blue_maxy = std::max (o.y, blue_maxy);
+#endif
+
+    scr.x += m_xshift;
+    scr.y += m_yshift;
+    point_t off;
+    data_entry e = T::red_scr_to_entry (scr, &off);
+    if (e.x + red_minx >= 0 && e.x + red_maxx < m_width * T::red_width_scale
+	&& e.y + red_miny >= 0 && e.y + red_maxy < m_height * T::red_height_scale)
+      {
+#define get_red_p(xx, yy) m_red [T::offset_for_interpolation_red (e, {xx, yy}).y * m_width * T::red_width_scale + T::offset_for_interpolation_red (e,{xx, yy}).x]
+	ret.red = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1), get_red_p (-1, 0), get_red_p (-1, 1), get_red_p (-1, 2), off.y),
+				     cubic_interpolate (get_red_p ( 0, -1), get_red_p ( 0, 0), get_red_p ( 0, 1), get_red_p ( 0, 2), off.y),
+				     cubic_interpolate (get_red_p ( 1, -1), get_red_p ( 1, 0), get_red_p ( 1, 1), get_red_p ( 1, 2), off.y),
+				     cubic_interpolate (get_red_p ( 2, -1), get_red_p ( 2, 0), get_red_p ( 2, 1), get_red_p ( 2, 2), off.y), off.x);
+#undef get_red_p
+      }
+    e = T::green_scr_to_entry (scr, &off);
+    if (e.x + green_minx >= 0 && e.x + green_maxx < m_width * T::green_width_scale
+	&& e.y + green_miny >= 0 && e.y + green_maxy < m_height * T::green_height_scale)
+      {
+#define get_green_p(xx, yy) m_green [T::offset_for_interpolation_green (e, {xx, yy}).y * m_width * T::green_width_scale + T::offset_for_interpolation_green (e,{xx, yy}).x]
+	ret.green = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1), get_green_p (-1, 0), get_green_p (-1, 1), get_green_p (-1, 2), off.y),
+				       cubic_interpolate (get_green_p ( 0, -1), get_green_p ( 0, 0), get_green_p ( 0, 1), get_green_p ( 0, 2), off.y),
+				       cubic_interpolate (get_green_p ( 1, -1), get_green_p ( 1, 0), get_green_p ( 1, 1), get_green_p ( 1, 2), off.y),
+				       cubic_interpolate (get_green_p ( 2, -1), get_green_p ( 2, 0), get_green_p ( 2, 1), get_green_p ( 2, 2), off.y), off.x);
+#undef get_green_p
+      }
+    e = T::blue_scr_to_entry (scr, &off);
+    if (e.x + blue_minx >= 0 && e.x + blue_maxx < m_width * T::blue_width_scale
+	&& e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * T::blue_height_scale)
+      {
+#define get_blue_p(xx, yy) m_blue [T::offset_for_interpolation_blue (e, {xx, yy}).y * m_width * T::blue_width_scale + T::offset_for_interpolation_blue (e,{xx, yy}).x]
+	ret.blue = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1), get_blue_p (-1, 0), get_blue_p (-1, 1), get_blue_p (-1, 2), off.y),
+				      cubic_interpolate (get_blue_p ( 0, -1), get_blue_p ( 0, 0), get_blue_p ( 0, 1), get_blue_p ( 0, 2), off.y),
+				      cubic_interpolate (get_blue_p ( 1, -1), get_blue_p ( 1, 0), get_blue_p ( 1, 1), get_blue_p ( 1, 2), off.y),
+				      cubic_interpolate (get_blue_p ( 2, -1), get_blue_p ( 2, 0), get_blue_p ( 2, 1), get_blue_p ( 2, 2), off.y), off.x);
+#undef get_blue_p
+      }
+    return ret;
   }
 };
 #endif
