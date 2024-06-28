@@ -187,188 +187,80 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 pure_attr rgbdata
 render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 {
-  luminosity_t red, green, blue;
-  int xshift, yshift;
+  rgbdata c;
 
   if (m_scr_to_img.get_type () != Dufay)
-    {
-      rgbdata c = m_paget->bicubic_interpolate ({x,y});
-      red = c.red;
-      green = c.green;
-      blue = c.blue;
-#if 0
-      xshift = m_paget->get_xshift ();
-      yshift = m_paget->get_yshift ();
-      x += xshift;
-      y += yshift;
-      coord_t xx = 2*(x-(coord_t)0.25);
-      coord_t yy = 2*(y-(coord_t)0.25);
-      int xp, yp;
-      coord_t xo = my_modf (xx, &xp);
-      coord_t yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) m_paget->blue (xp + (xx), yp + (yy))
-      blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
-				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
-				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
-				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
-#undef get_blue
-
-      point_t p = paget_geometry::to_diagonal_coordinates ((point_t){x, y});
-      coord_t xd = p.x, yd = p.y;
-      xo = my_modf (xd, &xp);
-      yo = my_modf (yd, &yp);
-
-#define get_green(xx, yy) m_paget->diag_green (xp + (xx), yp + (yy))
-      green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
-				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
-				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
-				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
-#undef get_green
-      p = paget_geometry::to_diagonal_coordinates ((point_t){x + (coord_t)0.5, y});
-      xd = p.x;
-      yd = p.y;
-      xo = my_modf (xd, &xp);
-      yo = my_modf (yd, &yp);
-#define get_red(xx, yy) m_paget->diag_red (xp + (xx), yp + (yy))
-      red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
-			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
-			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
-			       cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo), xo);
-#undef get_red
-#endif
-    }
+    c = m_paget->bicubic_interpolate ({x,y});
   else
-    {
-      rgbdata c = m_dufay->bicubic_interpolate ({x,y});
-      red = c.red;
-      green = c.green;
-      blue = c.blue;
-#if 0
-      xshift = m_dufay->get_xshift ();
-      yshift = m_dufay->get_yshift ();
-      x += xshift;
-      y += yshift;
-      coord_t xx = 2*(x - (coord_t)0.25);
-      coord_t yy = y-(coord_t)0.5;
-      int xp, yp;
-      coord_t xo = my_modf (xx, &xp);
-      coord_t yo = my_modf (yy, &yp);
-#define get_red(xx, yy) m_dufay->red (xp + (xx), yp + (yy))
-      red = cubic_interpolate (cubic_interpolate (get_red (-1, -1), get_red (-1, 0), get_red (-1, 1), get_red (-1, 2), yo),
-			       cubic_interpolate (get_red ( 0, -1), get_red ( 0, 0), get_red ( 0, 1), get_red ( 0, 2), yo),
-			       cubic_interpolate (get_red ( 1, -1), get_red ( 1, 0), get_red ( 1, 1), get_red ( 1, 2), yo),
-			       cubic_interpolate (get_red ( 2, -1), get_red ( 2, 0), get_red ( 2, 1), get_red ( 2, 2), yo), xo);
-#undef get_red
-      xx = x;
-      yy = y;
-      xo = my_modf (xx, &xp);
-      yo = my_modf (yy, &yp);
-#define get_green(xx, yy) m_dufay->green (xp + (xx), yp + (yy))
-      green = cubic_interpolate (cubic_interpolate (get_green (-1, -1), get_green (-1, 0), get_green (-1, 1), get_green (-1, 2), yo),
-				 cubic_interpolate (get_green ( 0, -1), get_green ( 0, 0), get_green ( 0, 1), get_green ( 0, 2), yo),
-				 cubic_interpolate (get_green ( 1, -1), get_green ( 1, 0), get_green ( 1, 1), get_green ( 1, 2), yo),
-				 cubic_interpolate (get_green ( 2, -1), get_green ( 2, 0), get_green ( 2, 1), get_green ( 2, 2), yo), xo);
-#undef get_green
-      xx = x-(coord_t)0.5;
-      //yy = y;
-      xo = my_modf (xx, &xp);
-      //yo = my_modf (yy, &yp);
-#define get_blue(xx, yy) m_dufay->blue (xp + (xx), yp + (yy))
-      blue = cubic_interpolate (cubic_interpolate (get_blue (-1, -1), get_blue (-1, 0), get_blue (-1, 1), get_blue (-1, 2), yo),
-				cubic_interpolate (get_blue ( 0, -1), get_blue ( 0, 0), get_blue ( 0, 1), get_blue ( 0, 2), yo),
-				cubic_interpolate (get_blue ( 1, -1), get_blue ( 1, 0), get_blue ( 1, 1), get_blue ( 1, 2), yo),
-				cubic_interpolate (get_blue ( 2, -1), get_blue ( 2, 0), get_blue ( 2, 1), get_blue ( 2, 2), yo), xo);
-#undef get_blue
-#endif
-    }
+    c = m_dufay->bicubic_interpolate ({x,y});
   if (!m_original_color)
-    m_saturation_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
+    m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
   if (m_unadjusted)
     ;
   else if (!m_original_color)
     {
-      red = adjust_luminosity_ir (red);
-      green = adjust_luminosity_ir (green);
-      blue = adjust_luminosity_ir (blue);
+      c.red = adjust_luminosity_ir (c.red);
+      c.green = adjust_luminosity_ir (c.green);
+      c.blue = adjust_luminosity_ir (c.blue);
     }
   else if (m_profiled)
     {
-      profile_matrix.apply_to_rgb (red, green, blue, &red, &green, &blue);
-      red = adjust_luminosity_ir (red);
-      green = adjust_luminosity_ir (green);
-      blue = adjust_luminosity_ir (blue);
+      profile_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+      c.red = adjust_luminosity_ir (c.red);
+      c.green = adjust_luminosity_ir (c.green);
+      c.blue = adjust_luminosity_ir (c.blue);
     }
   else 
-    {
-      rgbdata d = adjust_rgb ({red, green, blue});
-      red = d.red;
-      green = d.green;
-      blue = d.blue;
-    }
+    c = adjust_rgb (c);
   if (m_screen_compensation)
     {
-      coord_t lum = get_img_pixel_scr (x - xshift, y - yshift);
-      int ix = (uint64_t) nearest_int ((x - xshift) * screen::size) & (unsigned)(screen::size - 1);
-      int iy = (uint64_t) nearest_int ((y - yshift) * screen::size) & (unsigned)(screen::size - 1);
+      coord_t lum = get_img_pixel_scr (x, y);
+      int ix = (uint64_t) nearest_int ((x) * screen::size) & (unsigned)(screen::size - 1);
+      int iy = (uint64_t) nearest_int ((y) * screen::size) & (unsigned)(screen::size - 1);
       luminosity_t sr = m_screen->mult[iy][ix][0];
       luminosity_t sg = m_screen->mult[iy][ix][1];
       luminosity_t sb = m_screen->mult[iy][ix][2];
 
-      red = std::max (red, (luminosity_t)0);
-      green = std::max (green, (luminosity_t)0);
-      blue = std::max (blue, (luminosity_t)0);
+      c.red = std::max (c.red, (luminosity_t)0);
+      c.green = std::max (c.green, (luminosity_t)0);
+      c.blue = std::max (c.blue, (luminosity_t)0);
 
-      luminosity_t llum = red * sr + green * sg + blue * sb;
+      luminosity_t llum = c.red * sr + c.green * sg + c.blue * sb;
       luminosity_t correction = llum ? lum / llum : lum * 100;
 
-#if 1
       luminosity_t redmin = lum - (1 - sr);
       luminosity_t redmax = lum + (1 - sr);
-      if (red * correction < redmin)
-	correction = redmin / red;
-      else if (red * correction > redmax)
-	correction = redmax / red;
+      if (c.red * correction < redmin)
+	correction = redmin / c.red;
+      else if (c.red * correction > redmax)
+	correction = redmax / c.red;
 
       luminosity_t greenmin = lum - (1 - sg);
       luminosity_t greenmax = lum + (1 - sg);
-      if (green * correction < greenmin)
-	correction = greenmin / green;
-      else if (green * correction > greenmax)
-	correction = greenmax / green;
+      if (c.green * correction < greenmin)
+	correction = greenmin / c.green;
+      else if (c.green * correction > greenmax)
+	correction = greenmax / c.green;
 
       luminosity_t bluemin = lum - (1 - sb);
       luminosity_t bluemax = lum + (1 - sb);
-      if (blue * correction < bluemin)
-	correction = bluemin / blue;
-      else if (blue * correction > bluemax)
-	correction = bluemax / blue;
-#endif
+      if (c.blue * correction < bluemin)
+	correction = bluemin / c.blue;
+      else if (c.blue * correction > bluemax)
+	correction = bluemax / c.blue;
       correction = std::max (std::min (correction, (luminosity_t)5.0), (luminosity_t)0.0);
 
-      return {red * correction, green * correction, blue * correction};
-#if 0
-      red = std::min (1.0, std::max (0.0, red));
-      green = std::min (1.0, std::max (0.0, green));
-      blue = std::min (1.0, std::max (0.0, blue));
-      if (llum < 0.0001)
-	llum = 0.0001;
-      if (llum > 1)
-	llum = 1;
-      if (lum / llum > 2)
-	lum = 2 * llum;
-      //set_color_luminosity (red, green, blue, lum / llum * (red * rwght + green * gwght + blue * bwght), r, g, b);
-      //set_color_luminosity (red, green, blue, lum / llum * (red + green + blue)*0.333, r, g, b);
-#endif
+      return c * correction;
     }
   else if (m_adjust_luminosity)
     {
-      luminosity_t l = get_img_pixel_scr (x - xshift, y - yshift);
+      luminosity_t l = get_img_pixel_scr (x, y);
       luminosity_t red2, green2, blue2;
-      m_color_matrix.apply_to_rgb (red, green, blue, &red2, &green2, &blue2);
+      m_color_matrix.apply_to_rgb (c.red, c.green, c.blue, &red2, &green2, &blue2);
       // TODO: We really should convert to XYZ and determine just Y.
       luminosity_t gr = (red2 * rwght + green2 * gwght + blue2 * bwght);
       if (gr <= 0.00001 || l <= 0.00001)
-	red = green = blue = l;
+	red2 = green2 = blue2 = l;
       else
 	{
 	  gr = l / gr;
@@ -377,11 +269,11 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
 	  blue2 *= gr;
 	}
       // TODO: Inverse color matrix can be stored.
-      m_color_matrix.invert ().apply_to_rgb (red2, green2, blue2, &red, &green, &blue);
-      return {red, green, blue};
+      m_color_matrix.invert ().apply_to_rgb (red2, green2, blue2, &c.red, &c.green, &c.blue);
+      return c;
     }
   else
-    return {red, green, blue};
+    return c;
 }
 
 render_interpolate::~render_interpolate ()
