@@ -206,42 +206,92 @@ public:
   {
   }
   inline pure_attr rgbdata bicubic_interpolate (point_t scr);
-  luminosity_t &red (int x, int y) const
-    {
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
-      return m_red [y * m_width * GEOMETRY::red_width_scale + x];
-    }
-  luminosity_t &green (int x, int y) const
-    {
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
-      return m_green [y * m_width * GEOMETRY::green_width_scale + x];
-    }
-  luminosity_t &blue (int x, int y) const
-    {
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
-      return m_blue [y * m_width * GEOMETRY::blue_width_scale + x];
-    }
-  rgbdata &rgb_red (int x, int y) const
-    { 
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
-      return m_rgb_red [y * m_width * GEOMETRY::red_width_scale + x];
-    }
-  rgbdata &rgb_green (int x, int y) const
-    { 
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
-      return m_rgb_green [y * m_width * GEOMETRY::green_width_scale + x];
-    }
-  rgbdata &rgb_blue (int x, int y) const
-    { 
-      x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
-      y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
-      return m_rgb_blue [y * m_width * GEOMETRY::blue_width_scale + x];
-    }
+
+  luminosity_t &
+  red (int x, int y) const
+  {
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
+    return m_red [y * m_width * GEOMETRY::red_width_scale + x];
+  }
+
+  luminosity_t &
+  green (int x, int y) const
+  {
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
+    return m_green [y * m_width * GEOMETRY::green_width_scale + x];
+  }
+
+  luminosity_t &
+  blue (int x, int y) const
+  {
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
+    return m_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+  }
+
+  rgbdata &
+  rgb_red (int x, int y) const
+  { 
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::red_height_scale - 1);
+    return m_rgb_red [y * m_width * GEOMETRY::red_width_scale + x];
+  }
+
+  rgbdata &
+  rgb_green (int x, int y) const
+  { 
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::green_height_scale - 1);
+    return m_rgb_green [y * m_width * GEOMETRY::green_width_scale + x];
+  }
+
+  rgbdata &
+  rgb_blue (int x, int y) const
+  { 
+    x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
+    y = std::min (std::max (y, 0), m_height * GEOMETRY::blue_height_scale - 1);
+    return m_rgb_blue [y * m_width * GEOMETRY::blue_width_scale + x];
+  }
+
+  rgbdata
+  screen_tile_color (int x, int y)
+  {
+    rgbdata ret = {0,0,0};
+    for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::red_height_scale; xx++)
+	ret.red += m_red [(y * GEOMETRY::red_height_scale + yy) * m_width * GEOMETRY::red_width_scale + x * GEOMETRY::red_width_scale + xx];
+    ret.red *= (1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
+    for (int yy = 0; yy < GEOMETRY::green_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::green_height_scale; xx++)
+	ret.green += m_green [(y * GEOMETRY::green_height_scale + yy) * m_width * GEOMETRY::green_width_scale + x * GEOMETRY::green_width_scale + xx];
+    ret.green *= (1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
+    for (int yy = 0; yy < GEOMETRY::blue_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::blue_height_scale; xx++)
+	ret.blue += m_blue [(y * GEOMETRY::blue_height_scale + yy) * m_width * GEOMETRY::blue_width_scale + x * GEOMETRY::blue_width_scale + xx];
+    ret.blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
+    return ret;
+  }
+
+  void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
+  {
+    red = {0, 0, 0};
+    for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::red_height_scale; xx++)
+	red += m_rgb_red [(y * GEOMETRY::red_height_scale + yy) * m_width * GEOMETRY::red_width_scale + x * GEOMETRY::red_width_scale + xx];
+    red *= (1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
+    green = {0, 0, 0};
+    for (int yy = 0; yy < GEOMETRY::green_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::green_height_scale; xx++)
+	green += m_rgb_green [(y * GEOMETRY::green_height_scale + yy) * m_width * GEOMETRY::green_width_scale + x * GEOMETRY::green_width_scale + xx];
+    green *= (1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
+    blue = {0, 0, 0};
+    for (int yy = 0; yy < GEOMETRY::blue_width_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::blue_height_scale; xx++)
+	blue += m_rgb_blue [(y * GEOMETRY::blue_height_scale + yy) * m_width * GEOMETRY::blue_width_scale + x * GEOMETRY::blue_width_scale + xx];
+    blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
+  }
   bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
 protected:
   bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);

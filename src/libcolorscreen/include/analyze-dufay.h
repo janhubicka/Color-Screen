@@ -111,17 +111,6 @@ public:
   {
   }
 
-  rgbdata screen_tile_color (int x, int y)
-  {
-    return {(red (2*x, y) + red (2*x+1, y)) * 0.5, green (x, y), blue (x, y)};
-  }
-  void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
-  {
-    red = (rgb_red (2*x, y) + rgb_red (2*x+1, y)) * 0.5;
-    green = rgb_green (x, y);
-    blue = rgb_blue (x, y);
-  }
-
   bool analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress = NULL);
   luminosity_t compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress);
 private:

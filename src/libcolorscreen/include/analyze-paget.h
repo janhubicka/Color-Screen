@@ -190,16 +190,6 @@ public:
   ~analyze_paget()
   {
   }
-  rgbdata screen_tile_color (int x, int y)
-  {
-    return {(red (x, 2*y) + red (x, 2*y+1)) * 0.5, (green (x, 2*y) + green (x, 2*y+1)) * 0.5, (blue (2*x, 2*y) + blue (2*x +1, 2*y) + blue (2*x, 2*y+1) + blue (2*x+1, 2*y+1)) * 0.25};
-  }
-  void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
-  {
-     red = (rgb_red (x, 2*y) + rgb_red (x, 2*y+1)) * 0.5;
-     green = (rgb_green (x, 2*y) + rgb_green (x, 2*y+1)) * 0.5;
-     blue = (rgb_blue (2*x, 2*y) + rgb_blue (2*x +1, 2*y) + rgb_blue (2*x, 2*y+1) + rgb_blue (2*x+1, 2*y+1)) * 0.25;
-  }
   virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
   virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
   bool dump_patch_density (FILE *out);
