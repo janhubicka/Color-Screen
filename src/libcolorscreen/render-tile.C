@@ -9,6 +9,34 @@
 #include "render-extra/render-extra.h"
 #endif
 
+static void
+sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)
+{
+  if (rtparam.color && !img.has_rgb ())
+    rtparam.color = false;
+
+  /* These rendering types requires RGB.  */
+  if (!img.has_rgb ()
+      && (rtparam.type == render_type_interpolated_original || rtparam.type == render_type_interpolated_profiled_original
+	  || rtparam.type == render_type_interpolated_diff))
+    rtparam.type = render_type_original;
+
+  /* only original and profiled original rendering can be performed on Random screen.  */
+  if (param.type == Random
+      && rtparam.type != render_type_original
+      && rtparam.type != render_type_profiled_original)
+    rtparam.type = render_type_original;
+
+  if (rtparam.type == render_type_fast
+      || rtparam.type == render_type_interpolated_original
+      || rtparam.type == render_type_interpolated_profiled_original
+      || rtparam.type == render_type_interpolated)
+    rtparam.antialias = false;
+  if (rtparam.type == render_type_profiled_original)
+    rtparam.color = true;
+  if (rtparam.type == render_type_realistic)
+    rtparam.color = false;
+}
 
 bool
 render_to_scr::render_tile (render_type_parameters rtparam,
@@ -88,26 +116,8 @@ render_to_scr::render_tile (render_type_parameters rtparam,
   if (lock_p)
     global_rendering_lock.lock ();
 
-  if (rtparam.color && !img.has_rgb ())
-    rtparam.color = false;
+  sanitize_render_parameters (rtparam, param, img);
 
-  /* These rendering types requires RGB.  */
-  if (!img.has_rgb ()
-      && (rtparam.type == render_type_interpolated_original || rtparam.type == render_type_interpolated_profiled_original
-	  || rtparam.type == render_type_interpolated_diff))
-    rtparam.type = render_type_original;
-
-  /* only original and profiled original rendering can be performed on Random screen.  */
-  if (param.type == Random
-      && rtparam.type != render_type_original
-      && rtparam.type != render_type_profiled_original)
-    rtparam.type = render_type_original;
-
-  if (rtparam.type == render_type_fast
-      || rtparam.type == render_type_interpolated_original
-      || rtparam.type == render_type_interpolated_profiled_original
-      || rtparam.type == render_type_interpolated)
-    rtparam.antialias = false;
   render_parameters my_rparam;
   my_rparam.adjust_for (rtparam, rparam);
 

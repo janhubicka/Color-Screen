@@ -93,7 +93,7 @@ struct dufay_geometry
   static inline
   point_t blue_entry_to_scr (analyze_base::data_entry e)
   {
-    return {e.x+ (coord_t)0.5, (coord_t)e.y};
+    return {e.x + (coord_t)0.5, (coord_t)e.y};
   }
 };
 
