@@ -68,6 +68,7 @@ struct DLL_PUBLIC screen
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
   static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
+  void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
 private:
   /* Initialize screen to the thames screen plate.  */
   void thames ();

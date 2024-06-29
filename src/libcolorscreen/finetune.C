@@ -453,8 +453,10 @@ public:
       }
 
     fog_index = n_values;
+    if (!tile)
+      optimize_fog = false;
     if (optimize_fog)
-      n_values += tile ? 3 : 1;
+      n_values += 3;
 
     screen_index = n_values;
     if (optimize_emulsion_blur)

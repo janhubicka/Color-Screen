@@ -837,6 +837,57 @@ screen::initialize_with_2D_fft(screen &scr, precomputed_function<luminosity_t> *
     }
 }
 
+dj::fft_arg_fix<double,screen::size * screen::size>
+point_spread_fft (precomputed_function<luminosity_t> &point_spread, luminosity_t scale)
+{
+  dj::fft_arg_fix<double,screen::size * screen::size> in;
+  double sum = 0;
+  for (int y = 0; y < screen::size; y++)
+    for (int x = 0; x < screen::size; x++)
+      {
+	int x2 = screen::size - x;
+	int y2 = screen::size - y;
+	int dist = std::min ((x * x + y * y), std::min ((x2 * x2 + y * y), std::min ((x * x + y2 * y2), (x2 * x2 + y2 * y2))));
+	luminosity_t w = point_spread.apply (my_sqrt ((luminosity_t)dist) * (scale* screen::size));
+	in [y * screen::size + x] = w;
+	sum += w;
+      }
+  luminosity_t nrm = std::sqrt(screen::size * screen::size);
+  for (int x = 0; x < screen::size * screen::size; x++)
+      in [x] *= (nrm / sum);
+  return dj::fft2d_fix<double,screen::size>(in, dj::fft_dir::DIR_FWD);
+}
+
+void
+screen::initialize_with_point_spread(screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale)
+{
+  std::unique_ptr <dj::fft_arg_fix<double, size * size>> scaleFFT (new (dj::fft_arg_fix<double, size * size>));
+  std::unique_ptr <dj::fft_arg_fix<double, size * size>> imgData (new (dj::fft_arg_fix<double, size * size>));
+  std::unique_ptr <dj::fft_arg_fix<double, size * size>> imgDataFFT (new (dj::fft_arg_fix<double, size * size>));
+  std::unique_ptr <dj::fft_arg_fix<double, size * size>> imgDataInvFFT (new (dj::fft_arg_fix<double, size * size>));
+  for (int c = 0; c < 3; c++)
+    {
+      for (int y = 0; y < size; y++)
+	for (int x = 0; x < size; x++)
+	  (*imgData)[y * size + x] = scr.mult[y][x][c];
+
+      *imgDataFFT = dj::fft2d_fix<double,size>(*imgData, dj::fft_dir::DIR_FWD);
+
+      *scaleFFT = point_spread_fft (*point_spread[c], scale[c] / size);
+      for (int x = 0; x < size * size; x++)
+	(*imgDataFFT)[x] *= (*scaleFFT)[x];
+
+      *imgDataInvFFT = dj::fft2d_fix<double,size>(*imgDataFFT, dj::fft_dir::DIR_BWD);
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  {
+	    mult[y][x][c] = (*imgDataInvFFT)[y * size + x].real ();
+	    if (mult[y][x][c] < 0)
+	      mult[y][x][c] = 0;
+	  }
+    }
+}
+
 void
 screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 {
@@ -943,5 +994,9 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
 {
   std::unique_ptr <precomputed_function<luminosity_t>> mtfc(mtf_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3] = {mtfc.get (), mtfc.get (), mtfc.get ()};
+#if 0
   initialize_with_2D_fft (scr, vv, {1.0, 1.0, 1.0});
+#else
+  screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
+#endif
 }

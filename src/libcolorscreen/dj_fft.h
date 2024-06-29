@@ -313,12 +313,14 @@ template <typename T, const int cnt>  __attribute__ ((always_inline)) inline fft
     return xo;
 }
 
-template <typename T, const int cnt> __attribute__ ((always_inline)) inline fft_arg_fix<T,cnt * cnt> fft2d_fix(const fft_arg_fix<T, cnt * cnt> &xi, const fft_dir &dir)
+template <typename T, const int cnt> 
+inline fft_arg_fix<T,cnt * cnt> fft2d_fix(const fft_arg_fix<T, cnt * cnt> &xi, const fft_dir &dir)
 {
     static constexpr const int cnt2 = cnt * cnt;
     int msb = findMSB(cnt2) / 2; // lg2(N) = lg2(sqrt(NxN))
     T nrm = T(1) / T(cnt);
-    fft_arg_fix<T, cnt2> xo;
+    std::unique_ptr <fft_arg_fix<T, cnt2>> xoh(new fft_arg_fix<T, cnt2>);
+    fft_arg_fix<T, cnt2> &xo = *xoh;
     bool debug = false;
 
     // pre-process the input data
