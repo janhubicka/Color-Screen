@@ -598,9 +598,15 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
       clen = fir_blur::convolve_matrix_length (blur_radius[c] * screen::size);
       if (clen <= 1 || !(blur_radius[c] > 0))
 	{
-	  for (int y = 0; y < size; y++)
-	   for (int x = 0; x < size; x++)
-	     mult[y][x][c] = scr.mult[y][x][c];
+	  if (!all)
+	    for (int y = 0; y < size; y++)
+	     for (int x = 0; x < size; x++)
+	       mult[y][x][c] = scr.mult[y][x][c];
+	  else
+	    {
+	      memcpy (mult, scr.mult, sizeof (mult));
+	      break;
+	    }
 	  continue;
 	}
       if (blur_radius[c] > max_blur_radius)
