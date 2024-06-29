@@ -70,25 +70,26 @@ constexpr auto Pi = 3.141592653589793238462643383279502884;
  */
 inline int findMSB(int x)
 {
-#if 0
-    //DJ_ASSERT(x > 0 && "invalid input");
+#ifdef __GNUC__
+    return __builtin_ctz (x);
+#else
     int p = 0;
 
     while (x > 1) {
         x>>= 1;
         ++p;
     }
+    
+#if 0
+    if (p != __builtin_ctz (xo))
+    {
+	    printf ("%i %i %i\n",x,p,__builtin_ctz (xo));
+      abort ();
+    }
+#endif
 
     return p;
 #endif
-    static const unsigned int bval[] =
-    {0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4};
-
-    unsigned int r = 0;
-    if (x & 0xFFFF0000) { r += 16/1; x >>= 16/1; }
-    if (x & 0x0000FF00) { r += 16/2; x >>= 16/2; }
-    if (x & 0x000000F0) { r += 16/4; x >>= 16/4; }
-    return r + bval[x];
 }
 
 
@@ -148,13 +149,8 @@ template <typename T> fft_arg<T> fft1d(const fft_arg<T> &xi, const fft_dir &dir)
         for (int j = 0; j < (cnt/2); ++j) {
             int i1 = ((j >> i) << (i + 1)) + j % bm; // left wing
             int i2 = i1 ^ bm;                        // right wing
-#if 0
-            //std::complex<T> z1 = std::polar(T(1), ang * T(i1 ^ bw)); // left wing rotation
-            //std::complex<T> z2 = std::polar(T(1), ang * T(i2 ^ bw)); // right wing rotation
-#else
 	    std::complex<T> z1 = zs[((i1 ^ bw) * angstep) & (cnt - 1)];
 	    std::complex<T> z2 = zs[((i2 ^ bw) * angstep) & (cnt - 1)];
-#endif
 
             std::complex<T> tmp = xo[i1];
 
@@ -269,9 +265,57 @@ private:
   std::array<std::complex<T>,cnt> zs;
 };
 
-template <typename T, int cnt> __attribute__ ((always_inline)) inline fft_arg_fix<T,cnt * cnt> fft2d_fix(const fft_arg_fix<T, cnt * cnt> &xi, const fft_dir &dir)
+/*
+ * Computes a Fourier transform, i.e.,
+ * xo[k] = 1/sqrt(N) sum(j=0 -> N-1) xi[j] exp(i 2pi j k / N)
+ * with O(N log N) complexity using the butterfly technique
+ *
+ * NOTE: Only works for arrays whose size is a power-of-two
+ */
+template <typename T, const int cnt>  __attribute__ ((always_inline)) inline fft_arg_fix<T,cnt> fft1d_fix(const fft_arg_fix<T, cnt> &xi, const fft_dir &dir)
 {
-    const int cnt2 = cnt * cnt;
+    int msb = findMSB(cnt);
+    T nrm = T(1) / std::sqrt(T(cnt));
+    fft_arg_fix<T, cnt> xo;
+
+    // pre-process the input data
+    for (int j = 0; j < cnt; ++j)
+        xo[j] = nrm * xi[bitr(j, msb)];
+    //for (int i = 0; i < cnt; i++)
+      //printf ("nrm: %f, %i %f %f : %f %f\n", nrm, i, xo[i].real (), xo[i].imag (), xi[i].real (), xi[i].imag ());
+
+    static const fft_angles<T, cnt> zs;
+
+    // fft passes
+    for (int i = 0; i < msb; ++i) {
+        int bm = 1 << i; // butterfly mask
+        int bw = 2 << i; // butterfly width
+	int angstep = T(dir) * cnt / (2 * bm);
+
+        // fft butterflies
+        for (int j = 0; j < (cnt/2); ++j) {
+            int i1 = ((j >> i) << (i + 1)) + j % bm; // left wing
+            int i2 = i1 ^ bm;                        // right wing
+	    std::complex<T> z1 = zs.get(((i1 ^ bw) * angstep) & (cnt - 1));
+	    std::complex<T> z2 = zs.get(((i2 ^ bw) * angstep) & (cnt - 1));
+
+	    //if (i1 >= 128 || i2 >= 128 || i1 < 0 || i2 < 0)
+		    //printf ("Bad %i %i\n",i1,i2);
+
+            std::complex<T> tmp = xo[i1];
+
+            xo[i1]+= z1 * xo[i2];
+            xo[i2] = tmp + z2 * xo[i2];
+        }
+    }
+    //for (int i = 0; i < cnt; i++)
+      //printf ("%i %f %f : %f %f\n", i, xo[i].real (), xo[i].imag (), xi[i].real (), xi[i].imag ());
+    return xo;
+}
+
+template <typename T, const int cnt> __attribute__ ((always_inline)) inline fft_arg_fix<T,cnt * cnt> fft2d_fix(const fft_arg_fix<T, cnt * cnt> &xi, const fft_dir &dir)
+{
+    static constexpr const int cnt2 = cnt * cnt;
     int msb = findMSB(cnt2) / 2; // lg2(N) = lg2(sqrt(NxN))
     T nrm = T(1) / T(cnt);
     fft_arg_fix<T, cnt2> xo;

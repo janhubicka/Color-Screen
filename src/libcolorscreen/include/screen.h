@@ -60,9 +60,9 @@ struct DLL_PUBLIC screen
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = blur_mtffilter);
+  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian);
   /* Same but specify different blur for each color.  */
-  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = blur_mtffilter);
+  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian);
   void initialize_with_blur (screen &scr, luminosity_t mtf[4]);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
@@ -76,10 +76,10 @@ private:
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
   void preview_dufay ();
-  __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int channel);
-  void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int channel);
-  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius);
-  void initialize_with_1D_fft (screen &scr, luminosity_t *weights[3]);
+  __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
+  void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
+  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no_fft = false);
+  void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);
   void initialize_with_2D_fft (screen &scr, precomputed_function<luminosity_t> *mft[3], rgbdata scale);
   void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
 };
