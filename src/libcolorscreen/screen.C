@@ -596,7 +596,7 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
   for (int c = 0; c < 3; c++)
     {
       clen = fir_blur::convolve_matrix_length (blur_radius[c] * screen::size);
-      if (clen || !(blur_radius[c] > 0))
+      if (clen <= 1 || !(blur_radius[c] > 0))
 	{
 	  for (int y = 0; y < size; y++)
 	   for (int x = 0; x < size; x++)
