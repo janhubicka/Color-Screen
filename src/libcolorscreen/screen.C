@@ -551,7 +551,7 @@ void
 screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin, int cmax)
 {
   dj::fft_arg_fix<double, size * size> imgData;
-  for (int c = cmin; c < cmax; c++)
+  for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)

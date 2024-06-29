@@ -11,7 +11,7 @@ template<typename T>class spline
 public:
   /* Define spline with points X and Y.  The arrays are owned by caller but stay referenced
      by the class constructed.  */
-  spline<T> (T *x, T *y, int n)
+  spline (T *x, T *y, int n)
   : m_x (x), m_y (y), m_n (n)
   {
     T p, qn, sig, un, *u;
@@ -65,7 +65,7 @@ public:
     free (u);
   }
 
-  ~spline<T> ()
+  ~spline ()
   {
     free (m_y2);
     /* m_x and m_y are owned by the caller.  */
