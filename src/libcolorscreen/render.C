@@ -224,6 +224,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   ret.red = red;
   ret.green = green;
   ret.blue = blue;
+  ret.dark = dark;
 
 
   lookup_table_params par;

@@ -755,13 +755,42 @@ screen::save_tiff (const char *filename, bool normalize, int tiles)
 static precomputed_function<luminosity_t> *
 mtf_by_4_vals (luminosity_t mtf[4])
 {
-  luminosity_t y[] = {1, 0.75, 0.5, 0.25, 0, 0, 0};
-  luminosity_t x[] = {0, mtf[0], mtf[1], mtf[2], mtf[3], mtf[3] + 0.01, mtf[3] + 0.02};
-#if 0
-  spline<luminosity_t> p(x, y, 7);
-  return p.precompute (0, 128, 1024);
-#endif
-  return new precomputed_function<luminosity_t> (0, screen::size, 1024, x, y, 7);
+  luminosity_t y[] = {1, 1, 1, 0.75, 0.5, 0.25, 0, 0, 0};
+  luminosity_t x[] = {-0.02, -0.01, 0, mtf[0], mtf[1], mtf[2], mtf[3], mtf[3] + 0.01, mtf[3] + 0.02};
+  //spline<luminosity_t> p(x, y, 9);
+  //return p.precompute (0, mtf[3]+1, 1024);
+  return new precomputed_function<luminosity_t> (0, mtf[3]+1, 1024, x, y, 9);
+}
+/* Specify mtf75, mtf50, mtf25 and mtf8.  */
+static precomputed_function<luminosity_t> *
+point_spread_by_4_vals (luminosity_t mtf[4])
+{
+  luminosity_t y[] = {0, 0, 0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25, 0, 0, 0};
+  luminosity_t x[] = {-(mtf[3] + 0.02), -(mtf[3] + 0.01), -mtf[3], -mtf[2], -mtf[1], -mtf[0], 0, mtf[0], mtf[1], mtf[2], mtf[3], mtf[3] + 0.01, mtf[3] + 0.02};
+  spline<luminosity_t> p(x, y, 13);
+  return p.precompute (0, mtf[3]+1, 1024);
+}
+
+/* Sily way of computing fourier integral.  */
+static precomputed_function<luminosity_t> *
+mtf_to_point_spread (precomputed_function<luminosity_t> *mtf)
+{
+  /* we only need sqrt(2)/2 = 1.41/2 = 0.71 */
+  std::complex<double> vals[screen::size];
+  double v = mtf->apply (0);
+  for (int i = 0; i< screen::size; i++)
+    vals[i] = v;
+  for (double a = 0.1; a < screen::size; a += 0.1)
+    {
+      double v = mtf->apply (a);
+      if (v)
+        for (int i = 0; i< screen::size; i++)
+	  vals[i] += std::polar ((double)1, (double)(a * i)) * v;
+    }
+  luminosity_t vv[screen::size];
+  for (int i = 0; screen::size; i++)
+    vv[i] = vals[i].real ();
+  return new precomputed_function<luminosity_t> (0, screen::size, vv, screen::size);
 }
 
 static const int tiles = 1;
@@ -849,6 +878,8 @@ point_spread_fft (precomputed_function<luminosity_t> &point_spread, luminosity_t
 	int y2 = screen::size - y;
 	int dist = std::min ((x * x + y * y), std::min ((x2 * x2 + y * y), std::min ((x * x + y2 * y2), (x2 * x2 + y2 * y2))));
 	luminosity_t w = point_spread.apply (my_sqrt ((luminosity_t)dist) * (scale* screen::size));
+	if (w < 0)
+	  w = 0;
 	in [y * screen::size + x] = w;
 	sum += w;
       }
@@ -992,11 +1023,18 @@ screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type t
 void
 screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
 {
-  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(mtf_by_4_vals (mtf));
+#if 1
+  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(point_spread_by_4_vals (mtf));
+  std::unique_ptr <precomputed_function<luminosity_t>> ps(mtf_to_point_spread (mtfc.get ()));
+  precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
+  screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
+#elif 0
+  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3] = {mtfc.get (), mtfc.get (), mtfc.get ()};
-#if 0
   initialize_with_2D_fft (scr, vv, {1.0, 1.0, 1.0});
 #else
+  std::unique_ptr <precomputed_function<luminosity_t>> point_spreadc(ps_by_4_vals (mtf));
+  precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
   screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
 #endif
 }

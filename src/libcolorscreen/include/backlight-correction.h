@@ -106,6 +106,7 @@ public:
     luminosity_t mult = mult0 * (1 - ry) + mult1 * ry;
     if (mul)
       *mul = mult;
+    //printf ("%f %f %f %i\n",val,m_black,mult, channel);
     return (val - m_black) * mult + m_black;
   }
   bool initialized_p ()
