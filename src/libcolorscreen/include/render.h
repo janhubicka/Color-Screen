@@ -1,5 +1,6 @@
 #ifndef RENDER_H
 #define RENDER_H
+#include <memory>
 #include <math.h>
 #include <assert.h>
 #include <algorithm>
@@ -611,7 +612,7 @@ class DLL_PUBLIC render
 public:
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_tone_curve (NULL)
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (), m_tone_curve ()
   {
     if (m_params.invert)
       {
@@ -740,11 +741,11 @@ protected:
      corrections, like saturation control.  */
   color_matrix m_color_matrix2;
 
-  backlight_correction *m_backlight_correction;
+  std::unique_ptr <backlight_correction> m_backlight_correction;
 
 private:
   static const bool debug = false;
-  tone_curve *m_tone_curve;
+  std::unique_ptr <tone_curve> m_tone_curve;
 };
 
 typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec_luminosity_t;

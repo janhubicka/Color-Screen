@@ -652,7 +652,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
     rgbdata maxvals = hist.find_max (light_cut);
     dark_point = std::min (std::min (minvals.red, minvals.green), minvals.blue);
     brightness = 1 / ((std::max (std::max (maxvals.red, maxvals.green), maxvals.blue) - dark_point) * rparam.scan_exposure);
-    printf ("Initial color %f\n",get_max_color (img, *this, param, maxvals, progress));
+    //printf ("Initial color %f\n",get_max_color (img, *this, param, maxvals, progress));
     /* Finetune brightness so color is white after whitepoint adjustments.  */
     int n = 0;
     while (get_max_color (img, *this, param, maxvals, progress) < 1 - 1.0 / 256 && n < 65535)
@@ -666,7 +666,7 @@ render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters 
       brightness *= 1 - 1.0 / 65536;
       n++;
     }
-    printf ("Color %f attepts %i\n",get_max_color (img, *this, param, maxvals, progress), n);
+    //printf ("Color %f attepts %i\n",get_max_color (img, *this, param, maxvals, progress), n);
   }
 #if 0
   {

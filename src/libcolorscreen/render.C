@@ -408,12 +408,9 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 {
   if (m_params.backlight_correction)
     {
-      m_backlight_correction = new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, /*!grayscale_needed*/true, progress);
+      m_backlight_correction = std::unique_ptr <backlight_correction>(new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, /*!grayscale_needed*/true, progress));
       if (!m_backlight_correction->initialized_p ())
-	{
-	  delete m_backlight_correction;
-	  return false;
-	}
+	return false;
     }
   if (m_img.rgbdata)
     {
@@ -430,7 +427,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0, m_params.ignore_infrared},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction.get (), m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0, m_params.ignore_infrared},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
@@ -473,7 +470,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	    {
 	      xyz_pro_photo_rgb_matrix m;
 	      m_color_matrix2 = m * m_color_matrix2;
-	      m_tone_curve = new tone_curve (m_params.output_tone_curve);
+	      m_tone_curve = std::unique_ptr <tone_curve> (new tone_curve (m_params.output_tone_curve));
 	      assert (!m_tone_curve->is_linear ());
 	    }
 	  else
@@ -490,7 +487,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	    {
 	      xyz_pro_photo_rgb_matrix m;
 	      color = m * color;
-	      m_tone_curve = new tone_curve (m_params.output_tone_curve);
+	      m_tone_curve = std::unique_ptr <tone_curve> (new tone_curve (m_params.output_tone_curve));
 	      assert (!m_tone_curve->is_linear ());
 	    }
 	  else
@@ -514,8 +511,6 @@ render::~render ()
     lookup_table_cache.release (m_rgb_lookup_table);
   if (m_sharpened_data)
     gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
-  if (m_tone_curve)
-    delete m_tone_curve;
   if (m_spectrum_dyes_to_xyz)
     delete m_spectrum_dyes_to_xyz;
 }
