@@ -612,7 +612,7 @@ class DLL_PUBLIC render
 public:
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (), m_tone_curve ()
+    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_backlight_correction_id (0), m_tone_curve ()
   {
     if (m_params.invert)
       {
@@ -741,7 +741,8 @@ protected:
      corrections, like saturation control.  */
   color_matrix m_color_matrix2;
 
-  std::unique_ptr <backlight_correction> m_backlight_correction;
+  backlight_correction *m_backlight_correction;
+  uint64_t m_backlight_correction_id;
 
 private:
   static const bool debug = false;

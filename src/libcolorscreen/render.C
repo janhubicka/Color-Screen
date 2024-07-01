@@ -7,10 +7,10 @@
 #include "sharpen.h"
 #include "mapalloc.h"
 #include "include/spectrum-to-xyz.h"
+#include "include/stitch.h"
 
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
-
 
 /* A wrapper class around m_sharpened_data which handles allocation and dealocation.
    This is needed for the cache.  */
@@ -34,6 +34,44 @@ sharpened_data::~sharpened_data ()
 
 namespace
 {
+/*****************************************************************************/
+/*                         Backlight correction cache.                       */
+/*****************************************************************************/
+
+struct backlight_correction_cache_params
+{
+  backlight_correction_parameters *backlight_correction_params;
+  uint64_t backlight_correction_id;
+  int width;
+  int height;
+  luminosity_t backlight_correction_black;
+  bool grayscale_needed;
+  bool
+  operator==(backlight_correction_cache_params &o)
+  {
+    return backlight_correction_id == o.backlight_correction_id
+	   && width == o.width && height == o.height
+	   && backlight_correction_black == o.backlight_correction_black
+	   && grayscale_needed == o.grayscale_needed;
+  }
+};
+
+backlight_correction *
+get_new_backlight_correction (struct backlight_correction_cache_params &p, progress_info *progress)
+{
+  backlight_correction *c = new backlight_correction (*p.backlight_correction_params, p.width, p.height, p.backlight_correction_black, p.grayscale_needed, progress);
+  if (!c->initialized_p ())
+    {
+      delete c;
+      return NULL;
+    }
+  return c;
+}
+static lru_cache <backlight_correction_cache_params, backlight_correction, get_new_backlight_correction, 10> backlight_correction_cache ("backlight corrections");
+
+/*****************************************************************************/
+/*    In lookup table (translating scan values to linear values) cache       */
+/*****************************************************************************/
 
 /* Lookup table translates raw input data into linear values.  */
 struct lookup_table_params
@@ -114,6 +152,9 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   return lookup_table;
 }
 
+/*****************************************************************************/
+/*    Out lookup table (translating linear values to output gamma) cache     */
+/*****************************************************************************/
 
 /* Output lookup table takes linear r,g,b values in range 0...65536
    and outputs r,g,b values in sRGB gamma curve in range 0...maxval.  */
@@ -140,9 +181,7 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
   int maxval = p.maxval;
 
   for (int i = 0; i < 65536; i++)
-    {
-      lookup_table[i] = invert_gamma (apply_gamma ((i + (luminosity_t)0.5) / 65535, target_film_gamma), gamma) * maxval;
-    }
+    lookup_table[i] = invert_gamma (apply_gamma ((i + (luminosity_t)0.5) / 65535, target_film_gamma), gamma) * maxval;
 
   return lookup_table;
 }
@@ -151,6 +190,10 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lookup_table_cache ("in lookup tables");
 static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache ("out lookup tables");
 
+/*****************************************************************************/
+/*                     Gray and sharpened data cache                         */
+/*        (in tables are applied, channels mixed and data sharpened          */
+/*****************************************************************************/
 
 struct graydata_params
 {
@@ -167,7 +210,6 @@ struct graydata_params
   /* Backlight correction.  */
   backlight_correction *backlight;
   uint64_t backlight_correction_id;
-  luminosity_t backlight_correction_black;
   bool ignore_infrared;
   bool
   operator==(graydata_params &o)
@@ -180,7 +222,6 @@ struct graydata_params
 	   && green == o.green
 	   && blue == o.blue
 	   && backlight_correction_id == o.backlight_correction_id
-	   && backlight_correction_black == o.backlight_correction_black
 	   && ignore_infrared == o.ignore_infrared;
   }
 };
@@ -335,6 +376,7 @@ getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables t)
   luminosity_t val = compute_gray_data (t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
   return val;
 }
+
 sharpened_data *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *progress)
 {
@@ -393,7 +435,6 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
 static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
 
 }
-
 /* Prune render cache.  We need to do this so destruction order of MapAlloc and
    the cache does not yield an segfault.  */
 
@@ -402,14 +443,21 @@ prune_render_caches ()
 {
   gray_and_sharpened_data_cache.prune ();
 }
+/*****************************************************************************/
+/*                             render implementation                         */
+/*****************************************************************************/
+
 
 bool
 render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress)
 {
   if (m_params.backlight_correction)
     {
-      m_backlight_correction = std::unique_ptr <backlight_correction>(new backlight_correction (*m_params.backlight_correction, m_img.width, m_img.height, m_params.backlight_correction_black, /*!grayscale_needed*/true, progress));
-      if (!m_backlight_correction->initialized_p ())
+      backlight_correction_cache_params p = {m_params.backlight_correction, m_params.backlight_correction->id,
+					     m_img.width, m_img.height,
+					     m_params.backlight_correction_black, /*!grayscale_needed*/true};
+      m_backlight_correction = backlight_correction_cache.get (p, progress, &m_backlight_correction_id);
+      if (!m_backlight_correction)
 	return false;
     }
   if (m_img.rgbdata)
@@ -427,7 +475,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction.get (), m_backlight_correction ? m_params.backlight_correction->id : 0, m_backlight_correction ? m_params.backlight_correction_black : 0, m_params.ignore_infrared},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction_id, m_params.ignore_infrared},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
@@ -511,6 +559,8 @@ render::~render ()
     lookup_table_cache.release (m_rgb_lookup_table);
   if (m_sharpened_data)
     gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
+  if (m_backlight_correction)
+    backlight_correction_cache.release (m_backlight_correction);
   if (m_spectrum_dyes_to_xyz)
     delete m_spectrum_dyes_to_xyz;
 }
@@ -554,12 +604,22 @@ render_increase_lru_cache_sizes_for_stitch_projects (int n)
 DLL_PUBLIC rgbdata
 get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
 {
-   render r (img, rparam, 255);
    rgbdata color = {0,0,0};
    int n = 0;
-   /* TODO: Stitched projects needs to be accessed in screen coordinates.  */
+   const image_data *imgp = &img;
    if (img.stitch)
-     return color;
+     {
+	coord_t sx, sy;
+	int tx, ty;
+	img.stitch->common_scr_to_img.final_to_scr (xx + img.xmin, yy + img.ymin, &sx, &sy);
+	if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	  return color;
+	img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
+	xx = nearest_int (sx);
+	yy = nearest_int (sy);
+	imgp = img.stitch->images[ty][tx].img;
+     }
+   render r (*imgp, rparam, 255);
    r.precompute_all (img.rgbdata ? false : true, false,  {1/3.0, 1/3.0, 1/3.0}, progress);
    for (int y = yy - range; y < yy + range; y++)
      for (int x = xx - range; x < xx + range; x++)
