@@ -193,19 +193,15 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
     c = m_paget->bicubic_interpolate ({x,y}, m_scr_to_img.patch_proportions (&m_params));
   else
     c = m_dufay->bicubic_interpolate ({x,y}, m_scr_to_img.patch_proportions (&m_params));
-#if 0
   if (!m_original_color)
     m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
-#endif
   if (m_unadjusted)
     ;
   else if (!m_original_color)
     {
-#if 0
       c.red = adjust_luminosity_ir (c.red);
       c.green = adjust_luminosity_ir (c.green);
       c.blue = adjust_luminosity_ir (c.blue);
-#endif
     }
   else if (m_profiled)
     {
