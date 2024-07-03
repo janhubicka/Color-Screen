@@ -18,7 +18,7 @@ sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_paramete
   /* These rendering types requires RGB.  */
   if (!img.has_rgb ()
       && (rtparam.type == render_type_interpolated_original || rtparam.type == render_type_interpolated_profiled_original
-	  || rtparam.type == render_type_interpolated_diff))
+	  || rtparam.type == render_type_interpolated_diff || rtparam.type == render_type_profiled_original))
     rtparam.type = render_type_original;
 
   /* only original and profiled original rendering can be performed on Random screen.  */

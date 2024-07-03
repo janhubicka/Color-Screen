@@ -1023,12 +1023,13 @@ screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type t
 void
 screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
 {
-#if 1
+#if 0
+  /* An attempt to get more data points form MTF. Way too slow.  */
   std::unique_ptr <precomputed_function<luminosity_t>> mtfc(point_spread_by_4_vals (mtf));
   std::unique_ptr <precomputed_function<luminosity_t>> ps(mtf_to_point_spread (mtfc.get ()));
   precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
   screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
-#elif 0
+#elif 1
   std::unique_ptr <precomputed_function<luminosity_t>> mtfc(point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3] = {mtfc.get (), mtfc.get (), mtfc.get ()};
   initialize_with_2D_fft (scr, vv, {1.0, 1.0, 1.0});

@@ -654,22 +654,16 @@ public:
   pure_attr inline rgbdata
   evaulate_screen_pixel (int x, int y, point_t off)
   {
-    point_t p = tile_pos [y * twidth + x];
-    p.x += off.x;
-    p.y += off.y;
+    point_t p = tile_pos [y * twidth + x] + off;
     if (0)
       {
 	/* Interpolation here is necessary to ensure smoothness.  */
 	return scr.interpolated_mult (p);
       }
     int dx = x == twidth - 1 ? -1 : 1;
-    point_t px = tile_pos [y * twidth + (x + dx)];
-    px.x += off.x;
-    px.y += off.y;
+    point_t px = tile_pos [y * twidth + (x + dx)] + off;
     int dy = y == theight - 1 ? -1 : 1;
-    point_t py = tile_pos [(y + dy) * twidth + x];
-    py.x += off.x;
-    py.y += off.y;
+    point_t py = tile_pos [(y + dy) * twidth + x] + off;
     point_t pdx = (px - p) * (1.0 / 6.0) * dx;
     point_t pdy = (py - p) * (1.0 / 6.0) * dy;
     rgbdata m = {0,0,0};
@@ -1049,6 +1043,62 @@ public:
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
     return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.01);
+  }
+
+  void
+  collect_screen (screen *s, coord_t *v)
+  {
+    point_t off = get_offset (v);
+    for (int y = 0; y < screen::size; y++)
+      for (int x = 0; x < screen::size; x++)
+	for (int c = 0; c < 3; c++)
+	  {
+	    s->mult[y][x][c] = (luminosity_t)0;
+	    s->add[y][x][c] = (luminosity_t)0;
+	  }
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+        {
+          point_t p = tile_pos [y * twidth + x] + off;
+	  int xx = ((int64_t)nearest_int (p.x * screen::size)) & (screen::size - 1);
+	  int yy = ((int64_t)nearest_int (p.y * screen::size)) & (screen::size - 1);
+	  s->mult[yy][xx][0] = tile [y * twidth + x].red;
+	  s->mult[yy][xx][1] = tile [y * twidth + x].green;
+	  s->mult[yy][xx][2] = tile [y * twidth + x].blue;
+	  s->add[yy][xx][0] = 1;
+        }
+#if 0
+    for (int i = 0; i < screen::size; i++)
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  if (!s->add[y][x][0])
+	    {
+	      luminosity_t newv[3] = {(luminosity_t)0,(luminosity_t)0,(luminosity_t)0};
+	      int n = 0;
+	      for (int xo = -1; xo <= 1; xo++)
+	        for (int yo = -1; yo <= 1; yo++)
+		  {
+		    int nx = (x + xo) & (screen::size - 1);
+		    int ny = (y + yo) & (screen::size - 1);
+		    if (s->mult[ny][nx][0] + s->mult[ny][nx][1] + s->mult[ny][nx][2])
+		      {
+		        newv[0] += s->mult[ny][nx][0];
+		        newv[1] += s->mult[ny][nx][1];
+		        newv[2] += s->mult[ny][nx][2];
+			n++;
+		      }
+		  }
+	      if (n)
+		{
+		  s->mult[y][x][0] = newv[0] / n;
+		  s->mult[y][x][1] = newv[1] / n;
+		  s->mult[y][x][2] = newv[2] / n;
+		}
+	    }
+#endif
+    for (int y = 0; y < screen::size; y++)
+      for (int x = 0; x < screen::size; x++)
+	s->add[y][x][0] = 0;
   }
 
   int
@@ -1652,7 +1702,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       ret.solver_point_color = solver_parameters::green;
     }
   if (fparams.screen_file)
+  {
+    best_solver.collect_screen (&best_solver.scr1, best_solver.start);
     best_solver.scr1.save_tiff (fparams.screen_file);
+  }
   if (fparams.screen_blur_file)
     best_solver.scr.save_tiff (fparams.screen_blur_file);
   if (fparams.dot_spread_file)
