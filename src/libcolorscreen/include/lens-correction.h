@@ -142,7 +142,7 @@ private:
   coord_t m_max_dist, m_inv_max_dist_sq2;
   precomputed_function<coord_t> *m_inverted_ratio;
   //coord_t get_inverse (coord_t dist);
-  coord_t m_max;
+  //coord_t m_max;
   bool m_noop;
 };
 #endif

@@ -1,7 +1,7 @@
 #include "include/spectrum-to-xyz.h"
 #include "spectrum.h"
 namespace {
-
+#if 0
 /* Absolutes spectral sensitivity of panchromatic emulsion. log.  */
 const static spectra_entry absolute_panchromatic[] = {
   {337.07194243011116, 0.047135149544788035},
@@ -176,6 +176,7 @@ const static spectra_entry wedge_thungsten_panchromatic[] = {
   {653.8516161743756, 0.06259680436094861},
   {655.6213504016353, 0.02212685460477326},
 };
+#endif
 
 /* Panchromatic emulsion wedge sensitivity to thungsten light.  */
 const static spectra_entry wedge_Neopan_100_acros_daylight_5400k [] = {
@@ -1742,5 +1743,6 @@ set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type)
   case spectrum_dyes_to_xyz::monochromatic_ccd:
     compute_spectrum (film_response, sizeof (monochromatic_ccd) / sizeof (spectra_entry), monochromatic_ccd, false);
     break;
+  default: abort ();
   }
 }

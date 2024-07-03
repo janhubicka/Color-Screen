@@ -421,27 +421,27 @@ dufaycolor::print_synthetic_dyes_report ()
   luminosity_t best_green_d1=1000, best_green_d2=1000, best_green_l = 1;
   luminosity_t best_cgreen_d1=1000, best_cgreen_d2=1000, best_cgreen_l = 1;
   luminosity_t best_tgreen_d1=1000, best_tgreen_d2=1000, best_tgreen_l = 1;
-  luminosity_t best_sgreen_d1=1000, best_sgreen_d2=1000, best_sgreen_l = 1;
+  //luminosity_t best_sgreen_d1=1000, best_sgreen_d2=1000, best_sgreen_l = 1;
   luminosity_t best_blue_d1=1000, best_blue_d2=1000, best_blue_l = 1;
   luminosity_t best_cblue_d1=1000, best_cblue_d2=1000, best_cblue_l = 1;
   luminosity_t best_tblue_d1=1000, best_tblue_d2=1000, best_tblue_l = 1;
-  luminosity_t best_sblue_d1=1000, best_sblue_d2=1000, best_sblue_l = 1;
+  //luminosity_t best_sblue_d1=1000, best_sblue_d2=1000, best_sblue_l = 1;
   luminosity_t best_red_d1=1000, best_red_d2=1000, best_red_l = 1;
   luminosity_t best_cred_d1=1000, best_cred_d2=1000, best_cred_l = 1;
   luminosity_t best_tred_d1=1000, best_tred_d2=1000, best_tred_l = 1;
-  luminosity_t best_sred_d1=1000, best_sred_d2=1000, best_sred_l = 1;
+  //luminosity_t best_sred_d1=1000, best_sred_d2=1000, best_sred_l = 1;
   xyz best_green (0,0,0);
   xyz best_cgreen (0,0,0);
   xyz best_tgreen (0,0,0);
-  xyz best_sgreen (0,0,0);
+  //xyz best_sgreen (0,0,0);
   xyz best_blue (0,0,0);
   xyz best_cblue (0,0,0);
   xyz best_tblue (0,0,0);
-  xyz best_sblue (0,0,0);
+  //xyz best_sblue (0,0,0);
   xyz best_red (0,0,0);
   xyz best_cred (0,0,0);
   xyz best_tred (0,0,0);
-  xyz best_sred (0,0,0);
+  //xyz best_sred (0,0,0);
   spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
   xyz target_red = spec.dyes_rgb_to_xyz (1, 0, 0, 1931);
@@ -584,7 +584,6 @@ dufaycolor::print_synthetic_dyes_report ()
   spec.write_spectra (NULL, NULL, "synthetic-dufay-blue-spectra.abs.txt", NULL, 400, 720, true);
 }
 
-const int temperature = 6500;
 struct optimized_matrix_params
 {
   luminosity_t temperature;
@@ -593,7 +592,7 @@ struct optimized_matrix_params
   bool
   operator==(optimized_matrix_params &o)
   {
-    return temperature == temperature && backlight_temperature == backlight_temperature && type == type;
+    return temperature == o.temperature && backlight_temperature == o.backlight_temperature && type == o.type;
   }
 };
 

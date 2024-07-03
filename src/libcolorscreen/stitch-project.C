@@ -890,7 +890,6 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
   *weight = wsum;
   printf ("Fitting images: Mul %f add %f weight %f\n", *mul, *add * 65535, *weight);
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
-  uint64_t n = 0;
   for (i = from; i < (size_t)eqns.size (); i++)
     {
       auto eqn = eqns[i];
@@ -904,11 +903,10 @@ match_pair (std::vector <equation> &eqns, size_t from, luminosity_t *add, lumino
       if (fabs (uncor_diff) > max_uncor)
 	max_uncor = fabs (uncor_diff);
       avg_uncor += fabs (uncor_diff) * eqn.weight;
-      n+= eqn.n;
       if (verbose)
 	printf ("%s avg %f/%f=%f difference %f uncorected %f samples %lu weight %f adjusted weight %f\n",
 		channels[eqn.channel], eqn.s1/eqn.weight, eqn.s2/eqn.weight, eqn.s1/eqn.s2, cor_diff, uncor_diff, eqn.n, eqn.weight, gsl_vector_get (w, i - from));
-      i++;
+      //i++;
     }
   printf ("Corrected diff %f (avg) %f (max) %f (sq), uncorrected %f %3.2f%% (avg) %f  %3.2f%% (max) %f %3.2f%% (sq), chisq %f\n", avg_cor / wsum * 65535, max_cor * 65535, cor_sq, avg_uncor / wsum * 65535, avg_uncor * 100 / avg_cor, max_uncor * 65535, max_uncor * 100 / max_cor, uncor_sq, uncor_sq * 100 / cor_sq, chisq);
   progress->resume_stdout ();
@@ -1115,7 +1113,6 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
 
   /* Ouptut equations and compute data on the quality of output.  */
   luminosity_t max_cor = 0, avg_cor = 0, max_uncor = 0, avg_uncor = 0, cor_sq = 0, uncor_sq = 0;
-  uint64_t n = 0;
   int i=0;
   luminosity_t wsum = 0;
   for (auto eqn : eqns)
@@ -1133,7 +1130,6 @@ stitch_project::solve_equations (render_parameters *in_rparams, std::vector <ove
       luminosity_t cor_diff = (eqn.s1/eqn.weight - a1.dark_point) * a1.exposure - (eqn.s2/eqn.weight - a2.dark_point) * a2.exposure;
       //luminosity_t cor_diff = (eqn.s1/eqn.n) * e1 + b1 - eqn.s2/eqn.n*e2 - b2;
       luminosity_t uncor_diff = (eqn.s1 - eqn.s2)/eqn.weight;
-      n += eqn.n;
       wsum+= eqn.weight;
       if (fabs (cor_diff) > max_cor)
 	max_cor = fabs (cor_diff);
@@ -1193,8 +1189,6 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int fl
   const int outerborder = 20;
   /* Ignore 5% of inner borders.  */
   const int innerborder = 3;
-
-  const bool verbose = flags & VERBOSE;
 
   /* Determine how many scanlines we will inspect.  */
   int combined_height = 0;

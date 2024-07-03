@@ -304,7 +304,7 @@ find_best_whitepoint (xyz red, xyz green, xyz blue,
         luminosity_t d3 = dominant_wavelength (blue, w);
 	if (!d1 || !d2 || !d3)
 	  continue;
-	luminosity_t d = abs (red_dominating_wavelength - d1) + abs (green_dominating_wavelength - d2) + abs (blue_dominating_wavelength - d3);
+	luminosity_t d = fabs (red_dominating_wavelength - d1) + fabs (green_dominating_wavelength - d2) + fabs (blue_dominating_wavelength - d3);
 	if (!best_white_found || d < best_white_dist)
 	{
 	  best_white = w;

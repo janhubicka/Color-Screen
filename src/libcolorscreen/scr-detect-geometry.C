@@ -88,7 +88,7 @@ patch_center (patch_entry *entries, int size, coord_t *x, coord_t *y)
   return false;
 }
 
-/* Return trie if there is a strip on coordinates X, Y of color C.
+/* Return true if there is a strip on coordinates X, Y of color C.
    This is done by checking that there is patch of maximal size.  */
 
 bool
@@ -1524,7 +1524,6 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	      for (int y = 0; y < img.height; y++)
 		{
 		  if (!progress || !progress->cancel_requested ())
-#pragma omp simd
 		    for (int x = 0; x < img.width; x++)
 		      cmap->set_class (x, y, render->classify_pixel (x, y));
 		  if (progress)

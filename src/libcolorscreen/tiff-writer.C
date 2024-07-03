@@ -2,8 +2,8 @@
 #include "include/tiff-writer.h"
 
 static const TIFFFieldInfo tiffFields[] = {
-	{TIFFTAG_FORWARDMATRIX1, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, "ForwardMatrix1"},
-	{TIFFTAG_PROFILETONECURVE, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, "ToneCurve"},
+	{TIFFTAG_FORWARDMATRIX1, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ForwardMatrix1"},
+	{TIFFTAG_PROFILETONECURVE, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ToneCurve"},
 };
     /* end DNG tags */
 extern unsigned char sRGB_icc[];
@@ -105,7 +105,7 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
         (float)m.m_elements[0][1], (float)m.m_elements[1][1], (float)m.m_elements[2][1],
         (float)m.m_elements[0][2], (float)m.m_elements[1][2], (float)m.m_elements[2][2]};
       ///*= { /*0.807133, 1.0, 0.913289*/ };
-      luminosity_t n0, n1, n2;
+      //luminosity_t n0, n1, n2;
       //p.dye_to_xyz.apply_to_rgb (1,1,1, &n0, &n1, &n2);
       //float neutral[3] = {(float)n0, (float)n1, (float)n2};
       float neutral[3] = {1,1,1};
