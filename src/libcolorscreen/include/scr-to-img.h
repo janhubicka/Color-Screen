@@ -20,7 +20,7 @@ typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
 typedef matrix2x2<coord_t> trans_2d_matrix;
 class render;
-class render_parameters;
+struct render_parameters;
 
 /* Types of supported screens.  */
 enum scr_type
@@ -32,7 +32,6 @@ enum scr_type
    Dufay,
    max_scr_type
 };
-struct render_parameters;
 rgbdata patch_proportions (enum scr_type t, render_parameters *);
 
 /* Type of a scanner used.  */

@@ -261,7 +261,7 @@ backlight_correction_parameters::load (FILE *f, const char **error)
    return true;
 }
 backlight_correction::backlight_correction (backlight_correction_parameters &params, int width, int height, luminosity_t black, bool white_balance, progress_info *progress)
- : m_params (params), m_img_width (width), m_img_height (height), m_width (params.m_width), m_height (params.m_height), m_img_width_rec (params.m_width / (coord_t)width), m_img_height_rec (params.m_height / (coord_t)height), m_weights (NULL)
+ : m_params (params), /*m_img_width (width), m_img_height (height),*/ m_width (params.m_width), m_height (params.m_height), m_img_width_rec (params.m_width / (coord_t)width), m_img_height_rec (params.m_height / (coord_t)height), m_weights (NULL)
 {
   if (progress)
     progress->set_task ("computing backlight correction", 1);

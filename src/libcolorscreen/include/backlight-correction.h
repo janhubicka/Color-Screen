@@ -117,7 +117,7 @@ public:
 private:
   backlight_correction_parameters &m_params;
   luminosity_t m_black;
-  int m_img_width, m_img_height;
+  //int m_img_width, m_img_height;
   int m_width, m_height;
   coord_t m_img_width_rec;
   coord_t m_img_height_rec;

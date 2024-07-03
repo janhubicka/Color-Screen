@@ -839,6 +839,7 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
 }
 
 
+#if 0
 static double
 compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homography)
 {
@@ -852,6 +853,7 @@ compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homogr
     }
   return chisq;
 }
+#endif
 
 static double
 screen_compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homography)

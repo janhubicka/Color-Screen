@@ -122,7 +122,6 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	  printf ("Saturation \n");
 	  m_saturation_matrix.print (stdout);
 #endif
-	  rgbdata r;
         }
     }
   int xshift = -xmin;

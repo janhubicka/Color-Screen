@@ -101,13 +101,12 @@ stitch_image::load_img (const char **error, progress_info *progress)
     {
       int minx = -1, miny = -1;
       uint64_t minlast = 0;
-      int nref = 0;
 
 
       for (int y = 0; y < m_prj->params.height; y++)
 	for (int x = 0; x < m_prj->params.width; x++)
 	  if (m_prj->images[y][x].refcount)
-	    nref++;
+	    ;
 	  else if (m_prj->images[y][x].img
 		   && (minx == -1 || m_prj->images[y][x].lastused < minlast))
 	    {

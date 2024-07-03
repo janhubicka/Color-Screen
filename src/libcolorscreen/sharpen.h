@@ -13,7 +13,6 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
-#pragma omp simd
 	for (int x = 0; x < width; x++)
 	  out[y * width + x] = (mem_O) getdata (data, x, y, width, param);
     }
@@ -22,7 +21,6 @@ template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data,
 inline void
 do_sharpen_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T data,int width, int y, luminosity_t amount, P param)
 {
-#pragma omp simd
   for (int x = 0; x < width; x++)
     {
       O sum = hblur[0 * width + x] * rotated_cmatrix[0];
@@ -62,7 +60,6 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	  memset ((void *)(hblur + tp * width), 0, sizeof (O) * width);
 	else
 	{
-#pragma omp simd
 	  for (int x = 0; x < width ; x++)
 	    line[x] =getdata (data, x, yp, width, param);
 	  fir_blur::blur_horisontal<O, T> (hblur + tp * width, line, width, clen, cmatrix);
@@ -74,7 +71,6 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
           if (progress && progress->cancel_requested ())
 	    break;
 	  if (y + clen / 2 - 1 < height)
-#pragma omp simd
 	    for (int x = 0; x < width ; x++)
 	      line[x] =getdata (data, x, y + clen / 2 - 1, width, param);
 	  if (y + clen / 2 - 1 < height)

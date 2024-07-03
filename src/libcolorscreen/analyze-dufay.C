@@ -67,7 +67,7 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 		luminosity_t wsum = 0;
 #endif
 		luminosity_t ratsum1 = 0, ratsum2 = 0;
-		luminosity_t diffsum1 = 0, diffsum2 = 0, rsum1 = 0, rsum2 = 0;
+		//luminosity_t diffsum1 = 0, diffsum2 = 0, rsum1 = 0, rsum2 = 0;
 		const luminosity_t threshold = 0.1;
 		const luminosity_t minthreshold = 0.01;
 		int n = 0;
@@ -79,10 +79,10 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
 			skip = true;
 		      else
 			{
-			  diffsum1 += get_contrast (x + xx, y + yy).max - get_contrast (x + xx, y + yy).min;
-			  diffsum2 += other.get_contrast (x2 + xx, y2 + yy).max - other.get_contrast (x2 + xx, y2 + yy).min;
-			  rsum1 += red ((x + xx)*2, y + yy);
-			  rsum2 += other.red ((x2 + xx)*2, y2 + yy);
+			  //diffsum1 += get_contrast (x + xx, y + yy).max - get_contrast (x + xx, y + yy).min;
+			  //diffsum2 += other.get_contrast (x2 + xx, y2 + yy).max - other.get_contrast (x2 + xx, y2 + yy).min;
+			  //rsum1 += red ((x + xx)*2, y + yy);
+			  //rsum2 += other.red ((x2 + xx)*2, y2 + yy);
 			  if (get_contrast (x + xx, y + yy).max > threshold && other.get_contrast (x2 + xx, y2 + yy).max > threshold
 			      && get_contrast (x + xx, y + yy).min > minthreshold && other.get_contrast (x2 + xx, y2 + yy).min > minthreshold)
 			    {
