@@ -441,7 +441,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
       luminosity_t lbest_sqsum = 0;
       int lbest_xshift = 0, lbest_yshift = 0;
       luminosity_t lbest_rscale = 0, lbest_gscale = 0, lbest_bscale = 0;
-      int lbest_noverlap;
+      int lbest_noverlap = 0;
       for (int x = xstart; x < xend; x++)
 	{
 	  int est_noverlap = 0;

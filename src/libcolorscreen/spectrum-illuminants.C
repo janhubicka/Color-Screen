@@ -1029,5 +1029,6 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
 			  sizeof (debug_light) / sizeof (spectra_entry),
 			  debug_light, false, 1);
       break;
+    default: abort ();
   }
 }

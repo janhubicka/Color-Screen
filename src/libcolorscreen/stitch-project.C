@@ -1235,7 +1235,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int fl
       *rerror = error;
       return false;
     }
-  if (overlaps.size () < params.width * params.height - 1)
+  if ((int)overlaps.size () < params.width * params.height - 1)
     {
       *rerror = "there are not enough overlaps between tiles";
       return false;
@@ -1250,7 +1250,7 @@ stitch_project::optimize_tile_adjustments (render_parameters *in_rparams, int fl
 #pragma omp parallel for default(none) shared(progress,in_rparams,error,overlaps,flags,backlightmin,backlightmax) reduction(min_chi:min_correction)
       for (int b = backlightmin ; b < backlightmax; b++)
 	{
-	  double chisq;
+	  double chisq = 0;
 	  render_parameters rparams2 = *in_rparams;
 	  if (0 && progress)
 	    progress->push ();

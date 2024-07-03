@@ -1427,6 +1427,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     }
   finetune_solver best_solver;
   coord_t best_uncertainity = -1;
+  bool failed = false;
   {
     ///* FIXME: Hack; render is too large for stack in openmp thread.  */
     //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
@@ -1467,14 +1468,14 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,stderr,mapp,render,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
 	  {
 	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp->width - twidth - 1) & ~1;
 	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp->height - theight - 1) & ~1;
-	    int cur_txmax = cur_txmin + twidth;
-	    int cur_tymax = cur_tymin + theight;
+	    //int cur_txmax = cur_txmin + twidth;
+	    //int cur_tymax = cur_tymin + theight;
 	    finetune_solver solver;
 	    if (progress && progress->cancel_requested ()) 
 	      continue;
@@ -1486,13 +1487,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.tile_pos = (std::unique_ptr <point_t[]>)(new  (std::nothrow) point_t [twidth * theight]);
 	    if ((!solver.tile && !solver.bwtile) || !solver.tile_pos)
 	      {
-		if (verbose)
-		  {
-		    progress->pause_stdout ();
-		    fprintf (stderr, "Failed to allocate tile %i-%i %i-%i\n", cur_txmin, cur_txmax, cur_tymin, cur_tymax);
-		    progress->resume_stdout ();
-		  }
-		// TODO; Remember we failed.
+		failed = true;
 		continue;
 	      }
 	    for (int y = 0; y < theight; y++)
@@ -1555,6 +1550,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     {
       ret.err = "cancelled";
       return ret; 
+    }
+  if (failed)
+    {
+      ret.err = "failed memory allocaion";
+      return ret;
     }
   if (best_uncertainity < 0)
     {
