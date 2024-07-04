@@ -273,8 +273,6 @@ void stitch (progress_info *progress)
 		prj->images[y][x].write_stitch_info (progress, x, y, xx, yy);
 	    }
 
-  const coord_t xstep = prj->pixel_size, ystep = prj->pixel_size;
-  const coord_t pred_xstep = prj->pixel_size * prj->params.downscale, pred_ystep = prj->pixel_size * prj->params.downscale;
   if (prj->params.hugin_pto_filename.length ())
     produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
   if (prj->params.diffs)
@@ -284,7 +282,6 @@ void stitch (progress_info *progress)
 	  for (int xx = (yy == y ? x : 0); xx < prj->params.width; xx++)
 	    if (x != xx || y != yy)
 	      prj->images[y][x].diff (prj->images[yy][xx], progress);
-  const char *error;
 
   for (int y = 0; y < prj->params.height; y++)
     for (int x = 0; x < prj->params.width; x++)
