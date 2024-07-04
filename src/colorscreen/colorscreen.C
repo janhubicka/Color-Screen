@@ -1021,7 +1021,8 @@ digital_laboratory (int argc, char **argv)
     print_help ();
 }
 
-void
+
+static void
 finetune (int argc, char **argv)
 {
   const char *error = NULL;
@@ -1136,7 +1137,7 @@ finetune (int argc, char **argv)
 
   std::vector <finetune_result> results (ysteps * xsteps);
   progress.set_task ("analyzing samples", ysteps * xsteps);
-#pragma omp parallel for default (none) collapse(2) schedule (dynamic) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,stderr,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results,multitile)
+#pragma omp parallel for default (none) collapse(2) schedule (dynamic) shared (xsteps,ysteps,rparam,scan,flags,border,progress,param,orig_tiff_base,simulated_tiff_base,diff_tiff_base,results,multitile)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1169,11 +1170,7 @@ finetune (int argc, char **argv)
 	  }
 	results[y * xsteps + x] = finetune (rparam, param, scan, xpos, ypos, fparam, &progress);
 	if (!results[y * xsteps + x].success)
-	  {
-            progress.pause_stdout ();
-            fprintf (stderr, "Failed to analyze point %i %i:%s\n", xpos, ypos,results[y * xsteps + x].err.c_str ());
-            progress.resume_stdout ();
-	  }
+	  continue;
 	//progress.pop (stack);
 #if 0
 	if (verbose)
@@ -1190,6 +1187,12 @@ finetune (int argc, char **argv)
     for (int x = 0; x < xsteps; x++)
       if (results[y * xsteps + x].success)
 	nok++;
+      else
+	{
+          progress.pause_stdout ();
+          fprintf (stderr, "Failed to analyze sample %i %i:%s\n", x, y,results[y * xsteps + x].err.c_str ());
+          progress.resume_stdout ();
+	}
   if (!nok)
     {
       progress.pause_stdout ();
