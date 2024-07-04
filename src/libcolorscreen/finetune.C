@@ -14,6 +14,15 @@
 
 namespace {
 
+void
+to_range (coord_t &v, coord_t min, coord_t max)
+{
+  if (!(v >= min))
+    v = min;
+  if (!(v <= max))
+    v = max;
+}
+
 /* Solver used to find parameters of simulated scan (position of the grid,
    color of individual patches, lens blur ...) to match given scan tile
    (described tile and tile_pos) as well as possible.
@@ -63,7 +72,7 @@ public:
   screen scr;
 
   finetune_solver ()
-    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers ()
+    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), start (NULL)
   {
   }
   int n_tiles;
@@ -83,8 +92,7 @@ public:
   /* Tile colors */
   std::shared_ptr <rgbdata []> simulated_screen[max_tiles];
 
-  /* 2 coordinates, 1*emulsion blur, 3*emulsion inensities, 3* blur radius or 4 * mtf blur, 3 * 3 colors, strip widths, fog  */
-  coord_t start[25];
+  coord_t *start;
 
   /* Screen blur and duffay red strip widht and green strip height. */
   coord_t fixed_blur, fixed_width, fixed_height;
@@ -143,6 +151,7 @@ public:
   ~finetune_solver ()
   {
     free_least_squares ();
+    free (start);
   }
 
   int num_values ()
@@ -352,87 +361,58 @@ public:
   {
     /* x and y adjustments.  */
     if (optimize_position)
-      {
-	v[0] = std::min (v[0], (coord_t)1);
-	v[0] = std::max (v[0], (coord_t)-1);
-	v[1] = std::min (v[1], (coord_t)1);
-	v[1] = std::max (v[1], (coord_t)-1);
-      }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  to_range (v[tileid * 2 + 0], -1, 1);
+	  to_range (v[tileid * 2 + 1], -1, 1);
+	}
     if (optimize_fog && !fog_by_least_squares)
       {
-	v[fog_index] = std::min (v[fog_index], (coord_t)1);
-	v[fog_index] = std::max (v[fog_index], (coord_t)0);
-	v[fog_index+1] = std::min (v[fog_index+1], (coord_t)1);
-	v[fog_index+1] = std::max (v[fog_index+1], (coord_t)0);
-	v[fog_index+2] = std::min (v[fog_index+2], (coord_t)1);
-	v[fog_index+2] = std::max (v[fog_index+2], (coord_t)0);
+	to_range (v[fog_index + 0], 0, 1);
+	to_range (v[fog_index + 1], 0, 1);
+	to_range (v[fog_index + 2], 0, 1);
       }
     if (bwtile[0] && !least_squares && !data_collection)
       {
-	v[color_index] = std::min (v[color_index], (coord_t)2);
-	v[color_index] = std::max (v[color_index], (coord_t)0);
-	v[color_index + 1] = std::min (v[color_index + 1], (coord_t)2);
-	v[color_index + 1] = std::max (v[color_index + 1], (coord_t)0);
-	v[color_index + 2] = std::min (v[color_index + 2], (coord_t)2);
-	v[color_index + 2] = std::max (v[color_index + 2], (coord_t)0);
+	to_range (v[color_index + 0], 0, 2);
+	to_range (v[color_index + 1], 0, 2);
+	to_range (v[color_index + 2], 0, 2);
       }
     if (optimize_emulsion_blur)
-      {
-	/* Screen blur radius.  */
-	v[emulsion_blur_index] = std::max (v[emulsion_blur_index], (coord_t)0);
-	v[emulsion_blur_index] = std::min (v[emulsion_blur_index], (coord_t)1);
-      }
+      to_range (v[emulsion_blur_index], 0, 1);
     if (optimize_emulsion_intensities)
-      {
-	v[emulsion_intensity_index] = std::max (v[emulsion_intensity_index], (coord_t)0);
-	v[emulsion_intensity_index] = std::min (v[emulsion_intensity_index], (coord_t)1);
-	v[emulsion_intensity_index + 1] = std::max (v[emulsion_intensity_index + 1], (coord_t)0);
-	v[emulsion_intensity_index + 1] = std::min (v[emulsion_intensity_index + 1], (coord_t)1);
-	//v[emulsion_intensity_index + 2] = std::max (v[emulsion_intensity_index + 2], (coord_t)0);
-	//v[emulsion_intensity_index + 2] = std::min (v[emulsion_intensity_index + 2], (coord_t)1);
-      }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  to_range (v[emulsion_intensity_index + 2 * tileid + 0], 0, 1);
+	  to_range (v[emulsion_intensity_index + 2 * tileid + 1], 0, 1);
+	}
     if (optimize_emulsion_offset)
-      {
-	v[emulsion_offset_index] = std::max (v[emulsion_offset_index], (coord_t)-1);
-	v[emulsion_offset_index] = std::min (v[emulsion_offset_index], (coord_t)1);
-	v[emulsion_offset_index + 1] = std::max (v[emulsion_offset_index + 1], (coord_t)-1);
-	v[emulsion_offset_index + 1] = std::min (v[emulsion_offset_index + 1], (coord_t)1);
-      }
-
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
+	  to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
+	}
     if (optimize_screen_blur)
-      {
-	/* Screen blur radius.  */
-	v[screen_index] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index] = std::min (v[screen_index], (coord_t)1);
-      }
+      to_range (v[screen_index], 0, 1);
     if (optimize_screen_channel_blurs)
       {
 	/* Screen blur radius.  */
-	v[screen_index] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index] = std::min (v[screen_index], (coord_t)1);
-	v[screen_index + 1] = std::max (v[screen_index + 1], (coord_t)0);
-	v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)1);
-	v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0);
-	v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)1);
+        to_range (v[screen_index + 0], 0, 1);
+        to_range (v[screen_index + 1], 0, 1);
+        to_range (v[screen_index + 2], 0, 1);
       }
     if (optimize_screen_mtf_blur)
       {
-	v[screen_index] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index] = std::min (v[screen_index], (coord_t)1);
-	v[screen_index + 1] = std::max (v[screen_index + 1], (coord_t)0);
-	v[screen_index + 1] = std::min (v[screen_index + 1], (coord_t)1);
-	v[screen_index + 2] = std::max (v[screen_index + 2], (coord_t)0);
-	v[screen_index + 2] = std::min (v[screen_index + 2], (coord_t)1);
-	v[screen_index + 3] = std::max (v[screen_index + 3], (coord_t)0);
-	v[screen_index + 3] = std::min (v[screen_index + 3], (coord_t)1);
+        to_range (v[screen_index + 0], 0, 1);
+        to_range (v[screen_index + 1], 0, 1);
+        to_range (v[screen_index + 2], 0, 1);
+        to_range (v[screen_index + 3], 0, 1);
       }
     if (optimize_dufay_strips)
       {
 	/* Dufaycolor red strip width and height.  */
-	v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.5);
-	v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.1);
-	v[dufay_strips_index + 1] = std::min (v[dufay_strips_index + 1], (coord_t)0.7);
-	v[dufay_strips_index + 1] = std::max (v[dufay_strips_index + 1], (coord_t)0.3);
+        to_range (v[dufay_strips_index + 0], 0.1, 0.5);
+        to_range (v[dufay_strips_index + 1], 0.3, 0.7);
       }
   }
   void
@@ -515,15 +495,46 @@ public:
       }
   }
 
+  bool
+  init_tile (int tileid, int cur_txmin, int cur_tymin, bool bw, scr_to_img &map, render_to_scr &render)
+  {
+    txmin[tileid] = cur_txmin;
+    tymin[tileid] = cur_tymin;
+    type = map.get_type ();
+    pixel_size = render.pixel_size ();
+    if (!bw)
+      tile[tileid] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
+    else
+      bwtile[tileid] = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
+
+    tile_pos[tileid] = (std::unique_ptr <point_t[]>)(new  (std::nothrow) point_t [twidth * theight]);
+    if ((!tile[tileid] && !bwtile[tileid]) || !tile_pos[tileid])
+      return false;
+    for (int y = 0; y < theight; y++)
+      for (int x = 0; x < twidth; x++)
+	{
+	  map.to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &tile_pos [tileid][y * twidth + x].x, &tile_pos[tileid][y * twidth + x].y);
+	  if (tile[tileid])
+	    tile[tileid][y * twidth + x] = render.get_unadjusted_rgb_pixel (x + cur_txmin, y + cur_tymin);
+	  if (bwtile[tileid])
+	    bwtile[tileid][y * twidth + x] = render.get_unadjusted_data (x + cur_txmin, y + cur_tymin);
+	}
+    return true;
+  }
 
   void
-  init (coord_t blur_radius)
+  init (int flags, coord_t blur_radius)
   {
-    n_values = 0;
-    /* 2 values for position.  */
-    if (optimize_position)
-      n_values += 2;
-
+    optimize_position = flags & finetune_position;
+    optimize_screen_blur = flags & finetune_screen_blur;
+    optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
+    optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
+    optimize_emulsion_blur = flags & finetune_emulsion_blur;
+    optimize_dufay_strips = (flags & finetune_dufay_strips) && type == Dufay;
+    optimize_fog = (flags & finetune_fog) && tile[0];
+    least_squares = !(flags & finetune_no_least_squares);
+    data_collection = !(flags & finetune_no_data_collection);
+    normalize = !(flags & finetune_no_normalize);
     if (tile[0] && optimize_emulsion_blur && (optimize_screen_blur || optimize_screen_channel_blurs || optimize_screen_mtf_blur))
       {
         optimize_emulsion_intensities = true;
@@ -532,6 +543,12 @@ public:
       }
     else
       optimize_emulsion_intensities = optimize_emulsion_offset = false;
+    fog_by_least_squares = (optimize_fog && !normalize && least_squares);
+
+    n_values = 0;
+    /* 2 values for position.  */
+    if (optimize_position)
+      n_values += 2 * n_tiles;
 
     if (data_collection)
       least_squares = false;
@@ -548,18 +565,15 @@ public:
       }
 
     fog_index = n_values;
-    if (!tile[0])
-      optimize_fog = false;
-    fog_by_least_squares = (optimize_fog && !normalize && least_squares);
     if (optimize_fog && !fog_by_least_squares)
       n_values += 3;
 
     emulsion_intensity_index = n_values;
     if (optimize_emulsion_intensities)
-      n_values += 2;
+      n_values += 2 * n_tiles;
     emulsion_offset_index = n_values;
     if (optimize_emulsion_offset)
-      n_values += 2;
+      n_values += 2 * n_tiles;
     emulsion_blur_index = n_values;
     if (optimize_emulsion_blur)
       {
@@ -587,8 +601,7 @@ public:
     dufay_strips_index = n_values;
     if (optimize_dufay_strips)
       n_values += 2;
-    if ((unsigned)n_values > sizeof (start) / sizeof (start[0]))
-      abort ();
+    start = (coord_t *)malloc (sizeof (*start) * n_values);
 
     original_scr = std::shared_ptr <screen> (new screen);
     if (optimize_emulsion_blur)
@@ -606,10 +619,11 @@ public:
     last_width = -1;
     last_height = -1;
     if (optimize_position)
-      {
-	start[0] = 0;
-	start[1] = 0;
-      }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  start[2 * tileid + 0] = 0;
+	  start[2 * tileid + 1] = 0;
+	}
 
     if (!least_squares && !data_collection)
       {
@@ -1721,6 +1735,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
 
+
 #pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
@@ -1733,45 +1748,15 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.n_tiles = 1;
 	    if (progress && progress->cancel_requested ()) 
 	      continue;
-	    if (!bw)
-	      solver.tile[0] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
-	    else
-	      solver.bwtile[0] = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
-
-	    solver.tile_pos[0] = (std::unique_ptr <point_t[]>)(new  (std::nothrow) point_t [twidth * theight]);
-	    if ((!solver.tile[0] && !solver.bwtile[0]) || !solver.tile_pos[0])
+	    solver.twidth = twidth;
+	    solver.theight = theight;
+	    solver.collection_threshold = rparam.collection_threshold;
+	    if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp, render))
 	      {
 		failed = true;
 		continue;
 	      }
-	    for (int y = 0; y < theight; y++)
-	      for (int x = 0; x < twidth; x++)
-		{
-		  mapp->to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &solver.tile_pos [0][y * twidth + x].x, &solver.tile_pos[0][y * twidth + x].y);
-		  if (solver.tile[0])
-		    solver.tile[0][y * twidth + x] = render.get_unadjusted_rgb_pixel (x + cur_txmin, y + cur_tymin);
-		  if (solver.bwtile[0])
-		    solver.bwtile[0][y * twidth + x] = render.get_unadjusted_data (x + cur_txmin, y + cur_tymin);
-		}
-	    solver.txmin[0] = cur_txmin;
-	    solver.tymin[0] = cur_tymin;
-	    solver.twidth = twidth;
-	    solver.theight = theight;
-	    solver.type = mapp->get_type ();
-	    solver.pixel_size = render.pixel_size ();
-	    solver.optimize_position = fparams.flags & finetune_position;
-	    solver.optimize_screen_blur = fparams.flags & finetune_screen_blur;
-	    solver.optimize_screen_channel_blurs = fparams.flags & finetune_screen_channel_blurs;
-	    solver.optimize_screen_mtf_blur = fparams.flags & finetune_screen_mtf_blur;
-	    solver.optimize_emulsion_blur = fparams.flags & finetune_emulsion_blur;
-	    solver.optimize_dufay_strips = (fparams.flags & finetune_dufay_strips) && solver.type == Dufay;
-	    solver.optimize_fog = (fparams.flags & finetune_fog) && solver.tile[0];
-	    solver.collection_threshold = rparam.collection_threshold;
-	    //printf ("%i %i %i %u\n", solver.optimize_fog, (fparams.flags & finetune_fog), solver.tile != NULL, solver.bwtile != NULL);
-	    solver.least_squares = !(fparams.flags & finetune_no_least_squares);
-	    solver.data_collection = !(fparams.flags & finetune_no_data_collection);
-	    solver.normalize = !(fparams.flags & finetune_no_normalize);
-	    solver.init (rparam.screen_blur_radius);
+	    solver.init (fparams.flags, rparam.screen_blur_radius);
 
 	    //if (verbose)
 	      //solver.print_values (solver.start);
@@ -1795,6 +1780,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		if (best_uncertainity < 0 || best_uncertainity > uncertainity)
 		  {
 		    best_solver = solver;
+		    solver.start = NULL;
 		    best_uncertainity = uncertainity;
 		  }
 	      }
