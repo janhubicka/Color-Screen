@@ -771,11 +771,14 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.simulated_file = "/tmp/bwsimulated.tif";
 	fparam.orig_file = "/tmp/bworig.tif";
 	fparam.diff_file = "/tmp/bwdiff.tif";
+	fparam.screen_file = "/tmp/bwscr.tif";
+	fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
+	fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
 	fparam.multitile = 3;
 	fparam.range = 4;
 	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_emulsion_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -792,11 +795,14 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.simulated_file = "/tmp/bwsimulated.tif";
 	fparam.orig_file = "/tmp/bworig.tif";
 	fparam.diff_file = "/tmp/bwdiff.tif";
+	fparam.screen_file = "/tmp/bwscr.tif";
+	fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
+	fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
 	fparam.multitile = 3;
 	fparam.range = 4;
-	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur /*| finetune_dufay_strips | finetune_fog*/;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_mtf_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -813,10 +819,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.simulated_file = "/tmp/colorsimulated.tif";
 	fparam.orig_file = "/tmp/colororig.tif";
 	fparam.diff_file = "/tmp/colordiff.tif";
+	fparam.screen_file = "/tmp/colorscr.tif";
+	fparam.screen_blur_file = "/tmp/colorscr-blur.tif";
+	fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	fparam.multitile = 3;
 	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -833,15 +842,24 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.simulated_file = "/tmp/colorsimulated.tif";
 	fparam.orig_file = "/tmp/colororig.tif";
 	fparam.diff_file = "/tmp/colordiff.tif";
+	fparam.screen_file = "/tmp/colorscr.tif";
+	fparam.screen_blur_file = "/tmp/colorscr-blur.tif";
+	fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog;
+	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
+	fparam.range = 4;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
 	    rparams.dufay_red_strip_width = res.dufay_red_strip_width;
 	    rparams.dufay_green_strip_width = res.dufay_green_strip_width;
+	    rparams.mix_red = res.mix_weights.red;
+	    rparams.mix_green = res.mix_weights.green;
+	    rparams.mix_blue = res.mix_weights.blue;
+	    rparams.mix_dark = res.mix_dark;
+	    preview_display_scheduled = true;
 	    display_scheduled = true;
 	    setvals ();
 	  }
@@ -1903,7 +1921,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	  fparam.multitile = scale_x > 1 ? 3 : 1;
 	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose;
 	  file_progress_info progress (stdout);
-	  finetune_result res = finetune (rparams, current, scan, x, y, fparam, &progress);
+	  finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
 	  if (res.success)
 	    {
 	      current_solver.add_point (res.solver_point_img_location.x, res.solver_point_img_location.y, res.solver_point_screen_location.x, res.solver_point_screen_location.y, res.solver_point_color);

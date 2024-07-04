@@ -56,8 +56,8 @@ private:
   luminosity_t maxgray;
 
   rgbdata last_blur;
-  rgbdata last_emulsion_intensities;
-  point_t last_emulsion_offset;
+  rgbdata last_emulsion_intensities[max_tiles];
+  point_t last_emulsion_offset[max_tiles];
   luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
@@ -67,9 +67,9 @@ public:
   /* Screen with emulsion.  */
   std::shared_ptr <screen> emulsion_scr;
   /* Screen merging emulsion and unblurred screen.  */
-  std::shared_ptr <screen> merged_scr;
+  std::shared_ptr <screen> merged_scr[max_tiles];
   /* Blured screen used to render simulated scan.  */
-  screen scr;
+  std::shared_ptr <screen> scr[max_tiles];
 
   finetune_solver ()
     : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), start (NULL)
@@ -607,11 +607,17 @@ public:
     if (optimize_emulsion_blur)
       emulsion_scr = std::shared_ptr <screen> (new screen);
     if (optimize_emulsion_intensities)
-      merged_scr = std::shared_ptr <screen> (new screen);
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+        merged_scr[tileid] = std::shared_ptr <screen> (new screen);
+    for (int tileid = 0; tileid < n_tiles; tileid++)
+      scr[tileid] = std::shared_ptr <screen> (new screen);
 
     last_blur = {-1, -1,-1};
-    last_emulsion_intensities = {-1, -1, -1};
-    last_emulsion_offset = {-100,-100};
+    for (int tileid = 0; tileid < n_tiles; tileid++)
+      {
+        last_emulsion_intensities[tileid] = {-1, -1, -1};
+        last_emulsion_offset[tileid] = {-100,-100};
+      }
     last_fog = {0,0,0};
     for (int i = 0; i < 4; i++)
       last_mtf[i] = -1;
@@ -764,9 +770,9 @@ public:
 	    for (int x = 0; x < screen::size; x++)
 	      {
 		luminosity_t w = weight_scr->mult[y][x][0] * i.red + weight_scr->mult[y][x][1] * i.green + weight_scr->mult[y][x][2] * i.blue;
-		merged_scr->mult[y][x][0] = src_scr->mult[y][x][0] * w;
-		merged_scr->mult[y][x][1] = src_scr->mult[y][x][1] * w;
-		merged_scr->mult[y][x][2] = src_scr->mult[y][x][2] * w;
+		merged_scr[tileid]->mult[y][x][0] = src_scr->mult[y][x][0] * w;
+		merged_scr[tileid]->mult[y][x][1] = src_scr->mult[y][x][1] * w;
+		merged_scr[tileid]->mult[y][x][2] = src_scr->mult[y][x][2] * w;
 	      }
 	else
 	  for (int y = 0; y < screen::size; y++)
@@ -775,11 +781,11 @@ public:
 		rgbdata wd = weight_scr->interpolated_mult
 		  ((point_t){x * (1 / (coord_t)screen::size), y * (1 / (coord_t)screen::size)} + offset);
 		luminosity_t w = wd.red * i.red + wd.green * i.green + wd.blue * i.blue;
-		merged_scr->mult[y][x][0] = src_scr->mult[y][x][0] * w;
-		merged_scr->mult[y][x][1] = src_scr->mult[y][x][1] * w;
-		merged_scr->mult[y][x][2] = src_scr->mult[y][x][2] * w;
+		merged_scr[tileid]->mult[y][x][0] = src_scr->mult[y][x][0] * w;
+		merged_scr[tileid]->mult[y][x][1] = src_scr->mult[y][x][1] * w;
+		merged_scr[tileid]->mult[y][x][2] = src_scr->mult[y][x][2] * w;
 	      }
-	src_scr = merged_scr.get ();
+	src_scr = merged_scr[tileid].get ();
       }
 
     if (optimize_screen_mtf_blur)
@@ -816,15 +822,20 @@ public:
 	last_emulsion_blur = emulsion_blur;
 	updated = true;
       }
+
+    /* Force update on all tiles.  */
+    if (updated)
+      for (int t = 0; t < n_tiles; t++)
+	last_emulsion_offset[t] = {-10,-10};
     
-    if (blur != last_blur || updated || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf) || last_emulsion_intensities != intensities || last_emulsion_offset != emulsion_offset)
+    if (blur != last_blur || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf) || last_emulsion_intensities[tileid] != intensities || last_emulsion_offset[tileid] != emulsion_offset)
       {
-	apply_blur (v, tileid, &scr,
+	apply_blur (v, tileid, scr[tileid].get (),
 		    optimize_emulsion_blur && !optimize_emulsion_intensities? emulsion_scr.get () : original_scr.get (),
 		    optimize_emulsion_intensities ? emulsion_scr.get () : NULL);
 	last_blur = blur;
-	last_emulsion_intensities = intensities;
-	last_emulsion_offset = emulsion_offset;
+	last_emulsion_intensities[tileid] = intensities;
+	last_emulsion_offset[tileid] = emulsion_offset;
 	memcpy (last_mtf, mtf, sizeof (last_mtf));
       }
   }
@@ -837,7 +848,7 @@ public:
     if (0)
       {
 	/* Interpolation here is necessary to ensure smoothness.  */
-	return scr.interpolated_mult (p);
+	return scr[tileid]->interpolated_mult (p);
       }
     int dx = x == twidth - 1 ? -1 : 1;
     point_t px = tile_pos [tileid][y * twidth + (x + dx)] + off;
@@ -848,7 +859,7 @@ public:
     rgbdata m = {0,0,0};
     for (int yy = -2; yy <= 2; yy++)
       for (int xx = -2; xx <= 2; xx++)
-	m+= scr.interpolated_mult (p + pdx * xx + pdy * yy);
+	m+= scr[tileid]->interpolated_mult (p + pdx * xx + pdy * yy);
     return m * ((coord_t)1.0 / 25);
   }
 
@@ -1606,60 +1617,83 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 /* Finetune parameters and update RPARAM.  */
 
 finetune_result
-finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress)
+finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const finetune_parameters &fparams, progress_info *progress)
 {
   finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, {-1, -1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
-  const image_data *imgp = &img;
-  scr_to_img map;
-  scr_to_img *mapp;
-  if (img.stitch)
+
+  int n_tiles = locs.size ();
+  if (n_tiles > finetune_solver::max_tiles)
+    n_tiles = finetune_solver::max_tiles;
+  if (!n_tiles)
     {
-      coord_t sx, sy;
-      int tx, ty;
-      img.stitch->common_scr_to_img.final_to_scr (x + img.xmin, y + img.ymin, &sx, &sy);
-      if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
-        {
-	  ret.err = "no tile for given coordinates";
-	  return ret;
-        }
-      img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
-      x = nearest_int (sx);
-      y = nearest_int (sy);
-      imgp = img.stitch->images[ty][tx].img;
-      mapp = &img.stitch->images[ty][tx].scr_to_img_map;
+      ret.err = "no tile locations";
+      return ret;
     }
-  else
+  const image_data *imgp[finetune_solver::max_tiles];
+  scr_to_img *mapp[finetune_solver::max_tiles];
+  int x[finetune_solver::max_tiles];
+  int y[finetune_solver::max_tiles];
+
+  scr_to_img map;
+  imgp[0] = NULL;
+  mapp[0] = NULL;
+  x[0] = 0;
+  x[0] = 0;
+  for (int tileid = 0; tileid < n_tiles; tileid++)
     {
-      map.set_parameters (param, *imgp);
-      mapp = &map;
+      x[tileid] = locs[tileid].x;
+      y[tileid] = locs[tileid].y;
+      imgp[tileid] = &img;
+      if (img.stitch)
+	{
+	  coord_t sx, sy;
+	  int tx, ty;
+	  img.stitch->common_scr_to_img.final_to_scr (x[tileid] + img.xmin, y[tileid] + img.ymin, &sx, &sy);
+	  if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	    {
+	      ret.err = "no tile for given coordinates";
+	      return ret;
+	    }
+	  img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
+	  x[tileid] = nearest_int (sx);
+	  y[tileid] = nearest_int (sy);
+	  imgp[tileid] = img.stitch->images[ty][tx].img;
+	  mapp[tileid] = &img.stitch->images[ty][tx].scr_to_img_map;
+	}
+      else
+	{
+	  if (!tileid)
+	    map.set_parameters (param, *imgp[tileid]);
+	  mapp[tileid] = &map;
+	}
     }
   bool bw = fparams.flags & finetune_bw;
   bool verbose = fparams.flags & finetune_verbose;
 
-  if (!bw && !imgp->rgbdata)
+  if (!bw && !imgp[0]->rgbdata)
     bw = true;
 
   /* Determine tile to analyze.  */
   coord_t tx, ty;
-  mapp->to_scr (x, y, &tx, &ty);
+  mapp[0]->to_scr (x[0], y[0], &tx, &ty);
   int sx = nearest_int (tx);
   int sy = nearest_int (ty);
 
   coord_t test_range = fparams.range ? fparams.range : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
-  mapp->to_img (sx, sy, &tx, &ty);
-  mapp->to_img (sx - test_range, sy - test_range, &tx, &ty);
+  mapp[0]->to_img (sx, sy, &tx, &ty);
+  mapp[0]->to_img (sx - test_range, sy - test_range, &tx, &ty);
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
-  mapp->to_img (sx + test_range, sy - test_range, &tx, &ty);
+  mapp[0]->to_img (sx + test_range, sy - test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
   symax = std::max (symax, ty);
-  mapp->to_img (sx + test_range, sy + test_range, &tx, &ty);
+  mapp[0]->to_img (sx + test_range, sy + test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
   symax = std::max (symax, ty);
-  mapp->to_img (sx - test_range, sy + test_range, &tx, &ty);
+  mapp[0]->to_img (sx - test_range, sy + test_range, &tx, &ty);
   sxmin = std::min (sxmin, tx);
   sxmax = std::max (sxmax, tx);
   symin = std::min (symin, ty);
@@ -1668,12 +1702,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax), tymax = ceil (symax);
   if (txmin < 0)
     txmin = 0;
-  if (txmax > imgp->width)
-    txmax = imgp->width;
+  if (txmax > imgp[0]->width)
+    txmax = imgp[0]->width;
   if (tymin < 0)
     tymin = 0;
-  if (tymax > imgp->height)
-    tymax = imgp->height;
+  if (tymax > imgp[0]->height)
+    tymax = imgp[0]->height;
   if (txmin + 10 > txmax || tymin + 10 > tymax)
     {
       if (verbose)
@@ -1700,7 +1734,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
     render_parameters rparam2 = rparam;
     rparam2.invert = 0;
-    render_to_scr render (param, *imgp, rparam2, 256);
+    render_to_scr render (param, *imgp[0], rparam2, 256);
     int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
     int maxtiles = fparams.multitile;
     if (maxtiles < 1)
@@ -1711,8 +1745,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       {
 	rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
 	rymin = std::max (tymin - theight * (maxtiles / 2), 0);
-	rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp->width - 1);
-	rymax = std::max (tymax + (theight * maxtiles / 2), imgp->height - 1);
+	rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp[0]->width - 1);
+	rymax = std::max (tymax + (theight * maxtiles / 2), imgp[0]->height - 1);
       }
     if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
       {
@@ -1740,8 +1774,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       for (int ty = 0; ty < maxtiles; ty++)
 	for (int tx = 0; tx < maxtiles; tx++)
 	  {
-	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp->width - twidth - 1) & ~1;
-	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp->height - theight - 1) & ~1;
+	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp[0]->width - twidth - 1) & ~1;
+	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp[0]->height - theight - 1) & ~1;
 	    //int cur_txmax = cur_txmin + twidth;
 	    //int cur_tymax = cur_tymin + theight;
 	    finetune_solver solver;
@@ -1751,7 +1785,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	    solver.twidth = twidth;
 	    solver.theight = theight;
 	    solver.collection_threshold = rparam.collection_threshold;
-	    if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp, render))
+	    if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0], render))
 	      {
 		failed = true;
 		continue;
@@ -1957,11 +1991,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   if (fparams.screen_file)
    best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)
-    best_solver.scr.save_tiff (fparams.screen_blur_file);
+    best_solver.scr[0]->save_tiff (fparams.screen_blur_file);
   if (best_solver.emulsion_scr)
     best_solver.emulsion_scr->save_tiff ("/tmp/colorscr-emulsion.tif");
-  if (best_solver.merged_scr)
-    best_solver.merged_scr->save_tiff ("/tmp/colorscr-merged.tif");
+  if (best_solver.merged_scr[0])
+    best_solver.merged_scr[0]->save_tiff ("/tmp/colorscr-merged.tif");
   {
     screen tmp;
     best_solver.collect_screen (&tmp, best_solver.start, 0);
@@ -2018,7 +2052,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
 	   continue; 
 	finetune_parameters fparam;
 	fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
-	res[x+y*xsteps] = finetune (rparam, param, img, xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep, fparam, progress);
+	res[x+y*xsteps] = finetune (rparam, param, img, {{xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep}}, fparam, progress);
 	progress->inc_progress ();
       }
   if (progress && progress->cancel_requested ()) 

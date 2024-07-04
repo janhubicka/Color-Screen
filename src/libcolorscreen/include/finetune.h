@@ -59,7 +59,7 @@ struct finetune_result
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
 };
-DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int x, int y, const finetune_parameters &fparams, progress_info *progress);
+DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const finetune_parameters &fparams, progress_info *progress);
 DLL_PUBLIC bool finetune_area (solver_parameters *sparam, render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
 #endif
