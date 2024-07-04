@@ -10,6 +10,7 @@
 #include "include/tiff-writer.h"
 #include "nmsimplex.h"
 #include "include/bitmap.h"
+#include "icc.h"
 
 namespace {
 
@@ -1214,7 +1215,7 @@ public:
     /* Avoid solver from increasing blur past point it is no longer useful.
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
-   return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.01) * (1 + get_emulsion_blur_radius (v) * 0.0001);
+   return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.01) /** (1 + get_emulsion_blur_radius (v) * 0.0001)*/;
   }
 
   void
@@ -1378,14 +1379,19 @@ public:
   {
     init_screen (v);
     point_t off = get_offset (v);
+    void *buffer;
+    size_t len = create_linear_srgb_profile (&buffer);
 
     tiff_writer_params p;
     p.filename = name;
     p.width = twidth;
+    p.icc_profile = buffer;
+    p.icc_profile_len = len;
     p.height = theight;
     p.depth = 16;
     const char *error;
     tiff_writer rendered (p, &error);
+    free (buffer);
     if (error)
       return false;
 
