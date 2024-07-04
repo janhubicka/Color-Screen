@@ -124,6 +124,7 @@ public:
      Initialized in init call.  */
   bool optimize_emulsion_intensities;
   bool optimize_emulsion_offset;
+  bool fog_by_least_squares;
 
   /* Threshold for data collection.  */
   luminosity_t collection_threshold;
@@ -133,6 +134,7 @@ public:
      Initialized by objfunc and can be reused after it
      since get_colors is expensive.  */
   rgbdata last_red, last_green, last_blue, last_color;
+  rgbdata last_fog;
 
   ~finetune_solver ()
   {
@@ -348,7 +350,7 @@ public:
 	v[1] = std::min (v[1], (coord_t)1);
 	v[1] = std::max (v[1], (coord_t)-1);
       }
-    if (optimize_fog)
+    if (optimize_fog && !fog_by_least_squares)
       {
 	v[fog_index] = std::min (v[fog_index], (coord_t)1);
 	v[fog_index] = std::max (v[fog_index], (coord_t)0);
@@ -452,7 +454,7 @@ public:
   void
   alloc_least_squares ()
   {
-    int matrixw = 3;
+    int matrixw = tile ? (fog_by_least_squares ? 4 : 3) : 1;
     int matrixh = sample_points ();
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
@@ -468,6 +470,7 @@ public:
   void
   init_least_squares (coord_t *v)
   {
+    last_fog = {0,0,0};
     if (tile)
       {
 	int e = 0;
@@ -530,7 +533,8 @@ public:
     fog_index = n_values;
     if (!tile)
       optimize_fog = false;
-    if (optimize_fog)
+    fog_by_least_squares = (optimize_fog && !normalize && least_squares);
+    if (optimize_fog && !fog_by_least_squares)
       n_values += 3;
 
     emulsion_intensity_index = n_values;
@@ -578,6 +582,7 @@ public:
     last_blur = {-1, -1,-1};
     last_emulsion_intensities = {-1, -1, -1};
     last_emulsion_offset = {-100,-100};
+    last_fog = {0,0,0};
     for (int i = 0; i < 4; i++)
       last_mtf[i] = -1;
     last_emulsion_blur = -1;
@@ -688,8 +693,7 @@ public:
       {
 	free_least_squares ();
 	alloc_least_squares ();
-	if (!optimize_fog)
-	  init_least_squares (NULL);
+	init_least_squares (NULL);
       }
     simulated_screen_border = 0;
     simulated_screen_width = twidth;
@@ -986,6 +990,8 @@ public:
 		gsl_matrix_set (gsl_X, e, 0, c.red);
 		gsl_matrix_set (gsl_X, e, 1, c.green);
 		gsl_matrix_set (gsl_X, e, 2, c.blue);
+		if (fog_by_least_squares)
+		  gsl_matrix_set (gsl_X, e, 3, 1);
 		e++;
 	      }
 	double chisq;
@@ -993,8 +999,28 @@ public:
 			     &chisq, gsl_work);
 	sqsum += chisq;
 	(*red)[ch] = gsl_vector_get (gsl_c, 0);
+	if (!((*red)[ch] > -5))
+	  (*red)[ch] = -5;
+	if (!((*red)[ch] < 5))
+	  (*red)[ch] = 5;
 	(*green)[ch] = gsl_vector_get (gsl_c, 1);
+	if (!((*green)[ch] > -5))
+	  (*green)[ch] = -5;
+	if (!((*green)[ch] < 5))
+	  (*green)[ch] = 5;
 	(*blue)[ch] = gsl_vector_get (gsl_c, 2);
+	if (!((*blue)[ch] > -5))
+	  (*blue)[ch] = -5;
+	if (!((*blue)[ch] < 5))
+	  (*blue)[ch] = 5;
+	if (fog_by_least_squares)
+	  {
+	    last_fog[ch] = gsl_vector_get (gsl_c, 3);
+	    if (!(last_fog[ch] > 0))
+	      last_fog[ch] = 0;
+	    if (!(last_fog[ch] < fog_range[ch]))
+	      last_fog[ch] = fog_range[ch];
+	  }
 #if 0
 	rgbdata cc = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
 	if (!ch)
@@ -1100,6 +1126,8 @@ public:
   {
     if (!optimize_fog)
       return {0, 0, 0};
+    if (fog_by_least_squares)
+      return last_fog;
     return {v[fog_index] * fog_range.red, v[fog_index+1] * fog_range.green, v[fog_index+2] * fog_range.blue};
   }
 
@@ -1158,7 +1186,7 @@ public:
       determine_colors_using_data_collection (v, red, green, blue);
     else
       {
-	if (least_squares && optimize_fog)
+	if (least_squares && (optimize_fog && !fog_by_least_squares))
 	  init_least_squares (v);
 	determine_colors_using_least_squares (v, red, green, blue);
       }
@@ -1318,7 +1346,7 @@ public:
       {
 	free_least_squares ();
 	alloc_least_squares ();
-	if (!optimize_fog)
+	if (!optimize_fog || fog_by_least_squares)
 	  init_least_squares (NULL);
       }
     return noutliers;
@@ -1368,7 +1396,7 @@ public:
       {
 	free_least_squares ();
 	alloc_least_squares ();
-	if (!optimize_fog)
+	if (!optimize_fog || fog_by_least_squares)
 	  init_least_squares (NULL);
       }
     return noutliers;
@@ -1741,7 +1769,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   if (best_solver.least_squares)
     {
       best_solver.alloc_least_squares ();
-      if (!best_solver.optimize_fog)
+      if (!best_solver.optimize_fog || best_solver.fog_by_least_squares)
         best_solver.init_least_squares (best_solver.start);
     }
   if (best_solver.tile && fparams.ignore_outliers > 0)
