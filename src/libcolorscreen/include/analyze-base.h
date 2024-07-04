@@ -6,7 +6,7 @@
 #include "progress-info.h"
 #include "bitmap.h"
 #include "screen.h"
-class analyze_base
+class DLL_PUBLIC analyze_base
 {
 public:
   struct contrast_info
@@ -149,9 +149,9 @@ public:
     return m_contrast[y * m_width + x];
   }
 
-  virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
-  void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
-  virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
+  DLL_PUBLIC virtual int find_best_match (int percentake, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift, coord_t *yshift, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress = NULL);
+  DLL_PUBLIC void analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosity_t *rgmin, luminosity_t *rgmax, luminosity_t *rbmin, luminosity_t *rbmax);
+  DLL_PUBLIC virtual bool write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress = NULL, luminosity_t rmin = 0, luminosity_t rmax = 1, luminosity_t gmin = 0, luminosity_t gmax = 1, luminosity_t bmin = 0, luminosity_t bmax = 1);
   struct data_entry {
     int64_t x,y;
     pure_attr inline data_entry operator+(const data_entry other)
@@ -161,13 +161,13 @@ public:
   };
 protected:
   /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
-  analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
+  DLL_PUBLIC analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),
     m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
     m_contrast (NULL)
   {
   }
-  virtual
+  DLL_PUBLIC virtual
   ~analyze_base()
   {
     free (m_red);
@@ -197,19 +197,19 @@ protected:
 
 
 template<typename GEOMETRY>
-class analyze_base_worker : public analyze_base
+class DLL_PUBLIC analyze_base_worker : public analyze_base
 {
 public:
-  analyze_base_worker (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
+  DLL_PUBLIC analyze_base_worker (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   /* We store two reds per X coordinate.  */
   : analyze_base (rwscl, rhscl, gwscl, ghscl, bwscl, bhscl)
   {
   }
-  inline pure_attr rgbdata bicubic_bw_interpolate (point_t scr);
-  inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
-  inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
+  DLL_PUBLIC inline pure_attr rgbdata bicubic_bw_interpolate (point_t scr);
+  DLL_PUBLIC inline pure_attr rgbdata bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions);
+  DLL_PUBLIC inline pure_attr rgbdata bicubic_interpolate (point_t scr, rgbdata patch_proportions);
 
-  luminosity_t &
+  DLL_PUBLIC inline luminosity_t &
   red (int x, int y) const
   {
     x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
@@ -217,7 +217,7 @@ public:
     return m_red [y * m_width * GEOMETRY::red_width_scale + x];
   }
 
-  luminosity_t &
+  DLL_PUBLIC inline luminosity_t &
   green (int x, int y) const
   {
     x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
@@ -225,7 +225,7 @@ public:
     return m_green [y * m_width * GEOMETRY::green_width_scale + x];
   }
 
-  luminosity_t &
+  DLL_PUBLIC inline luminosity_t &
   blue (int x, int y) const
   {
     x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
@@ -233,7 +233,7 @@ public:
     return m_blue [y * m_width * GEOMETRY::blue_width_scale + x];
   }
 
-  rgbdata &
+  DLL_PUBLIC inline rgbdata &
   rgb_red (int x, int y) const
   { 
     x = std::min (std::max (x, 0), m_width * GEOMETRY::red_width_scale - 1);
@@ -241,7 +241,7 @@ public:
     return m_rgb_red [y * m_width * GEOMETRY::red_width_scale + x];
   }
 
-  rgbdata &
+  DLL_PUBLIC inline rgbdata &
   rgb_green (int x, int y) const
   { 
     x = std::min (std::max (x, 0), m_width * GEOMETRY::green_width_scale - 1);
@@ -249,7 +249,7 @@ public:
     return m_rgb_green [y * m_width * GEOMETRY::green_width_scale + x];
   }
 
-  rgbdata &
+  DLL_PUBLIC inline rgbdata &
   rgb_blue (int x, int y) const
   { 
     x = std::min (std::max (x, 0), m_width * GEOMETRY::blue_width_scale - 1);
@@ -257,7 +257,7 @@ public:
     return m_rgb_blue [y * m_width * GEOMETRY::blue_width_scale + x];
   }
 
-  rgbdata
+  DLL_PUBLIC inline rgbdata
   screen_tile_color (int x, int y)
   {
     rgbdata ret = {0,0,0};
@@ -276,7 +276,8 @@ public:
     return ret;
   }
 
-  void screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
+  DLL_PUBLIC inline void
+  screen_tile_rgb_color (rgbdata &red, rgbdata &green, rgbdata &blue, int x, int y)
   {
     red = {0, 0, 0};
     for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
@@ -294,12 +295,12 @@ public:
 	blue += m_rgb_blue [(y * GEOMETRY::blue_height_scale + yy) * m_width * GEOMETRY::blue_width_scale + x * GEOMETRY::blue_width_scale + xx];
     blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
   }
-  bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
+  DLL_PUBLIC bool analyze (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, const screen *screen, int width, int height, int xshift, int yshift, mode mode, luminosity_t collection_threshold, progress_info *progress);
 protected:
-  bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
-  bool analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
-  bool analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
-  bool analyze_fast (render_to_scr *render,progress_info *progress);
+  DLL_PUBLIC bool analyze_precise (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  DLL_PUBLIC bool analyze_precise_rgb (scr_to_img *scr_to_img, render_to_scr *render, const screen *screen, luminosity_t collection_threshold, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  DLL_PUBLIC bool analyze_color (scr_to_img *scr_to_img, render_to_scr *render, luminosity_t *w_red, luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx, int maxy, progress_info *progress);
+  DLL_PUBLIC bool analyze_fast (render_to_scr *render,progress_info *progress);
 
 };
 template<typename GEOMETRY>
