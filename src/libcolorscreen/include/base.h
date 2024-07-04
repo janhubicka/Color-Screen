@@ -83,6 +83,14 @@ struct point_t
   {
     return x == other.x && y == other.y;
   }
+  bool inline operator==(const point_t &other)
+  {
+    return other.x == x && other.y == y;
+  }
+  bool inline operator!=(const point_t &other)
+  {
+    return other.x != x || other.y != y;
+  }
 };
 
 /* Like modf but always round down.  */

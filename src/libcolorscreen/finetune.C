@@ -32,6 +32,9 @@ private:
   /* Indexes into optimized values array to fetch individual parameters  */
   int fog_index;
   int color_index;
+  int emulsion_intensity_index;
+  int emulsion_offset_index;
+  int emulsion_blur_index;
   int screen_index;
   int dufay_strips_index;
   /* Number of values needed.  */
@@ -41,12 +44,18 @@ private:
   luminosity_t maxgray;
 
   rgbdata last_blur;
+  rgbdata last_emulsion_intensities;
+  point_t last_emulsion_offset;
   luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
 public:
   /* Unblured screen.  */
-  screen scr1;
+  std::shared_ptr <screen> original_scr;
+  /* Screen with emulsion.  */
+  std::shared_ptr <screen> emulsion_scr;
+  /* Screen merging emulsion and unblurred screen.  */
+  std::shared_ptr <screen> merged_scr;
   /* Blured screen used to render simulated scan.  */
   screen scr;
 
@@ -69,8 +78,8 @@ public:
   /* Tile colors */
   std::shared_ptr <rgbdata []> simulated_screen;
 
-  /* 2 coordinates, 3* blur radius or 4 * mtf blur, 3 * 3 colors, strip widths, fog  */
-  coord_t start[20];
+  /* 2 coordinates, 1*emulsion blur, 3*emulsion inensities, 3* blur radius or 4 * mtf blur, 3 * 3 colors, strip widths, fog  */
+  coord_t start[25];
 
   /* Screen blur and duffay red strip widht and green strip height. */
   coord_t fixed_blur, fixed_width, fixed_height;
@@ -110,6 +119,11 @@ public:
      netural density filter) of the input scan is linear.  */
   bool normalize;
 
+  /* True if emulsion patch intensities should be finetuned.
+     Initialized in init call.  */
+  bool optimize_emulsion_intensities;
+  bool optimize_emulsion_offset;
+
   /* Threshold for data collection.  */
   luminosity_t collection_threshold;
 
@@ -131,7 +145,7 @@ public:
   constexpr static const coord_t rgbscale = /*256*/1;
   coord_t epsilon ()
   {
-    return 0.00000001;
+    return /*0.00000001*/ 1.0/65535;
   }
   coord_t scale ()
   {
@@ -154,6 +168,14 @@ public:
     coord_t range = type == Dufay ? dufay_range : paget_range;
     return {v[0] * range, v[1] * range};
   }
+  point_t
+  get_emulsion_offset (coord_t *v)
+  {
+    if (!optimize_emulsion_offset)
+      return {0, 0};
+    coord_t range = type == Dufay ? dufay_range : paget_range;
+    return {v[emulsion_offset_index] * range, v[emulsion_offset_index + 1] * range};
+  }
 
   point_t
   get_pos (coord_t *v, int x, int y)
@@ -170,24 +192,37 @@ public:
   {
     if (!optimize_emulsion_blur)
       return 0;
-    return v[screen_index] * screen::max_blur_radius;
+    return v[emulsion_blur_index] * (screen::max_blur_radius * 0.2 - 0.03) + 0.03;
+  }
+
+  /* Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.  */
+  coord_t pixel_blur (coord_t v)
+  {
+    return v * (screen::max_blur_radius / pixel_size - 0.3) + 0.3;
+  }
+  coord_t rev_pixel_blur (coord_t v)
+  {
+    return (v - 0.3) / (screen::max_blur_radius / pixel_size - 0.3);
   }
 
   coord_t get_blur_radius (coord_t *v)
   {
     if (optimize_screen_channel_blurs)
-      return (v[screen_index] + v[screen_index + 1] + v[screen_index + 2]) * screen::max_blur_radius / (pixel_size * 3);
+      return pixel_blur ((v[screen_index] + v[screen_index + 1] + v[screen_index + 2]) * (1 / (coord_t) 3));
     if (!optimize_screen_blur)
       return fixed_blur;
-    return v[screen_index] * screen::max_blur_radius / pixel_size;
+    return pixel_blur (v[screen_index]);
   }
   rgbdata get_channel_blur_radius (coord_t *v)
   {
     if (!optimize_screen_blur && !optimize_screen_channel_blurs)
       return {fixed_blur, fixed_blur, fixed_blur};
     if (!optimize_screen_channel_blurs)
-      return {v[screen_index] * screen::max_blur_radius / pixel_size, v[screen_index] * screen::max_blur_radius / pixel_size, v[screen_index] * screen::max_blur_radius / pixel_size};
-    return {v[screen_index] * screen::max_blur_radius / pixel_size, v[screen_index + 1] * screen::max_blur_radius / pixel_size, v[screen_index + 2] * screen::max_blur_radius / pixel_size};
+      {
+        coord_t b = pixel_blur (v[screen_index]);
+        return {b, b, b};
+      }
+    return {pixel_blur (v[screen_index]), pixel_blur (v[screen_index] + 1), pixel_blur (v[screen_index] + 2)};
   }
   coord_t get_red_strip_width (coord_t *v)
   {
@@ -225,7 +260,12 @@ public:
     if (optimize_position)
       {
 	point_t p = get_offset (v);
-        printf ("Center %f %f in pixels %f %f\n", p.x, p.y, p.x/pixel_size, p.y/pixel_size);
+        printf ("Screen offset %f %f (in pixels %f %f)\n", p.x, p.y, p.x/pixel_size, p.y/pixel_size);
+      }
+    if (optimize_emulsion_offset)
+      {
+        point_t p = get_emulsion_offset (v);
+        printf ("Emulsion offset %f %f (%f %f in pixels; relative to screen)\n", p.x, p.y, p.x / pixel_size, p.y / pixel_size);
       }
     if (optimize_emulsion_blur)
       printf ("Emulsion blur %f (%f pixels)\n", get_emulsion_blur_radius (v), get_emulsion_blur_radius (v) / pixel_size);
@@ -271,6 +311,18 @@ public:
 	printf ("Normalized blue :");
 	sum = blue.red + blue.green + blue.blue;
 	(blue / sum).print (stdout);
+	if (optimize_fog)
+	  {
+	    printf ("Fog ");
+	    get_fog (v).print (stdout);
+	  }
+	if (optimize_emulsion_intensities)
+	  {
+	    printf ("Emulsion intensities ");
+	    get_emulsion_intensities (v).print (stdout);
+	    printf ("Mix weights ");
+	    get_mix_weights (v).print (stdout);
+	  }
       }
     if (bwtile)
       {
@@ -316,8 +368,24 @@ public:
     if (optimize_emulsion_blur)
       {
 	/* Screen blur radius.  */
-	v[screen_index] = std::max (v[screen_index], (coord_t)0);
-	v[screen_index] = std::min (v[screen_index], (coord_t)1);
+	v[emulsion_blur_index] = std::max (v[emulsion_blur_index], (coord_t)0);
+	v[emulsion_blur_index] = std::min (v[emulsion_blur_index], (coord_t)1);
+      }
+    if (optimize_emulsion_intensities)
+      {
+	v[emulsion_intensity_index] = std::max (v[emulsion_intensity_index], (coord_t)0);
+	v[emulsion_intensity_index] = std::min (v[emulsion_intensity_index], (coord_t)1);
+	v[emulsion_intensity_index + 1] = std::max (v[emulsion_intensity_index + 1], (coord_t)0);
+	v[emulsion_intensity_index + 1] = std::min (v[emulsion_intensity_index + 1], (coord_t)1);
+	//v[emulsion_intensity_index + 2] = std::max (v[emulsion_intensity_index + 2], (coord_t)0);
+	//v[emulsion_intensity_index + 2] = std::min (v[emulsion_intensity_index + 2], (coord_t)1);
+      }
+    if (optimize_emulsion_offset)
+      {
+	v[emulsion_offset_index] = std::max (v[emulsion_offset_index], (coord_t)-1);
+	v[emulsion_offset_index] = std::min (v[emulsion_offset_index], (coord_t)1);
+	v[emulsion_offset_index + 1] = std::max (v[emulsion_offset_index + 1], (coord_t)-1);
+	v[emulsion_offset_index + 1] = std::min (v[emulsion_offset_index + 1], (coord_t)1);
       }
 
     if (optimize_screen_blur)
@@ -350,13 +418,10 @@ public:
     if (optimize_dufay_strips)
       {
 	/* Dufaycolor red strip width and height.  */
-	if (type == Dufay)
-	  {
-	    v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.5);
-	    v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.1);
-	    v[dufay_strips_index + 1] = std::min (v[dufay_strips_index + 1], (coord_t)0.7);
-	    v[dufay_strips_index + 1] = std::max (v[dufay_strips_index + 1], (coord_t)0.3);
-	  }
+	v[dufay_strips_index + 0] = std::min (v[dufay_strips_index + 0], (coord_t)0.5);
+	v[dufay_strips_index + 0] = std::max (v[dufay_strips_index + 0], (coord_t)0.1);
+	v[dufay_strips_index + 1] = std::min (v[dufay_strips_index + 1], (coord_t)0.7);
+	v[dufay_strips_index + 1] = std::max (v[dufay_strips_index + 1], (coord_t)0.3);
       }
   }
   void
@@ -438,6 +503,15 @@ public:
     if (optimize_position)
       n_values += 2;
 
+    if (tile && optimize_emulsion_blur && (optimize_screen_blur || optimize_screen_channel_blurs || optimize_screen_mtf_blur))
+      {
+        optimize_emulsion_intensities = true;
+	optimize_emulsion_offset = type != Dufay;
+	data_collection = false;
+      }
+    else
+      optimize_emulsion_intensities = optimize_emulsion_offset = false;
+
     if (data_collection)
       least_squares = false;
 
@@ -458,12 +532,20 @@ public:
     if (optimize_fog)
       n_values += 3;
 
-    screen_index = n_values;
+    emulsion_intensity_index = n_values;
+    if (optimize_emulsion_intensities)
+      n_values += 2;
+    emulsion_offset_index = n_values;
+    if (optimize_emulsion_offset)
+      n_values += 2;
+    emulsion_blur_index = n_values;
     if (optimize_emulsion_blur)
       {
-	optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = false;
+	if (!optimize_emulsion_intensities)
+	  optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = false;
 	n_values += 1;
       }
+    screen_index = n_values;
     if (optimize_screen_mtf_blur)
       {
 	n_values += 4;
@@ -478,13 +560,23 @@ public:
     if (optimize_screen_blur)
       n_values++;
 
+    if (type != Dufay)
+      optimize_dufay_strips = false;
     dufay_strips_index = n_values;
     if (optimize_dufay_strips)
       n_values += 2;
     if ((unsigned)n_values > sizeof (start) / sizeof (start[0]))
       abort ();
 
+    original_scr = std::shared_ptr <screen> (new screen);
+    if (optimize_emulsion_blur)
+      emulsion_scr = std::shared_ptr <screen> (new screen);
+    if (optimize_emulsion_intensities)
+      merged_scr = std::shared_ptr <screen> (new screen);
+
     last_blur = {-1, -1,-1};
+    last_emulsion_intensities = {-1, -1, -1};
+    last_emulsion_offset = {-100,-100};
     for (int i = 0; i < 4; i++)
       last_mtf[i] = -1;
     last_emulsion_blur = -1;
@@ -527,10 +619,24 @@ public:
     fixed_height = dufaycolor::green_height;
     if (tile && normalize)
       optimize_emulsion_blur = false;
+    if (optimize_emulsion_intensities)
+      {
+	start[emulsion_intensity_index] = 1 / 3.0;
+	start[emulsion_intensity_index + 1] = 1 / 3.0;
+	//start[emulsion_intensity_index + 2] = 0;
+      }
+    if (optimize_emulsion_offset)
+      {
+	start[emulsion_offset_index] = 0;
+	start[emulsion_offset_index + 1] = 0;
+      }
+    /* Sane scanner lens blurs close to Nqyist frequency.  */
     if (optimize_emulsion_blur)
-      start[screen_index] = 0.8;
+      start[emulsion_blur_index] = rev_pixel_blur (0.3);
     if (optimize_screen_blur)
-      start[screen_index] = 0.8;
+      start[screen_index] = rev_pixel_blur (0.3);
+    if (optimize_screen_channel_blurs)
+      start[screen_index] = start[screen_index + 1] = start[screen_index + 2]= rev_pixel_blur (0.3);
     if (optimize_screen_mtf_blur)
       {
         start[screen_index] = 0;
@@ -538,8 +644,6 @@ public:
         start[screen_index + 2] = 0;
         start[screen_index + 3] = 0;
       }
-    if (optimize_screen_channel_blurs)
-      start[screen_index] = start[screen_index + 1] = start[screen_index + 2]= 0.8;
     if (optimize_dufay_strips)
       {
 	start[dufay_strips_index + 0] = dufaycolor::red_width;
@@ -606,24 +710,43 @@ public:
 	return true;
     return false;
   }
+
   void
-  apply_blur (coord_t *v, screen *dst_scr, screen *src_scr)
+  apply_blur (coord_t *v, screen *dst_scr, screen *src_scr, screen *weight_scr = NULL)
   {
-    luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t mtf[4];
     get_mtf (mtf, v);
-    screen scr2;
-    //printf ("eblur %f\n", emulsion_blur);
-    if (emulsion_blur > 0)
+
+    if (weight_scr)
       {
-	scr2.initialize_with_blur (*src_scr, emulsion_blur);
-	src_scr = &scr2;
+	rgbdata i = get_emulsion_intensities (v);
+	point_t offset = get_emulsion_offset (v);
+	if (offset.x == 0 && offset.y == 0)
+	  for (int y = 0; y < screen::size; y++)
+	    for (int x = 0; x < screen::size; x++)
+	      {
+		luminosity_t w = weight_scr->mult[y][x][0] * i.red + weight_scr->mult[y][x][1] * i.green + weight_scr->mult[y][x][2] * i.blue;
+		merged_scr->mult[y][x][0] = src_scr->mult[y][x][0] * w;
+		merged_scr->mult[y][x][1] = src_scr->mult[y][x][1] * w;
+		merged_scr->mult[y][x][2] = src_scr->mult[y][x][2] * w;
+	      }
+	else
+	  for (int y = 0; y < screen::size; y++)
+	    for (int x = 0; x < screen::size; x++)
+	      {
+		rgbdata wd = weight_scr->interpolated_mult
+		  ((point_t){x * (1 / (coord_t)screen::size), y * (1 / (coord_t)screen::size)} + offset);
+		luminosity_t w = wd.red * i.red + wd.green * i.green + wd.blue * i.blue;
+		merged_scr->mult[y][x][0] = src_scr->mult[y][x][0] * w;
+		merged_scr->mult[y][x][1] = src_scr->mult[y][x][1] * w;
+		merged_scr->mult[y][x][2] = src_scr->mult[y][x][2] * w;
+	      }
+	src_scr = merged_scr.get ();
       }
+
     if (optimize_screen_mtf_blur)
-      {
-	dst_scr->initialize_with_blur (*src_scr, mtf);
-      }
+      dst_scr->initialize_with_blur (*src_scr, mtf);
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
   }
@@ -636,16 +759,34 @@ public:
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
     luminosity_t mtf[4];
+    rgbdata intensities = get_emulsion_intensities (v);
+    point_t emulsion_offset = get_emulsion_offset (v);
     get_mtf (mtf, v);
-    
-    if (emulsion_blur != last_emulsion_blur || blur != last_blur || red_strip_width != last_width || green_strip_height != last_height || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf))
+
+    bool updated = false;
+    if (red_strip_width != last_width || green_strip_height != last_height)
       {
-        scr1.initialize (type, red_strip_width, green_strip_height);
-	apply_blur (v, &scr, &scr1);
-	last_blur = blur;
-	last_emulsion_blur = emulsion_blur;
+        original_scr->initialize (type, red_strip_width, green_strip_height);
 	last_width = red_strip_width;
 	last_height = green_strip_height;
+	updated = true;
+      }
+
+    if (optimize_emulsion_blur && (emulsion_blur != last_emulsion_blur || updated))
+      {
+	emulsion_scr->initialize_with_blur (*original_scr, emulsion_blur);
+	last_emulsion_blur = emulsion_blur;
+	updated = true;
+      }
+    
+    if (blur != last_blur || updated || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf) || last_emulsion_intensities != intensities || last_emulsion_offset != emulsion_offset)
+      {
+	apply_blur (v, &scr,
+		    optimize_emulsion_blur && !optimize_emulsion_intensities? emulsion_scr.get () : original_scr.get (),
+		    optimize_emulsion_intensities ? emulsion_scr.get () : NULL);
+	last_blur = blur;
+	last_emulsion_intensities = intensities;
+	last_emulsion_offset = emulsion_offset;
 	memcpy (last_mtf, mtf, sizeof (last_mtf));
       }
   }
@@ -962,6 +1103,37 @@ public:
   }
 
   rgbdata
+  get_emulsion_intensities (coord_t *v)
+  {
+    /* Together with screen colors these are defined only up to scaling factor.  */
+    if (optimize_emulsion_intensities)
+      {
+	luminosity_t blue = 1 - v[emulsion_intensity_index + 0] - v[emulsion_intensity_index + 1];
+	if (blue < 0)
+	  blue = 0;
+        return {v[emulsion_intensity_index + 0], v[emulsion_intensity_index + 1], blue};
+      }
+    else
+      return {1, 1, 1};
+  }
+
+  rgbdata
+  get_mix_weights (coord_t *v)
+  {
+    rgbdata red, green, blue;
+    get_colors (v, &red, &green, &blue);
+    color_matrix process_colors (red.red,   green.red,   blue.red, 0,
+				 red.green, green.green, blue.green, 0,
+				 red.blue,  green.blue,  blue.blue, 0,
+				 0, 0, 0, 1);
+    process_colors.transpose ();
+    rgbdata ret;
+    process_colors.invert ().apply_to_rgb (1/3.0, 1/3.0, 1/3.0, &ret.red, &ret.green, &ret.blue);
+    luminosity_t sum = ret.red + ret.green + ret.blue;
+    return ret * (1 / sum);
+  }
+
+  rgbdata
   bw_get_color (coord_t *v)
   {
     if (!least_squares && !data_collection)
@@ -1042,7 +1214,7 @@ public:
     /* Avoid solver from increasing blur past point it is no longer useful.
        Otherwise it will pick solutions with too large blur and very contrasty
        colors.  */
-    return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.01);
+   return (sum / sample_points ()) * (1 + get_blur_radius (v) * 0.01) * (1 + get_emulsion_blur_radius (v) * 0.0001);
   }
 
   void
@@ -1058,16 +1230,16 @@ public:
 	  }
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
-        {
-          point_t p = tile_pos [y * twidth + x] + off;
-	  int xx = ((int64_t)nearest_int (p.x * screen::size)) & (screen::size - 1);
-	  int yy = ((int64_t)nearest_int (p.y * screen::size)) & (screen::size - 1);
-	  s->mult[yy][xx][0] = tile [y * twidth + x].red;
-	  s->mult[yy][xx][1] = tile [y * twidth + x].green;
-	  s->mult[yy][xx][2] = tile [y * twidth + x].blue;
-	  s->add[yy][xx][0] = 1;
-        }
-#if 0
+	if (!noutliers || !outliers->test_bit (x, y))
+	  {
+	    point_t p = tile_pos [y * twidth + x] + off;
+	    int xx = ((int64_t)nearest_int (p.x * screen::size)) & (screen::size - 1);
+	    int yy = ((int64_t)nearest_int (p.y * screen::size)) & (screen::size - 1);
+	    s->mult[yy][xx][0] = tile [y * twidth + x].red;
+	    s->mult[yy][xx][1] = tile [y * twidth + x].green;
+	    s->mult[yy][xx][2] = tile [y * twidth + x].blue;
+	    s->add[yy][xx][0] = 1;
+	  }
     for (int i = 0; i < screen::size; i++)
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
@@ -1095,7 +1267,6 @@ public:
 		  s->mult[y][x][2] = newv[2] / n;
 		}
 	    }
-#endif
     for (int y = 0; y < screen::size; y++)
       for (int x = 0; x < screen::size; x++)
 	s->add[y][x][0] = 0;
@@ -1314,7 +1485,6 @@ public:
       }
     return true;
   }
-
 };
 
 static coord_t
@@ -1604,6 +1774,14 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   best_solver.get_mtf (ret.screen_mtf_blur, best_solver.start);
   ret.screen_coord_adjust = best_solver.get_offset (best_solver.start);
   ret.fog = best_solver.get_fog (best_solver.start);
+  if (best_solver.optimize_emulsion_intensities)
+    ret.mix_weights = best_solver.get_mix_weights (best_solver.start);
+  else
+    {
+     ret.mix_weights.red = rparam.mix_red;
+     ret.mix_weights.green = rparam.mix_green;
+     ret.mix_weights.blue = rparam.mix_blue;
+    }
 
   if (best_solver.optimize_position)
     {
@@ -1702,12 +1880,18 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       ret.solver_point_color = solver_parameters::green;
     }
   if (fparams.screen_file)
-  {
-    best_solver.collect_screen (&best_solver.scr1, best_solver.start);
-    best_solver.scr1.save_tiff (fparams.screen_file);
-  }
+   best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)
     best_solver.scr.save_tiff (fparams.screen_blur_file);
+  if (best_solver.emulsion_scr)
+    best_solver.emulsion_scr->save_tiff ("/tmp/colorscr-emulsion.tif");
+  if (best_solver.merged_scr)
+    best_solver.merged_scr->save_tiff ("/tmp/colorscr-merged.tif");
+  {
+    screen tmp;
+    best_solver.collect_screen (&tmp, best_solver.start);
+    tmp.save_tiff ("/tmp/colorscr-collected.tif");
+  }
   if (fparams.dot_spread_file)
     {
       screen scr, scr1;
