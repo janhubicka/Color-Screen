@@ -455,7 +455,7 @@ public:
   alloc_least_squares ()
   {
     int matrixw = tile ? (fog_by_least_squares ? 4 : 3) : 1;
-    int matrixh = sample_points ();
+    int matrixh = sample_points () + (fog_by_least_squares != 0);
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
     gsl_y[0] = gsl_vector_alloc (matrixh);
@@ -484,6 +484,13 @@ public:
 		gsl_vector_set (gsl_y[2], e, c.blue);
 		e++;
 	      }
+	/* We want fog to be 0.  */
+	if (fog_by_least_squares)
+	  {
+	    gsl_vector_set (gsl_y[0], e, 0);
+	    gsl_vector_set (gsl_y[1], e, 0);
+	    gsl_vector_set (gsl_y[2], e, 0);
+	  }
       }
     else
       {
@@ -994,6 +1001,13 @@ public:
 		  gsl_matrix_set (gsl_X, e, 3, 1);
 		e++;
 	      }
+	if (fog_by_least_squares)
+	  {
+	    gsl_matrix_set (gsl_X, e, 0, 0);
+	    gsl_matrix_set (gsl_X, e, 1, 0);
+	    gsl_matrix_set (gsl_X, e, 2, 0);
+	    gsl_matrix_set (gsl_X, e, 3, 1);
+	  }
 	double chisq;
 	gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov,
 			     &chisq, gsl_work);
