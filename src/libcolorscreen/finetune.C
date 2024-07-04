@@ -31,7 +31,7 @@ to_range (coord_t &v, coord_t min, coord_t max)
 class finetune_solver
 {
 public:
-  static constexpr const int max_tiles = 1;
+  static constexpr const int max_tiles = 8;
 private:
   gsl_multifit_linear_workspace *gsl_work;
   gsl_matrix *gsl_X;
@@ -173,7 +173,7 @@ public:
   }
   int sample_points ()
   {
-    return twidth * theight - noutliers;
+    return twidth * theight * n_tiles - noutliers;
   }
 
   point_t
@@ -340,9 +340,9 @@ public:
 	    {
 	      printf ("Emulsion intensities ");
 	      get_emulsion_intensities (v, tileid).print (stdout);
-	      printf ("Mix weights ");
-	      get_mix_weights (v).print (stdout);
 	    }
+	printf ("Mix weights ");
+	get_mix_weights (v).print (stdout);
       }
     if (bwtile[0])
       {
@@ -530,10 +530,14 @@ public:
     optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_dufay_strips = (flags & finetune_dufay_strips) && type == Dufay;
-    optimize_fog = (flags & finetune_fog) && tile[0];
+    /* For one tile the effect of fog can always be simulated by adjusting the colors of screen.
+       If multiple tiles (and colors) are samples we can try to estimate it.  */
+    optimize_fog = (flags & finetune_fog) && tile[0] && n_tiles > 1;
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     normalize = !(flags & finetune_no_normalize);
+    if (tile[0] && normalize)
+      optimize_emulsion_blur = false;
     if (tile[0] && optimize_emulsion_blur && (optimize_screen_blur || optimize_screen_channel_blurs || optimize_screen_mtf_blur))
       {
         optimize_emulsion_intensities = true;
@@ -659,19 +663,19 @@ public:
     fixed_blur = blur_radius;
     fixed_width = dufaycolor::red_width;
     fixed_height = dufaycolor::green_height;
-    if (tile[0] && normalize)
-      optimize_emulsion_blur = false;
     if (optimize_emulsion_intensities)
-      {
-	start[emulsion_intensity_index] = 1 / 3.0;
-	start[emulsion_intensity_index + 1] = 1 / 3.0;
-	//start[emulsion_intensity_index + 2] = 0;
-      }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  start[emulsion_intensity_index + 2 * tileid] = 1 / 3.0;
+	  start[emulsion_intensity_index + 2 * tileid + 1] = 1 / 3.0;
+	  //start[emulsion_intensity_index + 2] = 0;
+	}
     if (optimize_emulsion_offset)
-      {
-	start[emulsion_offset_index] = 0;
-	start[emulsion_offset_index + 1] = 0;
-      }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  start[emulsion_offset_index + 2 * tileid] = 0;
+	  start[emulsion_offset_index + 2 * tileid + 1] = 0;
+	}
     /* Sane scanner lens blurs close to Nqyist frequency.  */
     if (optimize_emulsion_blur)
       start[emulsion_blur_index] = rev_pixel_blur (0.3);
@@ -735,7 +739,8 @@ public:
     simulated_screen_border = 0;
     simulated_screen_width = twidth;
     simulated_screen_height = theight;
-    simulated_screen[0] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height]);
+    for (int tileid = 0; tileid < n_tiles; tileid++)
+      simulated_screen[tileid] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height]);
   }
 
   coord_t
@@ -816,7 +821,6 @@ public:
   void
   init_screen (coord_t *v, int tileid)
   {
-    /* TODO: Add tile ID.  */
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
@@ -1277,12 +1281,18 @@ public:
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
 	init_screen (v, tileid);
-	point_t off = get_offset (v, tileid);
 	simulate_screen (v, tileid);
+      }
+    rgbdata red, green, blue, color;
+    if (tile[0])
+      get_colors (v, &red, &green, &blue);
+    else
+      color = bw_get_color (v);
+    for (int tileid = 0; tileid < n_tiles; tileid++)
+      {
+	point_t off = get_offset (v, tileid);
 	if (tile[0])
 	  {
-	    rgbdata red, green, blue;
-	    get_colors (v, &red, &green, &blue);
 	    for (int y = 0; y < theight; y++)
 	      for (int x = 0; x < twidth; x++)
 		if (!noutliers || !outliers[tileid]->test_bit (x, y))
@@ -1305,7 +1315,6 @@ public:
 	  }
 	else if (bwtile[0])
 	  {
-	    rgbdata color = bw_get_color (v);
 	    for (int y = 0; y < theight; y++)
 	      for (int x = 0; x < twidth; x++)
 		if (!noutliers || !outliers[tileid]->test_bit (x, y))
@@ -1391,12 +1400,12 @@ public:
   int
   determine_outliers (coord_t *v, coord_t ratio)
   {
+    rgbdata red, green, blue;
+    get_colors (v, &red, &green, &blue);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
 	histogram hist;
-	rgbdata red, green, blue;
 	point_t off = get_offset (v, tileid);
-	get_colors (v, &red, &green, &blue);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
@@ -1445,11 +1454,11 @@ public:
   int
   bw_determine_outliers (coord_t *v, coord_t ratio)
   {
+    rgbdata color = bw_get_color (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
 	histogram hist;
 	point_t off = get_offset (v, tileid);
-	rgbdata color = bw_get_color (v);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
@@ -1747,7 +1756,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   if (verbose)
     {
       progress->pause_stdout ();
-      fprintf (stderr, "Will analyze tile %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+      fprintf (stderr, "Tile size %ix%i; %i tiles\n", twidth, theight, n_tiles);
       progress->resume_stdout ();
     }
   finetune_solver best_solver;
@@ -1811,8 +1820,6 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      //int cur_tymax = cur_tymin + theight;
 	      finetune_solver solver;
 	      solver.n_tiles = 1;
-	      if (progress && progress->cancel_requested ()) 
-		continue;
 	      solver.twidth = twidth;
 	      solver.theight = theight;
 	      solver.pixel_size = pixel_size;
@@ -1823,6 +1830,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		  continue;
 		}
 	      solver.init (fparams.flags, rparam.screen_blur_radius);
+	      if (progress && progress->cancel_requested ()) 
+		continue;
 	      coord_t uncertainity = solver.solve (progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
 
 	      if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report) && progress)
@@ -1845,7 +1854,6 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       best_solver.theight = theight;
       best_solver.collection_threshold = rparam.collection_threshold;
       best_solver.pixel_size = pixel_size;
-      best_solver.init (fparams.flags, rparam.screen_blur_radius);
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
 	  int cur_txmin = std::min (std::max (x[tileid] - twidth / 2, 0), imgp[tileid]->width - twidth - 1) & ~1;
@@ -1863,15 +1871,18 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      ret.err = "cancelled";
 	      return ret; 
 	    }
+	  if (cur_txmin < 0 || cur_tymin < 0)
+	    {
+	      ret.err = "tile too large for image";
+	      return ret;
+	    }
 	  if (!best_solver.init_tile (tileid, cur_txmin, cur_tymin, bw, *mapp[tileid], render))
 	    {
-	      if (cur_txmin < 0 || cur_tymin < 0)
-		{
-		  ret.err = "tile too large for image";
-		  return ret;
-		}
+	      ret.err = "out of memory";
+	      return ret;
 	    }
 	}
+      best_solver.init (fparams.flags, rparam.screen_blur_radius);
       best_uncertainity = best_solver.solve (progress, !(fparams.flags & finetune_no_progress_report));
     }
   if (progress && progress->cancel_requested ()) 
