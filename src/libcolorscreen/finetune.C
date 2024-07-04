@@ -496,12 +496,11 @@ public:
   }
 
   bool
-  init_tile (int tileid, int cur_txmin, int cur_tymin, bool bw, scr_to_img &map, render_to_scr &render)
+  init_tile (int tileid, int cur_txmin, int cur_tymin, bool bw, scr_to_img &map, render &render)
   {
     txmin[tileid] = cur_txmin;
     tymin[tileid] = cur_tymin;
     type = map.get_type ();
-    pixel_size = render.pixel_size ();
     if (!bw)
       tile[tileid] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
     else
@@ -737,6 +736,26 @@ public:
     simulated_screen_width = twidth;
     simulated_screen_height = theight;
     simulated_screen[0] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height]);
+  }
+
+  coord_t
+  solve (progress_info *progress, bool report)
+  {
+    //if (verbose)
+      //solver.print_values (solver.start);
+    coord_t uncertainity = simplex<coord_t, finetune_solver>(*this, "finetuning", progress, report);
+    if (bwtile[0])
+      {
+	rgbdata c = last_color;
+	coord_t mmin = std::min (std::min (c.red, c.green), c.blue);
+	coord_t mmax = std::max (std::max (c.red, c.green), c.blue);
+	if (mmin != mmax)
+	  uncertainity /= (mmax - mmin);
+	else
+	  uncertainity = 100000000;
+      }
+    free_least_squares ();
+    return uncertainity;
   }
 
   rgbdata
@@ -1633,12 +1652,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   scr_to_img *mapp[finetune_solver::max_tiles];
   int x[finetune_solver::max_tiles];
   int y[finetune_solver::max_tiles];
+  coord_t pixel_size = -1;
 
   scr_to_img map;
   imgp[0] = NULL;
   mapp[0] = NULL;
   x[0] = 0;
-  x[0] = 0;
+  y[0] = 0;
   for (int tileid = 0; tileid < n_tiles; tileid++)
     {
       x[tileid] = locs[tileid].x;
@@ -1649,6 +1669,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  coord_t sx, sy;
 	  int tx, ty;
 	  img.stitch->common_scr_to_img.final_to_scr (x[tileid] + img.xmin, y[tileid] + img.ymin, &sx, &sy);
+	  pixel_size = img.stitch->pixel_size;
 	  if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
 	    {
 	      ret.err = "no tile for given coordinates";
@@ -1663,7 +1684,10 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       else
 	{
 	  if (!tileid)
-	    map.set_parameters (param, *imgp[tileid]);
+	    {
+	      map.set_parameters (param, *imgp[tileid]);
+	      pixel_size = map.pixel_size (imgp[tileid]->width, imgp[tileid]->height);
+	    }
 	  mapp[tileid] = &map;
 	}
     }
@@ -1729,86 +1753,80 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   finetune_solver best_solver;
   coord_t best_uncertainity = -1;
   bool failed = false;
-  {
-    ///* FIXME: Hack; render is too large for stack in openmp thread.  */
-    //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
-    render_parameters rparam2 = rparam;
-    rparam2.invert = 0;
-    render_to_scr render (param, *imgp[0], rparam2, 256);
-    int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
-    int maxtiles = fparams.multitile;
-    if (maxtiles < 1)
-      maxtiles = 1;
-    if (!(maxtiles & 1))
-      maxtiles++;
-    if (maxtiles > 1)
-      {
-	rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
-	rymin = std::max (tymin - theight * (maxtiles / 2), 0);
-	rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp[0]->width - 1);
-	rymax = std::max (tymax + (theight * maxtiles / 2), imgp[0]->height - 1);
-      }
-    if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
-      {
-	if (verbose)
-	  {
-	    progress->pause_stdout ();
-	    fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
-	    progress->resume_stdout ();
-	  }
-        ret.err = "precompting failed";
-	return ret;
-      }
-    if (progress && progress->cancel_requested ()) 
-      {
-	ret.err = "cancelled";
-	return ret;
-      }
 
-    if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
-      progress->set_task ("finetuning samples", maxtiles * maxtiles);
+  render_parameters rparam2 = rparam;
+  rparam2.invert = 0;
+
+  /* Multitile support only for 1 tile.  */
+  if (n_tiles == 1)
+    {
+      ///* FIXME: Hack; render is too large for stack in openmp thread.  */
+      //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
+      render render (*imgp[0], rparam2, 256);
+      //int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
+      int maxtiles = fparams.multitile;
+      if (maxtiles < 1)
+	maxtiles = 1;
+      if (!(maxtiles & 1))
+	maxtiles++;
+#if 0
+      if (maxtiles > 1)
+	{
+	  rxmin = std::max (txmin - twidth * (maxtiles / 2), 0);
+	  rymin = std::max (tymin - theight * (maxtiles / 2), 0);
+	  rxmax = std::max (txmax + (twidth * maxtiles / 2), imgp[0]->width - 1);
+	  rymax = std::max (tymax + (theight * maxtiles / 2), imgp[0]->height - 1);
+	}
+      //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
+#endif
+      if (!render.precompute_all (bw /*grayscale*/, false /*normalized*/, patch_proportions (param.type, &rparam2), !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
+	{
+	  if (verbose)
+	    {
+	      progress->pause_stdout ();
+	      fprintf (stderr, "Precomputing failed. Tile: %i-%i %i-%i\n", txmin, txmax, tymin, tymax);
+	      progress->resume_stdout ();
+	    }
+	  ret.err = "precompting failed";
+	  return ret;
+	}
+      if (progress && progress->cancel_requested ()) 
+	{
+	  ret.err = "cancelled";
+	  return ret;
+	}
+
+      if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+	progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
 
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
-      for (int ty = 0; ty < maxtiles; ty++)
-	for (int tx = 0; tx < maxtiles; tx++)
-	  {
-	    int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp[0]->width - twidth - 1) & ~1;
-	    int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp[0]->height - theight - 1) & ~1;
-	    //int cur_txmax = cur_txmin + twidth;
-	    //int cur_tymax = cur_tymin + theight;
-	    finetune_solver solver;
-	    solver.n_tiles = 1;
-	    if (progress && progress->cancel_requested ()) 
-	      continue;
-	    solver.twidth = twidth;
-	    solver.theight = theight;
-	    solver.collection_threshold = rparam.collection_threshold;
-	    if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0], render))
-	      {
-		failed = true;
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,pixel_size,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+	for (int ty = 0; ty < maxtiles; ty++)
+	  for (int tx = 0; tx < maxtiles; tx++)
+	    {
+	      int cur_txmin = std::min (std::max (txmin - twidth * (maxtiles / 2) + tx * twidth, 0), imgp[0]->width - twidth - 1) & ~1;
+	      int cur_tymin = std::min (std::max (tymin - theight * (maxtiles / 2) + ty * theight, 0), imgp[0]->height - theight - 1) & ~1;
+	      //int cur_txmax = cur_txmin + twidth;
+	      //int cur_tymax = cur_tymin + theight;
+	      finetune_solver solver;
+	      solver.n_tiles = 1;
+	      if (progress && progress->cancel_requested ()) 
 		continue;
-	      }
-	    solver.init (fparams.flags, rparam.screen_blur_radius);
+	      solver.twidth = twidth;
+	      solver.theight = theight;
+	      solver.pixel_size = pixel_size;
+	      solver.collection_threshold = rparam.collection_threshold;
+	      if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0], render))
+		{
+		  failed = true;
+		  continue;
+		}
+	      solver.init (fparams.flags, rparam.screen_blur_radius);
+	      coord_t uncertainity = solver.solve (progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
 
-	    //if (verbose)
-	      //solver.print_values (solver.start);
-	    simplex<coord_t, finetune_solver>(solver, "finetuning", progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
-	    coord_t uncertainity = solver.objfunc (solver.start);
-	    if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report) && progress)
-	      progress->inc_progress ();
-	    if (solver.bwtile[0])
-	      {
-		rgbdata c = solver.last_color;
-		coord_t mmin = std::min (std::min (c.red, c.green), c.blue);
-		coord_t mmax = std::max (std::max (c.red, c.green), c.blue);
-		if (mmin != mmax)
-		  uncertainity /= (mmax - mmin);
-		else
-		  uncertainity = 100000000;
-	      }
-	    solver.free_least_squares ();
+	      if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report) && progress)
+		progress->inc_progress ();
 #pragma omp critical
 	      {
 		if (best_uncertainity < 0 || best_uncertainity > uncertainity)
@@ -1818,7 +1836,43 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		    best_uncertainity = uncertainity;
 		  }
 	      }
-	  }
+	    }
+      }
+  else
+    {
+      best_solver.n_tiles = n_tiles;
+      best_solver.twidth = twidth;
+      best_solver.theight = theight;
+      best_solver.collection_threshold = rparam.collection_threshold;
+      best_solver.pixel_size = pixel_size;
+      best_solver.init (fparams.flags, rparam.screen_blur_radius);
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+        {
+	  int cur_txmin = std::min (std::max (x[tileid] - twidth / 2, 0), imgp[tileid]->width - twidth - 1) & ~1;
+	  int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0), imgp[tileid]->height - theight - 1) & ~1;
+	  /* FIXME: We only use render_to_scr since we eventually want to know pixel size.
+	     For stitched projects this is wrong.  */
+	  render render (*imgp[tileid], rparam2, 256);
+	  if (!render.precompute_all (bw /*grayscale*/, false /*normalized*/, patch_proportions (param.type, &rparam2), !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
+	    {
+	      ret.err = "precomputing failed";
+	      return ret;
+	    }
+	  if (progress && progress->cancel_requested ()) 
+	    {
+	      ret.err = "cancelled";
+	      return ret; 
+	    }
+	  if (!best_solver.init_tile (tileid, cur_txmin, cur_tymin, bw, *mapp[tileid], render))
+	    {
+	      if (cur_txmin < 0 || cur_tymin < 0)
+		{
+		  ret.err = "tile too large for image";
+		  return ret;
+		}
+	    }
+	}
+      best_uncertainity = best_solver.solve (progress, !(fparams.flags & finetune_no_progress_report));
     }
   if (progress && progress->cancel_requested ()) 
     {
@@ -1926,7 +1980,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	  ret.err = "Solver point is out of tile";
 	  return ret;
 	}
-      point_t fp;
+      point_t fp = {-1000,-1000};
 
       bool found = false;
       //printf ("%i %i %i %i %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y);
