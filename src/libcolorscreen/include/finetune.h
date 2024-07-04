@@ -51,6 +51,7 @@ struct finetune_result
   rgbdata screen_red, screen_green, screen_blue;
   rgbdata fog;
   rgbdata mix_weights;
+  rgbdata mix_dark;
   std::string err;
 
   /* Solver point data.  */
