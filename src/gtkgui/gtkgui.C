@@ -837,6 +837,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       {
 	int x = (sel1x + sel2x)/2;
 	int y = (sel1y + sel2y)/2;
+	static std::vector <point_t> tune_points;
 	printf ("Finetuning focus on %i %i\n",x,y);
 	finetune_parameters fparam;
 	fparam.simulated_file = "/tmp/colorsimulated.tif";
@@ -849,7 +850,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
 	fparam.range = 4;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
+	tune_points.push_back ({(coord_t)x, (coord_t)y});
+	finetune_result res = finetune (rparams, current, scan, tune_points, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;

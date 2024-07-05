@@ -383,11 +383,8 @@ public:
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], 0, 1);
     if (optimize_emulsion_intensities)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-	{
-	  to_range (v[emulsion_intensity_index + 2 * tileid + 0], 0, 1);
-	  to_range (v[emulsion_intensity_index + 2 * tileid + 1], 0, 1);
-	}
+      for (int tileid = 0; tileid < n_tiles * 3 - 1; tileid++)
+	to_range (v[emulsion_intensity_index + tileid], 0, 1);
     if (optimize_emulsion_offset)
       for (int tileid = 0; tileid < n_tiles; tileid++)
 	{
@@ -582,7 +579,7 @@ public:
 
     emulsion_intensity_index = n_values;
     if (optimize_emulsion_intensities)
-      n_values += 2 * n_tiles;
+      n_values += 3 * n_tiles - 1;
     emulsion_offset_index = n_values;
     if (optimize_emulsion_offset)
       n_values += 2 * n_tiles;
@@ -673,12 +670,8 @@ public:
     fixed_width = dufaycolor::red_width;
     fixed_height = dufaycolor::green_height;
     if (optimize_emulsion_intensities)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-	{
-	  start[emulsion_intensity_index + 2 * tileid] = 1 / 3.0;
-	  start[emulsion_intensity_index + 2 * tileid + 1] = 1 / 3.0;
-	  //start[emulsion_intensity_index + 2] = 0;
-	}
+      for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
+	start[emulsion_intensity_index + tileid] = 1 / 3.0;
     if (optimize_emulsion_offset)
       for (int tileid = 0; tileid < n_tiles; tileid++)
 	{
@@ -1194,13 +1187,21 @@ public:
   rgbdata
   get_emulsion_intensities (coord_t *v, int tileid)
   {
-    /* Together with screen colors these are defined only up to scaling factor.  */
     if (optimize_emulsion_intensities)
       {
-	luminosity_t blue = 1 - v[emulsion_intensity_index + 0 + tileid * 2] - v[emulsion_intensity_index + 1 + tileid * 2];
-	if (blue < 0)
-	  blue = 0;
-        return {v[emulsion_intensity_index + 0 + tileid * 2], v[emulsion_intensity_index + 1 + tileid * 2], blue};
+        /* Together with screen colors these are defined only up to scaling factor.  */
+	if (!tileid)
+	  {
+	    luminosity_t red = v[emulsion_intensity_index];
+	    luminosity_t green = v[emulsion_intensity_index + 1];
+	    luminosity_t blue = 1 - red - green;
+	    if (blue < 0)
+	      blue = 0;
+	    return {red, green, blue};
+	  }
+	return {v[emulsion_intensity_index + 3 * tileid - 1],
+	        v[emulsion_intensity_index + 3 * tileid - 0],
+	        v[emulsion_intensity_index + 3 * tileid + 1]};
       }
     else
       return {1, 1, 1};
