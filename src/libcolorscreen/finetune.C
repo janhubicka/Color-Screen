@@ -541,7 +541,7 @@ public:
     optimize_dufay_strips = (flags & finetune_dufay_strips) && type == Dufay;
     /* For one tile the effect of fog can always be simulated by adjusting the colors of screen.
        If multiple tiles (and colors) are samples we can try to estimate it.  */
-    optimize_fog = (flags & finetune_fog) && tile[0] && n_tiles > 1;
+    optimize_fog = (flags & finetune_fog) && tile[0] /*&& n_tiles > 1*/;
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     normalize = !(flags & finetune_no_normalize);
@@ -1012,43 +1012,14 @@ public:
   sat.apply_to_rgb (color_red.red, color_green.red, color_blue.red, &color_red.red, &color_green.red, &color_blue.red);
   sat.apply_to_rgb (color_red.green, color_green.green, color_blue.green, &color_red.green, &color_green.green, &color_blue.green);
   sat.apply_to_rgb (color_red.blue, color_green.blue, color_blue.blue, &color_red.blue, &color_green.blue, &color_blue.blue);
-  /* Colors should be real reactions of scanner, so no negative values and also no excessively large values. Allow some overexposure.  */
-  if (color_red.red < 0)
-    color_red.red = 0;
-  if (color_red.green < 0)
-    color_red.green = 0;
-  if (color_red.blue < 0)
-    color_red.blue = 0;
-  if (color_red.red > 2)
-    color_red.red = 2;
-  if (color_red.green > 2)
-    color_red.green = 2;
-  if (color_red.blue > 2)
-    color_red.blue = 2;
-  if (color_green.red < 0)
-    color_green.red = 0;
-  if (color_green.green < 0)
-    color_green.green = 0;
-  if (color_green.blue < 0)
-    color_green.blue = 0;
-  if (color_green.red > 2)
-    color_green.red = 2;
-  if (color_green.green > 2)
-    color_green.green = 2;
-  if (color_green.blue > 2)
-    color_green.blue = 2;
-  if (color_blue.red < 0)
-    color_blue.red = 0;
-  if (color_blue.green < 0)
-    color_blue.green = 0;
-  if (color_blue.blue < 0)
-    color_blue.blue = 0;
-  if (color_blue.red > 2)
-    color_blue.red = 2;
-  if (color_blue.green > 2)
-    color_blue.green = 2;
-  if (color_blue.blue > 2)
-    color_blue.blue = 2;
+  /* Colors should be real reactions of scanner, so no negative values and also
+     no excessively large values. Allow some overexposure.  */
+  for (int c = 0; c < 3; c++)
+    {
+      to_range (color_red[c], 0, 2);
+      to_range (color_green[c], 0, 2);
+      to_range (color_blue[c], 0, 2);
+    }
 
    *ret_red = color_red;
    *ret_green = color_green;
@@ -1090,43 +1061,23 @@ public:
 
     for (int ch = 0; ch < 3; ch++)
       {
-
 	double chisq;
 	gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov,
 			     &chisq, gsl_work);
 	sqsum += chisq;
+	/* Colors should be real reactions of scanner, so no negative values and also
+	   no excessively large values. Allow some overexposure.  */
 	(*red)[ch] = gsl_vector_get (gsl_c, 0);
-	if (!((*red)[ch] > -5))
-	  (*red)[ch] = -5;
-	if (!((*red)[ch] < 5))
-	  (*red)[ch] = 5;
+	to_range ((*red)[ch], 0, 2);
 	(*green)[ch] = gsl_vector_get (gsl_c, 1);
-	if (!((*green)[ch] > -5))
-	  (*green)[ch] = -5;
-	if (!((*green)[ch] < 5))
-	  (*green)[ch] = 5;
+	to_range ((*green)[ch], 0, 2);
 	(*blue)[ch] = gsl_vector_get (gsl_c, 2);
-	if (!((*blue)[ch] > -5))
-	  (*blue)[ch] = -5;
-	if (!((*blue)[ch] < 5))
-	  (*blue)[ch] = 5;
+	to_range ((*blue)[ch], 0, 2);
 	if (fog_by_least_squares)
 	  {
 	    last_fog[ch] = gsl_vector_get (gsl_c, 3);
-	    if (!(last_fog[ch] > 0))
-	      last_fog[ch] = 0;
-	    if (!(last_fog[ch] < fog_range[ch]))
-	      last_fog[ch] = fog_range[ch];
+	    to_range (last_fog[ch], 0, fog_range[ch]);
 	  }
-#if 0
-	rgbdata cc = {gsl_vector_get (c, 0), gsl_vector_get (c, 1), gsl_vector_get (c, 2)};
-	if (!ch)
-	  *red = cc;
-	else if (ch == 1)
-	  *green = cc;
-	else
-	  *blue = cc;
-#endif
       }
     return sqsum;
   }
@@ -1138,8 +1089,6 @@ public:
     rgbdata color = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
-    if (!least_squares_initialized)
-      abort ();
 
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = 0; y < theight; y++)
@@ -1204,6 +1153,8 @@ public:
   bw_determine_color_using_least_squares (coord_t *v)
   {
     int e = 0;
+    if (!least_squares_initialized)
+      abort ();
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = 0; y < theight; y++)
 	for (int x = 0; x < twidth; x++)
@@ -1220,8 +1171,14 @@ public:
       abort ();
     double chisq;
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
-    rgbdata ret = {gsl_vector_get (gsl_c, 0) * (2 * maxgray), gsl_vector_get (gsl_c, 1) * (2 * maxgray), gsl_vector_get (gsl_c, 2) * (2 * maxgray)};
-    return ret;
+    rgbdata color = {gsl_vector_get (gsl_c, 0) * (2 * maxgray), gsl_vector_get (gsl_c, 1) * (2 * maxgray), gsl_vector_get (gsl_c, 2) * (2 * maxgray)};
+    if (color.red < 0)
+      color.red = 0;
+    if (color.green < 0)
+      color.green = 0;
+    if (color.blue < 0)
+      color.blue = 0;
+    return color;
   }
 
   rgbdata
