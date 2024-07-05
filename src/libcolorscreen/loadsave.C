@@ -110,6 +110,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
 	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
+	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
 	  || fprintf (f, "profiled_red: %f %f %f\n", rparam->profiled_red.red, rparam->profiled_red.green, rparam->profiled_red.blue) < 0
 	  || fprintf (f, "profiled_green: %f %f %f\n", rparam->profiled_green.red, rparam->profiled_green.green, rparam->profiled_green.blue) < 0
@@ -599,6 +600,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       else if (!strcmp (buf, "mix_weights"))
 	{
 	  if (!read_rgb (f, rparam_check (mix_red), rparam_check (mix_green), rparam_check (mix_blue)))
+	    {
+	      *error = "error parsing mix_weights";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "mix_dark"))
+	{
+	  if (!read_rgb (f, rparam_check (mix_dark.red), rparam_check (mix_dark.green), rparam_check (mix_dark.blue)))
 	    {
 	      *error = "error parsing mix_weights";
 	      return false;
