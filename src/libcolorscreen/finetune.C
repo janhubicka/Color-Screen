@@ -1,4 +1,4 @@
-  #include <memory>
+#include <memory>
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
@@ -14,13 +14,26 @@
 
 namespace {
 
-void
+inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
   if (!(v >= min))
     v = min;
   if (!(v <= max))
     v = max;
+}
+
+/* v is in range 0...1 expand it to minv...maxv.  */
+inline coord_t
+expand_range (coord_t v, coord_t minv, coord_t maxv)
+{
+  return minv + v * (maxv - minv);
+}
+/* v is in range minv...maxv shrink it to 0...1.  */
+inline coord_t
+shrink_range (coord_t v, coord_t minv, coord_t maxv)
+{
+  return (v - minv) / (maxv - minv);
 }
 
 /* Solver used to find parameters of simulated scan (position of the grid,
@@ -96,7 +109,8 @@ public:
   coord_t *start;
 
   /* Screen blur and duffay red strip widht and green strip height. */
-  coord_t fixed_blur, fixed_width, fixed_height;
+  coord_t fixed_blur, fixed_width, fixed_height, fixed_emulsion_blur;
+  point_t fixed_offset[max_tiles], fixed_emulsion_offset [max_tiles];
 
   /* Range of position adjustment.  Dufay screen has squares about size of 0.5 screen
      coordinates.  adjusting within -0.2 to 0.2 makes sure we do not exchange green for
@@ -162,7 +176,7 @@ public:
   constexpr static const coord_t rgbscale = /*256*/1;
   coord_t epsilon ()
   {
-    return /*0.00000001*/ 1.0/65535;
+    return /*0.00000001*/ 1.0/65536; /*65536*/
   }
   coord_t scale ()
   {
@@ -181,18 +195,43 @@ public:
   get_offset (coord_t *v, int tileid)
   {
     if (!optimize_position)
-      return {0, 0};
+      return fixed_offset[tileid];
     coord_t range = type == Dufay ? dufay_range : paget_range;
     return {v[2 * tileid] * range, v[2 * tileid + 1] * range};
+  }
+  void
+  set_offset (coord_t *v, int tileid, point_t off)
+  {
+    if (!optimize_position)
+      {
+	fixed_offset[tileid] = off;
+	return;
+      }
+    coord_t range = type == Dufay ? dufay_range : paget_range;
+    v[2 * tileid] = off.x / range;
+    v[2 * tileid + 1] = off.y / range;
   }
   point_t
   get_emulsion_offset (coord_t *v, int tileid)
   {
     if (!optimize_emulsion_offset)
-      return {0, 0};
+      return fixed_emulsion_offset[tileid];
     coord_t range = type == Dufay ? dufay_range : paget_range;
     range *= 2;
     return {v[emulsion_offset_index + 2 * tileid] * range, v[emulsion_offset_index + 2 * tileid + 1] * range};
+  }
+  void
+  set_emulsion_offset (coord_t *v, int tileid, point_t off)
+  {
+    if (!optimize_emulsion_offset)
+      {
+	fixed_emulsion_offset[tileid] = off;
+	return;
+      }
+    coord_t range = type == Dufay ? dufay_range : paget_range;
+    range *= 2;
+    v[emulsion_offset_index + 2 * tileid] = off.x / range;
+    v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
   }
 
   point_t
@@ -209,18 +248,25 @@ public:
   coord_t get_emulsion_blur_radius (coord_t *v)
   {
     if (!optimize_emulsion_blur)
-      return 0;
+      return fixed_emulsion_blur;
     return v[emulsion_blur_index] * (screen::max_blur_radius * 0.2 - 0.03) + 0.03;
+  }
+  void set_emulsion_blur_radius (coord_t *v, coord_t blur)
+  {
+    if (!optimize_emulsion_blur)
+      fixed_emulsion_blur = blur;
+    else
+      v[emulsion_blur_index] = (blur - 0.03) / (screen::max_blur_radius * 0.2 - 0.03);
   }
 
   /* Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.  */
   coord_t pixel_blur (coord_t v)
   {
-    return v * (screen::max_blur_radius / pixel_size - 0.3) + 0.3;
+    return expand_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
   coord_t rev_pixel_blur (coord_t v)
   {
-    return (v - 0.3) / (screen::max_blur_radius / pixel_size - 0.3);
+    return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
 
   coord_t get_blur_radius (coord_t *v)
@@ -230,6 +276,16 @@ public:
     if (!optimize_screen_blur)
       return fixed_blur;
     return pixel_blur (v[screen_index]);
+  }
+  void set_blur_radius (coord_t *v, coord_t blur)
+  {
+    if (optimize_screen_channel_blurs)
+      abort ();
+    if (!optimize_screen_blur)
+      fixed_blur = blur;
+    else
+      v[screen_index] = rev_pixel_blur (blur);
+    return;
   }
   rgbdata get_channel_blur_radius (coord_t *v)
   {
@@ -383,8 +439,11 @@ public:
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], 0, 1);
     if (optimize_emulsion_intensities)
-      for (int tileid = 0; tileid < n_tiles * 3 - 1; tileid++)
-	to_range (v[emulsion_intensity_index + tileid], 0, 1);
+      for (int i = 0; i < n_tiles * 3 - 1; i++)
+	/* First 2 values are normalized and make only sense in range 0..1
+	   Rest of values are relative to the first two and may be large if
+	   first patch is dark.  */
+	to_range (v[emulsion_intensity_index + i], 0, i < 3 ? 1 : 100);
     if (optimize_emulsion_offset)
       for (int tileid = 0; tileid < n_tiles; tileid++)
 	{
@@ -528,7 +587,7 @@ public:
   }
 
   void
-  init (int flags, coord_t blur_radius)
+  init (int flags, coord_t blur_radius, const std::vector <finetune_result> *results)
   {
     optimize_position = flags & finetune_position;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -541,13 +600,14 @@ public:
     optimize_fog = (flags & finetune_fog) && tile[0] /*&& n_tiles > 1*/;
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
+    optimize_emulsion_offset = false;
     normalize = !(flags & finetune_no_normalize);
     if (tile[0] && normalize)
       optimize_emulsion_blur = false;
     if (tile[0] && optimize_emulsion_blur && (optimize_screen_blur || optimize_screen_channel_blurs || optimize_screen_mtf_blur))
       {
         optimize_emulsion_intensities = true;
-	optimize_emulsion_offset = type != Dufay;
+	optimize_emulsion_offset = /*(type != Dufay) && !results*/true;
 	data_collection = false;
       }
     else
@@ -633,11 +693,17 @@ public:
     last_emulsion_blur = -1;
     last_width = -1;
     last_height = -1;
-    if (optimize_position)
+    if (!results)
       for (int tileid = 0; tileid < n_tiles; tileid++)
 	{
-	  start[2 * tileid + 0] = 0;
-	  start[2 * tileid + 1] = 0;
+	  set_offset (start, tileid, {0, 0});
+	  set_emulsion_offset (start, tileid, {0, 0});
+	}
+    else
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	{
+	  set_offset (start, tileid, (*results)[tileid].screen_coord_adjust);
+	  set_emulsion_offset (start, tileid, (*results)[tileid].emulsion_coord_adjust);
 	}
 
     if (!least_squares && !data_collection)
@@ -666,25 +732,55 @@ public:
 
     /* Starting from blur 0 seems to work better, since other parameters
        are then more relevant.  */
-    fixed_blur = blur_radius;
     fixed_width = dufaycolor::red_width;
     fixed_height = dufaycolor::green_height;
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
 	start[emulsion_intensity_index + tileid] = 1 / 3.0;
-    if (optimize_emulsion_offset)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-	{
-	  start[emulsion_offset_index + 2 * tileid] = 0;
-	  start[emulsion_offset_index + 2 * tileid + 1] = 0;
-	}
     /* Sane scanner lens blurs close to Nqyist frequency.  */
     if (optimize_emulsion_blur)
-      start[emulsion_blur_index] = rev_pixel_blur (0.3);
-    if (optimize_screen_blur)
-      start[screen_index] = rev_pixel_blur (0.3);
+      {
+	coord_t blur = 0.03;
+	if (results)
+	  {
+	    histogram hist;
+	    for (int tileid = 0; tileid < n_tiles; tileid++)
+	      hist.pre_account ((*results)[tileid].emulsion_blur_radius);
+	    hist.finalize_range (65535);
+	    for (int tileid = 0; tileid < n_tiles; tileid++)
+	      hist.account ((*results)[tileid].emulsion_blur_radius);
+	    hist.finalize ();
+	    blur = hist.find_avg (0.1);
+	  }
+	set_emulsion_blur_radius (start, blur);
+	if (fabs (get_emulsion_blur_radius (start) - blur) > 0.01)
+	  {
+	    printf ("Emulsion blur %f %f\n", get_emulsion_blur_radius (start), blur);
+	    abort ();
+	  }
+      }
     if (optimize_screen_channel_blurs)
       start[screen_index] = start[screen_index + 1] = start[screen_index + 2]= rev_pixel_blur (0.3);
+    else
+      {
+	if (results)
+	  {
+	    histogram hist;
+	    for (int tileid = 0; tileid < n_tiles; tileid++)
+	      hist.pre_account ((*results)[tileid].screen_blur_radius);
+	    hist.finalize_range (65535);
+	    for (int tileid = 0; tileid < n_tiles; tileid++)
+	      hist.account ((*results)[tileid].screen_blur_radius);
+	    hist.finalize ();
+	    blur_radius = hist.find_avg (0.1);
+	  }
+        set_blur_radius (start, blur_radius);
+	if (fabs (get_blur_radius (start) - blur_radius) > 0.01)
+	  {
+	    printf ("Screen blur %f %f\n", get_blur_radius (start), blur_radius);
+	    abort ();
+	  }
+      }
     if (optimize_screen_mtf_blur)
       {
         start[screen_index] = 0;
@@ -1627,9 +1723,9 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 /* Finetune parameters and update RPARAM.  */
 
 finetune_result
-finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const finetune_parameters &fparams, progress_info *progress)
+finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const std::vector <finetune_result> *results, const finetune_parameters &fparams, progress_info *progress)
 {
-  finetune_result ret = {false, -1, -1, -1, {-1, -1, -1}, {-1, -1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
+  finetune_result ret = {false, {-1, -1}, -1, -1, -1, {-1, -1, -1}, {-1, -1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
 
   int n_tiles = locs.size ();
   if (n_tiles > finetune_solver::max_tiles)
@@ -1792,7 +1888,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 
 
 
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,pixel_size,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,pixel_size,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver,results) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
 	for (int ty = 0; ty < maxtiles; ty++)
 	  for (int tx = 0; tx < maxtiles; tx++)
 	    {
@@ -1811,7 +1907,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		  failed = true;
 		  continue;
 		}
-	      solver.init (fparams.flags, rparam.screen_blur_radius);
+	      solver.init (fparams.flags, rparam.screen_blur_radius, results);
 	      if (progress && progress->cancel_requested ()) 
 		continue;
 	      coord_t uncertainity = solver.solve (progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
@@ -1864,7 +1960,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      return ret;
 	    }
 	}
-      best_solver.init (fparams.flags, rparam.screen_blur_radius);
+      best_solver.init (fparams.flags, rparam.screen_blur_radius, results);
       best_uncertainity = best_solver.solve (progress, !(fparams.flags & finetune_no_progress_report));
     }
   if (progress && progress->cancel_requested ()) 
@@ -1917,6 +2013,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   ret.badness = best_solver.objfunc (best_solver.start);
   //if (best_solver.optimize_screen_blur)
     //ret.screen_blur_radius = best_solver.start[best_solver.screen_index];
+  /* TODO: Translate back to stitched project coordinates.  */
+  ret.tile_pos = {(coord_t)(best_solver.txmin[0] + best_solver.twidth / 2),
+		  (coord_t)(best_solver.tymin[0] + best_solver.theight / 2)};
   ret.dufay_red_strip_width = best_solver.get_red_strip_width (best_solver.start);
   ret.dufay_green_strip_width = best_solver.get_green_strip_width (best_solver.start);
   ret.screen_blur_radius = best_solver.get_blur_radius (best_solver.start);
@@ -1924,6 +2023,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   ret.emulsion_blur_radius = best_solver.get_emulsion_blur_radius (best_solver.start);
   best_solver.get_mtf (ret.screen_mtf_blur, best_solver.start);
   ret.screen_coord_adjust = best_solver.get_offset (best_solver.start, 0);
+  ret.emulsion_coord_adjust = best_solver.get_emulsion_offset (best_solver.start, 0);
   ret.fog = best_solver.get_fog (best_solver.start);
   if (best_solver.optimize_emulsion_intensities)
     {
@@ -2099,7 +2199,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
 	   continue; 
 	finetune_parameters fparam;
 	fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
-	res[x+y*xsteps] = finetune (rparam, param, img, {{xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep}}, fparam, progress);
+	res[x+y*xsteps] = finetune (rparam, param, img, {{xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep}}, NULL, fparam, progress);
 	progress->inc_progress ();
       }
   if (progress && progress->cancel_requested ()) 

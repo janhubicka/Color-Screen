@@ -778,7 +778,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.range = 4;
 	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_emulsion_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -802,7 +802,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.range = 4;
 	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_mtf_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -825,7 +825,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.multitile = 3;
 	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
 	file_progress_info progress (stdout);
-	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -833,11 +833,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    setvals ();
 	  }
       }
+      static std::vector <point_t> tune_points;
+      static std::vector <finetune_result> tune_results;
       if (k == 's' && (event->state & GDK_CONTROL_MASK))
       {
 	int x = (sel1x + sel2x)/2;
 	int y = (sel1y + sel2y)/2;
-	static std::vector <point_t> tune_points;
 	printf ("Finetuning focus on %i %i\n",x,y);
 	finetune_parameters fparam;
 	fparam.simulated_file = "/tmp/colorsimulated.tif";
@@ -850,8 +851,40 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
 	fparam.range = 4;
 	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	tune_points.push_back ({(coord_t)x, (coord_t)y});
-	finetune_result res = finetune (rparams, current, scan, tune_points, fparam, &progress);
+	tune_results.push_back (res);
+	if (res.success)
+	  {
+	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    rparams.dufay_red_strip_width = res.dufay_red_strip_width;
+	    rparams.dufay_green_strip_width = res.dufay_green_strip_width;
+	    rparams.mix_red = res.mix_weights.red;
+	    rparams.mix_green = res.mix_weights.green;
+	    rparams.mix_blue = res.mix_weights.blue;
+	    rparams.mix_dark = res.mix_dark;
+	    preview_display_scheduled = true;
+	    display_scheduled = true;
+	    setvals ();
+	  }
+      }
+      if (k == 's' && (event->state & GDK_MOD1_MASK))
+      {
+	int x = (sel1x + sel2x)/2;
+	int y = (sel1y + sel2y)/2;
+	printf ("Finetuning focus on %i %i\n",x,y);
+	finetune_parameters fparam;
+	fparam.simulated_file = "/tmp/colorsimulated.tif";
+	fparam.orig_file = "/tmp/colororig.tif";
+	fparam.diff_file = "/tmp/colordiff.tif";
+	fparam.screen_file = "/tmp/colorscr.tif";
+	fparam.screen_blur_file = "/tmp/colorscr-blur.tif";
+	fparam.dot_spread_file = "/tmp/colordot-spread.tif";
+	fparam.multitile = 3;
+	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
+	fparam.range = 4;
+	file_progress_info progress (stdout);
+	finetune_result res = finetune (rparams, current, scan, tune_points, &tune_results, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
@@ -890,7 +923,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
     }
   if (ui_mode == color_profiling && k == 'p')
   {
-    ui_mode == screen_editing;
+    ui_mode = screen_editing;
     display_scheduled = true;
     print_help ();
     printf ("Color editing mode\n");
@@ -1923,7 +1956,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	  fparam.multitile = scale_x > 1 ? 3 : 1;
 	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose;
 	  file_progress_info progress (stdout);
-	  finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, fparam, &progress);
+	  finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	  if (res.success)
 	    {
 	      current_solver.add_point (res.solver_point_img_location.x, res.solver_point_img_location.y, res.solver_point_screen_location.x, res.solver_point_screen_location.y, res.solver_point_color);

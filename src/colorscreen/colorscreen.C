@@ -1168,7 +1168,7 @@ finetune (int argc, char **argv)
 	    diff_file = (std::string)diff_tiff_base + (std::string)pos;
 	    fparam.diff_file = diff_file.c_str ();
 	  }
-	results[y * xsteps + x] = finetune (rparam, param, scan, {{(coord_t)xpos, (coord_t)ypos}}, fparam, &progress);
+	results[y * xsteps + x] = finetune (rparam, param, scan, {{(coord_t)xpos, (coord_t)ypos}}, NULL, fparam, &progress);
 	if (!results[y * xsteps + x].success)
 	  continue;
 	//progress.pop (stack);

@@ -134,23 +134,23 @@ public:
       abort ();
     int wsum = 0;
     int mini, maxi;
-    int sum1 = 0;
-    int threshold = (m_total * skip_min) + 0.5;
+    unsigned int sum1 = 0;
+    unsigned int threshold = (m_total * skip_min) + 0.5;
     for (mini = 0; mini < (int)m_entries.size (); mini++)
       {
-	sum1 += m_entries[mini];
-	if (sum1 > threshold)
+	if (sum1 + m_entries[mini] > threshold)
 	  break;
+	sum1 += m_entries[mini];
       }
-    int sum2 = 0;
+    unsigned int sum2 = 0;
     threshold = (m_total * skip_max) + 0.5;
     for (maxi = (int)m_entries.size () - 1; maxi >= 0; maxi--)
       {
-	sum2 += m_entries[maxi];
-	if (sum2 > threshold)
+	if (sum2 + m_entries[maxi] > threshold)
 	  break;
+	sum2 += m_entries[maxi];
       }
-    if (sum1 + sum2 >= m_total)
+    if (sum1 + sum2 >= (unsigned) m_total)
       abort ();
     if (mini > maxi)
       abort ();

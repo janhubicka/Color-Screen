@@ -38,6 +38,7 @@ struct finetune_parameters
 struct finetune_result
 {
   bool success;
+  point_t tile_pos;
   coord_t badness;
   coord_t uncertainity;
   coord_t screen_blur_radius;
@@ -47,6 +48,7 @@ struct finetune_result
   coord_t dufay_red_strip_width;
   coord_t dufay_green_strip_width;
   point_t screen_coord_adjust;
+  point_t emulsion_coord_adjust;
   rgbdata color;
   rgbdata screen_red, screen_green, screen_blue;
   rgbdata fog;
@@ -59,7 +61,7 @@ struct finetune_result
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
 };
-DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const finetune_parameters &fparams, progress_info *progress);
+DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const std::vector <finetune_result> *results, const finetune_parameters &fparams, progress_info *progress);
 DLL_PUBLIC bool finetune_area (solver_parameters *sparam, render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
 #endif
