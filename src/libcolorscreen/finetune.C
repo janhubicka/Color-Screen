@@ -1,4 +1,4 @@
-#include <memory>
+  #include <memory>
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
@@ -38,6 +38,7 @@ private:
   gsl_vector *gsl_y[3];
   gsl_vector *gsl_c;
   gsl_matrix *gsl_cov;
+  bool least_squares_initialized;
   int noutliers;
   std::shared_ptr <bitmap_2d> outliers[max_tiles];
 
@@ -190,6 +191,7 @@ public:
     if (!optimize_emulsion_offset)
       return {0, 0};
     coord_t range = type == Dufay ? dufay_range : paget_range;
+    range *= 2;
     return {v[emulsion_offset_index + 2 * tileid] * range, v[emulsion_offset_index + 2 * tileid + 1] * range};
   }
 
@@ -447,6 +449,7 @@ public:
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
     gsl_y[0] = gsl_vector_alloc (matrixh);
+    least_squares_initialized = false;
     if (tile[0])
       {
 	gsl_y[1] = gsl_vector_alloc (matrixh);
@@ -479,7 +482,10 @@ public:
 	    gsl_vector_set (gsl_y[0], e, 0);
 	    gsl_vector_set (gsl_y[1], e, 0);
 	    gsl_vector_set (gsl_y[2], e, 0);
+	    e++;
 	  }
+	if (e != (int)gsl_y[0]->size)
+	  abort ();
       }
     else
       {
@@ -492,7 +498,10 @@ public:
 		  gsl_vector_set (gsl_y[0], e, bw_get_pixel (tileid, x, y) / (2 * maxgray));
 		  e++;
 		}
+	if (e != (int)gsl_y[0]->size)
+	  abort ();
       }
+    least_squares_initialized = true;
   }
 
   bool
@@ -706,13 +715,15 @@ public:
     if (optimize_fog)
       {
 	rgb_histogram hist;
-	for (int y = 0; y < theight; y++)
-	  for (int x = 0; x < twidth; x++)
-	    hist.pre_account (tile[0][y * twidth + x]);
+	for (int tileid = 0; tileid < n_tiles; tileid++)
+	  for (int y = 0; y < theight; y++)
+	    for (int x = 0; x < twidth; x++)
+	      hist.pre_account (tile[tileid][y * twidth + x]);
 	hist.finalize_range (65535);
-	for (int y = 0; y < theight; y++)
-	  for (int x = 0; x < twidth; x++)
-	    hist.account (tile[0][y * twidth + x]);
+	for (int tileid = 0; tileid < n_tiles; tileid++)
+	  for (int y = 0; y < theight; y++)
+	    for (int x = 0; x < twidth; x++)
+	      hist.account (tile[tileid][y * twidth + x]);
 	hist.finalize ();
 	fog_range = hist.find_min (0.01);
 	start[fog_index] = 0;
@@ -721,20 +732,22 @@ public:
       }
 
     if (tile[0] && normalize && !optimize_fog)
-      for (int y = 0; y < theight; y++)
-	for (int x = 0; x < twidth; x++)
-	  {
-	    rgbdata &c = tile[0][y * twidth + x];
-	    luminosity_t sum = c.red + c.green + c.blue;
-	    if (sum > 0)
-	      c /= sum;
-	  }
+      for (int tileid = 0; tileid < n_tiles; tileid++)
+	for (int y = 0; y < theight; y++)
+	  for (int x = 0; x < twidth; x++)
+	    {
+	      rgbdata &c = tile[tileid][y * twidth + x];
+	      luminosity_t sum = c.red + c.green + c.blue;
+	      if (sum > 0)
+		c /= sum;
+	    }
 
     if (least_squares)
       {
 	free_least_squares ();
 	alloc_least_squares ();
-	init_least_squares (NULL);
+	if (!optimize_fog || fog_by_least_squares)
+	  init_least_squares (NULL);
       }
     simulated_screen_border = 0;
     simulated_screen_width = twidth;
@@ -861,6 +874,7 @@ public:
 	last_emulsion_offset[tileid] = emulsion_offset;
 	memcpy (last_mtf, mtf, sizeof (last_mtf));
       }
+
   }
 
   /* Determine color of screen at pixel X,Y with offset OFF.  */
@@ -1046,6 +1060,9 @@ public:
   {
     coord_t sqsum = 0;
 
+    if (!least_squares_initialized)
+      abort ();
+
     int e = 0;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = 0; y < theight; y++)
@@ -1066,11 +1083,14 @@ public:
 	gsl_matrix_set (gsl_X, e, 1, 0);
 	gsl_matrix_set (gsl_X, e, 2, 0);
 	gsl_matrix_set (gsl_X, e, 3, sample_points () * ((double)4 / 65546));
+	e++;
       }
-
+    if (e != (int)gsl_X->size1)
+      abort ();
 
     for (int ch = 0; ch < 3; ch++)
       {
+
 	double chisq;
 	gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov,
 			     &chisq, gsl_work);
@@ -1118,6 +1138,8 @@ public:
     rgbdata color = {0,0,0};
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
+    if (!least_squares_initialized)
+      abort ();
 
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = 0; y < theight; y++)
@@ -1194,6 +1216,8 @@ public:
 	      e++;
 	      //gsl_vector_set (gsl_y[0], e, bw_get_pixel (x, y) / (2 * maxgray));
 	    }
+    if (e != (int)gsl_X->size1)
+      abort ();
     double chisq;
     gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq, gsl_work);
     rgbdata ret = {gsl_vector_get (gsl_c, 0) * (2 * maxgray), gsl_vector_get (gsl_c, 1) * (2 * maxgray), gsl_vector_get (gsl_c, 2) * (2 * maxgray)};
