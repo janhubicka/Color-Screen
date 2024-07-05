@@ -216,7 +216,9 @@ public:
   {
     if (!optimize_emulsion_offset)
       return fixed_emulsion_offset[tileid];
-    coord_t range = type == Dufay ? dufay_range : paget_range;
+    /* Reduce dufay range since the screen is not removable and can only be adjusted
+       by angle of scanner.  */
+    coord_t range = type == Dufay ? dufay_range / 3: paget_range;
     range *= 2;
     return {v[emulsion_offset_index + 2 * tileid] * range, v[emulsion_offset_index + 2 * tileid + 1] * range};
   }
@@ -228,7 +230,7 @@ public:
 	fixed_emulsion_offset[tileid] = off;
 	return;
       }
-    coord_t range = type == Dufay ? dufay_range : paget_range;
+    coord_t range = type == Dufay ? dufay_range / 3: paget_range;
     range *= 2;
     v[emulsion_offset_index + 2 * tileid] = off.x / range;
     v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
@@ -763,6 +765,9 @@ public:
       start[screen_index] = start[screen_index + 1] = start[screen_index + 2]= rev_pixel_blur (0.3);
     else
       {
+	/* Optimization seem to work better when it starts from small blur.  */
+        if (optimize_screen_blur && !results)
+	  blur_radius = 0.3;
 	if (results)
 	  {
 	    histogram hist;
