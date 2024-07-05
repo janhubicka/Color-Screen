@@ -613,12 +613,12 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
 	maxradius = true;
       bool do_fft = ((blur_radius[c] >= max_blur_radius) || verify || clen > 15) && !no_fft;
       if (!do_fft)
-        initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 3 : c);
+        initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 2 : c);
       else
         {
 	  luminosity_t weights[size];
 	  gaussian_blur_mtf (blur_radius[c] * screen::size, weights);
-	  screen::initialize_with_1D_fft (scr, weights, c, all ? 3 : c);
+	  screen::initialize_with_1D_fft (scr, weights, c, all ? 2 : c);
 	  fft_used = true;
         }
       if (all)
@@ -994,7 +994,7 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 	      else
 		weights[x] = weights[size - x] = w;
 	    }
-          initialize_with_1D_fft (scr, weights, c, all ? 3 : c);
+          initialize_with_1D_fft (scr, weights, c, all ? 2 : c);
 	  if (all)
 	    break;
         }
