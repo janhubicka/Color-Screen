@@ -307,16 +307,16 @@ public:
   screen_tile_color (int x, int y)
   {
     rgbdata ret = {0,0,0};
-    for (int yy = 0; yy < GEOMETRY::red_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::red_height_scale; xx++)
+    for (int yy = 0; yy < GEOMETRY::red_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::red_width_scale; xx++)
 	ret.red += fast_red (x * GEOMETRY::red_width_scale + xx, y * GEOMETRY::red_height_scale + yy);
     ret.red *= (1.0 / (GEOMETRY::red_height_scale * GEOMETRY::red_width_scale));
-    for (int yy = 0; yy < GEOMETRY::green_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::green_height_scale; xx++)
+    for (int yy = 0; yy < GEOMETRY::green_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::green_width_scale; xx++)
 	ret.green += fast_green (x * GEOMETRY::green_width_scale + xx, y * GEOMETRY::green_height_scale + yy);
     ret.green *= (1.0 / (GEOMETRY::green_height_scale * GEOMETRY::green_width_scale));
-    for (int yy = 0; yy < GEOMETRY::blue_width_scale; yy++)
-      for (int xx = 0; xx < GEOMETRY::blue_height_scale; xx++)
+    for (int yy = 0; yy < GEOMETRY::blue_height_scale; yy++)
+      for (int xx = 0; xx < GEOMETRY::blue_width_scale; xx++)
 	ret.blue += fast_blue (x * GEOMETRY::blue_width_scale + xx, y * GEOMETRY::blue_height_scale + yy);
     ret.blue *= (1.0 / (GEOMETRY::blue_height_scale * GEOMETRY::blue_width_scale));
     return ret;
