@@ -753,14 +753,14 @@ typedef luminosity_t __attribute__ ((vector_size (sizeof (luminosity_t)*4))) vec
 
 /* Cubic interpolation helper.  */
 
-static inline luminosity_t const_attr
+static inline luminosity_t const_attr __attribute__ ((always_inline))
 cubic_interpolate (luminosity_t p0, luminosity_t p1, luminosity_t p2, luminosity_t p3, coord_t x)
 {
   return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +
 			 (luminosity_t)x * ((luminosity_t)2.0 * p0 - (luminosity_t)5.0 * p1 + (luminosity_t)4.0 * p2 - p3 +
 			      (luminosity_t)x * ((luminosity_t)3.0 * (p1 - p2) + p3 - p0)));
 }
-static inline vec_luminosity_t const_attr
+static inline vec_luminosity_t const_attr __attribute__ ((always_inline))
 vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_t p2, vec_luminosity_t p3, coord_t x)
 {
   return p1 + (luminosity_t)0.5 * (luminosity_t)x * (p2 - p0 +

@@ -1,5 +1,5 @@
 AC_PREREQ([2.61])
-AC_INIT([colorscreen], [0.1], [hubicka@ucw.cz])
+AC_INIT([colorscreen], [1.0], [hubicka@ucw.cz])
 AM_INIT_AUTOMAKE
 LT_INIT(win32-dll)
 
@@ -10,7 +10,7 @@ AC_PROG_RANLIB
 AM_MAINTAINER_MODE([disable])
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
-CXXFLAGS="$CXXFLAGS -Wall -Ofast  -march=native -std=c++11 -DLIBCOLORSCREEN"
+CXXFLAGS="-Wall -Ofast -std=c++11 -DLIBCOLORSCREEN $CXXFLAGS"
 #AX_CHECK_COMPILE_FLAG([-mfp16-format])
 AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
