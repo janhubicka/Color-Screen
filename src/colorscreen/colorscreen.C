@@ -121,6 +121,9 @@ print_help ()
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "  dump-lcc <filename>\n");
+  fprintf (stderr, "  Dump annotated contents of CaptureOne LCC file.");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  stitch <parameters> <tiles> [<args>]\n");
   fprintf (stderr, "  Produce stitched project.");
   fprintf (stderr, "  Supported args:\n");
@@ -231,6 +234,8 @@ print_help ()
   fprintf (stderr, "\n");
   fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
   fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "See also https://github.com/janhubicka/Color-Screen/wiki/colorscreen\n");
   exit (1);
 }
 
