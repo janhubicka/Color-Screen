@@ -31,7 +31,6 @@ struct stitching_params
   bool individual_geometry_info;
   bool outliers_info;
   bool diffs;
-  bool hdr;
   bool load_registration;
 
   int outer_tile_border;
@@ -39,7 +38,6 @@ struct stitching_params
   int min_overlap_percentage;
   int max_overlap_percentage;
   int max_unknown_screen_range;
-  int downscale;
   luminosity_t max_contrast;
   luminosity_t min_patch_contrast;
 
@@ -61,9 +59,9 @@ struct stitching_params
 
   stitching_params ()
   : type (Dufay), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (false), limit_directions (false), mesh_trans (true),
-    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), hdr (false), load_registration (false),
-    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), downscale (1), max_contrast (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
+    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (true), limit_directions (false), mesh_trans (true),
+    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), load_registration (false),
+    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
     max_avg_distance (2), max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0), height (0), path("")
   {
   }

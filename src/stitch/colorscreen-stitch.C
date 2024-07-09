@@ -24,21 +24,22 @@ print_help (const char *filename)
   printf ("\n");
   printf ("Supported parameters:\n");
   printf (" input files:\n");
-  printf ("  --csp=filename.par                          load given screen discovery and rendering parameters\n");
+  printf ("  --par=filename.par                          load given screen discovery and rendering parameters\n");
   printf ("  --ncols=n                                   number of columns of tiles\n");
   printf ("  --load-project=filename.csprj               store analysis to a project file\n");
   printf ("  --scan-ppi=scan-ppi                         PPI of input scan\n");
+  printf ("  --load-registration                         load registration from corresponding par files\n");
   printf (" output files:\n");
   printf ("  --report=filename.txt                       store report about stitching operation to a file\n");
   printf ("  --save-project=filename.csprj               store analysis to a project file\n");
   printf ("  --hugin-pto=filename.pto                    store project file for hugin\n");
-  printf ("  --hdr                                       output predictive and interpolated panorama in hdr\n");
+  printf ("  --hfov=val                                  lens horisontal field of view saved to hugin file\n");
   printf (" tiles to ouptut:\n");
   printf ("  --screen-tiles                              store screen tiles (for verification)\n");
   printf ("  --known-screen-tiles                        store screen tiles where unanalyzed pixels are transparent\n");
   printf (" overlap detection:\n");
-  printf ("  --no-cpfind                                 disable use of Hugin's cpfind to determine overlap\n");
   printf ("  --cpfind                                    enable use of Hugin's cpfind to determine overlap\n");
+  printf ("  --no-cpfind                                 disable use of Hugin's cpfind to determine overlap\n");
   printf ("  --cpfind-verification                       use cpfind to verify results of internal overlap detection\n");
   printf ("  --min-overlap=precentage                    minimal overlap\n");
   printf ("  --max-overlap=precentage                    maximal overlap\n");
@@ -58,8 +59,11 @@ print_help (const char *filename)
   printf ("  --optimize-colors                           auto-optimize screen colors (default)\n");
   printf ("  --no-optimize-colors                        do not auto-optimize screen colors\n");
   printf ("  --reoptimize-colors                         auto-optimize screen colors after initial screen analysis\n");
-  printf ("  --slow-floodfill                            use unly slower discovery of patches (by default both slow and fast methods are used)\n");
-  printf ("  --fast-floodfill                            use unly faster discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --slow-floodfill                            use slower discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --no-slow-floodfill                         do not use slower discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --fast-floodfill                            use faster discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --no-fast-floodfill                         do not use faster discovery of patches (by default both slow and fast methods are used)\n");
+  printf ("  --limit-directions                          do limit overlap checking to expected directions\n");
   printf ("  --no-limit-directions                       do not limit overlap checking to expected directions\n");
   printf ("  --min-patch-contrast=contrast               specify minimal contrast accepted in patch discovery\n");
   printf ("  --diffs                                     produce diff files for each overlapping pair of tiles\n");
@@ -344,7 +348,7 @@ main (int argc, char **argv)
 	  prj->params.report_filename = argv[i] + strlen ("--report=");
 	  continue;
 	}
-      if (!strcmp (argv[i], "--csp"))
+      if (!strcmp (argv[i], "--par"))
 	{
 	  if (i == argc - 1)
 	    {
@@ -393,19 +397,9 @@ main (int argc, char **argv)
 	  prj->params.cpfind = 2;
 	  continue;
 	}
-      if (!strcmp (argv[i], "--hdr"))
-	{
-	  prj->params.hdr = true;
-	  continue;
-	}
       if (!strcmp (argv[i], "--load-registration"))
         {
 	  prj->params.load_registration = true;
-	  continue;
-	}
-      if (!strncmp (argv[i], "--downscale=", strlen ("--downscale=")))
-	{
-	  prj->params.downscale = std::max (atoi (argv[i] + strlen ("--downscale=")), 1);
 	  continue;
 	}
       if (!strcmp (argv[i], "--screen-tiles"))
@@ -438,6 +432,11 @@ main (int argc, char **argv)
 	  prj->params.reoptimize_colors = true;
 	  continue;
 	}
+      if (!strcmp (argv[i], "--limit-directions"))
+	{
+	  prj->params.limit_directions = true;
+	  continue;
+	}
       if (!strcmp (argv[i], "--no-limit-directions"))
 	{
 	  prj->params.limit_directions = false;
@@ -451,6 +450,16 @@ main (int argc, char **argv)
       if (!strcmp (argv[i], "--fast-floodfill"))
 	{
 	  prj->params.fast_floodfill = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-slow-floodfill"))
+	{
+	  prj->params.slow_floodfill = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-fast-floodfill"))
+	{
+	  prj->params.fast_floodfill = false;
 	  continue;
 	}
       if (!strcmp (argv[i], "--outer-tile-border"))
