@@ -602,7 +602,7 @@ render_increase_lru_cache_sizes_for_stitch_projects (int n)
 }
 
 DLL_PUBLIC rgbdata
-get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
+get_linearized_pixel (/*const*/ image_data &img, render_parameters &rparam, int xx, int yy, int range, progress_info *progress)
 {
    rgbdata color = {0,0,0};
    int n = 0;

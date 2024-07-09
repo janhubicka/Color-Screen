@@ -176,7 +176,9 @@ public:
   constexpr static const coord_t rgbscale = /*256*/1;
   coord_t epsilon ()
   {
-    return /*0.00000001*/ 1.0/65536; /*65536*/
+    /* the objective function computes average difference.
+       1/65536 seems to be way too small epsilon.  */
+    return /*0.00000001*/ 1.0/10000; /*65536*/
   }
   coord_t scale ()
   {
