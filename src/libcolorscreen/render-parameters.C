@@ -941,6 +941,8 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
   c.blue = r.adjust_luminosity_ir (c.blue);
+  printf ("Adjusted color");
+  c.print (stdout);
   luminosity_t avg = (c.red + c.green + c.blue) / 3;
   white_balance.red = avg / c.red;
   white_balance.green = avg / c.green;
