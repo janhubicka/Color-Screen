@@ -1,23 +1,33 @@
-# Color Screen
-An tool to digitally register viewing screens to scan of negatives and
-transparencies made using additive color screen processes.  See 
-[our wiki](https://github.com/janhubicka/Color-Screen/wiki) for details.
+# Color-Screen
+Color-Screen is a software tool designed to digitally align viewing screens
+with scans of negatives and transparencies created using additive color screen
+processes. See [our
+wiki](https://github.com/janhubicka/Color-Screen/wiki) for details.
 
-The tool itself originated as a rather quick hack made for 2013 exhibition of
-[Sechtl and Vosecek museum of photography](http://sechtl-vosecek.ucw.cz/en/) which displayed
- photographs from the [Matson (G. Eric and Edith) Photograph Collection](https://www.loc.gov/pictures/collection/matpc/colony.html)
-digitized by the Library of Congress.  While working on the exhibition
-rare scans of early color negatives for Finlay color process were identified by
-Mark Jacobs and Jan Hubička implemented a rendering tool.
+Color-Screen began as a simplistic solution developed for the 2013 exhibition
+at the [Šechtl and Vošeček Museum of
+Photography](http://sechtl-vosecek.ucw.cz/en/).  The exhibition showcased
+photographs from the [Matson (G. Eric and Edith) Photograph
+Collection](https://www.loc.gov/pictures/collection/matpc/colony.html),
+digitized by the Library of Congress. During the preparation process, Mark
+Jacobs identified rare scans of early color negatives using the Finlay color
+process. To address these unique negatives, Jan Hubička quickly created a
+rendering tool that would later become Color-Screen.
 
 ## Prequisities
-The tool can be built with recent GCC or Clang compilers.  To obtain a good
-performance the compilers should support OpenMP (note that default XCode
-Clang compiler does not, however it is possible to install OpenMP).  To build
-the main library and command line utility the following libraries are needed
+Color-Screen can be built using recent versions of either GCC or Clang
+compilers.
+
+For optimal performance, OpenMP support in your compiler is recommended. The
+default Clang compiler included with Xcode does not support OpenMP. However,
+you can install OpenMP separately for Xcode's Clang.
+
+Building the main library and command-line utility requires the following
+additional libraries:
 
  - [libtiff](http://www.libtiff.org/)
  - [libjpeg-turbo](https://libjpeg-turbo.org/)
+ - [libzip](https://libzip.org/)
  - [libgsl](https://www.gnu.org/software/gsl/)
  - [libraw](https://www.libraw.org/)
  - [liblcms2](https://www.littlecms.com/)
@@ -78,10 +88,10 @@ to bin subdirectory.
 
 There are three programs installed. 
 
-`colorscreen` is an command line utility to render into tiff files. See
+`colorscreen` is a command line utility to render into tiff files. See
 `colorscreen --help` for usage information.
 
-`colorscreen-stitch` is an command line utility to produce stitched projects.
+`colorscreen-stitch` is a command line utility to produce stitched projects.
 This is useful to scan and stitch additive color photographs using digital
 camera with mutiple tiles. See `colorscreen-stitch --help` for more information.
 
