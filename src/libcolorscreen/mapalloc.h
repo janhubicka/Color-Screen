@@ -31,6 +31,11 @@ private:
 		void* pointer = NULL;
 		size_t size;
 	};
+	struct DestructionGuard
+	{
+	  ~DestructionGuard ();
+	};
+	static DestructionGuard Guard;
 	static std::vector<MapAllocObject*> objects;
 	static char tmpdir[256];
 	static char filename[512];

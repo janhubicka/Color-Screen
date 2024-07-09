@@ -17,13 +17,20 @@
 #endif
 
 static const bool debug = false;
+static bool destroyed = false;
 
+MapAlloc::DestructionGuard MapAlloc::Guard;
 std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";
 char MapAlloc::filename[512];
 int MapAlloc::suffix = 0;
 size_t MapAlloc::cache_threshold = 1024*1024*10;
 size_t MapAlloc::total_allocated = 0;
+
+MapAlloc::DestructionGuard::~DestructionGuard ()
+{
+  destroyed = true;
+}
 
 /***********************************************************************
 * MapAlloc
@@ -39,6 +46,9 @@ void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
 }
 
 void MapAlloc::Free(void* p) {
+	/* If static destruction already ran; do nothing.  */
+	if (destroyed)
+	  return;
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			delete (*it);
