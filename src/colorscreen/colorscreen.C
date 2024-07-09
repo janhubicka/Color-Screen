@@ -7,6 +7,7 @@
 #include "../libcolorscreen/include/tiff-writer.h"
 #include "../libcolorscreen/render-interpolate.h"
 #include "../libcolorscreen/include/finetune.h"
+#include "../libcolorscreen/include/stitch.h"
 
 static bool verbose = false;
 const char *binname;
@@ -37,7 +38,7 @@ static void
 print_help ()
 {
   fprintf (stderr, "%s <command> [<args>]\n", binname);
-  fprintf (stderr, "Supported commands and parameters are:\n\n");
+  fprintf (stderr, "Supported commands and arguments are:\n\n");
   fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
   fprintf (stderr, "    render scan into tiff\n");
   fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen parametr file\n");
@@ -117,6 +118,56 @@ print_help ()
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "  dump-lcc <filename>\n");
+  fprintf (stderr, "  stitch <parameters> <tiles> [<args>]\n");
+  fprintf (stderr, "  Produce stitched project.");
+  fprintf (stderr, "  Supported args:\n");
+  fprintf (stderr, "     input files:\n");
+  fprintf (stderr, "      --par=filename.par         load given screen discovery and rendering parameters\n");
+  fprintf (stderr, "      --ncols=n                  number of columns of tiles\n");
+  fprintf (stderr, "      --load-project=name.par    store analysis to a project file\n");
+  fprintf (stderr, "      --scan-ppi=scan-ppi        PPI of input scan\n");
+  fprintf (stderr, "      --load-registration        load registration from corresponding par files\n");
+  fprintf (stderr, "     output files:\n");
+  fprintf (stderr, "      --report=name.txt          store report about stitching operation to a file\n");
+  fprintf (stderr, "      --save-project=name.par    store analysis to a project file\n");
+  fprintf (stderr, "      --hugin-pto=name.pto       store project file for hugin\n");
+  fprintf (stderr, "      --hfov=val                 lens horisontal field of view saved to hugin file\n");
+  fprintf (stderr, "     tiles to ouptut:\n");
+  fprintf (stderr, "      --screen-tiles             store screen tiles (for verification)\n");
+  fprintf (stderr, "      --known-screen-tiles       store screen tiles where unanalyzed pixels are transparent\n");
+  fprintf (stderr, "     overlap detection:\n");
+  fprintf (stderr, "      --cpfind                   enable use of Hugin's cpfind to determine overlap\n");
+  fprintf (stderr, "      --no-cpfind                disable use of Hugin's cpfind to determine overlap\n");
+  fprintf (stderr, "      --cpfind-verification      use cpfind to verify results of internal overlap detection\n");
+  fprintf (stderr, "      --min-overlap=precentage   minimal overlap\n");
+  fprintf (stderr, "      --max-overlap=precentage   maximal overlap\n");
+  fprintf (stderr, "      --outer-tile-border=prcnt  border to ignore in outer files\n");
+  fprintf (stderr, "      --inner-tile-border=prcnt  border to ignore in inner parts files\n");
+  fprintf (stderr, "      --max-contrast=precentage  report differences in contrast over this threshold\n");
+  fprintf (stderr, "      --max-avg-distance=npixels maximal average distance of real screen patches to estimated ones via affine transform\n");
+  fprintf (stderr, "      --max-max-distance=npixels maximal maximal distance of real screen patches to estimated ones via affine transform\n");
+  fprintf (stderr, "      --geometry-info            store info about goemetry mismatches to tiff files\n");
+  fprintf (stderr, "      --individual-geometry-info store info about goemetry mismatches to tiff files; produce file for each pair\n");
+  fprintf (stderr, "      --outlier-info             store info about outliers\n");
+  fprintf (stderr, "     hugin output:\n");
+  fprintf (stderr, "      --num-control-points=n     number of control points for each pair of images\n");
+  fprintf (stderr, "     other:\n");
+  fprintf (stderr, "      --panorama-map             print panorama map in ascii-art\n");
+  fprintf (stderr, "      --min-screen-precentage    minimum portion of screen required to be recognized by screen detection\n");
+  fprintf (stderr, "      --optimize-colors          auto-optimize screen colors (default)\n");
+  fprintf (stderr, "      --no-optimize-colors       do not auto-optimize screen colors\n");
+  fprintf (stderr, "      --reoptimize-colors        auto-optimize screen colors after initial screen analysis\n");
+  fprintf (stderr, "      --slow-floodfill           use slower discovery of patches (by default both slow and fast methods are used)\n");
+  fprintf (stderr, "      --no-slow-floodfill        do not use slower discovery of patches (by default both slow and fast methods are used)\n");
+  fprintf (stderr, "      --fast-floodfill           use faster discovery of patches (by default both slow and fast methods are used)\n");
+  fprintf (stderr, "      --no-fast-floodfill        do not use faster discovery of patches (by default both slow and fast methods are used)\n");
+  fprintf (stderr, "      --limit-directions         do limit overlap checking to expected directions\n");
+  fprintf (stderr, "      --no-limit-directions      do not limit overlap checking to expected directions\n");
+  fprintf (stderr, "      --min-patch-contrast=val   specify minimal contrast accepted in patch discovery\n");
+  fprintf (stderr, "      --diffs                    produce diff files for each overlapping pair of tiles\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "  dump-lcc <filename>\n");
@@ -1874,6 +1925,664 @@ dump_patch_density (int argc, char **argv)
   render.dump_patch_density (out);
   fclose (out);
 }
+static stitch_project *prj;
+static const char* save_project_filename;
+static const char* load_project_filename;
+
+static void
+produce_hugin_pto_file (const char *name, progress_info *progress)
+{
+  FILE *f = fopen (name,"wt");
+  if (!f)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Can not open %s\n", name);
+      exit (1);
+    }
+  fprintf (f, "# hugin project file\n"
+	   "#hugin_ptoversion 2\n"
+	   //"p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "p f0 w39972 h31684 v82  k0 E0 R0 S13031,39972,11939,28553 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "m i0\n");
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+     if (!y && !x)
+       fprintf (f, "i w%i h%i f0 v%f Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", prj->images[y][x].img_width, prj->images[y][x].img_height, prj->params.hfov, prj->images[y][x].filename.c_str ());
+     else
+       fprintf (f, "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=1 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5 n\"%s\"\n", prj->images[y][x].img_width, prj->images[y][x].img_height, prj->images[y][x].filename.c_str ());
+  fprintf (f, "# specify variables that should be optimized\n"
+	   "v Ra0\n"
+	   "v Rb0\n"
+	   "v Rc0\n"
+	   "v Rd0\n"
+	   "v Re0\n"
+	   "v Vb0\n"
+	   "v Vc0\n"
+	   "v Vd0\n");
+  for (int i = 1; i < prj->params.width * prj->params.height; i++)
+    fprintf (f, "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v Eev%i\n"
+	     "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v r%i\n"
+	     "v p%i\n"
+	     "v y%i\n"
+	     "v Vb%i\n"
+	     "v Vc%i\n"
+	     "v Vd%i\n",i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i);
+#if 0
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+      {
+	if (x >= 1)
+	  images[y][x-1].output_common_points (f, images[y][x], y * prj->params.width + x - 1, y * prj->params.width + x);
+	if (y >= 1)
+	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * prj->params.width + x, y * prj->params.width + x);
+      }
+#endif
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+      for (int y2 = 0; y2 < prj->params.height; y2++)
+        for (int x2 = 0; x2 < prj->params.width; x2++)
+	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
+	    prj->images[y][x].output_common_points (f, prj->images[y2][x2], y * prj->params.width + x, y2 * prj->params.width + x2, false, progress);
+  fclose (f);
+}
+
+static void
+stitch (progress_info *progress)
+{
+  if (!prj->initialize ())
+    exit (1);
+  if (!load_project_filename)
+    {
+      progress->pause_stdout ();
+      printf ("Stitching:\n");
+      if (prj->report_file)
+	fprintf (prj->report_file, "Stitching:\n");
+      for (int y = 0; y < prj->params.height; y++)
+	{
+	  for (int x = 0; x < prj->params.width; x++)
+	    {
+	      printf ("  %s", prj->images[y][x].filename.c_str ());
+	      if (prj->report_file)
+		fprintf (prj->report_file, "  %s", prj->images[y][x].filename.c_str ());
+	    }
+	  printf("\n");
+	  if (prj->report_file)
+	    fprintf (prj->report_file, "\n");
+	}
+      progress->resume_stdout ();
+
+      if (prj->params.csp_filename.length ())
+	{
+	  const char *cspname = prj->params.csp_filename.c_str ();
+	  FILE *in = fopen (cspname, "rt");
+	  progress->pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	  progress->resume_stdout ();
+	  if (!in)
+	    {
+	      perror (cspname);
+	      exit (1);
+	    }
+	  const char *error;
+	  if (!load_csp (in, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param, &error))
+	    {
+	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	      exit (1);
+	    }
+	  if (prj->param.mesh_trans)
+	    {
+	      delete prj->param.mesh_trans;
+	      prj->param.mesh_trans = NULL;
+	    }
+	  fclose (in);
+	  prj->solver_param.remove_points ();
+	}
+
+      if (prj->report_file)
+	{
+	  fprintf (prj->report_file, "Color screen parameters:\n");
+	  save_csp (prj->report_file, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param);
+	}
+      if (!prj->analyze_images (progress))
+	{
+	  fflush (prj->report_file);
+	  exit (1);
+	}
+      if (save_project_filename)
+	{
+	  FILE *f = fopen (save_project_filename, "wt");
+	  if (!f)
+	    {
+	      fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
+	      exit (1);
+	    }
+	  if (!prj->save (f))
+	    {
+	      fprintf (stderr, "Error saving project file: %s\n", save_project_filename);
+	      exit (1);
+	    }
+	  fclose (f);
+	}
+    }
+  else
+    {
+      const char *error;
+      FILE *f = fopen (load_project_filename, "rt");
+      if (prj->params.csp_filename.length ())
+	{
+	  const char *cspname = prj->params.csp_filename.c_str ();
+	  FILE *in = fopen (cspname, "rt");
+	  progress->pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	  progress->resume_stdout ();
+	  if (!in)
+	    {
+	      perror (cspname);
+	      exit (1);
+	    }
+	  const char *error;
+	  if (!load_csp (in, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param, &error))
+	    {
+	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	      exit (1);
+	    }
+	  if (prj->param.mesh_trans)
+	    {
+	      delete prj->param.mesh_trans;
+	      prj->param.mesh_trans = NULL;
+	    }
+	  fclose (in);
+	  prj->solver_param.remove_points ();
+	}
+      if (!f)
+	{
+	  fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
+	  exit (1);
+	}
+      if (!prj->load (f, &error))
+	{
+	  fprintf (stderr, "Error loading project file: %s %s\n", load_project_filename, error);
+	  exit (1);
+	}
+      fclose(f);
+    }
+
+  prj->determine_angle ();
+
+  int xmin, ymin, xmax, ymax;
+  prj->determine_viewport (xmin, xmax, ymin, ymax);
+  if (prj->params.geometry_info)
+    for (int y = 0; y < prj->params.height; y++)
+      for (int x = 0; x < prj->params.width; x++)
+	if (prj->images[y][x].stitch_info)
+	  prj->images[y][x].write_stitch_info (progress);
+  if (prj->params.individual_geometry_info)
+    for (int y = 0; y < prj->params.height; y++)
+      for (int x = 0; x < prj->params.width; x++)
+	for (int yy = y; yy < prj->params.height; yy++)
+	  for (int xx = (yy == y ? x : 0); xx < prj->params.width; xx++)
+	    if (x != xx || y != yy)
+	    {
+	      prj->images[y][x].clear_stitch_info ();
+	      if (prj->images[y][x].output_common_points (NULL, prj->images[yy][xx], 0, 0, true, progress))
+		prj->images[y][x].write_stitch_info (progress, x, y, xx, yy);
+	    }
+
+  if (prj->params.hugin_pto_filename.length ())
+    produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
+  if (prj->params.diffs)
+    for (int y = 0; y < prj->params.height; y++)
+      for (int x = 0; x < prj->params.width; x++)
+	for (int yy = y; yy < prj->params.height; yy++)
+	  for (int xx = (yy == y ? x : 0); xx < prj->params.width; xx++)
+	    if (x != xx || y != yy)
+	      prj->images[y][x].diff (prj->images[yy][xx], progress);
+
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+      if (prj->images[y][x].img)
+	prj->images[y][x].release_image_data (progress);
+  if (prj->report_file)
+    fclose (prj->report_file);
+}
+
+void
+stitch(int argc, char **argv)
+{
+  file_progress_info progress (stdout);
+  std::vector<std::string> fnames;
+  int ncols = 0;
+
+  prj = new stitch_project ();
+
+  for (int i = 1; i < argc; i++)
+    {
+      if (!strcmp (argv[i], "--report"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing report filename\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.report_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--save-project"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing report filename\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  save_project_filename = argv[i];
+	  continue;
+	}
+      if (!strcmp (argv[i], "--load-project"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing report filename\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  load_project_filename = argv[i];
+	  continue;
+	}
+      if (!strncmp (argv[i], "--report=", strlen ("--report=")))
+	{
+	  prj->params.report_filename = argv[i] + strlen ("--report=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--par"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing csp filename\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.csp_filename = argv[i];
+	  continue;
+	}
+      if (!strncmp (argv[i], "--csp=", strlen ("--csp=")))
+	{
+	  prj->params.csp_filename = argv[i] + strlen ("--csp=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--hugin-pto"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing hugin-pto filename\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.hugin_pto_filename = argv[i];
+	  continue;
+	}
+      if (!strncmp (argv[i], "--hugin-pto=", strlen ("--hugin-pto=")))
+	{
+	  prj->params.hugin_pto_filename = argv[i] + strlen ("--hugin-pto=");
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-cpfind"))
+	{
+	  prj->params.cpfind = 0;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--cpfind"))
+	{
+	  prj->params.cpfind = 1;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--cpfind-verification"))
+	{
+	  prj->params.cpfind = 2;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--load-registration"))
+        {
+	  prj->params.load_registration = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--screen-tiles"))
+	{
+	  prj->params.screen_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--known-screen-tiles"))
+	{
+	  prj->params.known_screen_tiles = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--panorama-map"))
+	{
+	  prj->params.panorama_map = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--optimize-colors"))
+	{
+	  prj->params.optimize_colors = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-optimize-colors"))
+	{
+	  prj->params.optimize_colors = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--reoptimize-colors"))
+	{
+	  prj->params.reoptimize_colors = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--limit-directions"))
+	{
+	  prj->params.limit_directions = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-limit-directions"))
+	{
+	  prj->params.limit_directions = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--slow-floodfill"))
+	{
+	  prj->params.slow_floodfill = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--fast-floodfill"))
+	{
+	  prj->params.fast_floodfill = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-slow-floodfill"))
+	{
+	  prj->params.slow_floodfill = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-fast-floodfill"))
+	{
+	  prj->params.fast_floodfill = false;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--outer-tile-border"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing tile border percentage\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.outer_tile_border = atoi (argv[i]);
+	  continue;
+	}
+      if (!strncmp (argv[i], "--outer-tile-border=", strlen ("--outer-tile-border=")))
+	{
+	  prj->params.outer_tile_border = atoi (argv[i] + strlen ("--outer-tile-border="));
+	  continue;
+	}
+      if (!strcmp (argv[i], "--inner-tile-border"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing tile border percentage\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.inner_tile_border = atoi (argv[i]);
+	  continue;
+	}
+      if (!strncmp (argv[i], "--inner-tile-border=", strlen ("--inner-tile-border=")))
+	{
+	  prj->params.inner_tile_border = atoi (argv[i] + strlen ("--inner-tile-border="));
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-contrast"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing max contrast\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.max_contrast = atoi (argv[i]);
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-unknown-screen-range"))
+	{
+	  if (i == argc - 1)
+	    {
+	      fprintf (stderr, "Missing unknown screen range\n");
+	      print_help ();
+	      exit (1);
+	    }
+	  i++;
+	  prj->params.max_unknown_screen_range = atoi (argv[i]);
+	  continue;
+	}
+      if (!strcmp (argv[i], "--max-unknown-screen-range="))
+	{
+	  prj->params.max_unknown_screen_range = atoi (argv[i] + strlen("--max-unknown-screen-range="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-contrast=", strlen ("--max-contrast=")))
+	{
+	  prj->params.max_contrast = atoi (argv[i] + strlen ("--max-contrast="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-overlap=", strlen ("--min-overlap=")))
+	{
+	  prj->params.min_overlap_percentage = atoi (argv[i] + strlen ("--min-overlap="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-overlap=", strlen ("--max-overlap=")))
+	{
+	  prj->params.max_overlap_percentage = atoi (argv[i] + strlen ("--max-overlap="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--ncols=", strlen ("--ncols=")))
+	{
+	  ncols = atoi (argv[i] + strlen ("--ncols="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--num-control-points=", strlen ("--num-control-points=")))
+	{
+	  prj->params.num_control_points = atoi (argv[i] + strlen ("--num-control-points="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
+	{
+	  prj->params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--scan-ppi=", strlen ("--scan-ppi=")))
+	{
+	  prj->params.scan_xdpi = prj->params.scan_ydpi = atof (argv[i] + strlen ("--scan-ppi="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-screen-percentage=", strlen ("--min-screen-percentage=")))
+	{
+	  prj->params.min_screen_percentage = atoi (argv[i] + strlen ("--min-screen-percentage="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--hfov=", strlen ("--hfov=")))
+	{
+	  prj->params.hfov = atof (argv[i] + strlen ("--hfov="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-avg-distance=", strlen ("--max-avg-distance=")))
+	{
+	  prj->params.max_avg_distance = atof (argv[i] + strlen ("--max-avg-distance="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--max-max-distance=", strlen ("--max-max-distance=")))
+	{
+	  prj->params.max_max_distance = atof (argv[i] + strlen ("--max-max-distance="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--min-patch-contrast=", strlen ("--max-max-distance=")))
+	{
+	  prj->params.min_patch_contrast = atof (argv[i] + strlen ("--min-patch-contrast="));
+	  continue;
+	}
+      if (!strncmp (argv[i], "--screen-type=", strlen ("--screen-type=")))
+	{
+	  const char * t = argv[i] + strlen ("--screen-type=");
+	  if (!strcmp (t, "Paget"))
+	    prj->params.type = Paget;
+	  else if (!strcmp (t, "Dufay"))
+	    prj->params.type = Dufay;
+	  else if (!strcmp (t, "Finlay"))
+	    prj->params.type = Finlay;
+	  else
+	    {
+	      fprintf (stderr, "Unknown or unsupported screen type: %s\n", t);
+	      exit (1);
+	    }
+	  continue;
+	}
+      if (!strcmp (argv[i], "--mesh"))
+	{
+	  prj->params.mesh_trans = true;
+	  continue;
+	}
+      if (!strcmp (argv[i], "--no-mesh"))
+	{
+	  prj->params.mesh_trans = false;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--geometry-info", strlen ("--geometry-info")))
+	{
+	  prj->params.geometry_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--individual-geometry-info", strlen ("--individual-geometry-info")))
+	{
+	  prj->params.individual_geometry_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--outliers-info", strlen ("--outliers-info")))
+	{
+	  prj->params.outliers_info = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--diffs", strlen ("--diffs")))
+	{
+	  prj->params.diffs = true;
+	  continue;
+	}
+      if (!strncmp (argv[i], "--", 2))
+	{
+	  fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
+	  print_help ();
+	  exit (1);
+	}
+      std::string name = argv[i];
+      fnames.push_back (name);
+    }
+  if (!load_project_filename)
+    {
+      if (!fnames.size ())
+	{
+	  fprintf (stderr, "No files to stitch\n");
+	  print_help ();
+	  exit (1);
+	}
+      if (fnames.size () == 1)
+	{
+	  prj->params.width = 1;
+	  prj->params.height = 1;
+       
+       }
+      if (ncols > 0)
+	{
+	  prj->params.width = ncols;
+	  prj->params.height = fnames.size () / ncols;
+	}
+      else
+	{
+	  int indexpos;
+	  if (fnames[0].length () != fnames[1].length ())
+	    {
+	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
+	      print_help ();
+	      exit (1);
+	    }
+	  for (indexpos = 0; indexpos < (int)fnames[0].length () - 2; indexpos++)
+	    if (fnames[0][indexpos] != fnames[1][indexpos]
+		|| (fnames[0][indexpos] == '1' && fnames[0][indexpos + 1] != fnames[1][indexpos + 1]))
+	      break;
+	  if (fnames[0][indexpos] != '1' || fnames[0][indexpos + 1] != '1')
+	    {
+	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
+	      print_help ();
+	      exit (1);
+	    }
+	  int w;
+	  for (w = 1; w < (int)fnames.size (); w++)
+	    if (fnames[w][indexpos+1] != '1' + w)
+	      break;
+	  prj->params.width = w;
+	  prj->params.height = fnames.size () / w;
+	  for (int y = 0; y < prj->params.height; y++)
+	    for (int x = 0; x < prj->params.width; x++)
+	      {
+		int i = y * prj->params.width + x;
+		if (fnames[i].length () != fnames[0].length ()
+		    || fnames[i][indexpos] != '1' + y
+		    || fnames[i][indexpos + 1] != '1' + x)
+		  {
+		    fprintf (stderr, "Unexpected tile filename '%s' for tile %i %i\n", fnames[i].c_str (), y + 1, x + 1);
+		    print_help ();
+		    exit (1);
+		  }
+	      }
+	}
+      if (prj->params.width * prj->params.height != (int)fnames.size ())
+	{
+	  fprintf (stderr, "For %ix%i tiles I expect %i filenames, found %i\n", prj->params.width, prj->params.height, prj->params.width * prj->params.height, (int)fnames.size ());
+	  print_help ();
+	  exit (1);
+	}
+      for (int y = 0; y < prj->params.height; y++)
+	for (int x = 0; x < prj->params.width; x++)
+	  prj->images[y][x].filename = fnames[y * prj->params.width + x];
+    }
+  else
+    {
+      if (fnames.size ())
+	{
+	  fprintf (stderr, "Unknown parameter %s\n", fnames[0].c_str ());
+	  print_help ();
+	  exit (1);
+	}
+    }
+
+  stitch (&progress);
+  delete prj;
+  exit (0);;
+}
+
 
 int
 main (int argc, char **argv)
@@ -1893,6 +2602,8 @@ main (int argc, char **argv)
     export_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-lcc"))
     dump_lcc (argc-2, argv+2);
+  else if (!strcmp (argv[1], "stitch"))
+    stitch (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-patch-density"))
     dump_patch_density (argc-2, argv+2);
   else if (!strcmp (argv[1], "digital-laboratory")
