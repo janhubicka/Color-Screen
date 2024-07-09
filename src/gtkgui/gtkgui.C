@@ -283,7 +283,10 @@ print_help()
 		   "D   - detect regular screen                   a A - autosolve                     L - set lens center\n"
 		   "      (finetune mixing in selection)\n"
 		   "l   - disable lens center			  dek - remove points in selected region\n"
-		   "ctrl+A - finetune selection                   ctrl+L - autodetect brightness in selection\n");
+		   "ctrl+A - autodetect points in selection       ctrl+L - autodetect brightness in selection\n");
+		   "f   - finetune screen blur in selection using BW channel\n");
+		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n");
+		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");
@@ -809,7 +812,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	fparam.multitile = 3;
 	fparam.range = 4;
-	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_mtf_blur /*| finetune_dufay_strips | finetune_fog*/;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
