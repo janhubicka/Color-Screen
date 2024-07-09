@@ -2146,15 +2146,16 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
    best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)
     best_solver.scr[0]->save_tiff (fparams.screen_blur_file);
-  if (best_solver.emulsion_scr)
-    best_solver.emulsion_scr->save_tiff ("/tmp/colorscr-emulsion.tif");
-  if (best_solver.merged_scr[0])
-    best_solver.merged_scr[0]->save_tiff ("/tmp/colorscr-merged.tif");
-  {
-    screen tmp;
-    best_solver.collect_screen (&tmp, best_solver.start, 0);
-    tmp.save_tiff ("/tmp/colorscr-collected.tif");
-  }
+  if (best_solver.emulsion_scr && fparams.emulsion_file)
+    best_solver.emulsion_scr->save_tiff (fparams.emulsion_file);
+  if (best_solver.merged_scr[0] && fparams.merged_file)
+    best_solver.merged_scr[0]->save_tiff (fparams.merged_file);
+  if (fparams.collected_file)
+    {
+      screen tmp;
+      best_solver.collect_screen (&tmp, best_solver.start, 0);
+      tmp.save_tiff (fparams.collected_file);
+    }
   if (fparams.dot_spread_file)
     {
       screen scr, scr1;
