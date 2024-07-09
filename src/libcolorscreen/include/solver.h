@@ -167,7 +167,7 @@ struct detect_regular_screen_params
   coord_t min_screen_percentage;
   coord_t border_top, border_bottom, border_left, border_right;
   /* True if this is part of an tile that is on top, bottom, left or right.  */
-  coord_t top, bottom, left, right;
+  bool top, bottom, left, right;
   lens_warp_correction_parameters lens_correction;
   luminosity_t min_patch_contrast;
   int max_unknown_screen_range;

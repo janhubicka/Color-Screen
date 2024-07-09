@@ -63,11 +63,43 @@ print_help ()
   fprintf (stderr, "\n");
   fprintf (stderr, "      --precise                 force precise collection of patch density\n");
   fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
+  fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
+  fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
   fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
   fprintf (stderr, "                                suported modes:");
   for (int j = 0; j < render_parameters::dye_balance_max; j++)
     fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
   fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
+  fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
+  fprintf (stderr, "      --age=val                 specify age of color model\n");
+  fprintf (stderr, "      --scale=val               specify scale of output file\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "  autodetect <scan> <output> [<args>]\n");
+  fprintf (stderr, "    automatically detect geometry of scan and write it to output.\n");
+  fprintf (stderr, "      --help                    print help\n");
+  fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --par=filename            load parameters\n");
+  fprintf (stderr, "      --report=filename         save report\n");
+  fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
+  fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
+  fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
+  fprintf (stderr, "      --no-slow-floodfill       disable use of slow patch detection\n");
+  fprintf (stderr, "      --mesh                    compute mesh of non-linear transformations\n");
+  fprintf (stderr, "      --no-mesh                 do not compute mesh of non-linear transformations\n");
+  fprintf (stderr, "      --optimize-colors         try to automatically optimize colors of patches for screen discovery\n");
+  fprintf (stderr, "      --no-optimize-colors      do not automatically optimize colors of patches for screen discovery\n");
+  fprintf (stderr, "      --top/bottom/left/right   asume that given part of scan is not part of an image and insert fake point to improve geometry of binding tape\n");
+  fprintf (stderr, "      --min-screen-percentage   specify minimum perdentage of screen to be detected\n");
+  fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
+  fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
+  fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
+  fprintf (stderr, "      --border-left=percent     same for bottom\n");
+  fprintf (stderr, "      --border-right=percent    same for bottom\n");
+  fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
+  fprintf (stderr, "      --no-auto-color-model     do not choose color model for given screen type\n");
+  fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
+  fprintf (stderr, "      --no-auto-levels          do not choose brightness and dark point\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
@@ -75,10 +107,16 @@ print_help ()
   fprintf (stderr, "    Supported args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  dump-lcc <filename>\n");
   fprintf (stderr, "    Dump information in CaptureOne LLC file\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
   fprintf (stderr, "    Dump patch densities in text format for external processing. Requires parameters with screen geometry.\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
   fprintf (stderr, "    Finetune parameters of different parts of the input scan. Requires parameters with screen geometry.\n");
   fprintf (stderr, "    Supported args:\n");
@@ -86,19 +124,27 @@ print_help ()
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --width=n                 analyze n samples horisontally (number of vertical samples depeends on aspect ratio)\n");
   fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
+  fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
   fprintf (stderr, "      --optimize-screen-blur    enable finetuning of screen blur radius\n");
-  fprintf (stderr, "      --optimize-screen-channel-blur  enable finetuning of screen blur radius with each channel independently\n");
-  fprintf (stderr, "      --optimize-screen-mtf-blur  enable finetuning of screen MTF\n");
+  fprintf (stderr, "      --optimize-screen-channel-blur enable finetuning of screen blur radius with each channel independently\n");
+  fprintf (stderr, "      --optimize-screen-mtf-blur enable finetuning of screen blur MTF\n");
   fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of emulsion blur radius\n");
   fprintf (stderr, "                                requres known screen blur, mixing weights in input file and monochrome chanel use\n");
-  fprintf (stderr, "      --blur-tiff=name          write finetuned blur radius (eithr screen, screen channel or emulsion) parameters as tiff file\n");
   fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of dufay screen strip widths\n");
-  fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
   fprintf (stderr, "      --use-monochrome-channel  analyse using monochrome channel even when RGB is available\n");
   fprintf (stderr, "      --no-data-collection      do not determine colors by data collection\n");
   fprintf (stderr, "      --no-least-squares        do not use least squares to optimize screen colors\n");
   fprintf (stderr, "      --multi-tile=n            analyse n times n samples and choose best result on each spot\n");
   fprintf (stderr, "      --no-normalize            do not normalize colors\n");
+  fprintf (stderr, "      --blur-tiff=name          write finetuned blur radius (either screen, screen channel or emulsion) parameters as tiff file\n");
+  fprintf (stderr, "      --fog-tiff=name           write finetuned fog as tiff file\n");
+  fprintf (stderr, "      --position-tiff=name      write finetuned position as tiff file\n");
+  fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
+  fprintf (stderr, "      --orig-tiff-base=name     write analyzed tiles into tiff files <name>-y-x.tif\n");
+  fprintf (stderr, "      --simulated-tiff-base=name write simulated tiles into tiff files <name>-y-x.tif\n");
+  fprintf (stderr, "      --diff-tiff-base=name     write diff between original and simultated tiles to <name>-y-x.tif\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  lab <subcommnad>\n");
   fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
   fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
@@ -120,6 +166,8 @@ print_help ()
   fprintf (stderr, "      render-tone-hd-curve: save tone curve as hd curve\n");
   fprintf (stderr, "      scan-primaries: produce matrix profile specialized for given backlight, response and process dyes\n");
   fprintf (stderr, "    Each subcommand has its own help.\n");
+  fprintf (stderr, "\n");
+  fprintf (stderr, "\n");
   fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
   fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
   exit (1);
@@ -172,6 +220,14 @@ parse_color_model (const char *model)
   return parse_enum<enum render_parameters::color_model_t,
 		    render_parameters::color_model_names,
 		    (int)render_parameters::color_model_max> (model, "Unkonwn color model:%s\n");
+}
+
+static enum scanner_type
+parse_scanner_type (const char *model)
+{
+  return parse_enum<scanner_type,
+		    scanner_type_names,
+		    (int)max_scanner_type> (model, "Unkonwn scanner type:%s\n");
 }
 
 static enum render_parameters::dye_balance_t
@@ -257,6 +313,8 @@ render (int argc, char **argv)
   render_type_parameters rtparam;
   bool force_precise = false;
   bool detect_geometry = false;
+  bool detect_color_model = false;
+  bool detect_brightness = false;
   float scan_dpi = 0;
   float scale = 0;
   float output_gamma = -4;
@@ -287,6 +345,10 @@ render (int argc, char **argv)
 	color_model = parse_color_model (str);
       else if (!strcmp (argv[i], "--detect-geometry"))
 	detect_geometry = true;
+      else if (!strcmp (argv[i], "--auto-color-model"))
+	detect_color_model = true;
+      else if (!strcmp (argv[i], "--auto-levels"))
+	detect_brightness = true;
       else if (!strcmp (argv[i], "--precise"))
 	force_precise = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "dye-balance"))
@@ -374,12 +436,15 @@ render (int argc, char **argv)
 	  progress.pause_stdout ();
 	  printf ("Detecting geometry\n");
 	  record_time ();
-	  progress.resume_stdout ();
+	  detect_regular_screen_params dsparams;
+	  auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress);
+	  if (!detected.success)
+	    {
+	      progress.pause_stdout ();
+	      fprintf (stderr, "Autodetection failed\n");
+	      exit (1);
+	    }
 	}
-      abort ();
-      // TODO update call once it is clear what we want to do.
-      //detected_screen d = detect_regular_screen (scan, dparam, rparam.gamma, solver_param, false, false, false, NULL);
-      //param.mesh_trans = d.mesh_trans;
     }
   else if (solver && solver_param.npoints
 	   && !param.mesh_trans)
@@ -399,6 +464,11 @@ render (int argc, char **argv)
 	  progress.resume_stdout ();
 	}
     }
+  if (detect_color_model)
+    rparam.auto_color_model (param.type);
+  if (detect_brightness)
+    rparam.auto_dark_brightness (scan, param, scan.width / 10, scan.height / 10, 9 * scan.width / 10, 9 * scan.height / 10, &progress);
+
 
   /* Apply command line parameters.  */
   if (age != -100)
@@ -422,6 +492,216 @@ render (int argc, char **argv)
       fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
       exit (1);
     }
+  progress.pause_stdout ();
+  exit (0);
+}
+
+static void
+autodetect (int argc, char **argv)
+{
+  const char *cspname = NULL;
+  const char *infname = NULL;
+  const char *outname = NULL;
+  const char *repname = NULL;
+  float scan_dpi = 0;
+  float gamma = 0;
+  bool detect_color_model = true;
+  bool detect_brightness = true;
+  scanner_type scanner_type = max_scanner_type;
+  scr_detect_parameters dparam;
+  detect_regular_screen_params dsparams;
+  for (int i = 0; i < argc; i++)
+    {
+      float flt;
+      if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
+	print_help();
+      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
+	verbose = true;
+      else if ((cspname = arg_with_param (argc, argv, &i, "par")) != NULL)
+	;
+      else if ((repname = arg_with_param (argc, argv, &i, "report")) != NULL)
+	;
+      else if (!strcmp (argv[i], "--slow-floodfill"))
+	dsparams.slow_floodfill = true;
+      else if (!strcmp (argv[i], "--fast-floodfill"))
+	dsparams.fast_floodfill = true;
+      else if (!strcmp (argv[i], "--no-slow-floodfill"))
+	dsparams.slow_floodfill = false; 
+      else if (!strcmp (argv[i], "--no-fast-floodfill"))
+	dsparams.fast_floodfill = false;
+      else if (const char *str = arg_with_param (argc, argv, &i, "scanner-type"))
+	scanner_type = parse_scanner_type (str);
+      else if (!strcmp (argv[i], "--mesh"))
+	dsparams.do_mesh = true; 
+      else if (!strcmp (argv[i], "--no-mesh"))
+	dsparams.do_mesh = false; 
+      else if (!strcmp (argv[i], "--optimize-colors"))
+	dsparams.optimize_colors = true; 
+      else if (!strcmp (argv[i], "--no-optimize-colors"))
+	dsparams.optimize_colors = false; 
+      else if (!strcmp (argv[i], "--top"))
+	dsparams.top = true; 
+      else if (!strcmp (argv[i], "--bottom"))
+	dsparams.bottom = true; 
+      else if (!strcmp (argv[i], "--left"))
+	dsparams.left = true; 
+      else if (!strcmp (argv[i], "--right"))
+	dsparams.right = true; 
+      else if (parse_float_param (argc, argv, &i, "gamma", gamma, -2, 100))
+	;
+      else if (parse_float_param (argc, argv, &i, "min-screen-percentage", flt, 0, 100))
+	dsparams.min_screen_percentage = flt;
+      else if (parse_float_param (argc, argv, &i, "border-top", flt, 0, 100))
+	dsparams.border_top = flt;
+      else if (parse_float_param (argc, argv, &i, "border-bottom", flt, 0, 100))
+	dsparams.border_bottom = flt;
+      else if (parse_float_param (argc, argv, &i, "border-left", flt, 0, 100))
+	dsparams.border_left = flt;
+      else if (parse_float_param (argc, argv, &i, "border-right", flt, 0, 100))
+	dsparams.border_right = flt;
+      else if (parse_float_param (argc, argv, &i, "min-patch-contrast", flt, 0, 1000))
+	dsparams.min_patch_contrast = flt;
+      else if (!strcmp (argv[i], "--auto-color-model"))
+	detect_color_model = true;
+      else if (!strcmp (argv[i], "--no-auto-color-model"))
+	detect_color_model = false;
+      else if (!strcmp (argv[i], "--auto-brightness"))
+	detect_brightness = true;
+      else if (!strcmp (argv[i], "--no-auto-brightness"))
+	detect_brightness = false;
+      else if (!infname)
+	infname = argv[i];
+      else if (!outname)
+	outname = argv[i];
+      else
+        print_help ();
+    }
+  if (!outname)
+    print_help ();
+  file_progress_info progress (verbose ? stdout : NULL);
+  scr_to_img_parameters param;
+  render_parameters rparam;
+  solver_parameters solver_param;
+  const char *error;
+  if (cspname)
+    {
+      FILE *in = fopen (cspname, "rt");
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	  progress.resume_stdout ();
+	}
+      if (!in)
+	{
+	  progress.pause_stdout ();
+	  perror (cspname);
+	  exit (1);
+	}
+      if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  exit (1);
+	}
+      fclose (in);
+    }
+  /* Load scan data.  */
+  image_data scan;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", infname);
+      record_time ();
+      progress.resume_stdout ();
+    }
+  if (!scan.load (infname, false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      exit (1);
+    }
+  if (!scan.rgbdata)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Autodetection is only implemented for RGB scans");
+      exit (1);
+    }
+  if (gamma)
+    rparam.gamma = gamma;
+  else if (!cspname)
+    rparam.gamma = scan.gamma != -2 ? scan.gamma : 2.2;
+  if (scanner_type != max_scanner_type)
+    param.scanner_type = scanner_type;
+  if (scan_dpi)
+    scan.set_dpi (scan_dpi, scan_dpi);
+  FILE *report = NULL;
+  if (repname && !(report = fopen (repname, "wt")))
+    {
+      progress.pause_stdout ();
+      perror (repname);
+      exit (1);
+    }
+ 
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      print_time ();
+      printf ("Detecting geometry\n");
+      record_time ();
+      progress.resume_stdout ();
+    }
+  if (param.mesh_trans)
+    {
+      delete param.mesh_trans;
+      param.mesh_trans = NULL;
+    }
+  auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress, report);
+  param = detected.param;
+  param.mesh_trans = detected.mesh_trans;
+
+  if (report)
+    fclose (report);
+  if (!detected.success)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Autodetection failed\n");
+      exit (1);
+    }
+  if (detect_color_model)
+    rparam.auto_color_model (param.type);
+  if (detect_brightness)
+    {
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  print_time ();
+	  printf ("Detecting levels\n");
+	  record_time ();
+	  progress.resume_stdout ();
+	}
+      rparam.auto_dark_brightness (scan, param, scan.width / 10, scan.height / 10, 9 * scan.width / 10, 9 * scan.height / 10, &progress);
+    }
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      print_time ();
+      printf ("Saving %s\n", outname);
+      progress.resume_stdout ();
+    }
+  FILE *out = fopen (outname, "wt");
+  if (!out)
+    {
+      progress.pause_stdout ();
+      perror (outname);
+      exit (1);
+    }
+  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
+    {
+      fprintf (stderr, "saving failed\n");
+      exit (1);
+    }
+  progress.pause_stdout ();
   exit (0);
 }
 
@@ -1593,6 +1873,8 @@ main (int argc, char **argv)
     print_help ();
   else if (!strcmp (argv[1], "render"))
     render (argc-2, argv+2);
+  else if (!strcmp (argv[1], "autodetect"))
+    autodetect (argc-2, argv+2);
   else if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
   else if (!strcmp (argv[1], "finetune"))

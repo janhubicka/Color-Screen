@@ -2065,7 +2065,7 @@ G_MODULE_EXPORT void
 cb_save (GtkButton * button, Data * data)
 {
   FILE *out;
-  out = fopen (paroname, "w");
+  out = fopen (paroname, "wt");
   if (!out)
     {
       perror (paroname);
