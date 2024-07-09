@@ -69,6 +69,7 @@ print_help ()
   fprintf (stderr, "                                suported modes:");
   for (int j = 0; j < render_parameters::dye_balance_max; j++)
     fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
+  fprintf (stderr, "\n");
   fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
   fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
   fprintf (stderr, "      --age=val                 specify age of color model\n");
