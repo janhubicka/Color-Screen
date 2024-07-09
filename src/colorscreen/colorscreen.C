@@ -77,7 +77,7 @@ print_help ()
   fprintf (stderr, "      --scale=val               specify scale of output file\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
-  fprintf (stderr, "  autodetect <scan> <output> [<args>]\n");
+  fprintf (stderr, "  autodetect <scan> <output par> [<args>]\n");
   fprintf (stderr, "    automatically detect geometry of scan and write it to output.\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
