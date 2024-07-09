@@ -1,4 +1,4 @@
-SUBDIRS = libcolorscreen  colorscreen stitch
+SUBDIRS = libcolorscreen  colorscreen 
 if gtkgui
   SUBDIRS += gtkgui
 endif
