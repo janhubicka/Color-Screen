@@ -81,6 +81,13 @@ print_help ()
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --par=filename            load parameters\n");
   fprintf (stderr, "      --report=filename         save report\n");
+  fprintf (stderr, "      --scanner-type=type       specify scanner type:\n");
+  for (int j = 0; j < max_scanner_type; j++)
+  {
+    if (!(j % 4))
+      fprintf (stderr, "\n                                 ");
+    fprintf (stderr, " %s", scanner_type_names[j]);
+  }
   fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
   fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
   fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
