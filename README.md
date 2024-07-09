@@ -91,11 +91,7 @@ There are three programs installed.
 `colorscreen` is a command line utility to render into tiff files. See
 `colorscreen --help` for usage information.
 
-`colorscreen-stitch` is a command line utility to produce stitched projects.
-This is useful to scan and stitch additive color photographs using digital
-camera with mutiple tiles. See `colorscreen-stitch --help` for more information.
-
-`colorscreen-gtk` is the (now deprecated) GTK based gui application. Invoke it
+`colorscreen-gtk` is a (deprecated) GTK based gui application. Invoke it
 with `colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file
 format.
 

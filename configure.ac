@@ -142,7 +142,7 @@ fi
 
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AM_CONDITIONAL([RENDER_EXTRA], [test "$do_render_extra" != "no"])
-AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile src/stitch/Makefile examples/Makefile examples/amcolony/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
 AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h])
 
 AC_OUTPUT
