@@ -286,7 +286,8 @@ print_help()
 		   "ctrl+A - autodetect points in selection       ctrl+L - autodetect brightness in selection\n"
 		   "f   - finetune screen blur in selection using BW channel\n"
 		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n"
-		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n");
+		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n"
+		   "ctrl+w - set white balance so selection is neutral gray\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
 		   "r   - swithc to screen editing mode\n");

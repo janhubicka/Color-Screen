@@ -326,7 +326,9 @@ render_interpolate::analyze_patches (analyzer analyze,
 		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
 		      continue;
 		  }
-		if (!analyze (xs, ys, m_dufay->screen_tile_color (x, y)))
+		rgbdata c = m_dufay->screen_tile_color (x, y);
+		m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+		if (!analyze (xs, ys, c))
 		  return false;
 	      }
 	  if (progress)
@@ -352,7 +354,9 @@ render_interpolate::analyze_patches (analyzer analyze,
 		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
 		      continue;
 		  }
-		if (!analyze (xs, ys, m_paget->screen_tile_color (x, y)))
+		rgbdata c = m_paget->screen_tile_color (x, y);
+		m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+		if (!analyze (xs, ys, c))
 		  return false;
 	      }
 	  if (progress)
