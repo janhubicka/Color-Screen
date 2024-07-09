@@ -439,9 +439,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h include/stitch.h include/backlight-correction.h include/analyze-dufay.h include/analyze-paget.h include/analyze-base.h include/lens-correction.h include/tone-curve.h include/finetune.h
-#noinst_LIBRARIES = libcolorscreen.a
-#libcolorscreen_a_SOURCES = render.C  render-fast.C  render-interpolate.C  screen.C  scr-to-img.C
+include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h include/stitch.h include/backlight-correction.h include/analyze-dufay.h include/analyze-paget.h include/analyze-base.h include/lens-correction.h include/tone-curve.h include/finetune.h include/spline.h include/histogram.h
 lib_LTLIBRARIES = libcolorscreen.la
 libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C \
 	render-interpolate.C screen.C scr-to-img.C imagedata.C \
@@ -455,6 +453,7 @@ libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C \
 	spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C \
 	tone-curve.C lens-warp-correction.C matrix-profile.C \
 	scr-detect-colors.C finetune.C $(am__append_1)
+EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h lru-cache-loc.h render-diff.h render-tile.h sharpen.h wratten.h dj_fft.h gsl-utils.h loadsave.h mapalloc.h render-interpolate.h render-to-file.h spectrum-dyes.h dufaycolor.h icc.h lru-cache.h nmsimplex.h render-superposeimg.h screen-map.h spectrum.h
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
@@ -1275,11 +1274,6 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
-
-cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.C: cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h
-
-cz_cuni_mff_java_digitalColoring_interfaceWithC_ImageData.h: ImageData.java
-	javac -cp . -h . $<
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

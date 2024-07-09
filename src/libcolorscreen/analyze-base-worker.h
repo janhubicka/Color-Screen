@@ -29,6 +29,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise (scr_to_img *scr_to_img, render_t
 		  data_entry e = GEOMETRY::red_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::red_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::red_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::red_width_scale && e.y< m_height * GEOMETRY::red_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::red_width_scale + e.x;
 		      luminosity_t &c = m_red [idx];
@@ -45,6 +47,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise (scr_to_img *scr_to_img, render_t
 		  data_entry e = GEOMETRY::green_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::green_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::green_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::green_width_scale && e.y< m_height * GEOMETRY::green_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][1] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::green_width_scale + e.x;
 		      luminosity_t vall = val * l;
@@ -61,6 +65,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise (scr_to_img *scr_to_img, render_t
 		  data_entry e = GEOMETRY::blue_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::blue_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::blue_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::blue_width_scale && e.y< m_height * GEOMETRY::blue_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][2] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::blue_width_scale + e.x;
 		      luminosity_t vall = val * l;
@@ -171,6 +177,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (scr_to_img *scr_to_img, rend
 		  data_entry e = GEOMETRY::red_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::red_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::red_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::red_width_scale && e.y< m_height * GEOMETRY::red_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][0] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::red_width_scale + e.x;
 		      rgbdata vall = l * val;
@@ -191,6 +199,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (scr_to_img *scr_to_img, rend
 		  data_entry e = GEOMETRY::green_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::green_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::green_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::green_width_scale && e.y< m_height * GEOMETRY::green_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][1] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::green_width_scale + e.x;
 		      rgbdata vall = l * val;
@@ -211,6 +221,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (scr_to_img *scr_to_img, rend
 		  data_entry e = GEOMETRY::blue_scr_to_entry (scr);
 		  if (!GEOMETRY::check_range || (e.x >= 0 && e.x < m_width * GEOMETRY::blue_width_scale && e.y >= 0 && e.y < m_height * GEOMETRY::blue_height_scale))
 		    {
+		      if (debug)
+			assert (e.x >= 0 && e.y >= 0 && e.x < m_width * GEOMETRY::blue_width_scale && e.y< m_height * GEOMETRY::blue_height_scale);
 		      luminosity_t val = (screen->mult[iy][ix][2] - collection_threshold);
 		      int idx = e.y * m_width * GEOMETRY::blue_width_scale + e.x;
 		      rgbdata vall = l * val;
