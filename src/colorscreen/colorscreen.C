@@ -53,7 +53,7 @@ print_help ()
     fprintf (stderr, " %s", render_type_properties[j].name);
   }
   fprintf (stderr, "\n");
-  fprintf (stderr, "      --solver                  run solver if solver points are present");
+  fprintf (stderr, "      --solver                  run solver if solver points are present\n");
   fprintf (stderr, "      --hdr                     output HDR tiff\n");
   fprintf (stderr, "      --dng                     output DNG\n");
   fprintf (stderr, "      --output-profile=profile  specify output profile\n");
@@ -64,10 +64,10 @@ print_help ()
   fprintf (stderr, "      --precise                 force precise collection of patch density\n");
   fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
   fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
-  fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
   fprintf (stderr, "                                suported modes:");
   for (int j = 0; j < render_parameters::dye_balance_max; j++)
     fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
+  fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
