@@ -433,7 +433,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       print_help ();
       printf ("Solver editing mode entered\n");
     }
-  if (k == 'w' && ui_mode == solver_editing)
+  if (k == 'w' && !(event->state & GDK_CONTROL_MASK) && ui_mode == solver_editing)
     {
       ui_mode = screen_editing;
       print_help ();
@@ -850,6 +850,16 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       }
       static std::vector <point_t> tune_points;
       static std::vector <finetune_result> tune_results;
+      if (k == 'w' && (event->state & GDK_CONTROL_MASK))
+	{
+	  file_progress_info progress (stdout);
+	  printf ("Auto white balance in selection\n");
+	  if (rparams.auto_white_balance (scan, current, sel1x, sel1y, sel2x, sel2y, &progress))
+	    {
+	      display_scheduled = true;
+	      setvals ();
+	    }
+	}
       if (k == 's' && (event->state & GDK_CONTROL_MASK))
       {
 	int x = (sel1x + sel2x)/2;

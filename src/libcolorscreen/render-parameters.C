@@ -905,3 +905,45 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   gsl_vector_free (c);
   return true;
 }
+
+bool
+render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
+{
+  render_parameters rparam = *this;
+  /* Produce histogram.  */
+  rgb_histogram hist;
+  if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
+			{
+			  hist.pre_account (c);
+			  return true;
+			},
+			"determining value ranges",
+			img, rparam, param, false,
+			xmin, xmax, ymin, ymax, progress))
+    return false;
+  hist.finalize_range (65536*256);
+  if (!analyze_patches ([&] (coord_t x, coord_t y, rgbdata c)
+			{
+			  hist.account (c);
+			  return true;
+			},
+			"producing histograms",
+			img, rparam, param, false,
+			xmin, xmax, ymin, ymax, progress))
+    return false;
+  hist.finalize ();
+
+  /* Give up if the number of samples is too small.  */
+  if (hist.num_samples () < 2 || (progress && progress->cancel_requested ()))
+    return false;
+  rgbdata c = hist.find_avg (dark_cut, light_cut);
+  render r(img, rparam, 256);
+  c.red = r.adjust_luminosity_ir (c.red);
+  c.green = r.adjust_luminosity_ir (c.green);
+  c.blue = r.adjust_luminosity_ir (c.blue);
+  luminosity_t avg = (c.red + c.green + c.blue) / 3;
+  white_balance.red = avg / c.red;
+  white_balance.green = avg / c.green;
+  white_balance.blue = avg / c.blue;
+  return true;
+}

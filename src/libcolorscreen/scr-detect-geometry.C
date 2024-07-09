@@ -1658,7 +1658,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
   ret.param.type = type;
   /*ret.param.lens_center_x = img.width / 2;
   ret.param.lens_center_y = img.width / 2;*/
-  ret.param.projection_distance = img.width;
+  //ret.param.projection_distance = img.width;
   ret.param.lens_correction = dsparams->lens_correction;
   solver (&ret.param, img, sparam, progress);
   if (progress && progress->cancel_requested ())
