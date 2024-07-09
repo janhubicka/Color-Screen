@@ -5,7 +5,7 @@
 #include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
 
-static const char * const scr_names[max_scr_type] =
+const char * const scr_names[max_scr_type] =
 {
   "Random",
   "Paget",

@@ -32,6 +32,7 @@ enum scr_type
    Dufay,
    max_scr_type
 };
+extern const char * const scr_names[max_scr_type];
 rgbdata patch_proportions (enum scr_type t, render_parameters *);
 
 /* Type of a scanner used.  */

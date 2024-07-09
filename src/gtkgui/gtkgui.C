@@ -283,9 +283,9 @@ print_help()
 		   "D   - detect regular screen                   a A - autosolve                     L - set lens center\n"
 		   "      (finetune mixing in selection)\n"
 		   "l   - disable lens center			  dek - remove points in selected region\n"
-		   "ctrl+A - autodetect points in selection       ctrl+L - autodetect brightness in selection\n");
-		   "f   - finetune screen blur in selection using BW channel\n");
-		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n");
+		   "ctrl+A - autodetect points in selection       ctrl+L - autodetect brightness in selection\n"
+		   "f   - finetune screen blur in selection using BW channel\n"
+		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n"
 		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
