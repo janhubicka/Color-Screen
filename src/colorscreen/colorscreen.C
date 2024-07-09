@@ -81,7 +81,7 @@ print_help ()
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --par=filename            load parameters\n");
   fprintf (stderr, "      --report=filename         save report\n");
-  fprintf (stderr, "      --scanner-type=type       specify scanner type");
+  fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
   fprintf (stderr, "                                suported scanner types:");
   for (int j = 0; j < max_scanner_type; j++)
   {
