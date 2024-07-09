@@ -48,8 +48,7 @@ On typical Linux distribution it is enough to do the following.
 	make install
 
 To build the gui use use addition `--enable-gtkgui` option to the configure
-script. `make examples` will download some sample images from the Library
-of Congress webpages and produce color renderings.
+script.
 
 ### Windows
 
@@ -84,12 +83,19 @@ are necessary use
 This will print all libraries used. Copy all DLL files from mingw64 subdirectory
 to bin subdirectory.
 
+## Wonderful examples
+
+Once colorscreen is built, `make examples` will download some sample images
+from the Library of Congress webpages and produce color renderings.
+
 ## Usage
 
 There are three programs installed. 
 
 `colorscreen` is a command line utility to render into tiff files. See
-`colorscreen --help` for usage information.
+`colorscreen --help` and its
+[wiki](https://github.com/janhubicka/Color-Screen/wiki/colorscreen) for usage
+information.
 
 `colorscreen-gtk` is a (deprecated) GTK based gui application. Invoke it
 with `colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file
