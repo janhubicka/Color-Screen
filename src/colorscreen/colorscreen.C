@@ -90,6 +90,7 @@ print_help ()
       fprintf (stderr, "\n                                 ");
     fprintf (stderr, " %s", scanner_type_names[j]);
   }
+  fprintf (stderr, "\n");
   fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
   fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
   fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
@@ -103,8 +104,8 @@ print_help ()
   fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
   fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
   fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
-  fprintf (stderr, "      --border-left=percent     same for bottom\n");
-  fprintf (stderr, "      --border-right=percent    same for bottom\n");
+  fprintf (stderr, "      --border-left=percent     same for left\n");
+  fprintf (stderr, "      --border-right=percent    same for right\n");
   fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
   fprintf (stderr, "      --no-auto-color-model     do not choose color model for given screen type\n");
   fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
