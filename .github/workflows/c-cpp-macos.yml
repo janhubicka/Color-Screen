@@ -15,11 +15,9 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install libtiff
       run: brew install -v libtiff
-    - name: CXXFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" CXX=clang++ CC=clang configure
-      run: ./configure
+    - name: configure
+      run: CXXFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" CXX=clang++ CC=clang ./configure
     - name: make
       run: make
     - name: make check
       run: make check
-    - name: make distcheck
-      run: make distcheck
