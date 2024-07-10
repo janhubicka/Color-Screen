@@ -72,6 +72,7 @@ jobs:
     - name: Copy to directory
       shell: msys2 {0}
       run: cp Color-Screen-GUI/taraget/*.jar Color-Screen-GUI/taraget/*.dll /c/Color-Screen-GUI
-    - name: make distcheck
-      shell: msys2 {0}
-      run: make distcheck
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-GUI-binary
+        path: c:\Color-Screen-GUI\
