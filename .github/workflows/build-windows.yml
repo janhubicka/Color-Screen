@@ -21,14 +21,15 @@ jobs:
         install: gcc make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make mingw-w64-x86_64-pkg-config libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
     - name: digital coloring GUI
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
-    - uses: actions/setup-java@v4
+    - name: setup Java
+      uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
         architecture: x64
         cache: maven
-    - name: find header
-      run: find /c/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.3-9.0/x64 -name jni.h
+    - name: try maven
+      run: mvn
     - name: find maven
       run: ls /c/hostedtoolcache/windows/*aven*
     - name: configure
