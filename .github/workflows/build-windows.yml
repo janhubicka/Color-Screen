@@ -52,6 +52,6 @@ jobs:
     - name: Set properties
       run : ls
     - name: Set properties
-      rn : cp Color-Screen/.github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+      run: cp Color-Screen/.github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       run: cd Color-Screen-GUI ; mvn clean package
