@@ -49,6 +49,12 @@ jobs:
         java-version: '21'
         architecture: x64
         distribution: 'temurin'
+    - name: Set up Maven
+      uses: stCarolas/setup-maven@v5
+      with:
+        maven-version: 3.9.6
+    - name: test maven
+      run: mvn -v
     - name: digital coloring GUI
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Set properties
