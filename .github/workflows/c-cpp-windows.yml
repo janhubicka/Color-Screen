@@ -40,8 +40,8 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     - name: Run the Maven verify phase
-        run: mvn --batch-mode --update-snapshots verify
+      run: mvn --batch-mode --update-snapshots verify
     - name: digital coloring GUI
-        run: git checkout https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+      run: git checkout https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Run maven build
-        run: cd olor-Screen-GUI ; mvn clean package
+      run: cd olor-Screen-GUI ; mvn clean package
