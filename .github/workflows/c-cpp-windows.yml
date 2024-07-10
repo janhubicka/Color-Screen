@@ -34,4 +34,4 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary
-        path: /Color-Screen-install/
+        path: c:\Color-Screen-install\
