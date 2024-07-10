@@ -27,7 +27,9 @@ jobs:
       run: make check
     - name: make install
       run: make install
+    - name: print dlls
+      run: ldd /tmp/Color-Screen-install/bin/colorscreen-gtk
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary
-        path: /tmp/Color-Screen-install/
+        path: /msys64/tmp/Color-Screen-install/
