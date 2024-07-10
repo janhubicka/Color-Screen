@@ -58,8 +58,6 @@ jobs:
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Set properties
       run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
-    - name: update path
-      run: sed -i bak "s/JAVA_HOME/$JAVA_HOME/g" Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       run: cd Color-Screen-GUI ; mvn  clean package
     - name: make distcheck
