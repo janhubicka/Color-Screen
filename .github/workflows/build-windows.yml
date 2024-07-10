@@ -31,6 +31,12 @@ jobs:
     - name: find gcc
       shell: msys2 {0}
       run: whereis gcc
+    - name: find gcc
+      shell: msys2 {0}
+      run: /usr/bin/gcc --version
+    - name: find gcc
+      shell: msys2 {0}
+      run: /mingw64/bin/gcc --version
     - name: configure
       shell: msys2 {0}
       run: ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
@@ -64,7 +70,7 @@ jobs:
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       shell: msys2 {0}
-      run: set PATH=D:\a\;%PATH%; cd Color-Screen-GUI ; /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn  clean package
+      run: set PATH=D:/a/msys2/mingw64/bin/;%PATH%; cd Color-Screen-GUI ; /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
       run: mkdir /c/Color-Screen-GUI
