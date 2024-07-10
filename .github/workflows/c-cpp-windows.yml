@@ -1,4 +1,4 @@
-name: C/C++ CI Windows
+name: Windows build
 
 on:
   push:
@@ -35,3 +35,13 @@ jobs:
       with:
         name: windows-binary
         path: c:\Color-Screen-install\
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - name: Run the Maven verify phase
+        run: mvn --batch-mode --update-snapshots verify
+    - name: digital coloring GUI
+        run: git checkout https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: Run maven build
+        run: cd olor-Screen-GUI ; mvn clean package

@@ -1,4 +1,4 @@
-name: C/C++ CI MacOS
+name: MacOS build
 
 on:
   push:
