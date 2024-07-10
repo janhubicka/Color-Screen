@@ -13,7 +13,7 @@
 extern void prune_render_scr_detect_caches ();
 namespace
 {
-const bool verbose = false;
+const bool verbose = true;
 const int verbose_confirm = 0;
 struct patch_entry
 {
@@ -140,7 +140,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   if (!patch_center (entries, size, &rbpatches[0][0].x, &rbpatches[0][0].y))
     return false;
   if (report_file && verbose)
-    fprintf (report_file, "Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
+    fprintf (report_file, "Dufay: Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
 
   bool patch_found = false;
 
@@ -165,7 +165,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Blue patch not found\n");
+	fprintf (report_file, "Dufay: Blue patch not found\n");
       return false;
     }
 
@@ -174,7 +174,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   coord_t patch_stepx = rbpatches[0][1].x - rbpatches[0][0].x;
   coord_t patch_stepy = rbpatches[0][1].y - rbpatches[0][0].y;
   if (report_file && verbose)
-    fprintf (report_file, "found blue patch of size %i and center %f %f guessing patch distance %f %f\n", size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
+    fprintf (report_file, "Dufay: found blue patch of size %i and center %f %f guessing patch distance %f %f\n", size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
   for (int p = 2; p < npatches * 2; p++)
     {
       int nx = rbpatches[0][p - 1].x + patch_stepx;
@@ -183,20 +183,20 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	    fprintf (report_file, "Dufay: Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
 	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[0][p].x, &rbpatches[0][p].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	    fprintf (report_file, "Dufay: Center of patch 0, %i is not inside\n", p);
 	  return false;
 	}
       patch_stepx = (rbpatches[0][p].x - rbpatches[0][0].x) / p;
       patch_stepy = (rbpatches[0][p].y - rbpatches[0][0].y) / p;
     }
   if (report_file && verbose)
-   fprintf (report_file, "Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
+   fprintf (report_file, "Dufay: Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
 
   /* Now once row is found, extend each entry to an orthogonal row.  */
   for (int r = 1; r < npatches; r++)
@@ -209,20 +209,20 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
       if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, &priority, visited))
 	 {
 	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to confirm red on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	    fprintf (report_file, "Dufay: Failed to confirm red strip on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
 	  return false;
 	 }
       size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	    fprintf (report_file, "Dufay: Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
 	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[r][0].x, &rbpatches[r][0].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Center of patch %i,%i is not inside\n", r, 0);
+	    fprintf (report_file, "Dufay: Center of patch %i,%i is not inside\n", r, 0);
 	  return false;
 	}
       for (int p = 1; p < npatches * 2; p++)
@@ -233,13 +233,13 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "Dufay: Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
 	      return false;
 	    }
 	  if (!patch_center (entries, size, &rbpatches[r][p].x, &rbpatches[r][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Center of patch %i,%i is not inside\n", r, p);
+		fprintf (report_file, "Dufay: Center of patch %i,%i is not inside\n", r, p);
 	      return false;
 	    }
 	}
@@ -290,7 +290,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!patch_center (entries, size, &gpatches[0][0].x, &gpatches[0][0].y))
     return false;
   if (report_file && verbose)
-    fprintf (report_file, "Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
+    fprintf (report_file, "Paget: Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
 
   bool patch_found = false;
 #if 0
@@ -322,7 +322,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Blue patch not found\n");
+	fprintf (report_file, "Paget: Blue patch not found\n");
       return false;
     }
 
@@ -341,13 +341,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!size || size == max_size)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Second blue patch not found\n");
+	fprintf (report_file, "Paget: Second blue patch not found with step %f %f\n", b2patch_stepx, b2patch_stepy);
     }
   patch_found = patch_center (entries, size, &bx, &by);
   if (!patch_found || (bx == bpatches[0][0].x && by == bpatches[0][0].y))
     {
       if (report_file && verbose)
-	fprintf (report_file, "Center of second Blue patch not found\n");
+	fprintf (report_file, "Paget: Center of second Blue patch not found\n");
       return false;
     }
 
@@ -374,14 +374,14 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!size || size == max_size)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Second green patch not found\n");
+	fprintf (report_file, "Paget: Second green patch not found\n");
       return false;
     }
   patch_found = patch_center (entries, size, &gpatches[0][1].x, &gpatches[0][1].y);
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Center of second green patch not found\n");
+	fprintf (report_file, "Paget: Center of second green patch not found\n");
       return false;
     }
 
@@ -398,19 +398,19 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   if (!size || size == max_size)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Third blue patch not found\n");
+	fprintf (report_file, "Paget: Third blue patch not found\n");
       return false;
     }
   patch_found = patch_center (entries, size, &bpatches[0][1].x, &bpatches[0][1].y);
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Center of third blue patch not found\n");
+	fprintf (report_file, "Paget: Center of third blue patch not found\n");
       return false;
     }
 
   if (report_file && verbose)
-    fprintf (report_file, "found green patch of size %i and center %f %f guessing patch distance %f %f\n", size, gpatches[0][1].x, gpatches[0][1].y, patch_stepx, patch_stepy);
+    fprintf (report_file, "Paget: found green patch of size %i and center %f %f guessing patch distance %f %f\n", size, gpatches[0][1].x, gpatches[0][1].y, patch_stepx, patch_stepy);
   for (int p = 2; p < npatches; p++)
     {
       int nx = bpatches[0][p - 1].x + patch_stepx;
@@ -419,13 +419,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to guess green patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	    fprintf (report_file, "Paget: Failed to guess green patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
 	  return 0;
 	}
       if (!patch_center (entries, size, &gpatches[0][p].x, &gpatches[0][p].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	    fprintf (report_file, "Paget: Center of patch 0, %i is not inside\n", p);
 	  return 0;
 	}
 
@@ -435,13 +435,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Failed to guess blue patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	    fprintf (report_file, "Paget: Failed to guess blue patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
 	  return 0;
 	}
       if (!patch_center (entries, size, &bpatches[0][p].x, &bpatches[0][p].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Center of patch 0, %i is not inside\n", p);
+	    fprintf (report_file, "Paget: Center of patch 0, %i is not inside\n", p);
 	  return 0;
 	}
 
@@ -459,13 +459,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "Paget: Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
 	      return 0;
 	    }
 	  if (!patch_center (entries, size, &bpatches[q][p].x, &bpatches[q][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+		fprintf (report_file, "Paget: Center of patch %i, %i is not inside\n", q, p);
 	      return 0;
 	    }
 	  nx = bpatches[q-1][p].x + opatch_stepx;
@@ -474,13 +474,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Failed to guess red patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "Paget: Failed to guess red patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
 	      return 0;
 	    }
 	  if (!patch_center (entries, size, &rpatches[q/2][p].x, &rpatches[q/2][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+		fprintf (report_file, "Paget: Center of patch %i, %i is not inside\n", q, p);
 	      return 0;
 	    }
 	}
@@ -492,13 +492,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Failed to guess green patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "Paget: Failed to guess green patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
 	      return 0;
 	    }
 	  if (!patch_center (entries, size, &gpatches[q/2][p].x, &gpatches[q/2][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+		fprintf (report_file, "Paget: Center of patch %i, %i is not inside\n", q, p);
 	      return 0;
 	    }
 	  nx = rpatches[(q-1)/2][p].x + opatch_stepx;
@@ -507,13 +507,13 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "Paget: Failed to guess blue patch %i, %i with steps %f %f\n", q, p, patch_stepx, patch_stepy);
 	      return 0;
 	    }
 	  if (!patch_center (entries, size, &bpatches[q][p].x, &bpatches[q][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Center of patch %i, %i is not inside\n", q, p);
+		fprintf (report_file, "Paget: Center of patch %i, %i is not inside\n", q, p);
 	      return 0;
 	    }
       }
@@ -527,7 +527,7 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
       sparam.add_point (bpatches[r*2][p].x, bpatches[r*2][p].y, (r+p+0.5)/2.0, (p-r+0.5)/2.0, solver_parameters::blue);
     }
   if (verbose)
-    printf ("Initial screen found\n");
+    printf ("Paget: Initial screen found\n");
 
   return true;
 }
@@ -1512,7 +1512,8 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	     Enforce boundaries between patches so flood fill does not overflow.
 	   
 	     FIXME: This does not seem to work well since blue patches are too small
-	     and may get eliminated completely.  */
+	     and may get eliminated completely.  So in the following code we
+	     simply try both cmaps.  */
 	  if (try_paget_finlay)
 	    {
 	      std::unique_ptr<color_class_map> new_cmap (new color_class_map);
@@ -1546,12 +1547,24 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		    fflush (report_file);
 
 		  enum scr_type current_type = Random;
+		  color_class_map *this_cmap;
 		  /* Try to guess both screen types.  If we find Paget/Finlay screen, preserve original type
 		     if it makes sense, otheriwse default to Paget.  */
 		  if (try_dufay && try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
-		    current_type = Dufay;
+		    {
+		      current_type = Dufay;
+		      this_cmap = render->get_color_class_map ();
+		    }
 		  else if (try_paget_finlay && try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited_paget, progress))
-		    current_type = type == Finlay ? Finlay : Paget;
+		    {
+		      current_type = type == Finlay ? Finlay : Paget;
+		      this_cmap = cmap ? cmap.get () : render->get_color_class_map ();
+		    }
+		  else if (try_paget_finlay && cmap && try_guess_paget_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited_paget, progress))
+		    {
+		      current_type = type == Finlay ? Finlay : Paget;
+		      this_cmap = render->get_color_class_map ();
+		    }
 		  if (progress && progress->cancel_requested ())
 		    {
 		      if (progress)
@@ -1571,7 +1584,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		      param.type = current_type;
 		      simple_solver (&param, img, sparam, progress);
 		      smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get (),
-				         cmap && current_type != Dufay ? cmap.get () : render->get_color_class_map (), NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
+				         this_cmap, NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		      if (!smap)
 			{
 			  if (progress)
