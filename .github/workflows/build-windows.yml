@@ -38,9 +38,6 @@ jobs:
     - name: make check
       shell: msys2 {0}
       run: make check
-    - name: make distcheck
-      shell: msys2 {0}
-      run: make distcheck
     - name: make install
       shell: msys2 {0}
       run: make install
@@ -71,3 +68,6 @@ jobs:
     - name: Copy to directory
       shell: msys2 {0}
       run: cp Color-Screen-GUI/taraget/*.jar Color-Screen-GUI/taraget/*.dll /c/Color-Screen-GUI
+    - name: make distcheck
+      shell: msys2 {0}
+      run: make distcheck
