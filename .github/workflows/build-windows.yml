@@ -60,6 +60,9 @@ jobs:
     - name: Set properties
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+    - name: Get rid of mingw so maven does not pick it up. Hack
+      shell: msys2 {0}
+      run: rm /c/mingw64/bin/gcc /c/mingw64/bin/g++ /c/mingw64/bin/ld
     - name: Run maven build
       shell: pwsh
       run: |
