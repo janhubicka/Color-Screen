@@ -102,7 +102,7 @@ from the Library of Congress webpages and produce color renderings.
 
 ## Usage
 
-There are three programs installed. 
+There are two programs installed. 
 
 `colorscreen` is a command line utility to render into tiff files. See
 `colorscreen --help` and its
