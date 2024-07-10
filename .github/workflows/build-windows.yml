@@ -19,20 +19,6 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         install: gcc make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make mingw-w64-x86_64-pkg-config libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
-    - name: digital coloring GUI
-      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
-    - name: setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        architecture: x64
-    - name: Setup Maven Action
-      uses: stCarolas/setup-maven@v5
-      with:
-        maven-version: 3.8.2
-    - name: find maven
-      run: ls /c/hostedtoolcache/windows/*aven*
     - name: configure
       run: ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
     - name: make
@@ -51,5 +37,21 @@ jobs:
       with:
         name: windows-binary
         path: c:\Color-Screen-install\
+    - name: digital coloring GUI
+      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        architecture: x64
+    - name: Setup Maven Action
+      uses: stCarolas/setup-maven@v5
+      with:
+        maven-version: 3.9.6
+    - name: Set properties
+      run : ls
+    - name: Set properties
+      rn : cp Color-Screen/.github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
-      run: cd olor-Screen-GUI ; mvn clean package
+      run: cd Color-Screen-GUI ; mvn clean package
