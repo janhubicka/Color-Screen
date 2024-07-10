@@ -47,7 +47,6 @@ jobs:
       uses: actions/setup-java@v4
       with:
         java-version: '21'
-        architecture: arm64
         distribution: 'temurin'
     - name: Set up Maven
       uses: stCarolas/setup-maven@v5
