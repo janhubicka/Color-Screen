@@ -43,3 +43,15 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
+    - name: setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        architecture: x64
+        distribution: 'temurin'
+    - name: digital coloring GUI
+      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: digital coloring GUI
+      run: find / -name jni.h
+    - name: Set properties
+      run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
