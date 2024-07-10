@@ -20,13 +20,14 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+        cache: maven
     - uses: msys2/setup-msys2@v2
       with:
         install: gcc make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make diffutils automake autoconf mingw-w64-x86_64-pkg-config libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
     - name: find header
       run: find /c/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.3-9.0/x64 -name jni.h
     - name: find header
-      run: find /c/hostedtoolcache/windows/Java_Temurin-Hotspot_jdk/21.0.3-9.0/x64 -name mvn.*
+      run: find /c/hostedtoolcache/windows/ -name mvn.*
     - name: configure
       run: ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
     - name: make
