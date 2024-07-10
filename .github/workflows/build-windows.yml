@@ -38,6 +38,9 @@ jobs:
     - name: make check
       shell: msys2 {0}
       run: make check
+    - name: make distcheck
+      shell: msys2 {0}
+      run: make distcheck
     - name: make install
       shell: msys2 {0}
       run: make install
