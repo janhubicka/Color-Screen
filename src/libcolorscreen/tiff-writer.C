@@ -1,6 +1,14 @@
 #include <stdlib.h>
 #include "include/tiff-writer.h"
 
+/* Needed to build at ubuntu-latest.  */
+#ifndef TIFFTAG_FORWARDMATRIX1
+#  define TIFFTAG_FORWARDMATRIX1 50964              /* &matrix for mapping white balanced camera colors to XYZ D50 */
+#endif
+#ifndef TIFFTAG_PROFILETONECURVE
+#  define TIFFTAG_PROFILETONECURVE 50940            /* &default tone curve */
+#endif
+
 static const TIFFFieldInfo tiffFields[] = {
 	{TIFFTAG_FORWARDMATRIX1, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ForwardMatrix1"},
 	{TIFFTAG_PROFILETONECURVE, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ToneCurve"},
