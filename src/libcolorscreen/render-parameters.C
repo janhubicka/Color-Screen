@@ -799,6 +799,8 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
   bool verbose = true;
   if (verbose)
     {
+      if (progress)
+	progress->pause_stdout ();
       printf ("mix dark: ");
       mix_dark.print (stdout);
       printf ("gray red: ");
@@ -811,6 +813,8 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
       printf ("adjusted red %f\n", gray_red.red * mix_red + gray_red.green * mix_green + gray_red.blue * mix_blue);
       printf ("adjusted green %f\n", gray_green.red * mix_red + gray_green.green * mix_green + gray_green.blue * mix_blue);
       printf ("adjusted blue %f\n", gray_blue.red * mix_red + gray_blue.green * mix_green + gray_blue.blue * mix_blue);
+      if (progress)
+	progress->resume_stdout ();
     }
   return true;
 }
@@ -941,11 +945,16 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
   c.red = r.adjust_luminosity_ir (c.red);
   c.green = r.adjust_luminosity_ir (c.green);
   c.blue = r.adjust_luminosity_ir (c.blue);
-  printf ("Adjusted color");
-  c.print (stdout);
   luminosity_t avg = (c.red + c.green + c.blue) / 3;
   white_balance.red = avg / c.red;
   white_balance.green = avg / c.green;
   white_balance.blue = avg / c.blue;
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Adjusted color ");
+  c.print (stdout);
+  printf ("White balance %f %f %f\n", white_balance.red, white_balance.green, white_balance.blue);
+  if (progress)
+    progress->resume_stdout ();
   return true;
 }
