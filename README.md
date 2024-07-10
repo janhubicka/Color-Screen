@@ -39,7 +39,7 @@ by Linda Kimrová
 
 ## Installation
 
-### Linux
+### Linux (and other UNIX-like systems)
 
 On typical Linux distribution it is enough to do the following.
 
