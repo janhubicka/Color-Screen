@@ -1,4 +1,5 @@
 #include <time.h>
+#include <filesystem>
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
@@ -35,6 +36,7 @@ enum ui_mode
 static struct solver_parameters current_solver;
 static void setvals (void);
 static mesh *current_mesh = NULL;
+static const char *binary_name;
 
 detected_screen detected;
 
@@ -1143,11 +1145,19 @@ initgtk (int *argc, char **argv)
   GtkWidget *image_viewer;
 
   gtk_init (argc, &argv);
+#if 0
+  std::filesystem::path path(binary_name);
+  std::string filename = path.parent_path() + "/../colorscreen/gtkgui.glade";
+#endif
+
 
   /* Create builder and load interface */
   builder = gtk_builder_new ();
   if (!gtk_builder_add_from_file (builder,
       DATADIR "/colorscreen/gtkgui.glade", NULL)
+#if 0
+      && !gtk_builder_add_from_file (builder, filename.c_str (), NULL))
+#endif
       && !gtk_builder_add_from_file (builder, "../colorscreen/gtkgui.glade", NULL))
     {
       fprintf (stderr, "Can not open " DATADIR "/colorscreen/gtkgui.glade\n");
@@ -2120,6 +2130,7 @@ int
 main (int argc, char **argv)
 {
   GtkWidget *window;
+  binary_name = argv[0];
   if (argc != 2 && argc != 3)
     {
       fprintf (stderr, "Invocation: %s <scan> <csp (optional)>]\n\n"
