@@ -16,11 +16,8 @@ rendering tool that would later become Color-Screen.
 
 ## Prequisities
 Color-Screen can be built using recent versions of either GCC or Clang
-compilers.
-
-For optimal performance, OpenMP support in your compiler is recommended. The
-default Clang compiler included with Xcode does not support OpenMP. However,
-you can install OpenMP separately for Xcode's Clang.
+compilers.  For optimal performance, OpenMP support in your compiler is
+recommended. 
 
 Building the main library and command-line utility requires the following
 additional libraries:
