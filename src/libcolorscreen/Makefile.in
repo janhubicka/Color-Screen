@@ -90,7 +90,6 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@RENDER_EXTRA_TRUE@am__append_1 = render-extra/render-extra.C
 noinst_PROGRAMS = matrix$(EXEEXT)
 subdir = src/libcolorscreen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -134,20 +133,6 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libcolorscreen_la_LIBADD =
-am__libcolorscreen_la_SOURCES_DIST = render.C render-to-scr.C \
-	render-fast.C render-interpolate.C screen.C scr-to-img.C \
-	imagedata.C loadsave.C render-tile.C scr-detect.C \
-	render-scr-detect.C spectrum-to-xyz.C patches.C \
-	progress-info.C render-to-file.C color.C sensitivity.C \
-	solver.C mesh.C scr-detect-geometry.C analyze-dufay.C \
-	analyze-paget.C screen-map.C analyze-base.C tiff-writer.C \
-	backlight-correction.C stitch-image.C stitch-project.C icc.C \
-	render-parameters.C mapalloc.C parse-captureone-lcc.C \
-	dufaycolor.C wratten.C spectrum.C spectrum-dyes.C \
-	spectrum-illuminants.C spectrum-responses.C tone-curve.C \
-	lens-warp-correction.C matrix-profile.C scr-detect-colors.C \
-	finetune.C render-extra/render-extra.C
-@RENDER_EXTRA_TRUE@am__objects_1 = libcolorscreen_la-render-extra.lo
 am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-render-to-scr.lo \
 	libcolorscreen_la-render-fast.lo \
@@ -184,8 +169,11 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-lens-warp-correction.lo \
 	libcolorscreen_la-matrix-profile.lo \
 	libcolorscreen_la-scr-detect-colors.lo \
-	libcolorscreen_la-finetune.lo $(am__objects_1)
-libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS)
+	libcolorscreen_la-finetune.lo
+@RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_OBJECTS =  \
+@RENDER_EXTRA_TRUE@	libcolorscreen_la-render-extra.lo
+libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS) \
+	$(nodist_libcolorscreen_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -276,8 +264,9 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(libcolorscreen_la_SOURCES) $(matrix_SOURCES)
-DIST_SOURCES = $(am__libcolorscreen_la_SOURCES_DIST) $(matrix_SOURCES)
+SOURCES = $(libcolorscreen_la_SOURCES) \
+	$(nodist_libcolorscreen_la_SOURCES) $(matrix_SOURCES)
+DIST_SOURCES = $(libcolorscreen_la_SOURCES) $(matrix_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -441,19 +430,9 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/render-fast.h include/render.h include/render-to-scr.h include/screen.h include/scr-to-img.h  include/dllpublic.h include/scr-detect.h include/render-scr-detect.h include/spectrum-to-xyz.h include/patches.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/solver.h include/mesh.h include/base.h include/bitmap.h include/tiff-writer.h include/stitch.h include/backlight-correction.h include/analyze-dufay.h include/analyze-paget.h include/analyze-base.h include/lens-correction.h include/tone-curve.h include/finetune.h include/spline.h include/histogram.h
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C \
-	render-interpolate.C screen.C scr-to-img.C imagedata.C \
-	loadsave.C render-tile.C scr-detect.C render-scr-detect.C \
-	spectrum-to-xyz.C patches.C progress-info.C render-to-file.C \
-	color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C \
-	analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C \
-	tiff-writer.C backlight-correction.C stitch-image.C \
-	stitch-project.C icc.C render-parameters.C mapalloc.C \
-	parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C \
-	spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C \
-	tone-curve.C lens-warp-correction.C matrix-profile.C \
-	scr-detect-colors.C finetune.C $(am__append_1)
+libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interpolate.C screen.C scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C matrix-profile.C scr-detect-colors.C finetune.C
 EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h lru-cache-loc.h render-diff.h render-tile.h sharpen.h wratten.h dj_fft.h gsl-utils.h loadsave.h mapalloc.h render-interpolate.h render-to-file.h spectrum-dyes.h dufaycolor.h icc.h lru-cache.h nmsimplex.h render-superposeimg.h screen-map.h spectrum.h
+@RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
