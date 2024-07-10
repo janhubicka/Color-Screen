@@ -90,9 +90,9 @@ OpenMP for multithreading disabled.  For Color–Screen to run smoothly and
 faster, install (using homebrew) the `libomp8` package together with the other
 required packages listed above:
 
-   CXXFLAGS ="-I/opt/homebrew/include -I/opt/homebrew /opt/libomp/include -Xclang=-fopenmp" \
-   LDFLAGS ="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" \
-   ./configure --prefix=<where_to_install> --disable -openmp
+    CXXFLAGS ="-I/opt/homebrew/include -I/opt/homebrew /opt/libomp/include -Xclang=-fopenmp" \
+    LDFLAGS ="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" \
+    ./configure --prefix=<where_to_install> --disable -openmp
 
 ## Wonderful examples
 
