@@ -13,6 +13,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-binary
+        path: ~/Color-Screen-install
     - name: Install libtiff
       run: brew install -v libtiff
     - name: Install libjpeg-turbo
@@ -28,8 +32,10 @@ jobs:
     - name: Install libomp
       run: brew install -v libomp
     - name: configure
-      run: CXXFLAGS="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp
+      run: CXXFLAGS="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=~/Color-Screen-install
     - name: make
       run: make
     - name: make check
       run: make check
+    - name: make install
+      run: make install
