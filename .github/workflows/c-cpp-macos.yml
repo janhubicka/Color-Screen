@@ -25,8 +25,8 @@ jobs:
       run: brew install -v libraw
     - name: Install little-cms2
       run: brew install -v little-cms2
-    - name: Install libomp8
-      run: brew install -v libomp8
+    - name: Install libomp
+      run: brew install -v libomp
     - name: configure
       run: CXXFLAGS="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp
     - name: make
