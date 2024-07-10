@@ -16,9 +16,9 @@ jobs:
     - name: Install libtiff
       run: brew install -v libtiff
     - name: find
-      run: find / -name=tiffio.h
+      run: find / -name tiffio.h
     - name: find2
-      run: find / -name=libtiff*
+      run: find / -name libtiff*
     - name: CXXFLAGS ="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" configure
       run: ./configure
     - name: make

@@ -26,9 +26,9 @@ jobs:
     - name: Install liblcms2
       run: sudo apt-get install -y liblcms2-dev
     - name: find
-      run: find / -name=turbojpeg.h
+      run: find / -name turbojpeg.h
     - name: find2
-      run: find / -name=libturbojpeg*
+      run: find / -name libturbojpeg*
     - name: configure
       run: ./configure
     - name: make
