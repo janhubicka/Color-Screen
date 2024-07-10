@@ -18,7 +18,7 @@ jobs:
       with:
         java-version: '21'
         architecture: x64
-        distribution: 'oracle'
+        distribution: 'temurin'
     - name: test maven
       run: mvn -v
     - uses: msys2/setup-msys2@v2
@@ -61,7 +61,7 @@ jobs:
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
-      run: mvn  -f Color-Screen-GUI/pom.xml clean package
+      run: cd Color-Screen-GUI ; mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
       run: mkdir /c/Color-Screen-GUI
