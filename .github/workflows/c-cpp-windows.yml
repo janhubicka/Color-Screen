@@ -1,4 +1,4 @@
-name: C/C++ CI Ubuntu
+name: C/C++ CI Windows
 
 on:
   push:
@@ -13,6 +13,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - uses: msys2/setup-msys2@v2
     - name: configure
       run: ./configure
     - name: make
