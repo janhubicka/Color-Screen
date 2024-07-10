@@ -93,6 +93,8 @@ required packages listed above:
     CXXFLAGS ="-I/opt/homebrew/include -I/opt/homebrew /opt/libomp/include -Xclang=-fopenmp" \
     LDFLAGS ="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" \
     ./configure --prefix=<where_to_install> --disable-openmp
+    make
+    make install
 
 This works around the disabled OpenMP support.
 
