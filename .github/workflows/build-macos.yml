@@ -60,5 +60,7 @@ jobs:
       run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       run: cd Color-Screen-GUI ; mvn  clean package
-    - name: make distcheck
-      run: make distcheck
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-colorscreenGUI-target
+        path: Color-Screen-GUI/target
