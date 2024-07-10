@@ -2177,7 +2177,7 @@ stitch(int argc, char **argv)
 
   prj = new stitch_project ();
 
-  for (int i = 1; i < argc; i++)
+  for (int i = 0; i < argc; i++)
     {
       float flt;
       if (const char *str = arg_with_param (argc, argv, &i, "report"))
@@ -2304,7 +2304,6 @@ stitch(int argc, char **argv)
 	  if (fnames[0].length () != fnames[1].length ())
 	    {
 	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
-	      print_help ();
 	      exit (1);
 	    }
 	  for (indexpos = 0; indexpos < (int)fnames[0].length () - 2; indexpos++)
@@ -2314,7 +2313,6 @@ stitch(int argc, char **argv)
 	  if (fnames[0][indexpos] != '1' || fnames[0][indexpos + 1] != '1')
 	    {
 	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
-	      print_help ();
 	      exit (1);
 	    }
 	  int w;
@@ -2340,7 +2338,6 @@ stitch(int argc, char **argv)
       if (prj->params.width * prj->params.height != (int)fnames.size ())
 	{
 	  fprintf (stderr, "For %ix%i tiles I expect %i filenames, found %i\n", prj->params.width, prj->params.height, prj->params.width * prj->params.height, (int)fnames.size ());
-	  print_help ();
 	  exit (1);
 	}
       for (int y = 0; y < prj->params.height; y++)
