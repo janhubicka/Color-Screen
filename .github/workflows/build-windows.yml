@@ -24,6 +24,7 @@ jobs:
       with:
         java-version: '21'
         architecture: x64
+        distribution: 'oracle'
     - name: test maven
       run: mvn -v
     - name: find java
@@ -32,25 +33,35 @@ jobs:
       run: whereis mvn
     - name: configure
       run: ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
+        shell: msys2 {0}
     - name: make
       run: make
+        shell: msys2 {0}
     - name: make check
       run: make check
+        shell: msys2 {0}
     - name: make install
       run: make install
+        shell: msys2 {0}
     - name: print dlls gtk
       run: ldd /c/Color-Screen-install/bin/colorscreen-gtk
+        shell: msys2 {0}
     - name: print dlls dll
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
+        shell: msys2 {0}
     - name: copy dlls
       run: cp /mingw64/bin/libgcc_s_seh-*.dll /mingw64/bin/libcairo-*.dll /mingw64/bin/libgdk_pixbuf-*.dll /mingw64/bin/libgdk-*.dll /mingw64/bin/libglib-*.dll /mingw64/bin/libgomp-*.dll /mingw64/bin/libgobject-*.dll /mingw64/bin/libgsl-*.dll /mingw64/bin/libwinpthread-*.dll /mingw64/bin/libgtk-*.dll /mingw64/bin/liblcms2-*.dll /mingw64/bin/libtiff-*.dll /mingw64/bin/libraw-*.dll /mingw64/bin/libstdc++-*.dll /mingw64/bin/libzip.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libgio-*.dll /mingw64/bin/libintl-*.dll /mingw64/bin/libpango-*.dll /mingw64/bin/libpangocairo-*.dll /mingw64/bin/libfontconfig-*.dll /mingw64/bin/libpixman-*.dll /mingw64/bin/libfreetype-*.dll /mingw64/bin/libpng16-*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libgmodule-*.dll /mingw64/bin/libffi-*.dll /mingw64/bin/libpcre2-*.dll /mingw64/bin/libatk-*.dll /mingw64/bin/libgslcblas-*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig-*.dll /mingw64/bin/libjpeg-*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma-*.dll /mingw64/bin/libwebp-*.dll /mingw64/bin/libzstd.dll /mingw64/bin/libpangowin32-*.dll /mingw64/bin/libbz2-*.dll /mingw64/bin/libiconv-*.dll /mingw64/bin/libharfbuzz-*.dll /mingw64/bin/libthai-*.dll /mingw64/bin/libfribidi-*.dll /mingw64/bin/libpangoft2-*.dll /mingw64/bin/libexpat-*.dll /mingw64/bin/libbrotlidec.dll /mingw64/bin/libsharpyuv-*.dll /mingw64/bin/libgraphite2.dll /mingw64/bin/libdatrie-*.dll /mingw64/bin/libbrotlicommon.dll  /c/Color-Screen-install/bin
+        shell: msys2 {0}
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary
         path: c:\Color-Screen-install\
     - name: digital coloring GUI
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+        shell: msys2 {0}
     - name: Set properties
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+        shell: msys2 {0}
     - name: Run maven build
       run: cd Color-Screen-GUI ; mvn clean package
+        shell: msys2 {0}
