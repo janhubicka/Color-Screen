@@ -15,8 +15,6 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install libtiff
       run: brew install -v libtiff
-    - name: find
-      run: find / -name tiffio.h
     - name: find2
       run: find / -name libtiff*
     - name: CXXFLAGS ="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" configure
