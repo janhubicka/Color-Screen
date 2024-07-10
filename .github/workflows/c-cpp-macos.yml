@@ -13,10 +13,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/upload-artifact@v4
-      with:
-        name: macOS-binary
-        path: /tmp/Color-Screen-install
     - name: Install libtiff
       run: brew install -v libtiff
     - name: Install libjpeg-turbo
@@ -39,3 +35,7 @@ jobs:
       run: make check
     - name: make install
       run: make install
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-binary
+        path: /tmp/Color-Screen-install/
