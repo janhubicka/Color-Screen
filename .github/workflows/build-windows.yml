@@ -61,5 +61,10 @@ jobs:
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
-      shell: msys2 {0}
       run: cd Color-Screen-GUI ; mvn clean package
+    - name: Create output directory
+      shell: msys2 {0}
+      run: mkdir /c/Color-Screen-GUI
+    - name: Copy to directory
+      shell: msys2 {0}
+      run: cp Color-Screen-GUI/taraget/*.jar Color-Screen-GUI/taraget/*.dll /c/Color-Screen-GUI
