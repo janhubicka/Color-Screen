@@ -24,7 +24,7 @@ jobs:
     - name: Install libraw
       run: brew install -v libraw
     - name: Install little-cms2
-      run: brew install -v liblcms2
+      run: brew install -v little-cms2
     - name: configure
       run: CXXFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" CXX=clang++ CC=clang ./configure
     - name: make
