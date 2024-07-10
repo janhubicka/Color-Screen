@@ -81,12 +81,12 @@ public:
   /* Screen with emulsion.  */
   std::shared_ptr <screen> emulsion_scr;
   /* Screen merging emulsion and unblurred screen.  */
-  std::shared_ptr <screen> merged_scr[max_tiles];
+  screen *merged_scr[max_tiles];
   /* Blured screen used to render simulated scan.  */
-  std::shared_ptr <screen> scr[max_tiles];
+  screen *scr[max_tiles];
 
   finetune_solver ()
-    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), start (NULL), tile {NULL},bwtile {NULL}, tile_pos {NULL}
+    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), tile {NULL},bwtile {NULL}, tile_pos {NULL}, simulated_screen {NULL}, start (NULL), scr {NULL}, merged_scr {NULL}
   {
   }
   int n_tiles;
@@ -104,7 +104,7 @@ public:
   int simulated_screen_width;
   int simulated_screen_height;
   /* Tile colors */
-  std::shared_ptr <rgbdata []> simulated_screen[max_tiles];
+  rgbdata *simulated_screen[max_tiles];
 
   coord_t *start;
 
@@ -172,6 +172,9 @@ public:
 	delete tile[i];
 	delete bwtile[i];
 	delete tile_pos[i];
+	delete scr[i];
+	delete merged_scr[i];
+	delete simulated_screen[i];
       }
   }
 
@@ -687,9 +690,9 @@ public:
       emulsion_scr = std::shared_ptr <screen> (new screen);
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < n_tiles; tileid++)
-        merged_scr[tileid] = std::shared_ptr <screen> (new screen);
+        merged_scr[tileid] = new screen;
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      scr[tileid] = std::shared_ptr <screen> (new screen);
+      scr[tileid] = new screen;
 
     last_blur = {-1, -1,-1};
     for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -855,7 +858,7 @@ public:
     simulated_screen_width = twidth;
     simulated_screen_height = theight;
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      simulated_screen[tileid] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height]);
+      simulated_screen[tileid] = new  (std::nothrow) rgbdata [simulated_screen_width * simulated_screen_height];
   }
 
   coord_t
@@ -924,7 +927,7 @@ public:
 		merged_scr[tileid]->mult[y][x][1] = src_scr->mult[y][x][1] * w;
 		merged_scr[tileid]->mult[y][x][2] = src_scr->mult[y][x][2] * w;
 	      }
-	src_scr = merged_scr[tileid].get ();
+	src_scr = merged_scr[tileid];
       }
 
     if (optimize_screen_mtf_blur)
@@ -968,7 +971,7 @@ public:
     
     if (blur != last_blur || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf) || last_emulsion_intensities[tileid] != intensities || last_emulsion_offset[tileid] != emulsion_offset)
       {
-	apply_blur (v, tileid, scr[tileid].get (),
+	apply_blur (v, tileid, scr[tileid],
 		    optimize_emulsion_blur && !optimize_emulsion_intensities? emulsion_scr.get () : original_scr.get (),
 		    optimize_emulsion_intensities ? emulsion_scr.get () : NULL);
 	last_blur = blur;
@@ -1938,6 +1941,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		        solver.tile[i] = NULL;
 		        solver.bwtile[i] = NULL;
 		        solver.tile_pos[i] = NULL;
+		        solver.scr[i] = NULL;
+		        solver.merged_scr[i] = NULL;
+		        solver.simulated_screen[i] = NULL;
 		      }
 		    best_uncertainity = uncertainity;
 		  }
