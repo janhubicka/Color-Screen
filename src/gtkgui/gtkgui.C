@@ -1147,7 +1147,8 @@ initgtk (int *argc, char **argv)
   /* Create builder and load interface */
   builder = gtk_builder_new ();
   if (!gtk_builder_add_from_file (builder,
-      DATADIR "/colorscreen/gtkgui.glade", NULL))
+      DATADIR "/colorscreen/gtkgui.glade", NULL)
+      && !gtk_builder_add_from_file (builder, "../colorscreen/gtkgui.glade", NULL))
     {
       fprintf (stderr, "Can not open " DATADIR "/colorscreen/gtkgui.glade\n");
       exit (1);
