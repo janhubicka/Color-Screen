@@ -28,7 +28,9 @@ jobs:
         distribution: 'temurin'
         architecture: x64
     - name: Setup Maven Action
-      uses: s4u/setup-maven-action3.9.8
+      uses: stCarolas/setup-maven@v5
+      with:
+        maven-version: 3.8.2
     - name: find maven
       run: ls /c/hostedtoolcache/windows/*aven*
     - name: configure
