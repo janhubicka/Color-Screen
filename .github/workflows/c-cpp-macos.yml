@@ -28,7 +28,7 @@ jobs:
     - name: Install libomp
       run: brew install -v libomp
     - name: Install gtk+
-      run: brew install -v libomp
+      run: brew install -v gtk+
     - name: configure
       run: CXXFLAGS="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-install --enable-gtkgui
     - name: make
