@@ -28,9 +28,6 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         install: gcc make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make mingw-w64-x86_64-pkg-config libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
-    - name: test maven from msys2
-      shell: msys2 {0}
-      run: /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn -v
     - name: configure
       shell: msys2 {0}
       run: ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
@@ -59,12 +56,15 @@ jobs:
     - name: digital coloring GUI
       shell: msys2 {0}
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: find gcc
+      shell: msys2 {0}
+      run: whereis gcc
     - name: Set properties
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       shell: msys2 {0}
-      run: cd Color-Screen-GUI ; /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn  clean package
+      run: set PATH=D:\a\;%PATH%; cd Color-Screen-GUI ; /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
       run: mkdir /c/Color-Screen-GUI
