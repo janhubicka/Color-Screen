@@ -37,7 +37,9 @@ jobs:
       run: make check
     - name: make install
       run: make install
+    - name: tar
+      run: tar czvf /tmp/Color-Screen-MacOS.tar.gz /tmp/Color-Screen-install/
     - uses: actions/upload-artifact@v4
       with:
         name: macOS-binary
-        path: /tmp/Color-Screen-install/
+        path: /tmp/Color-Screen-MacOS.tar.gz
