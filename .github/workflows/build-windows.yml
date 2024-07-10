@@ -26,11 +26,9 @@ jobs:
         distribution: 'temurin'
         architecture: x64
     - name: Set up Maven
-      uses: hb0730/maven-action@v1.0.2
+      uses: aahmed-se/setup-maven@v3
       with:
-        maven-version: 3.8.2
-        maven-file: ${{ runner.temp }}/apache-maven-3.8.2-bin.tar.gz
-        url: https://downloads.apache.org/maven/maven-3/3.8.2/binaries/apache-maven-3.8.2-bin.tar.gz
+        maven-version: 3.9.6
     - name: test maven
       run: mvn -v
     - name: locate maven
