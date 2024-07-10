@@ -27,9 +27,8 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         architecture: x64
-        cache: maven
-    - name: try maven
-      run: mvn
+    - name: Setup Maven Action
+      uses: s4u/setup-maven-action3.9.8
     - name: find maven
       run: ls /c/hostedtoolcache/windows/*aven*
     - name: configure
