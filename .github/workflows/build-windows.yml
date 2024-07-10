@@ -27,6 +27,7 @@ jobs:
       run: mvn -v
     - uses: msys2/setup-msys2@v2
       with:
+        msystem: UCRT64
         install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
     - name: configure
       shell: msys2 {0}
@@ -60,7 +61,11 @@ jobs:
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
-      run: cd Color-Screen-GUI ; set PATH=D:\a\msys2\mingw64\bin;%PATH ; mvn  clean package
+      run: |
+        cd Color-Screen-GUI
+        set PATH=D:\a\msys2\mingw64\bin;%PATH%
+        set MSYSTEM=UCRT64
+        mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
       run: mkdir /c/Color-Screen-GUI
