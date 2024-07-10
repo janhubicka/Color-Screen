@@ -20,7 +20,7 @@ jobs:
     - name: Install libzip
       run: brew install -v libzip
     - name: Install libgsl
-      run: brew install -v libgsl
+      run: brew install -v gsl
     - name: Install libraw
       run: brew install -v libraw
     - name: Install liblcms2
