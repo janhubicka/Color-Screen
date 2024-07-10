@@ -24,7 +24,8 @@ jobs:
       with:
         maven-version: 3.9.6
     - name: test maven
-      run: mvn -v
+      shell: msys2 {0}
+      run: /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn -v
     - uses: msys2/setup-msys2@v2
       with:
         install: gcc make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git make mingw-w64-x86_64-pkg-config libtool mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
@@ -65,7 +66,8 @@ jobs:
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
-      run: cd Color-Screen-GUI ; mvn  clean package
+      shell: msys2 {0}
+      run: cd Color-Screen-GUI ; /c/hostedtoolcache/windows/maven/3.9.6/x64/mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
       run: mkdir /c/Color-Screen-GUI
