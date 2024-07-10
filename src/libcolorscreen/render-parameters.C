@@ -526,8 +526,12 @@ render_parameters::get_rgb_to_xyz_matrix (const image_data *img, bool normalized
   //
   if (saturation != 1 && color_model != color_model_kodachrome25)
     {
+      xyz_srgb_matrix xr;
+      srgb_xyz_matrix rx;
       saturation_matrix m (saturation);
+      color = xr * color;
       color = m * color;
+      color = rx * color;
     }
   color.verify_last_row_0001 ();
   return color;
