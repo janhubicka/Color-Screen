@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: C/C++ CI MacOS
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install libtiff
-      run: sudo brew install -v libtiff
+      run: brew install -v libtiff
     - name: configure
       run: ./configure
     - name: make
