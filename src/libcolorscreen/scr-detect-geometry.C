@@ -13,7 +13,7 @@
 extern void prune_render_scr_detect_caches ();
 namespace
 {
-const bool verbose = true;
+const bool verbose = false;
 const int verbose_confirm = 0;
 struct patch_entry
 {
