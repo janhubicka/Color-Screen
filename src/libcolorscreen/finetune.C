@@ -86,7 +86,7 @@ public:
   std::shared_ptr <screen> scr[max_tiles];
 
   finetune_solver ()
-    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), start (NULL)
+    : gsl_work (NULL), gsl_X (NULL), gsl_y {NULL, NULL, NULL}, gsl_c (NULL), gsl_cov (NULL), noutliers (0), outliers (), start (NULL), tile {NULL},bwtile {NULL}, tile_pos {NULL}
   {
   }
   int n_tiles;
@@ -95,11 +95,11 @@ public:
   /* Tile positions */
   int txmin[max_tiles], tymin[max_tiles];
   /* Tile colors */
-  std::shared_ptr <rgbdata []> tile[max_tiles];
+  rgbdata *tile[max_tiles];
   /* Black and white tile.  */
-  std::shared_ptr <luminosity_t []> bwtile[max_tiles];
+  luminosity_t *bwtile[max_tiles];
   /* Tile position  */
-  std::shared_ptr <point_t []> tile_pos[max_tiles];
+  point_t *tile_pos[max_tiles];
   int simulated_screen_border;
   int simulated_screen_width;
   int simulated_screen_height;
@@ -167,6 +167,12 @@ public:
   {
     free_least_squares ();
     free (start);
+    for (int i = 0; i < n_tiles; i++)
+      {
+	delete tile[i];
+	delete bwtile[i];
+	delete tile_pos[i];
+      }
   }
 
   int num_values ()
@@ -571,11 +577,11 @@ public:
     tymin[tileid] = cur_tymin;
     type = map.get_type ();
     if (!bw)
-      tile[tileid] = (std::unique_ptr <rgbdata[]>)(new  (std::nothrow) rgbdata [twidth * theight]);
+      tile[tileid] = new  (std::nothrow) rgbdata [twidth * theight];
     else
-      bwtile[tileid] = (std::unique_ptr <luminosity_t[]>)(new  (std::nothrow) luminosity_t [twidth * theight]);
+      bwtile[tileid] = new  (std::nothrow) luminosity_t [twidth * theight];
 
-    tile_pos[tileid] = (std::unique_ptr <point_t[]>)(new  (std::nothrow) point_t [twidth * theight]);
+    tile_pos[tileid] = new  (std::nothrow) point_t [twidth * theight];
     if ((!tile[tileid] && !bwtile[tileid]) || !tile_pos[tileid])
       return false;
     for (int y = 0; y < theight; y++)
@@ -1927,6 +1933,12 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		  {
 		    best_solver = solver;
 		    solver.start = NULL;
+		    for (int i = 0; i < solver.n_tiles; i++)
+		      {
+		        solver.tile[i] = NULL;
+		        solver.bwtile[i] = NULL;
+		        solver.tile_pos[i] = NULL;
+		      }
 		    best_uncertainity = uncertainity;
 		  }
 	      }
