@@ -63,12 +63,15 @@ jobs:
     - name: Set properties
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+    - name: show gcc path
+      shell: msys2 {0}
+      run: cygpath -w /mingw64/bin/gcc.exe
     - name: modify gcc path
       shell: msys2 {0}
-      run: sed 'sPgccPD:'`cygpath -w/mingw64/bin/gcc.exe`'P' -i.bck Color-Screen-GUI/pom.xml
+      run: sed "sPgccPD:`cygpath -w /mingw64/bin/gcc.exe`P" -i.bck Color-Screen-GUI/pom.xml
     - name: modify g++ path
       shell: msys2 {0}
-      run: sed 'sPg++PD:'`cygpath -w/mingw64/bin/g++.exe`'P' -i.bck Color-Screen-GUI/pom.xml
+      run: sed "sPg++PD:`cygpath -w /mingw64/bin/g++.exe`P" -i.bck Color-Screen-GUI/pom.xml
     - name: Run maven build
       shell: pwsh
       run: |
