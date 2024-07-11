@@ -68,10 +68,10 @@ jobs:
       run: cygpath -w /mingw64/bin/gcc.exe
     - name: modify gcc path
       shell: msys2 {0}
-      run: sed "s;gcc;`cygpath -m /mingw64/bin/gcc.exe`;" -i.bck Color-Screen-GUI/pom.xml
+      run: sed "gcc;msys2 gcc;" -i.bck Color-Screen-GUI/pom.xml
     - name: modify g++ path
       shell: msys2 {0}
-      run: sed "s;g++;`cygpath -m /mingw64/bin/g++.exe`;" -i.bck Color-Screen-GUI/pom.xml
+      run: sed "s;g++;msys2 g++;" -i.bck Color-Screen-GUI/pom.xml
     - name: Run maven build
       shell: pwsh
       run: |
