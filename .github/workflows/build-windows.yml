@@ -66,17 +66,10 @@ jobs:
     - name: show gcc path
       shell: msys2 {0}
       run: cygpath -w /mingw64/bin/gcc.exe
-    - name: modify gcc path
-      shell: msys2 {0}
-      run: sed "s;gcc;msys2 gcc;" -i.bck Color-Screen-GUI/pom.xml
-    - name: modify g++ path
-      shell: msys2 {0}
-      run: sed "s;g++;msys2 g++;" -i.bck Color-Screen-GUI/pom.xml
     - name: Run maven build
       shell: pwsh
       run: |
         cd Color-Screen-GUI
-        $env:PATH = "D:/a/_temp/msys64/mingw64/x86_64-w64-mingw32/bin;D:\a\msys2\mingw64\bin;" + $env:PATH
         mvn  clean package
     - name: Create output directory
       shell: msys2 {0}
