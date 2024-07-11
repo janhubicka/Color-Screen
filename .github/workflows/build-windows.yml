@@ -76,7 +76,10 @@ jobs:
       run: mkdir /c/Color-Screen-GUI
     - name: Copy to directory
       shell: msys2 {0}
-      run: cp Color-Screen-GUI/taraget/*.jar Color-Screen-GUI/taraget/*.dll /c/Color-Screen-GUI
+      run: cp Color-Screen-GUI/target/*.jar Color-Screen-GUI/target/*.dll /c/Color-Screen-GUI
+    - name: copy dlls
+      shell: msys2 {0}
+      rum: cp /mingw64/bin/libgcc_s_seh*.dll /mingw64/bin/libgomp*.dll /mingw64/bin/libgsl*.dll /mingw64/bin/liblcms2*.dll /mingw64/bin/libwinpthread*.dll /mingw64/bin/libraw*.dll /mingw64/bin/libstdc++*.dll /mingw64/bin/libtiff*.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libzip.dll /mingw64/bin/libgslcblas*.dll /mingw64/bin/libjpeg*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma*.dll /mingw64/bin/libwebp*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libzstd.dll /mingw64/bin/libbz2*.dll /mingw64/bin/libsharpyuv*.dll /c/Color-Screen-GUI
     - uses: actions/upload-artifact@v4
       with:
         name: windows-GUI-binary
