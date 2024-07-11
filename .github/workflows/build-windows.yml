@@ -65,10 +65,10 @@ jobs:
       run: rm /c/mingw64/bin/gcc /c/mingw64/bin/g++ /c/mingw64/bin/ld /c/Strawberry/c/bin/gcc /c/Strawberry/c/bin/g++  /c/Strawberry/c/bin/ld
     - name: modify gcc path
       shell: msys2 {0}
-      sed 'sPgccPD:/a/_temp/msys64/mingw64/x86_64-w64-mingw32/bin/gcc.exeP' -i bck Color-Screen-GUI/pom.xml
+      run: sed 'sPgccPD:/a/_temp/msys64/mingw64/x86_64-w64-mingw32/bin/gcc.exeP' -i bck Color-Screen-GUI/pom.xml
     - name: modify g++ path
       shell: msys2 {0}
-      sed 'sPg++PD:/a/_temp/msys64/mingw64/x86_64-w64-mingw32/bin/g++.exeP' -i bck2 Color-Screen-GUI/pom.xml
+      run: sed 'sPg++PD:/a/_temp/msys64/mingw64/x86_64-w64-mingw32/bin/g++.exeP' -i bck2 Color-Screen-GUI/pom.xml
     - name: Run maven build
       shell: pwsh
       run: |
