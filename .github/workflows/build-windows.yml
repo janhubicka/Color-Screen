@@ -30,6 +30,7 @@ jobs:
         msystem: MINGW64
         install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
     - name: find gcc
+      shell: msys2 {0}
       run: find /mingw64 -name gcc.exe
     - name: configure
       shell: msys2 {0}
