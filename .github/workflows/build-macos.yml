@@ -29,6 +29,8 @@ jobs:
       run: brew install -v libomp
     - name: Install gtk+
       run: brew install -v gtk+
+    - name: Install dynlibbundler
+      run: brew install -v dylibbundler
     - name: configure
       run: CXXFLAGS="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
     - name: make
@@ -43,13 +45,6 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
-    - name: setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: maven
-        cache-dependency-path: Color-Screen-GUI/pom.xml
     - name: Set up Maven
       uses: stCarolas/setup-maven@v5
       with:
@@ -58,6 +53,13 @@ jobs:
       run: mvn -v
     - name: digital coloring GUI
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        cache-dependency-path: Color-Screen-GUI/pom.xml
     - name: Set properties
       run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
@@ -66,3 +68,12 @@ jobs:
       with:
         name: macOS-colorscreenGUI-target
         path: Color-Screen-GUI/target
+    - name: Try to package library
+      run: |
+        mkdir ColorScreen-GUI-package
+        dylibbundler -od -b -x Color-Screen-GUI/target/render* -d ColorScreen-GUI-package
+        cp Color-Screen-GUI/target/*depen*jar ColorScreen-GUI-package
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-colorscreenGUI-package
+        path: Color-Screen-GUI-package
