@@ -61,6 +61,7 @@ jobs:
         architecture: x64
         distribution: 'temurin'
         cache: maven
+        cache-dependency-path: Color-Screen-GUI/pom.xml
     - name: Set up Maven
       uses: stCarolas/setup-maven@v5
       with:
