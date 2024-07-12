@@ -53,15 +53,17 @@ jobs:
       run: mvn -v
     - name: digital coloring GUI
       run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+    - name: Set properties
+      run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+    - name: Downgrade java in maven
+      run: sed s/21/18/ -i Color-Screen-GUI/pom.xml
     - name: setup Java
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
+        java-version: '18'
         distribution: 'temurin'
         cache: maven
         cache-dependency-path: Color-Screen-GUI/pom.xml
-    - name: Set properties
-      run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Run maven build
       run: cd Color-Screen-GUI ; mvn  clean package
     - uses: actions/upload-artifact@v4

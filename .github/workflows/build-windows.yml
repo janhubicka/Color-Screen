@@ -54,10 +54,12 @@ jobs:
     - name: show gcc path
       shell: msys2 {0}
       run: cygpath -w /mingw64/bin/gcc.exe
+    - name: Downgrade java in maven
+      run: sed s/21/18/ -i Color-Screen-GUI/pom.xml
     - name: setup Java
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
+        java-version: '18'
         architecture: x64
         distribution: 'temurin'
         cache: maven
