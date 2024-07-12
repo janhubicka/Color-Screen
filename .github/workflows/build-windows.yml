@@ -13,19 +13,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        architecture: x64
-        distribution: 'temurin'
-        cache: maven
-    - name: Set up Maven
-      uses: stCarolas/setup-maven@v5
-      with:
-        maven-version: 3.9.6
-    - name: test maven
-      run: mvn -v
     - uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
@@ -67,6 +54,19 @@ jobs:
     - name: show gcc path
       shell: msys2 {0}
       run: cygpath -w /mingw64/bin/gcc.exe
+    - name: setup Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        architecture: x64
+        distribution: 'temurin'
+        cache: maven
+    - name: Set up Maven
+      uses: stCarolas/setup-maven@v5
+      with:
+        maven-version: 3.9.6
+    - name: test maven
+      run: mvn -v
     - name: Run maven build
       shell: pwsh
       run: |
