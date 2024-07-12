@@ -75,7 +75,7 @@ To make the package stand-alone it is necessary to copy
 all DLL libraries to `~/Color-Screen-install/bin/`. To figure out what libraries
 are necessary use 
 
-    ldd libcolorscreen1.dll
+    ldd libcolorscreen0.dll
 
 This will print all libraries used. Copy all DLL files from mingw64 subdirectory
 to bin subdirectory.
