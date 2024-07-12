@@ -55,7 +55,7 @@ jobs:
       shell: msys2 {0}
       run: cygpath -w /mingw64/bin/gcc.exe
     - name: Downgrade java in maven
-      run: sed s/21/18/ -i Color-Screen-GUI/pom.xml
+      run: sed -i.bck s/21/18/  Color-Screen-GUI/pom.xml
     - name: setup Java
       uses: actions/setup-java@v4
       with:

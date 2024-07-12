@@ -56,7 +56,7 @@ jobs:
     - name: Set properties
       run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Downgrade java in maven
-      run: sed s/21/18/ -i Color-Screen-GUI/pom.xml
+      run: sed -i.bck s/21/18/ Color-Screen-GUI/pom.xml
     - name: setup Java
       uses: actions/setup-java@v4
       with:
