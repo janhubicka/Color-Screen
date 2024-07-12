@@ -71,8 +71,8 @@ jobs:
     - name: Try to package library
       run: |
         mkdir ColorScreen-GUI-package
-        dylibbundler -od -b -x Color-Screen-GUI/target/render* -d ColorScreen-GUI-package
-        cp Color-Screen-GUI/target/*depen*jar ColorScreen-GUI-package
+        dylibbundler -od -b -x Color-Screen-GUI/target/librender.dylib -d ColorScreen-GUI-package -p @executable_path/
+        cp Color-Screen-GUI/target/*dependencies*jar ColorScreen-GUI-package/color-screen-GUI.jar
     - uses: actions/upload-artifact@v4
       with:
         name: macOS-colorscreenGUI-package
