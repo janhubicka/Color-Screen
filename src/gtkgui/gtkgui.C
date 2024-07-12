@@ -1158,6 +1158,7 @@ initgtk (int *argc, char **argv)
 #if 0
       && !gtk_builder_add_from_file (builder, filename.c_str (), NULL))
 #endif
+      && !gtk_builder_add_from_file (builder, "gtkgui.glade", NULL)
       && !gtk_builder_add_from_file (builder, "../share/colorscreen/gtkgui.glade", NULL))
     {
       fprintf (stderr, "Can not open " DATADIR "/colorscreen/gtkgui.glade\n");
