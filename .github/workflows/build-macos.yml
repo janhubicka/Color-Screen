@@ -72,7 +72,7 @@ jobs:
       run: |
         mkdir Color-Screen-GUI-package
         cp Color-Screen-GUI/target/librender.dylib Color-Screen-GUI-package/
-        dylibbundler -od -b -x Color-Screen-package/librender.dylib -d Color-Screen-GUI-package -p @loader_path/
+        dylibbundler -od -b -x Color-Screen-GUI-package/librender.dylib -d Color-Screen-GUI-package -p @loader_path/
         otool -L Color-Screen-GUI-package/librender.dylib
         cp Color-Screen-GUI/target/*dependencies*jar Color-Screen-GUI-package/Color-Screen-GUI.jar
         ditto -ck --rsrc --sequesterRsrc Color-Screen-GUI-package Color-Screen-GUI-package.zip
