@@ -68,14 +68,27 @@ jobs:
       with:
         name: macOS-colorscreenGUI-target
         path: Color-Screen-GUI/target
-    - name: Try to package library
+    - name: Package GUI
       run: |
         mkdir Color-Screen-GUI-package
         cp Color-Screen-GUI/target/librender.dylib Color-Screen-GUI-package/
         dylibbundler -od -b -x Color-Screen-package/librender.dylib -d Color-Screen-GUI-package -p @loader_path/
-        otool -L Color-Screen-package/librender.dylib
+        otool -L Color-Screen-GUI-package/librender.dylib
         cp Color-Screen-GUI/target/*dependencies*jar Color-Screen-GUI-package/Color-Screen-GUI.jar
+        ditto -ck --rsrc --sequesterRsrc Color-Screen-GUI-package Color-Screen-GUI-package.zip
     - uses: actions/upload-artifact@v4
       with:
         name: macOS-colorscreenGUI-package
-        path: Color-Screen-GUI-package
+        path: Color-Screen-GUI-package.zip
+    - name: Package CLI
+      run: |
+        mkdir Color-Screen-package
+        mkdir Color-Screen-package/libs
+        cp bin/colorscreen Color-Screen-package
+        dylibbundler -od -b -x Color-Screen-package/colorscreen -d Color-Screen-package/colorscreen -p @executable_path/
+        otool -L Color-Screen-package/colorscreen
+        ditto -ck --rsrc --sequesterRsrc Color-Screen-package Color-Screen-package.zip
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-colorscreen-package
+        path: Color-Screen-package.zip
