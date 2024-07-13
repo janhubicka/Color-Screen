@@ -52,7 +52,7 @@ jobs:
     - name: test maven
       run: mvn -v
     - name: digital coloring GUI
-      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+      run: git clone -b bachelorRelease https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Set properties
       run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Downgrade java in maven

@@ -47,7 +47,7 @@ jobs:
         path: c:\Color-Screen-install\
     - name: digital coloring GUI
       shell: msys2 {0}
-      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
+      run: git clone -b bachelorRelease https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Set properties
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
