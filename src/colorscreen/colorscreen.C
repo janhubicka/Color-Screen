@@ -590,10 +590,10 @@ autodetect (int argc, char **argv)
 	print_help();
       else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
 	verbose = true;
-      else if ((cspname = arg_with_param (argc, argv, &i, "par")) != NULL)
-	;
-      else if ((repname = arg_with_param (argc, argv, &i, "report")) != NULL)
-	;
+      else if (const char *str = arg_with_param (argc, argv, &i, "par"))
+	cspname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "report"))
+	repname = str;
       else if (!strcmp (argv[i], "--slow-floodfill"))
 	dsparams.slow_floodfill = true;
       else if (!strcmp (argv[i], "--fast-floodfill"))
@@ -2186,9 +2186,10 @@ stitch(int argc, char **argv)
 	prj->params.csp_filename = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "hugin-pto"))
 	prj->params.hugin_pto_filename = str;
-      else if ((save_project_filename = arg_with_param (argc, argv, &i, "out")) != NULL
-               || (load_project_filename = arg_with_param (argc, argv, &i, "load-project")) != NULL)
-        ;
+      else if (const char *str = arg_with_param (argc, argv, &i, "out"))
+	save_project_filename = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "load-project"))
+	load_project_filename = str;
       else if (!strcmp (argv[i], "--no-cpfind"))
 	prj->params.cpfind = 0;
       else if (!strcmp (argv[i], "--cpfind"))
