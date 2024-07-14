@@ -62,7 +62,7 @@ in standard way.
     git clone https://github.com/janhubicka/Color-Screen.git Color-Screen
     mkdir Color-Screen-build
     cd Color-Screen-build/
-    ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
+    LDFLAGS="-Wl,--stack,16777216" ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
     make
     make install 
 
