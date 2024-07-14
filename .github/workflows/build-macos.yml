@@ -2,7 +2,7 @@ name: MacOS build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "v1-brach", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
 
