@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [ "main", "v1-brach", "Kimrova-bachelorRelease" ]
+    branches: [ "main", "v1-branch", "Kimrova-bachelorRelease" ]
   pull_request:
     branches: [ "main" ]
 
