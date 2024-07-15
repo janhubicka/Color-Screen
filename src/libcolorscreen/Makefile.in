@@ -90,7 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-noinst_PROGRAMS = matrix$(EXEEXT)
+noinst_PROGRAMS = unittests$(EXEEXT)
 subdir = src/libcolorscreen
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -182,9 +182,9 @@ libcolorscreen_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) \
 	$(libcolorscreen_la_LDFLAGS) $(LDFLAGS) -o $@
-am_matrix_OBJECTS = matrix.$(OBJEXT)
-matrix_OBJECTS = $(am_matrix_OBJECTS)
-matrix_LDADD = $(LDADD)
+am_unittests_OBJECTS = unittests.$(OBJEXT)
+unittests_OBJECTS = $(am_unittests_OBJECTS)
+unittests_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -244,7 +244,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo \
 	./$(DEPDIR)/libcolorscreen_la-wratten.Plo \
-	./$(DEPDIR)/matrix.Po
+	./$(DEPDIR)/unittests.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -265,8 +265,8 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libcolorscreen_la_SOURCES) \
-	$(nodist_libcolorscreen_la_SOURCES) $(matrix_SOURCES)
-DIST_SOURCES = $(libcolorscreen_la_SOURCES) $(matrix_SOURCES)
+	$(nodist_libcolorscreen_la_SOURCES) $(unittests_SOURCES)
+DIST_SOURCES = $(libcolorscreen_la_SOURCES) $(unittests_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -436,7 +436,7 @@ EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  rende
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
-matrix_SOURCES = matrix.C
+unittests_SOURCES = unittests.C
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -534,9 +534,9 @@ clean-libLTLIBRARIES:
 libcolorscreen.la: $(libcolorscreen_la_OBJECTS) $(libcolorscreen_la_DEPENDENCIES) $(EXTRA_libcolorscreen_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libcolorscreen_la_LINK) -rpath $(libdir) $(libcolorscreen_la_OBJECTS) $(libcolorscreen_la_LIBADD) $(LIBS)
 
-matrix$(EXEEXT): $(matrix_OBJECTS) $(matrix_DEPENDENCIES) $(EXTRA_matrix_DEPENDENCIES) 
-	@rm -f matrix$(EXEEXT)
-	$(AM_V_CXXLD)$(CXXLINK) $(matrix_OBJECTS) $(matrix_LDADD) $(LIBS)
+unittests$(EXEEXT): $(unittests_OBJECTS) $(unittests_DEPENDENCIES) $(EXTRA_unittests_DEPENDENCIES) 
+	@rm -f unittests$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(unittests_OBJECTS) $(unittests_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -588,7 +588,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-wratten.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/matrix.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unittests.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -1123,7 +1123,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
-	-rm -f ./$(DEPDIR)/matrix.Po
+	-rm -f ./$(DEPDIR)/unittests.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-tags
@@ -1213,7 +1213,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
-	-rm -f ./$(DEPDIR)/matrix.Po
+	-rm -f ./$(DEPDIR)/unittests.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -1253,6 +1253,8 @@ uninstall-am: uninstall-includeHEADERS uninstall-libLTLIBRARIES
 
 .PRECIOUS: Makefile
 
+
+#TESTS=unittests
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

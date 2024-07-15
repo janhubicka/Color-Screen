@@ -10,5 +10,7 @@ endif
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 
-noinst_PROGRAMS=matrix
-matrix_SOURCES=matrix.C
+noinst_PROGRAMS=unittests
+unittests_SOURCES=unittests.C
+
+#TESTS=unittests
