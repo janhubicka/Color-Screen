@@ -13,4 +13,4 @@ libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
 noinst_PROGRAMS=unittests
 unittests_SOURCES=unittests.C
 
-#TESTS=unittests
+TESTS=unittests
