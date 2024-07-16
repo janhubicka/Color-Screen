@@ -22,7 +22,7 @@ jobs:
       run: find /mingw64 -name gcc.exe
     - name: configure
       shell: msys2 {0}
-      run: LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
+      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
     - name: make
       shell: msys2 {0}
       run: make

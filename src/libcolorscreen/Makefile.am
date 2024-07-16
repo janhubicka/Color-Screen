@@ -8,7 +8,7 @@ nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 endif
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
-libcolorscreen_la_CXXFLAGS = -fvisibility=hidden
+libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
 
 noinst_PROGRAMS=unittests
 unittests_SOURCES=unittests.C

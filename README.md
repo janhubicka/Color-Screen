@@ -29,6 +29,13 @@ additional libraries:
  - [libraw](https://www.libraw.org/)
  - [liblcms2](https://www.littlecms.com/)
 
+If you wish to develop colorscreen, additional packages are recommended
+
+ - [autoconf](https://www.gnu.org/software/autoconf/)
+ - [automake](https://www.gnu.org/software/automake/)
+ - [autoconf-archive](https://www.gnu.org/s/autoconf-archive/Downloads.html)
+ - [libtool](https://www.gnu.org/software/libtool/)
+
 To build a GTK2 based gui, GTK2 and Glade libraries are needed. Note that the
 GTK2 gui is deprecated and new Java based [Color-Screen
 GUI](https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI) is being developed
@@ -40,12 +47,16 @@ by Linda Kimrová
 
 On typical Linux distribution it is enough to do the following.
 
-	./configure --prefix=<where_to_install>
+	CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --prefix=<where_to_install>
 	make
-	make install
+	make install-strip
 
 To build the gui use use addition `--enable-gtkgui` option to the configure
 script.
+
+For better performance, if you are going to use the binary on the same macine
+as you are building it, add " -march=native" to CXXFLAGS.  This will enable use
+of extended instruction set of your CPU.
 
 ### Windows
 
@@ -62,9 +73,13 @@ in standard way.
     git clone https://github.com/janhubicka/Color-Screen.git Color-Screen
     mkdir Color-Screen-build
     cd Color-Screen-build/
-    ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
+    CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ../Color-Screen/configure --prefix=~/Color-Screen-install --enable-gtkgui
     make
-    make install 
+    make install-strip
+
+For better performance, if you are going to use the binary on the same macine
+as you are building it, add " -march=native" to CXXFLAGS.  This will enable use
+of extended instruction set of your CPU.
 
 As a result native Color-Screen library, GTK gui and command line utilities
 will be built.  Note that `~` does not point to Windows home directory, but to
@@ -87,11 +102,11 @@ OpenMP for multithreading disabled.  For Color–Screen to run smoothly and
 faster, install (using homebrew) the `libomp` package together with the other
 required packages listed above:
 
-    CXXFLAGS ="-I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" \
-    LDFLAGS ="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" \
+    CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" \
+    LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" \
     ./configure --prefix=<where_to_install> --disable-openmp
     make
-    make install
+    make install-strip
 
 This works around the disabled OpenMP support.
 
