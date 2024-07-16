@@ -353,7 +353,8 @@ template<typename GEOMETRY>
 inline pure_attr rgbdata
 analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions)
 {
-  int64_t red_minx = -2, red_miny = -2, green_minx = -2, green_miny = -2, blue_minx = -2, blue_miny = -2;
+  /* Paget needs -3 for miny because of diagonal coordinates.  */
+  int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2, blue_maxx = 2, blue_maxy = 2;
 
   scr.x += m_xshift;
@@ -428,7 +429,8 @@ template<typename GEOMETRY>
 inline pure_attr rgbdata
 analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
 {
-  int64_t red_minx = -2, red_miny = -2, green_minx = -2, green_miny = -2, blue_minx = -2, blue_miny = -2;
+  /* Paget needs -3 for miny because of diagonal coordinates.  */
+  int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
   int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2, blue_maxx = 2, blue_maxy = 2;
   rgbdata ret = {1,0,0};
 

@@ -149,10 +149,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
      }
   /* We need to compute bit more to get interpolation right.
      TODO: figure out how much.  */
-  xshift += 4;
-  yshift += 4;
-  width += 8;
-  height += 8;
+  xshift += 5;
+  yshift += 5;
+  width += 9;
+  height += 9;
   struct analyzer_params p
     {
       m_img.id,
