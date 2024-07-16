@@ -1,3 +1,10 @@
  1. `make check` now executes unit tests
  2. removed some now obsolette items (such as original presentation and loq
     quality examples) from the git source tree
+ 3. automake buildsystem is now more standard.  Optimization flags needs to be
+    specified manually.
+ 4. official binaries are now with link-time optimization and stripped from
+    debug symbols
+ 5. fixed occasional crash when rendering Paget and Finlay plates in interpolated
+    mode.
+ 6. fixed makes examples
