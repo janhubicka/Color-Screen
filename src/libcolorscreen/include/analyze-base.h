@@ -169,7 +169,7 @@ protected:
     m_contrast (NULL)
   {
   }
-  DLL_PUBLIC virtual
+  DLL_PUBLIC_EXP virtual
   ~analyze_base()
   {
     free (m_red);

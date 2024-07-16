@@ -54,7 +54,7 @@ struct solver_parameters
   bool weighted;
   coord_t center_x, center_y;
 
-  DLL_PUBLIC int
+  DLL_PUBLIC_EXP int
   add_point (coord_t img_x, coord_t img_y, coord_t screen_x, coord_t screen_y, enum point_color color)
   {
     npoints++;
@@ -156,7 +156,7 @@ struct detected_screen
 /* Parameters for reglar screen detection.  */
 struct detect_regular_screen_params
 {
-  DLL_PUBLIC detect_regular_screen_params ()
+  DLL_PUBLIC_EXP detect_regular_screen_params ()
   : min_screen_percentage (20), border_top (50), border_bottom (50), border_left (50), border_right (50),
     top (false), bottom (false), left (false), right (false),
     lens_correction (),
