@@ -11,6 +11,7 @@
   #else
     #ifdef LIBCOLORSCREEN
       #define DLL_PUBLIC 
+      #define DLL_PUBLIC_EXP
     #else
       #ifdef __GNUC__
         #define DLL_PUBLIC __attribute__ ((dllimport))
