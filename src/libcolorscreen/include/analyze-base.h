@@ -163,7 +163,7 @@ public:
   };
 protected:
   /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
-  DLL_PUBLIC analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
+  DLL_PUBLIC_EXP analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),
     m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
     m_contrast (NULL)
@@ -202,7 +202,7 @@ template<typename GEOMETRY>
 class DLL_PUBLIC analyze_base_worker : public analyze_base
 {
 public:
-  DLL_PUBLIC analyze_base_worker (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
+  DLL_PUBLIC_EXP analyze_base_worker (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   /* We store two reds per X coordinate.  */
   : analyze_base (rwscl, rhscl, gwscl, ghscl, bwscl, bhscl)
   {

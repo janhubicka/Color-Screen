@@ -9,7 +9,7 @@
 
 struct solver_parameters
 {
-  DLL_PUBLIC solver_parameters ()
+  DLL_PUBLIC_EXP solver_parameters ()
   : npoints (0), point (NULL), optimize_lens (true), optimize_tilt (true), weighted (false)
   {
   }
@@ -67,7 +67,7 @@ struct solver_parameters
     return npoints;
   }
 
-  DLL_PUBLIC void
+  DLL_PUBLIC_EXP void
   remove_point (int n)
   {
     /* Just for fun keep the order as points were added.  */
@@ -80,12 +80,12 @@ struct solver_parameters
 #endif
     npoints--;
   }
-  DLL_PUBLIC void
+  DLL_PUBLIC_EXP void
   remove_points ()
   {
     npoints = 0;
   }
-  DLL_PUBLIC void
+  DLL_PUBLIC_EXP void
   dump (FILE *out)
   {
     for (int i =0; i < npoints; i++)
