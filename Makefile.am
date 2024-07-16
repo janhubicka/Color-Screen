@@ -1,4 +1,6 @@
 SUBDIRS = src examples
 
-examples: src/colorscreen/colorscreen
-	cd examples/amcolony ; make examples
+.PHONY: examples
+
+examples: src/colorscreen/colorscreen 
+	cd examples/amcolony ; $(MAKE) $(AM_MAKEFLAGS) examples
