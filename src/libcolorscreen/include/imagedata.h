@@ -24,7 +24,7 @@ public:
   void *icc_profile;
 
   DLL_PUBLIC image_data ();
-  DLL_PUBLIC ~image_data ();
+  DLL_PUBLIC_EXP ~image_data ();
   /* Dimensions of image data.  */
   int width, height;
   /* Maximal value of the image data.  */

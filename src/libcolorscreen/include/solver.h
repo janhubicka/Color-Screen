@@ -13,7 +13,7 @@ struct solver_parameters
   : npoints (0), point (NULL), optimize_lens (true), optimize_tilt (true), weighted (false)
   {
   }
-  DLL_PUBLIC ~solver_parameters ()
+  DLL_PUBLIC_EXP ~solver_parameters ()
   {
     free (point);
   }

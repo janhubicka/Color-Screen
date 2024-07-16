@@ -3,8 +3,10 @@
   #ifdef DLL_EXPORT
     #ifdef __GNUC__
       #define DLL_PUBLIC __attribute__ ((dllexport))
+      #define DLL_PUBLIC_EXP __attribute__ ((dllexport))
     #else
       #define DLL_PUBLIC __declspec(dllexport) // Note: actually gcc seems to also supports this syntax.
+      #define DLL_PUBLIC_EXP __attribute__ ((dllexport)) // Destructors only work if they are exported everywhere
     #endif
   #else
     #ifdef LIBCOLORSCREEN
@@ -12,6 +14,7 @@
     #else
       #ifdef __GNUC__
         #define DLL_PUBLIC __attribute__ ((dllimport))
+        #define DLL_PUBLIC_EXP __attribute__ ((dllexport)) // Destructors only work if they are exported everywhere
       #else
         #define DLL_PUBLIC __declspec(dllimport) // Note: actually gcc seems to also supports this syntax.
       #endif
@@ -21,9 +24,10 @@
 #else
   #if __GNUC__ >= 4
     #define DLL_PUBLIC __attribute__ ((visibility ("default")))
+    #define DLL_PUBLIC_EXP __attribute__ ((visibility ("default")))
     #define DLL_LOCAL  __attribute__ ((visibility ("hidden")))
   #else
-    #define DLL_PUBLIC
+    #define DLL_PUBLIC_EXP
     #define DLL_LOCAL
   #endif
 #endif

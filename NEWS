@@ -1,3 +1,4 @@
+Changes in version 1.1
  1. `make check` now executes unit tests
  2. removed some now obsolette items (such as original presentation and loq
     quality examples) from the git source tree
