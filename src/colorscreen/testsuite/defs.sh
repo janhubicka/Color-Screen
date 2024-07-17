@@ -23,9 +23,40 @@ case "$top_builddir" in
 esac
 
 WRAP=""
-if test -n "$VALGRIND" ; then
+if test -n "$TEST_VALGRIND" ; then
   WRAP="valgrind "
 fi
+
+# iterate across all rendering modes. invoke as
+# test_all_render_modes <basename of scan> <basename of par in output dir>
+test_all_render_modes() {
+  NNAME=$1
+  NPARNAME=$2
+  MODES=`$RUNCOLORSCREEN --help 2>&1 | sed -n '/select one/,/--/p' | sed '1d;$d'`
+  for mode in $MODES
+  do
+    echo rendering $NNAME.tif with $NPARNAME.par to $NPARNAME-$mode.tif
+    $RUNCOLORSCREEN render --mode $mode $TESTDATA/$NNAME.tif $NPARNAME.par $NPARNAME-$mode.tif
+  done
+}
+# autodetect
+# test_autodetect <basename of scan> <basename of output par>
+test_autodetect()
+{
+  NNAME=$1
+  NPARNAME=$2
+  shift
+  shift
+  echo "autodetect $NNAME to $NPARNAME with flags $*"
+  $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  grep "^Analyzed 99" "$NNAME".txt || echo bad
+}
+# autodetect and iterate across all rendering modes. invoke as
+# test_all_render_modes <basename of scan> <basename of output par>
+test_autodetect_and_render() {
+  test_autodetect $*
+  test_all_render_modes "$1" "$2"
+}
 
 TESTDATA=${top_srcdir}/src/colorscreen/testsuite
 RUNCOLORSCREEN=$WRAP${top_builddir}/src/colorscreen/colorscreen

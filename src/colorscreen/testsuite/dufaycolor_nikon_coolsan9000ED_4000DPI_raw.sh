@@ -10,11 +10,5 @@ if test -z "$srcdir"; then
 fi
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
-MODES=`$RUNCOLORSCREEN --help 2>&1 | sed -n '/select one/,/--/p' | sed '1d;$d'`
-echo modes: $MODES
-$RUNCOLORSCREEN autodetect --gamma 1 $TESTDATA/$NAME.tif $name.par --report=$NAME.txt || exit 1
-grep "^Analyzed 99" $NAME.txt || echo bad
-for mode in $MODES
-do
-  $RUNCOLORSCREEN render --mode $mode $TESTDATA/$NAME.tif $name.par $NAME-$mode.tif
-done
+test_autodetect_and_render $NAME $NAME-mesh --gamma 1 --mesh
+test_autodetect_and_render $NAME $NAME-nomesh --gamma 1 --no-mesh
