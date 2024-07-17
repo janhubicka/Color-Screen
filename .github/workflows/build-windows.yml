@@ -11,12 +11,17 @@ jobs:
 
     runs-on: windows-latest
 
+    strategy:
+    matrix:
+      include:
+        - { sys: mingw64, env: x86_64 }
+        - { sys: ucrt64,  env: ucrt-x86_64 }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
       with:
-        msystem: MINGW64
-        install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk2 mingw-w64-x86_64-libtiff mingw-w64-x86_64-libjpeg-turbo git mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libraw mingw-w64-x86_64-lcms  mingw-w64-x86_64-libzip mingw-w64-x86_64-gsl 
+        msystem: ${{matrix.sys}}
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl 
     - name: find gcc
       shell: msys2 {0}
       run: find /mingw64 -name gcc.exe
@@ -43,7 +48,7 @@ jobs:
       run: cp /mingw64/bin/libgcc_s_seh-*.dll /mingw64/bin/libcairo-*.dll /mingw64/bin/libgdk_pixbuf-*.dll /mingw64/bin/libgdk-*.dll /mingw64/bin/libglib-*.dll /mingw64/bin/libgomp-*.dll /mingw64/bin/libgobject-*.dll /mingw64/bin/libgsl-*.dll /mingw64/bin/libwinpthread-*.dll /mingw64/bin/libgtk-*.dll /mingw64/bin/liblcms2-*.dll /mingw64/bin/libtiff-*.dll /mingw64/bin/libraw-*.dll /mingw64/bin/libstdc++-*.dll /mingw64/bin/libzip.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libgio-*.dll /mingw64/bin/libintl-*.dll /mingw64/bin/libpango-*.dll /mingw64/bin/libpangocairo-*.dll /mingw64/bin/libfontconfig-*.dll /mingw64/bin/libpixman-*.dll /mingw64/bin/libfreetype-*.dll /mingw64/bin/libpng16-*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libgmodule-*.dll /mingw64/bin/libffi-*.dll /mingw64/bin/libpcre2-*.dll /mingw64/bin/libatk-*.dll /mingw64/bin/libgslcblas-*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig-*.dll /mingw64/bin/libjpeg-*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma-*.dll /mingw64/bin/libwebp-*.dll /mingw64/bin/libzstd.dll /mingw64/bin/libpangowin32-*.dll /mingw64/bin/libbz2-*.dll /mingw64/bin/libiconv-*.dll /mingw64/bin/libharfbuzz-*.dll /mingw64/bin/libthai-*.dll /mingw64/bin/libfribidi-*.dll /mingw64/bin/libpangoft2-*.dll /mingw64/bin/libexpat-*.dll /mingw64/bin/libbrotlidec.dll /mingw64/bin/libsharpyuv-*.dll /mingw64/bin/libgraphite2.dll /mingw64/bin/libdatrie-*.dll /mingw64/bin/libbrotlicommon.dll  /c/Color-Screen-install/bin
     - uses: actions/upload-artifact@v4
       with:
-        name: windows-binary
+        name: windows-binary-${{matrix.sys}}
         path: c:\Color-Screen-install\
     - name: digital coloring GUI
       shell: msys2 {0}
@@ -90,5 +95,5 @@ jobs:
       run: cp /mingw64/bin/libgcc_s_seh*.dll /mingw64/bin/libgomp*.dll /mingw64/bin/libgsl*.dll /mingw64/bin/liblcms2*.dll /mingw64/bin/libwinpthread*.dll /mingw64/bin/libraw*.dll /mingw64/bin/libstdc++*.dll /mingw64/bin/libtiff*.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libzip.dll /mingw64/bin/libgslcblas*.dll /mingw64/bin/libjpeg*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma*.dll /mingw64/bin/libwebp*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libzstd.dll /mingw64/bin/libbz2*.dll /mingw64/bin/libsharpyuv*.dll /c/Color-Screen-GUI
     - uses: actions/upload-artifact@v4
       with:
-        name: windows-GUI-binary
+        name: windows-GUI-binary-${{matrix.sys}}
         path: c:\Color-Screen-GUI\
