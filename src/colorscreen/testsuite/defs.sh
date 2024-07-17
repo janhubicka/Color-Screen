@@ -22,5 +22,10 @@ case "$top_builddir" in
     *) top_builddir=`\cd ${top_builddir-..} && pwd` ;;
 esac
 
+WRAP=""
+if test -n "$VALGRIND" ; then
+  WRAP="valgrind "
+fi
+
 TESTDATA=${top_srcdir}/src/colorscreen/testsuite
-RUNCOLORSCREEN=${top_builddir}/src/colorscreen/colorscreen
+RUNCOLORSCREEN=$WRAP${top_builddir}/src/colorscreen/colorscreen

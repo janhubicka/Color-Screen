@@ -1,4 +1,4 @@
-EXTRA_DIST              = defs $(TESTS) dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
+EXTRA_DIST              = defs.sh $(TESTS) dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif
 
 
 TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
