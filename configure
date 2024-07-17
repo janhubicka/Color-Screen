@@ -20523,7 +20523,7 @@ else
   RENDER_EXTRA_FALSE=
 fi
 
-ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile src/colorscreen/testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile"
 
 ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h"
 
@@ -21661,6 +21661,7 @@ do
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/libcolorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/libcolorscreen/Makefile" ;;
+    "src/colorscreen/testsuite/Makefile") CONFIG_FILES="$CONFIG_FILES src/colorscreen/testsuite/Makefile" ;;
     "src/gtkgui/Makefile") CONFIG_FILES="$CONFIG_FILES src/gtkgui/Makefile" ;;
     "src/colorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/colorscreen/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;

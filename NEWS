@@ -1,6 +1,6 @@
 Changes in version 1.1
- 1. `make check` now executes unit tests
- 2. removed some now obsolette items (such as original presentation and loq
+ 1. `make check` now executes unit tests and a testsuite for colorscreen
+ 2. removed some now obsolette items (such as original presentation and low
     quality examples) from the git source tree
  3. automake buildsystem is now more standard.  Optimization flags needs to be
     specified manually.
