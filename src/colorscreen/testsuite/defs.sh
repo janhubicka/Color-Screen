@@ -35,8 +35,8 @@ test_all_render_modes() {
   MODES=`$RUNCOLORSCREEN --help 2>&1 | sed -n '/select one/,/--/p' | sed '1d;$d'`
   for mode in $MODES
   do
-    echo rendering $NNAME.tif with $NPARNAME.par to $NPARNAME-$mode.tif
-    $RUNCOLORSCREEN render --mode $mode $TESTDATA/$NNAME.tif $NPARNAME.par $NPARNAME-$mode.tif
+    echo rendering $NNAME with $NPARNAME.par to $NPARNAME-$mode.tif
+    $RUNCOLORSCREEN render --mode $mode $NNAME $NPARNAME.par $NPARNAME-$mode.tif
   done
 }
 # autodetect
@@ -65,7 +65,7 @@ test_autodetect90()
 # test_all_render_modes <basename of scan> <basename of output par>
 test_autodetect_and_render() {
   test_autodetect $*
-  test_all_render_modes "$1" "$2"
+  test_all_render_modes $TESTDATA/"$1".tif "$2"
 }
 
 TESTDATA=${top_srcdir}/src/colorscreen/testsuite

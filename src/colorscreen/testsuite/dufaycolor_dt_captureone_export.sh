@@ -10,4 +10,6 @@ if test -z "$srcdir"; then
 fi
 . $srcdir/defs.sh
 NAME=dufaycolor_dt_captureone_export
-$RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-$name.csprj"  --report "out-$name.txt" --no-cpfind
+$RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind || exit 1
+
+#test_all_render_modes out-${NAME}.csprj out-${NAME}
