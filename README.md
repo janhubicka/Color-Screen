@@ -55,7 +55,7 @@ To build the gui use use addition `--enable-gtkgui` option to the configure
 script.
 
 For better performance, if you are going to use the binary on the same macine
-as you are building it, add " -march=native" to CXXFLAGS.  This will enable use
+as you are building it, add ' -march=native' to 'CXXFLAGS'.  This will enable use
 of extended instruction set of your CPU.
 
 ### Windows
@@ -78,7 +78,7 @@ in standard way.
     make install-strip
 
 For better performance, if you are going to use the binary on the same macine
-as you are building it, add " -march=native" to CXXFLAGS.  This will enable use
+as you are building it, add " -march=native' to 'CXXFLAGS'.  This will enable use
 of extended instruction set of your CPU.
 
 As a result native Color-Screen library, GTK gui and command line utilities
