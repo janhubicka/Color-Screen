@@ -31,6 +31,11 @@ jobs:
       run: make
     - name: make check
       run: make check
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always()
+      with:
+        files: src/colorscreen/testsuite/*.log src/colorscreen/testsuite/*.txt
     - name: make distcheck
       run: make distcheck
     - uses: actions/upload-artifact@v4
