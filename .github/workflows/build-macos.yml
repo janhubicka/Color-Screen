@@ -37,6 +37,12 @@ jobs:
       run: make
     - name: make check
       run: make check
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite
+        path: src/colorscreen/testsuite 
     - name: make install-strip
       run: make install-strip
     - name: tar
