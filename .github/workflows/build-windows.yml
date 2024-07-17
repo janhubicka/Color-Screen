@@ -52,7 +52,7 @@ jobs:
       run: git clone -b bachelorRelease https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
     - name: Set properties
       shell: msys2 {0}
-      run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
+      run: cp .github/workflows/digital-coloring-github-windows10-${{matrix.sys}}.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
     - name: Downgrade java in maven
       shell: msys2 {0}
       run: sed -i.bck s/21/18/  Color-Screen-GUI/pom.xml
