@@ -49,7 +49,17 @@ test_autodetect()
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
   $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
-  grep "^Analyzed 99" "$NNAME".txt || echo bad
+  grep "^Analyzed 99" "$NPARNAME".txt || exit 1
+}
+test_autodetect90()
+{
+  NNAME=$1
+  NPARNAME=$2
+  shift
+  shift
+  echo "autodetect $NNAME to $NPARNAME with flags $*"
+  $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  grep "^Analyzed 9[0-9]" "$NPARNAME".txt || exit 1
 }
 # autodetect and iterate across all rendering modes. invoke as
 # test_all_render_modes <basename of scan> <basename of output par>
