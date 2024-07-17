@@ -10,5 +10,5 @@ if test -z "$srcdir"; then
 fi
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
-test_autodetect_and_render $NAME $NAME-mesh --gamma 1 --mesh
-test_autodetect_and_render $NAME $NAME-nomesh --gamma 1 --no-mesh
+test_autodetect_and_render $NAME out-$NAME-mesh --gamma 1 --mesh
+test_autodetect_and_render $NAME out-$NAME-nomesh --gamma 1 --no-mesh
