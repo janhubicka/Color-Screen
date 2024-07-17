@@ -1,13 +1,12 @@
 AC_PREREQ([2.69])
+AC_CONFIG_MACRO_DIRS([m4])
 AC_INIT([colorscreen], [1.1], [hubicka@ucw.cz])
 AM_INIT_AUTOMAKE([-Wall subdir-objects])
 AM_PROG_AR
 LT_INIT(win32-dll)
-
 AC_PROG_MAKE_SET
 AC_PROG_CXX
 AC_PROG_CC
-AC_PROG_RANLIB
 AM_MAINTAINER_MODE([disable])
 AC_LANG(C++)
 PKG_PROG_PKG_CONFIG
