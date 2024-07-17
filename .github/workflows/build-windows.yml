@@ -22,9 +22,6 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl 
-    - name: find gcc
-      shell: msys2 {0}
-      run: find /mingw64 -name gcc.exe
     - name: configure
       shell: msys2 {0}
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
@@ -45,7 +42,7 @@ jobs:
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
     - name: copy dlls
       shell: msys2 {0}
-      run: cp /mingw64/bin/libgcc_s_seh-*.dll /mingw64/bin/libcairo-*.dll /mingw64/bin/libgdk_pixbuf-*.dll /mingw64/bin/libgdk-*.dll /mingw64/bin/libglib-*.dll /mingw64/bin/libgomp-*.dll /mingw64/bin/libgobject-*.dll /mingw64/bin/libgsl-*.dll /mingw64/bin/libwinpthread-*.dll /mingw64/bin/libgtk-*.dll /mingw64/bin/liblcms2-*.dll /mingw64/bin/libtiff-*.dll /mingw64/bin/libraw-*.dll /mingw64/bin/libstdc++-*.dll /mingw64/bin/libzip.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libgio-*.dll /mingw64/bin/libintl-*.dll /mingw64/bin/libpango-*.dll /mingw64/bin/libpangocairo-*.dll /mingw64/bin/libfontconfig-*.dll /mingw64/bin/libpixman-*.dll /mingw64/bin/libfreetype-*.dll /mingw64/bin/libpng16-*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libgmodule-*.dll /mingw64/bin/libffi-*.dll /mingw64/bin/libpcre2-*.dll /mingw64/bin/libatk-*.dll /mingw64/bin/libgslcblas-*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig-*.dll /mingw64/bin/libjpeg-*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma-*.dll /mingw64/bin/libwebp-*.dll /mingw64/bin/libzstd.dll /mingw64/bin/libpangowin32-*.dll /mingw64/bin/libbz2-*.dll /mingw64/bin/libiconv-*.dll /mingw64/bin/libharfbuzz-*.dll /mingw64/bin/libthai-*.dll /mingw64/bin/libfribidi-*.dll /mingw64/bin/libpangoft2-*.dll /mingw64/bin/libexpat-*.dll /mingw64/bin/libbrotlidec.dll /mingw64/bin/libsharpyuv-*.dll /mingw64/bin/libgraphite2.dll /mingw64/bin/libdatrie-*.dll /mingw64/bin/libbrotlicommon.dll  /c/Color-Screen-install/bin
+      run: cp /${{matrix.sys}}/bin/libgcc_s_seh-*.dll /${{matrix.sys}}/bin/libcairo-*.dll /${{matrix.sys}}/bin/libgdk_pixbuf-*.dll /${{matrix.sys}}/bin/libgdk-*.dll /${{matrix.sys}}/bin/libglib-*.dll /${{matrix.sys}}/bin/libgomp-*.dll /${{matrix.sys}}/bin/libgobject-*.dll /${{matrix.sys}}/bin/libgsl-*.dll /${{matrix.sys}}/bin/libwinpthread-*.dll /${{matrix.sys}}/bin/libgtk-*.dll /${{matrix.sys}}/bin/liblcms2-*.dll /${{matrix.sys}}/bin/libtiff-*.dll /${{matrix.sys}}/bin/libraw-*.dll /${{matrix.sys}}/bin/libstdc++-*.dll /${{matrix.sys}}/bin/libzip.dll /${{matrix.sys}}/bin/libturbojpeg.dll /${{matrix.sys}}/bin/libgio-*.dll /${{matrix.sys}}/bin/libintl-*.dll /${{matrix.sys}}/bin/libpango-*.dll /${{matrix.sys}}/bin/libpangocairo-*.dll /${{matrix.sys}}/bin/libfontconfig-*.dll /${{matrix.sys}}/bin/libpixman-*.dll /${{matrix.sys}}/bin/libfreetype-*.dll /${{matrix.sys}}/bin/libpng16-*.dll /${{matrix.sys}}/bin/zlib1.dll /${{matrix.sys}}/bin/libgmodule-*.dll /${{matrix.sys}}/bin/libffi-*.dll /${{matrix.sys}}/bin/libpcre2-*.dll /${{matrix.sys}}/bin/libatk-*.dll /${{matrix.sys}}/bin/libgslcblas-*.dll /${{matrix.sys}}/bin/libdeflate.dll /${{matrix.sys}}/bin/libjbig-*.dll /${{matrix.sys}}/bin/libjpeg-*.dll /${{matrix.sys}}/bin/libLerc.dll /${{matrix.sys}}/bin/liblzma-*.dll /${{matrix.sys}}/bin/libwebp-*.dll /${{matrix.sys}}/bin/libzstd.dll /${{matrix.sys}}/bin/libpangowin32-*.dll /${{matrix.sys}}/bin/libbz2-*.dll /${{matrix.sys}}/bin/libiconv-*.dll /${{matrix.sys}}/bin/libharfbuzz-*.dll /${{matrix.sys}}/bin/libthai-*.dll /${{matrix.sys}}/bin/libfribidi-*.dll /${{matrix.sys}}/bin/libpangoft2-*.dll /${{matrix.sys}}/bin/libexpat-*.dll /${{matrix.sys}}/bin/libbrotlidec.dll /${{matrix.sys}}/bin/libsharpyuv-*.dll /${{matrix.sys}}/bin/libgraphite2.dll /${{matrix.sys}}/bin/libdatrie-*.dll /${{matrix.sys}}/bin/libbrotlicommon.dll  /c/Color-Screen-install/bin
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary-${{matrix.sys}}
@@ -56,9 +53,6 @@ jobs:
     - name: Set properties
       shell: msys2 {0}
       run: cp .github/workflows/digital-coloring-github-windows10.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
-    - name: show gcc path
-      shell: msys2 {0}
-      run: cygpath -w /mingw64/bin/gcc.exe
     - name: Downgrade java in maven
       shell: msys2 {0}
       run: sed -i.bck s/21/18/  Color-Screen-GUI/pom.xml
@@ -92,7 +86,7 @@ jobs:
         cp Color-Screen-GUI/target/*depend*.jar /c/Color-Screen-GUI/Color-Screen-GUI.jar
     - name: copy dlls
       shell: msys2 {0}
-      run: cp /mingw64/bin/libgcc_s_seh*.dll /mingw64/bin/libgomp*.dll /mingw64/bin/libgsl*.dll /mingw64/bin/liblcms2*.dll /mingw64/bin/libwinpthread*.dll /mingw64/bin/libraw*.dll /mingw64/bin/libstdc++*.dll /mingw64/bin/libtiff*.dll /mingw64/bin/libturbojpeg.dll /mingw64/bin/libzip.dll /mingw64/bin/libgslcblas*.dll /mingw64/bin/libjpeg*.dll /mingw64/bin/libdeflate.dll /mingw64/bin/libjbig*.dll /mingw64/bin/libLerc.dll /mingw64/bin/liblzma*.dll /mingw64/bin/libwebp*.dll /mingw64/bin/zlib1.dll /mingw64/bin/libzstd.dll /mingw64/bin/libbz2*.dll /mingw64/bin/libsharpyuv*.dll /c/Color-Screen-GUI
+      run: cp /${{matrix.sys}}/bin/libgcc_s_seh*.dll /${{matrix.sys}}/bin/libgomp*.dll /${{matrix.sys}}/bin/libgsl*.dll /${{matrix.sys}}/bin/liblcms2*.dll /${{matrix.sys}}/bin/libwinpthread*.dll /${{matrix.sys}}/bin/libraw*.dll /${{matrix.sys}}/bin/libstdc++*.dll /${{matrix.sys}}/bin/libtiff*.dll /${{matrix.sys}}/bin/libturbojpeg.dll /${{matrix.sys}}/bin/libzip.dll /${{matrix.sys}}/bin/libgslcblas*.dll /${{matrix.sys}}/bin/libjpeg*.dll /${{matrix.sys}}/bin/libdeflate.dll /${{matrix.sys}}/bin/libjbig*.dll /${{matrix.sys}}/bin/libLerc.dll /${{matrix.sys}}/bin/liblzma*.dll /${{matrix.sys}}/bin/libwebp*.dll /${{matrix.sys}}/bin/zlib1.dll /${{matrix.sys}}/bin/libzstd.dll /${{matrix.sys}}/bin/libbz2*.dll /${{matrix.sys}}/bin/libsharpyuv*.dll /c/Color-Screen-GUI
     - uses: actions/upload-artifact@v4
       with:
         name: windows-GUI-binary-${{matrix.sys}}
