@@ -97,7 +97,6 @@ class stitch_image
 
   detected_screen detected;
 
-  std::unique_ptr<render_img> render2;
   /* Screen angle and ratio.  Used in Dufaycolor analysis since
      the Dufaycolor screens are printed with different ratios and angles
      of the horisontal and vertical lines.

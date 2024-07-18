@@ -373,7 +373,7 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val, int m
   return true;
 }
 
-static void
+static int
 render (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
@@ -453,7 +453,7 @@ render (int argc, char **argv)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
-      exit (1);
+      return 1;
     }
   if (scan_dpi)
     scan.set_dpi (scan_dpi, scan_dpi);
@@ -491,13 +491,13 @@ render (int argc, char **argv)
     {
       progress.pause_stdout ();
       perror (cspname);
-      exit (1);
+      return 1;
     }
   if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-      exit (1);
+      return 1;
     }
   fclose (in);
   if (force_precise)
@@ -516,7 +516,7 @@ render (int argc, char **argv)
 	    {
 	      progress.pause_stdout ();
 	      fprintf (stderr, "Autodetection failed\n");
-	      exit (1);
+	      return 1;
 	    }
 	}
     }
@@ -564,10 +564,10 @@ render (int argc, char **argv)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not save %s: %s\n", rfparams.filename, error);
-      exit (1);
+      return 1;
     }
   progress.pause_stdout ();
-  exit (0);
+  return 0;
 }
 
 static void
@@ -2383,7 +2383,7 @@ main (int argc, char **argv)
   if (argc == 1)
     print_help ();
   else if (!strcmp (argv[1], "render"))
-    render (argc-2, argv+2);
+    ret = render (argc-2, argv+2);
   else if (!strcmp (argv[1], "autodetect"))
     autodetect (argc-2, argv+2);
   else if (!strcmp (argv[1], "analyze-backlight"))

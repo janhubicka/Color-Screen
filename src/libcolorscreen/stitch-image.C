@@ -17,7 +17,7 @@ stitch_image::stitch_image ()
 : filename (""), img (NULL), mesh_trans (), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (), known_pixels (),
-  render2 (), stitch_info (NULL), refcount (0)
+  stitch_info (NULL), refcount (0)
 {
 }
 
@@ -36,7 +36,6 @@ stitch_image::release_image_data (progress_info *progress)
   assert (!refcount && img);
   delete img;
   img = NULL;
-  render2 = NULL;
   nloaded--;
 }
 
@@ -113,11 +112,13 @@ stitch_image::load_img (const char **error, progress_info *progress)
 	m_prj->images[miny][minx].release_image_data (progress);
     }
   nloaded++;
+#if 0
   if (progress)
     progress->pause_stdout ();
   printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
   if (progress)
     progress->resume_stdout ();
+#endif
   if (progress)
     progress->set_task ("loading image header",1);
   if (!init_loader (error, progress))
@@ -220,6 +221,7 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 {
   coord_t sx, sy;
   bool found = false;
+  int stack = 0;
   scr_to_img_map.to_scr (0, 0, &sx, &sy);
   if (other.img_pixel_known_p (sx + xpos, sy + ypos))
     found = true;
@@ -234,6 +236,44 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     found = true;
   if (!found)
     return false;
+  if (progress)
+    stack = progress->push ();
+  const char *error;
+  if (!load_img (&error, progress))
+    {
+      if (progress)
+        progress->pop (stack);
+      return false;
+    }
+  if (!other.load_img (&error, progress))
+    {
+      if (progress)
+        progress->pop (stack);
+      release_img ();
+      return false;
+    }
+  render_parameters def;
+  render_img render (param, *img, def, 65535);
+  if (!render.precompute_all (progress))
+    {
+      if (progress)
+        progress->pop (stack);
+      release_img ();
+      other.release_img ();
+      return false;
+    }
+  render_img render2 (other.param, *other.img, def, 65535);
+  if (!render2.precompute_all (progress))
+    {
+      if (progress)
+        progress->pop (stack);
+      release_img ();
+      other.release_img ();
+      return false;
+    }
+
+  if (progress)
+    progress->pop (stack);
   int rxmin = INT_MAX, rxmax = INT_MIN, rymin = INT_MAX, rymax = INT_MIN;
   progress->set_task ("determining overlap range", 1);
   for (int y = 0; y < img_height; y += 10)
@@ -253,15 +293,13 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   if (m_prj->report_file)
     fprintf (m_prj->report_file, "Tiles %s and %s overlap in range x %i...%i y %i...%i\n", filename.c_str (), other.filename.c_str (), rxmin, rxmax, rymin, rymax);
   if (rxmin >= rxmax || rymin >= rymax)
-    return false;
+    {
+      release_img ();
+      other.release_img ();
+    }
   progress->resume_stdout ();
   int rwidth = rxmax - rxmin + 1;
   int rheight = rymax - rymin + 1;
-  const char *error;
-  /* TODO: Error ignored.  */
-  if (!load_img (&error, progress)
-      || !other.load_img (&error, progress))
-    return false;
   std::string fname = (std::string)"diff" + filename + other.filename;
   tiff_writer_params p;
   p.filename = fname.c_str ();
@@ -273,7 +311,10 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     {
       progress->pause_stdout ();
       fprintf (stderr, "Can not open %s: %s\n", fname.c_str (), error);
-      exit (1);
+      release_img ();
+      other.release_img ();
+      progress->resume_stdout ();
+      return false;
     }
   if (progress)
     progress->set_task ("Writting difference of two tiles", rheight);
@@ -288,9 +329,13 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
           scr_to_img_map.to_scr (x, y, &sx, &sy);
           if (other.img_pixel_known_p (sx + xpos, sy + ypos))
 	   {
-	     int r2 = 0, g2 = 0, b2 = 0;
+	     rgbdata c1 = render.sample_pixel_scr (sx + xpos, sy + ypos);
+	     rgbdata c2 = render.sample_pixel_scr (sx + other.xpos, sy + other.ypos);
+	     int r = c1.red * 65535, g = c1.green * 65535, b = c1.blue * 65545;
+	     int r2 = c2.red * 65535, g2 = c2.green * 65535, b2 = c2.blue * 65545;
+#if 0
 	     render_pixel (65535, sx + xpos, sy + ypos, &r, &g, &b, progress);
-	     other.render_pixel (65535, sx + xpos, sy + ypos, &r2, &g2, &b2, progress);
+#endif
 	     if (patch_detected_p (sx + xpos, sy + ypos) && other.patch_detected_p (sx + xpos, sy + ypos))
 	       {
 		 sumdiff[0] += abs (r2-r);
@@ -317,9 +362,12 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 	}
       if (!out.write_row ())
         {
+	  other.release_img ();
+	  release_img ();
 	  progress->pause_stdout ();
 	  fprintf (stderr, "Can not write %s\n", fname.c_str ());
-	  exit (1);
+	  progress->resume_stdout ();
+	  return false;
         }
       if (progress)
 	progress->inc_progress ();
@@ -748,7 +796,6 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   progress->pause_stdout ();
   angle = param.get_angle ();
   ratio = param.get_ylen () / param.get_xlen ();
-  printf ("Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_xlen (), param.get_ylen (), ratio);
   if (m_prj->report_file)
     fprintf (m_prj->report_file, "Screen angle %f, x length %f, y length %f, ratio %f\n", angle, param.get_xlen (), param.get_ylen (), ratio);
   progress->resume_stdout ();
@@ -786,46 +833,6 @@ bool
 img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 {
   return ((stitch_image *)data)->img_pixel_known_p (sx, sy);
-}
-
-bool
-stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *progress)
-{
-  bool loaded = false;
-  /* TODO: Ignored. */
-  const char *error;
-  if (!render2)
-    {
-      int stack = 0;
-      if (progress)
-	stack = progress->push ();
-      if (!load_img (&error, progress))
-	{
-	  if (progress)
-	    progress->pop (stack);
-	  return false;
-	}
-      fprintf (stderr, "TODO: Update this code to new rendering API.\n");
-      abort ();
-#if 0
-      render2 = new render_img (param, *img, m_prj->passthrough_rparam, maxval);
-      render2->set_color_display ();
-#endif
-      if (!render2->precompute_all (progress))
-	{
-	  render2 = NULL;
-	  if (progress)
-	    progress->pop (stack);
-	  return false;
-	}
-      release_img ();
-      if (progress)
-	progress->pop (stack);
-      loaded = true;
-    }
-  else
-    lastused = ++current_time;
-  return loaded;
 }
 
 /* Write one row.  */
