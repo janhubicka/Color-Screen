@@ -17,7 +17,7 @@ stitch_image::stitch_image ()
 : filename (""), img (), mesh_trans (), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (), known_pixels (),
-  stitch_info (NULL), refcount (0)
+  stitch_info (NULL), refcount (0), analyzed (false)
 {
 }
 
