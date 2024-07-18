@@ -1231,28 +1231,28 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 # if 0
       progress->pause_stdout ();
       printf ("Analyzed %2.2f%% of scan and %2.2f%% of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
+      printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
+      printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
+      printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
+      printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
+      printf ("\n");
       progress->resume_stdout ();
 #endif
       if (report_file)
 	fprintf (report_file, "Analyzed %2.2f%% of scan and %2.2f%%  of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
-      printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
       if (report_file)
 	fprintf (report_file, "; left border: %2.2f%%", xmin * 100.0 / img.width);
-      printf ("; top border: %2.2f%%", ymin * 100.0 / img.height);
       if (report_file)
 	fprintf (report_file, "; top border: %2.2f%%", ymin * 100.0 / img.height);
-      printf ("; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
       if (report_file)
 	fprintf (report_file, "; right border: %2.2f%%", 100 - xmax * 100.0 / img.width);
-      printf ("; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
       if (report_file)
 	fprintf (report_file, "; bottom border: %2.2f%%", 100 - ymax * 100.0 / img.height);
-      printf ("\n");
       if (report_file)
-      {
-	fprintf (report_file, "\n");
-        queue.print_sums (report_file);
-      }
+	{
+	  fprintf (report_file, "\n");
+	  queue.print_sums (report_file);
+	}
     }
   if (!dsparams->do_mesh && nfound > 100000)
     return map;
