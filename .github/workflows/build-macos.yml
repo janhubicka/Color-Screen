@@ -107,8 +107,8 @@ jobs:
       with:
         name: macOS-colorscreen-package
         path: Color-Screen-package.zip
-    - name: Uninstall libgsl
-      run: brew install  gsl
+    - name: Uninstall libgsl to break one of dependencies
+      run: brew uninstall  gsl
     - name: Remove install directory
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
