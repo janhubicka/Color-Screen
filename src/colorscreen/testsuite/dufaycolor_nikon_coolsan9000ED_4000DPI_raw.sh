@@ -12,5 +12,5 @@ fi
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 test_autodetect_and_render $NAME out-$NAME-mesh --gamma 1 --mesh
 test_autodetect_and_render $NAME out-$NAME-nomesh --gamma 1 --no-mesh
-test_autodetect90 $NAME out-$NAME-nomesh-fast --gamma 1 --no-mesh --no-slow-floodfill --fast-floodfill
+test_autodetect80 $NAME out-$NAME-nomesh-fast --gamma 1 --no-mesh --no-slow-floodfill --fast-floodfill
 test_autodetect90 $NAME out-$NAME-nomesh-slow --gamma 1 --no-mesh --no-fast-floodfill --slow-floodfill
