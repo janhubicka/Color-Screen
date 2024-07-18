@@ -13,4 +13,9 @@ libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
 noinst_PROGRAMS=unittests
 unittests_SOURCES=unittests.C
 
+TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
+			  $(top_srcdir)/build-aux/tap-driver.sh
+
+TESTS_ENVIRONMENT       = top_builddir=$(top_builddir) top_srcdir=$(top_srcdir)
+
 TESTS=unittests

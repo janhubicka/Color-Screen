@@ -9,10 +9,14 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 . $srcdir/defs.sh
+echo 1..2
 NAME=dufaycolor_dt_captureone_export
 $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind || exit 1
+echo 'ok 1 - stitch project construction'
 PARNAME=out-${NAME}
 $RUNCOLORSCREEN autodetect out-${NAME}.csprj ${PARNAME}.par --gamma 2.2 $* || exit 1
+echo 'ok 2 - stitch project parameter autodetect'
 test_all_render_modes out-${NAME}.csprj ${PARNAME}
+echo 'ok 3 - stitch project render'
 
 #test_all_render_modes out-${NAME}.csprj out-${NAME}
