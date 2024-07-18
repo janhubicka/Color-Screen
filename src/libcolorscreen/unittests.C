@@ -74,7 +74,10 @@ test_color ()
 int
 main()
 {
+  printf ("1..2\n");
   test_matrix ();
+  printf ("ok 1 - matrix tests\n");
   test_color ();
+  printf ("ok 2 - color tests\n");
   return 0;
 }

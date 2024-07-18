@@ -1,4 +1,4 @@
-SUBDIRS = src examples
+SUBDIRS = src examples testsuite
 ACLOCAL_AMFLAGS = -I m4
 
 .PHONY: examples

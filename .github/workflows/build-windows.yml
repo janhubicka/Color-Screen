@@ -33,15 +33,16 @@ jobs:
       run: make check
     - name: Find testsuite
       shell: msys2 {0}
-      run: cygpath src/colorscreen/testsuite
+      if: always()
+      run: cygpath testsuite
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: testsuite
         path: |
-          src/colorscreen/testsuite/*.txt
-          src/colorscreen/testsuite/*.log
+          testsuite/*.txt
+          testsuite/*.log
     - name: make install
       shell: msys2 {0}
       run: make install

@@ -78,5 +78,5 @@ test_autodetect_and_render() {
   test_all_render_modes $TESTDATA/"$1".tif "$2"
 }
 
-TESTDATA=${top_srcdir}/src/colorscreen/testsuite
+TESTDATA=${top_srcdir}/testsuite
 RUNCOLORSCREEN=$WRAP${top_builddir}/src/colorscreen/colorscreen
