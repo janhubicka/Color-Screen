@@ -225,7 +225,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_wratten_25_58_47_spectra:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
 	}
       /* Colors derived from filters for Miethe-Goerz projector by Jens Wagner.  */
@@ -238,13 +238,13 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_autochrome:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::cinecolor);
 	  break;
 	}
       case render_parameters::color_model_autochrome2:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_reconstructed,
 					    spectrum_dyes_to_xyz::autochrome_reconstructed_aged,
 					    age);
@@ -252,7 +252,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_manual:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_dufaycolor_manual);
 	  break;
 	}
@@ -277,7 +277,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	break;
       case render_parameters::color_model_dufay_color_cinematography_spectra:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography);
 	}
 	break;
@@ -289,7 +289,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_harrison_horner_spectra:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_harrison_horner);
 	}
 	break;
@@ -301,7 +301,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_photography_its_materials_and_processes_spectra:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_photography_its_materials_and_processes);
 	}
 	break;
@@ -313,7 +313,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	}
       case render_parameters::color_model_dufay_collins_giles_spectra:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_collins_giles);
 	}
 	break;
@@ -328,7 +328,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       case render_parameters::color_model_dufay4:
       case render_parameters::color_model_dufay5:
 	{
-	  spect = (std::unique_ptr<spectrum_dyes_to_xyz>) (new (spectrum_dyes_to_xyz));
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
 	  spect->set_dyes (spectrum_dyes_to_xyz::dufaycolor_color_cinematography,
 					    (spectrum_dyes_to_xyz::dyes)((int)color_model - (int)render_parameters::color_model_dufay1 + (int)spectrum_dyes_to_xyz::dufaycolor_aged_DC_MSI_NSMM11948_spicer_dufaycolor), age);
 	  break;

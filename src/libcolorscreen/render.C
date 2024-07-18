@@ -518,7 +518,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	    {
 	      xyz_pro_photo_rgb_matrix m;
 	      m_color_matrix2 = m * m_color_matrix2;
-	      m_tone_curve = std::unique_ptr <tone_curve> (new tone_curve (m_params.output_tone_curve));
+	      m_tone_curve = std::make_unique <tone_curve> (m_params.output_tone_curve);
 	      assert (!m_tone_curve->is_linear ());
 	    }
 	  else
@@ -535,7 +535,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	    {
 	      xyz_pro_photo_rgb_matrix m;
 	      color = m * color;
-	      m_tone_curve = std::unique_ptr <tone_curve> (new tone_curve (m_params.output_tone_curve));
+	      m_tone_curve = std::make_unique <tone_curve> (m_params.output_tone_curve);
 	      assert (!m_tone_curve->is_linear ());
 	    }
 	  else
