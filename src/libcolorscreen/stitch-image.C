@@ -14,20 +14,16 @@ uint64_t stitch_image::current_time;
 int stitch_image::nloaded;
 
 stitch_image::stitch_image ()
-: filename (""), img (NULL), mesh_trans (NULL), xshift (0), yshift (0),
+: filename (""), img (NULL), mesh_trans (), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
-  final_height (0), screen_detected_patches (NULL), known_pixels (NULL),
-  render2 (NULL), stitch_info (NULL), refcount (0)
+  final_height (0), screen_detected_patches (), known_pixels (),
+  render2 (), stitch_info (NULL), refcount (0)
 {
 }
 
 stitch_image::~stitch_image ()
 {
-  delete render2;
   delete img;
-  delete mesh_trans;
-  delete known_pixels;
-  delete screen_detected_patches;
   delete stitch_info;
 }
 
@@ -40,7 +36,6 @@ stitch_image::release_image_data (progress_info *progress)
   assert (!refcount && img);
   delete img;
   img = NULL;
-  delete render2;
   render2 = NULL;
   nloaded--;
 }
@@ -610,17 +605,17 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 	  fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
 	  exit (1);
 	}
-      mesh_trans = detected.mesh_trans;
+      mesh_trans = (std::unique_ptr <mesh>)(detected.mesh_trans);
       if (m_prj->params.reoptimize_colors)
 	{
 	  scr_detect_parameters optimized_dparam = m_prj->dparam;
-	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img, mesh_trans, detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
-	  delete mesh_trans;
+	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img, mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
+	  mesh_trans= NULL;
 	  delete detected.known_patches;
 	  delete detected.smap;
 	  dsparams.optimize_colors = false;
 	  detected = detect_regular_screen (*img, m_prj->params.type, optimized_dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
-	  mesh_trans = detected.mesh_trans;
+	  mesh_trans = (std::unique_ptr <mesh>)(detected.mesh_trans);
 	  if (!detected.success)
 	    {
 	      progress->pause_stdout ();
@@ -655,7 +650,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 	  return false;
 	}
       fclose (f);
-      mesh_trans = param.mesh_trans;
+      mesh_trans = (std::unique_ptr <mesh>)(param.mesh_trans);
     }
 
 
@@ -667,7 +662,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
-  param.mesh_trans = mesh_trans;
+  param.mesh_trans = mesh_trans.get ();
   param.type = m_prj->params.type;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, false, progress);
@@ -705,7 +700,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       scr_to_img_parameters p = param;
       p.mesh_trans = NULL;
       basic_scr_to_img_map.set_parameters (p, *img);
-      known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL);
+      known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL));
     }
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
@@ -715,7 +710,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   scr_to_img_map.get_range (img->width, img->height, &xshift, &yshift, &width, &height);
   if (!m_prj->params.load_registration)
     {
-      screen_detected_patches = new bitmap_2d (width, height);
+      screen_detected_patches =  std::make_unique<bitmap_2d> (width, height);
       for (int y = 0; y < height; y++)
 	if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < detected.known_patches->height)
 	  for (int x = 0; x < width; x++)
@@ -737,14 +732,14 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   get_analyzer().set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
-  known_pixels = compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress);
+  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress));
   if (m_prj->params.screen_tiles && !get_analyzer().write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", screen_filename.c_str (), error);
       exit (1);
     }
-  if (m_prj->params.known_screen_tiles && !get_analyzer().write_screen (known_screen_filename.c_str (), screen_detected_patches, &error, progress, 0, 1, 0, 1, 0, 1))
+  if (m_prj->params.known_screen_tiles && !get_analyzer().write_screen (known_screen_filename.c_str (), screen_detected_patches.get (), &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
       fprintf (stderr, "Writting of screen file %s failed: %s\n", known_screen_filename.c_str (), error);
@@ -818,7 +813,6 @@ stitch_image::render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, 
 #endif
       if (!render2->precompute_all (progress))
 	{
-	  delete render2;
 	  render2 = NULL;
 	  if (progress)
 	    progress->pop (stack);
@@ -1237,11 +1231,11 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   //param.mesh_trans = NULL;
   scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
-  mesh_trans = param.mesh_trans;
+  mesh_trans = (std::unique_ptr<mesh>)(param.mesh_trans);
   param.mesh_trans = NULL;
   scr_to_img_map.set_parameters (param, data);
-  param.mesh_trans = mesh_trans;
-  known_pixels = compute_known_pixels (*img, scr_to_img_map, 5,5,5,5, NULL);
+  param.mesh_trans = mesh_trans.get ();
+  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 5,5,5,5, NULL));
   analyzed = true;
   return true;
 }

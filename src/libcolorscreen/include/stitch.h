@@ -78,7 +78,7 @@ class stitch_image
   std::string screen_filename;
   std::string known_screen_filename;
   image_data *img;
-  mesh *mesh_trans;
+  std::unique_ptr<mesh> mesh_trans;
   scr_to_img_parameters param;
   /* scr_to_img map holding mesh_trans.  */
   scr_to_img scr_to_img_map;
@@ -91,13 +91,13 @@ class stitch_image
   analyze_dufay dufay;
   analyze_paget paget;
   /* Screen patches that was detected by screen detection algorithm.  */
-  bitmap_2d *screen_detected_patches;
+  std::unique_ptr<bitmap_2d> screen_detected_patches;
   /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
-  bitmap_2d *known_pixels;
+  std::unique_ptr<bitmap_2d> known_pixels;
 
   detected_screen detected;
 
-  render_img *render2;
+  std::unique_ptr<render_img> render2;
   /* Screen angle and ratio.  Used in Dufaycolor analysis since
      the Dufaycolor screens are printed with different ratios and angles
      of the horisontal and vertical lines.
