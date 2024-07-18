@@ -1228,8 +1228,11 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
   if (snexpected > 0 && nfound > 1000)
     {
+# if 0
       progress->pause_stdout ();
       printf ("Analyzed %2.2f%% of scan and %2.2f%% of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
+      progress->resume_stdout ();
+#endif
       if (report_file)
 	fprintf (report_file, "Analyzed %2.2f%% of scan and %2.2f%%  of the screen area", nfound * 100.0 / nexpected, nfound * 100.0 / snexpected);
       printf ("; left border: %2.2f%%", xmin * 100.0 / img.width);
@@ -1250,7 +1253,6 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	fprintf (report_file, "\n");
         queue.print_sums (report_file);
       }
-      progress->resume_stdout ();
     }
   if (!dsparams->do_mesh && nfound > 100000)
     return map;
@@ -1408,7 +1410,9 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
     if (distance_num[c])
       {
 	const char *channel[3]={"Red", "Green", "Blue"};
+#if 0
         printf ("%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], (one_num[c] + four_num[c]) * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
+#endif
         if (report_file)
 	  fprintf (report_file, "%s patches %i. Avg distance to %s solution %f; max distance %f; %2.2f%% with distance over 1 and %2.2f%% with distance over 4\n", channel[c], distance_num[c], type, distance_sum[c] / distance_num[c], max_distance[c], one_num[c] * 100.0 / distance_num[c], four_num[c] * 100.0 / distance_num[c]);
       }

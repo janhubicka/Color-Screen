@@ -36,7 +36,9 @@ jobs:
       if: always()
       with:
         name: testsuite
-        path: src/colorscreen/testsuite 
+        path: |
+          src/colorscreen/testsuite/*.txt
+          src/colorscreen/testsuite/*.log
     - name: make distcheck
       run: make distcheck
     - uses: actions/upload-artifact@v4

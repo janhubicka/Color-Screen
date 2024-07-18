@@ -601,6 +601,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
       param->lens_correction.kr[2] = s.start[n + 1] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[3] = s.start[n + 2] * (1 / lens_solver::scale_kr);
       param->lens_correction.normalize ();
+#if 0
       if (progress)
 	progress->pause_stdout ();
       printf ("Lens correction center: %f,%f k0 %f k1 %f k2 %f k3 %f\n",
@@ -608,6 +609,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 	      param->lens_correction.kr[0], param->lens_correction.kr[1], param->lens_correction.kr[2], param->lens_correction.kr[3]);
       if (progress)
 	progress->resume_stdout ();
+#endif
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);

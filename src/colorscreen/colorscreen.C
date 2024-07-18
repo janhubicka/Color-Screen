@@ -694,53 +694,68 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       exit (1);
     }
-  if (!scan.rgbdata)
+  if (!scan.rgbdata && !scan.stitch)
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Autodetection is only implemented for RGB scans");
+      fprintf (stderr, "Autodetection is only implemented for RGB scans and stitched projects");
       exit (1);
     }
-  if (gamma)
-    rparam.gamma = gamma;
-  else if (!cspname)
-    rparam.gamma = scan.gamma != -2 ? scan.gamma : 2.2;
-  if (scanner_type != max_scanner_type)
-    param.scanner_type = scanner_type;
+  if (scan.rgbdata)
+    {
+      FILE *report = NULL;
+      if (repname && !(report = fopen (repname, "wt")))
+	{
+	  progress.pause_stdout ();
+	  perror (repname);
+	  exit (1);
+	}
+      if (gamma)
+	rparam.gamma = gamma;
+      else if (!cspname)
+	rparam.gamma = scan.gamma != -2 ? scan.gamma : 0;
+      if (scanner_type != max_scanner_type)
+	param.scanner_type = scanner_type;
+     
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  print_time ();
+	  printf ("Detecting geometry\n");
+	  record_time ();
+	  progress.resume_stdout ();
+	}
+      if (param.mesh_trans)
+	{
+	  delete param.mesh_trans;
+	  param.mesh_trans = NULL;
+	}
+      auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress, report);
+      param = detected.param;
+      param.mesh_trans = detected.mesh_trans;
+      if (report)
+	fclose (report);
+      if (!detected.success)
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Autodetection failed\n");
+	  exit (1);
+	}
+    }
+  else
+    {
+      param.type = scan.stitch->images[0][0].param.type;
+      if (gamma)
+	rparam.gamma = gamma;
+      else if (!cspname)
+	rparam.gamma = scan.stitch->images[0][0].img->gamma != -2 ? scan.stitch->images[0][0].img->gamma : 0;
+    }
+  if (rparam.gamma == 0)
+    {
+      fprintf (stderr, "Warning: unable to detect gamma and assuming 2.2; please use --gamma parameter\n");
+      rparam.gamma = 2.2;
+    }
   if (scan_dpi)
     scan.set_dpi (scan_dpi, scan_dpi);
-  FILE *report = NULL;
-  if (repname && !(report = fopen (repname, "wt")))
-    {
-      progress.pause_stdout ();
-      perror (repname);
-      exit (1);
-    }
- 
-  if (verbose)
-    {
-      progress.pause_stdout ();
-      print_time ();
-      printf ("Detecting geometry\n");
-      record_time ();
-      progress.resume_stdout ();
-    }
-  if (param.mesh_trans)
-    {
-      delete param.mesh_trans;
-      param.mesh_trans = NULL;
-    }
-  auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress, report);
-  param = detected.param;
-  param.mesh_trans = detected.mesh_trans;
-
-  if (report)
-    fclose (report);
-  if (!detected.success)
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Autodetection failed\n");
-      exit (1);
-    }
   if (detect_color_model)
     rparam.auto_color_model (param.type);
   if (detect_brightness)
