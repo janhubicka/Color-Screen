@@ -1233,7 +1233,7 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   mesh_trans = (std::unique_ptr<mesh>)(param.mesh_trans);
   param.mesh_trans = NULL;
-  scr_to_img_map.set_parameters (param, data);
+  basic_scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
   param.mesh_trans = mesh_trans.get ();
   known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 5,5,5,5, NULL));
   analyzed = true;

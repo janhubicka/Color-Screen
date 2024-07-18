@@ -79,6 +79,7 @@ static lru_cache <lens_inverse_parameters, precomputed_function<coord_t>, get_ne
 bool
 lens_warp_correction::precompute (point_t center, point_t c1, point_t c2, point_t c3, point_t c4, bool need_inverse)
 {
+  assert (!m_inverted_ratio);
   if (m_params.is_noop ())
     {
       m_noop = true;
