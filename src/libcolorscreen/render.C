@@ -617,7 +617,7 @@ get_linearized_pixel (/*const*/ image_data &img, render_parameters &rparam, int 
 	img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
 	xx = nearest_int (sx);
 	yy = nearest_int (sy);
-	imgp = img.stitch->images[ty][tx].img;
+	imgp = img.stitch->images[ty][tx].img.get ();
      }
    render r (*imgp, rparam, 255);
    r.precompute_all (img.rgbdata ? false : true, false,  {1/3.0, 1/3.0, 1/3.0}, progress);

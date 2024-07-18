@@ -479,10 +479,10 @@ rgbdata
 render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
   uint64_t rcount[4] = {0, 0, 0, 0};
-  scr_to_img *s = NULL;
+  std::unique_ptr <scr_to_img> s;
   if (param)
     {
-      s = new scr_to_img ();
+      s = std::make_unique <scr_to_img> ();
       s->set_parameters (*param, m_img);
     }
   if (xmin < 0)
@@ -527,8 +527,6 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
      if (progress)
        progress->inc_progress ();
     }
-  if (s)
-    delete s;
   int sum = rcount[0] + rcount[1] + rcount[2];
   if (!sum)
     {

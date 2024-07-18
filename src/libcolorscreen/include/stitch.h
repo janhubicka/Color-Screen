@@ -77,7 +77,7 @@ class stitch_image
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
-  image_data *img;
+  std::unique_ptr<image_data> img;
   std::unique_ptr<mesh> mesh_trans;
   scr_to_img_parameters param;
   /* scr_to_img map holding mesh_trans.  */

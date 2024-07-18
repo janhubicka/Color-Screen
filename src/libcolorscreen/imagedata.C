@@ -797,7 +797,6 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
       if (!simg.img->allocate ())
 	{
 	  *error = "out of memory";
-	  delete simg.img;
 	  simg.img = NULL;
 	  return false;
 	}
@@ -808,7 +807,6 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
     progress->push();
   if (!simg.load_part (&permille2, error, progress))
     {
-      delete simg.img;
       simg.img = NULL;
       return false;
     }

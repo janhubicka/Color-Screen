@@ -14,7 +14,7 @@ uint64_t stitch_image::current_time;
 int stitch_image::nloaded;
 
 stitch_image::stitch_image ()
-: filename (""), img (NULL), mesh_trans (), xshift (0), yshift (0),
+: filename (""), img (), mesh_trans (), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (), known_pixels (),
   stitch_info (NULL), refcount (0)
@@ -23,7 +23,6 @@ stitch_image::stitch_image ()
 
 stitch_image::~stitch_image ()
 {
-  delete img;
   delete stitch_info;
 }
 
@@ -34,7 +33,6 @@ stitch_image::release_image_data (progress_info *progress)
   //printf ("Releasing input tile %s\n", filename.c_str ());
   //progress->resume_stdout ();
   assert (!refcount && img);
-  delete img;
   img = NULL;
   nloaded--;
 }
@@ -43,13 +41,12 @@ bool
 stitch_image::init_loader (const char **error, progress_info *progress)
 {
   assert (!img);
-  img = new image_data;
+  img = std::make_unique <image_data> ();
   if (!img->init_loader (m_prj->add_path (filename).c_str (), false, error, progress))
     return false;
   if (img->stitch)
     {
       *error = "Can not embedd stitch projects in sitch projects";
-      delete img;
       img = NULL;
       return false;
     }
@@ -60,7 +57,6 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
 {
   if (!img->load_part (permille, error, progress))
     {
-      delete img;
       img = NULL;
       return false;
     }
@@ -75,7 +71,6 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
       if (!img->rgbdata)
 	{
 	  *error = "source image is not having color channels";
-	  delete img;
 	  img = NULL;
 	  return false;
 	}
@@ -128,7 +123,6 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (!img->allocate ())
     {
       *error = "out of memory";
-      delete img;
       img = NULL;
       return false;
     }
@@ -142,7 +136,6 @@ stitch_image::load_img (const char **error, progress_info *progress)
       if (progress && progress->cancel_requested ())
 	{
 	  *error = "cancelled";
-	  delete img;
 	  img = NULL;
 	  return false;
 	}
@@ -657,7 +650,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       if (m_prj->params.reoptimize_colors)
 	{
 	  scr_detect_parameters optimized_dparam = m_prj->dparam;
-	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img, mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
+	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img.get (), mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
 	  mesh_trans= NULL;
 	  delete detected.known_patches;
 	  delete detected.smap;
@@ -769,14 +762,14 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       detected.known_patches = NULL;
     }
   if (m_prj->params.type == Dufay)
-    dufay.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+    dufay.analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
   else
     {
       assert (detected.param.type != Dufay);
-      paget.analyze (&render, img, &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      paget.analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
     }
   if (m_prj->params.max_contrast >= 0)
-    dufay.analyze_contrast (&render, img, &scr_to_img_map, progress);
+    dufay.analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
   get_analyzer().set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
@@ -1383,8 +1376,8 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 	    struct common_sample sample = {(coord_t)xx,(coord_t)yy,iix,iiy,{0,0,0,0},{0,0,0,0},weight};
 	    if (img->rgbdata)
 	      {
-		rgbdata d1 =  sample_image_area (img, render1, xx, yy, range);
-		rgbdata d2 =  sample_image_area (other.img, render2, iix, iiy, range);
+		rgbdata d1 =  sample_image_area (img.get (), render1, xx, yy, range);
+		rgbdata d2 =  sample_image_area (other.img.get (), render2, iix, iiy, range);
 
 		sample.channel1[0] = d1.red;
 		sample.channel2[0] = d2.red;
