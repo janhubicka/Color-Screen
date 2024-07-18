@@ -110,6 +110,6 @@ jobs:
     - name: Uninstall libgsl
       run: brew install  gsl
     - name: Remove install directory
-      run: /tmp/Color-Screen-MacOS
+      run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
-      run: Color-Screen-package/colorscreen --help
+      run: Color-Screen-package/colorscreen autodetect colorscreen/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
