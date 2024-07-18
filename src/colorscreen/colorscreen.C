@@ -128,6 +128,7 @@ print_help ()
   fprintf (stderr, "  Produce stitched project.");
   fprintf (stderr, "  Supported args:\n");
   fprintf (stderr, "     input files:\n");
+  fprintf (stderr, "      --verbose                  enable verbose output\n");
   fprintf (stderr, "      --par=filename.par         load given screen discovery and rendering parameters\n");
   fprintf (stderr, "      --ncols=n                  number of columns of tiles\n");
   fprintf (stderr, "      --load-project=name.par    store analysis to a project file\n");
@@ -1952,12 +1953,11 @@ dump_patch_density (int argc, char **argv)
   render.dump_patch_density (out);
   fclose (out);
 }
-static stitch_project *prj;
 static const char* save_project_filename;
 static const char* load_project_filename;
 
 static void
-produce_hugin_pto_file (const char *name, progress_info *progress)
+produce_hugin_pto_file (std::unique_ptr<stitch_project> &prj, const char *name, progress_info *progress)
 {
   FILE *f = fopen (name,"wt");
   if (!f)
@@ -2024,7 +2024,7 @@ produce_hugin_pto_file (const char *name, progress_info *progress)
 }
 
 static void
-stitch (progress_info *progress)
+stitch (std::unique_ptr<stitch_project> &prj, progress_info *progress)
 {
   if (!prj->initialize ())
     exit (1);
@@ -2166,7 +2166,7 @@ stitch (progress_info *progress)
 	    }
 
   if (prj->params.hugin_pto_filename.length ())
-    produce_hugin_pto_file (prj->params.hugin_pto_filename.c_str (), progress);
+    produce_hugin_pto_file (prj, prj->params.hugin_pto_filename.c_str (), progress);
   if (prj->params.diffs)
     for (int y = 0; y < prj->params.height; y++)
       for (int x = 0; x < prj->params.width; x++)
@@ -2183,14 +2183,13 @@ stitch (progress_info *progress)
     fclose (prj->report_file);
 }
 
-void
+int
 stitch(int argc, char **argv)
 {
-  file_progress_info progress (stdout);
   std::vector<std::string> fnames;
   int ncols = 0;
 
-  prj = new stitch_project ();
+  auto prj = std::make_unique<stitch_project> ();
 
   for (int i = 0; i < argc; i++)
     {
@@ -2217,6 +2216,8 @@ stitch(int argc, char **argv)
 	prj->params.screen_tiles = true;
       else if (!strcmp (argv[i], "--known-screen-tiles"))
 	prj->params.known_screen_tiles = true;
+      else if (!strcmp (argv[i], "--vrbose"))
+	verbose = true;
       else if (!strcmp (argv[i], "--panorama-map"))
 	prj->params.panorama_map = true;
       else if (!strcmp (argv[i], "--optimize-colors"))
@@ -2281,7 +2282,7 @@ stitch(int argc, char **argv)
 	{
 	  fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
 	  print_help ();
-	  exit (1);
+	  return 1;
 	}
       else
 	{
@@ -2293,7 +2294,7 @@ stitch(int argc, char **argv)
     {
       fprintf (stderr, "Output filename via --out is not specified\n");
       print_help ();
-      exit (1);
+      return 1;
     }
   if (!load_project_filename)
     {
@@ -2301,7 +2302,7 @@ stitch(int argc, char **argv)
 	{
 	  fprintf (stderr, "No files to stitch\n");
 	  print_help ();
-	  exit (1);
+	  return 1;
 	}
       if (fnames.size () == 1)
 	{
@@ -2320,7 +2321,7 @@ stitch(int argc, char **argv)
 	  if (fnames[0].length () != fnames[1].length ())
 	    {
 	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
-	      exit (1);
+	      return 1;
 	    }
 	  for (indexpos = 0; indexpos < (int)fnames[0].length () - 2; indexpos++)
 	    if (fnames[0][indexpos] != fnames[1][indexpos]
@@ -2329,7 +2330,7 @@ stitch(int argc, char **argv)
 	  if (fnames[0][indexpos] != '1' || fnames[0][indexpos + 1] != '1')
 	    {
 	      fprintf (stderr, "Can not determine organization of tiles in '%s'.  Expect filenames of kind <name>yx<suffix>.tif\n", fnames[0].c_str ());
-	      exit (1);
+	      return 1;
 	    }
 	  int w;
 	  for (w = 1; w < (int)fnames.size (); w++)
@@ -2346,15 +2347,14 @@ stitch(int argc, char **argv)
 		    || fnames[i][indexpos + 1] != '1' + x)
 		  {
 		    fprintf (stderr, "Unexpected tile filename '%s' for tile %i %i\n", fnames[i].c_str (), y + 1, x + 1);
-		    print_help ();
-		    exit (1);
+		    return 1;
 		  }
 	      }
 	}
       if (prj->params.width * prj->params.height != (int)fnames.size ())
 	{
 	  fprintf (stderr, "For %ix%i tiles I expect %i filenames, found %i\n", prj->params.width, prj->params.height, prj->params.width * prj->params.height, (int)fnames.size ());
-	  exit (1);
+	  return 1;
 	}
       for (int y = 0; y < prj->params.height; y++)
 	for (int x = 0; x < prj->params.width; x++)
@@ -2365,14 +2365,13 @@ stitch(int argc, char **argv)
       if (fnames.size ())
 	{
 	  fprintf (stderr, "Unknown parameter %s\n", fnames[0].c_str ());
-	  print_help ();
-	  exit (1);
+	  return 1;
 	}
     }
 
-  stitch (&progress);
-  delete prj;
-  exit (0);;
+  file_progress_info progress (verbose ? stdout : NULL);
+  stitch (prj, &progress);
+  return 0;
 }
 
 
@@ -2380,6 +2379,7 @@ int
 main (int argc, char **argv)
 {
   binname = argv[0];
+  int ret = 0;
   if (argc == 1)
     print_help ();
   else if (!strcmp (argv[1], "render"))
@@ -2395,7 +2395,7 @@ main (int argc, char **argv)
   else if (!strcmp (argv[1], "dump-lcc"))
     dump_lcc (argc-2, argv+2);
   else if (!strcmp (argv[1], "stitch"))
-    stitch (argc-2, argv+2);
+    ret = stitch (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-patch-density"))
     dump_patch_density (argc-2, argv+2);
   else if (!strcmp (argv[1], "digital-laboratory")
@@ -2405,5 +2405,5 @@ main (int argc, char **argv)
     read_chemcad (argc-2, argv+2);
   else
     print_help ();
-  return 0;
+  return ret;
 }
