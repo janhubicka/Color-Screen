@@ -659,6 +659,8 @@ RENDER_EXTRA_FALSE
 RENDER_EXTRA_TRUE
 gtkgui_FALSE
 gtkgui_TRUE
+static_link_FALSE
+static_link_TRUE
 GTKGUI_BIN_LIBS
 GTKGUI_BIN_CFLAGS
 RDYNAMIC
@@ -819,6 +821,7 @@ with_liblcms2
 enable_checking
 enable_gtkgui
 enable_render_extra
+enable_static_link
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1483,6 +1486,7 @@ Optional Features:
 --enable-checking   enable checking
 --enable-gtkgui     enable gtk2 based gui interface
 --enable-render-extra     enable additional render
+--enable-static-link     enable static linking of libcolorscreen
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -20428,6 +20432,25 @@ printf "%s\n" "#define RENDER_EXTRA 1" >>confdefs.h
 
 fi
 
+static_link=yes
+# Check whether --enable-static-link was given.
+if test ${enable_static_link+y}
+then :
+  enableval=$enable_static_link; static_link=no
+else case e in #(
+  e) static_link=yes ;;
+esac
+fi
+
+
+ if test "$static_link" != "no"; then
+  static_link_TRUE=
+  static_link_FALSE='#'
+else
+  static_link_TRUE='#'
+  static_link_FALSE=
+fi
+
  if test "$do_gtkgui" != "no"; then
   gtkgui_TRUE=
   gtkgui_FALSE='#'
@@ -20592,6 +20615,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
   as_fn_error $? "conditional \"MAINTAINER_MODE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${static_link_TRUE}" && test -z "${static_link_FALSE}"; then
+  as_fn_error $? "conditional \"static_link\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then

@@ -149,6 +149,10 @@ then
   AC_DEFINE([RENDER_EXTRA], 1, "include render extra from extenral source tree")
 fi
 
+static_link=yes
+AC_ARG_ENABLE(static-link,[--enable-static-link     enable static linking of libcolorscreen],static_link=no,static_link=yes)
+
+AM_CONDITIONAL([static_link], [test "$static_link" != "no"])
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AM_CONDITIONAL([RENDER_EXTRA], [test "$do_render_extra" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
