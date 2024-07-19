@@ -3922,7 +3922,8 @@ bool
 spectrum_dyes_to_xyz::is_linear ()
 {
   const int steps = 16;
-  const luminosity_t max_error = (0.5 / 65546);
+  const luminosity_t max_error = (0.5 / 65536);
+  color_matrix m = xyz_matrix ();
   for (int r = 0; r < steps; r++)
     for (int g = 0; g < steps; g++)
       for (int b = 0; b < steps; b++)
@@ -3930,8 +3931,8 @@ spectrum_dyes_to_xyz::is_linear ()
 	  luminosity_t rr = r / (luminosity_t) steps;
 	  luminosity_t gg = g / (luminosity_t) steps;
 	  luminosity_t bb = b / (luminosity_t) steps;
-	  xyz v1 = dyes_rgb_to_xyz (rr, gg, bb);
-	  xyz v2 = xyz::from_linear_srgb (rr, gg, bb);
+	  xyz v1 = dyes_rgb_to_xyz (rr, gg, bb), v2;
+	  m.apply_to_rgb (rr, gg, bb, &v2.x, &v2.y, &v2.z);
 	  if (fabs (v1.x - v2.x) > max_error
 	      || fabs (v1.y - v2.y) > max_error
 	      || fabs (v1.z - v2.z) > max_error)
