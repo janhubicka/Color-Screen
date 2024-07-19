@@ -61,6 +61,7 @@ public:
       free (m_luminosities);
   }
   static backlight_correction_parameters *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
+  DLL_PUBLIC static backlight_correction_parameters *load_captureone_lcc (FILE *f, bool verbose = false);
   static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
   /* Unique id of the image (used for caching).  */
   uint64_t id;

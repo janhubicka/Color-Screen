@@ -384,6 +384,15 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 
 	return llci;
 }
+
+backlight_correction_parameters *
+backlight_correction_parameters::load_captureone_lcc (FILE *f, bool verbose)
+{
+  memory_buffer buf;
+  if (!buf.load_file (f))
+    return NULL;
+  return backlight_correction_parameters::load_captureone_lcc (f, verbose);
+}
 #if 0
 int
 main()

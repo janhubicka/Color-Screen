@@ -833,24 +833,25 @@ analyze_backlight (int argc, char **argv)
     }
   delete cor;
 }
-void
+bool
 dump_lcc (int argc, char **argv)
 {
-  memory_buffer buf;
   if (argc != 1)
     print_help ();
   FILE *f = fopen (argv[0], "rt");
   if (!f)
     {
       perror (argv[0]);
-      exit (1);
+      return 1;
     }
-  if (!buf.load_file (f))
+  auto c = backlight_correction_parameters::load_captureone_lcc (f, true);
+  if (!c)
     {
       fprintf (stderr, "Failed to load %s\n", argv[0]);
-      exit (1);
+      return 1;
     }
-  backlight_correction_parameters::load_captureone_lcc (&buf, true);
+  delete c;
+  return 0;
 }
 
 void
