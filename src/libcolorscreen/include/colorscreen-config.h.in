@@ -1,0 +1,2 @@
+/* define if checking is enabled */
+#undef COLORSCREEN_CHECKING

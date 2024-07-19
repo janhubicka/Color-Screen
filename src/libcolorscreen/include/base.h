@@ -2,9 +2,15 @@
 #define BASE_H
 #include <cmath>
 #include <cstdint>
+#include "colorscreen-config.h"
 #define flatten_attr __attribute__ ((__flatten__))
 #define pure_attr __attribute__ ((__pure__))
 #define const_attr __attribute__ ((__const__))
+#ifdef COLORSCREEN_CHECKING
+static constexpr const bool colorscreen_checking = true;
+#else
+static constexpr const bool colorscreen_checking = false;
+#endif
 
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float

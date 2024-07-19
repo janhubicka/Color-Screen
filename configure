@@ -816,6 +816,7 @@ with_libjpeg
 with_libraw
 with_libzip
 with_liblcms2
+enable_checking
 enable_gtkgui
 enable_render_extra
 '
@@ -1479,6 +1480,7 @@ Optional Features:
                           enable make rules and dependencies not useful (and
                           sometimes confusing) to the casual installer
   --disable-openmp        do not use OpenMP
+--enable-checking   enable checking
 --enable-gtkgui     enable gtk2 based gui interface
 --enable-render-extra     enable additional render
 
@@ -20255,6 +20257,22 @@ fi
 printf "%s\n" "$RDYNAMIC" >&6; }
 
 
+checking=no
+# Check whether --enable-checking was given.
+if test ${enable_checking+y}
+then :
+  enableval=$enable_checking; checking=yes
+else case e in #(
+  e) checking=no ;;
+esac
+fi
+
+if test "$checking" != "no"
+then
+
+printf "%s\n" "#define COLORSCREEN_CHECKING 1" >>confdefs.h
+
+fi
 
 do_gtkgui=no
 # Check whether --enable-gtkgui was given.
@@ -20428,7 +20446,7 @@ fi
 
 ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile"
 
-ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h"
+ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h"
 
 
 cat >confcache <<\_ACEOF
@@ -21571,6 +21589,7 @@ do
     "examples/amcolony/Makefile") CONFIG_FILES="$CONFIG_FILES examples/amcolony/Makefile" ;;
     "src/libcolorscreen/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/config.h" ;;
     "src/gtkgui/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/gtkgui/config.h" ;;
+    "src/libcolorscreen/include/colorscreen-config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/include/colorscreen-config.h" ;;
 
   *) as_fn_error $? "invalid argument: '$ac_config_target'" "$LINENO" 5;;
   esac

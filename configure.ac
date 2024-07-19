@@ -126,6 +126,12 @@ AC_SUBST([RDYNAMIC])
 
 AC_LINK_EXPORT_DYNAMIC
 
+checking=no
+AC_ARG_ENABLE(checking,[--enable-checking   enable checking],checking=yes,checking=no)
+if test "$checking" != "no"
+then
+  AC_DEFINE([COLORSCREEN_CHECKING], 1, "enable additional checking")
+fi
 
 do_gtkgui=no
 AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
@@ -146,6 +152,6 @@ fi
 AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
 AM_CONDITIONAL([RENDER_EXTRA], [test "$do_render_extra" != "no"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
-AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h])
+AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h])
 
 AC_OUTPUT

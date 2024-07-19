@@ -100,7 +100,8 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/libcolorscreen/config.h \
-	$(top_builddir)/src/gtkgui/config.h
+	$(top_builddir)/src/gtkgui/config.h \
+	$(top_builddir)/src/libcolorscreen/include/colorscreen-config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
@@ -125,7 +126,7 @@ AM_V_at = $(am__v_at_@AM_V@)
 am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
 am__v_at_1 = 
-DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_builddir)/src/gtkgui
+DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_builddir)/src/gtkgui -I$(top_builddir)/src/libcolorscreen/include
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/colorscreen.Po

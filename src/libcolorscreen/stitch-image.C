@@ -3,6 +3,8 @@
 #include <gsl/gsl_multifit.h>
 #include <tiffio.h>
 #include "include/stitch.h"
+#include "include/analyze-dufay.h"
+#include "include/analyze-paget.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "render-interpolate.h"
@@ -761,15 +763,23 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       delete detected.known_patches;
       detected.known_patches = NULL;
     }
+  analyze_dufay *dufay;
+  analyze_paget *paget;
   if (m_prj->params.type == Dufay)
-    dufay.analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+    {
+      dufay = new (analyze_dufay);
+      dufay->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      analyzer = (std::unique_ptr <analyze_base>) (dufay);
+    }
   else
     {
+      paget = new (analyze_paget);
       assert (detected.param.type != Dufay);
-      paget.analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
+      analyzer = (std::unique_ptr <analyze_base>) (dufay);
     }
   if (m_prj->params.max_contrast >= 0)
-    dufay.analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
+    dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
   get_analyzer().set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
@@ -861,7 +871,9 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
     return;
   if (m_prj->params.max_contrast < 0)
     return;
-  luminosity_t ratio = dufay.compare_contrast (other.dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);
+  analyze_dufay *dufay = static_cast <analyze_dufay *>(analyzer.get ());
+  analyze_dufay *other_dufay = static_cast <analyze_dufay *>(other.analyzer.get ());
+  luminosity_t ratio = dufay->compare_contrast (*other_dufay, xs, ys, &x1, &y1, &x2, &y2, scr_to_img_map, other.scr_to_img_map, progress);
   if (ratio < 0)
     {
       if (progress)

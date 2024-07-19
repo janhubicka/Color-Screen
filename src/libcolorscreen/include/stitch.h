@@ -4,8 +4,6 @@
 #include <string>
 #include "scr-to-img.h"
 #include "render.h"
-#include "analyze-dufay.h"
-#include "analyze-paget.h"
 #include "solver.h"
 #include "colorscreen.h"
 struct tiff;
@@ -67,9 +65,8 @@ struct stitching_params
   }
 };
 
-class render_interpolate;
-class render_fast;
 class stitch_project;
+class analyze_base;
 
 class stitch_image
 {
@@ -88,8 +85,7 @@ class stitch_image
   int xshift, yshift, width, height;
   int final_xshift, final_yshift;
   int final_width, final_height;
-  analyze_dufay dufay;
-  analyze_paget paget;
+  std::unique_ptr <analyze_base> analyzer;
   /* Screen patches that was detected by screen detection algorithm.  */
   std::unique_ptr<bitmap_2d> screen_detected_patches;
   /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
@@ -300,7 +296,6 @@ public:
       for (int ix = 0 ; ix < params.width; ix++)
 	if (images[iy][ix].img)
 	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
-
   }
 
   struct tile_range
@@ -336,7 +331,7 @@ private:
 analyze_base & 
 stitch_image::get_analyzer ()
 {
-  return m_prj->params.type == Dufay ? (analyze_base &)dufay : (analyze_base &)paget;
+  return *analyzer;
 }
 
 #endif

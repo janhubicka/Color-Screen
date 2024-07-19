@@ -161,14 +161,6 @@ public:
       return {x + other.x, y + other.y};
     }
   };
-protected:
-  /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
-  DLL_PUBLIC_EXP analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
-  : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),
-    m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
-    m_contrast (NULL)
-  {
-  }
   DLL_PUBLIC_EXP virtual
   ~analyze_base()
   {
@@ -181,6 +173,14 @@ protected:
     free (m_contrast);
     if (m_known_pixels)
       delete m_known_pixels;
+  }
+protected:
+  /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
+  DLL_PUBLIC_EXP analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
+  : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),
+    m_xshift (0), m_yshift (0), m_width (0), m_height (0), m_red (0), m_green (0), m_blue (0),  m_rgb_red (0), m_rgb_green (0), m_rgb_blue (0), m_known_pixels (NULL), m_n_known_pixels (0),
+    m_contrast (NULL)
+  {
   }
   bool find_best_match_using_cpfind (analyze_base &other, coord_t *xshift_ret, coord_t *yshift_ret, int direction, scr_to_img &map, scr_to_img &other_map, int scale, FILE *report_file, progress_info *progress);
   int m_rwscl;
