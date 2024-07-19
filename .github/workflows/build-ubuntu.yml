@@ -45,3 +45,19 @@ jobs:
       with:
         name: source-tarball
         path: colorscreen-*.tar.gz
+    - name: make distclean
+      run: make distclean
+    - name: configure with checking
+      run: CXXFLAGS="-Ofast -flto --enable-checking" CFLAGS="$CXXFLAGS" ./configure
+    - name: make (checking enabled)
+      run: make
+    - name: make check (checking enabled)
+      run: make check
+    - name: Upload Test Results (checking enabled)
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite-checking
+        path: |
+          testsuite/*.txt
+          testsuite/*.log

@@ -580,7 +580,7 @@ struct DLL_PUBLIC render_parameters
   bool auto_mix_weights_using_ir (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
   bool auto_white_balance (image_data &img, scr_to_img_parameters &par, int xmin, int ymin, int xmax, int ymax, progress_info *progress = NULL, luminosity_t dark_cut = 0.01, luminosity_t light_cut = 0.001);
 private:
-  static const bool debug = false;
+  static const bool debug = colorscreen_checking;
   color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img);
   color_matrix get_balanced_dyes_matrix (const image_data *img, bool normalized_patches, rgbdata patch_proportions, xyz target_whitepoint = d50_white);
 };
@@ -746,7 +746,6 @@ protected:
   uint64_t m_backlight_correction_id;
 
 private:
-  static const bool debug = false;
   std::unique_ptr <tone_curve> m_tone_curve;
 };
 

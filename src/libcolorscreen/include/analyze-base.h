@@ -9,7 +9,7 @@
 class DLL_PUBLIC analyze_base
 {
 protected:
-  static constexpr const bool debug = false;
+  static constexpr const bool debug = colorscreen_checking;
 public:
   struct contrast_info
   {

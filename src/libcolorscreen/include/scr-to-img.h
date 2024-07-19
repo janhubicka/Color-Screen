@@ -542,7 +542,7 @@ private:
     else
       *yr = m_motor_correction->invert (y);
   }
-  static const bool debug = false;
+  static const bool debug = colorscreen_checking;
   void initialize ();
 };
 

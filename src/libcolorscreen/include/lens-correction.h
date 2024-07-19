@@ -71,7 +71,7 @@ struct lens_warp_correction_parameters
 
 struct lens_warp_correction
 {
-  static constexpr const bool debug = false;
+  static constexpr const bool debug = colorscreen_checking;
   /* Size of table for inverse function.  16*1024 is probably overkill but
      should have one entry for every pixel.  */
   static constexpr const int size = 16 * 1024;
