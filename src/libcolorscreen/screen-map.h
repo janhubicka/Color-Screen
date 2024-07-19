@@ -2,7 +2,7 @@
 #define SCREEN_MAP_H
 #include <limits>
 #include "include/solver.h"
-#include "include/analyze-paget.h"
+#include "analyze-paget.h"
 class
 screen_map
 {

@@ -50,7 +50,7 @@ inline bool is_fixed_lens (scanner_type type)
   return type == fixed_lens || type == fixed_lens_sensor_move_horisontally || type == fixed_lens_sensor_move_vertically;
 }
 
-extern const char * const scanner_type_names[max_scanner_type];
+DLL_PUBLIC extern const char * const scanner_type_names[max_scanner_type];
 
 /* This implements to translate image coordiantes to coordinates of the viewing screen.
    In the viewing screen the coordinats (0,0) describe a green dot and

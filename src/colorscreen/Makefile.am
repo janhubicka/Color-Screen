@@ -1,4 +1,6 @@
 bin_PROGRAMS=colorscreen
-AM_LDFLAGS = -static
+if static_link
+  AM_LDFLAGS = -static
+endif
 LDADD = ../libcolorscreen/libcolorscreen.la 
 colorscreen_SOURCES=colorscreen.C

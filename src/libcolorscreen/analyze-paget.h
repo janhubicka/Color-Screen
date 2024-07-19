@@ -1,6 +1,6 @@
 #ifndef ANALYZE_PAGET_H
 #define ANALYZE_PAGET_H
-#include "render-to-scr.h"
+#include "include/render-to-scr.h"
 #include "analyze-base.h"
 struct paget_geometry
 {

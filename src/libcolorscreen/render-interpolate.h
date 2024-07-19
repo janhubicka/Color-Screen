@@ -3,8 +3,8 @@
 #include <functional>
 #include "include/render-to-scr.h"
 #include "include/screen.h"
-#include "include/analyze-dufay.h"
-#include "include/analyze-paget.h"
+#include "analyze-dufay.h"
+#include "analyze-paget.h"
 #include "include/histogram.h"
 #include "include/solver.h"
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;

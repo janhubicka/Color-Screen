@@ -1901,7 +1901,7 @@ finetune (int argc, char **argv)
     }
 }
 
-void
+int
 dump_patch_density (int argc, char **argv)
 {
   const char *error = NULL;
@@ -1915,7 +1915,7 @@ dump_patch_density (int argc, char **argv)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
-      exit (1);
+      return 1;
     }
 
   FILE *in = fopen (argv[1], "rt");
@@ -1923,7 +1923,7 @@ dump_patch_density (int argc, char **argv)
     {
       progress.pause_stdout ();
       perror (argv[1]);
-      exit (1);
+      return 1;
     }
 
   scr_to_img_parameters param;
@@ -1932,25 +1932,24 @@ dump_patch_density (int argc, char **argv)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
-      exit (1);
+      return 1;
     }
   fclose (in);
-  render_interpolate render (param, scan, rparam, 256);
-  if (!render.precompute_all (&progress))
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Precomputing failed");
-      exit (1);
-    }
   FILE *out = fopen (argv[2], "wt");
   if (!out)
     {
       progress.pause_stdout ();
       perror (argv[2]);
-      exit (1);
+      return 1;
     }
-  render.dump_patch_density (out);
+  if (!dump_patch_density (out, scan, param, rparam, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Saving failed\n", argv[1], error);
+      return 1;
+    }
   fclose (out);
+  return 0;
 }
 static const char* save_project_filename;
 static const char* load_project_filename;
@@ -2396,7 +2395,7 @@ main (int argc, char **argv)
   else if (!strcmp (argv[1], "stitch"))
     ret = stitch (argc-2, argv+2);
   else if (!strcmp (argv[1], "dump-patch-density"))
-    dump_patch_density (argc-2, argv+2);
+    ret = dump_patch_density (argc-2, argv+2);
   else if (!strcmp (argv[1], "digital-laboratory")
 	   || !strcmp (argv[1], "lab"))
     digital_laboratory (argc-2, argv+2);

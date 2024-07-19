@@ -8,7 +8,7 @@
 #include "include/bitmap.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"
-#include "include/analyze-paget.h"
+#include "analyze-paget.h"
 
 extern void prune_render_scr_detect_caches ();
 namespace

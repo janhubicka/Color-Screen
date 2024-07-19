@@ -1,5 +1,5 @@
 #include "analyze-base-worker.h"
-#include "include/analyze-dufay.h"
+#include "analyze-dufay.h"
 #include "include/screen.h"
 
 bool

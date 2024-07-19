@@ -44,4 +44,5 @@ DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters &rtpar
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p);
 /* No const fo compatibility with java GNU.  */
 DLL_PUBLIC rgbdata get_linearized_pixel (/*const*/ image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
+DLL_PUBLIC bool dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param, render_parameters &rparam, progress_info *progress = NULL);
 #endif

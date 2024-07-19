@@ -3,8 +3,8 @@
 #include <gsl/gsl_multifit.h>
 #include <tiffio.h>
 #include "include/stitch.h"
-#include "include/analyze-dufay.h"
-#include "include/analyze-paget.h"
+#include "analyze-dufay.h"
+#include "analyze-paget.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "render-interpolate.h"

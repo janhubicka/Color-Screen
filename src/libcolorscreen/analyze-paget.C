@@ -1,5 +1,5 @@
 #include "analyze-base-worker.h"
-#include "include/analyze-paget.h"
+#include "analyze-paget.h"
 #include "include/screen.h"
 #include "include/tiff-writer.h"
 

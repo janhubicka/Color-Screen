@@ -1,4 +1,4 @@
-#include "include/analyze-base.h"
+#include "analyze-base.h"
 /* Collect luminosity of individual color patches.  */
 template<typename GEOMETRY>
 bool

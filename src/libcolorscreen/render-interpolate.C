@@ -4,10 +4,10 @@
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "dufaycolor.h"
-#include "render-interpolate.h"
 #include "nmsimplex.h"
 #include "include/stitch.h"
 #include "include/finetune.h"
+#include "render-interpolate.h"
 
 namespace {
 
@@ -596,4 +596,13 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
   return render.analyze_rgb_patches (analyze,
 				     task, screen,
 				     xmin, xmax, ymin, ymax, progress);
+}
+
+bool
+dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param, render_parameters &rparam, progress_info *progress)
+{
+  render_interpolate render (param, scan, rparam, 256);
+  if (!render.precompute_all (progress))
+    return false;
+  return render.dump_patch_density (out);
 }

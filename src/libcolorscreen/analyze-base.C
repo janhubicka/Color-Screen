@@ -1,7 +1,7 @@
 #include <cstring>
 #include <vector>
 #include "include/render-to-scr.h"
-#include "include/analyze-base.h"
+#include "analyze-base.h"
 #include "include/tiff-writer.h"
 
 

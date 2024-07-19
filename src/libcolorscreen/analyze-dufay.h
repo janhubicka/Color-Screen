@@ -1,6 +1,6 @@
 #ifndef ANALYZE_DUFAY_H
 #define ANALYZE_DUFAY_H
-#include "render-to-scr.h"
+#include "include/render-to-scr.h"
 #include "analyze-base.h"
 
 struct dufay_geometry

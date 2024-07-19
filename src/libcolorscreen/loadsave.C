@@ -5,7 +5,7 @@
 #include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
 
-const char * const scr_names[max_scr_type] =
+DLL_PUBLIC const char * const scr_names[max_scr_type] =
 {
   "Random",
   "Paget",
@@ -14,7 +14,7 @@ const char * const scr_names[max_scr_type] =
   "Dufay"
 };
 
-const char * const scanner_type_names[max_scanner_type] =
+DLL_PUBLIC const char * const scanner_type_names[max_scanner_type] =
 {
   "fixed-lens",
   "fixed-lens-horisontally-moving-sensor",
