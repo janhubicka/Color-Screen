@@ -16,6 +16,8 @@
 #define strcpy_s(a,b) strcpy(a,b)
 #endif
 
+#include "include/base.h"
+
 static const bool debug = false;
 static bool destroyed = false;
 
@@ -207,4 +209,7 @@ MapAlloc::~MapAlloc ()
 {
 	if (debug)
 	  printf ("Global destruction\n");
+	if (colorscreen_checking)
+	  for (auto it = objects.begin(); it < objects.end(); ++it) 
+	    printf ("Mapallocated %li bytes during global destruction\n", (long)(*it)->GetSize());
 }

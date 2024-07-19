@@ -570,7 +570,7 @@ render (int argc, char **argv)
   return 0;
 }
 
-static void
+static int
 autodetect (int argc, char **argv)
 {
   const char *cspname = NULL;
@@ -670,13 +670,13 @@ autodetect (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  perror (cspname);
-	  exit (1);
+	  return 1;
 	}
       if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
 	{
 	  progress.pause_stdout ();
 	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-	  exit (1);
+	  return 1;
 	}
       fclose (in);
     }
@@ -693,13 +693,13 @@ autodetect (int argc, char **argv)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
-      exit (1);
+      return 1;
     }
   if (!scan.rgbdata && !scan.stitch)
     {
       progress.pause_stdout ();
       fprintf (stderr, "Autodetection is only implemented for RGB scans and stitched projects");
-      exit (1);
+      return 1;
     }
   if (scan.rgbdata)
     {
@@ -708,7 +708,7 @@ autodetect (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  perror (repname);
-	  exit (1);
+	  return 1;
 	}
       if (gamma)
 	rparam.gamma = gamma;
@@ -739,7 +739,7 @@ autodetect (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  fprintf (stderr, "Autodetection failed\n");
-	  exit (1);
+	  return 1;
 	}
     }
   else
@@ -783,15 +783,14 @@ autodetect (int argc, char **argv)
     {
       progress.pause_stdout ();
       perror (outname);
-      exit (1);
+      return 1;
     }
   if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
     {
       fprintf (stderr, "saving failed\n");
-      exit (1);
+      return 1;
     }
-  progress.pause_stdout ();
-  exit (0);
+  return 0;
 }
 
 void

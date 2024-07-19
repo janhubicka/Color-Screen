@@ -27,6 +27,11 @@ if test -n "$TEST_VALGRIND" ; then
   WRAP="valgrind "
 fi
 
+pexec() {
+  echo "Running $*"
+  $*
+}
+
 # iterate across all rendering modes. invoke as
 # test_all_render_modes <basename of scan> <basename of par in output dir>
 test_all_render_modes() {
@@ -36,7 +41,7 @@ test_all_render_modes() {
   for mode in $MODES
   do
     echo rendering $NNAME with $NPARNAME.par to $NPARNAME-$mode.tif
-    $RUNCOLORSCREEN render --mode $mode $NNAME $NPARNAME.par $NPARNAME-$mode.tif
+    pexec $RUNCOLORSCREEN render --mode $mode $NNAME $NPARNAME.par $NPARNAME-$mode.tif
   done
 }
 # autodetect
@@ -48,7 +53,7 @@ test_autodetect()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
   grep "^Analyzed 99" "$NPARNAME".txt || exit 1
 }
 test_autodetect90()
@@ -58,7 +63,7 @@ test_autodetect90()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
   grep "^Analyzed 9[0-9]" "$NPARNAME".txt || exit 1
 }
 test_autodetect80()
@@ -68,7 +73,7 @@ test_autodetect80()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
   grep "^Analyzed [8-9][0-9]" "$NPARNAME".txt || exit 1
 }
 # autodetect and iterate across all rendering modes. invoke as

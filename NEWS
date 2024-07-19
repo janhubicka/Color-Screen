@@ -17,5 +17,7 @@ Changes in version 1.1
  8. Stack size for Windows build was increased so finetune solver works
     (for unknown reason it works very slowly when run on real Windows; it is
     fast under wine). This is Issue #6
+ 9. `--enable-checking` configure option now enables extra runtime sanity
+    checking
 
 Version 1.0 was the first public release

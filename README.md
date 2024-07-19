@@ -128,4 +128,4 @@ information.
 with `colorscreen-gtk <scan file>`. Scan must be either in tiff or jpeg file
 format.
 
-Jan Hubicka (hubicka@ucw.cz)
+Jan Hubička (hubicka@ucw.cz)
