@@ -2384,7 +2384,7 @@ main (int argc, char **argv)
   else if (!strcmp (argv[1], "render"))
     ret = render (argc-2, argv+2);
   else if (!strcmp (argv[1], "autodetect"))
-    autodetect (argc-2, argv+2);
+    ret = autodetect (argc-2, argv+2);
   else if (!strcmp (argv[1], "analyze-backlight"))
     analyze_backlight (argc-2, argv+2);
   else if (!strcmp (argv[1], "finetune"))
