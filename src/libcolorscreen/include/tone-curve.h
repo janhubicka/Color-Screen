@@ -9,7 +9,7 @@
 /* Implement DNG-style tone curve.  */
 class tone_curve:public precomputed_function <luminosity_t>
 {
-  static const bool debug = false;
+  static const bool debug = colorscreen_checking;
 public:
   enum tone_curves
   {

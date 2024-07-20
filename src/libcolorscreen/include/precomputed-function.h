@@ -209,7 +209,7 @@ private:
     T slope, add;
   } *m_entry;
   bool increasing;
-  static const bool debug = false;
+  static const bool debug = colorscreen_checking;
 };
 
 
