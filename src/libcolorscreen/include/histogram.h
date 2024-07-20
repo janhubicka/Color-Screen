@@ -2,7 +2,7 @@
 #define HISTOGRAM_H
 #include <limits>
 
-/* Basic datastructure to hols various value histograms.  */
+/* Basic datastructure for value histograms.  */
 class histogram
 {
 public:

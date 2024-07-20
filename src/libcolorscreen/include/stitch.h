@@ -6,9 +6,9 @@
 #include "render.h"
 #include "solver.h"
 #include "colorscreen.h"
-#include "screen.h"
 struct tiff;
 typedef struct tiff TIFF;
+class screen;
 
 struct stitching_params
 {

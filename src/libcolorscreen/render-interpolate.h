@@ -2,7 +2,7 @@
 #define RENDEINTERPOLATE_H
 #include <functional>
 #include "include/render-to-scr.h"
-#include "include/screen.h"
+#include "screen.h"
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
 #include "include/histogram.h"

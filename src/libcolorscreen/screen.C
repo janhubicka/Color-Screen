@@ -3,7 +3,7 @@
 #include <array>
 #include "include/tiff-writer.h"
 #include "include/dufaycolor.h"
-#include "include/screen.h"
+#include "screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
 #include "spline.h"

@@ -2,7 +2,7 @@
 #define FINETUNE_H
 #include <string>
 #include "solver.h"
-struct screen;
+class screen;
 enum finetune_flags
 {
   finetune_position = 1,

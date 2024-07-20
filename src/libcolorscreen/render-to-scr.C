@@ -1,6 +1,6 @@
 #include <cassert>
 #include "include/render-to-scr.h"
-#include "include/screen.h"
+#include "screen.h"
 #include "lru-cache.h"
 
 namespace

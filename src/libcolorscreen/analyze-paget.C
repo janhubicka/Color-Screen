@@ -1,6 +1,6 @@
 #include "analyze-base-worker.h"
 #include "analyze-paget.h"
-#include "include/screen.h"
+#include "screen.h"
 #include "include/tiff-writer.h"
 
 /* For stitching we need to write screen with 2 pixels per repetition of screen pattern.  */

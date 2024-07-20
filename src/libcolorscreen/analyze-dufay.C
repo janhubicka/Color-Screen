@@ -1,6 +1,6 @@
 #include "analyze-base-worker.h"
 #include "analyze-dufay.h"
-#include "include/screen.h"
+#include "screen.h"
 
 bool
 analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress)

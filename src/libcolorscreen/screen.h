@@ -1,12 +1,13 @@
 #ifndef SCREEN_H
 #define SCREEN_H
-#include "color.h"
-#include "scr-to-img.h"
+#include "include/color.h"
+#include "include/scr-to-img.h"
 template<typename T> class precomputed_function;
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
-struct DLL_PUBLIC screen
+class screen
 {
+public:
   /* Size of the arrays holding the screen.  Must be power of 2.  */
   static const int size=128;
   /* blur radius is in screen coordiates. 0.25 makes almost invisible.  */

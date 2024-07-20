@@ -2,7 +2,7 @@
 #include "include/spectrum-to-xyz.h"
 #include "include/dufaycolor.h"
 #include "icc.h"
-#include "include/screen.h"
+#include "screen.h"
 #include "lru-cache.h"
 constexpr xyY dufaycolor::red_dye;
 constexpr xyY dufaycolor::green_dye;
