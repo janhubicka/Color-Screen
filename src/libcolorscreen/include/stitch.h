@@ -113,8 +113,8 @@ class stitch_image
 
   bool top, bottom, left, right;
 
-  DLL_PUBLIC stitch_image ();
-  DLL_PUBLIC_EXP ~stitch_image ();
+  stitch_image ();
+  ~stitch_image ();
   bool init_loader (const char **error, progress_info *progress);
   bool load_img (const char **error, progress_info *);
   bool load_part (int *permille, const char **error, progress_info *progress);
