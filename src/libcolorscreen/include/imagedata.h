@@ -9,7 +9,7 @@ class image_data_loader;
 class stitch_project;
 
 /* Scanned image descriptor.  */
-class DLL_PUBLIC image_data
+class image_data
 {
 public:
   typedef unsigned short gray;
@@ -58,15 +58,15 @@ public:
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
 
-  bool has_rgb ();
-  bool has_grayscale_or_ir ();
+  pure_attr DLL_PUBLIC bool has_rgb ();
+  pure_attr DLL_PUBLIC bool has_grayscale_or_ir ();
 
   xyY primary_red;
   xyY primary_green;
   xyY primary_blue;
   xyz whitepoint;
   class backlight_correction_parameters *lcc;
-  void set_dpi (coord_t xdpi, coord_t ydpi);
+  DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
   luminosity_t gamma;
 private:

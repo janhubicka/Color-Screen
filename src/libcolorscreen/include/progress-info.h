@@ -10,22 +10,11 @@
 #include "dllpublic.h"
 
 /* Class to communicate progress info from rendering kernels.  It can also be used to cancel computation in the middle.  */
-class DLL_PUBLIC progress_info
+class progress_info
 {
 public:
-  progress_info ()
-  : m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
-  {
-  }
-  ~progress_info ()
-  {
-    if (debug && m_task)
-      {
-	const char *t = m_task;
-	uint64_t current = m_current;
-	printf ("\nlast task %s: finished with %" PRIu64 " steps\n", t, current);
-      }
-  }
+  DLL_PUBLIC progress_info ();
+  DLL_PUBLIC ~progress_info ();
 
   /* API used to monitor and control computation.  */
 
@@ -154,8 +143,8 @@ public:
     pthread_mutex_unlock (&m_lock);
   }
 
-  virtual void pause_stdout ();
-  virtual void resume_stdout ();
+  DLL_PUBLIC virtual void pause_stdout ();
+  DLL_PUBLIC virtual void resume_stdout ();
 private:
   static const bool debug = false;
   std::atomic<const char *>m_task;
@@ -171,14 +160,14 @@ private:
   pthread_mutex_t m_lock;
 };
 
-class DLL_PUBLIC file_progress_info : public progress_info
+class file_progress_info : public progress_info
 {
 public:
-  file_progress_info (FILE *f, bool display = true);
-  ~file_progress_info ();
+  DLL_PUBLIC file_progress_info (FILE *f, bool display = true);
+  DLL_PUBLIC ~file_progress_info ();
   void display_progress ();
-  virtual void pause_stdout ();
-  virtual void resume_stdout ();
+  DLL_PUBLIC virtual void pause_stdout () final;
+  DLL_PUBLIC virtual void resume_stdout () final;
 
   pthread_mutex_t m_exit_lock;
   pthread_cond_t m_exit_cond;

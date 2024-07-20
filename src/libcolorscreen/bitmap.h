@@ -1,5 +1,6 @@
 #ifndef BITMAP_H
 #define BITMAP_H
+/* Constanly sized bitmap datastructure.  */
 class bitmap
 {
 public:
@@ -55,6 +56,7 @@ protected:
   int size;
 };
 
+/* Constanly sized 2d bitmap datastructure.  */
 class bitmap_2d: private bitmap
 {
 public:

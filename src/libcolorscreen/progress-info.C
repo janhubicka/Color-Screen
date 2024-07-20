@@ -5,6 +5,19 @@
 #include <cstring>
 #include <cstdlib>
 #include "include/progress-info.h"
+progress_info::progress_info ()
+: m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
+{
+}
+progress_info::~progress_info ()
+{
+  if (debug && m_task)
+    {
+      const char *t = m_task;
+      uint64_t current = m_current;
+      printf ("\nlast task %s: finished with %" PRIu64 " steps\n", t, current);
+    }
+}
 void
 progress_info::pause_stdout ()
 {

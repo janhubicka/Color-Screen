@@ -67,7 +67,7 @@ DLL_PUBLIC extern const char * const scanner_type_names[max_scanner_type];
      6) change of basis so center+coordinate1 becomes (1.0) and center+coordinate2 becomes (0,1)
 */
 
-struct DLL_PUBLIC scr_to_img_parameters
+struct scr_to_img_parameters
 {
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
   coord_t center_x, center_y;
@@ -257,10 +257,10 @@ struct DLL_PUBLIC scr_to_img_parameters
 class image_data;
 
 /* Mapping between screen and image.  */
-class DLL_PUBLIC scr_to_img
+class scr_to_img
 {
 public:
-  void set_parameters (const scr_to_img_parameters &param, const image_data &img, coord_t rotation_adjustment = 0, bool need_inverse = true);
+  DLL_PUBLIC void set_parameters (const scr_to_img_parameters &param, const image_data &img, coord_t rotation_adjustment = 0, bool need_inverse = true);
   void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio, coord_t final_angle);
   void get_range (int img_width, int img_height,

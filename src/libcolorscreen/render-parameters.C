@@ -962,3 +962,26 @@ render_parameters::auto_white_balance (image_data &img, scr_to_img_parameters &p
     progress->resume_stdout ();
   return true;
 }
+
+void
+render_parameters::adjust_for (render_type_parameters &rtparam, render_parameters &rparam)
+{
+  const render_type_property &prop = render_type_properties[rtparam.type];
+  if (prop.flags & render_type_property::OUTPUTS_SCAN_PROFILE)
+    original_render_from (rparam, rtparam.color, false);
+  else if (prop.flags & render_type_property::OUTPUTS_SRGB_PROFILE)
+    {
+      *this = rparam;
+      color_model = color_model_none;
+      presaturation = 1;
+      saturation = 1;
+      if (prop.flags & render_type_property::RESET_BRIGHTNESS_ETC)
+	{
+	  output_tone_curve = tone_curve::tone_curve_linear;
+	  brightness = 1;
+	  dark_point = 0;
+	}
+    }
+  else
+    *this = rparam;
+}
