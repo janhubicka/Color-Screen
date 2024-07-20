@@ -985,3 +985,154 @@ render_parameters::adjust_for (render_type_parameters &rtparam, render_parameter
   else
     *this = rparam;
 }
+void
+render_parameters::compute_mix_weights (rgbdata patch_proportions)
+{
+  rgbdata sprofiled_red = profiled_red /*/ patch_proportions.red*/;
+  rgbdata sprofiled_green = profiled_green /*/ patch_proportions.green*/;
+  rgbdata sprofiled_blue = profiled_blue /*/ patch_proportions.blue*/;
+  bool verbose = true;
+  color_matrix process_colors (sprofiled_red.red,   sprofiled_green.red,   sprofiled_blue.red,   0,
+			       sprofiled_red.green, sprofiled_green.green, sprofiled_blue.green, 0,
+			       sprofiled_red.blue,  sprofiled_green.blue,  sprofiled_blue.blue,  0,
+			       0, 0, 0, 1);
+  process_colors.transpose ();
+  mix_dark = profiled_dark;
+  process_colors.invert ().apply_to_rgb (
+      3 * patch_proportions.red / white_balance.red,
+      3 * patch_proportions.green / white_balance.green,
+      3 * patch_proportions.blue / white_balance.blue, &mix_red, &mix_green,
+      &mix_blue);
+  white_balance = { 1, 1, 1 };
+  if (verbose)
+    {
+      printf ("profiled dark ");
+      profiled_dark.print (stdout);
+      printf ("Scaled profiled red ");
+      sprofiled_red.print (stdout);
+      printf ("Scaled profiled green ");
+      sprofiled_green.print (stdout);
+      printf ("Scaled profiled blue ");
+      sprofiled_blue.print (stdout);
+      printf ("mix weights %f %f %f\n", mix_red, mix_green, mix_blue);
+      printf ("%f %f\n",
+	      profiled_red.red * mix_red + profiled_red.green * mix_green
+		  + profiled_red.blue * mix_blue,
+	      patch_proportions.red);
+      printf ("%f %f\n",
+	      profiled_green.red * mix_red + profiled_green.green * mix_green
+		  + profiled_green.blue * mix_blue,
+	      patch_proportions.green);
+      printf ("%f %f\n",
+	      profiled_blue.red * mix_red + profiled_blue.green * mix_green
+		  + profiled_blue.blue * mix_blue,
+	      patch_proportions.blue);
+    }
+}
+/* Initialize render parameters for showing original scan.
+   In this case we do not want to apply color models etc.  */
+void
+render_parameters::original_render_from (render_parameters &rparam, bool color, bool profiled)
+{
+  if (profiled)
+    {
+      *this = rparam;
+      return;
+    }
+  backlight_correction = rparam.backlight_correction;
+  backlight_correction_black = rparam.backlight_correction_black;
+  gamma = rparam.gamma;
+  invert = rparam.invert;
+  scan_exposure = rparam.scan_exposure;
+  ignore_infrared = rparam.ignore_infrared;
+  scanner_red = rparam.scanner_red;
+  scanner_green = rparam.scanner_green;
+  scanner_blue = rparam.scanner_blue;
+  dark_point = rparam.dark_point;
+  brightness = rparam.brightness;
+  color_model = color ? (profiled ? rparam.color_model
+				  : render_parameters::color_model_scan)
+		      : render_parameters::color_model_none;
+  output_tone_curve = rparam.output_tone_curve;
+  tile_adjustments = rparam.tile_adjustments;
+  tile_adjustments_width = rparam.tile_adjustments_width;
+  tile_adjustments_height = rparam.tile_adjustments_height;
+  output_profile = rparam.output_profile;
+  if (color)
+    white_balance = rparam.white_balance;
+  else
+    {
+      mix_dark = rparam.mix_dark;
+      mix_red = rparam.mix_red;
+      mix_green = rparam.mix_green;
+      mix_blue = rparam.mix_blue;
+    }
+  sharpen_amount = rparam.sharpen_amount;
+  sharpen_radius = rparam.sharpen_radius;
+
+  /* Copy setup of interpolated rendering algorithm.  */
+  precise = rparam.precise;
+  collection_threshold = rparam.collection_threshold;
+  screen_blur_radius = rparam.screen_blur_radius;
+}
+
+color_matrix
+render_parameters::get_profile_matrix (rgbdata patch_proportions)
+{
+  color_matrix subtract_dark (1, 0, 0, -profiled_dark.red,
+			      0, 1, 0, -profiled_dark.green,
+			      0, 0, 1, -profiled_dark.blue,
+			      0, 0, 0, 1);
+  color_matrix process_colors (profiled_red.red * patch_proportions.red, profiled_green.red * patch_proportions.green, profiled_blue.red * patch_proportions.blue, 0,
+			       profiled_red.green * patch_proportions.red, profiled_green.green * patch_proportions.green, profiled_blue.green * patch_proportions.blue, 0,
+			       profiled_red.blue * patch_proportions.red, profiled_green.blue * patch_proportions.green, profiled_blue.blue * patch_proportions.blue, 0,
+			       0, 0, 0, 1);
+  color_matrix ret = process_colors.invert ();
+  ret = ret * subtract_dark;
+  return ret;
+}
+
+/* Set invert, exposure and dark_point for a given range of values
+   in input scan.  Used to interpret old gray_range parameter
+   and can be removed eventually.  */
+void 
+render_parameters::set_gray_range (int gray_min, int gray_max, int maxval)
+{
+  if (gray_min < gray_max)
+    {
+      luminosity_t min2
+	  = apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+      luminosity_t max2
+	  = apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+      scan_exposure = 1 / (max2 - min2);
+      dark_point = min2;
+      invert = false;
+    }
+  else if (gray_min > gray_max)
+    {
+      luminosity_t min2
+	  = 1 / apply_gamma ((gray_min + 0.5) / (luminosity_t)maxval, gamma);
+      luminosity_t max2
+	  = 1 / apply_gamma ((gray_max + 0.5) / (luminosity_t)maxval, gamma);
+      scan_exposure = 1 / (max2 - min2);
+      dark_point = min2;
+      invert = true;
+    }
+}
+void
+render_parameters::get_gray_range (int *min, int *max, int maxval)
+{
+  if (!invert)
+    {
+      *min = invert_gamma (dark_point, gamma) * maxval - 0.5;
+      *max = invert_gamma (dark_point + 1 / scan_exposure, gamma) * maxval
+	     - 0.5;
+    }
+  else
+    {
+      *min = (invert_gamma (1 / dark_point, gamma) * maxval) - 0.5;
+      *max = (invert_gamma (1 / (((dark_point + 1 / scan_exposure))), gamma)
+	      * maxval)
+	     - 0.5;
+    }
+}
