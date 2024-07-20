@@ -45,7 +45,6 @@ public:
     RESET_BRIGHTNESS_ETC = 1024,
   };
 };
-
 namespace {
 static const constexpr render_type_property render_type_properties[render_type_max] =
 {
@@ -80,8 +79,9 @@ public:
   bool color;
   bool antialias;
   render_type_parameters ()
-  : type (render_type_original), color (true), antialias (true)
-  { }
+      : type (render_type_original), color (true), antialias (true)
+  {
+  }
 };
 
 #endif
