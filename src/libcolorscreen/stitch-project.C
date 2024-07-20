@@ -1347,8 +1347,8 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
 	ranges[i].seen = true;
       }
   std::vector <tile_range> ret;
-  for (int ty = 0; ty < params.width; ty++)
-    for (int tx = 0; tx < params.height; tx++)
+  for (int ty = 0; ty < params.height; ty++)
+    for (int tx = 0; tx < params.width; tx++)
       {
         int i = ty * params.width + tx;
 	if (ranges[i].seen)
