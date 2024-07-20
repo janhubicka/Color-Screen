@@ -1,10 +1,11 @@
 /* This file implement logic to detect regular screen in RGB scan.  */
 #include <memory>
 #include <limits.h>
+#include "include/colorscreen.h"
 #include "include/scr-detect.h"
 #include "include/solver.h"
 #include "include/render-scr-detect.h"
-#include "screen-map.h"
+#include "include/screen-map.h"
 #include "include/bitmap.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"

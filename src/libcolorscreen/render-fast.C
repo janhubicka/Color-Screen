@@ -1,3 +1,4 @@
+#include "include/colorscreen.h"
 #include "include/render-fast.h"
 
 render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
@@ -57,4 +58,26 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
     }
 #undef getpixel
   return {red, green, blue};
+}
+
+/* Render preview for gtkgui. To be replaces by render_tile later.  */
+bool
+render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride)
+{
+  render_fast render (param, scan, rparams, 255);
+  int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height ();
+  if (!render.precompute_all (NULL))
+    return false;
+  coord_t step = std::max (scr_xsize / (coord_t)width, scr_ysize / (coord_t)height);
+#pragma omp parallel for default(none) shared(render,pixels,step,width,height,rowstride)
+  for (int y = 0; y < height; y ++)
+    for (int x = 0; x < width; x ++)
+      {
+	int red, green, blue;
+	render.render_pixel_final (x * step, y * step, &red, &green, &blue);
+	*(pixels + y * rowstride + x * 3) = red;
+	*(pixels + y * rowstride + x * 3 + 1) = green;
+	*(pixels + y * rowstride + x * 3 + 2) = blue;
+      }
+  return true;
 }

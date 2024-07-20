@@ -2,10 +2,10 @@
 #include <string>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/spectrum-to-xyz.h"
-#include "../libcolorscreen/dufaycolor.h"
-#include "../libcolorscreen/wratten.h"
+#include "../libcolorscreen/include/dufaycolor.h"
+#include "../libcolorscreen/include/wratten.h"
 #include "../libcolorscreen/include/tiff-writer.h"
-#include "../libcolorscreen/render-interpolate.h"
+#include "../libcolorscreen/include/histogram.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/stitch.h"
 

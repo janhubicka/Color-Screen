@@ -1,7 +1,8 @@
 #ifndef WRATTEN_H
 #define WRATTEN_H
-#include "include/base.h"
-#include "include/color.h"
+#include "base.h"
+#include "color.h"
+#include "dllpublic.h"
 class wratten
 {
 public:
@@ -21,7 +22,7 @@ public:
   static constexpr luminosity_t filter_25_red_dominating_wavelength = 615.3;
   static constexpr luminosity_t filter_58_green_dominating_wavelength = 541.5;
   static constexpr luminosity_t filter_47_blue_dominating_wavelength = 461.3;
-  static void print_xyz_report ();
-  static void print_spectra_report ();
+  DLL_PUBLIC static void print_xyz_report ();
+  DLL_PUBLIC static void print_spectra_report ();
 };
 #endif

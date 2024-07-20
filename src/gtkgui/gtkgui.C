@@ -13,10 +13,12 @@
 #include "config.h"
 #include "gtk-image-viewer.h"
 #include "../libcolorscreen/include/colorscreen.h"
-#include "../libcolorscreen/screen-map.h"
+#include "../libcolorscreen/include/screen-map.h"
 #include "../libcolorscreen/include/stitch.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
+#include "../libcolorscreen/include/render-to-scr.h"
+#include "../libcolorscreen/include/render-scr-detect.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
@@ -1124,7 +1126,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  int miny = std::max ((int)(shift_y / scale_y), 0);
 	  int maxy = std::min ((int)((shift_y + pysize) / scale_y), scan.height);
 	  file_progress_info progress (stdout);
-	  render_scr_detect::analyze_color_proportions (current_scr_detect, rparams, scan, k == 'O' ? &current : NULL, minx, miny, maxx, maxy, &progress);
+	  analyze_color_proportions (current_scr_detect, rparams, scan, k == 'O' ? &current : NULL, minx, miny, maxx, maxy, &progress);
 	}
     }
 
@@ -1244,15 +1246,6 @@ init_transformation_data (scr_to_img *trans)
   trans->set_parameters (get_scr_to_img_parameters (), scan);
 }
 
-static inline void
-my_putpixel (guchar * pixels, int rowstride, int x, int y, int r, int g,
-	     int b)
-{
-  *(pixels + y * rowstride + x * 3) = r;
-  *(pixels + y * rowstride + x * 3 + 1) = g;
-  *(pixels + y * rowstride + x * 3 + 2) = b;
-}
-
 /* This renders the small preview widget.   */
 
 static void
@@ -1264,27 +1257,14 @@ previewrender (GdkPixbuf ** pixbuf)
   enum render_parameters::color_model_t cm = rparams.color_model;
   //if (optimize_colors)
     //rparams.color_model = render_parameters::color_model_optimized;
-  render_fast render (get_scr_to_img_parameters (), scan, rparams, 255);
-  int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height (), rowstride;
-  int max_size = std::max (scr_xsize, scr_ysize);
-  coord_t step = max_size / (coord_t)PREVIEWSIZE;
-  int my_xsize = ceil (scr_xsize / step), my_ysize = ceil (scr_ysize / step);
-  if (!render.precompute_all (NULL))
-    return;
+  int my_xsize = PREVIEWSIZE, my_ysize = PREVIEWSIZE;
 
   g_object_unref (*pixbuf);
   *pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, 0, 8, my_xsize, my_ysize);
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
-  rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
-#pragma omp parallel for default(none) shared(render,pixels,step,my_ysize,my_xsize,rowstride)
-  for (int y = 0; y < my_ysize; y ++)
-    for (int x = 0; x < my_xsize; x ++)
-      {
-	int red, green, blue;
-	render.render_pixel_final (x * step, y * step, &red, &green, &blue);
-	my_putpixel (pixels, rowstride, x, y, red, green, blue);
-      }
+  int rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
+  render_preview (scan, get_scr_to_img_parameters (), rparams, pixels, my_xsize, my_ysize, rowstride);
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (pixels,
 					   CAIRO_FORMAT_RGB24,

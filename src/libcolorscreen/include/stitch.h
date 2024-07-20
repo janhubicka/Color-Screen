@@ -6,6 +6,7 @@
 #include "render.h"
 #include "solver.h"
 #include "colorscreen.h"
+#include "screen.h"
 struct tiff;
 typedef struct tiff TIFF;
 
@@ -306,7 +307,7 @@ public:
   DLL_PUBLIC bool stitch (progress_info *progress, const char *load_project_filename);
 private:
   bool analyze_images (progress_info *progress);
-  void produce_hugin_pto_file (const char *name, progress_info *progress);
+  bool produce_hugin_pto_file (const char *name, progress_info *progress);
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
   scr_to_img_parameters scr_param;

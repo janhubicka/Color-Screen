@@ -259,7 +259,7 @@ done:
   {
     return m_color_class_map;
   }
-  static rgbdata analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *p = NULL);
+  rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
 protected:
   my_mem_rgbdata *m_precomputed_rgbdata;
   class precomputed_rgbdata *m_precomputed_rgbdata_holder;
@@ -267,7 +267,6 @@ protected:
   scr_detect m_scr_detect;
   uint64_t m_color_class_map_id;
   uint64_t m_precomputed_rgbdata_id;
-  rgbdata analyze_color_proportions (scr_to_img_parameters *param, int xmin, int ymin, int xmax, int ymax, progress_info *p);
 };
 
 /* Simple wrapper to be used by rendering templates.  */

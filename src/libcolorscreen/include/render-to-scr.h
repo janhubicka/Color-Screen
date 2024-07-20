@@ -197,7 +197,5 @@ render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y)
 
 struct scr_detect_parameters;
 struct solver_parameters;
-DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam);
-DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error);
 
 #endif

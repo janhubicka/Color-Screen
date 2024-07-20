@@ -98,6 +98,56 @@ struct point_t
     return other.x != x || other.y != y;
   }
 };
+struct int_point_t
+{
+  int64_t x, y;
+  int_point_t inline &operator+=(const int_point_t other)
+  {
+    x += other.x;
+    y += other.y;
+    return *this;
+  }
+  pure_attr inline int_point_t operator+(const int_point_t other)
+  {
+    return {x + other.x, y + other.y};
+  }
+  int_point_t inline &operator-=(const int_point_t other)
+  {
+    x -= other.x;
+    y -= other.y;
+    return *this;
+  }
+  pure_attr inline int_point_t operator-(const int_point_t other)
+  {
+    return {x - other.x, y - other.y};
+  }
+  int_point_t inline &operator*=(const int64_t other)
+  {
+    x *= other;
+    y *= other;
+    return *this;
+  }
+  pure_attr inline int_point_t operator*(const int64_t other)
+  {
+    return {x * other, y * other};
+  }
+  const_attr inline bool almost_eq(int_point_t other, coord_t epsilon = 0.001)
+  {
+    return (fabs (x-other.x) < epsilon && fabs (y - other.y) < epsilon);
+  }
+  pure_attr inline bool operator== (int_point_t &other) const
+  {
+    return x == other.x && y == other.y;
+  }
+  bool inline operator==(const int_point_t &other)
+  {
+    return other.x == x && other.y == y;
+  }
+  bool inline operator!=(const int_point_t &other)
+  {
+    return other.x != x || other.y != y;
+  }
+};
 
 /* Like modf but always round down.  */
 static inline float

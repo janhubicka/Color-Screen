@@ -544,7 +544,7 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
 }
 
 rgbdata
-render_scr_detect::analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
   /* Sharpening changes screen proportions.  Lets hope that no sharpening yields to most realistic results.  */
   //param.sharpen_amount = 0;

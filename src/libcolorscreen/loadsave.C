@@ -1,7 +1,5 @@
 #include <locale>
-#include "include/render-to-scr.h"
-#include "include/scr-detect.h"
-#include "include/solver.h"
+#include "include/colorscreen.h"
 #include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
 

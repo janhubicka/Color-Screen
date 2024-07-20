@@ -1,8 +1,8 @@
 #ifndef DUFAYCOLOR_H
 #define DUFAYCOLOR_H
-#include <cstdio>
-#include "include/base.h"
-#include "include/color.h"
+#include "base.h"
+#include "color.h"
+#include "dllpublic.h"
 
 /* Class expressing all knowledge on dufaycolor we have so far.  */
 class dufaycolor
@@ -158,10 +158,105 @@ public:
   }
   static void determine_relative_patch_sizes_by_whitepoint (luminosity_t *r, luminosity_t *g, luminosity_t *b);
   static void determine_relative_patch_sizes_by_simulated_response (luminosity_t *r, luminosity_t *g, luminosity_t *b);
-  static void print_xyY_report ();
-  static void print_spectra_report ();
-  static void print_synthetic_dyes_report ();
+  DLL_PUBLIC static void print_xyY_report ();
+  DLL_PUBLIC static void print_spectra_report ();
+  DLL_PUBLIC static void print_synthetic_dyes_report ();
   static bool tiff_with_primaries (const char *, bool);
 };
+
+struct dufay_geometry
+{
+  /* There is red strip, green and blue patch per screen organized as follows:
+    
+     GB
+     RR
+
+     We subdivide the red strip into two red patches which are shifted to appear
+     half way between the green and blue squares.  This reduces banding if scanner
+     influences red strip by neighbouring green or blue color.  */
+  static constexpr const int red_width_scale = 2;
+  static constexpr const int red_height_scale = 1;
+  static constexpr const int green_width_scale = 1;
+  static constexpr const int green_height_scale = 1;
+  static constexpr const int blue_width_scale = 1;
+  static constexpr const int blue_height_scale = 1;
+  static constexpr const bool check_range = false;
+
+  /* Used to compute grid for interpolation between neighbouring values.
+     Everything is orthogonal, so no translation necessary  */
+  inline static int_point_t offset_for_interpolation_red (int_point_t e, int_point_t off)
+  {
+    return e + off;
+  }
+  inline static int_point_t offset_for_interpolation_green (int_point_t e, int_point_t off)
+  {
+    return e + off;
+  }
+  inline static int_point_t offset_for_interpolation_blue (int_point_t e, int_point_t off)
+  {
+    return e + off;
+  }
+
+  /* Convert screen coordinates to data entry, possibly with offset for interpolation.
+     For performance reason do both.  */
+  static inline
+  int_point_t red_scr_to_entry (point_t scr)
+  {
+    return {nearest_int (scr.x * 2 - (coord_t)0.5), nearest_int (scr.y - (coord_t)0.5)};
+  }
+  static inline
+  int_point_t red_scr_to_entry (point_t scr, point_t *off)
+  {
+    int xx, yy;
+    off->x = my_modf (scr.x * 2 - (coord_t)0.5, &xx);
+    off->y = my_modf (scr.y - (coord_t)0.5, &yy);
+    return {xx, yy};
+  }
+  static inline
+  int_point_t green_scr_to_entry (point_t scr)
+  {
+    return {nearest_int (scr.x), nearest_int (scr.y)};
+  }
+  static inline
+  int_point_t green_scr_to_entry (point_t scr, point_t *off)
+  {
+    int xx, yy;
+    off->x = my_modf (scr.x, &xx);
+    off->y = my_modf (scr.y, &yy);
+    return {xx, yy};
+  }
+  static inline
+  int_point_t blue_scr_to_entry (point_t scr)
+  {
+    return {nearest_int (scr.x - (coord_t)0.5), nearest_int (scr.y)};
+  }
+  static inline
+  int_point_t blue_scr_to_entry (point_t scr, point_t *off)
+  {
+    int xx, yy;
+    off->x = my_modf (scr.x - (coord_t)0.5, &xx);
+    off->y = my_modf (scr.y, &yy);
+    return {xx, yy};
+  }
+
+
+  /* Reverse conversion: entry to screen coordinates.   */
+  static inline
+  point_t red_entry_to_scr (int_point_t e)
+  {
+    return {e.x * (coord_t)0.5 + (coord_t)0.25, e.y + (coord_t)0.5};
+  }
+  static inline
+  point_t green_entry_to_scr (int_point_t e)
+  {
+    return {(coord_t)e.x, (coord_t)e.y};
+  }
+  static inline
+  point_t blue_entry_to_scr (int_point_t e)
+  {
+    return {e.x + (coord_t)0.5, (coord_t)e.y};
+  }
+};
+
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);
 #endif

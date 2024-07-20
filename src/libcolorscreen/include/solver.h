@@ -100,7 +100,7 @@ struct solver_parameters
     coord_t x, y;
     solver_parameters::point_color color;
   };
-  static point_location *get_point_locations (enum scr_type type, int *n);
+  DLL_PUBLIC static point_location *get_point_locations (enum scr_type type, int *n);
   /* Names of colors in enum point_color.  */
   static const char *point_color_names[(int)max_point_color];
 };
@@ -188,8 +188,8 @@ struct color_match
   xyz target;
   luminosity_t deltaE;
 };
-color_matrix determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts = 0, std::vector <color_match> *report = NULL, render *r = NULL, rgbdata proportions = {1, 1, 1}, progress_info *progress = NULL);
-bool optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress);
+DLL_PUBLIC color_matrix determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts = 0, std::vector <color_match> *report = NULL, render *r = NULL, rgbdata proportions = {1, 1, 1}, progress_info *progress = NULL);
+DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress);
 
 
 #endif

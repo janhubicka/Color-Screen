@@ -1,6 +1,6 @@
 #include "include/tiff-writer.h"
 #include "include/spectrum-to-xyz.h"
-#include "dufaycolor.h"
+#include "include/dufaycolor.h"
 #include "icc.h"
 #include "include/screen.h"
 #include "lru-cache.h"

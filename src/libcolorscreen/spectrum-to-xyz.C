@@ -5,7 +5,7 @@
 #include "include/tiff-writer.h"
 #include "include/solver.h"
 #include "icc.h"
-#include "dufaycolor.h"
+#include "include/dufaycolor.h"
 #include "spectrum.h"
 #include "spectrum-dyes.h"
 

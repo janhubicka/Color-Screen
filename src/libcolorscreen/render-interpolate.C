@@ -3,7 +3,7 @@
 #include <limits>
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
-#include "dufaycolor.h"
+#include "include/dufaycolor.h"
 #include "nmsimplex.h"
 #include "include/stitch.h"
 #include "include/finetune.h"

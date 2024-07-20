@@ -355,8 +355,8 @@ private:
   const char *name;
 };
 
-extern DLL_PUBLIC void render_increase_lru_cache_sizes_for_stitch_projects (int n);
-extern DLL_PUBLIC void render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n);
+extern void render_increase_lru_cache_sizes_for_stitch_projects (int n);
+extern void render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n);
 inline void
 increase_lru_cache_sizes_for_stitch_projects (int n)
 {

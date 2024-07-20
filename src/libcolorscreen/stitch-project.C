@@ -7,8 +7,9 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "include/stitch.h"
-#include "render-interpolate.h"
-#include "screen-map.h"
+#include "include/screen-map.h"
+#include "include/render-to-scr.h"
+#include "analyze-base.h"
 #include "loadsave.h"
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
@@ -1359,7 +1360,7 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
   return ret;
 }
 
-void
+bool
 stitch_project::produce_hugin_pto_file (const char *name, progress_info *progress)
 {
   FILE *f = fopen (name,"wt");
@@ -1367,7 +1368,7 @@ stitch_project::produce_hugin_pto_file (const char *name, progress_info *progres
     {
       progress->pause_stdout ();
       fprintf (stderr, "Can not open %s\n", name);
-      exit (1);
+      return false;
     }
   fprintf (f, "# hugin project file\n"
 	   "#hugin_ptoversion 2\n"
@@ -1424,6 +1425,7 @@ stitch_project::produce_hugin_pto_file (const char *name, progress_info *progres
 	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
 	    images[y][x].output_common_points (f, images[y2][x2], y * params.width + x, y2 * params.width + x2, false, progress);
   fclose (f);
+  return true;
 }
 
 bool
@@ -1554,7 +1556,8 @@ stitch_project::stitch (progress_info *progress, const char *load_project_filena
 	    }
 
   if (params.hugin_pto_filename.length ())
-    produce_hugin_pto_file (params.hugin_pto_filename.c_str (), progress);
+    if (!produce_hugin_pto_file (params.hugin_pto_filename.c_str (), progress))
+      return false;
   if (params.diffs)
     for (int y = 0; y < params.height; y++)
       for (int x = 0; x < params.width; x++)

@@ -1,6 +1,6 @@
 #ifndef COLORSCREEN_H
 #define COLORSCREEN_H
-#include "render-fast.h"
+#include "render.h"
 #include "render-scr-detect.h"
 #include "solver.h"
 
@@ -38,11 +38,14 @@ struct render_to_file_params
   : filename (NULL), depth(16), verbose (false), hdr (false), dng(false), scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0), xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0), ystart (0), xstep (0), ystep (0), pixel_size (0)
   {}
 };
+DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam);
+DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error);
 DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
 			render_to_file_params rfarams, render_type_parameters &rtparam, progress_info *progress, const char **error);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p);
-/* No const fo compatibility with java GNU.  */
-DLL_PUBLIC rgbdata get_linearized_pixel (/*const*/ image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
+DLL_PUBLIC rgbdata get_linearized_pixel (const image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);
 DLL_PUBLIC bool dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param, render_parameters &rparam, progress_info *progress = NULL);
+DLL_PUBLIC bool render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride);
+DLL_PUBLIC rgbdata analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax, progress_info *p = NULL);
 #endif

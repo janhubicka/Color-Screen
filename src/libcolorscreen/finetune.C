@@ -6,7 +6,7 @@
 #include "include/histogram.h"
 #include "include/stitch.h"
 #include "render-interpolate.h"
-#include "dufaycolor.h"
+#include "include/dufaycolor.h"
 #include "include/tiff-writer.h"
 #include "nmsimplex.h"
 #include "include/bitmap.h"

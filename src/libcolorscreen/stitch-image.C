@@ -3,12 +3,12 @@
 #include <gsl/gsl_multifit.h>
 #include <tiffio.h>
 #include "include/stitch.h"
-#include "analyze-dufay.h"
-#include "analyze-paget.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
+#include "include/screen-map.h"
+#include "analyze-dufay.h"
+#include "analyze-paget.h"
 #include "render-interpolate.h"
-#include "screen-map.h"
 #include "loadsave.h"
 extern unsigned char sRGB_icc[];
 extern unsigned int sRGB_icc_len;

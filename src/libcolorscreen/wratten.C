@@ -1,5 +1,5 @@
-#include "wratten.h"
-#include "dufaycolor.h"
+#include "include/wratten.h"
+#include "include/dufaycolor.h"
 #include "include/spectrum-to-xyz.h"
 constexpr xyz wratten::filter_25_red;
 constexpr xyz wratten::filter_58_green;

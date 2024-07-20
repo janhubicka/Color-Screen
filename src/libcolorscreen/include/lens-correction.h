@@ -78,11 +78,11 @@ struct lens_warp_correction
   /* Error tolerated when looking for inverse.  */
   static constexpr const coord_t epsilon = 0.001;
 
-  lens_warp_correction ()
+  DLL_PUBLIC_EXP lens_warp_correction ()
   : m_params (), m_inverted_ratio (NULL)
   { }
 
-  ~lens_warp_correction ();
+  DLL_PUBLIC ~lens_warp_correction ();
 
   void
   set_parameters (const lens_warp_correction_parameters &p)

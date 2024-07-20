@@ -6,8 +6,8 @@
 #include "include/render.h"
 #include "include/stitch.h"
 #include "icc.h"
-#include "dufaycolor.h"
-#include "wratten.h"
+#include "include/dufaycolor.h"
+#include "include/wratten.h"
 #include "include/spectrum-to-xyz.h"
 #include "render-interpolate.h"
 const char * render_parameters::color_model_names [] = {

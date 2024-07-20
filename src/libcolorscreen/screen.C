@@ -1,7 +1,7 @@
 #include <math.h>
 #include <memory>
 #include "include/tiff-writer.h"
-#include "dufaycolor.h"
+#include "include/dufaycolor.h"
 #include "include/screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
