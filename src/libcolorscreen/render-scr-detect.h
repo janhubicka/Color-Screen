@@ -3,7 +3,7 @@
 #include "include/render.h"
 #include "include/progress-info.h"
 #include "include/scr-detect.h"
-#include "include/patches.h"
+#include "patches.h"
 struct render_to_file_params;
 class render_scr_detect : public render
 {

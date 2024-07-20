@@ -1,10 +1,9 @@
 #ifndef PATCHES_H
 #define PATCHES_H
 #include <vector>
-#include "render.h"
-#include "progress-info.h"
-#include "scr-detect.h"
-#include "imagedata.h"
+#include "include/progress-info.h"
+#include "include/scr-detect.h"
+#include "include/imagedata.h"
 
 class patches
 {
