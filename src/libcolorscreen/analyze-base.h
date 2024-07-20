@@ -4,8 +4,8 @@
 #include "include/scr-to-img.h"
 #include "include/color.h"
 #include "include/progress-info.h"
-#include "include/bitmap.h"
 #include "include/screen.h"
+#include "bitmap.h"
 class analyze_base
 {
 protected:

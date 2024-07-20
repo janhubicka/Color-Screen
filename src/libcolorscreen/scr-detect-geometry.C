@@ -6,9 +6,9 @@
 #include "include/solver.h"
 #include "include/render-scr-detect.h"
 #include "include/screen-map.h"
-#include "include/bitmap.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"
+#include "bitmap.h"
 #include "analyze-paget.h"
 
 extern void prune_render_scr_detect_caches ();

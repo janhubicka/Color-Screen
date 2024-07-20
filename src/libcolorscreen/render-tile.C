@@ -1,5 +1,4 @@
 #include "config.h"
-#include "include/render-fast.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "render-diff.h"
@@ -8,6 +7,7 @@
 #ifdef RENDER_EXTRA
 #include "render-extra/render-extra.h"
 #endif
+#include "render-fast.h"
 
 static void
 sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)

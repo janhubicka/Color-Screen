@@ -3,9 +3,9 @@
 #include "include/colorscreen.h"
 #include "include/scr-to-img.h"
 #include "include/imagedata.h"
-#include "include/spline.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"
+#include "spline.h"
 
 namespace {
 

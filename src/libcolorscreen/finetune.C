@@ -5,11 +5,11 @@
 #include "include/finetune.h"
 #include "include/histogram.h"
 #include "include/stitch.h"
-#include "render-interpolate.h"
 #include "include/dufaycolor.h"
 #include "include/tiff-writer.h"
+#include "render-interpolate.h"
 #include "nmsimplex.h"
-#include "include/bitmap.h"
+#include "bitmap.h"
 #include "icc.h"
 
 namespace {

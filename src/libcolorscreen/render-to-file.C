@@ -3,7 +3,6 @@
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "include/stitch.h"
-#include "include/render-fast.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "icc-srgb.h"
@@ -12,6 +11,7 @@
 #ifdef RENDER_EXTRA
 #include "extra-render/render-extra.h"
 #endif
+#include "render-fast.h"
 
 bool
 complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)

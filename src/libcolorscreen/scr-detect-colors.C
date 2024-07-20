@@ -4,8 +4,9 @@
 #include <gsl/gsl_linalg.h>
 #include "include/colorscreen.h"
 #include "include/render-to-scr.h"
-#include "gsl-utils.h"
 #include "include/solver.h"
+#include "bitmap.h"
+#include "gsl-utils.h"
 #include "sharpen.h"
 #include "nmsimplex.h"
 namespace {

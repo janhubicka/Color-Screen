@@ -1,12 +1,12 @@
 #include <math.h>
 #include <memory>
+#include <array>
 #include "include/tiff-writer.h"
 #include "include/dufaycolor.h"
 #include "include/screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
-#include <array>
-#include <include/spline.h>
+#include "spline.h"
 #include "icc.h"
 
 /* Produce empty screen.  */

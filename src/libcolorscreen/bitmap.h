@@ -5,6 +5,8 @@ class bitmap
 public:
   bitmap(size_t size1)
   {
+    if (colorscreen_checking)
+      assert (size1 >= 0);
     size = size1;
     data = (uint8_t *)calloc ((size + 7) / 8, 1);
   }
@@ -15,6 +17,8 @@ public:
   bool
   test_bit (size_t p)
   {
+    if (colorscreen_checking)
+      assert (p >= 0 && p < size);
     int pos = p / 8;
     int bit = p & 7;
     return data[pos] & (1U << bit);
@@ -22,6 +26,8 @@ public:
   bool
   set_bit (size_t p)
   {
+    if (colorscreen_checking)
+      assert (p >= 0 && p < size);
     int pos = p / 8;
     int bit = p & 7;
     bool ret = data[pos] & (1U << bit);
@@ -31,6 +37,8 @@ public:
   bool
   clear_bit (size_t p)
   {
+    if (colorscreen_checking)
+      assert (p >= 0 && p < size);
     int pos = p / 8;
     int bit = p & 7;
     bool ret = data[pos] & (1U << bit);
@@ -60,17 +68,44 @@ public:
   bool
   test_bit (size_t x, size_t y)
   {
+    if (colorscreen_checking)
+      assert (x >= 0 && y >= 0 && x <= width && y <= height);
     return bitmap::test_bit (y * width + x);
+  }
+  bool
+  test_bit (int_point_t p)
+  {
+    if (colorscreen_checking)
+      assert (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height);
+    return bitmap::test_bit (p.y * width + p.x);
   }
   bool
   set_bit (size_t x, size_t y)
   {
+    if (colorscreen_checking)
+      assert (x >= 0 && y >= 0 && x <= width && y <= height);
     return bitmap::set_bit (y * width + x);
+  }
+  bool
+  set_bit (int_point_t p)
+  {
+    if (colorscreen_checking)
+      assert (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height);
+    return bitmap::set_bit (p.y * width + p.x);
   }
   bool
   clear_bit (size_t x, size_t y)
   {
+    if (colorscreen_checking)
+      assert (x >= 0 && y >= 0 && x <= width && y <= height);
     return bitmap::clear_bit (y * width + x);
+  }
+  bool
+  clear_bit (int_point_t p)
+  {
+    if (colorscreen_checking)
+      assert (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height);
+    return bitmap::clear_bit (p.y * width + p.x);
   }
   bool
   test_range (size_t x, size_t y, size_t r)

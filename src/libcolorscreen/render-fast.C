@@ -1,5 +1,5 @@
 #include "include/colorscreen.h"
-#include "include/render-fast.h"
+#include "render-fast.h"
 
 render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
  : render_to_scr (param, img, params, dst_maxval)

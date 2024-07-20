@@ -25,8 +25,10 @@ jobs:
       run: sudo apt-get install -y libraw-dev
     - name: Install liblcms2
       run: sudo apt-get install -y liblcms2-dev
+    - name: Install gtk2
+      run: sudo apt-get install -y gtk2.0-dev
     - name: configure
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure
+      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui
     - name: make
       run: make
     - name: make check

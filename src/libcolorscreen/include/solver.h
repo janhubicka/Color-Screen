@@ -5,7 +5,8 @@
 #include "progress-info.h"
 #include "scr-detect.h"
 #include "imagedata.h"
-#include "bitmap.h"
+
+class bitmap_2d;
 
 struct solver_parameters
 {

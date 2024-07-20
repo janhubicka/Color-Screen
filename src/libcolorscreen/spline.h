@@ -2,7 +2,7 @@
 #define SPLINE_H
 #include <stdlib.h>
 #include <stdio.h>
-#include "precomputed-function.h"
+#include "include/precomputed-function.h"
 
 /* Cubic spline implementation.  Based on numerical recipes in C. */
 
