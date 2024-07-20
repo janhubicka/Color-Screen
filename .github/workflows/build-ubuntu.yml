@@ -48,7 +48,7 @@ jobs:
     - name: make distclean
       run: make distclean
     - name: configure with checking
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-checking
+      run: CXXFLAGS="-Ofast -flto -march=native" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui
     - name: make (checking enabled)
       run: make
     - name: make check (checking enabled)

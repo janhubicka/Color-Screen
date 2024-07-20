@@ -107,6 +107,23 @@ jobs:
       with:
         name: macOS-colorscreen-package
         path: Color-Screen-package.zip
+    - name: make distclean
+      run: make distclean
+    - name: configure with checking
+      run: CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-checking --disable-static-link
+    - name: make (checking enabled)
+      run: make
+    - name: make check (checking enabled)
+      run: make check
+    - name: Upload Test Results (checking enabled)
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: testsuite-checking
+        path: |
+          testsuite/*.txt
+          testsuite/*.log
+
     - name: Uninstall libgsl to break one of dependencies
       run: brew uninstall  gsl
     - name: Remove install directory
