@@ -11,12 +11,12 @@
 
 typedef luminosity_t spectrum[SPECTRUM_SIZE];
 class progress_info;
-extern const DLL_PUBLIC spectrum cie_cmf_x;
-extern const DLL_PUBLIC spectrum cie_cmf_y;
-extern const DLL_PUBLIC spectrum cie_cmf_z;
-extern const DLL_PUBLIC spectrum cie_cmf1964_x;
-extern const DLL_PUBLIC spectrum cie_cmf1964_y;
-extern const DLL_PUBLIC spectrum cie_cmf1964_z;
+DLL_PUBLIC extern const spectrum cie_cmf_x;
+DLL_PUBLIC extern const spectrum cie_cmf_y;
+DLL_PUBLIC extern const spectrum cie_cmf_z;
+DLL_PUBLIC extern const spectrum cie_cmf1964_x;
+DLL_PUBLIC extern const spectrum cie_cmf1964_y;
+DLL_PUBLIC extern const spectrum cie_cmf1964_z;
 inline luminosity_t const_attr
 transmitance_to_absorbance (luminosity_t t)
 {
@@ -26,24 +26,11 @@ transmitance_to_absorbance (luminosity_t t)
 inline luminosity_t const_attr
 absorbance_to_transmitance (luminosity_t a)
 {
-  //return pow (10, 2 - a) * 0.01;
   luminosity_t ret = pow (10, -a);
-#if 0
-  if (ret > 1)
-    {
-      //printf ("%f\n",ret);
-      return 1;
-    }
-  if (ret < 0)
-    {
-      //printf ("%f %f\n",a,ret);
-      return 0;
-    }
-#endif
   return ret;
 }
 
-class DLL_PUBLIC spectrum_dyes_to_xyz
+class spectrum_dyes_to_xyz
 {
 public:
   enum dyes {
@@ -71,7 +58,7 @@ public:
     debug_dyes,
     dyes_max
   };
-  constexpr static const char *dyes_names[dyes_max] =
+  DLL_PUBLIC constexpr static const char *dyes_names[dyes_max] =
   {
     "dufaycolor_color_cinematography",
     "dufaycolor_harrison_horner",
@@ -109,7 +96,7 @@ public:
      il_debug,
      illuminants_max
   };
-  constexpr static const char *illuminants_names[illuminants_max] =
+  DLL_PUBLIC constexpr static const char *illuminants_names[illuminants_max] =
   {
      "A",
      "B",
@@ -144,7 +131,7 @@ public:
     response_even,
     responses_max
   };
-  constexpr static const char *responses_names[responses_max] =
+  DLL_PUBLIC constexpr static const char *responses_names[responses_max] =
   {
     "neopan_100",
     "ilford_panchromatic",
@@ -180,7 +167,7 @@ public:
     spicer_dufay_reversal_curve_high,
     characteristic_curves_max
   };
-  constexpr static const char *characteristic_curve_names[characteristic_curves_max] =
+  DLL_PUBLIC constexpr static const char *characteristic_curve_names[characteristic_curves_max] =
   {
     "linear_reversal",
     "input",
@@ -233,8 +220,8 @@ public:
 
 
   bool subtractive;
-  rgbdata linear_film_rgb_response (luminosity_t *s);
-  rgbdata film_rgb_response (luminosity_t *s);
+  DLL_PUBLIC rgbdata linear_film_rgb_response (luminosity_t *s);
+  DLL_PUBLIC rgbdata film_rgb_response (luminosity_t *s);
 
   void
   set_backlight (spectrum s)
@@ -248,11 +235,11 @@ public:
       memcpy (green, g, sizeof (backlight));
       memcpy (blue, b, sizeof (backlight));
     }
-  void set_characteristic_curve (enum characteristic_curves);
+  DLL_PUBLIC void set_characteristic_curve (enum characteristic_curves);
   /* Set dyes to given measured spectra.
      If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
-  void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, luminosity_t age = 1);
-  void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
+  DLL_PUBLIC void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, luminosity_t age = 1);
+  DLL_PUBLIC void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
   /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
      in white in a given temperature of daylight.  */
   void normalize_dyes (luminosity_t temperature);
@@ -263,7 +250,7 @@ public:
      in sRGB white  */
   void normalize_xyz_to_backlight_whitepoint ();
   /* Write spectra to tmp directory so they can be printed by gnuplot script.  */
-  void debug_write_spectra ();
+  DLL_PUBLIC void debug_write_spectra ();
 
 
 
@@ -329,19 +316,19 @@ public:
   /* Return true if dyes_rgb_to_xyz behaves linearly.  */
   bool is_linear ();
 
-  void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
-  void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
-  void write_ssf_json (const char *name);
-  bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
-  void write_film_characteristic_curves (const char *red, const char *green, const char *blue);
-  void write_film_hd_characteristic_curves (const char *red, const char *green, const char *blue);
+  DLL_PUBLIC void write_spectra (const char *red, const char *green, const char *blue, const char *backlight, int start = SPECTRUM_START, int end = SPECTRUM_END, bool absorbance = false);
+  DLL_PUBLIC void write_responses (const char *red, const char *green, const char *blue, bool log = false, int start = SPECTRUM_START, int end = SPECTRUM_END);
+  DLL_PUBLIC void write_ssf_json (const char *name);
+  DLL_PUBLIC bool write_film_response (const char *filename, luminosity_t *f, bool absolute, bool log = true);
+  DLL_PUBLIC void write_film_characteristic_curves (const char *red, const char *green, const char *blue);
+  DLL_PUBLIC void write_film_hd_characteristic_curves (const char *red, const char *green, const char *blue);
 
   void synthetic_dufay_red (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_green (luminosity_t d1, luminosity_t d2);
   void synthetic_dufay_blue (luminosity_t d1, luminosity_t d2);
   bool generate_simulated_argyll_ti3_file (FILE *f);
-  bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
-  void set_film_response (enum responses film);
+  DLL_PUBLIC bool generate_color_target_tiff (const char *filename, const char **error, bool white_balance, bool optimized);
+  DLL_PUBLIC void set_film_response (enum responses film);
   void set_response_to_kodachrome_25 ();
   void adjust_film_response_for_zeiss_contact_prime_cp2_lens ();
   void adjust_film_response_for_canon_CN_E_85mm_T1_3_lens ();
@@ -374,10 +361,10 @@ public:
     exp_adjust.red = exp_adjust.green = exp_adjust.blue = 1 / sum;
   }
 
-  bool tiff_with_primaries (const char *filename, rgbdata white);
-  bool tiff_with_overlapping_filters (const char *filename, rgbdata white, const char *spectra_prefix);
-  bool tiff_with_overlapping_filters_response (const char *filename, rgbdata white);
-  bool tiff_with_spectra_photo (const char *filename);
+  DLL_PUBLIC bool tiff_with_primaries (const char *filename, rgbdata white);
+  DLL_PUBLIC bool tiff_with_overlapping_filters (const char *filename, rgbdata white, const char *spectra_prefix);
+  DLL_PUBLIC bool tiff_with_overlapping_filters_response (const char *filename, rgbdata white);
+  DLL_PUBLIC bool tiff_with_spectra_photo (const char *filename);
 
   private:
     synthetic_hd_curve *hd_curve;
