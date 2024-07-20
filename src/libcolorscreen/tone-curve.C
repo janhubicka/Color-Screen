@@ -317,3 +317,18 @@ tone_curve::tone_curve (enum tone_curves type)
       default: abort ();
     }
 }
+
+bool
+tone_curve::save_tone_curve (FILE *f, tone_curves curve, bool hd)
+{
+   tone_curve c(curve);
+   for (float i = 0; i < 1; i+= 0.01)
+     {
+       luminosity_t val = c.apply_to_rgb((rgbdata){i,i,i}).red;
+       if (!hd)
+         fprintf (f, "%f %f\n", i, (double)val);
+       else if (val >= 1/255.0)
+         fprintf (f, "%f %f\n", log10(i)/*-log10 (0.001)*/, log10 (1/val));
+     }
+   return true;
+}

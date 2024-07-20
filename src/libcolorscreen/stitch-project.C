@@ -1358,3 +1358,216 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
       }
   return ret;
 }
+
+void
+stitch_project::produce_hugin_pto_file (const char *name, progress_info *progress)
+{
+  FILE *f = fopen (name,"wt");
+  if (!f)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Can not open %s\n", name);
+      exit (1);
+    }
+  fprintf (f, "# hugin project file\n"
+	   "#hugin_ptoversion 2\n"
+	   //"p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "p f0 w39972 h31684 v82  k0 E0 R0 S13031,39972,11939,28553 n\"TIFF_m c:LZW r:CROP\"\n"
+	   "m i0\n");
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+     if (!y && !x)
+       fprintf (f, "i w%i h%i f0 v%f Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, params.hfov, images[y][x].filename.c_str ());
+     else
+       fprintf (f, "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=1 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5 n\"%s\"\n", images[y][x].img_width, images[y][x].img_height, images[y][x].filename.c_str ());
+  fprintf (f, "# specify variables that should be optimized\n"
+	   "v Ra0\n"
+	   "v Rb0\n"
+	   "v Rc0\n"
+	   "v Rd0\n"
+	   "v Re0\n"
+	   "v Vb0\n"
+	   "v Vc0\n"
+	   "v Vd0\n");
+  for (int i = 1; i < params.width * params.height; i++)
+    fprintf (f, "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v Eev%i\n"
+	     "v Ra%i\n"
+	     "v Rb%i\n"
+	     "v Rc%i\n"
+	     "v Rd%i\n"
+	     "v Re%i\n"
+	     "v r%i\n"
+	     "v p%i\n"
+	     "v y%i\n"
+	     "v Vb%i\n"
+	     "v Vc%i\n"
+	     "v Vd%i\n",i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i);
+#if 0
+  for (int y = 0; y < prj->params.height; y++)
+    for (int x = 0; x < prj->params.width; x++)
+      {
+	if (x >= 1)
+	  images[y][x-1].output_common_points (f, images[y][x], y * prj->params.width + x - 1, y * prj->params.width + x);
+	if (y >= 1)
+	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * prj->params.width + x, y * prj->params.width + x);
+      }
+#endif
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      for (int y2 = 0; y2 < params.height; y2++)
+        for (int x2 = 0; x2 < params.width; x2++)
+	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
+	    images[y][x].output_common_points (f, images[y2][x2], y * params.width + x, y2 * params.width + x2, false, progress);
+  fclose (f);
+}
+
+bool
+stitch_project::stitch (progress_info *progress, const char *load_project_filename)
+{
+  if (!initialize ())
+    return false;
+  if (!load_project_filename)
+    {
+      progress->pause_stdout ();
+      printf ("Stitching:\n");
+      if (report_file)
+	fprintf (report_file, "Stitching:\n");
+      for (int y = 0; y < params.height; y++)
+	{
+	  for (int x = 0; x < params.width; x++)
+	    {
+	      printf ("  %s", images[y][x].filename.c_str ());
+	      if (report_file)
+		fprintf (report_file, "  %s", images[y][x].filename.c_str ());
+	    }
+	  printf("\n");
+	  if (report_file)
+	    fprintf (report_file, "\n");
+	}
+      progress->resume_stdout ();
+
+      if (params.csp_filename.length ())
+	{
+	  const char *cspname = params.csp_filename.c_str ();
+	  FILE *in = fopen (cspname, "rt");
+	  progress->pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	  progress->resume_stdout ();
+	  if (!in)
+	    {
+	      perror (cspname);
+	      return false;
+	    }
+	  const char *error;
+	  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	    {
+	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	      return false;
+	    }
+	  if (param.mesh_trans)
+	    {
+	      delete param.mesh_trans;
+	      param.mesh_trans = NULL;
+	    }
+	  fclose (in);
+	  solver_param.remove_points ();
+	}
+
+      if (report_file)
+	{
+	  fprintf (report_file, "Color screen parameters:\n");
+	  save_csp (report_file, &param, &dparam, &rparam, &solver_param);
+	}
+      if (!analyze_images (progress))
+	{
+	  fflush (report_file);
+	  return false;
+	}
+    }
+  else
+    {
+      const char *error;
+      FILE *f = fopen (load_project_filename, "rt");
+      if (params.csp_filename.length ())
+	{
+	  const char *cspname = params.csp_filename.c_str ();
+	  FILE *in = fopen (cspname, "rt");
+	  progress->pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	  progress->resume_stdout ();
+	  if (!in)
+	    {
+	      perror (cspname);
+	      return false;
+	    }
+	  const char *error;
+	  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	    {
+	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	      return false;
+	    }
+	  if (param.mesh_trans)
+	    {
+	      delete param.mesh_trans;
+	      param.mesh_trans = NULL;
+	    }
+	  fclose (in);
+	  solver_param.remove_points ();
+	}
+      if (!f)
+	{
+	  fprintf (stderr, "Error opening project file: %s\n", load_project_filename);
+	  return false;
+	}
+      if (!load (f, &error))
+	{
+	  fprintf (stderr, "Error loading project file: %s %s\n", load_project_filename, error);
+	  return false;
+	}
+      fclose(f);
+    }
+
+  determine_angle ();
+
+  int xmin, ymin, xmax, ymax;
+  determine_viewport (xmin, xmax, ymin, ymax);
+  if (params.geometry_info)
+    for (int y = 0; y < params.height; y++)
+      for (int x = 0; x < params.width; x++)
+	if (images[y][x].stitch_info)
+	  images[y][x].write_stitch_info (progress);
+  if (params.individual_geometry_info)
+    for (int y = 0; y < params.height; y++)
+      for (int x = 0; x < params.width; x++)
+	for (int yy = y; yy < params.height; yy++)
+	  for (int xx = (yy == y ? x : 0); xx < params.width; xx++)
+	    if (x != xx || y != yy)
+	    {
+	      images[y][x].clear_stitch_info ();
+	      if (images[y][x].output_common_points (NULL, images[yy][xx], 0, 0, true, progress))
+		images[y][x].write_stitch_info (progress, x, y, xx, yy);
+	    }
+
+  if (params.hugin_pto_filename.length ())
+    produce_hugin_pto_file (params.hugin_pto_filename.c_str (), progress);
+  if (params.diffs)
+    for (int y = 0; y < params.height; y++)
+      for (int x = 0; x < params.width; x++)
+	for (int yy = y; yy < params.height; yy++)
+	  for (int xx = (yy == y ? x : 0); xx < params.width; xx++)
+	    if (x != xx || y != yy)
+	      images[y][x].diff (images[yy][xx], progress);
+
+  for (int y = 0; y < params.height; y++)
+    for (int x = 0; x < params.width; x++)
+      if (images[y][x].img)
+	images[y][x].release_image_data (progress);
+  if (report_file)
+    fclose (report_file);
+  return true;
+}

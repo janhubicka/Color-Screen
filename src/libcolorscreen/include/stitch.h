@@ -207,11 +207,10 @@ public:
   DLL_PUBLIC stitch_project ();
   DLL_PUBLIC ~stitch_project ();
   bool initialize();
-  bool analyze_images (progress_info *progress);
   void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
   void determine_angle ();
-  bool save (FILE *f);
-  bool load (FILE *f, const char **error);
+  DLL_PUBLIC bool save (FILE *f);
+  DLL_PUBLIC bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix, std::string extension, int x = -1, int y = -1);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
@@ -304,7 +303,10 @@ public:
     coord_t xmin, ymin, xmax, ymax;
   };
   std::vector <tile_range> find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t ymax, bool only_loaded, bool screen_ranges);
+  DLL_PUBLIC bool stitch (progress_info *progress, const char *load_project_filename);
 private:
+  bool analyze_images (progress_info *progress);
+  void produce_hugin_pto_file (const char *name, progress_info *progress);
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
   scr_to_img_parameters scr_param;

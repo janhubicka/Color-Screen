@@ -62,12 +62,12 @@ public:
   }
   static backlight_correction_parameters *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   DLL_PUBLIC static backlight_correction_parameters *load_captureone_lcc (FILE *f, bool verbose = false);
-  static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
+  DLL_PUBLIC static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
   /* Unique id of the image (used for caching).  */
   uint64_t id;
-  bool save (FILE *f);
-  const char* save_tiff (const char *name);
-  bool load (FILE *f, const char **);
+  DLL_PUBLIC bool save (FILE *f);
+  DLL_PUBLIC const char* save_tiff (const char *name);
+  DLL_PUBLIC bool load (FILE *f, const char **);
   friend backlight_correction;
 private:
   int m_width, m_height;

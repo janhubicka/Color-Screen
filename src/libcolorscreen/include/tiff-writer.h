@@ -2,6 +2,7 @@
 #define TIFFWRITER_H
 #include <tiffio.h>
 #include "color.h"
+#include "dllpublic.h"
 inline uint16_t float_to_half(float f)
 {
     union {
@@ -73,9 +74,9 @@ struct tiff_writer_params
 class tiff_writer
 {
 public:
-  tiff_writer (tiff_writer_params &p, const char **error);
-  ~tiff_writer ();
-  bool write_row ();
+  DLL_PUBLIC tiff_writer (tiff_writer_params &p, const char **error);
+  DLL_PUBLIC ~tiff_writer ();
+  DLL_PUBLIC bool write_row ();
   uint16_t *row16bit ()
   {
     return (uint16_t *)outrow;

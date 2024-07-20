@@ -4,6 +4,7 @@
 #include "precomputed-function.h"
 #include "color.h"
 #include "spectrum-to-xyz.h"
+#include "dllpublic.h"
 
 /* Implement DNG-style tone curve.  */
 class tone_curve:public precomputed_function <luminosity_t>
@@ -22,7 +23,7 @@ public:
     tone_curve_spicer_dufay_high,
     tone_curve_max
   };
-  constexpr static const char *tone_curve_names[tone_curve_max] =
+  DLL_PUBLIC constexpr static const char *tone_curve_names[tone_curve_max] =
   {
     "linear",
     "dng",
@@ -33,6 +34,7 @@ public:
     "spicer_dufay_mid",
     "spicer_dufay_high"
   };
+  static bool DLL_PUBLIC save_tone_curve (FILE *f, tone_curves curve, bool hd);
   tone_curve (enum tone_curves type);
   /* This does the same as dng reference implementation.  */
   rgbdata

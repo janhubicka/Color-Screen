@@ -1218,15 +1218,14 @@ digital_laboratory (int argc, char **argv)
 	  printf ("Expected <filename> <tone-curve>\n");
 	  exit (1);
 	}
-      tone_curve c(parse_tone_curve(argv[2]));
+      tone_curve::tone_curves c = parse_tone_curve(argv[2]);
       FILE *f = fopen (argv[1], "wt");
       if (!f)
         {
 	  perror (argv[1]);
 	  exit(1);
         }
-      for (float i = 0; i < 1; i+= 0.01)
-	fprintf (f, "%f %f\n", i, (float)c.apply_to_rgb((rgbdata){i,i,i}).red);
+      tone_curve::save_tone_curve (f, c, false);
       fclose (f);
     }
   else if (!strcmp (argv[0], "save-tone-hd-curve"))
@@ -1236,19 +1235,15 @@ digital_laboratory (int argc, char **argv)
 	  printf ("Expected <filename> <tone-curve>\n");
 	  exit (1);
 	}
-      tone_curve c(parse_tone_curve(argv[2]));
+      tone_curve::tone_curves c = parse_tone_curve(argv[2]);
       FILE *f = fopen (argv[1], "wt");
       if (!f)
         {
 	  perror (argv[1]);
 	  exit(1);
         }
-      for (float i = 0; i < 1; i+= 0.001)
-        {
-	  luminosity_t val = c.apply_to_rgb((rgbdata){i,i,i}).red;
-	  if (val >= 1/255.0)
-	    fprintf (f, "%f %f\n", log10(i)/*-log10 (0.001)*/, log10 (1/val));
-        }
+      tone_curve::save_tone_curve (f, c, true);
+      fclose (f);
 #if 0
       for (float i = -2; i < 2; i+= 0.01)
         {
@@ -1955,233 +1950,6 @@ dump_patch_density (int argc, char **argv)
 static const char* save_project_filename;
 static const char* load_project_filename;
 
-static void
-produce_hugin_pto_file (std::unique_ptr<stitch_project> &prj, const char *name, progress_info *progress)
-{
-  FILE *f = fopen (name,"wt");
-  if (!f)
-    {
-      progress->pause_stdout ();
-      fprintf (stderr, "Can not open %s\n", name);
-      exit (1);
-    }
-  fprintf (f, "# hugin project file\n"
-	   "#hugin_ptoversion 2\n"
-	   //"p f2 w3000 h1500 v360  k0 E0 R0 n\"TIFF_m c:LZW r:CROP\"\n"
-	   "p f0 w39972 h31684 v82  k0 E0 R0 S13031,39972,11939,28553 n\"TIFF_m c:LZW r:CROP\"\n"
-	   "m i0\n");
-  for (int y = 0; y < prj->params.height; y++)
-    for (int x = 0; x < prj->params.width; x++)
-     if (!y && !x)
-       fprintf (f, "i w%i h%i f0 v%f Ra0 Rb0 Rc0 Rd0 Re0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy0 Tpp0 j0 a0 b0 c0 d0 e0 g0 t0 Va1 Vb0 Vc0 Vd0 Vx0 Vy0  Vm5 n\"%s\"\n", prj->images[y][x].img_width, prj->images[y][x].img_height, prj->params.hfov, prj->images[y][x].filename.c_str ());
-     else
-       fprintf (f, "i w%i h%i f0 v=0 Ra=0 Rb=0 Rc=0 Rd=0 Re=0 Eev0 Er1 Eb1 r0 p0 y0 TrX0 TrY0 TrZ0 Tpy-0 Tpp0 j0 a=0 b=0 c=0 d=0 e=0 g=0 t=0 Va=1 Vb=0 Vc=0 Vd=0 Vx=0 Vy=0  Vm5 n\"%s\"\n", prj->images[y][x].img_width, prj->images[y][x].img_height, prj->images[y][x].filename.c_str ());
-  fprintf (f, "# specify variables that should be optimized\n"
-	   "v Ra0\n"
-	   "v Rb0\n"
-	   "v Rc0\n"
-	   "v Rd0\n"
-	   "v Re0\n"
-	   "v Vb0\n"
-	   "v Vc0\n"
-	   "v Vd0\n");
-  for (int i = 1; i < prj->params.width * prj->params.height; i++)
-    fprintf (f, "v Ra%i\n"
-	     "v Rb%i\n"
-	     "v Rc%i\n"
-	     "v Rd%i\n"
-	     "v Re%i\n"
-	     "v Eev%i\n"
-	     "v Ra%i\n"
-	     "v Rb%i\n"
-	     "v Rc%i\n"
-	     "v Rd%i\n"
-	     "v Re%i\n"
-	     "v r%i\n"
-	     "v p%i\n"
-	     "v y%i\n"
-	     "v Vb%i\n"
-	     "v Vc%i\n"
-	     "v Vd%i\n",i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i);
-#if 0
-  for (int y = 0; y < prj->params.height; y++)
-    for (int x = 0; x < prj->params.width; x++)
-      {
-	if (x >= 1)
-	  images[y][x-1].output_common_points (f, images[y][x], y * prj->params.width + x - 1, y * prj->params.width + x);
-	if (y >= 1)
-	  images[y-1][x].output_common_points (f, images[y][x], (y - 1) * prj->params.width + x, y * prj->params.width + x);
-      }
-#endif
-  for (int y = 0; y < prj->params.height; y++)
-    for (int x = 0; x < prj->params.width; x++)
-      for (int y2 = 0; y2 < prj->params.height; y2++)
-        for (int x2 = 0; x2 < prj->params.width; x2++)
-	  if ((x != x2 || y != y2) && (y < y2 || (y == y2 && x < x2)))
-	    prj->images[y][x].output_common_points (f, prj->images[y2][x2], y * prj->params.width + x, y2 * prj->params.width + x2, false, progress);
-  fclose (f);
-}
-
-static void
-stitch (std::unique_ptr<stitch_project> &prj, progress_info *progress)
-{
-  if (!prj->initialize ())
-    exit (1);
-  if (!load_project_filename)
-    {
-      progress->pause_stdout ();
-      printf ("Stitching:\n");
-      if (prj->report_file)
-	fprintf (prj->report_file, "Stitching:\n");
-      for (int y = 0; y < prj->params.height; y++)
-	{
-	  for (int x = 0; x < prj->params.width; x++)
-	    {
-	      printf ("  %s", prj->images[y][x].filename.c_str ());
-	      if (prj->report_file)
-		fprintf (prj->report_file, "  %s", prj->images[y][x].filename.c_str ());
-	    }
-	  printf("\n");
-	  if (prj->report_file)
-	    fprintf (prj->report_file, "\n");
-	}
-      progress->resume_stdout ();
-
-      if (prj->params.csp_filename.length ())
-	{
-	  const char *cspname = prj->params.csp_filename.c_str ();
-	  FILE *in = fopen (cspname, "rt");
-	  progress->pause_stdout ();
-	  printf ("Loading color screen parameters: %s\n", cspname);
-	  progress->resume_stdout ();
-	  if (!in)
-	    {
-	      perror (cspname);
-	      exit (1);
-	    }
-	  const char *error;
-	  if (!load_csp (in, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param, &error))
-	    {
-	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-	      exit (1);
-	    }
-	  if (prj->param.mesh_trans)
-	    {
-	      delete prj->param.mesh_trans;
-	      prj->param.mesh_trans = NULL;
-	    }
-	  fclose (in);
-	  prj->solver_param.remove_points ();
-	}
-
-      if (prj->report_file)
-	{
-	  fprintf (prj->report_file, "Color screen parameters:\n");
-	  save_csp (prj->report_file, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param);
-	}
-      if (!prj->analyze_images (progress))
-	{
-	  fflush (prj->report_file);
-	  exit (1);
-	}
-      if (save_project_filename)
-	{
-	  FILE *f = fopen (save_project_filename, "wt");
-	  if (!f)
-	    {
-	      fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
-	      exit (1);
-	    }
-	  if (!prj->save (f))
-	    {
-	      fprintf (stderr, "Error saving project file: %s\n", save_project_filename);
-	      exit (1);
-	    }
-	  fclose (f);
-	}
-    }
-  else
-    {
-      const char *error;
-      FILE *f = fopen (load_project_filename, "rt");
-      if (prj->params.csp_filename.length ())
-	{
-	  const char *cspname = prj->params.csp_filename.c_str ();
-	  FILE *in = fopen (cspname, "rt");
-	  progress->pause_stdout ();
-	  printf ("Loading color screen parameters: %s\n", cspname);
-	  progress->resume_stdout ();
-	  if (!in)
-	    {
-	      perror (cspname);
-	      exit (1);
-	    }
-	  const char *error;
-	  if (!load_csp (in, &prj->param, &prj->dparam, &prj->rparam, &prj->solver_param, &error))
-	    {
-	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-	      exit (1);
-	    }
-	  if (prj->param.mesh_trans)
-	    {
-	      delete prj->param.mesh_trans;
-	      prj->param.mesh_trans = NULL;
-	    }
-	  fclose (in);
-	  prj->solver_param.remove_points ();
-	}
-      if (!f)
-	{
-	  fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
-	  exit (1);
-	}
-      if (!prj->load (f, &error))
-	{
-	  fprintf (stderr, "Error loading project file: %s %s\n", load_project_filename, error);
-	  exit (1);
-	}
-      fclose(f);
-    }
-
-  prj->determine_angle ();
-
-  int xmin, ymin, xmax, ymax;
-  prj->determine_viewport (xmin, xmax, ymin, ymax);
-  if (prj->params.geometry_info)
-    for (int y = 0; y < prj->params.height; y++)
-      for (int x = 0; x < prj->params.width; x++)
-	if (prj->images[y][x].stitch_info)
-	  prj->images[y][x].write_stitch_info (progress);
-  if (prj->params.individual_geometry_info)
-    for (int y = 0; y < prj->params.height; y++)
-      for (int x = 0; x < prj->params.width; x++)
-	for (int yy = y; yy < prj->params.height; yy++)
-	  for (int xx = (yy == y ? x : 0); xx < prj->params.width; xx++)
-	    if (x != xx || y != yy)
-	    {
-	      prj->images[y][x].clear_stitch_info ();
-	      if (prj->images[y][x].output_common_points (NULL, prj->images[yy][xx], 0, 0, true, progress))
-		prj->images[y][x].write_stitch_info (progress, x, y, xx, yy);
-	    }
-
-  if (prj->params.hugin_pto_filename.length ())
-    produce_hugin_pto_file (prj, prj->params.hugin_pto_filename.c_str (), progress);
-  if (prj->params.diffs)
-    for (int y = 0; y < prj->params.height; y++)
-      for (int x = 0; x < prj->params.width; x++)
-	for (int yy = y; yy < prj->params.height; yy++)
-	  for (int xx = (yy == y ? x : 0); xx < prj->params.width; xx++)
-	    if (x != xx || y != yy)
-	      prj->images[y][x].diff (prj->images[yy][xx], progress);
-
-  for (int y = 0; y < prj->params.height; y++)
-    for (int x = 0; x < prj->params.width; x++)
-      if (prj->images[y][x].img)
-	prj->images[y][x].release_image_data (progress);
-  if (prj->report_file)
-    fclose (prj->report_file);
-}
-
 int
 stitch(int argc, char **argv)
 {
@@ -2368,8 +2136,26 @@ stitch(int argc, char **argv)
 	}
     }
 
-  file_progress_info progress (verbose ? stdout : NULL);
-  stitch (prj, &progress);
+  {
+    file_progress_info progress (verbose ? stdout : NULL);
+    if (!prj->stitch (&progress, load_project_filename))
+      return 1;
+  }
+  if (save_project_filename)
+    {
+      FILE *f = fopen (save_project_filename, "wt");
+      if (!f)
+	{
+	  fprintf (stderr, "Error opening project file: %s\n", save_project_filename);
+	  return 1;
+	}
+      if (!prj->save (f))
+	{
+	  fprintf (stderr, "Error saving project file: %s\n", save_project_filename);
+	  return 1;
+	}
+      fclose (f);
+    }
   return 0;
 }
 
