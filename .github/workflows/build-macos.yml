@@ -95,11 +95,10 @@ jobs:
       run: |
         mkdir Color-Screen-package
         mkdir Color-Screen-package/libs
-        mkdir Color-Screen-package/libs-gtk
         cp /tmp/Color-Screen-MacOS/bin/colorscreen /tmp/Color-Screen-MacOS/bin/colorscreen-gtk Color-Screen-package
         cp /tmp/Color-Screen-MacOS/share/colorscreen/gtkgui.glade Color-Screen-package
         dylibbundler -od -b -x Color-Screen-package/colorscreen -d Color-Screen-package/libs -p @executable_path/libs
-        dylibbundler -od -b -x Color-Screen-package/colorscreen-gtk -d Color-Screen-package/libs-gtk -p @executable_path/libs-gtk
+        dylibbundler -od -b -x Color-Screen-package/colorscreen-gtk -d Color-Screen-package/libs -p @executable_path/libs
         otool -L Color-Screen-package/colorscreen
         otool -L Color-Screen-package/colorscreen-gtk
         ditto -ck --rsrc --sequesterRsrc Color-Screen-package Color-Screen-package.zip
