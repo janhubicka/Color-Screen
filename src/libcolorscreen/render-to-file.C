@@ -3,6 +3,7 @@
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "include/stitch.h"
+#include "render-scr-detect.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "icc-srgb.h"

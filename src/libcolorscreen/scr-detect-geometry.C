@@ -4,12 +4,12 @@
 #include "include/colorscreen.h"
 #include "include/scr-detect.h"
 #include "include/solver.h"
-#include "include/render-scr-detect.h"
 #include "include/screen-map.h"
 #include "include/render-to-scr.h"
 #include "include/solver.h"
 #include "bitmap.h"
 #include "analyze-paget.h"
+#include "render-scr-detect.h"
 
 extern void prune_render_scr_detect_caches ();
 namespace

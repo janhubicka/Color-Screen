@@ -17,8 +17,6 @@
 #include "../libcolorscreen/include/stitch.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
-#include "../libcolorscreen/include/render-to-scr.h"
-#include "../libcolorscreen/include/render-scr-detect.h"
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
@@ -1386,21 +1384,26 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 
   {
     file_progress_info progress (stdout);
+    render_type_parameters rtparam;
     if (ui_mode == screen_detection && scr_detect_display_type)
       {
-	render_type_parameters rtparam;
 	rtparam.type = (enum render_type_t)(scr_detect_display_type + (int)render_type_first_scr_detect - 1);
 	rtparam.color = color_display;
-	ret = render_scr_detect::render_tile (rtparam, current_scr_detect, scan, rparams, bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
       }
     else
       {
-	render_type_parameters rtparam;
 	rtparam.type = ui_mode == screen_detection ? render_type_original : (enum render_type_t)display_type;
 	rtparam.color = color_display;
-	ret = render_to_scr::render_tile (rtparam, get_scr_to_img_parameters (), scan, rparams,
-					  bigpixels, 4, bigrowstride, pxsize, pysize, xoffset, yoffset, step, &progress);
       }
+    tile_parameters tile;
+    tile.width = pxsize;
+    tile.height = pysize;
+    tile.rowstride = bigrowstride;
+    tile.pixelbytes = 4;
+    tile.pos = {(coord_t)xoffset, (coord_t)yoffset};
+    tile.step = step;
+    tile.pixels = bigpixels;
+    ret = render_tile (scan, get_scr_to_img_parameters (), current_scr_detect, rparams, rtparam, tile,&progress);
   }
 
   cairo_surface_t *surface

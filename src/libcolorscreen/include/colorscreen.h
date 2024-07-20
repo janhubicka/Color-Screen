@@ -1,7 +1,7 @@
 #ifndef COLORSCREEN_H
 #define COLORSCREEN_H
-#include "render.h"
-#include "render-scr-detect.h"
+#include "render-parameters.h"
+#include "render-type-parameters.h"
 #include "solver.h"
 
 struct render_to_file_params
@@ -42,6 +42,18 @@ DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_para
 DLL_PUBLIC bool load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, render_parameters *rparam, solver_parameters *sparam, const char **error);
 DLL_PUBLIC bool render_to_file(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
 			render_to_file_params rfarams, render_type_parameters &rtparam, progress_info *progress, const char **error);
+struct tile_parameters
+{
+  uint8_t *pixels;
+  int rowstride;
+  int pixelbytes;
+  int width;
+  int height;
+  point_t pos;
+  coord_t step;
+};
+DLL_PUBLIC bool render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
+			    render_type_parameters &rtparam, tile_parameters &tile, progress_info *progress = NULL);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p);
 DLL_PUBLIC bool complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p);
 DLL_PUBLIC rgbdata get_linearized_pixel (const image_data &img, render_parameters &rparam, int x, int y, int range = 4, progress_info *progress = NULL);

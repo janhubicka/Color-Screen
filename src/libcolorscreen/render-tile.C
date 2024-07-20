@@ -1,4 +1,5 @@
 #include "config.h"
+#include "include/colorscreen.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
 #include "render-diff.h"
@@ -8,6 +9,7 @@
 #include "render-extra/render-extra.h"
 #endif
 #include "render-fast.h"
+#include "render-scr-detect.h"
 
 static void
 sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)
@@ -212,4 +214,16 @@ render_to_scr::render_to_file (render_to_file_params &rfparams, render_type_para
     default:
       abort ();
     }
+}
+DLL_PUBLIC bool
+render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameters &dparam, render_parameters &rparam,
+	    render_type_parameters &rtparam, tile_parameters &tile, progress_info *progress)
+{
+  if ((int)rtparam.type < (int)render_type_first_scr_detect)
+    return render_to_scr::render_tile (rtparam, param, scan, rparam,
+				       tile.pixels, tile.pixelbytes, tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y, tile.step, progress);
+  else
+    return render_scr_detect::render_tile (rtparam, dparam, scan, rparam,
+					   tile.pixels, tile.pixelbytes, tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y, tile.step, progress);
+
 }

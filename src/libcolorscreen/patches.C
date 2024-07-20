@@ -1,5 +1,5 @@
 #include <include/patches.h>
-#include <include/render-scr-detect.h>
+#include <render-scr-detect.h>
 
 patches::patches (const image_data &img, render &render, color_class_map &color_map, int max_patch_size, progress_info *progress)
  : m_width (img.width), m_height (img.height)
