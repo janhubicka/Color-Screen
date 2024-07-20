@@ -1,5 +1,5 @@
 #include <cassert>
-#include "include/render-to-scr.h"
+#include "render-to-scr.h"
 #include "screen.h"
 #include "lru-cache.h"
 

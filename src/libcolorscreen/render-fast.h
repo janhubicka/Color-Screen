@@ -1,6 +1,6 @@
 #ifndef RENDERFAST_H
 #define RENDERFAST_H
-#include "include/render-to-scr.h"
+#include "render-to-scr.h"
 class render_fast : public render_to_scr
 {
 public:

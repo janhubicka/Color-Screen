@@ -7,16 +7,16 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include "base.h"
-#include "imagedata.h"
-#include "color.h"
-#include "progress-info.h"
-#include "sensitivity.h"
-#include "backlight-correction.h"
-#include "tone-curve.h"
-#include "scr-to-img.h"
-#include "render-parameters.h"
-#include "render-type-parameters.h"
+#include "include/base.h"
+#include "include/imagedata.h"
+#include "include/color.h"
+#include "include/progress-info.h"
+#include "include/sensitivity.h"
+#include "include/backlight-correction.h"
+#include "include/tone-curve.h"
+#include "include/scr-to-img.h"
+#include "include/render-parameters.h"
+#include "include/render-type-parameters.h"
 
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */

@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include "render-scr-detect.h"
-#include "include/render-to-scr.h"
+#include "render-to-scr.h"
 #include "lru-cache.h"
 #include "sharpen.h"
 #include "render-tile.h"

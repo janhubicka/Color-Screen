@@ -1,7 +1,7 @@
 #ifndef ANALYZE_DUFAY_H
 #define ANALYZE_DUFAY_H
-#include "include/render-to-scr.h"
 #include "include/dufaycolor.h"
+#include "render-to-scr.h"
 #include "analyze-base.h"
 
 

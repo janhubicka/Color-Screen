@@ -8,7 +8,7 @@
 #include <gsl/gsl_linalg.h>
 #include "include/stitch.h"
 #include "include/screen-map.h"
-#include "include/render-to-scr.h"
+#include "render-to-scr.h"
 #include "analyze-base.h"
 #include "loadsave.h"
 stitch_project::stitch_project ()

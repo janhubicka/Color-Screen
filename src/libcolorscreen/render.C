@@ -1,13 +1,13 @@
 #include <cassert>
 #include "include/colorscreen.h"
-#include "include/render.h"
-#include "lru-cache.h"
 #include "include/sensitivity.h"
+#include "include/spectrum-to-xyz.h"
+#include "include/stitch.h"
+#include "render.h"
+#include "lru-cache.h"
 #include "gaussian-blur.h"
 #include "sharpen.h"
 #include "mapalloc.h"
-#include "include/spectrum-to-xyz.h"
-#include "include/stitch.h"
 
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;

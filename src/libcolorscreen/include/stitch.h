@@ -2,8 +2,9 @@
 #define STITCH_H
 #include <pthread.h>
 #include <string>
+#include <memory>
+#include "imagedata.h"
 #include "scr-to-img.h"
-#include "render.h"
 #include "solver.h"
 #include "colorscreen.h"
 struct tiff;
@@ -178,7 +179,6 @@ class stitch_image
   typedef std::vector<common_sample> common_samples;
   common_samples find_common_points (stitch_image &other, int outerborder, int innerborder, render_parameters &rparams, progress_info *progress, const char **error);
 private:
-  bool render_pixel (int maxval, coord_t sx, coord_t sy, int *r, int *g, int *b, progress_info *p);
   static uint64_t current_time;
   static int nloaded;
   uint64_t lastused;

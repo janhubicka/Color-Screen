@@ -1,8 +1,8 @@
 #ifndef RENDER_TO_SCR_H
 #define RENDER_TO_SCR_H
-#include "progress-info.h"
+#include "include/progress-info.h"
+#include "include/scr-to-img.h"
 #include "render.h"
-#include "scr-to-img.h"
 
 class screen;
 struct render_to_file_params;

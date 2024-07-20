@@ -1,9 +1,9 @@
 #include <string>
 #include "include/spectrum-to-xyz.h"
 #include "include/scr-to-img.h"
-#include "include/render.h"
 #include "include/tiff-writer.h"
 #include "include/solver.h"
+#include "render.h"
 #include "icc.h"
 #include "include/dufaycolor.h"
 #include "spectrum.h"

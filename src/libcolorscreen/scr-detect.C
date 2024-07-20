@@ -1,6 +1,6 @@
 #include <cassert>
 #include "include/scr-detect.h"
-#include "include/render.h"
+#include "render.h"
 
 void
 scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval)

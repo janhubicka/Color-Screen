@@ -1,7 +1,7 @@
 #ifndef ANALYZE_PAGET_H
 #define ANALYZE_PAGET_H
-#include "include/render-to-scr.h"
 #include "include/paget.h"
+#include "render-to-scr.h"
 #include "analyze-base.h"
 template class analyze_base_worker <paget_geometry>;
 class analyze_paget : public analyze_base_worker <paget_geometry>

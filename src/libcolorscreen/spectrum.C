@@ -1,5 +1,5 @@
 #include "spectrum.h"
-#include "include/render.h"
+#include "render.h"
 /* Output gnuplottable data.  */
 void
 print_transmitance_spectrum (FILE * out, const spectrum spec, int start, int end)

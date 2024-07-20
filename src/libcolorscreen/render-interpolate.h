@@ -1,12 +1,12 @@
 #ifndef RENDEINTERPOLATE_H
 #define RENDEINTERPOLATE_H
 #include <functional>
-#include "include/render-to-scr.h"
+#include "include/histogram.h"
+#include "include/solver.h"
+#include "render-to-scr.h"
 #include "screen.h"
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
-#include "include/histogram.h"
-#include "include/solver.h"
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 class render_interpolate : public render_to_scr

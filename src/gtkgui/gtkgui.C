@@ -380,13 +380,13 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       if (k == 'm')
 	{
 	  rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model + 1);
-	  if ((int)rparams.color_model >= render::num_color_models)
+	  if ((int)rparams.color_model >= (int)render_parameters::color_model_max)
 	    rparams.color_model = (render_parameters::color_model_t)0;
 	}
       else
 	{
 	  if ((int)rparams.color_model == 0)
-	    rparams.color_model = (render_parameters::color_model_t)((int)render::num_color_models - 1);
+	    rparams.color_model = (render_parameters::color_model_t)((int)render_parameters::color_model_max - 1);
 	  else
 	    rparams.color_model = (render_parameters::color_model_t)((int)rparams.color_model - 1);
 	}

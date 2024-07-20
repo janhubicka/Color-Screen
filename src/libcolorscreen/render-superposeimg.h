@@ -1,7 +1,7 @@
 #ifndef RENDERSUPERPOSEIMG_H
 #define RENDERSUPERPOSEIMG_H
 #include <assert.h>
-#include "include/render-to-scr.h"
+#include "render-to-scr.h"
 #include "screen.h"
 class render_superpose_img : public render_to_scr
 {

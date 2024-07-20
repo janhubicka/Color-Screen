@@ -1,9 +1,9 @@
 #ifndef ANALYZE_BASE_H
 #define ANALYZE_BASE_H
-#include "include/render-to-scr.h"
-#include "include/scr-to-img.h"
 #include "include/color.h"
 #include "include/progress-info.h"
+#include "include/scr-to-img.h"
+#include "render-to-scr.h"
 #include "screen.h"
 #include "bitmap.h"
 class analyze_base
