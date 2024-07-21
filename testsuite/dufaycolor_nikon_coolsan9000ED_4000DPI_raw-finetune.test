@@ -15,10 +15,10 @@ pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par
 grep "^Screen blur robust min 0\\.6" out-${NAME}-finetune-blur.txt || exit 1
 echo "ok 1 - finetune of position and blur"
 
-pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur-strips.txt --optimize-dufay-strips
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-dufay-strips >out-${NAME}-finetune-blur-strips.txt
 grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips.txt || exit 1
 echo "ok 2 - finetune of position, blur and strips"
 
-pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur-strips.txt --optimize-dufay-strips --no-data-collection
-grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips.txt || exit 1
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-dufay-strips --no-data-collection >out-${NAME}-finetune-blur-strips-nocollect.txt
+grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips-nocollect.txt || exit 1
 echo "ok 3 - finetune of position, blur and strips with no data collection"
