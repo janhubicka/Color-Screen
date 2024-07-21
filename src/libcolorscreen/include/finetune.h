@@ -1,8 +1,12 @@
 #ifndef FINETUNE_H
 #define FINETUNE_H
+#include "base.h"
+#include "color.h"
 #include <string>
-//#include "solver.h"
 class screen;
+class render_parameters;
+class scr_to_img_parameters;
+class image_data;
 enum finetune_flags
 {
   finetune_position = 1,
@@ -35,8 +39,12 @@ struct finetune_parameters
   const char *collected_file;
   const char *dot_spread_file;
   finetune_parameters ()
-  : flags (0), range (0), multitile (1), ignore_outliers (0.1), simulated_file (NULL), orig_file (NULL), diff_file (NULL), screen_file (NULL), screen_blur_file (NULL), emulsion_file (NULL), merged_file (NULL), collected_file (NULL), dot_spread_file (NULL)
-  { }
+      : flags (0), range (0), multitile (1), ignore_outliers (0.1),
+        simulated_file (NULL), orig_file (NULL), diff_file (NULL),
+        screen_file (NULL), screen_blur_file (NULL), emulsion_file (NULL),
+        merged_file (NULL), collected_file (NULL), dot_spread_file (NULL)
+  {
+  }
 };
 struct finetune_result
 {
@@ -64,7 +72,18 @@ struct finetune_result
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
 };
-DLL_PUBLIC finetune_result finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const std::vector <finetune_result> *results, const finetune_parameters &fparams, progress_info *progress);
-DLL_PUBLIC bool finetune_area (solver_parameters *sparam, render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
-bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
+DLL_PUBLIC finetune_result
+finetune (render_parameters &rparam, const scr_to_img_parameters &param,
+          const image_data &img, const std::vector<point_t> &locs,
+          const std::vector<finetune_result> *results,
+          const finetune_parameters &fparams, progress_info *progress);
+DLL_PUBLIC bool finetune_area (solver_parameters *sparam,
+                               render_parameters &rparam,
+                               const scr_to_img_parameters &param,
+                               const image_data &img, int xmin, int ymin,
+                               int xmax, int ymax, progress_info *progress);
+bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green,
+                           rgbdata *ret_blue, screen &scr,
+                           luminosity_t threshold, scr_to_img &map, int xmin,
+                           int ymin, int xmax, int ymax);
 #endif
