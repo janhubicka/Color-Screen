@@ -1,0 +1,16 @@
+## -*- sh -*-
+## incomplete.test -- Test incomplete command handling
+
+# Common definitions
+if test -z "$srcdir"; then
+    srcdir=echo "$0" | sed 's,[^/]*$,,'
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+    test "${VERBOSE+set}" != set && VERBOSE=1
+fi
+echo 1..1
+. $srcdir/defs.sh
+NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt
+grep "^Screen blur robust min 0.658217" out-${NAME}-finetune-blur.txt || exit 1
+echo "ok 1 - finetune of position and blur"
