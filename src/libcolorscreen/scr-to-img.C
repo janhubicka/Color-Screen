@@ -3,7 +3,7 @@
 #include "include/colorscreen.h"
 #include "include/scr-to-img.h"
 #include "include/imagedata.h"
-#include "include/solver.h"
+#include "solver.h"
 #include "render-to-scr.h"
 #include "spline.h"
 

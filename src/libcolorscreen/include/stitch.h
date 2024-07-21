@@ -5,7 +5,7 @@
 #include <memory>
 #include "imagedata.h"
 #include "scr-to-img.h"
-#include "solver.h"
+//#include "solver.h"
 #include "colorscreen.h"
 struct tiff;
 typedef struct tiff TIFF;

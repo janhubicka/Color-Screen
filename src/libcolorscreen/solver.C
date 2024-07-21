@@ -4,9 +4,9 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "gsl-utils.h"
-#include "include/solver.h"
 #include "include/colorscreen.h"
 #include "include/screen-map.h"
+#include "solver.h"
 #include "nmsimplex.h"
 
 const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};

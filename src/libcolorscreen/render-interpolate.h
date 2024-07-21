@@ -2,7 +2,7 @@
 #define RENDEINTERPOLATE_H
 #include <functional>
 #include "include/histogram.h"
-#include "include/solver.h"
+#include "solver.h"
 #include "render-to-scr.h"
 #include "screen.h"
 #include "analyze-dufay.h"

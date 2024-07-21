@@ -3,7 +3,7 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
 #include "include/colorscreen.h"
-#include "include/solver.h"
+#include "solver.h"
 #include "render-to-scr.h"
 #include "bitmap.h"
 #include "gsl-utils.h"

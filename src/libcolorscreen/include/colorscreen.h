@@ -2,7 +2,9 @@
 #define COLORSCREEN_H
 #include "render-parameters.h"
 #include "render-type-parameters.h"
-#include "solver.h"
+#include "solver-parameters.h"
+#include "detect-regular-screen-parameters.h"
+#include "scr-detect.h"
 
 struct render_to_file_params
 {
@@ -44,6 +46,24 @@ struct render_to_file_params
   {
   }
 };
+
+struct color_match
+{
+  xyz profiled;
+  xyz target;
+  luminosity_t deltaE;
+};
+
+struct tile_parameters
+{
+  uint8_t *pixels;
+  int rowstride;
+  int pixelbytes;
+  int width;
+  int height;
+  point_t pos;
+  coord_t step;
+};
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param,
                           scr_detect_parameters *dparam,
                           render_parameters *rparam,
@@ -58,16 +78,6 @@ DLL_PUBLIC bool render_to_file (image_data &scan, scr_to_img_parameters &param,
                                 render_to_file_params rfarams,
                                 render_type_parameters &rtparam,
                                 progress_info *progress, const char **error);
-struct tile_parameters
-{
-  uint8_t *pixels;
-  int rowstride;
-  int pixelbytes;
-  int width;
-  int height;
-  point_t pos;
-  coord_t step;
-};
 DLL_PUBLIC bool render_tile (image_data &scan, scr_to_img_parameters &param,
                              scr_detect_parameters &dparam,
                              render_parameters &rparam,
@@ -97,4 +107,27 @@ DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_detect_parameters param, render_parameters &rparam, image_data &img,
     scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax,
     progress_info *p = NULL);
+
+DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, image_data &img_data,
+                           solver_parameters &sparam,
+                           progress_info *progress = NULL);
+DLL_PUBLIC mesh *solver_mesh (scr_to_img_parameters *param,
+                              image_data &img_data, solver_parameters &sparam,
+                              progress_info *progress = NULL);
+DLL_PUBLIC detected_screen detect_regular_screen (
+    image_data &img, enum scr_type type, scr_detect_parameters &dparam,
+    luminosity_t gamma, solver_parameters &sparam,
+    detect_regular_screen_params *dsparams, progress_info *progress = NULL,
+    FILE *report_file = NULL);
+DLL_PUBLIC color_matrix determine_color_matrix (
+    rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white,
+    int dark_point_elts = 0, std::vector<color_match> *report = NULL,
+    render *r = NULL, rgbdata proportions = { 1, 1, 1 },
+    progress_info *progress = NULL);
+DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
+                                             image_data &img,
+                                             render_parameters &rparam,
+                                             std::vector<point_t> &points,
+                                             std::vector<color_match> *report,
+                                             progress_info *progress);
 #endif

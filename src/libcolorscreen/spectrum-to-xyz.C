@@ -1,11 +1,12 @@
 #include <string>
+#include "include/colorscreen.h"
 #include "include/spectrum-to-xyz.h"
 #include "include/scr-to-img.h"
 #include "include/tiff-writer.h"
-#include "include/solver.h"
+#include "include/dufaycolor.h"
+#include "solver.h"
 #include "render.h"
 #include "icc.h"
-#include "include/dufaycolor.h"
 #include "spectrum.h"
 #include "spectrum-dyes.h"
 

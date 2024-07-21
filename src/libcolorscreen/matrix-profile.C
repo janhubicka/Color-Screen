@@ -2,7 +2,8 @@
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_linalg.h>
-#include "include/solver.h"
+#include "include/colorscreen.h"
+#include "solver.h"
 #include "render-interpolate.h"
 #include "gsl-utils.h"
 #include "nmsimplex.h"

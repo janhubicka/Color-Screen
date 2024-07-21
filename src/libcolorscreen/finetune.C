@@ -2,6 +2,7 @@
 #define HAVE_INLINE
 #define GSL_RANGE_CHECK_OFF
 #include <gsl/gsl_multifit.h>
+#include "include/colorscreen.h"
 #include "include/finetune.h"
 #include "include/histogram.h"
 #include "include/stitch.h"

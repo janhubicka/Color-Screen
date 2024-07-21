@@ -1,7 +1,8 @@
 #ifndef SCREEN_MAP_H
 #define SCREEN_MAP_H
 #include <limits>
-#include "solver.h"
+#include "dllpublic.h"
+#include "solver-parameters.h"
 #include "paget.h"
 class
 screen_map

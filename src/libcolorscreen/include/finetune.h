@@ -1,7 +1,7 @@
 #ifndef FINETUNE_H
 #define FINETUNE_H
 #include <string>
-#include "solver.h"
+//#include "solver.h"
 class screen;
 enum finetune_flags
 {
