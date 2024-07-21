@@ -690,45 +690,78 @@ public:
 	else
 	  n_values += 3;
       }
+    else
+      color_index = -1;
 
-    fog_index = n_values;
     if (optimize_fog && !fog_by_least_squares)
-      n_values += 3;
+      {
+        fog_index = n_values;
+        n_values += 3;
+      }
+    else
+      fog_index = -1;
 
-    emulsion_intensity_index = n_values;
     if (optimize_emulsion_intensities)
-      n_values += 3 * n_tiles - 1;
-    emulsion_offset_index = n_values;
+      {
+        emulsion_intensity_index = n_values;
+        n_values += 3 * n_tiles - 1;
+      }
+    else
+      emulsion_intensity_index = -1;
     if (optimize_emulsion_offset)
-      n_values += 2 * n_tiles;
-    emulsion_blur_index = n_values;
+      {
+	emulsion_offset_index = n_values;
+	n_values += 2 * n_tiles;
+      }
+    else 
+      emulsion_offset_index = -1;
     if (optimize_emulsion_blur)
       {
+        emulsion_blur_index = n_values;
 	if (!optimize_emulsion_intensities)
 	  optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = false;
 	n_values += 1;
       }
-    screen_index = n_values;
+    else
+      emulsion_blur_index = -1;
     if (optimize_screen_mtf_blur)
       {
+        screen_index = n_values;
 	n_values += 4;
 	optimize_screen_blur = false;
 	optimize_screen_channel_blurs = false;
       }
-    if (optimize_screen_channel_blurs)
+    else if (optimize_screen_channel_blurs)
       {
+        screen_index = n_values;
 	optimize_screen_blur = false;
 	n_values += 3;
       }
-    if (optimize_screen_blur)
-      n_values++;
+    else if (optimize_screen_blur)
+      {
+        screen_index = n_values;
+	n_values++;
+      }
+    else
+      screen_index = -1;
 
     if (type != Dufay)
       optimize_dufay_strips = false;
-    dufay_strips_index = n_values;
     if (optimize_dufay_strips)
-      n_values += 2;
+      {
+	dufay_strips_index = n_values;
+	n_values += 2;
+      }
+    else
+      dufay_strips_index = -1;
     start = (coord_t *)malloc (sizeof (*start) * n_values);
+    if (colorscreen_checking)
+      {
+	for (int i = 0; i < n_values; i++)
+	  start[i] = INT_MAX;
+	for (int i = 0; i < n_values; i++)
+	  assert (start[i] == INT_MAX);
+      }
 
     original_scr = std::shared_ptr <screen> (new screen);
     if (optimize_emulsion_blur)
@@ -876,10 +909,16 @@ public:
 	      hist.account (tiles[tileid].color[y * twidth + x]);
 	hist.finalize ();
 	fog_range = hist.find_min (0.01);
-	start[fog_index] = 0;
-	start[fog_index + 1] = 0;
-	start[fog_index + 2] = 0;
+	if (!fog_by_least_squares)
+	  {
+	    start[fog_index + 1] = 0;
+	    start[fog_index + 1] = 0;
+	    start[fog_index + 2] = 0;
+	  }
       }
+    if (colorscreen_checking)
+      for (int i = 0; i < n_values; i++)
+	assert (start[i] != INT_MAX);
 
     if (tiles[0].color && normalize && !optimize_fog)
       for (int tileid = 0; tileid < n_tiles; tileid++)
