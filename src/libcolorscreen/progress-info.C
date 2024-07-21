@@ -37,7 +37,7 @@ thread_start (void *arg)
       struct timespec ts, now;
       int timev = first ? 300000 : 100000;
 
-#ifdef __APPLE__
+#if defined (__APPLE__) || defined (_WIN32)
       clock_gettime(CLOCK_REALTIME, &now);
 #else
       clock_gettime(CLOCK_MONOTONIC, &now);
