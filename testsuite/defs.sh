@@ -28,7 +28,7 @@ if test -n "$TEST_VALGRIND" ; then
 fi
 
 pexec() {
-  echo "Running $*"
+  echo "  Running $*"
   $*
 }
 
@@ -81,6 +81,27 @@ test_autodetect80()
 test_autodetect_and_render() {
   test_autodetect $*
   test_all_render_modes $TESTDATA/"$1".tif "$2"
+}
+
+testno=1
+oktest() {
+  echo "ok $testno - $*"
+  testno=$((testno+1))
+}
+failtest() {
+  echo "not ok $testno - $*"
+  testno=$((testno+1))
+}
+
+dotest() {
+  mytest="$1"
+  shift
+  if $@
+  then
+   failtest "$mytest"
+  else
+   oktest "$mytest"
+  fi
 }
 
 TESTDATA=${top_srcdir}/testsuite

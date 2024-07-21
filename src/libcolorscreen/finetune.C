@@ -354,7 +354,7 @@ public:
         coord_t b = pixel_blur (v[screen_index]);
         return {b, b, b};
       }
-    return {pixel_blur (v[screen_index]), pixel_blur (v[screen_index] + 1), pixel_blur (v[screen_index] + 2)};
+    return {pixel_blur (v[screen_index]), pixel_blur (v[screen_index + 1]), pixel_blur (v[screen_index + 2])};
   }
   coord_t get_red_strip_width (coord_t *v)
   {

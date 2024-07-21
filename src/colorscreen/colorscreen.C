@@ -1670,7 +1670,7 @@ finetune (int argc, char **argv)
 		  printf ("  ------");
 	      printf ("\n");
 	    }
-	  printf ("Emsulion robust min %f, avg %f, max %f\n", emulsion_hist.find_min (0.1), emulsion_hist.find_avg (0.1,0.1), emulsion_hist.find_max (0.1));
+	  printf ("Emulsion blur robust min %f, avg %f, max %f\n", emulsion_hist.find_min (0.1), emulsion_hist.find_avg (0.1,0.1), emulsion_hist.find_max (0.1));
 	}
       if (screen_blur_tiff_name)
 	{
