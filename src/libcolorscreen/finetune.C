@@ -2284,6 +2284,11 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
   std::vector <finetune_result> res(xsteps * ysteps);
   if (progress)
     progress->set_task ("finetuning grid", ysteps * xsteps);
+  /* We are going to initialize render inside of nested region.
+     TODO: We probably want to set omp_nested on proper place.  */
+#ifdef _OPENMP
+  omp_set_nested (1);
+#endif
   if (xsteps > 1 || ysteps > 1)
     {
 #pragma omp parallel for default (none) collapse(2) schedule(dynamic) shared (xsteps, ysteps, rparam, param,progress,img, solver, res, xmin, ymin, xstep, ystep)
