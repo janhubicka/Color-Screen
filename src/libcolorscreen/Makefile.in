@@ -439,7 +439,7 @@ libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interp
 EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  render-diff.h render-tile.h sharpen.h dj_fft.h gsl-utils.h loadsave.h mapalloc.h render-interpolate.h render-to-file.h spectrum-dyes.h icc.h nmsimplex.h render-superposeimg.h spectrum.h analyze-dufay.h analyze-paget.h analyze-base.h  bitmap.h render-fast.h spline.h screen.h render-scr-detect.h patches.h render-to-scr.h render.h solver.h
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 # -no-undefined is needed in order to build DLL on Windows.
-libcolorscreen_la_LDFLAGS = -version-info 1:1:1 $(WIN_NO_UNDEFINED)
+libcolorscreen_la_LDFLAGS = -version-info 2:0:0 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
 unittests_SOURCES = unittests.C
 all: config.h
