@@ -51,7 +51,9 @@ jobs:
       run: make install
     - name: print dlls gtk
       shell: msys2 {0}
-      run: ldd /c/Color-Screen-install/bin/colorscreen-gtk
+      run: |
+        ldd /c/Color-Screen-install/bin/colorscreen-gtk.exe 
+        ldd /c/Color-Screen-install/bin/libcolorscreen0.dll 
     - name: print dlls dll
       shell: msys2 {0}
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
