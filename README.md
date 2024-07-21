@@ -18,7 +18,7 @@ rendering tool that would later become Color-Screen.
 ## Binary packages
 We provide binary packages for Windows (x86) and MacOS (aarch64) at
 our [wiki page](https://github.com/janhubicka/Color-Screen/wiki#software-packages).
-We are happy to build more configurations if that seem useful
+We are happy to build more configurations if that seem useful.
 
 ## Building from source code
 ### Prequisities
