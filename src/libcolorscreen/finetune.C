@@ -15,6 +15,24 @@
 
 namespace {
 
+static coord_t
+sign (point_t p1, point_t p2, point_t p3)
+{
+  return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+}
+/* Compute a, b such that
+   x1 + dx1 * a = x2 + dx2 * b
+   y1 + dy1 * a = y2 + dy2 * b  */
+void
+intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
+		   coord_t x2, coord_t y2, coord_t dx2, coord_t dy2,
+		   coord_t *a, coord_t *b)
+{
+  matrix2x2<coord_t> m (dx1, -dx2, dy1, -dy2);
+  m = m.invert ();
+  m.apply_to_vector (x2 - x1, y2 - y1, a, b);
+}
+
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
@@ -1742,25 +1760,137 @@ public:
       }
     return true;
   }
-};
+  void
+  set_results (finetune_result &ret, render_parameters &rparam, bool verbose, progress_info *progress)
+  {
+    ret.badness = objfunc (start);
+    //if (optimize_screen_blur)
+      //ret.screen_blur_radius = start[screen_index];
+    /* TODO: Translate back to stitched project coordinates.  */
+    ret.tile_pos = {(coord_t)(tiles[0].txmin + twidth / 2),
+		    (coord_t)(tiles[0].tymin + theight / 2)};
+    ret.dufay_red_strip_width = get_red_strip_width (start);
+    ret.dufay_green_strip_width = get_green_strip_width (start);
+    ret.screen_blur_radius = get_blur_radius (start);
+    ret.screen_channel_blur_radius = get_channel_blur_radius (start);
+    ret.emulsion_blur_radius = get_emulsion_blur_radius (start);
+    get_mtf (ret.screen_mtf_blur, start);
+    ret.screen_coord_adjust = get_offset (start, 0);
+    ret.emulsion_coord_adjust = get_emulsion_offset (start, 0);
+    ret.fog = get_fog (start);
+    if (optimize_emulsion_intensities)
+      {
+	ret.mix_weights = get_mix_weights (start);
+	ret.mix_dark = get_fog (start);
+      }
+    else
+      {
+       ret.mix_weights.red = rparam.mix_red;
+       ret.mix_weights.green = rparam.mix_green;
+       ret.mix_weights.blue = rparam.mix_blue;
+       ret.mix_dark = rparam.mix_dark;
+      }
 
-static coord_t
-sign (point_t p1, point_t p2, point_t p3)
-{
-  return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-}
-/* Compute a, b such that
-   x1 + dx1 * a = x2 + dx2 * b
-   y1 + dy1 * a = y2 + dy2 * b  */
-void
-intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
-		   coord_t x2, coord_t y2, coord_t dx2, coord_t dy2,
-		   coord_t *a, coord_t *b)
-{
-  matrix2x2<coord_t> m (dx1, -dx2, dy1, -dy2);
-  m = m.invert ();
-  m.apply_to_vector (x2 - x1, y2 - y1, a, b);
-}
+    if (optimize_position)
+      {
+	int tileid = 0;
+	/* Construct solver point.  Try to get closest point to the center of analyzed tile.  */
+	int fsx = nearest_int (get_pos (start, tileid, twidth/2, theight/2).x);
+	int fsy = nearest_int (get_pos (start, tileid, twidth/2, theight/2).y);
+	int bx = - 1, by = -1;
+	coord_t bdist = 0;
+	for (int y = 0; y < theight; y++)
+	  {
+	    for (int x = 0; x < twidth; x++)
+	      {
+		point_t p = get_pos (start, tileid, x, y);
+		//printf ("  %-5.2f,%-5.2f", p.x, p.y);
+		coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
+		if (bx < 0 || dist < bdist)
+		  {
+		    bx = x;
+		    by = y;
+		    bdist = dist;
+		  }
+	      }
+	    //printf ("\n");
+	  }
+	if (!bx || bx == twidth - 1 || !by || by == theight - 1)
+	  {
+	    if (verbose)
+	      {
+		progress->pause_stdout ();
+		printf ("Solver point is out of tile\n");
+		progress->resume_stdout ();
+	      }
+	    ret.err = "Solver point is out of tile";
+	    return;
+	  }
+	point_t fp = {-1000,-1000};
+
+	bool found = false;
+	//printf ("%i %i %i %i %f %f\n", bx, by, fsx, fsy, tile_pos[twidth/2+(theight/2)*twidth].x, tile_pos[twidth/2+(theight/2)*twidth].y);
+	for (int y = by - 1; y <= by + 1; y++)
+	  for (int x = bx - 1; x <= bx + 1; x++)
+	    {
+	      /* Determine cell corners.  */
+	      point_t p = {(coord_t)fsx, (coord_t)fsy};
+	      point_t p1 = get_pos (start, tileid, x, y);
+	      point_t p2 = get_pos (start, tileid, x + 1, y);
+	      point_t p3 = get_pos (start, tileid, x, y + 1);
+	      point_t p4 = get_pos (start, tileid, x + 1, y + 1);
+	      /* Check if point is above or bellow diagonal.  */
+	      coord_t sgn1 = sign (p, p1, p4);
+	      if (sgn1 > 0)
+		{
+		  /* Check if point is inside of the triangle.  */
+		  if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
+		    continue;
+		  coord_t rx, ry;
+		  intersect_vectors (p1.x, p1.y,
+				     p.x - p1.x, p.y - p1.y,
+				     p3.x, p3.y,
+				     p4.x - p3.x, p4.y - p3.y,
+				     &rx, &ry);
+		  rx = 1 / rx;
+		  found = true;
+		  fp = {(ry * rx + x), (rx + y)};
+		}
+	      else
+		{
+		  /* Check if point is inside of the triangle.  */
+		  if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
+		    continue;
+		  coord_t rx, ry;
+		  intersect_vectors (p1.x, p1.y,
+				     p.x - p1.x, p.y - p1.y,
+				     p2.x, p2.y,
+				     p4.x - p2.x, p4.y - p2.y,
+				     &rx, &ry);
+		  rx = 1 / rx;
+		  found = true;
+		  fp = {(rx + x), (ry * rx + y)};
+		}
+	    }
+	/* TODO: If we did not find the tile we could try some non-integer location.  */
+	if (!found)
+	  {
+	    if (verbose)
+	      {
+		progress->pause_stdout ();
+		printf ("Failed to find solver point\n");
+		progress->resume_stdout ();
+	      }
+	    ret.err = "Failed to find solver point";
+	    return;
+	  }
+	ret.solver_point_img_location = {fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5};
+	ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
+	ret.solver_point_color = solver_parameters::green;
+      }
+    ret.success = true;
+  }
+};
 }
 
 /* Finetune parameters and update RPARAM.  */
@@ -1768,7 +1898,7 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
 finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param, const image_data &img, const std::vector <point_t> &locs, const std::vector <finetune_result> *results, const finetune_parameters &fparams, progress_info *progress)
 {
-  finetune_result ret = {false, {-1, -1}, -1, -1, -1, {-1, -1, -1}, {-1, -1, -1, -1}, -1, -1, -1, {-1, -1}, {-1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}};
+  finetune_result ret;
 
   int n_tiles = locs.size ();
   if (n_tiles > finetune_solver::max_tiles)
@@ -1886,19 +2016,21 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 
   render_parameters rparam2 = rparam;
   rparam2.invert = 0;
+  int maxtiles = fparams.multitile;
+  if (maxtiles < 1)
+    maxtiles = 1;
+  if (!(maxtiles & 1))
+    maxtiles++;
 
   /* Multitile support only for 1 tile.  */
-  if (n_tiles == 1)
+  if (n_tiles == 1
+      /* Avoid openmp when we do not need it.  This seems also necessary to get
+         Windows builds working.  */
+      && (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report)))
     {
       ///* FIXME: Hack; render is too large for stack in openmp thread.  */
       //std::unique_ptr<render_to_scr> rp(new render_to_scr (param, img, rparam, 256));
       render render (*imgp[0], rparam2, 256);
-      //int rxmin = txmin, rxmax = txmax, rymin = tymin, rymax = tymax;
-      int maxtiles = fparams.multitile;
-      if (maxtiles < 1)
-	maxtiles = 1;
-      if (!(maxtiles & 1))
-	maxtiles++;
 #if 0
       if (maxtiles > 1)
 	{
@@ -1929,9 +2061,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       if (maxtiles * maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
 	progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
-
-
-#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,pixel_size,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver,results) if (maxtiles > 1 && !(fparams.flags & finetune_no_progress_report))
+#pragma omp parallel for default(none) collapse (2) schedule(dynamic) shared(fparams,maxtiles,rparam,pixel_size,best_uncertainity,verbose,std::nothrow,imgp,twidth,theight,txmin,tymin,bw,progress,mapp,render,failed,best_solver,results) 
 	for (int ty = 0; ty < maxtiles; ty++)
 	  for (int tx = 0; tx < maxtiles; tx++)
 	    {
@@ -2042,12 +2172,6 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       return ret; 
     }
 
-  if (fparams.simulated_file)
-    best_solver.write_file (best_solver.start, fparams.simulated_file, 0, 0);
-  if (fparams.orig_file)
-    best_solver.write_file (best_solver.start, fparams.orig_file, 0, 1);
-  if (fparams.diff_file)
-    best_solver.write_file (best_solver.start, fparams.diff_file, 0, 2);
   ret.uncertainity = best_uncertainity;
   if (verbose)
     {
@@ -2055,131 +2179,14 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       best_solver.print_values (best_solver.start);
       progress->resume_stdout ();
     }
-  ret.badness = best_solver.objfunc (best_solver.start);
-  //if (best_solver.optimize_screen_blur)
-    //ret.screen_blur_radius = best_solver.start[best_solver.screen_index];
-  /* TODO: Translate back to stitched project coordinates.  */
-  ret.tile_pos = {(coord_t)(best_solver.tiles[0].txmin + best_solver.twidth / 2),
-		  (coord_t)(best_solver.tiles[0].tymin + best_solver.theight / 2)};
-  ret.dufay_red_strip_width = best_solver.get_red_strip_width (best_solver.start);
-  ret.dufay_green_strip_width = best_solver.get_green_strip_width (best_solver.start);
-  ret.screen_blur_radius = best_solver.get_blur_radius (best_solver.start);
-  ret.screen_channel_blur_radius = best_solver.get_channel_blur_radius (best_solver.start);
-  ret.emulsion_blur_radius = best_solver.get_emulsion_blur_radius (best_solver.start);
-  best_solver.get_mtf (ret.screen_mtf_blur, best_solver.start);
-  ret.screen_coord_adjust = best_solver.get_offset (best_solver.start, 0);
-  ret.emulsion_coord_adjust = best_solver.get_emulsion_offset (best_solver.start, 0);
-  ret.fog = best_solver.get_fog (best_solver.start);
-  if (best_solver.optimize_emulsion_intensities)
-    {
-      ret.mix_weights = best_solver.get_mix_weights (best_solver.start);
-      ret.mix_dark = best_solver.get_fog (best_solver.start);
-    }
-  else
-    {
-     ret.mix_weights.red = rparam.mix_red;
-     ret.mix_weights.green = rparam.mix_green;
-     ret.mix_weights.blue = rparam.mix_blue;
-     ret.mix_dark = rparam.mix_dark;
-    }
+  best_solver.set_results (ret, rparam, verbose, progress);
 
-  if (best_solver.optimize_position)
-    {
-      int tileid = 0;
-      /* Construct solver point.  Try to get closest point to the center of analyzed tile.  */
-      int fsx = nearest_int (best_solver.get_pos (best_solver.start, tileid, twidth/2, theight/2).x);
-      int fsy = nearest_int (best_solver.get_pos (best_solver.start, tileid, twidth/2, theight/2).y);
-      int bx = - 1, by = -1;
-      coord_t bdist = 0;
-      for (int y = 0; y < theight; y++)
-	{
-	  for (int x = 0; x < twidth; x++)
-	    {
-	      point_t p = best_solver.get_pos (best_solver.start, tileid, x, y);
-	      //printf ("  %-5.2f,%-5.2f", p.x, p.y);
-	      coord_t dist = fabs (p.x - fsx) + fabs (p.y - fsy);
-	      if (bx < 0 || dist < bdist)
-		{
-		  bx = x;
-		  by = y;
-		  bdist = dist;
-		}
-	    }
-	  //printf ("\n");
-	}
-      if (!bx || bx == twidth - 1 || !by || by == theight - 1)
-	{
-	  if (verbose)
-	    {
-	      progress->pause_stdout ();
-	      printf ("Solver point is out of tile\n");
-	      progress->resume_stdout ();
-	    }
-	  ret.err = "Solver point is out of tile";
-	  return ret;
-	}
-      point_t fp = {-1000,-1000};
-
-      bool found = false;
-      //printf ("%i %i %i %i %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y);
-      for (int y = by - 1; y <= by + 1; y++)
-	for (int x = bx - 1; x <= bx + 1; x++)
-	  {
-	    /* Determine cell corners.  */
-	    point_t p = {(coord_t)fsx, (coord_t)fsy};
-	    point_t p1 = best_solver.get_pos (best_solver.start, tileid, x, y);
-	    point_t p2 = best_solver.get_pos (best_solver.start, tileid, x + 1, y);
-	    point_t p3 = best_solver.get_pos (best_solver.start, tileid, x, y + 1);
-	    point_t p4 = best_solver.get_pos (best_solver.start, tileid, x + 1, y + 1);
-	    /* Check if point is above or bellow diagonal.  */
-	    coord_t sgn1 = sign (p, p1, p4);
-	    if (sgn1 > 0)
-	      {
-		/* Check if point is inside of the triangle.  */
-		if (sign (p, p4, p3) < 0 || sign (p, p3, p1) < 0)
-		  continue;
-		coord_t rx, ry;
-		intersect_vectors (p1.x, p1.y,
-				   p.x - p1.x, p.y - p1.y,
-				   p3.x, p3.y,
-				   p4.x - p3.x, p4.y - p3.y,
-				   &rx, &ry);
-		rx = 1 / rx;
-		found = true;
-		fp = {(ry * rx + x), (rx + y)};
-	      }
-	    else
-	      {
-		/* Check if point is inside of the triangle.  */
-		if (sign (p, p4, p2) > 0 || sign (p, p2, p1) > 0)
-		  continue;
-		coord_t rx, ry;
-		intersect_vectors (p1.x, p1.y,
-				   p.x - p1.x, p.y - p1.y,
-				   p2.x, p2.y,
-				   p4.x - p2.x, p4.y - p2.y,
-				   &rx, &ry);
-		rx = 1 / rx;
-		found = true;
-		fp = {(rx + x), (ry * rx + y)};
-	      }
-	  }
-      /* TODO: If we did not find the tile we could try some non-integer location.  */
-      if (!found)
-	{
-	  if (verbose)
-	    {
-	      progress->pause_stdout ();
-	      printf ("Failed to find solver point\n");
-	      progress->resume_stdout ();
-	    }
-	  ret.err = "Failed to find solver point";
-	  return ret;
-	}
-      ret.solver_point_img_location = {fp.x + best_solver.tiles[tileid].txmin + 0.5, fp.y + best_solver.tiles[tileid].tymin + 0.5};
-      ret.solver_point_screen_location = {(coord_t)fsx, (coord_t)fsy};
-      ret.solver_point_color = solver_parameters::green;
-    }
+  if (fparams.simulated_file)
+    best_solver.write_file (best_solver.start, fparams.simulated_file, 0, 0);
+  if (fparams.orig_file)
+    best_solver.write_file (best_solver.start, fparams.orig_file, 0, 1);
+  if (fparams.diff_file)
+    best_solver.write_file (best_solver.start, fparams.diff_file, 0, 2);
   if (fparams.screen_file)
    best_solver.original_scr->save_tiff (fparams.screen_file);
   if (fparams.screen_blur_file)
@@ -2201,7 +2208,6 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       best_solver.apply_blur (best_solver.start, 0, &scr, &scr1);
       scr.save_tiff (fparams.dot_spread_file, true, 1);
     }
-  ret.success = true;
   //printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy, best_solver.tile_pos[twidth/2+(theight/2)*twidth].x, best_solver.tile_pos[twidth/2+(theight/2)*twidth].y, fp.x, fp.y);
   return ret;
 }
@@ -2234,20 +2240,32 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
   int ystep = img.width / overall_ysteps;
   int xsteps = (xmax - xmin + xstep) / xstep;
   int ysteps = (ymax - ymin + ystep) / ystep;
+  if (!xsteps || !ysteps)
+    return false;
   std::vector <finetune_result> res(xsteps * ysteps);
   if (progress)
     progress->set_task ("finetuning grid", ysteps * xsteps);
+  if (xsteps > 1 || ysteps > 1)
+    {
 #pragma omp parallel for default (none) collapse(2) schedule(dynamic) shared (xsteps, ysteps, rparam, param,progress,img, solver, res, xmin, ymin, xstep, ystep)
-  for (int x = 0; x < xsteps; x++)
-    for (int y = 0; y < ysteps; y++)
-      {
-	if (progress && progress->cancel_requested ()) 
-	   continue; 
-	finetune_parameters fparam;
-	fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
-	res[x+y*xsteps] = finetune (rparam, param, img, {{xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep}}, NULL, fparam, progress);
-	progress->inc_progress ();
-      }
+      for (int x = 0; x < xsteps; x++)
+	for (int y = 0; y < ysteps; y++)
+	  {
+	    if (progress && progress->cancel_requested ()) 
+	       continue; 
+	    finetune_parameters fparam;
+	    fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw | finetune_no_progress_report;
+	    res[x+y*xsteps] = finetune (rparam, param, img, {{xmin + (x + 0.5) * xstep, ymin + (y + 0.5) * ystep}}, NULL, fparam, progress);
+	    progress->inc_progress ();
+	  }
+    }
+  else if (!progress || !progress->cancel_requested ()) 
+    {
+      finetune_parameters fparam;
+      fparam.flags |= finetune_position /*| finetune_multitile*/ | finetune_bw;
+      res[1] = finetune (rparam, param, img, {{xmin + (0.5) * xstep, ymin + (0.5) * ystep}}, NULL, fparam, progress);
+      progress->inc_progress ();
+    }
   if (progress && progress->cancel_requested ()) 
     return false; 
   std::sort (res.begin(), res.end(), [] (finetune_result &a, finetune_result &b) { return a.uncertainity > b.uncertainity;});

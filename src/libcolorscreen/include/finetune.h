@@ -71,6 +71,17 @@ struct finetune_result
   point_t solver_point_img_location;
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
+
+  finetune_result ()
+  : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
+    screen_blur_radius (-1), screen_channel_blur_radius (-1, -1, -1), screen_mtf_blur {-1, -1, -1, -1},
+    emulsion_blur_radius (-1), dufay_red_strip_width (-1), dufay_green_strip_width (-1),
+    screen_coord_adjust {-1, -1}, emulsion_coord_adjust {-1, -1}, color (-1, -1, -1),
+    screen_red (-1, -1, -1), screen_green (-1, -1, -1), screen_blue (-1, -1, -1),
+    mix_weights (-1, -1, -1), mix_dark (-1, -1, -1), err (), solver_point_img_location {-1, -1},
+    solver_point_screen_location {-1, -1}, solver_point_color (solver_parameters::max_point_color)
+    {
+    }
 };
 DLL_PUBLIC finetune_result
 finetune (render_parameters &rparam, const scr_to_img_parameters &param,
