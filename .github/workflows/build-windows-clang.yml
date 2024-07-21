@@ -24,7 +24,7 @@ jobs:
         install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils
     - name: configure
       shell: msys2 {0}
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
+      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install
     - name: make
       shell: msys2 {0}
       run: make
