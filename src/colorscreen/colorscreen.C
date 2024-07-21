@@ -1963,6 +1963,8 @@ stitch(int argc, char **argv)
       float flt;
       if (const char *str = arg_with_param (argc, argv, &i, "report"))
 	prj->params.report_filename = str;
+      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
+	verbose = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "par"))
 	prj->params.csp_filename = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "hugin-pto"))
