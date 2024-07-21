@@ -92,12 +92,12 @@ public:
     { }
     ~tile_data ()
     {
-      delete color;
-      delete bw;
-      delete pos;
+      delete [] color;
+      delete [] bw;
+      delete [] pos;
       delete scr;
       delete merged_scr;
-      delete simulated_screen;
+      delete [] simulated_screen;
     }
     void
     forget ()
