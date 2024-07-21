@@ -12,7 +12,7 @@ Changes in version 1.1
     tested on MacOS to actually work as expected.
  -  fixed occasional crash when rendering Paget and Finlay plates in interpolated
     mode.
- -  fixed `makes examples`
+ -  fixed `make examples`
  -  `colorscreen autodetect` now works on stitched projects
  -  Stack size for Windows build was increased so finetune solver works
     (for unknown reason it works very slowly when run on real Windows; it is

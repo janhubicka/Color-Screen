@@ -4,7 +4,7 @@
 #include "render-type-parameters.h"
 #include "solver-parameters.h"
 #include "detect-regular-screen-parameters.h"
-#include "scr-detect.h"
+#include "scr-detect-parameters.h"
 
 struct render_to_file_params
 {

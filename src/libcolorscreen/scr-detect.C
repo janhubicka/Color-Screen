@@ -1,5 +1,5 @@
 #include <cassert>
-#include "include/scr-detect.h"
+#include "scr-detect.h"
 #include "render.h"
 
 void

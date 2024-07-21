@@ -2,7 +2,6 @@
 #include <memory>
 #include <limits.h>
 #include "include/colorscreen.h"
-#include "include/scr-detect.h"
 #include "include/screen-map.h"
 #include "solver.h"
 #include "render-to-scr.h"

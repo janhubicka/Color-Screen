@@ -1,7 +1,7 @@
 #ifndef RENDER_SCR_DETECT_H
 #define RENDER_SCR_DETECT_H
 #include "include/progress-info.h"
-#include "include/scr-detect.h"
+#include "scr-detect.h"
 #include "render.h"
 #include "patches.h"
 struct render_to_file_params;

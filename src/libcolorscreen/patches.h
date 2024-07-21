@@ -2,8 +2,9 @@
 #define PATCHES_H
 #include <vector>
 #include "include/progress-info.h"
-#include "include/scr-detect.h"
 #include "include/imagedata.h"
+#include "scr-detect.h"
+#include "render.h"
 
 class patches
 {
