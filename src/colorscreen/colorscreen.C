@@ -1535,17 +1535,6 @@ finetune (int argc, char **argv)
 	    fparam.diff_file = diff_file.c_str ();
 	  }
 	results[y * xsteps + x] = finetune (rparam, param, scan, {{(coord_t)xpos, (coord_t)ypos}}, NULL, fparam, &progress);
-	if (!results[y * xsteps + x].success)
-	  continue;
-	//progress.pop (stack);
-#if 0
-	if (verbose)
-	  {
-	    progress.pause_stdout ();
-	    printf ("%i %i pos %i %i %f\n", x, y, xpos, ypos, my_rparam.screen_blur_radius);
-	    progress.resume_stdout ();
-	  }
-#endif
 	progress.inc_progress ();
       }
   int nok = 0;
