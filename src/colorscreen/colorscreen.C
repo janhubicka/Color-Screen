@@ -1432,6 +1432,8 @@ finetune (int argc, char **argv)
 	flags |= finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-least-squares"))
 	flags |= finetune_no_least_squares;
+      else if (!strcmp (argv[i], "--no-data-collection"))
+	flags |= finetune_no_data_collection;
       else if (parse_int_param (argc, argv, &i, "multitile", multitile, 1, 100))
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "fog-tiff"))

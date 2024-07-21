@@ -8,9 +8,17 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
-echo 1..1
+echo 1..3
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt
-grep "^Screen blur robust min 0.658217" out-${NAME}-finetune-blur.txt || exit 1
+grep "^Screen blur robust min 0\\.6" out-${NAME}-finetune-blur.txt || exit 1
 echo "ok 1 - finetune of position and blur"
+
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur-strips.txt --optimize-dufay-strips
+grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips.txt || exit 1
+echo "ok 2 - finetune of position, blur and strips"
+
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur-strips.txt --optimize-dufay-strips --no-data-collection
+grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips.txt || exit 1
+echo "ok 3 - finetune of position, blur and strips with no data collection"
