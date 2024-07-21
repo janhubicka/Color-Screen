@@ -14,7 +14,14 @@ Jacobs identified rare scans of early color negatives using the Finlay color
 process. To address these unique negatives, Jan Hubička quickly created a
 rendering tool that would later become Color-Screen.
 
-## Prequisities
+# Installing Color-Screen
+## Binary packages
+We provide binary packages for Windows (x86) and MacOS (aarch64) at
+our [wiki page](https://github.com/janhubicka/Color-Screen/wiki#software-packages).
+We are happy to build more configurations if that seem useful
+
+## Building from source code
+### Prequisities
 Color-Screen can be built using recent versions of either GCC or Clang
 compilers.  For optimal performance, OpenMP support in your compiler is
 recommended. 
@@ -41,9 +48,7 @@ GTK2 gui is deprecated and new Java based [Color-Screen
 GUI](https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI) is being developed
 by Linda Kimrová
 
-## Installation
-
-### Linux (and other UNIX-like systems)
+### Building on Linux (and other UNIX-like systems)
 
 On typical Linux distribution it is enough to do the following.
 
@@ -58,7 +63,7 @@ For better performance, if you are going to use the binary on the same macine
 as you are building it, add ' -march=native' to 'CXXFLAGS'.  This will enable use
 of extended instruction set of your CPU.
 
-### Windows
+### Building on Windows
 
 Easiest way to install on Windows is to use [MSYS2](https://www.msys2.org/).
 Then start MSYS2 WINGW64 from Windows start menu.  Install all necessary
@@ -95,7 +100,7 @@ are necessary use
 This will print all libraries used. Copy all DLL files from mingw64 subdirectory
 to bin subdirectory.
 
-### MacOS
+### Building on MacOS
 
 Install Xcode to obtain the C++ compiler (clang).  Xcode version of clang has
 OpenMP for multithreading disabled.  For Color–Screen to run smoothly and
@@ -110,12 +115,12 @@ required packages listed above:
 
 This works around the disabled OpenMP support.
 
-## Wonderful examples
+### Wonderful examples
 
 Once colorscreen is built, `make examples` will download some sample images
 from the Library of Congress webpages and produce color renderings.
 
-## Usage
+# Usage
 
 There are two programs installed. 
 
