@@ -27,7 +27,7 @@ jobs:
       run: autoreconf -fiv
     - name: configure
       shell: msys2 {0}
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install --disable-static-link
+      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: make
       shell: msys2 {0}
       run: make
