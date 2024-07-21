@@ -1,7 +1,8 @@
 EXTRA_DIST              = defs.sh $(TESTS) \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif \
 			  dufaycolor_dt_captureone_export_tile1.jpg \
-			  dufaycolor_dt_captureone_export_tile2.jpg
+			  dufaycolor_dt_captureone_export_tile2.jpg \
+			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-nomesh.par
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
 			  $(top_srcdir)/build-aux/tap-driver.sh
