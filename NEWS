@@ -7,7 +7,10 @@ Changes in version 1.1
    - make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,
      `colorscreen render` and `colorscreen finetune`.
-     Tests are run regularly on Ubuntu, MacOS Aarch64 and Windows x86 builbots
+     Tests are run regularly on Ubuntu, MacOS Aarch64 and Windows x86 builbots.
+   - `--enable-checking` configure option now enables extra runtime sanity
+     checking.
+   - tone curves are now saved to parameter files
  - Bugs fixed:
    - fixed text-mode progress info on Windows
    - Fixed problem with nested parallelism in finetune solver.
@@ -15,14 +18,12 @@ Changes in version 1.1
    - fixed `make examples`
    - fixed occasional crash when rendering Paget and Finlay plates in
      interpolated mode.
-   - tone curves are now correctly saved and resotred
    - fixed bug in `colorscreen finetune --optimize-screen-channel-blur`
  - Internal changes:
-   - cleaned up public API and privatized most of datastructures
-   - `--enable-checking` configure option now enables extra runtime sanity
-     checking
+   - cleaned up public API and privatized large part of libcolorscreen
+     datastructures
    - automake buildsystem cleaned up and is now more standard.  As a
-     consequence, build not defaults to `-O2 -g`.  We recommend to add
+     consequence, build no longer defaults to `-O2 -g`.  We recommend to add
      `-Ofast -flto` into `CXXFLAGS` as documented in `README.md`.
    -  removed some now obsolette files from git (such as original presentation
       and low quality examples) from the git source tree
