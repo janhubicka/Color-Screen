@@ -40,7 +40,7 @@ public:
   {
     coord_t xx, yy;
     coord_t xx2, yy2;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
     int ix = xx + 0.5;
     int iy = yy + 0.5;
     m_scr_to_img.to_img (ix, iy, &xx2, &yy2);

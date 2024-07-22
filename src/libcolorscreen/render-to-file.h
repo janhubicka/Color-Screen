@@ -294,6 +294,7 @@ produce_file (render_to_file_params &rfparams,
 	      render_type_parameters &rtparam, scr_to_img_parameters sparam, P &param, render_parameters &rparam, image_data &img, int black, progress_info *progress)
 {
   T render (param, img, rparam, 65535);
+  render.compute_final_range ();
   render.set_render_type (rtparam);
   if (progress)
     {

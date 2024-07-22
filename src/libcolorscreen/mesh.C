@@ -160,22 +160,22 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, c
 	if (x2 < mminx || y2 < mminy)
 	  continue;
 	coord_t px, py;
-	trans.apply_to_vector ((x - 1) * m_xstep - m_xshift, (y - 1) * m_ystep - m_yshift, &px, &py);
+	trans.apply_to_vector ((x - 0) * m_xstep - m_xshift, (y - 0) * m_ystep - m_yshift, &px, &py);
 	coord_t pxmin = px;
 	coord_t pxmax = px;
 	coord_t pymin = py;
 	coord_t pymax = py;
-	trans.apply_to_vector ((x + 2) * m_xstep - m_xshift, (y - 1) * m_ystep - m_yshift, &px, &py);
+	trans.apply_to_vector ((x + 1) * m_xstep - m_xshift, (y - 0) * m_ystep - m_yshift, &px, &py);
 	pxmin = std::min (pxmin, px);
 	pxmax = std::max (pxmax, px);
 	pymin = std::min (pymin, py);
 	pymax = std::max (pymax, py);
-	trans.apply_to_vector ((x - 1) * m_xstep - m_xshift, (y + 2) * m_ystep - m_yshift, &px, &py);
+	trans.apply_to_vector ((x - 0) * m_xstep - m_xshift, (y + 1) * m_ystep - m_yshift, &px, &py);
 	pxmin = std::min (pxmin, px);
 	pxmax = std::max (pxmax, px);
 	pymin = std::min (pymin, py);
 	pymax = std::max (pymax, py);
-	trans.apply_to_vector ((x + 2) * m_xstep - m_xshift, (y + 2) * m_ystep - m_yshift, &px, &py);
+	trans.apply_to_vector ((x + 1) * m_xstep - m_xshift, (y + 1) * m_ystep - m_yshift, &px, &py);
 	pxmin = std::min (pxmin, px);
 	pxmax = std::max (pxmax, px);
 	pymin = std::min (pymin, py);

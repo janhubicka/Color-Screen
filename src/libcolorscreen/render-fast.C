@@ -65,6 +65,7 @@ bool
 render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride)
 {
   render_fast render (param, scan, rparams, 255);
+  render.compute_final_range ();
   int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height ();
   if (!render.precompute_all (NULL))
     return false;

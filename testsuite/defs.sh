@@ -29,7 +29,7 @@ fi
 
 pexec() {
   echo "  Running $*"
-  $*
+  $* || exit 1
 }
 
 # iterate across all rendering modes. invoke as
@@ -53,7 +53,7 @@ test_autodetect()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* 
   grep "^Analyzed 99" "$NPARNAME".txt || exit 1
 }
 test_autodetect90()
@@ -63,7 +63,7 @@ test_autodetect90()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* 
   grep "^Analyzed 9[0-9]" "$NPARNAME".txt || exit 1
 }
 test_autodetect80()
@@ -73,7 +73,7 @@ test_autodetect80()
   shift
   shift
   echo "autodetect $NNAME to $NPARNAME with flags $*"
-  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* || exit 1
+  pexec $RUNCOLORSCREEN autodetect $TESTDATA/$NNAME.tif $NPARNAME.par --report=$NPARNAME.txt $* 
   grep "^Analyzed [8-9][0-9]" "$NPARNAME".txt || exit 1
 }
 # autodetect and iterate across all rendering modes. invoke as

@@ -745,6 +745,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       basic_scr_to_img_map.set_parameters (p, *img);
       known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL));
     }
+  render.compute_final_range ();
   final_xshift = render.get_final_xshift ();
   final_yshift = render.get_final_yshift ();
   final_width = render.get_final_width ();

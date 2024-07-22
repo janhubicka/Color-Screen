@@ -18,7 +18,7 @@ public:
   rgbdata sample_pixel_final (coord_t x, coord_t y)
   {
     coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
     return sample_pixel_scr (xx, yy);
   }
   void set_render_type (render_type_parameters rtparam);

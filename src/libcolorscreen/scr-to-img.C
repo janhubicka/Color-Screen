@@ -398,7 +398,8 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
 			     int *final_width, int *final_height)
 {
   coord_t minx, miny, maxx, maxy;
-  if (!m_param.mesh_trans)
+  /* Do not use mesh.get_range since it is way too conservative.  */
+  if (!m_param.mesh_trans || 1)
     {
       /* Compute all the corners.  */
       coord_t xul,xur,xdl,xdr;
@@ -415,8 +416,8 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
       maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
       maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
 
-      /* Hack warning: if we correct lens distortion the corners may not be extremes.  */
-      if ((!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y))
+      /* If we correct lens distortion the corners may not be extremes.  */
+      if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y || m_param.mesh_trans)
 	{
 	  const int steps = 16*1024;
 	  for (int i = 1; i < steps; i++)

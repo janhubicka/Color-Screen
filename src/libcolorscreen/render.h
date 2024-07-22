@@ -126,6 +126,11 @@ public:
   {
     return m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions);
   }
+  /* Just a placeholder, it is needed only for render_to_scr.  */
+  void
+  compute_final_range ()
+  {
+  }
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
 protected:

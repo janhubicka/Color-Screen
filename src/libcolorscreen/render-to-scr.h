@@ -15,7 +15,10 @@ public:
     : render (img, rparam, dstmaxval)
   {
     m_scr_to_img.set_parameters (param, img);
-    m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift, &m_final_yshift, &m_final_width, &m_final_height);
+    m_final_width = -1;
+    m_final_height = -1;
+    m_final_xshift = INT_MIN;
+    m_final_yshift = INT_MIN;
   }
   inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
   inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x, coord_t y);
@@ -24,22 +27,32 @@ public:
   DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
   DLL_PUBLIC bool precompute (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
   DLL_PUBLIC bool precompute_img_range (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
+  void
+  compute_final_range ()
+  {
+    if (m_final_width < 0)
+      m_scr_to_img.get_final_range (m_img.width, m_img.height, &m_final_xshift, &m_final_yshift, &m_final_width, &m_final_height);
+  }
   /* This returns screen coordinate width of rendered output.  */
   int get_final_width ()
   {
+    assert (!colorscreen_checking || m_final_width > 0);
     return m_final_width;
   }
   /* This returns screen coordinate height of rendered output.  */
   int get_final_height ()
   {
+    assert (!colorscreen_checking || m_final_height > 0);
     return m_final_height;
   }
   int get_final_xshift ()
   {
+    assert (!colorscreen_checking || m_final_xshift != INT_MIN);
     return m_final_xshift;
   }
   int get_final_yshift ()
   {
+    assert (!colorscreen_checking || m_final_yshift != INT_MIN);
     return m_final_yshift;
   }
   static bool render_tile (render_type_parameters rtparam, scr_to_img_parameters &param, image_data &img, render_parameters &rparam,
@@ -55,6 +68,7 @@ protected:
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
 
+private:
   int m_final_xshift, m_final_yshift;
   int m_final_width, m_final_height;
 };
@@ -121,7 +135,7 @@ public:
   inline rgbdata sample_pixel_final (coord_t x, coord_t y)
   {
     coord_t xx, yy;
-    m_scr_to_img.final_to_img (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    m_scr_to_img.final_to_img (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
     return sample_pixel_img (xx, yy);
   }
   inline rgbdata sample_pixel_scr (coord_t x, coord_t y)

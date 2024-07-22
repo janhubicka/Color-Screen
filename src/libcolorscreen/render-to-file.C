@@ -30,6 +30,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
       if (!stitch)
 	{
 	  render_img render (*param, *scan, rparam, 65535);
+	  render.compute_final_range ();
 	  render_width = render.get_final_width ();
 	  render_height = render.get_final_height ();
 	  if (!p->pixel_size)

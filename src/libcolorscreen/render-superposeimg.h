@@ -43,7 +43,7 @@ public:
   rgbdata sample_pixel_final (coord_t x, coord_t y)
   {
     coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - m_final_xshift, y - m_final_yshift, &xx, &yy);
+    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
     coord_t ix, iy;
     m_scr_to_img.to_img (xx, yy, &ix, &iy);
     return sample_pixel_img (ix, iy, xx, yy);
