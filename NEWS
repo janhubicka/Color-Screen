@@ -1,25 +1,30 @@
 Changes in version 1.1
- -  `make check` now executes unit tests and a testsuite for colorscreen
-    features `colorscreen autodetect`, `colorscreen stitch`
-    and `colorscreen render`
- -  removed some now obsolette items (such as original presentation and low
-    quality examples) from the git source tree
- -  automake buildsystem cleaned up and is now more standard.  As a
-    consequence, build not defaults to `-O2 -g`.  We recommend to add
-    `-Ofast -flto` into `CXXFLAGS` as documented in `README.md`.
- -  official binaries are now built with link-time optimization, stripped from
-    debug symbols (reducing package size to about half) and also automatically
-    tested on MacOS to actually work as expected.
- -  fixed occasional crash when rendering Paget and Finlay plates in interpolated
-    mode.
- -  fixed `make examples`
- -  `colorscreen autodetect` now works on stitched projects
- -  Stack size for Windows build was increased so finetune solver works
-    (for unknown reason it works very slowly when run on real Windows; it is
-    fast under wine). This is Issue #6
- -  `--enable-checking` configure option now enables extra runtime sanity
-    checking
- -  fixed text-mode progress info on Windows
- -  cleaned up public API and privatized most of datastructures
+ - New features:
+   - official binaries are now built with link-time optimization, stripped from
+     debug symbols (reducing package size to about half) and also automatically
+     tested on MacOS to actually work as expected.
+   - `colorscreen autodetect` now works on stitched projects
+   - make check` now executes unit tests and a testsuite for colorscreen
+     features `colorscreen autodetect`, `colorscreen stitch`,
+     `colorscreen render` and `colorscreen finetune`.
+     Tests are run regularly on Ubuntu, MacOS Aarch64 and Windows x86 builbots
+ - Bugs fixed:
+   - fixed text-mode progress info on Windows
+   - Fixed problem with nested parallelism in finetune solver.
+   - Stack size for Windows build was increased to avoid finetune solver crash
+   - fixed `make examples`
+   - fixed occasional crash when rendering Paget and Finlay plates in
+     interpolated mode.
+   - tone curves are now correctly saved and resotred
+   - fixed bug in `colorscreen finetune --optimize-screen-channel-blur`
+ - Internal changes:
+   - cleaned up public API and privatized most of datastructures
+   - `--enable-checking` configure option now enables extra runtime sanity
+     checking
+   - automake buildsystem cleaned up and is now more standard.  As a
+     consequence, build not defaults to `-O2 -g`.  We recommend to add
+     `-Ofast -flto` into `CXXFLAGS` as documented in `README.md`.
+   -  removed some now obsolette files from git (such as original presentation
+      and low quality examples) from the git source tree
 
 Version 1.0 was the first public release
