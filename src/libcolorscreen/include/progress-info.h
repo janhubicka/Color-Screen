@@ -122,7 +122,7 @@ public:
   DLL_PUBLIC virtual void resume_stdout () final;
 
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max) final;
-  DLL_PUBLIC virtual void pop (int expected = -1);
+  DLL_PUBLIC virtual void pop (int expected = -1) final;
 
   /* Used internally.  */
   pthread_mutex_t m_exit_lock;
