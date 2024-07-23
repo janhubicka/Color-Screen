@@ -168,6 +168,8 @@ public:
   need_to_grow_left (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
+    if (!width)
+      return true;
     int xo = width == 1 ? 0 : 1;
     for (int y = 0; y < m_height; y++)
       if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
@@ -179,6 +181,8 @@ public:
   need_to_grow_top (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
+    if (!height)
+      return true;
     int yo = height == 1 ? 0 : m_width;
     for (int x = 0; x < m_width; x++)
       if (m_data[x + yo].x >= 0 && m_data[x + yo].x < width
@@ -191,6 +195,8 @@ public:
   {
     /* Avoid missing triangles on corners.  */
     int xo = width == 1 ? 0 : width - 2;
+    if (!width)
+      return true;
     for (int y = 0; y < m_height; y++)
       if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
 	  && m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
@@ -201,6 +207,8 @@ public:
   need_to_grow_bottom (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
+    if (!height)
+      return true;
     int yo = height == 1 ? 0 : (m_height - 2) * m_width;
     for (int x = 0; x < m_width; x++)
       if (m_data[yo + x].x >= 0 && m_data[yo + x].x < width
