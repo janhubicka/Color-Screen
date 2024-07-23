@@ -167,36 +167,44 @@ public:
   bool
   need_to_grow_left (int width, int height)
   {
+    /* Avoid missing triangles on corners.  */
+    int xo = width == 1 ? 0 : 1;
     for (int y = 0; y < m_height; y++)
-      if (m_data[y * m_width].x >= 0 && m_data[y * m_width].x < width
-	  && m_data[y * m_width].y >= 0 && m_data[y * m_width].y < height)
+      if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
+	  && m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
 	return true;
     return false;
   }
   bool
   need_to_grow_top (int width, int height)
   {
+    /* Avoid missing triangles on corners.  */
+    int yo = height == 1 ? 0 : m_width;
     for (int x = 0; x < m_width; x++)
-      if (m_data[x].x >= 0 && m_data[x].x < width
-	  && m_data[x].y >= 0 && m_data[x].y < height)
+      if (m_data[x + yo].x >= 0 && m_data[x + yo].x < width
+	  && m_data[x + yo].y >= 0 && m_data[x + yo].y < height)
 	return true;
     return false;
   }
   bool
   need_to_grow_right (int width, int height)
   {
+    /* Avoid missing triangles on corners.  */
+    int xo = width == 1 ? 0 : width - 2;
     for (int y = 0; y < m_height; y++)
-      if (m_data[y * m_width + m_width - 1].x >= 0 && m_data[y * m_width + m_width - 1].x < width
-	  && m_data[y * m_width + m_width - 1].y >= 0 && m_data[y * m_width + m_width - 1].y < height)
+      if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
+	  && m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
 	return true;
     return false;
   }
   bool
   need_to_grow_bottom (int width, int height)
   {
+    /* Avoid missing triangles on corners.  */
+    int yo = height == 1 ? 0 : (m_height - 2) * m_width;
     for (int x = 0; x < m_width; x++)
-      if (m_data[(m_height - 1) * m_width + x].x >= 0 && m_data[(m_height - 1) * m_width + x].x < width
-	  && m_data[(m_height - 1) * m_width + x].y >= 0 && m_data[(m_height - 1) * m_width + x].y < height)
+      if (m_data[yo + x].x >= 0 && m_data[yo + x].x < width
+	  && m_data[yo + x].y >= 0 && m_data[yo + x].y < height)
       return true;
     return false;
   }
