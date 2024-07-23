@@ -160,7 +160,7 @@ file_progress_info::file_progress_info (FILE *f, bool display, bool print_all_ta
       pthread_mutex_init (&m_exit_lock, NULL);
       pthread_condattr_t condattr;
       pthread_condattr_init(&condattr);
-#if defined (__APPLE__) || defined (_WIN32)
+#if !defined (__APPLE__) && !defined (_WIN32)
       pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC);
 #endif
       pthread_cond_init (&m_exit_cond, &condattr);
