@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include "include/progress-info.h"
 progress_info::progress_info ()
-: m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
+: m_record_time (false), m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
 {
 }
 progress_info::~progress_info ()
@@ -25,6 +25,60 @@ progress_info::pause_stdout ()
 void
 progress_info::resume_stdout ()
 {
+}
+void
+progress_info::set_task (const char *name, uint64_t max)
+{
+  if (debug && m_task)
+    {
+      const char *t = m_task;
+      uint64_t current = m_current;
+      printf ("\ntask %s: finished with %" PRIu64 " steps\n", t, current);
+    }
+  m_current = 0;
+  m_max = max;
+  m_task = name;
+  if (m_record_time)
+    gettimeofday (&m_time, NULL);
+  if (debug)
+    printf ("\ntask %s: %" PRIu64 " steps\n", name, max);
+}
+int
+progress_info::push ()
+{
+  if (pthread_mutex_lock (&m_lock) != 0)
+    perror ("lock");
+  int ret = stack.size ();
+  assert (ret >= 0);
+  stack.push_back ({ m_max, m_current, m_task });
+  if (m_record_time)
+    time_stack.push_back (m_time);
+  m_task = NULL;
+  m_current = 0;
+  m_max = 1;
+  pthread_mutex_unlock (&m_lock);
+  return ret;
+}
+
+/* EXPECTED is return value of push used for sanity checking.  */
+void
+progress_info::pop (int expected)
+{
+  if (pthread_mutex_lock (&m_lock) != 0)
+    perror ("lock");
+  assert (stack.size () > 0);
+  task t = stack.back ();
+  m_current = t.current;
+  m_max = t.max;
+  m_task = t.task;
+  stack.pop_back ();
+  if (m_record_time)
+    {
+      m_time = time_stack.back ();
+      time_stack.pop_back ();
+    }
+  assert (expected == -1 || (int)stack.size () == expected);
+  pthread_mutex_unlock (&m_lock);
 }
 static void *
 thread_start (void *arg)
@@ -63,6 +117,28 @@ thread_start (void *arg)
     }
   return NULL;
 }
+std::vector<progress_info::status>
+progress_info::get_status ()
+{
+  if (pthread_mutex_lock (&m_lock) != 0)
+    perror ("lock");
+  std::vector<status> ret;
+  const char *task = m_task;
+  int max = m_max;
+  int current = m_current;
+  ret.reserve (stack.size () + (task != NULL ? 1 : 0));
+  for (auto s : stack)
+    {
+      float progress = -1;
+      if (s.max > 1)
+	progress =  (float)100.0 * s.current / s.max;
+      ret.push_back ({ s.task, progress });
+    }
+  pthread_mutex_unlock (&m_lock);
+  if (task != NULL)
+    ret.push_back ({ task, max ? (float)100.0 * current / max : 0 });
+  return ret;
+}
 file_progress_info::file_progress_info (FILE *f, bool display, bool print_all_tasks)
 {
   // TODO: For some reason Windows pthread API will not cancel the thread.
@@ -75,6 +151,8 @@ file_progress_info::file_progress_info (FILE *f, bool display, bool print_all_ta
   m_last_printed_len = 0;
   m_exit = false;
   m_print_all_tasks = print_all_tasks && f != NULL;
+  if (m_print_all_tasks)
+    m_record_time = true;
   m_display_progress = false;
   if (display && f)
     {
@@ -138,17 +216,22 @@ file_progress_info::pause_stdout ()
 }
 
 static int 
-print_task (FILE *f, std::vector<progress_info::status> &status, bool finished)
+print_task (FILE *f, std::vector<progress_info::status> &status, timeval *start_time)
 {
   int len;
   bool repeat;
   for (int i = 0; i < status.size () - 1; i++)
     len += fprintf (f, "  ");
   auto s = status [status.size () - 1];
-  if (!finished)
+  if (!start_time)
     len += fprintf (f, "%s\n", s.task);
   else
-    fprintf (f, "... done\n", s.task);
+    {
+      struct timeval end_time;
+      gettimeofday (&end_time, NULL);
+      double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time->tv_sec - start_time->tv_usec/1000000.0;
+      fprintf (f, "... done in %.3fs\n", time);
+    }
   fflush (f);
   return len;
 }
@@ -165,7 +248,10 @@ print_status (FILE *f, std::vector<progress_info::status> &status, int last)
     len = 0;
     for (auto s: status)
       {
-	len += fprintf (f, "%s%s: %2.2f%%", first ? "\r" : " | ", s.task, s.progress);
+	if (s.progress >= 0)
+	  len += fprintf (f, "%s%s: %2.2f%%", first ? "\r" : " | ", s.task, s.progress);
+	else
+	  len += fprintf (f, "%s%s", first ? "\r" : " | ", s.task);
 	first = false;
       }
     if (last > len)
@@ -230,7 +316,7 @@ file_progress_info::set_task (const char *name, uint64_t max)
       if (s.size ())
 	{
 	  pause_stdout ();
-	  print_task (m_file, s, true);
+	  print_task (m_file, s, &m_time);
 	  paused = true;
 	}
     }
@@ -242,7 +328,7 @@ file_progress_info::set_task (const char *name, uint64_t max)
 	{
 	  if (!paused)
 	    pause_stdout ();
-	  print_task (m_file, s, false);
+	  print_task (m_file, s, NULL);
 	  paused = true;
 	}
     }
@@ -259,7 +345,7 @@ file_progress_info::pop (int expected)
       if (s.size ())
 	{
 	  pause_stdout ();
-	  print_task (m_file, s, true);
+	  print_task (m_file, s, &m_time);
 	  paused = true;
 	}
     }

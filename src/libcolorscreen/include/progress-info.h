@@ -31,6 +31,8 @@ public:
   struct status
   {
     const char *task;
+    /* If >= 0 then it is the progress in percent.
+       If negative, then current task has no progress info.  */
     float progress;
     bool
     operator== (const struct status &o) const
@@ -39,23 +41,7 @@ public:
     }
   };
 
-  std::vector<status>
-  get_status ()
-  {
-    if (pthread_mutex_lock (&m_lock) != 0)
-      perror ("lock");
-    std::vector<status> ret;
-    const char *task = m_task;
-    int max = m_max;
-    int current = m_current;
-    ret.reserve (stack.size () + (task != NULL ? 1 : 0));
-    for (auto s : stack)
-      ret.push_back ({ s.task, s.max ? (float)100.0 * s.current / s.max : 0 });
-    pthread_mutex_unlock (&m_lock);
-    if (task != NULL)
-      ret.push_back ({ task, max ? (float)100.0 * current / max : 0 });
-    return ret;
-  }
+  DLL_PUBLIC std::vector<status> get_status ();
 
   void
   cancel ()
@@ -83,21 +69,7 @@ public:
     return false;
   }
 
-  virtual void
-  set_task (const char *name, uint64_t max)
-  {
-    if (debug && m_task)
-      {
-        const char *t = m_task;
-        uint64_t current = m_current;
-        printf ("\ntask %s: finished with %" PRIu64 " steps\n", t, current);
-      }
-    m_current = 0;
-    m_max = max;
-    m_task = name;
-    if (debug)
-      printf ("\ntask %s: %" PRIu64 " steps\n", name, max);
-  }
+  DLL_PUBLIC virtual void set_task (const char *name, uint64_t max);
 
   void
   inc_progress ()
@@ -113,42 +85,18 @@ public:
     m_current = p;
   }
 
-  int
-  push ()
-  {
-    if (pthread_mutex_lock (&m_lock) != 0)
-      perror ("lock");
-    int ret = stack.size ();
-    assert (ret >= 0);
-    stack.push_back ({ m_max, m_current, m_task });
-    m_task = NULL;
-    m_current = 0;
-    m_max = 1;
-    pthread_mutex_unlock (&m_lock);
-    return ret;
-  }
-
+  DLL_PUBLIC int push ();
   /* EXPECTED is return value of push used for sanity checking.  */
-  virtual void
-  pop (int expected = -1)
-  {
-    if (pthread_mutex_lock (&m_lock) != 0)
-      perror ("lock");
-    assert (stack.size () > 0);
-    task t = stack.back ();
-    m_current = t.current;
-    m_max = t.max;
-    m_task = t.task;
-    stack.pop_back ();
-    assert (expected == -1 || (int)stack.size () == expected);
-    pthread_mutex_unlock (&m_lock);
-  }
+  DLL_PUBLIC virtual void pop (int expected = -1);
 
   DLL_PUBLIC virtual void pause_stdout ();
   DLL_PUBLIC virtual void resume_stdout ();
 
 protected:
+  /* Set to true to record also m_time.  */
+  bool m_record_time;
   std::atomic<const char *> m_task;
+  struct timeval m_time;
 private:
   static const bool debug = false;
   std::atomic_uint64_t m_max, m_current;
@@ -160,6 +108,7 @@ private:
     const char *task;
   };
   std::vector<task> stack;
+  std::vector<struct timeval> time_stack;
   pthread_mutex_t m_lock;
 };
 

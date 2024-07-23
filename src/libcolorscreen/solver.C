@@ -457,7 +457,7 @@ coord_t
 simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
   if (progress)
-    progress->set_task ("optimizing", 1);
+    progress->set_task ("determing geometry by linear regression", 1);
   return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
 }
 
