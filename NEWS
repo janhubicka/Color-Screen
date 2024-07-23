@@ -19,6 +19,8 @@ Changes in version 1.1
    - fixed occasional crash when rendering Paget and Finlay plates in
      interpolated mode.
    - fixed bug in `colorscreen finetune --optimize-screen-channel-blur`
+   - render images now contains less of unnecesary border along sides
+   - fix small triangles of missing mesh data on the corners of scan.
  - Internal changes:
    - cleaned up public API and privatized large part of libcolorscreen
      datastructures
