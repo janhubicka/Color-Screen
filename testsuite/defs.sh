@@ -105,4 +105,4 @@ dotest() {
 }
 
 TESTDATA=${top_srcdir}/testsuite
-RUNCOLORSCREEN=$WRAP${top_builddir}/src/colorscreen/colorscreen
+RUNCOLORSCREEN="$WRAP${top_builddir}/src/colorscreen/colorscreen --verbose-tasks"

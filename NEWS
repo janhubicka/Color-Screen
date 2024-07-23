@@ -11,6 +11,7 @@ Changes in version 1.1
    - `--enable-checking` configure option now enables extra runtime sanity
      checking.
    - tone curves are now saved to parameter files
+   - `colorscreen --verbose-tasks` print all tasks performed by a given command
  - Bugs fixed:
    - fixed text-mode progress info on Windows
    - Fixed problem with nested parallelism in finetune solver.
