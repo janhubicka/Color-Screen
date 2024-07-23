@@ -92,10 +92,18 @@ public:
     int size = 0;
     uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
-    if (progress)
-      progress->set_task ("unlocking cache", 1);
-    if (pthread_mutex_lock (&lock))
-      abort ();
+
+    /* Do not set task to unlocking cache if object is not locked.  */
+    struct timespec timeoutTime;
+    timeoutTime.tv_nsec = 0;
+    timeoutTime.tv_sec = 0;
+    if (pthread_mutex_timedlock(&lock, &timeoutTime))
+      {
+	if (progress)
+	  progress->set_task ("unlocking cache", 1);
+	if (pthread_mutex_lock (&lock))
+	  abort ();
+      }
     time++;
     for (e = entries; e; e = e->next)
       {

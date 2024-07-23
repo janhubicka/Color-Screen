@@ -63,7 +63,7 @@ thread_start (void *arg)
     }
   return NULL;
 }
-file_progress_info::file_progress_info (FILE *f, bool display)
+file_progress_info::file_progress_info (FILE *f, bool display, bool print_all_tasks)
 {
   // TODO: For some reason Windows pthread API will not cancel the thread.
 //#ifdef _WIN32
@@ -74,16 +74,22 @@ file_progress_info::file_progress_info (FILE *f, bool display)
   m_displayed = 0;
   m_last_printed_len = 0;
   m_exit = false;
-  pthread_mutex_init (&m_exit_lock, NULL);
-  pthread_condattr_t condattr;
-  pthread_condattr_init(&condattr);
-#ifndef __APPLE__
-  pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC);
+  m_print_all_tasks = print_all_tasks && f != NULL;
+  m_display_progress = false;
+  if (display && f)
+    {
+      m_display_progress = true;
+      pthread_mutex_init (&m_exit_lock, NULL);
+      pthread_condattr_t condattr;
+      pthread_condattr_init(&condattr);
+#if defined (__APPLE__) || defined (_WIN32)
+      pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC);
 #endif
-  pthread_cond_init (&m_exit_cond, &condattr);
-  if (!f || !display)
-    return;
-  resume_stdout ();
+      pthread_cond_init (&m_exit_cond, &condattr);
+      if (!f || !display)
+	return;
+      resume_stdout ();
+    }
 }
 file_progress_info::~file_progress_info ()
 {
@@ -98,7 +104,7 @@ clear_task (FILE *f, int len)
 void
 file_progress_info::pause_stdout (bool final)
 {
-  if (!m_initialized)
+  if (!m_initialized || !m_display_progress)
     return;
   pthread_mutex_lock (&m_exit_lock);
   m_exit = true;
@@ -132,6 +138,22 @@ file_progress_info::pause_stdout ()
 }
 
 static int 
+print_task (FILE *f, std::vector<progress_info::status> &status, bool finished)
+{
+  int len;
+  bool repeat;
+  for (int i = 0; i < status.size () - 1; i++)
+    len += fprintf (f, "  ");
+  auto s = status [status.size () - 1];
+  if (!finished)
+    len += fprintf (f, "%s\n", s.task);
+  else
+    fprintf (f, "... done\n", s.task);
+  fflush (f);
+  return len;
+}
+
+static int 
 print_status (FILE *f, std::vector<progress_info::status> &status, int last)
 {
   int len;
@@ -160,7 +182,7 @@ print_status (FILE *f, std::vector<progress_info::status> &status, int last)
 void
 file_progress_info::resume_stdout ()
 {
-  if (m_initialized || !m_file)
+  if (m_initialized || !m_file || !m_display_progress)
     return;
   if (m_displayed)
     {
@@ -196,4 +218,52 @@ file_progress_info::display_progress ()
 	}
       fflush (m_file);
     }
+}
+
+void
+file_progress_info::set_task (const char *name, uint64_t max)
+{
+  bool paused = false;
+  if (m_task && m_print_all_tasks)
+    {
+      auto s = get_status ();
+      if (s.size ())
+	{
+	  pause_stdout ();
+	  print_task (m_file, s, true);
+	  paused = true;
+	}
+    }
+  progress_info::set_task (name, max);
+  if (m_print_all_tasks)
+    {
+      auto s = get_status ();
+      if (s.size ())
+	{
+	  if (!paused)
+	    pause_stdout ();
+	  print_task (m_file, s, false);
+	  paused = true;
+	}
+    }
+  if (paused)
+    resume_stdout ();
+}
+void
+file_progress_info::pop (int expected)
+{
+  bool paused = false;
+  if (m_task && m_print_all_tasks)
+    {
+      auto s = get_status ();
+      if (s.size ())
+	{
+	  pause_stdout ();
+	  print_task (m_file, s, true);
+	  paused = true;
+	}
+    }
+  progress_info::pop ();
+  if (paused)
+    resume_stdout ();
 }

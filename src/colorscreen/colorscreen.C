@@ -10,6 +10,7 @@
 #include "../libcolorscreen/include/stitch.h"
 
 static bool verbose = false;
+static bool verbose_tasks = false;
 const char *binname;
 
 /* Utilities to report time eneeded for a given operation.
@@ -373,6 +374,27 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val, int m
   return true;
 }
 
+bool
+parse_common_flags (int argc, char **argv, int *i)
+{
+  if (!strcmp (argv[*i], "--help") || !strcmp (argv[*i], "-h"))
+    {
+      print_help();
+      return true;
+    }
+  else if (!strcmp (argv[*i], "--verbose") || !strcmp (argv[*i], "-v"))
+    {
+      verbose = true;
+      return true;
+    }
+  else if (!strcmp (argv[*i], "--verbose-tasks"))
+    {
+      verbose_tasks = true;
+      return true;
+    }
+  return false;
+}
+
 static int
 render (int argc, char **argv)
 {
@@ -396,10 +418,8 @@ render (int argc, char **argv)
 
   for (int i = 0; i < argc; i++)
     {
-      if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
-	print_help();
-      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
-	verbose = true;
+      if (parse_common_flags (argc, argv, &i))
+	;
       else if (const char *str = arg_with_param (argc, argv, &i, "mode"))
 	rtparam.type = parse_mode (str);
       else if (!strcmp (argv[i], "--hdr"))
@@ -438,7 +458,7 @@ render (int argc, char **argv)
     }
   if (!infname || !cspname || !rfparams.filename)
     print_help ();
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
 
   /* Load scan data.  */
   image_data scan;
@@ -587,10 +607,8 @@ autodetect (int argc, char **argv)
   for (int i = 0; i < argc; i++)
     {
       float flt;
-      if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
-	print_help();
-      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
-	verbose = true;
+      if (parse_common_flags (argc, argv, &i))
+	;
       else if (const char *str = arg_with_param (argc, argv, &i, "par"))
 	cspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "report"))
@@ -652,7 +670,7 @@ autodetect (int argc, char **argv)
     }
   if (!outname)
     print_help ();
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   scr_to_img_parameters param;
   render_parameters rparam;
   solver_parameters solver_param;
@@ -800,7 +818,7 @@ analyze_backlight (int argc, char **argv)
 
   if (argc < 2 || argc > 3)
     print_help ();
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
   if (!scan.load (argv[0], false, &error, &progress))
     {
@@ -861,7 +879,7 @@ export_lcc (int argc, char **argv)
 
   if (argc < 2 || argc > 3)
     print_help ();
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
   if (!scan.load (argv[0], false, &error, &progress))
     {
@@ -1408,10 +1426,8 @@ finetune (int argc, char **argv)
   
   for (int i = 0; i < argc; i++)
     {
-      if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h"))
-	print_help();
-      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
-	verbose = true;
+      if (parse_common_flags (argc, argv, &i))
+	;
       else if (!strcmp (argv[i], "--optimize-position"))
 	flags |= finetune_position;
       else if (!strcmp (argv[i], "--optimize-fog"))
@@ -1463,7 +1479,7 @@ finetune (int argc, char **argv)
   if (!infname || !cspname || !flags)
     print_help ();
   flags |= finetune_no_progress_report;
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
   if (verbose)
     {
@@ -1896,7 +1912,7 @@ dump_patch_density (int argc, char **argv)
   if (argc != 3)
     print_help ();
   verbose = 1;
-  file_progress_info progress (verbose ? stdout : NULL);
+  file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
   if (!scan.load (argv[0], false, &error, &progress))
     {
@@ -1952,10 +1968,10 @@ stitch(int argc, char **argv)
   for (int i = 0; i < argc; i++)
     {
       float flt;
-      if (const char *str = arg_with_param (argc, argv, &i, "report"))
+      if (parse_common_flags (argc, argv, &i))
+	;
+      else if (const char *str = arg_with_param (argc, argv, &i, "report"))
 	prj->params.report_filename = str;
-      else if (!strcmp (argv[i], "--verbose") || !strcmp (argv[i], "-v"))
-	verbose = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "par"))
 	prj->params.csp_filename = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "hugin-pto"))
@@ -2130,7 +2146,7 @@ stitch(int argc, char **argv)
     }
 
   {
-    file_progress_info progress (verbose ? stdout : NULL);
+    file_progress_info progress (stdout, verbose, verbose_tasks);
     if (!prj->stitch (&progress, load_project_filename))
       return 1;
   }
@@ -2158,29 +2174,39 @@ main (int argc, char **argv)
 {
   binname = argv[0];
   int ret = 0;
-  if (argc == 1)
+  argv++;
+  argc-=1;
+  int i;
+  for (i = 0; i < argc; i++)
+    if (parse_common_flags (argc, argv, &i))
+      ;
+    else
+      break;
+  argv += i;
+  argc -= i;
+  if (argc == 0)
     print_help ();
-  else if (!strcmp (argv[1], "render"))
-    ret = render (argc-2, argv+2);
-  else if (!strcmp (argv[1], "autodetect"))
-    ret = autodetect (argc-2, argv+2);
-  else if (!strcmp (argv[1], "analyze-backlight"))
-    analyze_backlight (argc-2, argv+2);
-  else if (!strcmp (argv[1], "finetune"))
-    finetune (argc-2, argv+2);
-  else if (!strcmp (argv[1], "export-lcc"))
-    export_lcc (argc-2, argv+2);
-  else if (!strcmp (argv[1], "dump-lcc"))
-    dump_lcc (argc-2, argv+2);
-  else if (!strcmp (argv[1], "stitch"))
-    ret = stitch (argc-2, argv+2);
-  else if (!strcmp (argv[1], "dump-patch-density"))
-    ret = dump_patch_density (argc-2, argv+2);
-  else if (!strcmp (argv[1], "digital-laboratory")
-	   || !strcmp (argv[1], "lab"))
-    digital_laboratory (argc-2, argv+2);
-  else if (!strcmp (argv[1], "read-chemcad-spectra"))
-    read_chemcad (argc-2, argv+2);
+  else if (!strcmp (argv[0], "render"))
+    ret = render (argc-1, argv+1);
+  else if (!strcmp (argv[0], "autodetect"))
+    ret = autodetect (argc-1, argv+1);
+  else if (!strcmp (argv[0], "analyze-backlight"))
+    analyze_backlight (argc-1, argv+1);
+  else if (!strcmp (argv[0], "finetune"))
+    finetune (argc-1, argv+1);
+  else if (!strcmp (argv[0], "export-lcc"))
+    export_lcc (argc-1, argv+1);
+  else if (!strcmp (argv[0], "dump-lcc"))
+    dump_lcc (argc-1, argv+1);
+  else if (!strcmp (argv[0], "stitch"))
+    ret = stitch (argc-1, argv+1);
+  else if (!strcmp (argv[0], "dump-patch-density"))
+    ret = dump_patch_density (argc-1, argv+1);
+  else if (!strcmp (argv[0], "digital-laboratory")
+	   || !strcmp (argv[0], "lab"))
+    digital_laboratory (argc-1, argv+1);
+  else if (!strcmp (argv[0], "read-chemcad-spectra"))
+    read_chemcad (argc-1, argv+1);
   else
     print_help ();
   return ret;

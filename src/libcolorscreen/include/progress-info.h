@@ -83,7 +83,7 @@ public:
     return false;
   }
 
-  void
+  virtual void
   set_task (const char *name, uint64_t max)
   {
     if (debug && m_task)
@@ -129,7 +129,7 @@ public:
   }
 
   /* EXPECTED is return value of push used for sanity checking.  */
-  void
+  virtual void
   pop (int expected = -1)
   {
     if (pthread_mutex_lock (&m_lock) != 0)
@@ -147,9 +147,10 @@ public:
   DLL_PUBLIC virtual void pause_stdout ();
   DLL_PUBLIC virtual void resume_stdout ();
 
+protected:
+  std::atomic<const char *> m_task;
 private:
   static const bool debug = false;
-  std::atomic<const char *> m_task;
   std::atomic_uint64_t m_max, m_current;
   std::atomic_bool m_cancel;
   std::atomic_bool m_cancelled;
@@ -165,7 +166,7 @@ private:
 class file_progress_info : public progress_info
 {
 public:
-  DLL_PUBLIC file_progress_info (FILE *f, bool display = true);
+  DLL_PUBLIC file_progress_info (FILE *f, bool display = true, bool print_all_tasks = false);
   DLL_PUBLIC ~file_progress_info ();
   void display_progress ();
   DLL_PUBLIC virtual void pause_stdout () final;
@@ -174,8 +175,12 @@ public:
   pthread_mutex_t m_exit_lock;
   pthread_cond_t m_exit_cond;
   std::atomic<bool> m_exit;
+  virtual void set_task (const char *name, uint64_t max) final;
+  virtual void pop (int expected = -1);
 
 private:
+  bool m_print_all_tasks;
+  bool m_display_progress;
   void pause_stdout (bool final);
   FILE *m_file;
   pthread_t m_thread;
