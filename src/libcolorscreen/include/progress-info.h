@@ -121,11 +121,13 @@ public:
   DLL_PUBLIC virtual void pause_stdout () final;
   DLL_PUBLIC virtual void resume_stdout () final;
 
+  DLL_PUBLIC virtual void set_task (const char *name, uint64_t max) final;
+  DLL_PUBLIC virtual void pop (int expected = -1);
+
+  /* Used internally.  */
   pthread_mutex_t m_exit_lock;
   pthread_cond_t m_exit_cond;
   std::atomic<bool> m_exit;
-  virtual void set_task (const char *name, uint64_t max) final;
-  virtual void pop (int expected = -1);
 
 private:
   bool m_print_all_tasks;
