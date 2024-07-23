@@ -97,7 +97,7 @@ public:
     struct timespec timeoutTime;
     timeoutTime.tv_nsec = 0;
     timeoutTime.tv_sec = 0;
-    if (pthread_mutex_timedlock(&lock, &timeoutTime))
+    if (/*pthread_mutex_timedlock(&lock, &timeoutTime)*/ true)
       {
 	if (progress)
 	  progress->set_task ("unlocking cache", 1);
