@@ -14,8 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: melusina-org/setup-macports@v1
-        with:
-          parameters: 'testsuite/run-testsuite-on-macos-12.yaml'
+      with:
+        parameters: 'testsuite/run-testsuite-on-macos-12.yaml'
     - name: Install libtiff
       run: brew install -v libtiff
     - name: Install libjpeg-turbo
