@@ -32,7 +32,7 @@ jobs:
     - name: Install dynlibbundler
       run: brew install -v dylibbundler
     - name: configure
-      run: CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
+      run: CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libtiff.a /opt/homebrew/opt/libomp/lib/libomp.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
     - name: make
       run: make
     - name: make check
