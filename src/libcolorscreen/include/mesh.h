@@ -168,9 +168,9 @@ public:
   need_to_grow_left (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
-    if (!width)
+    if (!m_width)
       return true;
-    int xo = width == 1 ? 0 : 1;
+    int xo = m_width == 1 ? 0 : 1;
     for (int y = 0; y < m_height; y++)
       if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
 	  && m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
@@ -181,9 +181,9 @@ public:
   need_to_grow_top (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
-    if (!height)
+    if (!m_height)
       return true;
-    int yo = height == 1 ? 0 : m_width;
+    int yo = m_height == 1 ? 0 : m_width;
     for (int x = 0; x < m_width; x++)
       if (m_data[x + yo].x >= 0 && m_data[x + yo].x < width
 	  && m_data[x + yo].y >= 0 && m_data[x + yo].y < height)
@@ -194,9 +194,9 @@ public:
   need_to_grow_right (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
-    int xo = width == 1 ? 0 : width - 2;
-    if (!width)
+    if (!m_width)
       return true;
+    int xo = m_width == 1 ? 0 : m_width - 2;
     for (int y = 0; y < m_height; y++)
       if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
 	  && m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
@@ -207,9 +207,9 @@ public:
   need_to_grow_bottom (int width, int height)
   {
     /* Avoid missing triangles on corners.  */
-    if (!height)
+    if (!m_height)
       return true;
-    int yo = height == 1 ? 0 : (m_height - 2) * m_width;
+    int yo = m_height == 1 ? 0 : (m_height - 2) * m_width;
     for (int x = 0; x < m_width; x++)
       if (m_data[yo + x].x >= 0 && m_data[yo + x].x < width
 	  && m_data[yo + x].y >= 0 && m_data[yo + x].y < height)
