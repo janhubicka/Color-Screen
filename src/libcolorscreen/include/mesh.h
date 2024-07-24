@@ -1,44 +1,39 @@
 #ifndef MESH_H
 #define MESH_H
-#include "matrix.h"
+#include "dllpublic.h"
 #include "base.h"
+#include "matrix.h"
 
 
 class mesh
 {
-  static const bool debug = false;
+  static const bool debug = colorscreen_checking;
 
 public:
   /* Conserve memory; we do not need to be that precise here since we
-   * interpolate across small regions.  */
+     interpolate across small regions.  */
   typedef float mesh_coord_t;
 
   mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
         int width, int height);
-  ~mesh ()
-  {
-    free (m_data);
-    free (m_invdata);
-  }
+  DLL_PUBLIC ~mesh ();
   struct mesh_point
   {
     mesh_coord_t x, y;
   };
   void
-  set_point (int x, int y, coord_t xx, coord_t yy)
+  set_point (int_point_t src, point_t dst)
   {
-    if (debug && (y < 0 || y >= m_height || x < 0 || x >= m_width))
+    if (debug && (src.y < 0 || src.y >= m_height || src.x < 0 || src.x >= m_width))
       abort ();
-    m_data[y * m_width + x].x = xx;
-    m_data[y * m_width + x].y = yy;
+    m_data[src.y * m_width + src.x] = {(mesh_coord_t)dst.x, (mesh_coord_t)dst.y};
   }
-  void
-  get_point (int x, int y, coord_t *xx, coord_t *yy) const
+  pure_attr point_t
+  get_point (int_point_t p) const
   {
-    if (debug && (y < 0 || y >= m_height || x < 0 || x >= m_width))
+    if (debug && (p.y < 0 || p.y >= m_height || p.x < 0 || p.x >= m_width))
       abort ();
-    *xx = m_data[y * m_width + x].x;
-    *yy = m_data[y * m_width + x].y;
+    return {(coord_t) m_data[p.y * m_width + p.x].x, (coord_t) m_data[p.y * m_width + p.x].y};
   }
   point_t pure_attr
   apply (point_t p) const
@@ -215,11 +210,6 @@ private:
     matrix2x2<mesh_coord_t> m (dx1, -dx2, dy1, -dy2);
     m = m.invert ();
     m.apply_to_vector (x2 - x1, y2 - y1, a, b);
-#if 0
-    m.print (stderr);
-    printf ("%f %f\n", x1 + dx1 * *a, x2 + dx2 * *b);
-    printf ("%f %f\n", y1 + dy1 * *a, y2 + dy2 * *b);
-#endif
   }
 
   /* Smoothly map triangle (0,0), (1,0), (1,1) to trangle z, x, y */

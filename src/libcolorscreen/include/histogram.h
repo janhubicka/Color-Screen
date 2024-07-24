@@ -6,8 +6,10 @@
 class histogram
 {
 public:
-  histogram()
-  : m_minval (std::numeric_limits<luminosity_t>::max ()), m_maxval (std::numeric_limits<luminosity_t>::min ()), m_inv (0), m_entries (), m_total (-1)
+  histogram ()
+      : m_minval (std::numeric_limits<luminosity_t>::max ()),
+        m_maxval (std::numeric_limits<luminosity_t>::min ()), m_inv (0),
+        m_entries (), m_total (-1)
   {
   }
 
@@ -20,7 +22,8 @@ public:
   }
 
   /* Once range is known allocate the histogram.  */
-  inline void finalize_range (int nvals)
+  inline void
+  finalize_range (int nvals)
   {
     if (m_minval == m_maxval)
       m_maxval = m_minval + 0.00001;
@@ -29,39 +32,41 @@ public:
   }
 
   /* Alternative way to initialize histogram if range is known.  */
-  inline void set_range (luminosity_t minval, luminosity_t maxval, int nvals)
+  inline void
+  set_range (luminosity_t minval, luminosity_t maxval, int nvals)
   {
     if (m_minval != m_maxval)
       abort ();
     m_minval = minval;
     m_maxval = maxval;
     finalize_range (nvals);
-    //std::fill (m_entries.begin (), m_entries.end (), 0);
+    // std::fill (m_entries.begin (), m_entries.end (), 0);
   }
 
-
   /* Turn value intro index of entry in the value histogram.  */
-  inline int
-  val_to_index (luminosity_t val)
+  pure_attr inline int
+  val_to_index (luminosity_t val) const
   {
     if (val >= m_minval && val <= m_maxval)
       {
-	int entry = (val - m_minval) * m_inv;
-	if (entry == (int)m_entries.size ())
-	  entry--;
-	return entry;
+        int entry = (val - m_minval) * m_inv;
+        if (entry == (int)m_entries.size ())
+          entry--;
+        return entry;
       }
     return -1;
   }
 
   /* turn in histogram to typical value.  */
-  inline luminosity_t
-  index_to_val (luminosity_t entry)
+  pure_attr inline luminosity_t 
+  index_to_val (luminosity_t entry) const
   {
-    return m_minval + (entry + 0.5) * ((m_maxval - m_minval) / m_entries.size ());
+    return m_minval
+           + (entry + 0.5) * ((m_maxval - m_minval) / m_entries.size ());
   }
 
-  /* Account value to histogram. Return true if it fits in the range and was accounted.  */
+  /* Account value to histogram. Return true if it fits in the range and was
+   * accounted.  */
   inline bool
   account (luminosity_t val)
   {
@@ -71,7 +76,7 @@ public:
     if ((idx = val_to_index (val)) >= 0)
       {
         m_entries[idx]++;
-	return true;
+        return true;
       }
     return false;
   }
@@ -89,8 +94,8 @@ public:
   }
 
   /* Find minimal value after cutting off total*skip elements.  */
-  luminosity_t
-  find_min (luminosity_t skip)
+  pure_attr luminosity_t
+  find_min (luminosity_t skip) const
   {
     if (m_total == -1)
       abort ();
@@ -98,19 +103,19 @@ public:
       return m_minval;
     int threshold = (m_total * skip) + 0.5;
     int sum = 0;
-    //printf ("Threshold %i total %i\n", threshold, m_total);
+    // printf ("Threshold %i total %i\n", threshold, m_total);
     for (int i = 0; i < (int)m_entries.size (); i++)
       {
-	sum += m_entries[i];
-	//printf ("%i %i %i %f\n",i,sum, m_entries[i], index_to_val (i));
-	if (sum > threshold)
-	  return i ? index_to_val (i - 1) : m_minval;
+        sum += m_entries[i];
+        // printf ("%i %i %i %f\n",i,sum, m_entries[i], index_to_val (i));
+        if (sum > threshold)
+          return i ? index_to_val (i - 1) : m_minval;
       }
     return m_minval;
   }
   /* Find maximal value after cutting off total*skip elements.  */
-  luminosity_t
-  find_max (luminosity_t skip)
+  pure_attr luminosity_t
+  find_max (luminosity_t skip) const
   {
     if (m_total == -1)
       abort ();
@@ -120,15 +125,17 @@ public:
     int sum = 0;
     for (int i = (int)m_entries.size () - 1; i >= 0; i--)
       {
-	sum += m_entries[i];
-	if (sum > threshold)
-	  return i ==  (int)m_entries.size () - 1 ? m_maxval : index_to_val (i + 1);
+        sum += m_entries[i];
+        if (sum > threshold)
+          return i == (int)m_entries.size () - 1 ? m_maxval
+                                                 : index_to_val (i + 1);
       }
     return m_maxval;
   }
-  /* return robust average skiping skip_min & skip_max ratio of extreme points.  */
-  luminosity_t
-  find_avg (luminosity_t skip_min = 0, luminosity_t skip_max = 0)
+  /* return robust average skiping skip_min & skip_max ratio of extreme points.
+   */
+  pure_attr luminosity_t
+  find_avg (luminosity_t skip_min = 0, luminosity_t skip_max = 0) const
   {
     if (m_total == -1)
       abort ();
@@ -138,19 +145,19 @@ public:
     unsigned int threshold = (m_total * skip_min) + 0.5;
     for (mini = 0; mini < (int)m_entries.size (); mini++)
       {
-	if (sum1 + m_entries[mini] > threshold)
-	  break;
-	sum1 += m_entries[mini];
+        if (sum1 + m_entries[mini] > threshold)
+          break;
+        sum1 += m_entries[mini];
       }
     unsigned int sum2 = 0;
     threshold = (m_total * skip_max) + 0.5;
     for (maxi = (int)m_entries.size () - 1; maxi >= 0; maxi--)
       {
-	if (sum2 + m_entries[maxi] > threshold)
-	  break;
-	sum2 += m_entries[maxi];
+        if (sum2 + m_entries[maxi] > threshold)
+          break;
+        sum2 += m_entries[maxi];
       }
-    if (sum1 + sum2 >= (unsigned) m_total)
+    if (sum1 + sum2 >= (unsigned)m_total)
       abort ();
     if (mini > maxi)
       abort ();
@@ -158,30 +165,28 @@ public:
     for (int i = mini; i <= maxi; i++)
       {
         wsum += m_entries[i] * i;
-	sum += m_entries[i];
+        sum += m_entries[i];
       }
     return index_to_val (wsum / ((luminosity_t)sum));
   }
 
-  int num_samples ()
+  int
+  num_samples () const
   {
     return m_total;
   }
 
 private:
-
   luminosity_t m_minval, m_maxval;
   luminosity_t m_inv;
   std::vector<unsigned int> m_entries;
   int m_total;
 };
 
-class
-rgb_histogram
+class rgb_histogram
 {
 public:
-  rgb_histogram()
-  { }
+  rgb_histogram () {}
   inline void
   pre_account (rgbdata val)
   {
@@ -217,36 +222,34 @@ public:
     m_histogram[1].account (val[1]);
     m_histogram[2].account (val[2]);
   }
-  rgbdata
-  find_min (luminosity_t skip)
+  pure_attr rgbdata
+  find_min (luminosity_t skip) const
   {
-    return {m_histogram[0].find_min (skip),
-            m_histogram[1].find_min (skip),
-            m_histogram[2].find_min (skip)};
+    return { m_histogram[0].find_min (skip), m_histogram[1].find_min (skip),
+             m_histogram[2].find_min (skip) };
   }
-  rgbdata
-  find_max (luminosity_t skip)
+  pure_attr rgbdata
+  find_max (luminosity_t skip) const
   {
-    return {m_histogram[0].find_max (skip),
-            m_histogram[1].find_max (skip),
-            m_histogram[2].find_max (skip)};
+    return { m_histogram[0].find_max (skip), m_histogram[1].find_max (skip),
+             m_histogram[2].find_max (skip) };
   }
-  rgbdata
-  find_avg (luminosity_t skipmin = 0, luminosity_t skipmax = 0)
+  pure_attr rgbdata
+  find_avg (luminosity_t skipmin = 0, luminosity_t skipmax = 0) const
   {
-    return {m_histogram[0].find_avg (skipmin,skipmax),
-            m_histogram[1].find_avg (skipmin,skipmax),
-            m_histogram[2].find_avg (skipmin,skipmax)};
+    return { m_histogram[0].find_avg (skipmin, skipmax),
+             m_histogram[1].find_avg (skipmin, skipmax),
+             m_histogram[2].find_avg (skipmin, skipmax) };
   }
 
-  int
-  num_samples ()
+  pure_attr int
+  num_samples () const
   {
     return std::min (std::min (m_histogram[0].num_samples (),
-			       m_histogram[1].num_samples ()),
-			       m_histogram[2].num_samples ());
-
+                               m_histogram[1].num_samples ()),
+                     m_histogram[2].num_samples ());
   }
+
 private:
   histogram m_histogram[3];
 };

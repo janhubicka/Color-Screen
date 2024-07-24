@@ -662,7 +662,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 		if (i == 100)
 		  printf ("Osclation instability\n");
 	      }
-	    mesh_trans->set_point (x,y, xx, yy);
+	    mesh_trans->set_point ({x,y}, {xx, yy});
 	    if (progress)
 	      progress->inc_progress ();
 	  }
@@ -717,7 +717,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_para
 	//h.print (stdout);
        //printf ("%f %f %f %f\n",sx,sy,xx,yy);
     }
-  mesh_trans->set_point (x,y, xx, yy);
+  mesh_trans->set_point ({x,y}, {xx, yy});
 }
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)
