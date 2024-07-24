@@ -1,7 +1,13 @@
 #ifndef SCR_TO_IMG_PARAMETERS_H
 #define SCR_TO_IMG_PARAMETERS_H
+#include <cmath>
 #include "base.h"
 #include "dllpublic.h"
+
+/* Windows does not seem to define this by default.  */
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
 class render;
 struct render_parameters;
 
