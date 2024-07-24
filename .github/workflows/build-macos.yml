@@ -33,9 +33,7 @@ jobs:
       run: brew install -v dylibbundler
     - name: configure
       run: |
-        ls -l /opt/homebrew/opt/libomp/lib/*
-        find / -name libtiff*.a
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-l /opt/homebrew/Cellar/libtiff/*/lib/libtiff.a -l /opt/homebrew/Cellar/jpeg-turbo/*/lib/libturbojpeg.a -l /opt/homebrew/opt/libomp/lib/libomp.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
+        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="-l /opt/homebrew/lib/libtiff.a -l /opt/homebrew/lib/libturbojpeg.a -l /opt/homebrew/opt/libomp/lib/libomp.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
