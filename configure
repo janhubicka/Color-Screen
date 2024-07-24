@@ -813,6 +813,7 @@ with_sysroot
 enable_libtool_lock
 enable_maintainer_mode
 enable_openmp
+enable_dependencies
 with_libtiff
 with_libjpeg
 with_libraw
@@ -1483,6 +1484,7 @@ Optional Features:
                           enable make rules and dependencies not useful (and
                           sometimes confusing) to the casual installer
   --disable-openmp        do not use OpenMP
+--enable-dependencies   enable learch for dependencies
 --enable-checking   enable checking
 --enable-gtkgui     enable gtk2 based gui interface
 --enable-render-extra     enable additional render
@@ -19709,6 +19711,18 @@ then :
 
 fi
 
+dependencies=yes
+# Check whether --enable-dependencies was given.
+if test ${enable_dependencies+y}
+then :
+  enableval=$enable_dependencies; dependencies=no
+else case e in #(
+  e) dependencies=yes ;;
+esac
+fi
+
+if test "$dependencies" == "yes"
+then
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for cblas_dgemm in -lgslcblas" >&5
 printf %s "checking for cblas_dgemm in -lgslcblas... " >&6; }
 if test ${ac_cv_lib_gslcblas_cblas_dgemm+y}
@@ -20184,6 +20198,8 @@ then :
 else case e in #(
   e)  echo " * * * try option --with-liblcms2=PATH" ;;
 esac
+fi
+
 fi
 
 fi

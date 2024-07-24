@@ -21,6 +21,10 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 AC_SEARCH_LIBS([sqrt], [m])
 AC_CHECK_LIB([m],[cos])
+dependencies=yes
+AC_ARG_ENABLE(dependencies,[--enable-dependencies   enable learch for dependencies],dependencies=no,dependencies=yes)
+if test "$dependencies" == "yes"
+then
 AC_CHECK_LIB([gslcblas],[cblas_dgemm])
 AC_CHECK_LIB([gsl],[gsl_blas_dgemm])
 
@@ -87,6 +91,8 @@ if test -n "$with_liblcms2"; then echo "option: with_liblcms2 $with_liblcms2"; f
 if test "$with_liblcms2" != "no"; then
 AC_SEARCH_LIBS(cmsCreateRGBProfile,[lcms2],[check_liblcms2_h="lcms2.h"],
  [ echo " * * * try option --with-liblcms2=PATH"])
+fi
+
 fi
 
 # Windows DLL require -no-undefined libtool argument.  Using it on other
