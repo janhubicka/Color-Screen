@@ -19,6 +19,8 @@ jobs:
       run: brew install -v libjpeg-turbo
     - name: Install libzip
       run: brew install -v libzip
+    - name: List libzip
+      run: brew list libzip
     - name: Install libgsl
       run: brew install -v gsl
     - name: Install libraw
