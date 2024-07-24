@@ -17,6 +17,8 @@ jobs:
       run: brew install -v libtiff
     - name: Install libjpeg-turbo
       run: brew install -v libjpeg-turbo
+    - name: Install libzip (port)
+      run: port install  libzip
     - name: Install libzip
       run: brew install -v libzip
     - name: List libzip
