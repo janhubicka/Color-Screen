@@ -7,7 +7,7 @@ mesh::mesh(coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep, int wid
   m_data = (mesh_point *)malloc (width * height * sizeof (mesh_point));
 }
 void
-mesh::print (FILE *f)
+mesh::print (FILE *f) const
 {
   fprintf (f, "Mesh %ix%i shift:%fx%f steps:%fx%f\n", m_width, m_height, m_xshift, m_yshift, m_xstep, m_ystep);
   for (int y = 0; y < m_height; y++)
@@ -105,7 +105,7 @@ mesh::precompute_inverse()
 
 /* Get rectangular range of source coordinates which covers range given by x1,y1,x2,y2 transformed by trans in image coordinates.  */
 void
-mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax)
+mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin, coord_t *ymax) const
 {
 #if 0
   int ixmin = m_width;
@@ -218,7 +218,7 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2, c
 
 
 bool
-mesh::save (FILE *f)
+mesh::save (FILE *f) const
 {
   if (fprintf (f, "  mesh_dimensions: %i %i\n", m_width, m_height) < 0)
     return false;
@@ -314,4 +314,77 @@ mesh::load (FILE *f, const char **error)
       return NULL;
     }
   return m;
+}
+bool
+mesh::grow (int left, int right, int top, int bottom)
+{
+  int new_xshift = m_xshift + left * m_xstep;
+  int new_yshift = m_yshift + top * m_ystep;
+  int new_width = m_width + left + right;
+  int new_height = m_height + top + bottom;
+  assert (!m_invdata);
+  mesh_point *new_data = (mesh_point *)malloc (new_width * new_height * sizeof (mesh_point));
+  if (!new_data)
+    return false;
+  for (int y = 0; y < m_height; y++)
+    memcpy (new_data + (new_width * (y + top) + left), m_data + m_width * y, m_width * sizeof (mesh_point));
+  free (m_data);
+  m_data = new_data;
+  m_width = new_width;
+  m_height = new_height;
+  m_xshift = new_xshift;
+  m_yshift = new_yshift;
+  return true;
+}
+bool
+mesh::need_to_grow_left (int width, int height) const
+{
+  /* Avoid missing triangles on corners.  */
+  if (!m_width)
+    return true;
+  int xo = m_width == 1 ? 0 : 1;
+  for (int y = 0; y < m_height; y++)
+    if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
+	&& m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
+      return true;
+  return false;
+}
+bool
+mesh::need_to_grow_top (int width, int height) const
+{
+  /* Avoid missing triangles on corners.  */
+  if (!m_height)
+    return true;
+  int yo = m_height == 1 ? 0 : m_width;
+  for (int x = 0; x < m_width; x++)
+    if (m_data[x + yo].x >= 0 && m_data[x + yo].x < width
+	&& m_data[x + yo].y >= 0 && m_data[x + yo].y < height)
+      return true;
+  return false;
+}
+bool
+mesh::need_to_grow_right (int width, int height) const
+{
+  /* Avoid missing triangles on corners.  */
+  if (!m_width)
+    return true;
+  int xo = m_width == 1 ? 0 : m_width - 2;
+  for (int y = 0; y < m_height; y++)
+    if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
+	&& m_data[y * m_width + xo].y >= 0 && m_data[y * m_width + xo].y < height)
+      return true;
+  return false;
+}
+bool
+mesh::need_to_grow_bottom (int width, int height) const
+{
+  /* Avoid missing triangles on corners.  */
+  if (!m_height)
+    return true;
+  int yo = m_height == 1 ? 0 : (m_height - 2) * m_width;
+  for (int x = 0; x < m_width; x++)
+    if (m_data[yo + x].x >= 0 && m_data[yo + x].x < width
+	&& m_data[yo + x].y >= 0 && m_data[yo + x].y < height)
+    return true;
+  return false;
 }
