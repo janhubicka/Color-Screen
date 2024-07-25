@@ -26,8 +26,9 @@ void
 progress_info::resume_stdout ()
 {
 }
+/* Negative max is used to announce waiting tasks.  */
 void
-progress_info::set_task (const char *name, uint64_t max)
+progress_info::set_task_1 (const char *name, int64_t max)
 {
   if (debug && m_task)
     {
@@ -42,6 +43,18 @@ progress_info::set_task (const char *name, uint64_t max)
     gettimeofday (&m_time, NULL);
   if (debug)
     printf ("\ntask %s: %" PRIu64 " steps\n", name, max);
+}
+
+void
+progress_info::set_task (const char *name, uint64_t max)
+{
+  set_task_1 (name, max);
+}
+/* Indicate that process is waiting for something, like lock.  */
+void
+progress_info::wait (const char *name)
+{
+  set_task_1 (name, -1);
 }
 int
 progress_info::push ()
@@ -310,7 +323,7 @@ void
 file_progress_info::set_task (const char *name, uint64_t max)
 {
   bool paused = false;
-  if (m_task && m_print_all_tasks)
+  if (m_task && m_print_all_tasks && m_max >= 0)
     {
       auto s = get_status ();
       if (s.size ())
@@ -336,10 +349,28 @@ file_progress_info::set_task (const char *name, uint64_t max)
     resume_stdout ();
 }
 void
+file_progress_info::wait (const char *name)
+{
+  bool paused = false;
+  if (m_task && m_print_all_tasks && m_max >= 0)
+    {
+      auto s = get_status ();
+      if (s.size ())
+	{
+	  pause_stdout ();
+	  print_task (m_file, s, &m_time);
+	  paused = true;
+	}
+    }
+  progress_info::wait (name);
+  if (paused)
+    resume_stdout ();
+}
+void
 file_progress_info::pop (int expected)
 {
   bool paused = false;
-  if (m_task && m_print_all_tasks)
+  if (m_task && m_print_all_tasks && m_max >= 0)
     {
       auto s = get_status ();
       if (s.size ())

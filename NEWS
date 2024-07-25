@@ -1,34 +1,36 @@
 Changes in version 1.1
  - New features:
-   - official binaries are now built with link-time optimization, stripped from
+   - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically
      tested on MacOS to actually work as expected.
-   - `colorscreen autodetect` now works on stitched projects
-   - make check` now executes unit tests and a testsuite for colorscreen
+   - More effective parallelism while rendering files.
+   - `colorscreen autodetect` now works on stitched projects.
+   - Tone curves are now saved to parameter files.
+ - Infrastructure improvements:
+   - `make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,
      `colorscreen render` and `colorscreen finetune`.
      Tests are run regularly on Ubuntu, MacOS Aarch64 and Windows x86 builbots.
    - `--enable-checking` configure option now enables extra runtime sanity
      checking.
-   - tone curves are now saved to parameter files
-   - `colorscreen --verbose-tasks` print all tasks performed by a given command
+   - `colorscreen --verbose-tasks` print all tasks performed.
  - Bugs fixed:
-   - fixed text-mode progress info on Windows
+   - Fixed text-mode progress info on Windows.
    - Fixed problem with nested parallelism in finetune solver.
    - Stack size for Windows build was increased to avoid finetune solver crash
-   - fixed `make examples`
-   - fixed occasional crash when rendering Paget and Finlay plates in
+   - Fixed `make examples`.
+   - Fixed occasional crash when rendering Paget and Finlay plates in
      interpolated mode.
-   - fixed bug in `colorscreen finetune --optimize-screen-channel-blur`
-   - render images now contains less of unnecesary border along sides
-   - fix small triangles of missing mesh data on the corners of scan.
+   - Fixed bug in `colorscreen finetune --optimize-screen-channel-blur`.
+   - Render images now contains less of unnecesary border along sides.
+   - Fixed small triangles of missing mesh data on the corners of scan.
  - Internal changes:
-   - cleaned up public API and privatized large part of libcolorscreen
-     datastructures
-   - automake buildsystem cleaned up and is now more standard.  As a
+   - Cleaned up public API and privatized large part of libcolorscreen
+     datastructures.
+   - Automake buildsystem cleaned up and is now more standard.  As a
      consequence, build no longer defaults to `-O2 -g`.  We recommend to add
      `-Ofast -flto` into `CXXFLAGS` as documented in `README.md`.
-   -  removed some now obsolette files from git (such as original presentation
-      and low quality examples) from the git source tree
+   - Removed some obsolette files from git (such as original presentation
+     and low quality examples) from the git source tree.
 
 Version 1.0 was the first public release

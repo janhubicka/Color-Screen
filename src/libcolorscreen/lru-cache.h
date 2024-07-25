@@ -100,7 +100,7 @@ public:
     if (/*pthread_mutex_timedlock(&lock, &timeoutTime)*/ true)
       {
 	if (progress)
-	  progress->set_task ("unlocking cache", 1);
+	  progress->wait ("unlocking cache");
 	if (pthread_mutex_lock (&lock))
 	  abort ();
       }

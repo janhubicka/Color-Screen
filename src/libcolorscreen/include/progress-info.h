@@ -41,14 +41,17 @@ public:
     }
   };
 
+  /* Return stack of nested tasks and their progress.  */
   DLL_PUBLIC std::vector<status> get_status ();
 
+  /* Request cancel.  */
   void
   cancel ()
   {
     m_cancel = true;
   }
 
+  /* Return true if cancel was exeuted.  */
   bool
   cancelled ()
   {
@@ -69,8 +72,12 @@ public:
     return false;
   }
 
+  /* Set current task to NAME with MAX steps.  */
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max);
+  /* Announce that the process is waiting (i.e. for cache lock).  */
+  DLL_PUBLIC virtual void wait (const char *name);
 
+  /* Increment progress of current task.  */
   void
   inc_progress ()
   {
@@ -79,16 +86,20 @@ public:
       abort ();
   }
 
+  /* Set progress of current taks to given state.  */
   void
   set_progress (uint64_t p)
   {
     m_current = p;
   }
 
+  /* Enter nested tasks; return stack depth.  */
   DLL_PUBLIC int push ();
   /* EXPECTED is return value of push used for sanity checking.  */
   DLL_PUBLIC virtual void pop (int expected = -1);
 
+  /* This needs to be used around standard output so it does not get
+     mixed randomly with progress reports.  */
   DLL_PUBLIC virtual void pause_stdout ();
   DLL_PUBLIC virtual void resume_stdout ();
 
@@ -96,15 +107,17 @@ protected:
   /* Set to true to record also m_time.  */
   bool m_record_time;
   std::atomic<const char *> m_task;
+  std::atomic_int64_t m_max;
   struct timeval m_time;
 private:
+  void set_task_1 (const char *name, int64_t max);
   static const bool debug = false;
-  std::atomic_uint64_t m_max, m_current;
+  std::atomic_int64_t m_current;
   std::atomic_bool m_cancel;
   std::atomic_bool m_cancelled;
   struct task
   {
-    uint64_t max, current;
+    int64_t max, current;
     const char *task;
   };
   std::vector<task> stack;
@@ -122,6 +135,7 @@ public:
   DLL_PUBLIC virtual void resume_stdout () final;
 
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max) final;
+  DLL_PUBLIC virtual void wait (const char *name) final;
   DLL_PUBLIC virtual void pop (int expected = -1) final;
 
   /* Used internally.  */
@@ -135,7 +149,7 @@ private:
   void pause_stdout (bool final);
   FILE *m_file;
   pthread_t m_thread;
-  std::atomic_uint64_t m_displayed;
+  std::atomic_int64_t m_displayed;
   // std::atomic<const char *>m_last_task;
   std::atomic<int> m_last_printed_len;
   std::vector<status> m_last_status;
