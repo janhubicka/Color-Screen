@@ -81,6 +81,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
   int final_xshift, final_yshift, final_width, final_height;
   map.get_final_range (img.width, img.height, &final_xshift, &final_yshift, &final_width, &final_height);
   tiff_writer_params tp;
+  tp.parallel = true;
   tp.filename = p.filename;
   tp.width = p.width;
   tp.height = p.height;
@@ -135,64 +136,66 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
         progress->resume_stdout ();
     }
   if (progress)
-    progress->set_task ("Rendering and saving", p.height);
-  for (int y = 0; y < p.height; y++)
+    progress->set_task ("Rendering and saving", (p.height + out.get_n_rows ()) / out.get_n_rows ());
+  for (int y = 0; y < p.height;)
     {
       if (p.antialias == 1)
 	{
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,map)
-	    for (int x = 0; x < p.width; x++)
-	      {
-		coord_t xx = x * p.xstep + p.xstart;
-		coord_t yy = y * p.ystep + p.ystart;
-		p.common_map->final_to_scr (xx, yy, &xx, &yy);
-		if (!p.pixel_known_p (p.pixel_known_p_data, xx, yy))
-		  {
-		    if (!p.hdr)
-		      out.kill_pixel (x);
-		    else
-		      out.kill_hdr_pixel (x);
-		  }
-		else
-		  {
-		    xx -= p.xpos;
-		    yy -= p.ypos;
-		    rgbdata d = sample_data_scr (render, map, xx, yy);
-		    if (!p.hdr)
-		      {
-			int rr, gg, bb;
-			render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			out.put_pixel (x, rr, gg, bb);
-		      }
-		    else
-		      {
-			luminosity_t rr, gg, bb;
-			render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			out.put_hdr_pixel (x, rr, gg, bb);
-		      }
-		  }
-	      }
+#pragma omp parallel for default(none) shared(p,render,y,out,map) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  p.common_map->final_to_scr (xx, yy, &xx, &yy);
+		  if (!p.pixel_known_p (p.pixel_known_p_data, xx, yy))
+		    {
+		      if (!p.hdr)
+			out.kill_pixel (x, row);
+		      else
+			out.kill_hdr_pixel (x, row);
+		    }
+		  else
+		    {
+		      xx -= p.xpos;
+		      yy -= p.ypos;
+		      rgbdata d = sample_data_scr (render, map, xx, yy);
+		      if (!p.hdr)
+			{
+			  int rr, gg, bb;
+			  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			  out.put_pixel (x, row, rr, gg, bb);
+			}
+		      else
+			{
+			  luminosity_t rr, gg, bb;
+			  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			  out.put_hdr_pixel (x, row, rr, gg, bb);
+			}
+		    }
+		}
 	  else
-#pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift)
-	    for (int x = 0; x < p.width; x++)
-	      {
-		coord_t xx = x * p.xstep + p.xstart;
-		coord_t yy = y * p.ystep + p.ystart;
-		rgbdata d = sample_data_final (render, map, xx, yy, final_xshift, final_yshift);
-		if (!p.hdr)
-		  {
-		    int rr, gg, bb;
-		    render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		    out.put_pixel (x, rr, gg, bb);
-		  }
-		else
-		  {
-		    luminosity_t rr, gg, bb;
-		    render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		    out.put_hdr_pixel (x, rr, gg, bb);
-		  }
-	      }
+#pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  rgbdata d = sample_data_final (render, map, xx, yy, final_xshift, final_yshift);
+		  if (!p.hdr)
+		    {
+		      int rr, gg, bb;
+		      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_pixel (x, row, rr, gg, bb);
+		    }
+		  else
+		    {
+		      luminosity_t rr, gg, bb;
+		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		    }
+		}
 	}
       else
 	{
@@ -200,76 +203,79 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	  coord_t asy = p.ystep / p.antialias;
 	  luminosity_t sc = 1.0 / (p.antialias * p.antialias);
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift, final_yshift)
-	    for (int x = 0; x < p.width; x++)
-	      {
-		coord_t xx = x * p.xstep + p.xstart;
-		coord_t yy = y * p.ystep + p.ystart;
-		coord_t xx2, yy2;
-		p.common_map->final_to_scr (xx, yy, &xx2, &yy2);
-		if (!p.pixel_known_p (p.pixel_known_p_data, xx2, yy2))
-		  {
-		    if (!p.hdr)
-		      out.kill_pixel (x);
-		    else
-		      out.kill_hdr_pixel (x);
-		  }
-		else
-		  {
-		    rgbdata d = {0, 0, 0};
-		    for (int ay = 0 ; ay < p.antialias; ay++)
-		      for (int ax = 0 ; ax < p.antialias; ax++)
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift, final_yshift) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  coord_t xx2, yy2;
+		  p.common_map->final_to_scr (xx, yy, &xx2, &yy2);
+		  if (!p.pixel_known_p (p.pixel_known_p_data, xx2, yy2))
+		    {
+		      if (!p.hdr)
+			out.kill_pixel (x, row);
+		      else
+			out.kill_hdr_pixel (x, row);
+		    }
+		  else
+		    {
+		      rgbdata d = {0, 0, 0};
+		      for (int ay = 0 ; ay < p.antialias; ay++)
+			for (int ax = 0 ; ax < p.antialias; ax++)
+			  {
+			    p.common_map->final_to_scr (xx + ax * asx, yy + ay * asy, &xx2, &yy2);
+			    xx2 -= p.xpos;
+			    yy2 -= p.ypos;
+			    d += sample_data_scr (render, map, xx2 + ax * asx, yy2 + ay * asy);
+			  }
+		      d.red *= sc;
+		      d.green *= sc;
+		      d.blue *= sc;
+		      if (!p.hdr)
 			{
-			  p.common_map->final_to_scr (xx + ax * asx, yy + ay * asy, &xx2, &yy2);
-			  xx2 -= p.xpos;
-			  yy2 -= p.ypos;
-			  d += sample_data_scr (render, map, xx2 + ax * asx, yy2 + ay * asy);
+			  int rr, gg, bb;
+			  render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			  out.put_pixel (x, row, rr, gg, bb);
 			}
-		    d.red *= sc;
-		    d.green *= sc;
-		    d.blue *= sc;
-		    if (!p.hdr)
-		      {
-			int rr, gg, bb;
-			render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			out.put_pixel (x, rr, gg, bb);
-		      }
-		    else
-		      {
-			luminosity_t rr, gg, bb;
-			render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-			out.put_hdr_pixel (x, rr, gg, bb);
-		      }
-		  }
-	      }
+		      else
+			{
+			  luminosity_t rr, gg, bb;
+			  render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+			  out.put_hdr_pixel (x, row, rr, gg, bb);
+			}
+		    }
+		}
 	  else
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift)
-	    for (int x = 0; x < p.width; x++)
-	      {
-		rgbdata d = {0, 0, 0};
-		coord_t xx = x * p.xstep + p.xstart;
-		coord_t yy = y * p.ystep + p.ystart;
-		for (int ay = 0 ; ay < p.antialias; ay++)
-		  for (int ax = 0 ; ax < p.antialias; ax++)
-		    d += sample_data_final (render, map, xx + ax * asx, yy + ay * asy, final_xshift, final_yshift);
-		d.red *= sc;
-		d.green *= sc;
-		d.blue *= sc;
-		if (!p.hdr)
-		  {
-		    int rr, gg, bb;
-		    render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		    out.put_pixel (x, rr, gg, bb);
-		  }
-		else
-		  {
-		    luminosity_t rr, gg, bb;
-		    render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
-		    out.put_hdr_pixel (x, rr, gg, bb);
-		  }
-	      }
-	  }
-      if (!out.write_row ())
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  rgbdata d = {0, 0, 0};
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  for (int ay = 0 ; ay < p.antialias; ay++)
+		    for (int ax = 0 ; ax < p.antialias; ax++)
+		      d += sample_data_final (render, map, xx + ax * asx, yy + ay * asy, final_xshift, final_yshift);
+		  d.red *= sc;
+		  d.green *= sc;
+		  d.blue *= sc;
+		  if (!p.hdr)
+		    {
+		      int rr, gg, bb;
+		      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_pixel (x, row, rr, gg, bb);
+		    }
+		  else
+		    {
+		      luminosity_t rr, gg, bb;
+		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		    }
+		}
+	    }
+      y += out.get_n_rows ();
+      if (!out.write_rows ())
 	return "Write error";
       if (progress && progress->cancel_requested ())
 	return "Cancelled";

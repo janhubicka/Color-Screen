@@ -142,7 +142,20 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 	  return;
 	}
     }
-  outrow = malloc (p.width * (size_t)p.depth * (p.alpha ? 4 : 3) / 8);
+  height = p.height;
+  stride = p.width * (p.alpha ? 4 : 3);
+  bytestride = (size_t)p.depth * stride / 8;
+  /* If parallelism is supported, try to write blocks of at least
+     one megapixel.  */
+  if (p.parallel)
+    {
+      n_rows = (1024*1024 + p.width - 1) / p.width;
+      if (n_rows > height)
+	n_rows = height;
+    }
+  else
+    n_rows = 1;
+  outrow = malloc (bytestride * n_rows);
   if (!outrow)
     {
       *error = "Out of memory allocating output buffer";
@@ -152,15 +165,26 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
     }
 }
 bool
+tiff_writer::write_rows ()
+{
+  for (int i = 0; i < n_rows; i++)
+    {
+      if (TIFFWriteScanline (out, (void *)((char *)outrow + bytestride * i), y++, 0) < 0)
+	{
+	  TIFFClose (out);
+	  out = NULL;
+	  return false;
+	}
+    }
+  if (y + n_rows > height)
+    n_rows = y - height;
+  return true;
+}
+bool
 tiff_writer::write_row ()
 {
-  if (TIFFWriteScanline (out, outrow, y++, 0) < 0)
-    {
-      TIFFClose (out);
-      out = NULL;
-      return false;
-    }
-  return true;
+  assert (colorscreen_checking || get_n_rows () == 1);
+  return write_rows ();
 }
 tiff_writer::~tiff_writer()
 {
