@@ -9,7 +9,7 @@ template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data,
 flatten_attr void
 non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *progress)
 {
-#pragma omp parallel for shared(progress,out,width, height, param, data) default(none)
+#pragma omp parallel for shared(progress,out,width, height, param, data) default(none) if (width * height > 128 * 1024)
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -37,7 +37,7 @@ template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data,
 flatten_attr void
 do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress)
 {
-#pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data) default(none)
+#pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data) default(none) if (width * height > 1024 * 128)
   {
     O *hblur = (O *)calloc (width * clen, sizeof (O));
     luminosity_t *rotated_cmatrix = (luminosity_t *)malloc (clen * sizeof (luminosity_t));

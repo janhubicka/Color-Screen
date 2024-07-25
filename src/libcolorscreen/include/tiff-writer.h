@@ -4,6 +4,9 @@
 #include "base.h"
 #include "color.h"
 #include "dllpublic.h"
+
+class progress_info;
+
 inline uint16_t
 float_to_half (float f)
 {
@@ -94,7 +97,7 @@ public:
   DLL_PUBLIC tiff_writer (tiff_writer_params &p, const char **error);
   DLL_PUBLIC ~tiff_writer ();
   DLL_PUBLIC bool write_row ();
-  DLL_PUBLIC bool write_rows ();
+  DLL_PUBLIC bool write_rows (progress_info *progress = NULL);
   int
   get_n_rows ()
   {

@@ -171,7 +171,6 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
         progress->pause_stdout ();
       printf ("Precomputing\n");
       fflush (stdout);
-      record_time ();
       if (progress)
         progress->resume_stdout ();
     }

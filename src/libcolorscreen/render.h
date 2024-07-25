@@ -767,16 +767,17 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 #define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
-  int size = width * height / (pixelsize * pixelsize);
+  int size = width * height * (pixelsize * pixelsize);
+  bool openmp = size > openmp_size ();
 
-#pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none) if (size > openmp_size ())
+#pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights,openmp) default (none) if (openmp)
   {
     luminosity_t scale = 1 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
 #ifdef _OPENMP
-    int tn = omp_get_thread_num ();
-    int threads = omp_get_max_threads ();
+    int tn = openmp ? omp_get_thread_num () : 1;
+    int threads = openmp ? omp_get_max_threads () : 1;
 #else
     int tn = 0;
     int threads = 1;

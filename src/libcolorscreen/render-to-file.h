@@ -2,32 +2,6 @@
 #include "include/tiff-writer.h"
 
 namespace {
-/* Utilities to report time eneeded for a given operation.
-  
-   Time measurement started.
- 
-   TODO: This is leftover of colorscreen utility and should be integrated
-   with progress_info and removed. */
-static struct timeval start_time;
-
-/* Start measurement.  */
-inline static void
-record_time ()
-{
-  gettimeofday (&start_time, NULL);
-}
-
-/* Finish measurement and output time.  */
-inline static void
-print_time ()
-{
-  struct timeval end_time;
-  gettimeofday (&end_time, NULL);
-  double time =
-    end_time.tv_sec + end_time.tv_usec / 1000000.0 - start_time.tv_sec -
-    start_time.tv_usec / 1000000.0;
-  printf ("  ... done in %.3fs\n", time);
-}
 
 
 template<typename T>
@@ -130,19 +104,18 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	    printf (", vertical PPI %f", p.ydpi);
 	}
       fflush (stdout);
-      record_time ();
       printf ("\n");
       if (progress)
         progress->resume_stdout ();
     }
   if (progress)
-    progress->set_task ("Rendering and saving", (p.height + out.get_n_rows ()) / out.get_n_rows ());
+    progress->set_task ("Rendering and saving", p.height * 2);
   for (int y = 0; y < p.height;)
     {
       if (p.antialias == 1)
 	{
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,map) collapse (2)
+#pragma omp parallel for default(none) shared(p,render,y,out,map,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -174,9 +147,11 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 			  out.put_hdr_pixel (x, row, rr, gg, bb);
 			}
 		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
 		}
 	  else
-#pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift) collapse (2)
+#pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -195,6 +170,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
 		      out.put_hdr_pixel (x, row, rr, gg, bb);
 		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
 		}
 	}
       else
@@ -203,7 +180,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	  coord_t asy = p.ystep / p.antialias;
 	  luminosity_t sc = 1.0 / (p.antialias * p.antialias);
 	  if (p.tile)
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift, final_yshift) collapse (2)
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift, final_yshift,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -245,9 +222,11 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 			  out.put_hdr_pixel (x, row, rr, gg, bb);
 			}
 		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
 		}
 	  else
-#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift) collapse (2)
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
@@ -272,26 +251,20 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
 		      out.put_hdr_pixel (x, row, rr, gg, bb);
 		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
 		}
 	    }
       y += out.get_n_rows ();
-      if (!out.write_rows ())
-	return "Write error";
+      bool ret;
+      ret = out.write_rows (progress);
       if (progress && progress->cancel_requested ())
 	return "Cancelled";
-      if (progress)
-	progress->inc_progress ();
+      if (!ret)
+	return "Write error";
     }
   if (progress)
     progress->set_task ("Closing tiff file", 1);
-  if (p.verbose)
-    {
-      if (progress)
-	progress->pause_stdout ();
-      print_time ();
-      if (progress)
-	progress->resume_stdout ();
-    }
   return NULL;
 }
 template<typename T, rgbdata (sample_data_final)(T &render, scr_to_img &map, coord_t x, coord_t y, int, int), rgbdata (sample_data_scr)(T &render, scr_to_img &map, coord_t x, coord_t y), typename P>
@@ -311,14 +284,6 @@ produce_file (render_to_file_params &rfparams,
     return "Precomputation failed (out of memory)";
   if (progress)
     progress->pop ();
-  if (rfparams.verbose)
-    {
-      if (progress)
-	progress->pause_stdout ();
-      print_time ();
-      if (progress)
-	progress->resume_stdout ();
-    }
 
   // TODO: For HDR output we want to linearize the ICC profile.
   return produce_file<T, sample_data_final, sample_data_scr> (rfparams, sparam, img, render, black, progress);

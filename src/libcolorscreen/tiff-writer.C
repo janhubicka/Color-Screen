@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "include/tiff-writer.h"
+#include "include/progress-info.h"
 
 /* Needed to build at ubuntu-latest.  */
 #ifndef TIFFTAG_FORWARDMATRIX1
@@ -165,19 +166,24 @@ tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
     }
 }
 bool
-tiff_writer::write_rows ()
+tiff_writer::write_rows (progress_info *progress)
 {
   for (int i = 0; i < n_rows; i++)
     {
+      if (progress && progress->cancel_requested ())
+	return false;
       if (TIFFWriteScanline (out, (void *)((char *)outrow + bytestride * i), y++, 0) < 0)
 	{
 	  TIFFClose (out);
 	  out = NULL;
 	  return false;
 	}
+      if (progress)
+        progress->inc_progress ();
     }
+  assert (y <= height);
   if (y + n_rows > height)
-    n_rows = y - height;
+    n_rows = height - y;
   return true;
 }
 bool
