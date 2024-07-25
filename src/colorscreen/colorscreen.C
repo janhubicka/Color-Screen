@@ -13,28 +13,6 @@ static bool verbose = false;
 static bool verbose_tasks = false;
 const char *binname;
 
-/* Utilities to report time eneeded for a given operation.
-  
-   Time measurement started.  */
-static struct timeval start_time;
-
-/* Start measurement.  */
-static void
-record_time ()
-{
-  gettimeofday (&start_time, NULL);
-}
-
-/* Finish measurement and output time.  */
-static void
-print_time ()
-{
-  struct timeval end_time;
-  gettimeofday (&end_time, NULL);
-  double time = end_time.tv_sec + end_time.tv_usec/1000000.0 - start_time.tv_sec - start_time.tv_usec/1000000.0;
-  printf ("  ... done in %.3fs\n", time);
-}
-
 static void
 print_help ()
 {
@@ -466,7 +444,6 @@ render (int argc, char **argv)
     {
       progress.pause_stdout ();
       printf ("Loading scan %s\n", infname);
-      record_time ();
       progress.resume_stdout ();
     }
   if (!scan.load (infname, false, &error, &progress))
@@ -492,7 +469,6 @@ render (int argc, char **argv)
 	    printf (", vertical PPI %f", scan.ydpi);
 	}
       printf ("\n");
-      print_time ();
       progress.resume_stdout ();
     }
 
@@ -529,7 +505,6 @@ render (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  printf ("Detecting geometry\n");
-	  record_time ();
 	  detect_regular_screen_params dsparams;
 	  auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress);
 	  if (!detected.success)
@@ -547,16 +522,9 @@ render (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  printf ("Computing mesh\n");
-	  record_time ();
 	  progress.resume_stdout ();
 	}
       param.mesh_trans = solver_mesh (&param, scan, solver_param);
-      if (verbose)
-	{
-	  progress.pause_stdout ();
-	  print_time ();
-	  progress.resume_stdout ();
-	}
     }
   if (detect_color_model)
     rparam.auto_color_model (param.type);
@@ -704,7 +672,6 @@ autodetect (int argc, char **argv)
     {
       progress.pause_stdout ();
       printf ("Loading scan %s\n", infname);
-      record_time ();
       progress.resume_stdout ();
     }
   if (!scan.load (infname, false, &error, &progress))
@@ -738,9 +705,7 @@ autodetect (int argc, char **argv)
       if (verbose)
 	{
 	  progress.pause_stdout ();
-	  print_time ();
 	  printf ("Detecting geometry\n");
-	  record_time ();
 	  progress.resume_stdout ();
 	}
       if (param.mesh_trans)
@@ -782,9 +747,7 @@ autodetect (int argc, char **argv)
       if (verbose)
 	{
 	  progress.pause_stdout ();
-	  print_time ();
 	  printf ("Detecting levels\n");
-	  record_time ();
 	  progress.resume_stdout ();
 	}
       rparam.auto_dark_brightness (scan, param, scan.width / 10, scan.height / 10, 9 * scan.width / 10, 9 * scan.height / 10, &progress);
@@ -792,7 +755,6 @@ autodetect (int argc, char **argv)
   if (verbose)
     {
       progress.pause_stdout ();
-      print_time ();
       printf ("Saving %s\n", outname);
       progress.resume_stdout ();
     }
@@ -1485,7 +1447,6 @@ finetune (int argc, char **argv)
     {
       progress.pause_stdout ();
       printf ("Loading scan %s\n", infname);
-      record_time ();
       progress.resume_stdout ();
     }
   if (!scan.load (infname, true, &error, &progress))
