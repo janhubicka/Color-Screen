@@ -344,6 +344,14 @@ protected:
   bool analyze_fast (render_to_scr *render,progress_info *progress);
 
 };
+
+inline flatten_attr pure_attr luminosity_t always_inline_attr
+do_bicubic_interpolate (vec_luminosity_t v1, vec_luminosity_t v2, vec_luminosity_t v3, vec_luminosity_t v4, point_t off)
+{
+  vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, off.y);
+  return cubic_interpolate (v[0], v[1], v[2], v[3], off.x);
+}
+
 template<typename GEOMETRY>
 inline pure_attr rgbdata
 analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata patch_proportions)
@@ -362,18 +370,18 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
       && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_rgb_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
-      intred.red = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).red, get_red_p (-1, 0).red, get_red_p (-1, 1).red, get_red_p (-1, 2).red, off.y),
-				      cubic_interpolate (get_red_p ( 0, -1).red, get_red_p ( 0, 0).red, get_red_p ( 0, 1).red, get_red_p ( 0, 2).red, off.y),
-				      cubic_interpolate (get_red_p ( 1, -1).red, get_red_p ( 1, 0).red, get_red_p ( 1, 1).red, get_red_p ( 1, 2).red, off.y),
-				      cubic_interpolate (get_red_p ( 2, -1).red, get_red_p ( 2, 0).red, get_red_p ( 2, 1).red, get_red_p ( 2, 2).red, off.y), off.x);
-      intred.green = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).green, get_red_p (-1, 0).green, get_red_p (-1, 1).green, get_red_p (-1, 2).green, off.y),
-				        cubic_interpolate (get_red_p ( 0, -1).green, get_red_p ( 0, 0).green, get_red_p ( 0, 1).green, get_red_p ( 0, 2).green, off.y),
-				        cubic_interpolate (get_red_p ( 1, -1).green, get_red_p ( 1, 0).green, get_red_p ( 1, 1).green, get_red_p ( 1, 2).green, off.y),
-				        cubic_interpolate (get_red_p ( 2, -1).green, get_red_p ( 2, 0).green, get_red_p ( 2, 1).green, get_red_p ( 2, 2).green, off.y), off.x);
-      intred.blue = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1).blue, get_red_p (-1, 0).blue, get_red_p (-1, 1).blue, get_red_p (-1, 2).blue, off.y),
-				       cubic_interpolate (get_red_p ( 0, -1).blue, get_red_p ( 0, 0).blue, get_red_p ( 0, 1).blue, get_red_p ( 0, 2).blue, off.y),
-				       cubic_interpolate (get_red_p ( 1, -1).blue, get_red_p ( 1, 0).blue, get_red_p ( 1, 1).blue, get_red_p ( 1, 2).blue, off.y),
-				       cubic_interpolate (get_red_p ( 2, -1).blue, get_red_p ( 2, 0).blue, get_red_p ( 2, 1).blue, get_red_p ( 2, 2).blue, off.y), off.x);
+      intred.red = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1).red, get_red_p (0, -1).red, get_red_p (1, -1).red, get_red_p (2, -1).red},
+				           (vec_luminosity_t){get_red_p (-1,  0).red, get_red_p (0,  0).red, get_red_p (1,  0).red, get_red_p (2,  0).red},
+				           (vec_luminosity_t){get_red_p (-1,  1).red, get_red_p (0,  1).red, get_red_p (1,  1).red, get_red_p (2,  1).red},
+				           (vec_luminosity_t){get_red_p (-1,  2).red, get_red_p (0,  2).red, get_red_p (1,  2).red, get_red_p (2,  2).red}, off);
+      intred.green = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1).green, get_red_p (0, -1).green, get_red_p (1, -1).green, get_red_p (2, -1).green},
+					     (vec_luminosity_t){get_red_p (-1,  0).green, get_red_p (0,  0).green, get_red_p (1,  0).green, get_red_p (2,  0).green},
+					     (vec_luminosity_t){get_red_p (-1,  1).green, get_red_p (0,  1).green, get_red_p (1,  1).green, get_red_p (2,  1).green},
+					     (vec_luminosity_t){get_red_p (-1,  2).green, get_red_p (0,  2).green, get_red_p (1,  2).green, get_red_p (2,  2).green}, off);
+      intred.blue = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1).blue, get_red_p (0, -1).blue, get_red_p (1, -1).blue, get_red_p (2, -1).blue},
+					    (vec_luminosity_t){get_red_p (-1,  0).blue, get_red_p (0,  0).blue, get_red_p (1,  0).blue, get_red_p (2,  0).blue},
+					    (vec_luminosity_t){get_red_p (-1,  1).blue, get_red_p (0,  1).blue, get_red_p (1,  1).blue, get_red_p (2,  1).blue},
+					    (vec_luminosity_t){get_red_p (-1,  2).blue, get_red_p (0,  2).blue, get_red_p (1,  2).blue, get_red_p (2,  2).blue}, off);
 #undef get_red_p
     }
   rgbdata intgreen = {0, 0, 0};
@@ -382,18 +390,18 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
       && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_rgb_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
-      intgreen.red = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).red, get_green_p (-1, 0).red, get_green_p (-1, 1).red, get_green_p (-1, 2).red, off.y),
-					cubic_interpolate (get_green_p ( 0, -1).red, get_green_p ( 0, 0).red, get_green_p ( 0, 1).red, get_green_p ( 0, 2).red, off.y),
-					cubic_interpolate (get_green_p ( 1, -1).red, get_green_p ( 1, 0).red, get_green_p ( 1, 1).red, get_green_p ( 1, 2).red, off.y),
-					cubic_interpolate (get_green_p ( 2, -1).red, get_green_p ( 2, 0).red, get_green_p ( 2, 1).red, get_green_p ( 2, 2).red, off.y), off.x);
-      intgreen.green = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).green, get_green_p (-1, 0).green, get_green_p (-1, 1).green, get_green_p (-1, 2).green, off.y),
-					  cubic_interpolate (get_green_p ( 0, -1).green, get_green_p ( 0, 0).green, get_green_p ( 0, 1).green, get_green_p ( 0, 2).green, off.y),
-					  cubic_interpolate (get_green_p ( 1, -1).green, get_green_p ( 1, 0).green, get_green_p ( 1, 1).green, get_green_p ( 1, 2).green, off.y),
-					  cubic_interpolate (get_green_p ( 2, -1).green, get_green_p ( 2, 0).green, get_green_p ( 2, 1).green, get_green_p ( 2, 2).green, off.y), off.x);
-      intgreen.blue = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1).blue, get_green_p (-1, 0).blue, get_green_p (-1, 1).blue, get_green_p (-1, 2).blue, off.y),
-					 cubic_interpolate (get_green_p ( 0, -1).blue, get_green_p ( 0, 0).blue, get_green_p ( 0, 1).blue, get_green_p ( 0, 2).blue, off.y),
-					 cubic_interpolate (get_green_p ( 1, -1).blue, get_green_p ( 1, 0).blue, get_green_p ( 1, 1).blue, get_green_p ( 1, 2).blue, off.y),
-					 cubic_interpolate (get_green_p ( 2, -1).blue, get_green_p ( 2, 0).blue, get_green_p ( 2, 1).blue, get_green_p ( 2, 2).blue, off.y), off.x);
+      intgreen.red = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1).red, get_green_p (0, -1).red, get_green_p (1, -1).red, get_green_p (2, -1).red},
+					     (vec_luminosity_t){get_green_p (-1,  0).red, get_green_p (0,  0).red, get_green_p (1,  0).red, get_green_p (2,  0).red},
+					     (vec_luminosity_t){get_green_p (-1,  1).red, get_green_p (0,  1).red, get_green_p (1,  1).red, get_green_p (2,  1).red},
+					     (vec_luminosity_t){get_green_p (-1,  2).red, get_green_p (0,  2).red, get_green_p (1,  2).red, get_green_p (2,  2).red}, off);
+      intgreen.green = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1).green, get_green_p (0, -1).green, get_green_p (1, -1).green, get_green_p (2, -1).green},
+					       (vec_luminosity_t){get_green_p (-1,  0).green, get_green_p (0,  0).green, get_green_p (1,  0).green, get_green_p (2,  0).green},
+					       (vec_luminosity_t){get_green_p (-1,  1).green, get_green_p (0,  1).green, get_green_p (1,  1).green, get_green_p (2,  1).green},
+					       (vec_luminosity_t){get_green_p (-1,  2).green, get_green_p (0,  2).green, get_green_p (1,  2).green, get_green_p (2,  2).green}, off);
+      intgreen.blue = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1).blue, get_green_p (0, -1).blue, get_green_p (1, -1).blue, get_green_p (2, -1).blue},
+					      (vec_luminosity_t){get_green_p (-1,  0).blue, get_green_p (0,  0).blue, get_green_p (1,  0).blue, get_green_p (2,  0).blue},
+					      (vec_luminosity_t){get_green_p (-1,  1).blue, get_green_p (0,  1).blue, get_green_p (1,  1).blue, get_green_p (2,  1).blue},
+					      (vec_luminosity_t){get_green_p (-1,  2).blue, get_green_p (0,  2).blue, get_green_p (1,  2).blue, get_green_p (2,  2).blue}, off);
 #undef get_green_p
     }
   rgbdata intblue = {0, 0, 0};
@@ -402,18 +410,18 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
       && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_rgb_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
-      intblue.red = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).red, get_blue_p (-1, 0).red, get_blue_p (-1, 1).red, get_blue_p (-1, 2).red, off.y),
-				       cubic_interpolate (get_blue_p ( 0, -1).red, get_blue_p ( 0, 0).red, get_blue_p ( 0, 1).red, get_blue_p ( 0, 2).red, off.y),
-				       cubic_interpolate (get_blue_p ( 1, -1).red, get_blue_p ( 1, 0).red, get_blue_p ( 1, 1).red, get_blue_p ( 1, 2).red, off.y),
-				       cubic_interpolate (get_blue_p ( 2, -1).red, get_blue_p ( 2, 0).red, get_blue_p ( 2, 1).red, get_blue_p ( 2, 2).red, off.y), off.x);
-      intblue.green = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).green, get_blue_p (-1, 0).green, get_blue_p (-1, 1).green, get_blue_p (-1, 2).green, off.y),
-					 cubic_interpolate (get_blue_p ( 0, -1).green, get_blue_p ( 0, 0).green, get_blue_p ( 0, 1).green, get_blue_p ( 0, 2).green, off.y),
-					 cubic_interpolate (get_blue_p ( 1, -1).green, get_blue_p ( 1, 0).green, get_blue_p ( 1, 1).green, get_blue_p ( 1, 2).green, off.y),
-					 cubic_interpolate (get_blue_p ( 2, -1).green, get_blue_p ( 2, 0).green, get_blue_p ( 2, 1).green, get_blue_p ( 2, 2).green, off.y), off.x);
-      intblue.blue = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1).blue, get_blue_p (-1, 0).blue, get_blue_p (-1, 1).blue, get_blue_p (-1, 2).blue, off.y),
-					cubic_interpolate (get_blue_p ( 0, -1).blue, get_blue_p ( 0, 0).blue, get_blue_p ( 0, 1).blue, get_blue_p ( 0, 2).blue, off.y),
-					cubic_interpolate (get_blue_p ( 1, -1).blue, get_blue_p ( 1, 0).blue, get_blue_p ( 1, 1).blue, get_blue_p ( 1, 2).blue, off.y),
-					cubic_interpolate (get_blue_p ( 2, -1).blue, get_blue_p ( 2, 0).blue, get_blue_p ( 2, 1).blue, get_blue_p ( 2, 2).blue, off.y), off.x);
+      intblue.red = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1).red, get_blue_p (0, -1).red, get_blue_p (1, -1).red, get_blue_p (2, -1).red},
+					    (vec_luminosity_t){get_blue_p (-1,  0).red, get_blue_p (0,  0).red, get_blue_p (1,  0).red, get_blue_p (2,  0).red},
+					    (vec_luminosity_t){get_blue_p (-1,  1).red, get_blue_p (0,  1).red, get_blue_p (1,  1).red, get_blue_p (2,  1).red},
+					    (vec_luminosity_t){get_blue_p (-1,  2).red, get_blue_p (0,  2).red, get_blue_p (1,  2).red, get_blue_p (2,  2).red}, off);
+      intblue.green = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1).green, get_blue_p (0, -1).green, get_blue_p (1, -1).green, get_blue_p (2, -1).green},
+					      (vec_luminosity_t){get_blue_p (-1,  0).green, get_blue_p (0,  0).green, get_blue_p (1,  0).green, get_blue_p (2,  0).green},
+					      (vec_luminosity_t){get_blue_p (-1,  1).green, get_blue_p (0,  1).green, get_blue_p (1,  1).green, get_blue_p (2,  1).green},
+					      (vec_luminosity_t){get_blue_p (-1,  2).green, get_blue_p (0,  2).green, get_blue_p (1,  2).green, get_blue_p (2,  2).green}, off);
+      intblue.blue = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1).blue, get_blue_p (0, -1).blue, get_blue_p (1, -1).blue, get_blue_p (2, -1).blue},
+					     (vec_luminosity_t){get_blue_p (-1,  0).blue, get_blue_p (0,  0).blue, get_blue_p (1,  0).blue, get_blue_p (2,  0).blue},
+					     (vec_luminosity_t){get_blue_p (-1,  1).blue, get_blue_p (0,  1).blue, get_blue_p (1,  1).blue, get_blue_p (2,  1).blue},
+					     (vec_luminosity_t){get_blue_p (-1,  2).blue, get_blue_p (0,  2).blue, get_blue_p (1,  2).blue, get_blue_p (2,  2).blue}, off);
 #undef get_blue_p
     }
 
@@ -437,10 +445,10 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
       && e.y + red_miny >= 0 && e.y + red_maxy < m_height * GEOMETRY::red_height_scale)
     {
 #define get_red_p(xx, yy) fast_red (GEOMETRY::offset_for_interpolation_red (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_red (e, {xx, yy}).y)
-      ret.red = cubic_interpolate (cubic_interpolate (get_red_p (-1, -1), get_red_p (-1, 0), get_red_p (-1, 1), get_red_p (-1, 2), off.y),
-				   cubic_interpolate (get_red_p ( 0, -1), get_red_p ( 0, 0), get_red_p ( 0, 1), get_red_p ( 0, 2), off.y),
-				   cubic_interpolate (get_red_p ( 1, -1), get_red_p ( 1, 0), get_red_p ( 1, 1), get_red_p ( 1, 2), off.y),
-				   cubic_interpolate (get_red_p ( 2, -1), get_red_p ( 2, 0), get_red_p ( 2, 1), get_red_p ( 2, 2), off.y), off.x);
+      ret.red = do_bicubic_interpolate ((vec_luminosity_t){get_red_p (-1, -1), get_red_p (0, -1), get_red_p (1, -1), get_red_p (2, -1)},
+					(vec_luminosity_t){get_red_p (-1,  0), get_red_p (0,  0), get_red_p (1,  0), get_red_p (2,  0)},
+					(vec_luminosity_t){get_red_p (-1,  1), get_red_p (0,  1), get_red_p (1,  1), get_red_p (2,  1)},
+					(vec_luminosity_t){get_red_p (-1,  2), get_red_p (0,  2), get_red_p (1,  2), get_red_p (2,  2)}, off);
 #undef get_red_p
     }
   e = GEOMETRY::green_scr_to_entry (scr, &off);
@@ -448,10 +456,10 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
       && e.y + green_miny >= 0 && e.y + green_maxy < m_height * GEOMETRY::green_height_scale)
     {
 #define get_green_p(xx, yy) fast_green (GEOMETRY::offset_for_interpolation_green (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_green (e, {xx, yy}).y)
-      ret.green = cubic_interpolate (cubic_interpolate (get_green_p (-1, -1), get_green_p (-1, 0), get_green_p (-1, 1), get_green_p (-1, 2), off.y),
-				     cubic_interpolate (get_green_p ( 0, -1), get_green_p ( 0, 0), get_green_p ( 0, 1), get_green_p ( 0, 2), off.y),
-				     cubic_interpolate (get_green_p ( 1, -1), get_green_p ( 1, 0), get_green_p ( 1, 1), get_green_p ( 1, 2), off.y),
-				     cubic_interpolate (get_green_p ( 2, -1), get_green_p ( 2, 0), get_green_p ( 2, 1), get_green_p ( 2, 2), off.y), off.x);
+      ret.green = do_bicubic_interpolate ((vec_luminosity_t){get_green_p (-1, -1), get_green_p (0, -1), get_green_p (1, -1), get_green_p (2, -1)},
+					(vec_luminosity_t){get_green_p (-1,  0), get_green_p (0,  0), get_green_p (1,  0), get_green_p (2,  0)},
+					(vec_luminosity_t){get_green_p (-1,  1), get_green_p (0,  1), get_green_p (1,  1), get_green_p (2,  1)},
+					(vec_luminosity_t){get_green_p (-1,  2), get_green_p (0,  2), get_green_p (1,  2), get_green_p (2,  2)}, off);
 #undef get_green_p
     }
   e = GEOMETRY::blue_scr_to_entry (scr, &off);
@@ -459,10 +467,10 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
       && e.y + blue_miny >= 0 && e.y + blue_maxy < m_height * GEOMETRY::blue_height_scale)
     {
 #define get_blue_p(xx, yy) fast_blue (GEOMETRY::offset_for_interpolation_blue (e,{xx, yy}).x, GEOMETRY::offset_for_interpolation_blue (e, {xx, yy}).y)
-      ret.blue = cubic_interpolate (cubic_interpolate (get_blue_p (-1, -1), get_blue_p (-1, 0), get_blue_p (-1, 1), get_blue_p (-1, 2), off.y),
-				    cubic_interpolate (get_blue_p ( 0, -1), get_blue_p ( 0, 0), get_blue_p ( 0, 1), get_blue_p ( 0, 2), off.y),
-				    cubic_interpolate (get_blue_p ( 1, -1), get_blue_p ( 1, 0), get_blue_p ( 1, 1), get_blue_p ( 1, 2), off.y),
-				    cubic_interpolate (get_blue_p ( 2, -1), get_blue_p ( 2, 0), get_blue_p ( 2, 1), get_blue_p ( 2, 2), off.y), off.x);
+      ret.blue = do_bicubic_interpolate ((vec_luminosity_t){get_blue_p (-1, -1), get_blue_p (0, -1), get_blue_p (1, -1), get_blue_p (2, -1)},
+					(vec_luminosity_t){get_blue_p (-1,  0), get_blue_p (0,  0), get_blue_p (1,  0), get_blue_p (2,  0)},
+					(vec_luminosity_t){get_blue_p (-1,  1), get_blue_p (0,  1), get_blue_p (1,  1), get_blue_p (2,  1)},
+					(vec_luminosity_t){get_blue_p (-1,  2), get_blue_p (0,  2), get_blue_p (1,  2), get_blue_p (2,  2)}, off);
 #undef get_blue_p
     }
   return ret;

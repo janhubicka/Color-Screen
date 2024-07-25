@@ -218,7 +218,7 @@ vec_cubic_interpolate (vec_luminosity_t p0, vec_luminosity_t p1, vec_luminosity_
 
 /* Get image data in normalized range 0...1.  */
 
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::get_unadjusted_data (int x, int y)
 {
   /* TODO do inversion and film curves if requested.  */
@@ -227,7 +227,7 @@ render::get_unadjusted_data (int x, int y)
   return m_sharpened_data [y * m_img.width + x];
 }
 
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::adjust_luminosity_ir (luminosity_t lum)
 {
   lum = (lum - m_params.dark_point) * m_params.scan_exposure;
@@ -238,7 +238,7 @@ render::adjust_luminosity_ir (luminosity_t lum)
 
 /* Get image data in normalized range 0...1.  */
 
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::get_data (int x, int y)
 {
   return adjust_luminosity_ir (get_unadjusted_data (x, y));
@@ -246,7 +246,7 @@ render::get_data (int x, int y)
 
 /* Get same for rgb data.  */
 
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::get_linearized_data_red (int x, int y)
 {
   if (colorscreen_checking)
@@ -255,7 +255,7 @@ render::get_linearized_data_red (int x, int y)
   /* TODO do inversion and film curves if requested.  */
 }
 
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::get_linearized_data_green (int x, int y)
 {
   if (colorscreen_checking)
@@ -263,7 +263,7 @@ render::get_linearized_data_green (int x, int y)
   return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
   /* TODO do inversion and film curves if requested.  */
 }
-inline luminosity_t
+inline luminosity_t always_inline_attr
 render::get_linearized_data_blue (int x, int y)
 {
   if (colorscreen_checking)

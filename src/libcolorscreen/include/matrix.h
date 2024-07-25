@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdio.h>
+#include "base.h"
 
 
 /* Square matrix template.  */
@@ -299,7 +300,7 @@ public:
   }
 
   /* Matrix-vector multiplication used for RGB values.  */
-  inline void
+  always_inline_attr inline void
   apply_to_rgb (T r, T g, T b, T *rr, T *gg, T *bb)
   {
     *rr = r * B::m_elements[0][0] + g * B::m_elements[1][0] + b * B::m_elements[2][0] + B::m_elements[3][0];
