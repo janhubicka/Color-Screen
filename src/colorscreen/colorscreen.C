@@ -515,8 +515,7 @@ render (int argc, char **argv)
 	    }
 	}
     }
-  else if (solver && solver_param.npoints
-	   && !param.mesh_trans)
+  else if (solver && solver_param.npoints)
     {
       if (verbose)
 	{
@@ -524,6 +523,11 @@ render (int argc, char **argv)
 	  printf ("Computing mesh\n");
 	  progress.resume_stdout ();
 	}
+      if (param.mesh_trans)
+        {
+	  delete (param.mesh_trans);
+	  param.mesh_trans = NULL;
+        }
       param.mesh_trans = solver_mesh (&param, scan, solver_param);
     }
   if (detect_color_model)
