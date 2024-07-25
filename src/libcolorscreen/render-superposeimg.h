@@ -62,7 +62,7 @@ private:
   bool m_preview;
 };
 
-flatten_attr inline rgbdata
+inline rgbdata
 render_superpose_img::fast_sample_pixel_img (int x, int y)
 {
   coord_t scr_x, scr_y;
@@ -108,7 +108,7 @@ render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int w
   downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
-flatten_attr inline rgbdata
+inline rgbdata
 render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y)
 {
   int ix, iy;
@@ -131,7 +131,7 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
 	      bb * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2]};
     }
 }
-flatten_attr rgbdata
+rgbdata
 render_superpose_img::sample_pixel_img (coord_t x, coord_t y)
 {
   coord_t scr_x, scr_y;
@@ -140,7 +140,7 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y)
 }
 
 /* Analyze average r, g and b color in a given tile in the image coordinates.  */
-flatten_attr inline void
+inline void
 render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b)
 {
   luminosity_t rw = 0, rr = 0, gw = 0, gg = 0, bw = 0, bb = 0;

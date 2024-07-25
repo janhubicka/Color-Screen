@@ -293,7 +293,7 @@ public:
     return precompute_all (progress);
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  flatten_attr void
+  void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
@@ -350,7 +350,7 @@ public:
     return precompute_all (progress);
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  flatten_attr void
+  void
   render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
   {
     rgbdata d = sample_pixel_img (x, y);
@@ -381,17 +381,17 @@ public:
   }
 private:
 };
-flatten_attr inline rgbdata
+inline rgbdata
 render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y)
 {
   return get_screen_color (x, y) * get_data (x, y);
 }
-flatten_attr inline rgbdata
+inline rgbdata
 render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y)
 {
   return get_screen_color (x, y) * get_img_pixel (x, y);
 }
-flatten_attr void
+void
 render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
 {
   rgbdata d = sample_pixel_img (x, y);
