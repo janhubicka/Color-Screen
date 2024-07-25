@@ -358,7 +358,7 @@ analyze_base_worker<GEOMETRY>::bicubic_rgb_interpolate (point_t scr, rgbdata pat
 {
   /* Paget needs -3 for miny because of diagonal coordinates.  */
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
-  int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2, blue_maxx = 2, blue_maxy = 2;
+  int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
 
   scr.x += m_xshift;
   scr.y += m_yshift;
@@ -434,7 +434,7 @@ analyze_base_worker<GEOMETRY>::bicubic_bw_interpolate (point_t scr)
 {
   /* Paget needs -3 for miny because of diagonal coordinates.  */
   int64_t red_minx = -2, red_miny = -3, green_minx = -2, green_miny = -3, blue_minx = -2, blue_miny = -2;
-  int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2, blue_maxx = 2, blue_maxy = 2;
+  int64_t red_maxx = 2, red_maxy = 3, green_maxx = 2, green_maxy = 3, blue_maxx = 2, blue_maxy = 2;
   rgbdata ret = {1,0,0};
 
   scr.x += m_xshift;

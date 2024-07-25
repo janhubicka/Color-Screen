@@ -454,7 +454,11 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
   *final_xshift = -floor (minx);
   *final_yshift = -floor (miny);
   *final_width = ceil (maxx - floor(minx));
+  if (*final_width <= 0)
+    *final_width = 1;
   *final_height = ceil (maxy - floor(miny));
+  if (*final_height <= 0)
+    *final_height = 1;
 }
 
 /* Determine rectangular section of the final coordiantes to which the whole image
