@@ -47,7 +47,7 @@ bool render_img_normal(render_type_parameters rtparam,
     progress->pop ();
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset)
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset) if (width * height > render.openmp_size ())
   for (int y = 0; y < height; y++)
     {
       coord_t py = (y + yoffset) * step;
@@ -93,7 +93,7 @@ bool render_img_downscale(render_type_parameters rtparam,
   render.get_color_data (data, xoffset * step, yoffset * step, width, height, step, progress);
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data) if (width * height > render.openmp_size ())
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -138,7 +138,7 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
   render.get_gray_data (data, xoffset * step, yoffset * step, width, height, step, progress);
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data)
+#pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset,data) if (width * height > render.openmp_size ())
   for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
@@ -275,6 +275,7 @@ void render_stitched(RP &rtparam, P &outer_param,
   //renders[0] = init_render (0, 0);
 
   int xmin = img.xmin, ymin = img.ymin;
+  int openmp_size;
 
 #if 0
   for (int y = 0; y < stitch.params.height; y++)
@@ -324,6 +325,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    if (progress)
 	      progress->push ();
 	    renders[iy * stitch.params.width + ix]  = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
+	    openmp_size = renders[iy * stitch.params.width + ix]->openmp_size ();
 	    if (progress)
 	      {
 		progress->pop ();
@@ -333,7 +335,7 @@ void render_stitched(RP &rtparam, P &outer_param,
   }
   if (progress)
     progress->set_task ("rendering", height);
-#pragma omp parallel for default(none) shared(img,rtparam,rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,lock,antialias,outer_param)
+#pragma omp parallel for default(none) shared(img,rtparam,rparam,progress,pixels,renders,pixelbytes,rowstride,height, width,step,yoffset,xoffset,xmin,ymin,stitch,lock,antialias,outer_param) if (width * height * antialias * antialias > openmp_size)
   for (int y = 0; y < height; y++)
     {
       /* Try to use same renderer as for last tile to avoid accessing atomic pointer.  */

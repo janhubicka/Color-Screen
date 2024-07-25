@@ -169,6 +169,7 @@ public:
       delete m_known_pixels;
   }
 protected:
+  static constexpr const size_t openmp_min_size = 128 * 1024;
   /* Scales of R G and B tables as shifts.  I.e. 0 = one etry per screen period, 2 = two entries.  */
   analyze_base (int rwscl, int rhscl, int gwscl, int ghscl, int bwscl, int bhscl)
   : m_rwscl (rwscl), m_rhscl (rhscl), m_gwscl (gwscl), m_ghscl (ghscl), m_bwscl (bwscl), m_bhscl (bhscl),

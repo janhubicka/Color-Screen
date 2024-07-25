@@ -133,6 +133,14 @@ public:
   }
   void get_gray_data (luminosity_t *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
+  /* Return number of pixel computations that are considered
+     profitable for openmp to paralelize.  */
+  size_t openmp_size ()
+  {
+    return 128 * 1024;
+  }
+
+
 protected:
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
@@ -759,7 +767,9 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 #define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
-#pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none)
+  int size = width * height / (pixelsize * pixelsize);
+
+#pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights) default (none) if (size > openmp_size ())
   {
     luminosity_t scale = 1 / (pixelsize * pixelsize);
     int pystart = std::max (0, (int)(-y / pixelsize));
