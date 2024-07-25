@@ -8,6 +8,7 @@ Changes in version 1.1
    - More effective parallelism while rendering files.
    - `colorscreen autodetect` now works on stitched projects.
    - Tone curves are now saved to parameter files.
+   - `colorscreen` now support `--threads=n` parameter to control parallelism.
  - Infrastructure improvements:
    - `make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,

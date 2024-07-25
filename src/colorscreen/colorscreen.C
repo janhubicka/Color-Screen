@@ -1,5 +1,8 @@
 #include <sys/time.h>
 #include <string>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/spectrum-to-xyz.h"
 #include "../libcolorscreen/include/dufaycolor.h"
@@ -18,13 +21,15 @@ print_help ()
 {
   fprintf (stderr, "%s <command> [<args>]\n", binname);
   fprintf (stderr, "Supported commands and arguments are:\n\n");
+  fprintf (stderr, "    Supported common args:\n");
+  fprintf (stderr, "      --help                    print help\n");
+  fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --threads=n               setnumber of threads\n");
   fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
   fprintf (stderr, "    render scan into tiff\n");
   fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen parametr file\n");
   fprintf (stderr, "    <output> is tiff file to be produced\n");
   fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "      --help                    print help\n");
-  fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --mode=mode               select one of output modes:");
   for (int j = 0; j < render_type_max; j++)
   {
@@ -58,8 +63,6 @@ print_help ()
   fprintf (stderr, "\n");
   fprintf (stderr, "  autodetect <scan> <output par> [<args>]\n");
   fprintf (stderr, "    automatically detect geometry of scan and write it to output.\n");
-  fprintf (stderr, "      --help                    print help\n");
-  fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --par=name.par            load parameters\n");
   fprintf (stderr, "      --report=name.txt         save report\n");
   fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
@@ -95,8 +98,6 @@ print_help ()
   fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
   fprintf (stderr, "    produce backlight correction table from photo of empty backlight\n");
   fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "      --help                    print help\n");
-  fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "\n");
   fprintf (stderr, "  dump-lcc <filename>\n");
@@ -107,7 +108,6 @@ print_help ()
   fprintf (stderr, "  Produce stitched project.");
   fprintf (stderr, "  Supported args:\n");
   fprintf (stderr, "     input files:\n");
-  fprintf (stderr, "      --verbose                  enable verbose output\n");
   fprintf (stderr, "      --par=filename.par         load given screen discovery and rendering parameters\n");
   fprintf (stderr, "      --ncols=n                  number of columns of tiles\n");
   fprintf (stderr, "      --load-project=name.par    store analysis to a project file\n");
@@ -164,8 +164,6 @@ print_help ()
   fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
   fprintf (stderr, "    Finetune parameters of different parts of the input scan. Requires parameters with screen geometry.\n");
   fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "      --help                    print help\n");
-  fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --width=n                 analyze n samples horisontally (number of vertical samples depeends on aspect ratio)\n");
   fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
   fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
@@ -355,6 +353,7 @@ parse_int_param (int argc, char **argv, int *i, const char *arg, int &val, int m
 bool
 parse_common_flags (int argc, char **argv, int *i)
 {
+  int threads = -1;
   if (!strcmp (argv[*i], "--help") || !strcmp (argv[*i], "-h"))
     {
       print_help();
@@ -368,6 +367,16 @@ parse_common_flags (int argc, char **argv, int *i)
   else if (!strcmp (argv[*i], "--verbose-tasks"))
     {
       verbose_tasks = true;
+      return true;
+    }
+  else if (parse_int_param (argc, argv, i, "threads", threads, 1, 1024*1024))
+    {
+#ifdef _OPENMP
+      omp_set_num_threads (threads);
+#else
+      if (threads != 1)
+	fprintf (stderr, "Warning: libcolorscreen is compiled without OpenMP requires for multithreading\n");
+#endif
       return true;
     }
   return false;
