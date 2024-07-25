@@ -249,5 +249,6 @@ private:
     p = triangle_interpolate (tl, tr, br, p);
     return p;
   }
+  point_t push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2, coord_t y2) const;
 };
 #endif

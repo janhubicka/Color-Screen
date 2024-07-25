@@ -111,8 +111,29 @@ mesh::precompute_inverse ()
       }
 }
 
+/* Find mesh inverse that is close to entry (x,y) but within range of x1, y1,
+ * x2, y2.  */
+point_t
+mesh::push_to_range (int x, int y, coord_t x1, coord_t y1, coord_t x2,
+                     coord_t y2) const
+{
+  coord_t xx = m_data[y * m_width + x].x;
+  coord_t yy = m_data[y * m_width + x].y;
+  if (xx >= x1 && xx <= x2 && yy >= y1 && yy <= y2)
+    return { x * m_xstep - m_xshift, y * m_ystep - m_yshift };
+  if (xx < x1)
+    xx = x1;
+  if (xx > x2)
+    xx = x2;
+  if (yy < y1)
+    yy = y1;
+  if (yy > y2)
+    yy = y2;
+  return invert ({ xx, yy });
+}
+
 /* Get rectangular range of source coordinates which covers range given by
- * x1,y1,x2,y2 transformed by trans in image coordinates.  */
+   x1,y1,x2,y2 transformed by trans in image coordinates.  */
 void
 mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
                  coord_t y2, coord_t *xmin, coord_t *xmax, coord_t *ymin,
@@ -169,26 +190,26 @@ mesh::get_range (matrix2x2<coord_t> trans, coord_t x1, coord_t y1, coord_t x2,
         if (x2 < mminx || y2 < mminy)
           continue;
         coord_t px, py;
-        trans.apply_to_vector ((x - 0) * m_xstep - m_xshift,
-                               (y - 0) * m_ystep - m_yshift, &px, &py);
+        point_t p = push_to_range (x, y, x1, y1, x2, y2);
+        trans.apply_to_vector (p.x, p.y, &px, &py);
         coord_t pxmin = px;
         coord_t pxmax = px;
         coord_t pymin = py;
         coord_t pymax = py;
-        trans.apply_to_vector ((x + 1) * m_xstep - m_xshift,
-                               (y - 0) * m_ystep - m_yshift, &px, &py);
+        p = push_to_range (x + 1, y, x1, y1, x2, y2);
+        trans.apply_to_vector (p.x, p.y, &px, &py);
         pxmin = std::min (pxmin, px);
         pxmax = std::max (pxmax, px);
         pymin = std::min (pymin, py);
         pymax = std::max (pymax, py);
-        trans.apply_to_vector ((x - 0) * m_xstep - m_xshift,
-                               (y + 1) * m_ystep - m_yshift, &px, &py);
+        p = push_to_range (x, y + 1, x1, y1, x2, y2);
+        trans.apply_to_vector (p.x, p.y, &px, &py);
         pxmin = std::min (pxmin, px);
         pxmax = std::max (pxmax, px);
         pymin = std::min (pymin, py);
         pymax = std::max (pymax, py);
-        trans.apply_to_vector ((x + 1) * m_xstep - m_xshift,
-                               (y + 1) * m_ystep - m_yshift, &px, &py);
+        p = push_to_range (x + 1, y + 1, x1, y1, x2, y2);
+        trans.apply_to_vector (p.x, p.y, &px, &py);
         pxmin = std::min (pxmin, px);
         pxmax = std::max (pxmax, px);
         pymin = std::min (pymin, py);
@@ -302,7 +323,7 @@ mesh::load (FILE *f, const char **error)
               *error = "failed to parse mesh points";
               return NULL;
             }
-          m->set_point ({x, y}, {sx, sy});
+          m->set_point ({ x, y }, { sx, sy });
         }
     }
   if (!expect_keyword (f, "mesh_end"))
