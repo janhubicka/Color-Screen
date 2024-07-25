@@ -67,6 +67,7 @@ sharpen_amount: 2.000000
 presaturation: 1.500000
 saturation: 1.000000
 brightness: 1.000000
+output_tone_curve: linear
 dufay_red_strip_width: 0.000000
 dufay_green_strip_width: 0.000000
 collection_threshold: 0.200000
@@ -82,6 +83,7 @@ backlight_correction_black: 0.000000
 invert: no
 precise: yes
 mix_weights: 0.300000 0.100000 1.000000
+mix_dark: 0.000000 0.000000 0.000000
 profiled_dark: 0.000000 0.000000 0.000000
 profiled_red: 1.000000 0.000000 0.000000
 profiled_green: 0.000000 1.000000 0.000000

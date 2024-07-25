@@ -3,6 +3,8 @@ Changes in version 1.1
    - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically
      tested on MacOS to actually work as expected.
+   - MacOS binary has now fewer dependencies, so fewer permissions are needed to
+     start it.
    - More effective parallelism while rendering files.
    - `colorscreen autodetect` now works on stitched projects.
    - Tone curves are now saved to parameter files.
@@ -24,6 +26,8 @@ Changes in version 1.1
    - Fixed bug in `colorscreen finetune --optimize-screen-channel-blur`.
    - Render images now contains less of unnecesary border along sides.
    - Fixed small triangles of missing mesh data on the corners of scan.
+   - `colorscreen render --solver` now executes solver even if mesh is already
+     present in parameter file.
  - Internal changes:
    - Cleaned up public API and privatized large part of libcolorscreen
      datastructures.
