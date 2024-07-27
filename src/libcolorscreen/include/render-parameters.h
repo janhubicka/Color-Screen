@@ -6,7 +6,7 @@
 #include "progress-info.h"
 #include "sensitivity.h"
 #include "tone-curve.h"
-#include "scr-to-img.h"
+#include "scr-to-img-parameters.h"
 class render_type_parameters;
 class render_type_property;
 /* Parameters of rendering algorithms.  */

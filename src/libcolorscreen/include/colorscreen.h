@@ -6,6 +6,8 @@
 #include "detect-regular-screen-parameters.h"
 #include "scr-detect-parameters.h"
 
+class scr_to_img;
+
 struct render_to_file_params
 {
   const char *filename;
@@ -47,13 +49,6 @@ struct render_to_file_params
   }
 };
 
-struct color_match
-{
-  xyz profiled;
-  xyz target;
-  luminosity_t deltaE;
-};
-
 struct tile_parameters
 {
   uint8_t *pixels;
@@ -63,6 +58,13 @@ struct tile_parameters
   int height;
   point_t pos;
   coord_t step;
+};
+
+struct color_match
+{
+  xyz profiled;
+  xyz target;
+  luminosity_t deltaE;
 };
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param,
                           scr_detect_parameters *dparam,

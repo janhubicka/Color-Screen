@@ -1,5 +1,6 @@
-#include "include/screen-map.h"
 #include <tiffio.h>
+#include "include/screen-map.h"
+#include "include/scr-to-img.h"
 
 screen_map::screen_map (enum scr_type type1, int xshift1, int yshift1,
                         int width1, int height1)

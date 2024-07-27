@@ -3,7 +3,7 @@
 #include "dllpublic.h"
 #include "base.h"
 #include "color.h"
-#include "scr-to-img.h"
+#include "scr-to-img-parameters.h"
 struct solver_parameters
 {
   DLL_PUBLIC_EXP

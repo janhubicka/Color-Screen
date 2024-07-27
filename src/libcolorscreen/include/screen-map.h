@@ -4,6 +4,10 @@
 #include "dllpublic.h"
 #include "solver-parameters.h"
 #include "paget.h"
+#include "progress-info.h"
+
+class scr_to_img;
+class image_data;
 class screen_map
 {
 public:

@@ -1,5 +1,6 @@
 #include <locale>
 #include "include/colorscreen.h"
+#include "include/mesh.h"
 #include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
 

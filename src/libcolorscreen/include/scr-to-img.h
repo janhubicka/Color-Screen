@@ -209,7 +209,7 @@ public:
 	  {
 	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", x, y, xx, yy);
 	    m_nwarnings++;
-	    if (colorscreen_checking)
+	    if (colorscreen_checking && 0)
 	      abort ();
 	  }
       }

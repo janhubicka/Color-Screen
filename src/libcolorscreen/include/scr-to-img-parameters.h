@@ -3,6 +3,9 @@
 #include <cmath>
 #include "base.h"
 #include "dllpublic.h"
+#include "lens-warp-correction-parameters.h"
+
+class mesh;
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
