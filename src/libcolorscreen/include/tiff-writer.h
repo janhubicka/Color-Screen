@@ -211,21 +211,6 @@ public:
   void
   put_hdr_pixel (int x, int row, luminosity_t r, luminosity_t g, luminosity_t b)
   {
-#if 0
-      if (r < 0)
-	      r = 0;
-      if (g < 0)
-	      g = 0;
-      if (b < 0)
-	      b = 0;
-      if (g > 1)
-	      g = 1;
-      if (r > 1)
-	      r = 1;
-      if (b > 1)
-	      b = 1;
-      printf ("Pixel %f %f %f\n",r,g,b);
-#endif
     if (pixel_format == pixel_32bit_hdr)
       {
         row32bit_float (row)[3 * x] = r;

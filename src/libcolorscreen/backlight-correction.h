@@ -3,9 +3,10 @@
 #include <vector>
 #include <cstdio>
 #include <cassert>
-#include "color.h"
-#include "base.h"
-#include "imagedata.h"
+#include "include/color.h"
+#include "include/base.h"
+#include "include/imagedata.h"
+#include "include/backlight-correction-parameters.h"
 struct memory_buffer 
 {
   void *data;
@@ -17,62 +18,6 @@ struct memory_buffer
     return *((char *)data+pos++);
   }
   bool load_file (FILE *f);
-};
-class backlight_correction;
-class backlight_correction_parameters
-{
-  struct entry
-  {
-    //luminosity_t add[4];
-    luminosity_t lum[4];
-  };
-public:
-  enum channel {red, green, blue, ir, all_channels};
-  backlight_correction_parameters ();
-  bool
-  alloc (int width, int height, bool enabled[4])
-  {
-    m_luminosities = (entry *)calloc (width * height, sizeof (entry));
-    m_width = width;
-    m_height = height;
-    for (int i = 0; i < 4;i++)
-      m_channel_enabled[i] = enabled[i];
-    return (m_luminosities != NULL);
-  }
-  void
-  set_luminosity (int x, int y, luminosity_t lum, enum channel channel = all_channels)
-  {
-    struct entry &e = m_luminosities[y * m_width + x];
-    if (channel != all_channels)
-      {
-	//e.add[(int)channel] = add;
-	e.lum[(int)channel] = lum;
-      }
-    else
-      for (int i = 0; i < 4; i++)
-	{
-	  //e.add[i] = add;
-	  e.lum[i] = lum;
-	}
-  }
-  ~backlight_correction_parameters ()
-  {
-    if (m_luminosities)
-      free (m_luminosities);
-  }
-  static backlight_correction_parameters *load_captureone_lcc (memory_buffer *buf, bool verbose = false);
-  DLL_PUBLIC static backlight_correction_parameters *load_captureone_lcc (FILE *f, bool verbose = false);
-  DLL_PUBLIC static backlight_correction_parameters *analyze_scan (image_data &scan, luminosity_t gamma = 1);
-  /* Unique id of the image (used for caching).  */
-  uint64_t id;
-  DLL_PUBLIC bool save (FILE *f);
-  DLL_PUBLIC const char* save_tiff (const char *name);
-  DLL_PUBLIC bool load (FILE *f, const char **);
-  friend backlight_correction;
-private:
-  int m_width, m_height;
-  entry *m_luminosities;
-  bool m_channel_enabled[4];
 };
 
 

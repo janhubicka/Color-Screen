@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cassert>
 
-#include "include/backlight-correction.h"
+#include "backlight-correction.h"
 
 
 static

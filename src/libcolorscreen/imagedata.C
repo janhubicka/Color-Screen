@@ -6,10 +6,10 @@
 #include <turbojpeg.h>
 #include <zip.h>
 #include <lcms2.h>
-#include "lru-cache.h"
 #include "include/imagedata.h"
-#include "include/backlight-correction.h"
 #include "include/stitch.h"
+#include "lru-cache.h"
+#include "backlight-correction.h"
 #include "mapalloc.h"
 
 #define HAVE_LIBRAW

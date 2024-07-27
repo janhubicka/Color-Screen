@@ -12,11 +12,12 @@
 #include "include/color.h"
 #include "include/progress-info.h"
 #include "include/sensitivity.h"
-#include "include/backlight-correction.h"
 #include "include/tone-curve.h"
 #include "include/scr-to-img.h"
 #include "include/render-parameters.h"
 #include "include/render-type-parameters.h"
+#include "include/stitch.h"
+#include "backlight-correction.h"
 
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */

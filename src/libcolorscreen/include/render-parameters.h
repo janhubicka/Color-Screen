@@ -1,14 +1,15 @@
 #ifndef RENDER_PARAMETERS_H
 #define RENDER_PARAMETERS_H
-#include "backlight-correction.h"
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
 #include "sensitivity.h"
 #include "tone-curve.h"
 #include "scr-to-img-parameters.h"
+#include "backlight-correction-parameters.h"
 class render_type_parameters;
 class render_type_property;
+class stitch_project;
 /* Parameters of rendering algorithms.  */
 struct render_parameters
 {
