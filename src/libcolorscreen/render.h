@@ -648,7 +648,7 @@ template<typename T, void (*account_pixel) (T *, T, luminosity_t)>
 void
 render::process_pixel (T *data, int width, int height, int px, int py, bool x0, bool x1, bool y0, bool y1, T pixel, luminosity_t scale, luminosity_t xweight, luminosity_t yweight)
 {
-  if (0)
+  if (colorscreen_checking)
     {
       assert (px >= (x0?0:-1) && px < (x1 ? width - 1 : width));
       assert (py >= (y0?0:-1) && py < (y1 ? height - 1: height));
@@ -777,7 +777,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
     int pystart = std::max (0, (int)(-y / pixelsize));
     int pyend = std::min (height - 1, (int)((m_img.height - y) / pixelsize));
 #ifdef _OPENMP
-    int tn = openmp ? omp_get_thread_num () : 1;
+    int tn = openmp ? omp_get_thread_num () : 0;
     int threads = openmp ? omp_get_max_threads () : 1;
 #else
     int tn = 0;
