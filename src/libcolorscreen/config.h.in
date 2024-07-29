@@ -1,5 +1,8 @@
 /* src/libcolorscreen/config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* "use 16bit floats for temporary data" */
+#undef COLORSCREEN_16BIT_FLOAT
+
 /* "enable additional checking" */
 #undef COLORSCREEN_CHECKING
 

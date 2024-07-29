@@ -819,6 +819,7 @@ with_libjpeg
 with_libraw
 with_libzip
 with_liblcms2
+enable_16bit_float
 enable_checking
 enable_gtkgui
 enable_render_extra
@@ -1484,11 +1485,14 @@ Optional Features:
                           enable make rules and dependencies not useful (and
                           sometimes confusing) to the casual installer
   --disable-openmp        do not use OpenMP
---enable-dependencies   enable learch for dependencies
---enable-checking   enable checking
---enable-gtkgui     enable gtk2 based gui interface
---enable-render-extra     enable additional render
---enable-static-link     enable static linking of libcolorscreen
+  --disable-dependencies  do not search for libraries colorscreen depends on
+                          (a hack for MacOS static linking)
+  --disable-16bit-float   disable use of 16bit floats for temporary data
+  --enable-checking       enable extra runtime checking
+  --enable-gtkgui         enable gtk2 based gui interface
+  --enable-render-extra   enable additional render from external source tree
+  --disable-static-link   do not link colorscreen statically into colorscreen
+                          and colorscreen-gtk binaries
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -19711,17 +19715,13 @@ then :
 
 fi
 
-dependencies=yes
 # Check whether --enable-dependencies was given.
 if test ${enable_dependencies+y}
 then :
-  enableval=$enable_dependencies; dependencies=no
-else case e in #(
-  e) dependencies=yes ;;
-esac
+  enableval=$enable_dependencies;
 fi
 
-if test "$dependencies" == "yes"
+if test x"$enable_dependencies" != x"no"
 then
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for cblas_dgemm in -lgslcblas" >&5
 printf %s "checking for cblas_dgemm in -lgslcblas... " >&6; }
@@ -20277,34 +20277,39 @@ fi
 printf "%s\n" "$RDYNAMIC" >&6; }
 
 
-checking=no
+# Check whether --enable-16bit-float was given.
+if test ${enable_16bit_float+y}
+then :
+  enableval=$enable_16bit_float;
+fi
+
+if test x"$enable_16bit_float" != x"no"
+then
+
+printf "%s\n" "#define COLORSCREEN_16BIT_FLOAT 1" >>confdefs.h
+
+fi
+
 # Check whether --enable-checking was given.
 if test ${enable_checking+y}
 then :
-  enableval=$enable_checking; checking=yes
-else case e in #(
-  e) checking=no ;;
-esac
+  enableval=$enable_checking;
 fi
 
-if test "$checking" != "no"
+if test x"$enable_checking" == x"yes"
 then
 
 printf "%s\n" "#define COLORSCREEN_CHECKING 1" >>confdefs.h
 
 fi
 
-do_gtkgui=no
 # Check whether --enable-gtkgui was given.
 if test ${enable_gtkgui+y}
 then :
-  enableval=$enable_gtkgui; do_gtkgui=yes
-else case e in #(
-  e) do_gtkgui=no ;;
-esac
+  enableval=$enable_gtkgui;
 fi
 
-if test "$do_gtkgui" != "no"; then
+if test x"$enable_gtkgui" == x"yes"; then
 
 pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for
@@ -20431,35 +20436,27 @@ printf "%s\n" "yes" >&6; }
 fi
 fi
 
-do_render_extra=no
 # Check whether --enable-render-extra was given.
 if test ${enable_render_extra+y}
 then :
-  enableval=$enable_render_extra; do_render_extra=yes
-else case e in #(
-  e) do_render_extra=no ;;
-esac
+  enableval=$enable_render_extra;
 fi
 
-if test "$do_render_extra" != "no"
+if test x"$enable_render_extra" == x"yes"
 then
 
 printf "%s\n" "#define RENDER_EXTRA 1" >>confdefs.h
 
 fi
 
-static_link=yes
 # Check whether --enable-static-link was given.
 if test ${enable_static_link+y}
 then :
-  enableval=$enable_static_link; static_link=no
-else case e in #(
-  e) static_link=yes ;;
-esac
+  enableval=$enable_static_link;
 fi
 
 
- if test "$static_link" != "no"; then
+ if test "$enable_static_link" != "no"; then
   static_link_TRUE=
   static_link_FALSE='#'
 else
@@ -20467,7 +20464,7 @@ else
   static_link_FALSE=
 fi
 
- if test "$do_gtkgui" != "no"; then
+ if test x"$enable_gtkgui" == x"yes"; then
   gtkgui_TRUE=
   gtkgui_FALSE='#'
 else
@@ -20475,7 +20472,7 @@ else
   gtkgui_FALSE=
 fi
 
- if test "$do_render_extra" != "no"; then
+ if test x"$enable_render_extra" == x"yes"; then
   RENDER_EXTRA_TRUE=
   RENDER_EXTRA_FALSE='#'
 else

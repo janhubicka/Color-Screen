@@ -23,9 +23,7 @@ float_to_half (float f)
   if (exponent <= 0)
     {
       if (exponent < -10)
-        {
-          return (uint16_t)lsign;
-        }
+        return (uint16_t)lsign;
       mantissa = (mantissa | 0x00800000) >> (1 - exponent);
       if (mantissa & 0x00001000)
         mantissa += 0x00002000;
@@ -34,13 +32,9 @@ float_to_half (float f)
   else if (exponent == 0xff - (127 - 15))
     {
       if (mantissa == 0)
-        {
-          return (uint16_t)(lsign | 0x7c00);
-        }
+        return (uint16_t)(lsign | 0x7c00);
       else
-        {
-          return (uint16_t)(lsign | 0x7c00 | (mantissa >> 13));
-        }
+        return (uint16_t)(lsign | 0x7c00 | (mantissa >> 13));
     }
   if (mantissa & 0x00001000)
     {
@@ -52,9 +46,7 @@ float_to_half (float f)
         }
     }
   if (exponent > 30)
-    {
-      return (uint16_t)(lsign | 0x7c00); // infinity with the same sign as f.
-    }
+    return (uint16_t)(lsign | 0x7c00); // infinity with the same sign as f.
   return (uint16_t)(lsign | (exponent << 10) | (mantissa >> 13));
 }
 

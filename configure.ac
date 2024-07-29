@@ -21,9 +21,9 @@ LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
 AC_SEARCH_LIBS([sqrt], [m])
 AC_CHECK_LIB([m],[cos])
-dependencies=yes
-AC_ARG_ENABLE(dependencies,[--enable-dependencies   enable learch for dependencies],dependencies=no,dependencies=yes)
-if test "$dependencies" == "yes"
+AC_ARG_ENABLE([dependencies],AS_HELP_STRING([--disable-dependencies],
+					    [do not search for libraries colorscreen depends on (a hack for MacOS static linking)]))
+if test x"$enable_dependencies" != x"no"
 then
 AC_CHECK_LIB([gslcblas],[cblas_dgemm])
 AC_CHECK_LIB([gsl],[gsl_blas_dgemm])
@@ -132,35 +132,44 @@ AC_SUBST([RDYNAMIC])
 
 AC_LINK_EXPORT_DYNAMIC
 
-checking=no
-AC_ARG_ENABLE(checking,[--enable-checking   enable checking],checking=yes,checking=no)
-if test "$checking" != "no"
+AC_ARG_ENABLE([16bit-float],
+	      AS_HELP_STRING([--disable-16bit-float],
+			     [disable use of 16bit floats for temporary data]))
+if test x"$enable_16bit_float" != x"no"
+then
+  AC_DEFINE([COLORSCREEN_16BIT_FLOAT], 1, "use 16bit floats for temporary data")
+fi
+
+AC_ARG_ENABLE([checking],
+	      AS_HELP_STRING([--enable-checking],
+			     [enable extra runtime checking]))
+if test x"$enable_checking" == x"yes"
 then
   AC_DEFINE([COLORSCREEN_CHECKING], 1, "enable additional checking")
 fi
 
-do_gtkgui=no
-AC_ARG_ENABLE(gtkgui,[--enable-gtkgui     enable gtk2 based gui interface],do_gtkgui=yes,do_gtkgui=no)
-if test "$do_gtkgui" != "no"; then
+AC_ARG_ENABLE([gtkgui],AS_HELP_STRING([--enable-gtkgui],
+				      [enable gtk2 based gui interface]))
+if test x"$enable_gtkgui" == x"yes"; then
   PKG_CHECK_MODULES([GTKGUI_BIN], [
     glib-2.0
     gtk+-2.0
   ])
 fi
 
-do_render_extra=no
-AC_ARG_ENABLE(render-extra,[--enable-render-extra     enable additional render],do_render_extra=yes,do_render_extra=no)
-if test "$do_render_extra" != "no"
+AC_ARG_ENABLE([render-extra],AS_HELP_STRING([--enable-render-extra],
+				      [enable additional render from external source tree]))
+if test x"$enable_render_extra" == x"yes"
 then
   AC_DEFINE([RENDER_EXTRA], 1, "include render extra from extenral source tree")
 fi
 
-static_link=yes
-AC_ARG_ENABLE(static-link,[--enable-static-link     enable static linking of libcolorscreen],static_link=no,static_link=yes)
+AC_ARG_ENABLE([static-link],AS_HELP_STRING([--disable-static-link],
+	      [do not link colorscreen statically into colorscreen and colorscreen-gtk binaries]))
 
-AM_CONDITIONAL([static_link], [test "$static_link" != "no"])
-AM_CONDITIONAL([gtkgui], [test "$do_gtkgui" != "no"])
-AM_CONDITIONAL([RENDER_EXTRA], [test "$do_render_extra" != "no"])
+AM_CONDITIONAL([static_link], [test "$enable_static_link" != "no"])
+AM_CONDITIONAL([gtkgui], [test x"$enable_gtkgui" == x"yes"])
+AM_CONDITIONAL([RENDER_EXTRA], [test x"$enable_render_extra" == x"yes"])
 AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
 AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h])
 
