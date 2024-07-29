@@ -16,203 +16,244 @@ static bool verbose = false;
 static bool verbose_tasks = false;
 const char *binname;
 
+static enum subhelp
+{
+  help_basic,
+  help_render,
+  help_autodetect,
+  help_analyze_backlight,
+  help_dump_lcc,
+  help_stitch,
+  help_dump_patch_density,
+  help_finetune,
+  help_lab,
+  help_read_chemcad_spectra,
+} subhelp = help_basic;
+
 static void
 print_help ()
 {
-  fprintf (stderr, "%s <command> [<args>]\n", binname);
+  fprintf (stderr, "%s [<args>] <command>\n", binname);
   fprintf (stderr, "Supported commands and arguments are:\n\n");
-  fprintf (stderr, "    Supported common args:\n");
+  fprintf (stderr, "  Supported common args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --threads=n               setnumber of threads\n");
-  fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
-  fprintf (stderr, "    render scan into tiff\n");
-  fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen parametr file\n");
-  fprintf (stderr, "    <output> is tiff file to be produced\n");
-  fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "      --mode=mode               select one of output modes:");
-  for (int j = 0; j < render_type_max; j++)
-  {
-    if (!(j % 4))
-      fprintf (stderr, "\n                                 ");
-    fprintf (stderr, " %s", render_type_properties[j].name);
-  }
+  if (subhelp == help_render || subhelp == help_basic)
+    {
+      fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
+      fprintf (stderr, "    render scan into tiff\n");
+    }
+  if (subhelp == help_render)
+    {
+      fprintf (stderr, "    <scan> is image, <parameters> is the ColorScreen parametr file\n");
+      fprintf (stderr, "    <output> is tiff file to be produced\n");
+      fprintf (stderr, "    Supported args:\n");
+      fprintf (stderr, "      --mode=mode               select one of output modes:");
+      for (int j = 0; j < render_type_max; j++)
+      {
+	if (!(j % 4))
+	  fprintf (stderr, "\n                                 ");
+	fprintf (stderr, " %s", render_type_properties[j].name);
+      }
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --solver                  run solver if solver points are present\n");
+      fprintf (stderr, "      --hdr                     output HDR tiff\n");
+      fprintf (stderr, "      --dng                     output DNG\n");
+      fprintf (stderr, "      --output-profile=profile  specify output profile\n");
+      fprintf (stderr, "                                suported profiles:");
+      for (int j = 0; j < render_parameters::output_profile_max; j++)
+	fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --precise                 force precise collection of patch density\n");
+      fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
+      fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
+      fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
+      fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
+      fprintf (stderr, "                                suported modes:");
+      for (int j = 0; j < render_parameters::dye_balance_max; j++)
+	fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
+      fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
+      fprintf (stderr, "      --age=val                 specify age of color model\n");
+      fprintf (stderr, "      --scale=val               specify scale of output file\n");
+    }
+  if (subhelp == help_autodetect || subhelp == help_basic)
+    {
+      fprintf (stderr, "  autodetect <scan> <output par> [<args>]\n");
+      fprintf (stderr, "    automatically detect geometry of scan and write it to output.\n");
+    }
+  if (subhelp == help_autodetect)
+    {
+      fprintf (stderr, "      --par=name.par            load parameters\n");
+      fprintf (stderr, "      --report=name.txt         save report\n");
+      fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
+      fprintf (stderr, "                                suported scanner types:");
+      for (int j = 0; j < max_scanner_type; j++)
+	{
+	  if (!(j % 4))
+	    fprintf (stderr, "\n                                 ");
+	  fprintf (stderr, " %s", scanner_type_names[j]);
+	}
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
+      fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
+      fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
+      fprintf (stderr, "      --no-slow-floodfill       disable use of slow patch detection\n");
+      fprintf (stderr, "      --mesh                    compute mesh of non-linear transformations\n");
+      fprintf (stderr, "      --no-mesh                 do not compute mesh of non-linear transformations\n");
+      fprintf (stderr, "      --optimize-colors         try to automatically optimize colors of patches for screen discovery\n");
+      fprintf (stderr, "      --no-optimize-colors      do not automatically optimize colors of patches for screen discovery\n");
+      fprintf (stderr, "      --top/bottom/left/right   asume that given part of scan is not part of an image and insert fake point to improve geometry of binding tape\n");
+      fprintf (stderr, "      --min-screen-percentage   specify minimum perdentage of screen to be detected\n");
+      fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
+      fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
+      fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
+      fprintf (stderr, "      --border-left=percent     same for left\n");
+      fprintf (stderr, "      --border-right=percent    same for right\n");
+      fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
+      fprintf (stderr, "      --no-auto-color-model     do not choose color model for given screen type\n");
+      fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
+      fprintf (stderr, "      --no-auto-levels          do not choose brightness and dark point\n");
+    }
+  if (subhelp == help_analyze_backlight || subhelp == help_basic)
+    {
+      fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
+      fprintf (stderr, "    produce backlight correction table from photo of empty backlight\n");
+    }
+  if (subhelp == help_analyze_backlight)
+    {
+      fprintf (stderr, "    Supported args:\n");
+    }
+  if (subhelp == help_dump_lcc || subhelp == help_basic)
+    {
+      fprintf (stderr, "  dump-lcc <filename>\n");
+      fprintf (stderr, "    dump annotated contents of CaptureOne LCC file\n");
+    }
+  if (subhelp == help_stitch || subhelp == help_basic)
+    {
+      fprintf (stderr, "  stitch <parameters> <tiles> [<args>]\n");
+      fprintf (stderr, "    produce stitched project\n");
+    }
+  if (subhelp == help_stitch)
+    {
+      fprintf (stderr, "    Supported args:\n");
+      fprintf (stderr, "      --par=filename.par         load given screen discovery and rendering parameters\n");
+      fprintf (stderr, "      --ncols=n                  number of columns of tiles\n");
+      fprintf (stderr, "      --load-project=name.par    store analysis to a project file\n");
+      fprintf (stderr, "      --scan-ppi=scan-ppi        PPI of input scan\n");
+      fprintf (stderr, "      --load-registration        load registration from corresponding par files\n");
+      fprintf (stderr, "     output files:\n");
+      fprintf (stderr, "      --report=name.txt          store report about stitching operation to a file\n");
+      fprintf (stderr, "      --out=name.csprj           store analysis to a project file\n");
+      fprintf (stderr, "      --hugin-pto=name.pto       store project file for hugin\n");
+      fprintf (stderr, "     tiles to ouptut:\n");
+      fprintf (stderr, "      --screen-tiles             store screen tiles (for verification)\n");
+      fprintf (stderr, "      --known-screen-tiles       store screen tiles where unanalyzed pixels are transparent\n");
+      fprintf (stderr, "     overlap detection:\n");
+      fprintf (stderr, "      --cpfind                   enable use of Hugin's cpfind to determine overlap\n");
+      fprintf (stderr, "      --no-cpfind                disable use of Hugin's cpfind to determine overlap\n");
+      fprintf (stderr, "      --cpfind-verification      use cpfind to verify results of internal overlap detection\n");
+      fprintf (stderr, "      --min-overlap=precentage   minimal overlap\n");
+      fprintf (stderr, "      --max-overlap=precentage   maximal overlap\n");
+      fprintf (stderr, "      --outer-tile-border=prcnt  border to ignore in outer files\n");
+      fprintf (stderr, "      --inner-tile-border=prcnt  border to ignore in inner parts files\n");
+      fprintf (stderr, "      --max-contrast=precentage  report differences in contrast over this threshold\n");
+      fprintf (stderr, "      --max-avg-distance=npixels maximal average distance of real screen patches to estimated ones via affine transform\n");
+      fprintf (stderr, "      --max-max-distance=npixels maximal maximal distance of real screen patches to estimated ones via affine transform\n");
+      fprintf (stderr, "      --geometry-info            store info about goemetry mismatches to tiff files\n");
+      fprintf (stderr, "      --individual-geometry-info store info about goemetry mismatches to tiff files; produce file for each pair\n");
+      fprintf (stderr, "      --outlier-info             store info about outliers\n");
+      fprintf (stderr, "     hugin output:\n");
+      fprintf (stderr, "      --num-control-points=n     number of control points for each pair of images\n");
+      fprintf (stderr, "      --hfov=val                 lens horisontal field of view saved to hugin file\n");
+      fprintf (stderr, "     other:\n");
+      fprintf (stderr, "      --panorama-map             print panorama map in ascii-art\n");
+      fprintf (stderr, "      --min-screen-precentage    minimum portion of screen required to be recognized by screen detection\n");
+      fprintf (stderr, "      --optimize-colors          auto-optimize screen colors (default)\n");
+      fprintf (stderr, "      --no-optimize-colors       do not auto-optimize screen colors\n");
+      fprintf (stderr, "      --reoptimize-colors        auto-optimize screen colors after initial screen analysis\n");
+      fprintf (stderr, "      --slow-floodfill           use slower discovery of patches (by default both slow and fast methods are used)\n");
+      fprintf (stderr, "      --no-slow-floodfill        do not use slower discovery of patches (by default both slow and fast methods are used)\n");
+      fprintf (stderr, "      --fast-floodfill           use faster discovery of patches (by default both slow and fast methods are used)\n");
+      fprintf (stderr, "      --no-fast-floodfill        do not use faster discovery of patches (by default both slow and fast methods are used)\n");
+      fprintf (stderr, "      --limit-directions         do limit overlap checking to expected directions\n");
+      fprintf (stderr, "      --no-limit-directions      do not limit overlap checking to expected directions\n");
+      fprintf (stderr, "      --min-patch-contrast=val   specify minimal contrast accepted in patch discovery\n");
+      fprintf (stderr, "      --diffs                    produce diff files for each overlapping pair of tiles\n");
+    }
+  if (subhelp == help_dump_patch_density || subhelp == help_basic)
+    {
+      fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
+      fprintf (stderr, "    dump patch densities in text format for external processing (requires parameters with screen geometry)\n");
+    }
+  if (subhelp == help_finetune || subhelp == help_basic)
+    {
+      fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
+      fprintf (stderr, "    finetune parameters of different parts of the input scan. Requires parameters with screen geometry\n");
+    }
+  if (subhelp == help_finetune)
+    {
+      fprintf (stderr, "    Supported args:\n");
+      fprintf (stderr, "      --width=n                 analyze n samples horisontally (number of vertical samples depeends on aspect ratio)\n");
+      fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
+      fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
+      fprintf (stderr, "      --optimize-screen-blur    enable finetuning of screen blur radius\n");
+      fprintf (stderr, "      --optimize-screen-channel-blur enable finetuning of screen blur radius with each channel independently\n");
+      fprintf (stderr, "      --optimize-screen-mtf-blur enable finetuning of screen blur MTF\n");
+      fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of emulsion blur radius\n");
+      fprintf (stderr, "                                requres known screen blur, mixing weights in input file and monochrome chanel use\n");
+      fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of dufay screen strip widths\n");
+      fprintf (stderr, "      --use-monochrome-channel  analyse using monochrome channel even when RGB is available\n");
+      fprintf (stderr, "      --no-data-collection      do not determine colors by data collection\n");
+      fprintf (stderr, "      --no-least-squares        do not use least squares to optimize screen colors\n");
+      fprintf (stderr, "      --multi-tile=n            analyse n times n samples and choose best result on each spot\n");
+      fprintf (stderr, "      --no-normalize            do not normalize colors\n");
+      fprintf (stderr, "      --blur-tiff=name          write finetuned blur radius (either screen, screen channel or emulsion) parameters as tiff file\n");
+      fprintf (stderr, "      --fog-tiff=name           write finetuned fog as tiff file\n");
+      fprintf (stderr, "      --position-tiff=name      write finetuned position as tiff file\n");
+      fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
+      fprintf (stderr, "      --orig-tiff-base=name     write analyzed tiles into tiff files <name>-y-x.tif\n");
+      fprintf (stderr, "      --simulated-tiff-base=name write simulated tiles into tiff files <name>-y-x.tif\n");
+      fprintf (stderr, "      --diff-tiff-base=name     write diff between original and simultated tiles to <name>-y-x.tif\n");
+    }
+  if (subhelp == help_lab || subhelp == help_basic)
+    {
+      fprintf (stderr, "  lab <subcommnad>\n");
+      fprintf (stderr, "    various commands useful for testing.\n");
+    }
+  if (subhelp == help_lab)
+    {
+      fprintf (stderr, "    Supported commands are:\n");
+      fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
+      fprintf (stderr, "      dufay-spectra: print report about Dufaycolor resau spectra\n");
+      fprintf (stderr, "      dufay-synthetic: print report about mixing Dufaycolor reseau from known dyes\n");
+      fprintf (stderr, "      wratten-xyz: print report about Wratten trichromatic set xyY values\n");
+      fprintf (stderr, "      wratten-spectra: print report about Wratten trichromatic set spectra\n");
+      fprintf (stderr, "      save-film-sensitivity: save film sensitivity curve\n");
+      fprintf (stderr, "      save-film-log-sensitivity: save film sensitivity curve with log sensitivity (wedge spectrogram)\n");
+      fprintf (stderr, "      save-film-linear-characteristic-curve: save film characteristic curve\n");
+      fprintf (stderr, "      save-film-hd-characteristic-curve: save film characteristic H&D (Hurter and Driffield) curve\n");
+      fprintf (stderr, "      save-dyes: save spectra of dyes\n");
+      fprintf (stderr, "      save-ssf-jason: save spectral sensitivity functions to jsason file for dcamprof\n");
+      fprintf (stderr, "      render-target: render color target\n");
+      fprintf (stderr, "      render-wb-target: render color target with auto white balance\n");
+      fprintf (stderr, "      render-optimized-target: render color target with optimized camera matrix\n");
+      fprintf (stderr, "      render-spectra-photo: render photo of spectrum taken over filters\n");
+      fprintf (stderr, "      render-tone-curve: save tone curve in linear gamma\n");
+      fprintf (stderr, "      render-tone-hd-curve: save tone curve as hd curve\n");
+      fprintf (stderr, "      scan-primaries: produce matrix profile specialized for given backlight, response and process dyes\n");
+      fprintf (stderr, "    Each subcommand has its own help.\n");
+    }
+  if (subhelp == help_read_chemcad_spectra || subhelp == help_basic)
+    {
+      fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
+      fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
+    }
   fprintf (stderr, "\n");
-  fprintf (stderr, "      --solver                  run solver if solver points are present\n");
-  fprintf (stderr, "      --hdr                     output HDR tiff\n");
-  fprintf (stderr, "      --dng                     output DNG\n");
-  fprintf (stderr, "      --output-profile=profile  specify output profile\n");
-  fprintf (stderr, "                                suported profiles:");
-  for (int j = 0; j < render_parameters::output_profile_max; j++)
-    fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
-  fprintf (stderr, "\n");
-  fprintf (stderr, "      --precise                 force precise collection of patch density\n");
-  fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
-  fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
-  fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
-  fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
-  fprintf (stderr, "                                suported modes:");
-  for (int j = 0; j < render_parameters::dye_balance_max; j++)
-    fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
-  fprintf (stderr, "\n");
-  fprintf (stderr, "      --output-gamma=gamma      set gamma correction of output file\n");
-  fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
-  fprintf (stderr, "      --age=val                 specify age of color model\n");
-  fprintf (stderr, "      --scale=val               specify scale of output file\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  autodetect <scan> <output par> [<args>]\n");
-  fprintf (stderr, "    automatically detect geometry of scan and write it to output.\n");
-  fprintf (stderr, "      --par=name.par            load parameters\n");
-  fprintf (stderr, "      --report=name.txt         save report\n");
-  fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
-  fprintf (stderr, "                                suported scanner types:");
-  for (int j = 0; j < max_scanner_type; j++)
-  {
-    if (!(j % 4))
-      fprintf (stderr, "\n                                 ");
-    fprintf (stderr, " %s", scanner_type_names[j]);
-  }
-  fprintf (stderr, "\n");
-  fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
-  fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
-  fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
-  fprintf (stderr, "      --no-slow-floodfill       disable use of slow patch detection\n");
-  fprintf (stderr, "      --mesh                    compute mesh of non-linear transformations\n");
-  fprintf (stderr, "      --no-mesh                 do not compute mesh of non-linear transformations\n");
-  fprintf (stderr, "      --optimize-colors         try to automatically optimize colors of patches for screen discovery\n");
-  fprintf (stderr, "      --no-optimize-colors      do not automatically optimize colors of patches for screen discovery\n");
-  fprintf (stderr, "      --top/bottom/left/right   asume that given part of scan is not part of an image and insert fake point to improve geometry of binding tape\n");
-  fprintf (stderr, "      --min-screen-percentage   specify minimum perdentage of screen to be detected\n");
-  fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
-  fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
-  fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
-  fprintf (stderr, "      --border-left=percent     same for left\n");
-  fprintf (stderr, "      --border-right=percent    same for right\n");
-  fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
-  fprintf (stderr, "      --no-auto-color-model     do not choose color model for given screen type\n");
-  fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
-  fprintf (stderr, "      --no-auto-levels          do not choose brightness and dark point\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  analyze-backlight <scan> <output-backlight> <output-tiff> [<args>]\n");
-  fprintf (stderr, "    produce backlight correction table from photo of empty backlight\n");
-  fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  dump-lcc <filename>\n");
-  fprintf (stderr, "  Dump annotated contents of CaptureOne LCC file.");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  stitch <parameters> <tiles> [<args>]\n");
-  fprintf (stderr, "  Produce stitched project.");
-  fprintf (stderr, "  Supported args:\n");
-  fprintf (stderr, "     input files:\n");
-  fprintf (stderr, "      --par=filename.par         load given screen discovery and rendering parameters\n");
-  fprintf (stderr, "      --ncols=n                  number of columns of tiles\n");
-  fprintf (stderr, "      --load-project=name.par    store analysis to a project file\n");
-  fprintf (stderr, "      --scan-ppi=scan-ppi        PPI of input scan\n");
-  fprintf (stderr, "      --load-registration        load registration from corresponding par files\n");
-  fprintf (stderr, "     output files:\n");
-  fprintf (stderr, "      --report=name.txt          store report about stitching operation to a file\n");
-  fprintf (stderr, "      --out=name.csprj           store analysis to a project file\n");
-  fprintf (stderr, "      --hugin-pto=name.pto       store project file for hugin\n");
-  fprintf (stderr, "     tiles to ouptut:\n");
-  fprintf (stderr, "      --screen-tiles             store screen tiles (for verification)\n");
-  fprintf (stderr, "      --known-screen-tiles       store screen tiles where unanalyzed pixels are transparent\n");
-  fprintf (stderr, "     overlap detection:\n");
-  fprintf (stderr, "      --cpfind                   enable use of Hugin's cpfind to determine overlap\n");
-  fprintf (stderr, "      --no-cpfind                disable use of Hugin's cpfind to determine overlap\n");
-  fprintf (stderr, "      --cpfind-verification      use cpfind to verify results of internal overlap detection\n");
-  fprintf (stderr, "      --min-overlap=precentage   minimal overlap\n");
-  fprintf (stderr, "      --max-overlap=precentage   maximal overlap\n");
-  fprintf (stderr, "      --outer-tile-border=prcnt  border to ignore in outer files\n");
-  fprintf (stderr, "      --inner-tile-border=prcnt  border to ignore in inner parts files\n");
-  fprintf (stderr, "      --max-contrast=precentage  report differences in contrast over this threshold\n");
-  fprintf (stderr, "      --max-avg-distance=npixels maximal average distance of real screen patches to estimated ones via affine transform\n");
-  fprintf (stderr, "      --max-max-distance=npixels maximal maximal distance of real screen patches to estimated ones via affine transform\n");
-  fprintf (stderr, "      --geometry-info            store info about goemetry mismatches to tiff files\n");
-  fprintf (stderr, "      --individual-geometry-info store info about goemetry mismatches to tiff files; produce file for each pair\n");
-  fprintf (stderr, "      --outlier-info             store info about outliers\n");
-  fprintf (stderr, "     hugin output:\n");
-  fprintf (stderr, "      --num-control-points=n     number of control points for each pair of images\n");
-  fprintf (stderr, "      --hfov=val                 lens horisontal field of view saved to hugin file\n");
-  fprintf (stderr, "     other:\n");
-  fprintf (stderr, "      --panorama-map             print panorama map in ascii-art\n");
-  fprintf (stderr, "      --min-screen-precentage    minimum portion of screen required to be recognized by screen detection\n");
-  fprintf (stderr, "      --optimize-colors          auto-optimize screen colors (default)\n");
-  fprintf (stderr, "      --no-optimize-colors       do not auto-optimize screen colors\n");
-  fprintf (stderr, "      --reoptimize-colors        auto-optimize screen colors after initial screen analysis\n");
-  fprintf (stderr, "      --slow-floodfill           use slower discovery of patches (by default both slow and fast methods are used)\n");
-  fprintf (stderr, "      --no-slow-floodfill        do not use slower discovery of patches (by default both slow and fast methods are used)\n");
-  fprintf (stderr, "      --fast-floodfill           use faster discovery of patches (by default both slow and fast methods are used)\n");
-  fprintf (stderr, "      --no-fast-floodfill        do not use faster discovery of patches (by default both slow and fast methods are used)\n");
-  fprintf (stderr, "      --limit-directions         do limit overlap checking to expected directions\n");
-  fprintf (stderr, "      --no-limit-directions      do not limit overlap checking to expected directions\n");
-  fprintf (stderr, "      --min-patch-contrast=val   specify minimal contrast accepted in patch discovery\n");
-  fprintf (stderr, "      --diffs                    produce diff files for each overlapping pair of tiles\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  dump-lcc <filename>\n");
-  fprintf (stderr, "    Dump information in CaptureOne LLC file\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  dump-patch-density <scan> <prameters> <output>\n");
-  fprintf (stderr, "    Dump patch densities in text format for external processing. Requires parameters with screen geometry.\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  finetune <scan> <prameters> <output> [<args>]\n");
-  fprintf (stderr, "    Finetune parameters of different parts of the input scan. Requires parameters with screen geometry.\n");
-  fprintf (stderr, "    Supported args:\n");
-  fprintf (stderr, "      --width=n                 analyze n samples horisontally (number of vertical samples depeends on aspect ratio)\n");
-  fprintf (stderr, "      --optimize-position       enable finetuning of screen registration\n");
-  fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
-  fprintf (stderr, "      --optimize-screen-blur    enable finetuning of screen blur radius\n");
-  fprintf (stderr, "      --optimize-screen-channel-blur enable finetuning of screen blur radius with each channel independently\n");
-  fprintf (stderr, "      --optimize-screen-mtf-blur enable finetuning of screen blur MTF\n");
-  fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of emulsion blur radius\n");
-  fprintf (stderr, "                                requres known screen blur, mixing weights in input file and monochrome chanel use\n");
-  fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of dufay screen strip widths\n");
-  fprintf (stderr, "      --use-monochrome-channel  analyse using monochrome channel even when RGB is available\n");
-  fprintf (stderr, "      --no-data-collection      do not determine colors by data collection\n");
-  fprintf (stderr, "      --no-least-squares        do not use least squares to optimize screen colors\n");
-  fprintf (stderr, "      --multi-tile=n            analyse n times n samples and choose best result on each spot\n");
-  fprintf (stderr, "      --no-normalize            do not normalize colors\n");
-  fprintf (stderr, "      --blur-tiff=name          write finetuned blur radius (either screen, screen channel or emulsion) parameters as tiff file\n");
-  fprintf (stderr, "      --fog-tiff=name           write finetuned fog as tiff file\n");
-  fprintf (stderr, "      --position-tiff=name      write finetuned position as tiff file\n");
-  fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay strip parameters as tiff file\n");
-  fprintf (stderr, "      --orig-tiff-base=name     write analyzed tiles into tiff files <name>-y-x.tif\n");
-  fprintf (stderr, "      --simulated-tiff-base=name write simulated tiles into tiff files <name>-y-x.tif\n");
-  fprintf (stderr, "      --diff-tiff-base=name     write diff between original and simultated tiles to <name>-y-x.tif\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  lab <subcommnad>\n");
-  fprintf (stderr, "    various commands useful for testing.  Supported commands are:\n");
-  fprintf (stderr, "      dufay-xyY: print report about Dufaycolor resau xyY table from Color Cinematography book\n");
-  fprintf (stderr, "      dufay-spectra: print report about Dufaycolor resau spectra\n");
-  fprintf (stderr, "      dufay-synthetic: print report about mixing Dufaycolor reseau from known dyes\n");
-  fprintf (stderr, "      wratten-xyz: print report about Wratten trichromatic set xyY values\n");
-  fprintf (stderr, "      wratten-spectra: print report about Wratten trichromatic set spectra\n");
-  fprintf (stderr, "      save-film-sensitivity: save film sensitivity curve\n");
-  fprintf (stderr, "      save-film-log-sensitivity: save film sensitivity curve with log sensitivity (wedge spectrogram)\n");
-  fprintf (stderr, "      save-film-linear-characteristic-curve: save film characteristic curve\n");
-  fprintf (stderr, "      save-film-hd-characteristic-curve: save film characteristic H&D (Hurter and Driffield) curve\n");
-  fprintf (stderr, "      save-dyes: save spectra of dyes\n");
-  fprintf (stderr, "      save-ssf-jason: save spectral sensitivity functions to jsason file for dcamprof\n");
-  fprintf (stderr, "      render-target: render color target\n");
-  fprintf (stderr, "      render-wb-target: render color target with auto white balance\n");
-  fprintf (stderr, "      render-optimized-target: render color target with optimized camera matrix\n");
-  fprintf (stderr, "      render-spectra-photo: render photo of spectrum taken over filters\n");
-  fprintf (stderr, "      render-tone-curve: save tone curve in linear gamma\n");
-  fprintf (stderr, "      render-tone-hd-curve: save tone curve as hd curve\n");
-  fprintf (stderr, "      scan-primaries: produce matrix profile specialized for given backlight, response and process dyes\n");
-  fprintf (stderr, "    Each subcommand has its own help.\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "\n");
-  fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
-  fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
-  fprintf (stderr, "\n");
+  if (subhelp == help_basic)
+    fprintf (stderr, "Use %s <command> --help for help on specific command\n", binname);
   fprintf (stderr, "See also https://github.com/janhubicka/Color-Screen/wiki/colorscreen\n");
   exit (1);
 }
@@ -401,6 +442,7 @@ render (int argc, char **argv)
   float scan_dpi = 0;
   float scale = 0;
   float output_gamma = -4;
+  subhelp = help_render;
 
 
   for (int i = 0; i < argc; i++)
@@ -585,6 +627,7 @@ autodetect (int argc, char **argv)
   scanner_type scanner_type = max_scanner_type;
   scr_detect_parameters dparam;
   detect_regular_screen_params dsparams;
+  subhelp = help_autodetect;
   for (int i = 0; i < argc; i++)
     {
       float flt;
@@ -790,6 +833,7 @@ void
 analyze_backlight (int argc, char **argv)
 {
   const char *error = NULL;
+  subhelp = help_analyze_backlight;
 
   if (argc < 2 || argc > 3)
     print_help ();
@@ -829,6 +873,7 @@ analyze_backlight (int argc, char **argv)
 bool
 dump_lcc (int argc, char **argv)
 {
+  subhelp = help_dump_lcc;
   if (argc != 1)
     print_help ();
   FILE *f = fopen (argv[0], "rt");
@@ -900,6 +945,7 @@ read_chemcad (int argc, char **argv)
   FILE *f = NULL;
   spectrum s;
   spectrum sum;
+  subhelp = help_read_chemcad_spectra;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     s[i] = sum[i] = 0;
   if (argc == 0)
@@ -1042,6 +1088,7 @@ parse_filename_and_camera_setup (int argc, char **argv, const char **filename, s
 void
 digital_laboratory (int argc, char **argv)
 {
+  subhelp = help_lab;
   if (!argc)
     print_help ();
   if (argc == 1 && !strcmp (argv[0], "dufay-xyY"))
@@ -1398,6 +1445,7 @@ finetune (int argc, char **argv)
   int border = 5;
   int flags = 0;
   //*finetune_no_progress_report | finetune_screen_blur| finetune_dufay_strips;
+  subhelp = help_finetune;
   
   for (int i = 0; i < argc; i++)
     {
@@ -1882,6 +1930,7 @@ int
 dump_patch_density (int argc, char **argv)
 {
   const char *error = NULL;
+  subhelp = help_dump_patch_density;
 
   if (argc != 3)
     print_help ();
@@ -1936,6 +1985,7 @@ stitch(int argc, char **argv)
 {
   std::vector<std::string> fnames;
   int ncols = 0;
+  subhelp = help_stitch;
 
   auto prj = std::make_unique<stitch_project> ();
 
