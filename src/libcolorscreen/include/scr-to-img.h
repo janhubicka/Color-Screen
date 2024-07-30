@@ -44,7 +44,7 @@ public:
 			coord_t x2, coord_t y2,
 			int *final_xshift, int *final_yshift,
 			int *final_width, int *final_height);
-  coord_t get_rotation_adjustment ()
+  coord_t get_rotation_adjustment () const
   {
     return m_rotation_adjustment;
   }
@@ -84,43 +84,37 @@ public:
   /* Apply corrections that fix scanner optics that does not fit into the linear
      transformation matrix.  */
   pure_attr point_t
-  apply_early_correction (point_t p)
+  apply_early_correction (point_t p) const
   {
     p = apply_motor_correction (p);
     return m_lens_correction.scan_to_corrected (p) * m_inverted_projection_distance;
   }
   pure_attr point_t
-  inverse_early_correction (point_t p)
+  inverse_early_correction (point_t p) const
   {
     p = m_lens_correction.corrected_to_scan (p * m_param.projection_distance);
     return inverse_motor_correction (p);
   }
 
-  void
-  apply_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  pure_attr point_t
+  apply_lens_correction (point_t sp) const
   {
-    point_t sp = {x,y};
     point_t shift = {0, 0};
     if (m_param.scanner_type == lens_move_horisontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
-    point_t p = m_lens_correction.corrected_to_scan (sp-shift)+shift;
-    *xr = p.x;
-    *yr = p.y;
+    return m_lens_correction.corrected_to_scan (sp-shift)+shift;
   }
-  void
-  inverse_lens_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  pure_attr point_t
+  inverse_lens_correction (point_t sp) const
   {
-    point_t sp = {x,y};
     point_t shift = {0, 0};
     if (m_param.scanner_type == lens_move_horisontally)
       shift.x = sp.x;
     if (m_param.scanner_type == lens_move_vertically)
       shift.y = sp.y;
-    point_t p = m_lens_correction.scan_to_corrected (sp-shift)+shift;
-    *xr = p.x;
-    *yr = p.y;
+    return m_lens_correction.scan_to_corrected (sp-shift)+shift;
   }
 
   /* Map screen coordinates to image coordinates.  */

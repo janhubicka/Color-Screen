@@ -14,7 +14,7 @@ struct lens_warp_correction_parameters
   {
   }
 
-  bool
+  pure_attr bool
   operator== (lens_warp_correction_parameters &other) const
   {
     return center == other.center && kr[0] == other.kr[0]
@@ -23,15 +23,15 @@ struct lens_warp_correction_parameters
   }
 
   /* Return true if lens need no correcting.  */
-  bool
-  is_noop ()
+  pure_attr bool
+  is_noop () const
   {
     return kr[0] == 1 && kr[1] == 0 && kr[2] == 0 && kr[3] == 0;
   }
 
   /* Apply the correction: kr0 + (kr1 * r^2) + (kr2 * r^4) + (kr3 * r^6)  */
-  coord_t
-  get_ratio (coord_t rsq)
+  pure_attr coord_t
+  get_ratio (coord_t rsq) const
   {
     if (rsq > 1)
       rsq = 1;
@@ -41,7 +41,7 @@ struct lens_warp_correction_parameters
   /* Verify that the correction is  monotone on a interval 0..1.
      This should be true for all sane parameters.  */
   pure_attr bool
-  is_monotone ()
+  is_monotone () const
   {
     coord_t l = 0;
     for (int i = 1; true; i++)

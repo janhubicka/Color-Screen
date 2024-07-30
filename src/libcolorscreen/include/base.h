@@ -43,12 +43,12 @@ struct point_t
 {
   coord_t x, y;
   pure_attr inline coord_t
-  dist_sq2_from (point_t p)
+  dist_sq2_from (point_t p) const
   {
     return (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y);
   }
   pure_attr inline coord_t
-  dist_from (point_t p)
+  dist_from (point_t p) const
   {
     return my_sqrt (dist_sq2_from (p));
   }
@@ -58,7 +58,7 @@ struct point_t
     y += other.y;
     return *this;
   }
-  pure_attr inline point_t operator+(const point_t other)
+  pure_attr inline point_t operator+(const point_t other) const
   {
     return {x + other.x, y + other.y};
   }
@@ -68,7 +68,7 @@ struct point_t
     y -= other.y;
     return *this;
   }
-  pure_attr inline point_t operator-(const point_t other)
+  pure_attr inline point_t operator-(const point_t other) const
   {
     return {x - other.x, y - other.y};
   }
@@ -78,11 +78,11 @@ struct point_t
     y *= other;
     return *this;
   }
-  pure_attr inline point_t operator*(const coord_t other)
+  pure_attr inline point_t operator*(const coord_t other) const
   {
     return {x * other, y * other};
   }
-  const_attr inline bool almost_eq(point_t other, coord_t epsilon = 0.001)
+  const_attr inline bool almost_eq(point_t other, coord_t epsilon = 0.001) const
   {
     return (fabs (x-other.x) < epsilon && fabs (y - other.y) < epsilon);
   }
@@ -90,11 +90,11 @@ struct point_t
   {
     return x == other.x && y == other.y;
   }
-  bool inline operator==(const point_t &other)
+  bool inline operator==(const point_t &other) const
   {
     return other.x == x && other.y == y;
   }
-  bool inline operator!=(const point_t &other)
+  bool inline operator!=(const point_t &other) const
   {
     return other.x != x || other.y != y;
   }
@@ -108,7 +108,7 @@ struct int_point_t
     y += other.y;
     return *this;
   }
-  pure_attr inline int_point_t operator+(const int_point_t other)
+  pure_attr inline int_point_t operator+(const int_point_t other) const
   {
     return {x + other.x, y + other.y};
   }
@@ -118,7 +118,7 @@ struct int_point_t
     y -= other.y;
     return *this;
   }
-  pure_attr inline int_point_t operator-(const int_point_t other)
+  pure_attr inline int_point_t operator-(const int_point_t other) const
   {
     return {x - other.x, y - other.y};
   }
@@ -128,23 +128,19 @@ struct int_point_t
     y *= other;
     return *this;
   }
-  pure_attr inline int_point_t operator*(const int64_t other)
+  pure_attr inline int_point_t operator*(const int64_t other) const
   {
     return {x * other, y * other};
-  }
-  const_attr inline bool almost_eq(int_point_t other, coord_t epsilon = 0.001)
-  {
-    return (fabs (x-other.x) < epsilon && fabs (y - other.y) < epsilon);
   }
   pure_attr inline bool operator== (int_point_t &other) const
   {
     return x == other.x && y == other.y;
   }
-  bool inline operator==(const int_point_t &other)
+  bool inline operator==(const int_point_t &other) const
   {
     return other.x == x && other.y == y;
   }
-  bool inline operator!=(const int_point_t &other)
+  bool inline operator!=(const int_point_t &other) const
   {
     return other.x != x || other.y != y;
   }

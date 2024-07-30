@@ -32,7 +32,7 @@ struct lens_warp_correction
                    point_t c4, bool need_inverse = true);
 
   inline pure_attr point_t
-  corrected_to_scan (point_t p)
+  corrected_to_scan (point_t p) const
   {
     if (m_noop)
       return p;
@@ -51,7 +51,7 @@ struct lens_warp_correction
   }
 
   inline pure_attr point_t
-  scan_to_corrected (point_t p)
+  scan_to_corrected (point_t p) const
   {
     if (m_noop)
       return p;
