@@ -83,21 +83,17 @@ public:
 
   /* Apply corrections that fix scanner optics that does not fit into the linear
      transformation matrix.  */
-  void
-  apply_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  pure_attr point_t
+  apply_early_correction (point_t p)
   {
-    apply_motor_correction (x, y, &x, &y);
-    point_t p = m_lens_correction.scan_to_corrected ({x,y});
-    *xr = p.x * m_inverted_projection_distance;
-    *yr = p.y * m_inverted_projection_distance;
+    p = apply_motor_correction (p);
+    return m_lens_correction.scan_to_corrected (p) * m_inverted_projection_distance;
   }
-  void
-  inverse_early_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr)
+  pure_attr point_t
+  inverse_early_correction (point_t p)
   {
-    x *= m_param.projection_distance;
-    y *= m_param.projection_distance;
-    point_t p = m_lens_correction.corrected_to_scan ({x,y});
-    inverse_motor_correction (p.x, p.y, xr, yr);
+    p = m_lens_correction.corrected_to_scan (p * m_param.projection_distance);
+    return inverse_motor_correction (p);
   }
 
   void
@@ -157,7 +153,9 @@ public:
       }
 #endif
 #endif
-    inverse_early_correction (x, y, xp, yp);
+    point_t p = inverse_early_correction ({x, y});
+    *xp = p.x;
+    *yp = p.y;
   }
   bool
   to_img_in_mesh_range (coord_t x, coord_t y)
@@ -182,7 +180,7 @@ public:
       }
     else
       {
-	apply_early_correction (xx, yy, &xx, &yy);
+	point_t p = apply_early_correction ({xx, yy});
 #if 0
         coord_t xx2, yy2;
         m_img_to_scr_homography_matrix.perspective_transform (xx, yy, xx2, yy2);
@@ -192,10 +190,10 @@ public:
         assert (fabs (yy2-*yp) < 0.1);
 #else
 	if (m_do_homography)
-	  m_img_to_scr_homography_matrix.perspective_transform (xx, yy, *xp, *yp);
+	  m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, *xp, *yp);
 	else
 	  {
-	    m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
+	    m_perspective_matrix.inverse_perspective_transform (p.x, p.y, xx, yy);
 	    m_inverse_matrix.apply (xx,yy, xp, yp);
 	  }
 #endif
@@ -286,29 +284,27 @@ private:
   lens_warp_correction m_lens_correction;
 
   /* Apply spline defining motor correction.  */
-  void
-  apply_motor_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr) const
+  pure_attr point_t
+  apply_motor_correction (point_t p) const
   {
-    *xr = x;
-    *yr = y;
     if (!m_motor_correction)
-      return;
+      return p;
     if (m_param.scanner_type == lens_move_horisontally || m_param.scanner_type == fixed_lens_sensor_move_horisontally)
-      *xr = m_motor_correction->apply (x);
+      p.x = m_motor_correction->apply (p.x);
     else
-      *yr = m_motor_correction->apply (y);
+      p.y = m_motor_correction->apply (p.y);
+    return p;
   }
-  void
-  inverse_motor_correction (coord_t x, coord_t y, coord_t *xr, coord_t *yr) const
+  pure_attr point_t
+  inverse_motor_correction (point_t p) const
   {
-    *xr = x;
-    *yr = y;
     if (!m_motor_correction)
-      return;
+      return p;
     if (m_param.scanner_type == lens_move_horisontally || m_param.scanner_type == fixed_lens_sensor_move_vertically)
-      *xr = m_motor_correction->invert (x);
+      p.x = m_motor_correction->invert (p.x);
     else
-      *yr = m_motor_correction->invert (y);
+      p.y = m_motor_correction->invert (p.y);
+    return p;
   }
   static const bool debug = colorscreen_checking;
   void initialize ();

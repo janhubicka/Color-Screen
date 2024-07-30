@@ -41,10 +41,10 @@ class rotation_distance_matrix: public matrix4x4<coord_t>
 class translation_3x3matrix: public matrix3x3<coord_t>
 {
 public:
-  translation_3x3matrix (coord_t center_x, coord_t center_y)
+  translation_3x3matrix (point_t center)
   {
-    m_elements[2][0] = center_x;
-    m_elements[2][1] = center_y;
+    m_elements[2][0] = center.x;
+    m_elements[2][1] = center.y;
   }
 };
 
@@ -52,11 +52,10 @@ public:
 class change_of_basis_3x3matrix: public matrix3x3<coord_t>
 {
 public:
-  change_of_basis_3x3matrix (coord_t c1_x, coord_t c1_y,
-			     coord_t c2_x, coord_t c2_y)
+  change_of_basis_3x3matrix (point_t c1, point_t c2)
   {
-    m_elements[0][0] = c1_x; m_elements[1][0] = c2_x;
-    m_elements[0][1] = c1_y; m_elements[1][1] = c2_y;
+    m_elements[0][0] = c1.x; m_elements[1][0] = c2.x;
+    m_elements[0][1] = c1.y; m_elements[1][1] = c2.y;
   }
 };
 
@@ -143,42 +142,23 @@ scr_to_img::initialize ()
   /* Now set up the projection matrix that combines tilts and shifting to a given distance.  */
   rotation_distance_matrix rd (m_param.projection_distance, m_param.tilt_x, m_param.tilt_y, m_param.scanner_type);
   m_perspective_matrix = rd;
-  coord_t c1x, c1y;
-  coord_t c2x, c2y;
-  coord_t corrected_center_x;
-  coord_t corrected_center_y;
   /* Center and base vectors are in the scan coordinates.  */
-  apply_early_correction (m_param.center_x, m_param.center_y,
-			  &corrected_center_x,	 &corrected_center_y);
-  apply_early_correction (m_param.coordinate1_x + m_param.center_x,
-			  m_param.coordinate1_y + m_param.center_y,
-			  &c1x, &c1y);
+  point_t corrected_center = apply_early_correction ({m_param.center_x, m_param.center_y});
+  point_t c1 = apply_early_correction ({m_param.coordinate1_x + m_param.center_x,
+					m_param.coordinate1_y + m_param.center_y});
+  point_t c2 = apply_early_correction ({m_param.coordinate2_x + m_param.center_x,
+					m_param.coordinate2_y + m_param.center_y});
 
-  apply_early_correction (m_param.coordinate2_x + m_param.center_x,
-			  m_param.coordinate2_y + m_param.center_y,
-			  &c2x, &c2y);
-
-  m_perspective_matrix.inverse_perspective_transform (corrected_center_x, corrected_center_y, corrected_center_x, corrected_center_y);
-  m_perspective_matrix.inverse_perspective_transform (c1x, c1y, c1x, c1y);
-  m_perspective_matrix.inverse_perspective_transform (c2x, c2y, c2x, c2y);
-  c1x -= corrected_center_x;
-  c1y -= corrected_center_y;
-  c2x -= corrected_center_x;
-  c2y -= corrected_center_y;
-#if 0
-  /* This makes the grid fixed which is sometimes useful to debug various bugs concerning
-     earlier corrections.  */
-  corrected_center_x = corrected_center_y = 0;
-  c1x=800;
-  c1y=0;
-  c2x=0;
-  c2y=800;
-#endif
+  m_perspective_matrix.inverse_perspective_transform (corrected_center.x, corrected_center.y, corrected_center.x, corrected_center.y);
+  m_perspective_matrix.inverse_perspective_transform (c1.x, c1.y, c1.x, c1.y);
+  m_perspective_matrix.inverse_perspective_transform (c2.x, c2.y, c2.x, c2.y);
+  c1 -= corrected_center;
+  c2 -= corrected_center;
 
   /* Change-of-basis matrix.  */
   trans_3d_matrix mm;
-  change_of_basis_3x3matrix basis (c1x, c1y, c2x, c2y);
-  translation_3x3matrix trans (corrected_center_x, corrected_center_y);
+  change_of_basis_3x3matrix basis (c1, c2);
+  translation_3x3matrix trans (corrected_center);
   mm = basis * mm;
   mm = trans * mm;
 
@@ -277,12 +257,11 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param, const image_data
 
   /* Next initialize lens correction.
      Lens center is specified in scan coordinates, so apply previous corrections.  */
-  point_t center, c1, c2, c3, c4;
-  apply_motor_correction (param.lens_correction.center.x * img.width, param.lens_correction.center.y * img.height, &center.x, &center.y);
-  apply_motor_correction (0, 0, &c1.x, &c1.y);
-  apply_motor_correction (img.width, 0, &c2.x, &c2.y);
-  apply_motor_correction (0, img.height, &c3.x, &c3.y);
-  apply_motor_correction (img.width, img.height, &c4.x, &c4.y);
+  point_t center = apply_motor_correction ({param.lens_correction.center.x * img.width, param.lens_correction.center.y * img.height});
+  point_t c1 = apply_motor_correction ({(coord_t)0, (coord_t)0});
+  point_t c2 = apply_motor_correction ({(coord_t)img.width, (coord_t)0});
+  point_t c3 = apply_motor_correction ({(coord_t)0, (coord_t)img.height});
+  point_t c4 = apply_motor_correction ({(coord_t)img.width, (coord_t)img.height});
   m_lens_correction.set_parameters (param.lens_correction);
   if (m_param.scanner_type == lens_move_horisontally)
     c1.x = c2.x = c3.x = c4.x = center.x = param.lens_correction.center.x;
