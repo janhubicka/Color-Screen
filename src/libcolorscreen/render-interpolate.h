@@ -15,7 +15,7 @@ public:
   render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval);
   ~render_interpolate ();
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
-  rgbdata sample_pixel_final (coord_t x, coord_t y)
+  pure_attr inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
@@ -50,8 +50,8 @@ public:
     m_scr_to_img.get_range (x1, y1, x2, y2, &xshift, &yshift, &width, &height);
     return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
-  pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y);
-  rgbdata sample_pixel_img (int x, int y)
+  pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y) const;
+  pure_attr inline rgbdata sample_pixel_img (int x, int y) const
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);

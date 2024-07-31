@@ -7,6 +7,7 @@
 #include "render-to-scr.h"
 #include "spline.h"
 
+std::atomic_ulong scr_to_img::m_nwarnings;
 namespace {
 
 class rotation_distance_matrix: public matrix4x4<coord_t>
@@ -96,13 +97,10 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio, coord_t final_a
      This makes flipped scans to come out right.  */
   if (!m_rotation_adjustment && m_param.type == Dufay)
     {
-      coord_t zx, zy, xx, yy;
       const coord_t dufay_angle = 23 + 0.77;
-      to_img (0, 0, &zx, &zy);
-      to_img (1, 0, &xx, &yy);
-      xx -= zx;
-      yy -= zy;
-      coord_t angle = -asin (xx / my_sqrt (xx*xx+yy*yy)) * 180 / M_PI;
+      point_t z = to_img ({(coord_t)0, (coord_t)0});
+      point_t d = to_img ({(coord_t)1, (coord_t)0}) - z;
+      coord_t angle = -asin (d.x / my_sqrt (d.x*d.x+d.y*d.y)) * 180 / M_PI;
       //angle += 23 - 99 + 0.77;
       for (int b = 0; b < 360; b += 90)
       {

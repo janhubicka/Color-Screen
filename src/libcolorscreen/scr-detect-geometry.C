@@ -1266,10 +1266,10 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       for (int x = -map->xshift; x < map->width - map->xshift; x++, last_seen++)
 	if (!map->known_p (x, y))
 	  {
-	    coord_t sx, sy, ix, iy;
+	    coord_t sx, sy;
 	    map->get_screen_coord (x, y, &sx, &sy);
-	    map2.to_img (sx, sy, &ix, &iy);
-	    if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+	    point_t img = map2.to_img ({sx, sy});
+	    if (img.x < xmin || img.x > xmax || img.y < ymin || img.y > ymax)
 	      continue;
 	    int xrmul = 2;
 	    int yrmul = param.type != Dufay ? 2 : 1;
@@ -1284,11 +1284,11 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    if (!found)
 	      {
 	        progress->pause_stdout ();
-	        printf ("Too large unanalyzed unknown screen area around image coordinates %f %f\n", ix, iy);
+	        printf ("Too large unanalyzed unknown screen area around image coordinates %f %f\n", img.x, img.y);
 		progress->resume_stdout ();
 		if (report_file)
 		  {
-		    fprintf (report_file, "Too large unanalyzed unknown screen area around image coordinates %f %f\n", ix, iy);
+		    fprintf (report_file, "Too large unanalyzed unknown screen area around image coordinates %f %f\n", img.x, img.y);
 		  }
 		return NULL;
 	      }
@@ -1391,9 +1391,9 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
 	  coord_t sx, sy;
 	  solver_parameters::point_color color;
 	  smap->get_screen_coord (x, y, &sx, &sy, &color);
-	  map.to_img (sx, sy, &ix, &iy);
+	  point_t imgp = map.to_img ({sx, sy});
 	  smap->get_coord (x, y, &ix2, &iy2);
-	  coord_t dist = sqrt ((ix-ix2) * (ix - ix2) + (iy - iy2) * (iy - iy2));
+	  coord_t dist = sqrt ((imgp.x-ix2) * (imgp.x - ix2) + (imgp.y - iy2) * (imgp.y - iy2));
 	  int t = (int)color;
 	  max_distance [t] = std::max (max_distance[t], dist);
 	  distance_sum [t] += dist;
@@ -1737,9 +1737,9 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		    coord_t ix, iy;
 		    coord_t sx, sy;
 		    smap->get_screen_coord (x, y, &sx, &sy);
-		    map.to_img (sx, sy, &ix, &iy);
+		    point_t imgp = map.to_img ({sx, sy});
 	            last_seen = 0;
-		    if ((ix <= ret.xmin && dsparams->left) || (iy < ret.ymin && dsparams->top) || (ix >= ret.xmax && dsparams->right) || (iy >= ret.ymax && dsparams->bottom))
+		    if ((imgp.x <= ret.xmin && dsparams->left) || (imgp.y < ret.ymin && dsparams->top) || (imgp.x >= ret.xmax && dsparams->right) || (imgp.y >= ret.ymax && dsparams->bottom))
 		      smap->set_coord (x, y, ix, iy);
 		    
 		  }

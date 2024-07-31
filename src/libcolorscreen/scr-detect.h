@@ -19,17 +19,20 @@ public:
     blue,
     unknown
   };
+  inline
   void adjust_linearized_color (luminosity_t r, luminosity_t g, luminosity_t b,
-				luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+				luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
   {
     m_color_adjust.apply_to_rgb (r, g, b, rr, gg, bb);
   }
+  inline
   void adjust_color (int r, int g, int b,
-		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb)
+		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
   {
     m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
   }
-  enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b)
+  inline pure_attr
+  enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b) const
   {
     luminosity_t ma = std::max (std::max (r, g), b);
     if (ma < m_param.min_luminosity)
@@ -47,7 +50,8 @@ public:
 
     return unknown;
   }
-  enum color_class classify_color (int ir, int ig, int ib)
+  inline pure_attr
+  enum color_class classify_color (int ir, int ig, int ib) const
   {
     luminosity_t r, g, b;
     adjust_color (ir, ig, ib, &r, &g, &b);

@@ -1324,25 +1324,25 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
 	common_scr_to_img.final_to_scr (x, y, &sx, &sy);
 	if (!tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
 	  continue;
-	coord_t tsx, tsy;
-	images[ty][tx].common_scr_to_img_scr (sx, sy, &tsx, &tsy);
+	point_t timg;
+	images[ty][tx].common_scr_to_img_scr (sx, sy, &timg.x, &timg.y);
 	int i = ty * params.width + tx;
 	if (!screen_ranges)
-	  images[ty][tx].scr_to_img_map.to_img (tsx, tsy, &tsx, &tsy);
+	  timg = images[ty][tx].scr_to_img_map.to_img (timg);
 	//printf ("tile %i %i final %i %i scr %f %f tile scr %f %f\n",tx,ty,x,y,sx,sy,tsx,tsy);
 	if (ranges[i].seen)
 	  {
-	    ranges[i].xmin = std::min (ranges[i].xmin, (coord_t)tsx);
-	    ranges[i].xmax = std::max (ranges[i].xmax, (coord_t)tsx);
-	    ranges[i].ymin = std::min (ranges[i].ymin, (coord_t)tsy);
-	    ranges[i].ymax = std::max (ranges[i].ymax, (coord_t)tsy);
+	    ranges[i].xmin = std::min (ranges[i].xmin, (coord_t)timg.x);
+	    ranges[i].xmax = std::max (ranges[i].xmax, (coord_t)timg.x);
+	    ranges[i].ymin = std::min (ranges[i].ymin, (coord_t)timg.y);
+	    ranges[i].ymax = std::max (ranges[i].ymax, (coord_t)timg.y);
 	  }
 	else
 	  {
-	    ranges[i].xmin = tsx;
-	    ranges[i].xmax = tsx;
-	    ranges[i].ymin = tsy;
-	    ranges[i].ymax = tsy;
+	    ranges[i].xmin = timg.x;
+	    ranges[i].xmax = timg.x;
+	    ranges[i].ymin = timg.y;
+	    ranges[i].ymax = timg.y;
 	  }
 	ranges[i].seen = true;
       }

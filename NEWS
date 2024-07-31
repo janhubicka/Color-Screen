@@ -11,6 +11,8 @@ Changes in version 1.1
    - `colorscreen` now support `--threads=n` parameter to control parallelism.
    - `colorscreen --help` is now organized into main section and independent 
      helps for every command
+   - `--disable-16bit-float` configure option now dsables use of more memory
+     effecient but slower 16bit floats for temporary data
  - Infrastructure improvements:
    - `make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,

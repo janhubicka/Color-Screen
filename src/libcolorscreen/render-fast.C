@@ -9,26 +9,13 @@ render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_
 pure_attr rgbdata
 render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 {
-  coord_t dx = x, dy = y;
-
-/*  This is precise version:
-
-       #define pixel(xo,yo) get_img_pixel_scr (dx + xo, dy + yo)
-
-    In the following we assume that map is linear within single repetition
-    of the screen.  This saves some matrix multiplication  */
-  coord_t xx, xy;
-  coord_t yx, yy;
   luminosity_t red, green, blue;
   //m_scr_to_img.to_img (dx, dy, &zx, &zy);
-  m_scr_to_img.to_img (dx+1, dy, &xx, &xy);
-  m_scr_to_img.to_img (dx, dy+1, &yx, &yy);
-  xx = xx - zx;
-  xy = xy - zy;
-  yx = yx - zx;
-  yy = yy - zy;
+  point_t z = {zx, zy};
+  point_t dx = m_scr_to_img.to_img ({(coord_t)(x + 1), (coord_t)y}) - z;
+  point_t dy = m_scr_to_img.to_img ({(coord_t)x, (coord_t)(y + 1)}) - z;
 
-#define pixel(xo,yo) get_img_pixel (zx + xx * (xo) + yx * (yo), zy + xy * (xo) + yy * (yo))
+#define pixel(xo,yo) get_img_pixel (z.x + dx.x * (xo) + dy.x * (yo), z.y + dx.y * (xo) + dy.y * (yo))
   
   if (m_scr_to_img.get_type () != Dufay)
     {

@@ -609,14 +609,14 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx, 
    const image_data *imgp = &img;
    if (img.stitch)
      {
-	coord_t sx, sy;
 	int tx, ty;
+	coord_t sx, sy;
 	img.stitch->common_scr_to_img.final_to_scr (xx + img.xmin, yy + img.ymin, &sx, &sy);
 	if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
 	  return color;
-	img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
-	xx = nearest_int (sx);
-	yy = nearest_int (sy);
+	point_t p = img.stitch->images[ty][tx].common_scr_to_img ({sx, sy});
+	xx = nearest_int (p.x);
+	yy = nearest_int (p.y);
 	imgp = img.stitch->images[ty][tx].img.get ();
      }
    render r (*imgp, rparam, 255);

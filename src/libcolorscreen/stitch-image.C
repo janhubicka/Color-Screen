@@ -174,18 +174,17 @@ stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int
     {
       for (int x = 0; x < width; x++)
 	{
-	  coord_t x1, y1;
-	  scr_to_img.to_img (x - xshift - 1, y - yshift - 1, &x1, &y1);
-	  if (x1 < xmin || x1 >= xmax || y1 < ymin || y1 >= ymax)
+	  point_t p = scr_to_img.to_img ({(coord_t)(x - xshift - 1), (coord_t)(y - yshift - 1)});
+	  if (p.x < xmin || p.x >= xmax || p.y < ymin || p.y >= ymax)
 	    continue;
-	  scr_to_img.to_img (x - xshift + 2, y - yshift - 1, &x1, &y1);
-	  if (x1 < xmin || x1 >= xmax || y1 < ymin || y1 >= ymax)
+	  p = scr_to_img.to_img ({(coord_t)(x - xshift + 2), (coord_t)(y - yshift - 1)});
+	  if (p.x < xmin || p.x >= xmax || p.y < ymin || p.y >= ymax)
 	    continue;
-	  scr_to_img.to_img (x - xshift - 1, y - yshift + 2, &x1, &y1);
-	  if (x1 < xmin || x1 >= xmax || y1 < ymin || y1 >= ymax)
+	  p = scr_to_img.to_img ({(coord_t)(x - xshift - 1), (coord_t)(y - yshift + 2)});
+	  if (p.x < xmin || p.x >= xmax || p.y < ymin || p.y >= ymax)
 	    continue;
-	  scr_to_img.to_img (x - xshift + 2, y - yshift + 2, &x1, &y1);
-	  if (x1 < xmin || x1 >= xmax || y1 < ymin || y1 >= ymax)
+	  p = scr_to_img.to_img ({(coord_t)(x - xshift + 2), (coord_t)(y - yshift + 2)});
+	  if (p.x < xmin || p.x >= xmax || p.y < ymin || p.y >= ymax)
 	    continue;
 	  known_pixels->set_bit (x, y);
 	}
@@ -398,13 +397,10 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
 		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
 	    {
-	      coord_t x1, y1, x2, y2;
-	      scr_to_img_map.to_img (x, y, &x1, &y1);
-	      other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
-	      //mesh_trans->apply (x,y, &x1, &y1);
-	      //other.mesh_trans->apply (xx, yy, &x2, &y2);
-	      if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
-	          || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
+	      point_t p1 = scr_to_img_map.to_img ({(coord_t)x, (coord_t)y});
+	      point_t p2 = other.scr_to_img_map.to_img ({(coord_t)xx, (coord_t)yy});
+	      if (p1.x < img_width * border || p1.x >= img_width * (1 - border) || p1.y < img_height * border || p1.y >= img_height * (1 - border)
+	          || p2.x < other.img_width * border || p2.x >= other.img_width * (1 - border) || p2.y < other.img_height * border || p2.y >= other.img_height * (1 - border))
 		continue;
 	      n++;
 	    }
@@ -437,39 +433,36 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
 		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
 	      {
-		coord_t x1, y1, x2, y2;
-		//mesh_trans->apply (x,y, &x1, &y1);
-		//other.mesh_trans->apply (xx, yy, &x2, &y2);
-	        scr_to_img_map.to_img (x, y, &x1, &y1);
-	        other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
-		if (x1 < img_width * border || x1 >= img_width * (1 - border) || y1 < img_height * border || y1 >= img_height * (1 - border)
-		    || x2 < other.img_width * border || x2 >= other.img_width * (1 - border) || y2 < other.img_height * border || y2 >= other.img_height * (1 - border))
+		point_t p1 = scr_to_img_map.to_img ({(coord_t)x, (coord_t)y});
+		point_t p2 = other.scr_to_img_map.to_img ({(coord_t)xx, (coord_t)yy});
+		if (p1.x < img_width * border || p1.x >= img_width * (1 - border) || p1.y < img_height * border || p1.y >= img_height * (1 - border)
+		    || p2.x < other.img_width * border || p2.x >= other.img_width * (1 - border) || p2.y < other.img_height * border || p2.y >= other.img_height * (1 - border))
 		  continue;
 	        if (m++ == next)
 		  {
 		    next += step;
 		    if (f)
-		      fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, x1, y1, x2, y2);
+		      fprintf (f,  "c n%i N%i x%f y%f X%f Y%f t0\n", n1, n2, p1.x, p1.y, p2.x, p2.y);
 
 		    if (!collect_stitch_info || nfound >= npoints)
 		      continue;
 
 		    gsl_matrix_set (X, nfound * 2, 0, 1.0);
 		    gsl_matrix_set (X, nfound * 2, 1, 0.0);
-		    gsl_matrix_set (X, nfound * 2, 2, x1);
+		    gsl_matrix_set (X, nfound * 2, 2, p1.x);
 		    gsl_matrix_set (X, nfound * 2, 3, 0);
-		    gsl_matrix_set (X, nfound * 2, 4, y1);
+		    gsl_matrix_set (X, nfound * 2, 4, p1.y);
 		    gsl_matrix_set (X, nfound * 2, 5, 0);
 
 		    gsl_matrix_set (X, nfound * 2+1, 0, 0.0);
 		    gsl_matrix_set (X, nfound * 2+1, 1, 1.0);
 		    gsl_matrix_set (X, nfound * 2+1, 2, 0);
-		    gsl_matrix_set (X, nfound * 2+1, 3, x1);
+		    gsl_matrix_set (X, nfound * 2+1, 3, p1.x);
 		    gsl_matrix_set (X, nfound * 2+1, 4, 0);
-		    gsl_matrix_set (X, nfound * 2+1, 5, y1);
+		    gsl_matrix_set (X, nfound * 2+1, 5, p1.y);
 
-		    gsl_vector_set (vy, nfound * 2, x2);
-		    gsl_vector_set (vy, nfound * 2 + 1, y2);
+		    gsl_vector_set (vy, nfound * 2, p2.x);
+		    gsl_vector_set (vy, nfound * 2 + 1, p2.y);
 		    gsl_vector_set (w, nfound * 2, 1.0);
 		    gsl_vector_set (w, nfound * 2 + 1, 1.0);
 		    nfound++;
@@ -508,30 +501,27 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 		    && screen_detected_patches->test_bit (x + xshift, y + yshift)
 		    && other.screen_detected_patches->test_bit (floor (xx) + other.xshift, floor (yy) + other.yshift))
 		  {
-		    coord_t x1, y1, x2, y2;
-		    //mesh_trans->apply (x,y, &x1, &y1);
-		    //other.mesh_trans->apply (xx, yy, &x2, &y2);
-	            scr_to_img_map.to_img (x, y, &x1, &y1);
-	            other.scr_to_img_map.to_img (xx, yy, &x2, &y2);
-		    if (x1 < 0 || x1 >= img_width || y1 < 0 || y1 >= img_height
-			|| x2 < 0 || x2 >= other.img_width || y2 < 0 || y2 > other.img_height)
+		    point_t p1 = scr_to_img_map.to_img ({(coord_t)x, (coord_t)y});
+		    point_t p2 = other.scr_to_img_map.to_img ({(coord_t)xx, (coord_t)yy});
+		    if (p1.x < img_width * border || p1.x >= img_width * (1 - border) || p1.y < img_height * border || p1.y >= img_height * (1 - border)
+			|| p2.x < other.img_width * border || p2.x >= other.img_width * (1 - border) || p2.y < other.img_height * border || p2.y >= other.img_height * (1 - border))
 		      continue;
-		    coord_t px = C(0) + x1 * C(2) + y1 * C(4);
-		    coord_t py = C(1) + x1 * C(3) + y1 * C(5);
-		    coord_t dist = sqrt ((x2 - px) * (x2 - px) + (y2 - py) * (y2 - py));
+		    coord_t px = C(0) + p1.x * C(2) + p1.y * C(4);
+		    coord_t py = C(1) + p1.x * C(3) + p1.y * C(5);
+		    coord_t dist = sqrt ((p2.x - px) * (p2.x - px) + (p2.y - py) * (p2.y - py));
 		    distsum += dist;
 		    maxdist = std::max (maxdist, dist);
-		    assert ((((int)y1) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)x1) / m_prj->stitch_info_scale <= (img_width / m_prj->stitch_info_scale + 1) * (img_height / m_prj->stitch_info_scale + 1));
-		    assert ((((int)y1) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)x1) / m_prj->stitch_info_scale >= 0);
-		    struct stitch_info &info = stitch_info[(((int)y1) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)x1) / m_prj->stitch_info_scale];
-		    info.x += fabs(x2-px);
-		    info.y += fabs(y2-py);
+		    assert ((((int)p1.y) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)p1.x) / m_prj->stitch_info_scale <= (img_width / m_prj->stitch_info_scale + 1) * (img_height / m_prj->stitch_info_scale + 1));
+		    assert ((((int)p1.y) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)p1.x) / m_prj->stitch_info_scale >= 0);
+		    struct stitch_info &info = stitch_info[(((int)p1.y) / m_prj->stitch_info_scale) * (img_width / m_prj->stitch_info_scale + 1) + ((int)p1.x) / m_prj->stitch_info_scale];
+		    info.x += fabs(p2.x-px);
+		    info.y += fabs(p2.y-py);
 		    info.sum++;
-		    assert ((((int)y2) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)x2) / m_prj->stitch_info_scale <= (other.img_width / m_prj->stitch_info_scale + 1) * (other.img_height / m_prj->stitch_info_scale + 1));
-		    assert ((((int)y2) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)x2) / m_prj->stitch_info_scale >= 0);
-		    struct stitch_info &info2 = other.stitch_info[(((int)y2) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)x2) / m_prj->stitch_info_scale];
-		    info2.x += fabs(x2-px);
-		    info2.y += fabs(y2-py);
+		    assert ((((int)p2.y) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)p2.x) / m_prj->stitch_info_scale <= (other.img_width / m_prj->stitch_info_scale + 1) * (other.img_height / m_prj->stitch_info_scale + 1));
+		    assert ((((int)p2.y) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)p2.x) / m_prj->stitch_info_scale >= 0);
+		    struct stitch_info &info2 = other.stitch_info[(((int)p2.y) / m_prj->stitch_info_scale) * (other.img_width / m_prj->stitch_info_scale + 1) + ((int)p2.x) / m_prj->stitch_info_scale];
+		    info2.x += fabs(p2.x-px);
+		    info2.y += fabs(p2.y-py);
 		    info2.sum++;
 		    npoints++;
 		  }
@@ -826,12 +816,11 @@ pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 bool
 stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 {
-  coord_t ix, iy;
-  scr_to_img_map.to_img (sx - xpos, sy - ypos, &ix, &iy);
-  return ix >= (left ? 5 : img_width * 0.02)
-	 && iy >= (top ? 5 : img_height * 0.02)
-	 && ix <= (right ? img_width - 5 : img_width * 0.98)
-	 && iy <= (bottom ? img_height - 5 : img_height * 0.98);
+  point_t imgp = scr_to_img_map.to_img ({sx - xpos, sy - ypos});
+  return imgp.x >= (left ? 5 : img_width * 0.02)
+	 && imgp.y >= (top ? 5 : img_height * 0.02)
+	 && imgp.x <= (right ? img_width - 5 : img_width * 0.98)
+	 && imgp.y <= (bottom ? img_height - 5 : img_height * 0.98);
 }
 bool
 img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
@@ -1345,15 +1334,14 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 
 	    if (!other.pixel_maybe_in_range_p (common_x, common_y))
 	      continue;
-	    coord_t iix, iiy;
-	    other.common_scr_to_img (common_x, common_y, &iix, &iiy);
-	    if (iix < xmin2 || iix >=xmax2 || iiy < ymin2 || iiy >= ymax2)
+	    point_t imgp = other.common_scr_to_img ({common_x, common_y});
+	    if (imgp.x < xmin2 || imgp.x >=xmax2 || imgp.y < ymin2 || imgp.y >= ymax2)
 	      continue;
 	    luminosity_t weight = (luminosity_t)
 	      std::min ((coord_t)std::min (std::min (xx, img_width - xx),
 						std::min (yy, img_height - yy)),
-			std::min (std::min (iix, other.img_width - iix),
-			     std::min (iiy, other.img_height - iiy)));
+			std::min (std::min (imgp.x, other.img_width - imgp.x),
+			     std::min (imgp.y, other.img_height - imgp.y)));
 	    if (!(weight > 0))
 	      continue;
 #pragma omp critical
@@ -1386,11 +1374,11 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 	      }
 	    if (!render2)
 	      break;
-	    struct common_sample sample = {(coord_t)xx,(coord_t)yy,iix,iiy,{0,0,0,0},{0,0,0,0},weight};
+	    struct common_sample sample = {(coord_t)xx,(coord_t)yy,imgp.x,imgp.y,{0,0,0,0},{0,0,0,0},weight};
 	    if (img->rgbdata)
 	      {
 		rgbdata d1 =  sample_image_area (img.get (), render1, xx, yy, range);
-		rgbdata d2 =  sample_image_area (other.img.get (), render2, iix, iiy, range);
+		rgbdata d2 =  sample_image_area (other.img.get (), render2, imgp.x, imgp.y, range);
 
 		sample.channel1[0] = d1.red;
 		sample.channel2[0] = d2.red;

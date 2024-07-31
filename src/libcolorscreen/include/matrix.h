@@ -135,14 +135,14 @@ public:
 
   /* Matrix-vector multiplication.  */
   inline void
-  apply_to_vector (T x, T y, T *xx, T *yy)
+  apply_to_vector (T x, T y, T *xx, T *yy) const
   {
     *xx = x * B::m_elements[0][0] + y * B::m_elements[1][0];
     *yy = x * B::m_elements[0][1] + y * B::m_elements[1][1];
   }
 
   /* Compute inversion.  */
-  inline matrix2x2
+  pure_attr inline matrix2x2
   invert ()
   {
     T a = B::m_elements[0][0];
@@ -183,7 +183,7 @@ public:
 
   /* Apply matrix to vector (x,y,1) and return its two elements.  */
   inline void
-  apply (T x, T y, T *xx, T *yy)
+  apply (T x, T y, T *xx, T *yy) const
   {
     *xx = x * B::m_elements[0][0] + y * B::m_elements[1][0] + B::m_elements[2][0];
     *yy = x * B::m_elements[0][1] + y * B::m_elements[1][1] + B::m_elements[2][1];
@@ -191,7 +191,7 @@ public:
 
   /* Compute inversion.  */
   inline matrix3x3
-  invert ()
+  invert () const
   {
     T determinant = 0;
     matrix3x3 ret;
@@ -248,7 +248,7 @@ public:
   /* Apply matrix to 2 dimensional coordinates and do perspective projetion.
      TODO: function is transposed  */
   inline void
-  perspective_transform (T x, T y, T &xr, T &yr)
+  perspective_transform (T x, T y, T &xr, T &yr) const
   {
     xr =   (x * B::m_elements[0][0] + y * B::m_elements[1][0] + B::m_elements[2][0] + B::m_elements[3][0])
 	 / (x * B::m_elements[0][2] + y * B::m_elements[1][2] + B::m_elements[2][2] + B::m_elements[3][2]);
@@ -258,7 +258,7 @@ public:
 
   /* Inverse transform for the operation above.  */
   inline void
-  inverse_perspective_transform (T x, T y, T &xr, T &yr)
+  inverse_perspective_transform (T x, T y, T &xr, T &yr) const
   {
     matrix2x2<T> m (B::m_elements[0][0] - B::m_elements[0][2] * x,
 	            B::m_elements[0][1] - B::m_elements[0][3] * y,
@@ -301,7 +301,7 @@ public:
 
   /* Matrix-vector multiplication used for RGB values.  */
   always_inline_attr inline void
-  apply_to_rgb (T r, T g, T b, T *rr, T *gg, T *bb)
+  apply_to_rgb (T r, T g, T b, T *rr, T *gg, T *bb) const
   {
     *rr = r * B::m_elements[0][0] + g * B::m_elements[1][0] + b * B::m_elements[2][0] + B::m_elements[3][0];
     *gg = r * B::m_elements[0][1] + g * B::m_elements[1][1] + b * B::m_elements[2][1] + B::m_elements[3][1];
@@ -339,8 +339,8 @@ public:
 	B::m_elements[i][j] *= mul;
   }
   /* Compute inversion.  */
-  inline matrix4x4
-  invert ()
+  pure_attr inline matrix4x4
+  invert () const
   {
     T A2323 = B::m_elements[2][2] * B::m_elements[3][3] - B::m_elements[2][3] * B::m_elements[3][2];
     T A1323 = B::m_elements[2][1] * B::m_elements[3][3] - B::m_elements[2][3] * B::m_elements[3][1];

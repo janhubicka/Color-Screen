@@ -507,18 +507,17 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
 		  s->to_scr (x, y, &sx, &sy);
 		  int isx = my_floor (sx);
 		  int isy = my_floor (sy);
-		  coord_t ix, iy;
-		  s->to_img (isx, isy, &ix, &iy);
-		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		  point_t ip = s->to_img ({(coord_t)isx, (coord_t)isy});
+		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
-		  s->to_img (isx + 1, isy, &ix, &iy);
-		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		  ip = s->to_img ({(coord_t)(isx + 1), (coord_t)isy});
+		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
-		  s->to_img (isx, isy + 1, &ix, &iy);
-		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		  ip = s->to_img ({(coord_t)isx, (coord_t)(isy + 1)});
+		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
-		  s->to_img (isx + 1, isy + 1, &ix, &iy);
-		  if (ix < xmin || ix > xmax || iy < ymin || iy > ymax)
+		  s->to_img ({(coord_t)(isx + 1), (coord_t)(isy + 1)});
+		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
 	        }
 	      rcount[(int)m_color_class_map->get_class (x, y)]++;

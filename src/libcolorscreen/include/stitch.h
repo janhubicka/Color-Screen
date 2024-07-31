@@ -165,9 +165,10 @@ class stitch_image
     *isx = sx - xpos;
     *isy = sy - ypos;
   }
-  void common_scr_to_img (coord_t sx, coord_t sy, coord_t *ix, coord_t *iy)
+  pure_attr point_t
+  common_scr_to_img (point_t p) const
   {
-    scr_to_img_map.to_img (sx - xpos, sy - ypos, ix, iy);
+    return scr_to_img_map.to_img ({p.x - xpos, p.y - ypos});
   }
   struct common_sample
   {
@@ -253,14 +254,13 @@ public:
 	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
 	      && images[iy][ix].pixel_maybe_in_range_p (sx, sy))
 	    {
-	      coord_t xx, yy;
 	      /* Compute image coordinates.  */
-	      images[iy][ix].common_scr_to_img (sx, sy, &xx, &yy);
+	      point_t pp = images[iy][ix].common_scr_to_img ({sx, sy});
 	      /* Shortest distance from the edge.  */
-	      if (xx < 0 || xx >= images[iy][ix].img_width || yy < 0 || yy >= images[iy][ix].img_height)
+	      if (pp.x < 0 || pp.x >= images[iy][ix].img_width || pp.y < 0 || pp.y >= images[iy][ix].img_height)
 		continue;
-	      int dd = std::min (std::min ((int)xx, images[iy][ix].img_width - (int)xx),
-				 std::min ((int)yy, images[iy][ix].img_height - (int)yy));
+	      int dd = std::min (std::min ((int)pp.x, images[iy][ix].img_width - (int)pp.x),
+				 std::min ((int)pp.y, images[iy][ix].img_height - (int)pp.y));
 	      /* Try to minimize distances to edges.  */
 	      if (dd>0 && (!found || dd > bdist))
 	        {

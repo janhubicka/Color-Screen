@@ -820,25 +820,24 @@ analyze_base_worker<GEOMETRY>::analyze (
 
       /* Determine region is image that is covered by screen.  */
       int minx, maxx, miny, maxy;
-      coord_t dx, dy;
-      scr_to_img->to_img (-m_xshift, -m_yshift, &dx, &dy);
-      minx = maxx = dx;
-      miny = maxy = dy;
-      scr_to_img->to_img (-m_xshift + m_width, -m_yshift, &dx, &dy);
-      minx = std::min ((int)dx, minx);
-      miny = std::min ((int)dy, miny);
-      maxx = std::max ((int)dx, maxx);
-      maxy = std::max ((int)dy, maxy);
-      scr_to_img->to_img (-m_xshift, -m_yshift + m_height, &dx, &dy);
-      minx = std::min ((int)dx, minx);
-      miny = std::min ((int)dy, miny);
-      maxx = std::max ((int)dx, maxx);
-      maxy = std::max ((int)dy, maxy);
-      scr_to_img->to_img (-m_xshift + m_width, -m_yshift + m_height, &dx, &dy);
-      minx = std::min ((int)dx, minx);
-      miny = std::min ((int)dy, miny);
-      maxx = std::max ((int)dx, maxx);
-      maxy = std::max ((int)dy, maxy);
+      point_t d = scr_to_img->to_img ({(coord_t)-m_xshift, (coord_t)-m_yshift});
+      minx = maxx = d.x;
+      miny = maxy = d.y;
+      d = scr_to_img->to_img ({(coord_t)(-m_xshift + m_width), (coord_t)-m_yshift});
+      minx = std::min ((int)d.x, minx);
+      miny = std::min ((int)d.y, miny);
+      maxx = std::max ((int)d.x, maxx);
+      maxy = std::max ((int)d.y, maxy);
+      d = scr_to_img->to_img ({(coord_t)-m_xshift, (coord_t)(-m_yshift + m_height)});
+      minx = std::min ((int)d.x, minx);
+      miny = std::min ((int)d.y, miny);
+      maxx = std::max ((int)d.x, maxx);
+      maxy = std::max ((int)d.y, maxy);
+      d = scr_to_img->to_img ({(coord_t)(-m_xshift + m_width), (coord_t)(-m_yshift + m_height)});
+      minx = std::min ((int)d.x, minx);
+      miny = std::min ((int)d.y, miny);
+      maxx = std::max ((int)d.x, maxx);
+      maxy = std::max ((int)d.y, maxy);
 
       minx = std::max (minx, 0);
       miny = std::max (miny, 0);

@@ -31,8 +31,8 @@ public:
 	  }
     return t;
   }
-  inline rgbdata
-  get_screen_color (coord_t xp, coord_t yp)
+  pure_attr inline rgbdata
+  get_screen_color (coord_t xp, coord_t yp) const
   {
     /* Center of pixel [0,0] is [0.5,0.5].  */
     xp -= (coord_t)0.5;
@@ -66,7 +66,7 @@ public:
   }
   bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *);
   bool precompute_rgbdata (progress_info *progress);
-  rgbdata get_adjusted_pixel (coord_t xp, coord_t yp)
+  pure_attr inline rgbdata get_adjusted_pixel (coord_t xp, coord_t yp) const
   {
     xp -= (coord_t)0.5;
     yp -= (coord_t)0.5;
@@ -133,45 +133,45 @@ public:
   }
   /* TODO: 16bit floats seems to be too slow for screen detection.  */
   typedef rgbdata my_mem_rgbdata;
-  my_mem_rgbdata fast_precomputed_get_adjusted_pixel (int x, int y)
+  pure_attr inline my_mem_rgbdata fast_precomputed_get_adjusted_pixel (int x, int y) const
   {
     return m_precomputed_rgbdata[y * m_img.width + x];
   }
-  my_mem_rgbdata fast_precomputed_get_normalized_pixel (int x, int y)
+  pure_attr inline my_mem_rgbdata fast_precomputed_get_normalized_pixel (int x, int y) const
   {
     return normalize_color (m_precomputed_rgbdata[y * m_img.width + x]);
   }
-  rgbdata adjust_linearized_color (rgbdata c)
+  pure_attr inline rgbdata adjust_linearized_color (rgbdata c) const
   {
     rgbdata d;
     m_scr_detect.adjust_linearized_color (c.red, c.green, c.blue, &d.red, &d.green, &d.blue);
     return d;
   }
-  rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y)
+  pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int x, int y) const
   {
     rgbdata d;
     m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return d;
   }
-  rgbdata fast_nonprecomputed_get_normalized_pixel (int x, int y)
+  pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int x, int y) const
   {
     rgbdata d;
     m_scr_detect.adjust_color (m_img.rgbdata[y][x].r, m_img.rgbdata[y][x].g, m_img.rgbdata[y][x].b, &d.red, &d.green, &d.blue);
     return normalize_color (d);
   }
-  rgbdata fast_get_adjusted_pixel (int x, int y)
+  pure_attr inline rgbdata fast_get_adjusted_pixel (int x, int y) const
   {
     if (m_precomputed_rgbdata)
       return fast_precomputed_get_adjusted_pixel (x, y);
     else
       return fast_nonprecomputed_get_adjusted_pixel (x, y);
   }
-  rgbdata fast_get_normalized_pixel (int x, int y)
+  pure_attr inline rgbdata fast_get_normalized_pixel (int x, int y) const
   {
     rgbdata c = normalize_color (fast_get_adjusted_pixel (x, y));
     return c;
   }
-  rgbdata fast_get_screen_pixel (int x, int y)
+  pure_attr inline rgbdata fast_get_screen_pixel (int x, int y) const
   {
     rgbdata d;
     d.red = m_color_class_map->get_color_red (x, y);
@@ -194,7 +194,7 @@ public:
     set_color (d.red,d.green,d.blue, r, g, b);
   }
 #endif
-  rgbdata get_normalized_pixel_img (coord_t x, coord_t y)
+  pure_attr inline rgbdata get_normalized_pixel_img (coord_t x, coord_t y) const
   {
     int xx = x;
     int yy = y;
@@ -203,8 +203,8 @@ public:
     //rgbdata d = fast_get_normalized_pixel (xx, yy);
     return  fast_get_normalized_pixel (xx, yy);
   }
-  luminosity_t
-  get_patch_density (int x, int y, scr_detect::color_class c)
+  inline pure_attr luminosity_t
+  get_patch_density (int x, int y, scr_detect::color_class c) const
   {
     const int max_patch_size = 16;
     struct queue {int x, y;} queue [max_patch_size];
@@ -279,8 +279,8 @@ public:
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy)
+  pure_attr inline rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy) const
   {
     return get_adjusted_pixel (xx, yy);
   }
@@ -293,8 +293,8 @@ public:
     return precompute_all (progress);
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
-  void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  inline void
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
     set_color (d.red, d.green, d.blue, r,g,b);
@@ -311,8 +311,8 @@ public:
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy)
+  pure_attr inline rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy) const
   {
     return get_normalized_pixel_img (xx, yy);
   }
@@ -336,8 +336,8 @@ public:
   void set_render_type (render_type_parameters rtparam)
   {
   }
-  rgbdata
-  sample_pixel_img (coord_t xx, coord_t yy)
+  pure_attr inline rgbdata
+  sample_pixel_img (coord_t xx, coord_t yy) const
   {
     return get_screen_color (xx, yy);
   }
@@ -351,7 +351,7 @@ public:
   }
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
   void
-  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+  render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) const
   {
     rgbdata d = sample_pixel_img (x, y);
     set_color (d.red, d.green, d.blue, r,g,b);
@@ -366,8 +366,8 @@ public:
   }
   void inline render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b);
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
-  inline rgbdata fast_sample_pixel_img (int x, int y);
-  inline rgbdata sample_pixel_img (coord_t x, coord_t y);
+  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
+  pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y) const;
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
@@ -381,18 +381,18 @@ public:
   }
 private:
 };
-inline rgbdata
-render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y)
+pure_attr inline rgbdata
+render_scr_detect_superpose_img::fast_sample_pixel_img (int x, int y) const
 {
   return get_screen_color (x, y) * get_data (x, y);
 }
-inline rgbdata
-render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y)
+pure_attr inline rgbdata
+render_scr_detect_superpose_img::sample_pixel_img (coord_t x, coord_t y) const
 {
   return get_screen_color (x, y) * get_img_pixel (x, y);
 }
 void
-render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b)
+render_scr_detect_superpose_img::render_pixel_img (coord_t x, coord_t y, int *r, int *g, int *b) 
 {
   rgbdata d = sample_pixel_img (x, y);
   set_color (d.red, d.green, d.blue, r,g,b);
@@ -427,8 +427,8 @@ public:
   { 
   }
   bool precompute_all (progress_info *);
-  rgbdata
-  fast_sample_pixel_img (int x, int y)
+  inline pure_attr rgbdata
+  fast_sample_pixel_img (int x, int y) const
   {
     if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
       return {0,0,0};
@@ -463,7 +463,7 @@ public:
   }
 private:
   luminosity_t *cdata[3];
-  luminosity_t get_luminosity (int color, int x, int y)
+  inline luminosity_t get_luminosity (int color, int x, int y) const
     {
       return cdata[color][y * m_img.width + x];
     }
@@ -476,8 +476,8 @@ public:
    : render_scr_detect (param, data, rparam, dst_maxval)
   { 
   }
-  rgbdata
-  sample_pixel_img (coord_t x, coord_t y)
+  inline pure_attr rgbdata
+  sample_pixel_img (coord_t x, coord_t y) const
   {
      /* Search for nearest pixels of each known color.  */
      const coord_t inf = distance_list::max_distance + 1;
@@ -510,8 +510,8 @@ public:
      else
       return {get_patch_density (rx[0], ry[0], scr_detect::red), get_patch_density (rx[1], ry[1], scr_detect::green), get_patch_density (rx[2], ry[2], scr_detect::blue)};
   }
-  rgbdata
-  fast_sample_pixel_img (int x, int y)
+  inline pure_attr rgbdata
+  fast_sample_pixel_img (int x, int y) const
   {
     return sample_pixel_img (x + 0.5, y + 0.5);
   }

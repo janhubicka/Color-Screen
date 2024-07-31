@@ -14,7 +14,7 @@ const char *solver_parameters::point_color_names[(int)max_point_color] = {"red",
 namespace
 {
 bool debug_output = false;
-bool debug = false;
+bool debug = colorscreen_checking;
 
 inline int fast_rand16(unsigned int *g_seed) {
     *g_seed = (214013* *g_seed+2531011);
@@ -298,16 +298,16 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   h.perspective_transform (1, 0, coordinate1_x, coordinate1_y);
   h.perspective_transform (0, 1, coordinate2_x, coordinate2_y);
 
-  map.to_img (center_x, center_y, &center_x, &center_y);
-  map.to_img (coordinate1_x, coordinate1_y, &coordinate1_x, &coordinate1_y);
-  map.to_img (coordinate2_x, coordinate2_y, &coordinate2_x, &coordinate2_y);
+  point_t center = map.to_img ({center_x, center_y});
+  point_t coordinate1 = map.to_img ({coordinate1_x, coordinate1_y}) - center;
+  point_t coordinate2 = map.to_img ({coordinate2_x, coordinate2_y}) - center;
 
-  param->center_x = center_x;
-  param->center_y = center_y;
-  param->coordinate1_x = coordinate1_x - center_x;
-  param->coordinate1_y = coordinate1_y - center_y;
-  param->coordinate2_x = coordinate2_x - center_x;
-  param->coordinate2_y = coordinate2_y - center_y;
+  param->center_x = center.x;
+  param->center_y = center.y;
+  param->coordinate1_x = coordinate1.x;
+  param->coordinate1_y = coordinate1.y;
+  param->coordinate2_x = coordinate2.x;
+  param->coordinate2_y = coordinate2.y;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
   if (flags & homography::solve_rotation)
     {
@@ -333,12 +333,11 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 		  for (int sy = -100; sy <= 100; sy+=100)
 		    for (int sx = -100; sx <= 100; sx+=100)
 		      {
-			coord_t xt, yt;
-			map2.to_img (sx, sy, &xt, &yt);
-			coord_t px, py;
-			h.perspective_transform (sx, sy, px, py);
-			map.to_img (px, py, &px, &py);
-			sq += (px - xt) * (px - xt) + (py - yt) * (py - yt);
+			point_t t = map2.to_img ({(coord_t)sx, (coord_t)sy});
+			point_t p;
+			h.perspective_transform (sx, sy, p.x, p.y);
+			p = map.to_img (p);
+			sq += p.dist_sq2_from (t);
 		      }
 
 		  if (sq < minsq)
@@ -427,11 +426,10 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  coord_t xt, yt;
-	  map2.to_img (xs, ys, &xt, &yt);
-	  coord_t px, py;
-	  h.perspective_transform (xs, ys, px, py);
-	  map.to_img (px, py, &px, &py);
+	  point_t t = map2.to_img ({xs, ys});
+	  point_t p;
+	  h.perspective_transform (xs, ys, p.x, p.y);
+	  p = map.to_img (p);
 
 #if 0
 	  map.to_img (px, py, &px, &py);
@@ -439,9 +437,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	    printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
 		px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
 #endif
-	  if (fabs (px - xt) > 1 || fabs (py - yt) > 1)
+	  if (!p.almost_eq (t))
 	    {
-	      printf ("Solver model mismatch %f %f should be %f %f (ideally %f %f)\n", xt, yt, px, py, xi, yi);
+	      printf ("Solver model mismatch %f %f should be %f %f (ideally %f %f)\n", t.x, t.y, p.x, p.y, xi, yi);
 	      found = true;
 	    }
 	}

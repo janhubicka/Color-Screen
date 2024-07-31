@@ -25,7 +25,7 @@ enum scr_type
    max_scr_type
 };
 DLL_PUBLIC extern const char * const scr_names[max_scr_type];
-DLL_PUBLIC rgbdata patch_proportions (enum scr_type t, render_parameters *);
+pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t, const render_parameters *);
 
 /* Type of a scanner used.  */
 enum scanner_type {

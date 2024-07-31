@@ -298,17 +298,17 @@ screen_map::write_outliers_info (const char *filename, int imgwidth,
     for (int x = 0; x < width; x++)
       if (known_p (x - xshift, y - yshift))
         {
-          coord_t ix1, ix2, iy1, iy2;
+          coord_t ix1, iy1;
           coord_t sx, sy;
           get_coord (x - xshift, y - yshift, &ix1, &iy1);
           get_screen_coord (x - xshift, y - yshift, &sx, &sy);
-          map.to_img (sx, sy, &ix2, &iy2);
           if (ix1 < 0 || ix1 >= imgwidth || iy1 < 0 || iy1 >= imgheight)
             continue;
+          point_t imgp = map.to_img ({sx, sy});
           struct summary &i
               = info[((int)ix1) / scale + (((int)iy1) / scale) * infowidth];
-          i.x = std::max (i.x, fabs (ix1 - ix2) + 1);
-          i.y = std::max (i.y, fabs (iy1 - iy2) + 1);
+          i.x = std::max (i.x, fabs (ix1 - imgp.x) + 1);
+          i.y = std::max (i.y, fabs (iy1 - imgp.y) + 1);
         }
   TIFF *out = TIFFOpen (filename, "wb");
   if (!out)

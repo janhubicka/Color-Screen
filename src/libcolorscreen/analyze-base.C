@@ -199,13 +199,12 @@ analyze_base::find_best_match_using_cpfind (analyze_base &other, coord_t *xshift
 	    {
 	      int xx = -xo / (coord_t)scale - (m_xshift - other.m_xshift);
 	      int yy = -yo / (coord_t)scale - (m_yshift - other.m_yshift);
-	      coord_t xi, yi;
-	      map.to_img (lx + xx, ly + yy, &xi, &yi);
+	      point_t imgp = map.to_img ({lx + xx, ly + yy});
 
-	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
-		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
+	      if ((direction == 0 && (imgp.x < 0 || fabs (imgp.y) > fabs (imgp.x)/5))
+		  || (direction == 1 && (imgp.y < 0 || fabs (imgp.x) > fabs (imgp.y)/5)))
 		{
-		  fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, xi, yi);
+		  fprintf (report_file, "Control point %f %f %f %f identified by cpfind discarded since offset is in wrong direction %f %f\n", x1,y1,x2,y2, imgp.x, imgp.y);
 		  continue;
 		}
 	    }
@@ -457,13 +456,12 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 #if 1
 	  if (direction >= 0)
 	    {
-	      coord_t xi, yi;
-	      map.to_img (x + lx, y + ly, &xi, &yi);
-	      if ((direction == 0 && (xi < 0 || fabs (yi) > fabs (xi)/5))
-		  || (direction == 1 && (yi < 0 || fabs (xi) > fabs (yi)/5)))
+	      point_t imgp = map.to_img ({x + lx, y + ly});
+	      if ((direction == 0 && (imgp.x < 0 || fabs (imgp.y) > fabs (imgp.x)/5))
+		  || (direction == 1 && (imgp.y < 0 || fabs (imgp.x) > fabs (imgp.y)/5)))
 		{
 		  if (is_cpfind)
-		    fprintf (report_file, "cpfind offset in wrong direction %f %f\n", xi, yi);
+		    fprintf (report_file, "cpfind offset in wrong direction %f %f\n", imgp.x, imgp.y);
 		  continue;
 		}
 	    }

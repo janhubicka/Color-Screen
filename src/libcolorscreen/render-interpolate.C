@@ -184,7 +184,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 }
 
 pure_attr rgbdata
-render_interpolate::sample_pixel_scr (coord_t x, coord_t y)
+render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 {
   rgbdata c;
 
@@ -316,14 +316,13 @@ render_interpolate::analyze_patches (analyzer analyze,
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < m_dufay->get_width (); x++)
 	      {
-		coord_t xp, yp;
 		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
 		if (!screen)
 		  {
-		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
-		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		    point_t imgp = m_scr_to_img.to_img ({xs, ys});
+		    if (!screen && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax || imgp.y > ymax))
 		      continue;
 		  }
 		rgbdata c = m_dufay->screen_tile_color (x, y);
@@ -350,8 +349,8 @@ render_interpolate::analyze_patches (analyzer analyze,
 		  continue;
 		if (!screen)
 		  {
-		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
-		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		    point_t imgp = m_scr_to_img.to_img ({xs, ys});
+		    if (!screen && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax || imgp.y > ymax))
 		      continue;
 		  }
 		rgbdata c = m_paget->screen_tile_color (x, y);
@@ -388,8 +387,8 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 		  continue;
 		if (!screen)
 		  {
-		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
-		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		    point_t imgp = m_scr_to_img.to_img ({xs, ys});
+		    if (!screen && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax || imgp.y > ymax))
 		      continue;
 		  }
 		rgbdata r,g,b;
@@ -416,8 +415,8 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 		  continue;
 		if (!screen)
 		  {
-		    m_scr_to_img.to_img (xs, ys, &xp, &yp);
-		    if (!screen && (xp < xmin || yp < ymin || xp > xmax || yp > ymax))
+		    point_t imgp = m_scr_to_img.to_img ({xs, ys});
+		    if (!screen && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax || imgp.y > ymax))
 		      continue;
 		  }
 		rgbdata r,g,b;

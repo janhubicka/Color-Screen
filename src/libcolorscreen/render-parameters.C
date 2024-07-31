@@ -59,7 +59,7 @@ const char * render_parameters::output_profile_names [] = {
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue
    patches respectively. It should have sum at most 1.  */
-rgbdata patch_proportions (enum scr_type t, render_parameters *rparam)
+rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
 {
   switch (t)
     {

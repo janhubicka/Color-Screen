@@ -36,9 +36,8 @@ template<typename T>
 inline rgbdata
 sample_data_scr_by_img (T &render, scr_to_img &map,coord_t x, coord_t y)
 {
-  coord_t xx, yy;
-  map.to_img (x, y, &xx, &yy);
-  return render.sample_pixel_img (xx, yy);
+  point_t p = map.to_img ({x, y});
+  return render.sample_pixel_img (p.x, p.y);
 }
 
 #define supports_final sample_data_final_by_final, sample_data_scr_by_scr

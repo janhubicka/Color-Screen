@@ -1974,9 +1974,9 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      ret.err = "no tile for given coordinates";
 	      return ret;
 	    }
-	  img.stitch->images[ty][tx].common_scr_to_img (sx, sy, &sx, &sy);
-	  x[tileid] = nearest_int (sx);
-	  y[tileid] = nearest_int (sy);
+	  point_t p = img.stitch->images[ty][tx].common_scr_to_img ({sx, sy});
+	  x[tileid] = nearest_int (p.x);
+	  y[tileid] = nearest_int (p.y);
 	  imgp[tileid] = img.stitch->images[ty][tx].img.get ();
 	  mapp[tileid] = &img.stitch->images[ty][tx].scr_to_img_map;
 	}
@@ -2003,24 +2003,28 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
   int sy = nearest_int (ty);
 
   coord_t test_range = fparams.range ? fparams.range : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
-  mapp[0]->to_img (sx, sy, &tx, &ty);
-  mapp[0]->to_img (sx - test_range, sy - test_range, &tx, &ty);
+  point_t p = mapp[0]->to_img ({(coord_t)sx, (coord_t)sy});
   coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
-  mapp[0]->to_img (sx + test_range, sy - test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
-  mapp[0]->to_img (sx + test_range, sy + test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
-  mapp[0]->to_img (sx - test_range, sy + test_range, &tx, &ty);
-  sxmin = std::min (sxmin, tx);
-  sxmax = std::max (sxmax, tx);
-  symin = std::min (symin, ty);
-  symax = std::max (symax, ty);
+  p = mapp[0]->to_img ({sx - test_range, sy - test_range});
+  sxmin = std::min (sxmin, p.x);
+  sxmax = std::max (sxmax, p.x);
+  symin = std::min (symin, p.y);
+  symax = std::max (symax, p.y);
+  p = mapp[0]->to_img ({sx + test_range, sy - test_range});
+  sxmin = std::min (sxmin, p.x);
+  sxmax = std::max (sxmax, p.x);
+  symin = std::min (symin, p.y);
+  symax = std::max (symax, p.y);
+  p = mapp[0]->to_img ({sx + test_range, sy + test_range});
+  sxmin = std::min (sxmin, p.x);
+  sxmax = std::max (sxmax, p.x);
+  symin = std::min (symin, p.y);
+  symax = std::max (symax, p.y);
+  p = mapp[0]->to_img ({sx - test_range, sy + test_range});
+  sxmin = std::min (sxmin, p.x);
+  sxmax = std::max (sxmax, p.x);
+  symin = std::min (symin, p.y);
+  symax = std::max (symax, p.y);
 
   int txmin = floor (sxmin), tymin = floor (symin), txmax = ceil (sxmax), tymax = ceil (symax);
   if (txmin < 0)

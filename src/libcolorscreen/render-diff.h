@@ -41,8 +41,8 @@ public:
       return false;
     return r2.precompute_all (progress);
   }
-  rgbdata
-  sample_pixel_scr (coord_t x, coord_t y)
+  pure_attr inline rgbdata
+  sample_pixel_scr (coord_t x, coord_t y) const
   {
     rgbdata c1 = r1.sample_pixel_scr (x, y);
     rgbdata c2 = r2.sample_pixel_scr (x, y);
@@ -50,8 +50,8 @@ public:
 	    0.25-4 * (c1.green - c2.green) * m_brightness,
 	    0.25-4 * (c1.blue - c2.blue) * m_brightness};
   }
-  rgbdata
-  sample_pixel_img (int x, int y)
+  pure_attr inline rgbdata
+  sample_pixel_img (int x, int y) const
   {
     coord_t xx, yy;
     m_scr_to_img.to_scr (x, y, &xx, &yy);

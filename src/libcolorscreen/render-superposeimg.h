@@ -35,35 +35,33 @@ public:
   {
     return precompute_all (progress);
   }
-  inline rgbdata sample_pixel_img (coord_t x, coord_t y);
+  inline rgbdata sample_pixel_img (coord_t x, coord_t y) const;
   void inline analyze_tile (int x, int y, int w, int h, int stepx, int stepy, luminosity_t *r, luminosity_t *g, luminosity_t *b);
   /* If set, use color scan for input.  */
   void set_color_display () { if (m_img.rgbdata) m_color = 1; }
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
-  rgbdata sample_pixel_final (coord_t x, coord_t y)
+  pure_attr rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
-    coord_t ix, iy;
-    m_scr_to_img.to_img (xx, yy, &ix, &iy);
-    return sample_pixel_img (ix, iy, xx, yy);
+    point_t p = m_scr_to_img.to_img ({xx, yy});
+    return sample_pixel_img (p.x, p.y, xx, yy);
   }
-  rgbdata sample_pixel_scr (coord_t x, coord_t y)
+  pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y) const
   {
-    coord_t ix, iy;
-    m_scr_to_img.to_img (x, y, &ix, &iy);
-    return sample_pixel_img (ix, iy, x, y);
+    point_t p = m_scr_to_img.to_img ({x, y});
+    return sample_pixel_img (p.x, p.y, x, y);
   }
 private:
-  inline rgbdata sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y);
-  inline rgbdata fast_sample_pixel_img (int x, int y);
+  pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const;
+  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
   screen *m_screen;
   bool m_color;
   bool m_preview;
 };
 
 inline rgbdata
-render_superpose_img::fast_sample_pixel_img (int x, int y)
+render_superpose_img::fast_sample_pixel_img (int x, int y) const
 {
   coord_t scr_x, scr_y;
   luminosity_t rs, gs, bs;
@@ -108,8 +106,8 @@ render_superpose_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int w
   downscale<render_superpose_img, rgbdata, &render_superpose_img::fast_sample_pixel_img, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
 }
 
-inline rgbdata
-render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y)
+pure_attr inline rgbdata
+render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const
 {
   int ix, iy;
 
@@ -131,8 +129,8 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
 	      bb * m_screen->mult[iy][ix][2] + m_screen->add[iy][ix][2]};
     }
 }
-rgbdata
-render_superpose_img::sample_pixel_img (coord_t x, coord_t y)
+pure_attr inline rgbdata
+render_superpose_img::sample_pixel_img (coord_t x, coord_t y) const
 {
   coord_t scr_x, scr_y;
   m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);

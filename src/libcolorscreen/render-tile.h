@@ -211,9 +211,8 @@ render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y
   rgbdata d;
   if (antialias == 1)
     {
-      coord_t xx, yy;
-      map.to_img (x, y, &xx, &yy);
-      d = render.sample_pixel_img (xx, yy);
+      point_t p = map.to_img ({x, y});
+      d = render.sample_pixel_img (p.x, p.y);
     }
   else
     {
@@ -222,9 +221,8 @@ render_loop_img (T &render, scr_to_img &map, int antialias, coord_t x, coord_t y
       for (int ax = 0; ax < antialias; ax++)
 	for (int ay = 0; ay < antialias; ay++)
 	  {
-	    coord_t xx, yy;
-	    map.to_img (x + ax * substep, y + ay * substep, &xx, &yy);
-	    d += render.sample_pixel_img (xx, yy);
+	    point_t p = map.to_img ({x + ax * substep, y + ay * substep});
+	    d += render.sample_pixel_img (p.x, p.y);
 	  }
       luminosity_t ainv = 1 / (luminosity_t)(antialias * antialias);
       d.red *= ainv;

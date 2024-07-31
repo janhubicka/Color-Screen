@@ -20,9 +20,9 @@ public:
     m_final_xshift = INT_MIN;
     m_final_yshift = INT_MIN;
   }
-  inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y);
-  inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x, coord_t y);
-  inline rgbdata get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y);
+  pure_attr inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y) const;
+  pure_attr inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x, coord_t y) const;
+  pure_attr inline rgbdata get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const;
   coord_t pixel_size ();
   DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, progress_info *progress);
   DLL_PUBLIC bool precompute (bool grayscale_needed, bool normalized_patches, coord_t, coord_t, coord_t, coord_t, progress_info *progress);
@@ -45,12 +45,12 @@ public:
     assert (!colorscreen_checking || m_final_height > 0);
     return m_final_height;
   }
-  int get_final_xshift ()
+  int get_final_xshift () const
   {
     assert (!colorscreen_checking || m_final_xshift != INT_MIN);
     return m_final_xshift;
   }
-  int get_final_yshift ()
+  int get_final_yshift () const
   {
     assert (!colorscreen_checking || m_final_yshift != INT_MIN);
     return m_final_yshift;
@@ -106,7 +106,8 @@ public:
   {
     return precompute_all (progress);
   }
-  inline rgbdata sample_pixel_img (coord_t x, coord_t y)
+  pure_attr
+  inline rgbdata sample_pixel_img (coord_t x, coord_t y) const
   {
     rgbdata ret;
     if (!m_color)
@@ -123,7 +124,8 @@ public:
       }
     return ret;
   }
-  rgbdata inline get_profiled_rgb_pixel (int x, int y)
+  pure_attr
+  rgbdata inline get_profiled_rgb_pixel (int x, int y) const
   {
     rgbdata c = get_unadjusted_rgb_pixel (x, y);
     profile_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
@@ -132,17 +134,17 @@ public:
     c.blue = adjust_luminosity_ir (c.blue);
     return c;
   }
-  inline rgbdata sample_pixel_final (coord_t x, coord_t y)
+  pure_attr
+  inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
     coord_t xx, yy;
     m_scr_to_img.final_to_img (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
     return sample_pixel_img (xx, yy);
   }
-  inline rgbdata sample_pixel_scr (coord_t x, coord_t y)
+  inline rgbdata sample_pixel_scr (coord_t x, coord_t y) 
   {
-    coord_t xx, yy;
-    m_scr_to_img.to_img (x, y, &xx, &yy);
-    return sample_pixel_img (xx, yy);
+    point_t p = m_scr_to_img.to_img ({x, y});
+    return sample_pixel_img (p.x, p.y);
   }
   /* Compute RGB data of downscaled image.  */
   void
@@ -158,11 +160,10 @@ private:
 luminosity_t
 render_to_scr::sample_scr_diag_square (coord_t xc, coord_t yc, coord_t diagonal_size)
 {
-  coord_t xxc, yyc, x1, y1, x2, y2;
-  m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
-  m_scr_to_img.to_img (xc + diagonal_size / 2, yc, &x1, &y1);
-  m_scr_to_img.to_img (xc, yc + diagonal_size / 2, &x2, &y2);
-  return sample_img_square (xxc, yyc, x1 - xxc, y1 - yyc, x2 - xxc, y2 - yyc);
+  point_t pc = m_scr_to_img.to_img ({xc, yc});
+  point_t p1 = m_scr_to_img.to_img ({xc + diagonal_size / 2, yc});
+  point_t p2 = m_scr_to_img.to_img ({xc, yc + diagonal_size / 2});
+  return sample_img_square (pc.x, pc.y, p1.x - pc.x, p1.y - pc.y, p2.x - pc.x, p2.y - pc.y);
 }
 
 /* Sample diagonal square.
@@ -170,42 +171,38 @@ render_to_scr::sample_scr_diag_square (coord_t xc, coord_t yc, coord_t diagonal_
 luminosity_t
 render_to_scr::sample_scr_square (coord_t xc, coord_t yc, coord_t width, coord_t height)
 {
-  coord_t xxc, yyc, x1, y1, x2, y2;
-  m_scr_to_img.to_img (xc, yc, &xxc, &yyc);
-  m_scr_to_img.to_img (xc - width / 2, yc + height / 2, &x1, &y1);
-  m_scr_to_img.to_img (xc + width / 2, yc + height / 2, &x2, &y2);
-  return sample_img_square (xxc, yyc, x1 - xxc, y1 - yyc, x2 - xxc, y2 - yyc);
+  point_t pc = m_scr_to_img.to_img ({xc, yc});
+  point_t p1 = m_scr_to_img.to_img ({xc - width / 2, yc + height / 2});
+  point_t p2 = m_scr_to_img.to_img ({xc + width / 2, yc + height / 2});
+  return sample_img_square (pc.x, pc.y, p1.x - pc.x, p1.y - pc.y, p2.x - pc.x, p2.y - pc.y);
 }
 
 /* Determine grayscale value at a given position in the image.
    The position is in the screen coordinates.  */
-inline luminosity_t
-render_to_scr::get_img_pixel_scr (coord_t x, coord_t y)
+pure_attr inline luminosity_t
+render_to_scr::get_img_pixel_scr (coord_t x, coord_t y) const
 {
-  coord_t xp, yp;
-  m_scr_to_img.to_img (x, y, &xp, &yp);
-  return get_img_pixel (xp, yp);
+  point_t p = m_scr_to_img.to_img ({x, y});
+  return get_img_pixel (p.x, p.y);
 }
 
 /* Determine grayscale value at a given position in the image.
    The position is in the screen coordinates.  */
-inline luminosity_t
-render_to_scr::get_unadjusted_img_pixel_scr (coord_t x, coord_t y)
+pure_attr inline luminosity_t
+render_to_scr::get_unadjusted_img_pixel_scr (coord_t x, coord_t y) const
 {
-  coord_t xp, yp;
-  m_scr_to_img.to_img (x, y, &xp, &yp);
-  return get_unadjusted_img_pixel (xp, yp);
+  point_t p = m_scr_to_img.to_img ({x, y});
+  return get_unadjusted_img_pixel (p.x, p.y);
 }
 
 /* Determine RGB value at a given position in the image.
    The position is in the screen coordinates.  */
-inline rgbdata
-render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y)
+pure_attr inline rgbdata
+render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
 {
-  coord_t xp, yp;
-  m_scr_to_img.to_img (x, y, &xp, &yp);
+  point_t p = m_scr_to_img.to_img ({x, y});
   rgbdata ret;
-  render::get_unadjusted_img_rgb_pixel (xp, yp, &ret.red, &ret.green, &ret.blue);
+  render::get_unadjusted_img_rgb_pixel (p.x, p.y, &ret.red, &ret.green, &ret.blue);
   return ret;
 }
 

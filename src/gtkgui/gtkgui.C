@@ -627,9 +627,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
 	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
 	      {
-		coord_t sx, sy;
-		map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
-		coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+		point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
+		coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
 		hist.pre_account (dist);
 	      }
 	  hist.finalize_range (65536);
@@ -637,18 +636,16 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
 	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
 	      {
-		coord_t sx, sy;
-		map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
-		coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+		point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
+		coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
 		hist.account (dist);
 	      }
 	  hist.finalize ();
 	  coord_t thresholt = hist.find_max (0.1);
 	  for (int n = 0; n < current_solver.npoints;)
 	    {
-	      coord_t sx, sy;
-	      map.to_img (current_solver.point[n].screen_x, current_solver.point[n].screen_y, &sx, &sy);
-	      coord_t dist = sqrt ((sx - current_solver.point[n].img_x) * (sx - current_solver.point[n].img_x) + (sy - current_solver.point[n].img_y) * (sy - current_solver.point[n].img_y));
+	      point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
+	      coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
 	      if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
 		  && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y
 		  && dist > thresholt)
@@ -1442,8 +1439,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
       bradford_whitepoint_adaptation_matrix m(d50_white, srgb_white);
       for (size_t i = 0; i < color_optimizer_points.size (); i++)
         {
-	  coord_t sx, sy;
-	  map.to_img (color_optimizer_points[i].x, color_optimizer_points[i].y, &sx, &sy);
+	  point_t p = map.to_img ({color_optimizer_points[i].x, color_optimizer_points[i].y});
 	  rgbdata c2 = {1, 0, 0};
 	  rgbdata c1 = {1, 1, 1};
 	  if (color_optimizer_match.size () > i)
@@ -1458,12 +1454,12 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	      c2 = c2.cut ();
 	      char buf[256];
 	      sprintf (buf, "%.1fΔE2k", color_optimizer_match[i].deltaE);
-	      draw_text (surface, bigscale, xoffset, yoffset, buf, sx + 27 / bigscale, sy + 2 / bigscale, 0, 0, 0, 1);
-	      draw_text (surface, bigscale, xoffset, yoffset, buf, sx + 25 / bigscale, sy, 1, 1, 1, 1);
+	      draw_text (surface, bigscale, xoffset, yoffset, buf, p.x + 27 / bigscale, p.y + 2 / bigscale, 0, 0, 0, 1);
+	      draw_text (surface, bigscale, xoffset, yoffset, buf, p.x + 25 / bigscale, p.y, 1, 1, 1, 1);
 	    }
-	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, 1,1,1, 23/bigscale, 1);
-	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, c2.blue, c2.green, c2.red, 20/bigscale, 1);
-          draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, c1.blue, c1.green, c1.red, 10/bigscale, 1);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 1,1,1, 23/bigscale, 1);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, c2.blue, c2.green, c2.red, 20/bigscale, 1);
+          draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, c1.blue, c1.green, c1.red, 10/bigscale, 1);
         }
     }
 
@@ -1491,16 +1487,15 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  coord_t xi = current_solver.point[i].img_x;
 	  coord_t yi = current_solver.point[i].img_y;
 	  current_solver.point[i].get_rgb (&r,&g,&b);
-	  coord_t sx, sy;
-	  map.to_img (current_solver.point[i].screen_x, current_solver.point[i].screen_y, &sx, &sy);
+	  point_t p = map.to_img ({current_solver.point[i].screen_x, current_solver.point[i].screen_y});
 
 	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, b, g, r);
-	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, sx, sy, 3*b/4, 3*g/4, 3*r/4);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 3*b/4, 3*g/4, 3*r/4);
 
 	  coord_t patch_diam = sqrt (current.coordinate1_x * current.coordinate1_x + current.coordinate1_y * current.coordinate1_y) / 2;
 	  double scale = 200 / patch_diam / bigscale;
-	  coord_t xd = sx - xi;
-	  coord_t yd = sy - yi;
+	  coord_t xd = p.x - xi;
+	  coord_t yd = p.y - yi;
 	  bool bad = sqrt (xd*xd + yd*yd) > patch_diam / 4;
 
 	  xd *= scale;

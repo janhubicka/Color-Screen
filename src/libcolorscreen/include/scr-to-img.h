@@ -118,41 +118,16 @@ public:
   }
 
   /* Map screen coordinates to image coordinates.  */
-  void
-  to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  pure_attr point_t
+  to_img (point_t p) const
   {
     if (m_param.mesh_trans)
-      {
- 	point_t p = m_param.mesh_trans->apply ({x, y});
-	*xp = p.x;
-	*yp = p.y;
-	return;
-      }
-#if 0
-    coord_t xx, yy;
-    m_scr_to_img_homography_matrix.perspective_transform (x, y, xx, yy);
-    m_matrix.apply (x,y, &x, &y);
-    m_perspective_matrix.perspective_transform (x,y, x, y);
-    assert (fabs (x-xx) < 0.1);
-    assert (fabs (y-yy) < 0.1);
-#else
-    m_scr_to_img_homography_matrix.perspective_transform (x, y, x, y);
-#if 0
-    if (m_do_homography)
-      m_scr_to_img_homography_matrix.perspective_transform (x, y, x, y);
-    else
-      {
-	m_matrix.apply (x,y, &x, &y);
-	m_perspective_matrix.perspective_transform (x,y, x, y);
-      }
-#endif
-#endif
-    point_t p = inverse_early_correction ({x, y});
-    *xp = p.x;
-    *yp = p.y;
+      return m_param.mesh_trans->apply (p);
+    m_scr_to_img_homography_matrix.perspective_transform (p.x, p.y, p.x, p.y);
+    return inverse_early_correction (p);
   }
   bool
-  to_img_in_mesh_range (coord_t x, coord_t y)
+  to_img_in_mesh_range (coord_t x, coord_t y) const
   {
     if (!m_param.mesh_trans)
       return true;
@@ -160,7 +135,7 @@ public:
   }
   /* Map image coordinats to screen.  */
   void
-  to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
     coord_t xx = x, yy = y;
     if (m_param.mesh_trans)
@@ -175,14 +150,7 @@ public:
     else
       {
 	point_t p = apply_early_correction ({xx, yy});
-#if 0
-        coord_t xx2, yy2;
-        m_img_to_scr_homography_matrix.perspective_transform (xx, yy, xx2, yy2);
-	m_perspective_matrix.inverse_perspective_transform (xx,yy, xx, yy);
-	m_inverse_matrix.apply (xx,yy, xp, yp);
-        assert (fabs (xx2-*xp) < 0.1);
-        assert (fabs (yy2-*yp) < 0.1);
-#else
+	/* For scanners with moving lens the inverse transform may not correspond to homography.  */
 	if (m_do_homography)
 	  m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, *xp, *yp);
 	else
@@ -190,16 +158,15 @@ public:
 	    m_perspective_matrix.inverse_perspective_transform (p.x, p.y, xx, yy);
 	    m_inverse_matrix.apply (xx,yy, xp, yp);
 	  }
-#endif
       }
 
     /* Verify that inverse is working.  */
     if (debug)
       {
-        to_img (*xp, *yp, &xx, &yy);
-	if (fabs (xx - x) + fabs (yy - y) > 0.1 && m_nwarnings < 10)
+        point_t np = to_img ({*xp, *yp});
+	if (fabs (np.x - x) + fabs (np.x - y) > 0.1 && m_nwarnings < 10)
 	  {
-	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", x, y, xx, yy);
+	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", x, y, np.x, np.y);
 	    m_nwarnings++;
 	    if (colorscreen_checking && 0)
 	      abort ();
@@ -207,42 +174,44 @@ public:
       }
   }
   void
-  scr_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  scr_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
     m_scr_to_final_matrix.apply_to_vector (x, y, xp, yp);
   }
   void
-  final_to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  final_to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
     m_final_to_scr_matrix.apply_to_vector (x, y, xp, yp);
   }
   void
-  img_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  img_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
     to_scr (x, y, &x, &y);
     scr_to_final (x, y, xp, yp);
   }
   void
-  final_to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp)
+  final_to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
     final_to_scr (x, y, &x, &y);
-    to_img (x, y, xp, yp);
+    point_t p = to_img ({x, y});
+    *xp = p.x;
+    *yp = p.y;
   }
   enum scr_type
-  get_type ()
+  get_type () const
   {
     return m_param.type;
   }
-  const scr_to_img_parameters &get_param ()
+  const scr_to_img_parameters &get_param () const
   {
     return m_param;
   }
-  rgbdata patch_proportions (render_parameters *rparam)
+  rgbdata patch_proportions (const render_parameters *rparam) const
   {
     return ::patch_proportions (m_param.type, rparam);
   }
   pure_attr coord_t
-  pixel_size (int img_width, int img_height)
+  pixel_size (int img_width, int img_height) const
   {
     coord_t x,x2, y, y2;
     coord_t bx = img_width / 2, by = img_height / 2;
@@ -263,7 +232,7 @@ private:
   trans_3d_matrix m_inverse_matrix;
   trans_4d_matrix m_scr_to_img_homography_matrix;
   trans_4d_matrix m_img_to_scr_homography_matrix;
-  std::atomic_ulong m_nwarnings;
+  DLL_PUBLIC static std::atomic_ulong m_nwarnings;
   /* True if we should use homography matrix for scr to img transforms.
      We disable it for moving lens scanners since inverse transform is not
      necessarily a homography.  */
@@ -278,7 +247,7 @@ private:
   lens_warp_correction m_lens_correction;
 
   /* Apply spline defining motor correction.  */
-  pure_attr point_t
+  inline pure_attr point_t
   apply_motor_correction (point_t p) const
   {
     if (!m_motor_correction)
@@ -289,7 +258,7 @@ private:
       p.y = m_motor_correction->apply (p.y);
     return p;
   }
-  pure_attr point_t
+  inline pure_attr point_t
   inverse_motor_correction (point_t p) const
   {
     if (!m_motor_correction)
