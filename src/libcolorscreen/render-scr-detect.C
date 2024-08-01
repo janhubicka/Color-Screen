@@ -503,10 +503,9 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
 	    {
 	      if (s)
 	        {
-		  coord_t sx, sy;
-		  s->to_scr (x, y, &sx, &sy);
-		  int isx = my_floor (sx);
-		  int isy = my_floor (sy);
+		  point_t scr = s->to_scr ({(coord_t)x, (coord_t)y});
+		  int isx = my_floor (scr.x);
+		  int isy = my_floor (scr.y);
 		  point_t ip = s->to_img ({(coord_t)isx, (coord_t)isy});
 		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;

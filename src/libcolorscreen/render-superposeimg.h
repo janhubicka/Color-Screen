@@ -63,15 +63,14 @@ private:
 inline rgbdata
 render_superpose_img::fast_sample_pixel_img (int x, int y) const
 {
-  coord_t scr_x, scr_y;
   luminosity_t rs, gs, bs;
   luminosity_t ra, ga, ba;
 
   int ix, iy;
-  m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
+  point_t scr = m_scr_to_img.to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
 
-  ix = (uint64_t) nearest_int (scr_x* screen::size) & (unsigned)(screen::size - 1);
-  iy = (uint64_t) nearest_int (scr_y* screen::size) & (unsigned)(screen::size - 1);
+  ix = (uint64_t) nearest_int (scr.x* screen::size) & (unsigned)(screen::size - 1);
+  iy = (uint64_t) nearest_int (scr.y* screen::size) & (unsigned)(screen::size - 1);
   rs = m_screen->mult[iy][ix][0];
   gs = m_screen->mult[iy][ix][1];
   bs = m_screen->mult[iy][ix][2];
@@ -132,9 +131,8 @@ render_superpose_img::sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coo
 pure_attr inline rgbdata
 render_superpose_img::sample_pixel_img (coord_t x, coord_t y) const
 {
-  coord_t scr_x, scr_y;
-  m_scr_to_img.to_scr (x, y, &scr_x, &scr_y);
-  return sample_pixel_img (x, y, scr_x, scr_y);
+  point_t scr = m_scr_to_img.to_scr ({x, y});
+  return sample_pixel_img (x, y, scr.x, scr.y);
 }
 
 /* Analyze average r, g and b color in a given tile in the image coordinates.  */
@@ -145,12 +143,11 @@ render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int
   for (int x = xs; x < xs + w; x+=stepx)
     for (int y = ys; y < ys + h; y+=stepy)
       {
-	coord_t scr_x, scr_y;
 	luminosity_t l = fast_get_img_pixel (x, y);
 
-	m_scr_to_img.to_scr (x + 0.5, y + 0.5, &scr_x, &scr_y);
-	int ix = (uint64_t) nearest_int (scr_x * screen::size) & (unsigned)(screen::size - 1);
- 	int iy = (uint64_t) nearest_int (scr_y * screen::size) & (unsigned)(screen::size - 1);
+	point_t scr = m_scr_to_img.to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	int ix = (uint64_t) nearest_int (scr.x * screen::size) & (unsigned)(screen::size - 1);
+ 	int iy = (uint64_t) nearest_int (scr.y * screen::size) & (unsigned)(screen::size - 1);
 	rr += m_screen->mult[iy][ix][0] * l;
 	rw += m_screen->mult[iy][ix][0];
 	gg += m_screen->mult[iy][ix][1] * l;

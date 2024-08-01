@@ -1602,10 +1602,10 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       coord_t screenx, screeny;
       scr_to_img map;
       map.set_parameters (current, scan);
-      map.to_scr (x, y, &screenx, &screeny);
+      point_t screen = map.to_scr ({x, y});
       if (event->button == 1)
 	{
-	  color_optimizer_points.push_back ({screenx, screeny});
+	  color_optimizer_points.push_back (screen);
           display_scheduled = true;
 	  return;
 	}
@@ -1615,7 +1615,7 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	  coord_t delta = 10000000;
 	  for (int i = 0; i < color_optimizer_points.size (); i++)
 	    {
-	      coord_t dist = sqrt ((color_optimizer_points[i].x-screenx) * (color_optimizer_points[i].x-screenx) + (color_optimizer_points[i].y-screeny) * (color_optimizer_points[i].y-screeny));
+	      coord_t dist = sqrt ((color_optimizer_points[i].x-screen.x) * (color_optimizer_points[i].x-screen.x) + (color_optimizer_points[i].y-screen.y) * (color_optimizer_points[i].y-screen.y));
 	      if (dist < delta)
 	        {
 		   best = i;
@@ -1757,9 +1757,9 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       coord_t rscreenx, rscreeny;
       scr_to_img map;
       map.set_parameters (current, scan);
-      map.to_scr (x, y, &screenx, &screeny);
-      pscreenx = floor (screenx);
-      pscreeny = floor (screeny);
+      point_t screen = map.to_scr ({x, y});
+      pscreenx = floor (screen.x);
+      pscreeny = floor (screen.y);
       rscreenx = pscreenx;
       rscreeny = pscreenx;
       struct coord {coord_t x, y;
@@ -2012,9 +2012,9 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	  coord_t rscreenx, rscreeny;
 	  scr_to_img map;
 	  map.set_parameters (current, scan);
-	  map.to_scr (x, y, &screenx, &screeny);
-	  pscreenx = floor (screenx);
-	  pscreeny = floor (screeny);
+	  point_t screen = map.to_scr ({x, y});
+	  pscreenx = floor (screen.x);
+	  pscreeny = floor (screen.y);
 	  rscreenx = pscreenx;
 	  rscreeny = pscreenx;
 	  struct coord {coord_t x, y;

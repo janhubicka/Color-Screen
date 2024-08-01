@@ -216,17 +216,18 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   coord_t sx, sy;
   bool found = false;
   int stack = 0;
-  scr_to_img_map.to_scr (0, 0, &sx, &sy);
-  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+  point_t pos = {(coord_t)xpos, (coord_t)ypos};
+  point_t s = scr_to_img_map.to_scr ({(coord_t)0, (coord_t)0}) + pos;
+  if (other.img_pixel_known_p (s.x, s.y))
     found = true;
-  scr_to_img_map.to_scr (img_width - 1, 0, &sx, &sy);
-  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+  s = scr_to_img_map.to_scr ({(coord_t)(img_width - 1), (coord_t)0}) + pos;
+  if (other.img_pixel_known_p (s.x, s.y))
     found = true;
-  scr_to_img_map.to_scr (0, img_height - 1, &sx, &sy);
-  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+  s = scr_to_img_map.to_scr ({(coord_t)0, (coord_t)(img_height - 1)}) + pos;
+  if (other.img_pixel_known_p (s.x, s.y))
     found = true;
-  scr_to_img_map.to_scr (img_width - 1, img_height - 1, &sx, &sy);
-  if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+  s = scr_to_img_map.to_scr ({(coord_t)(img_width - 1), (coord_t)(img_height - 1)}) + pos;
+  if (other.img_pixel_known_p (s.x, s.y))
     found = true;
   if (!found)
     return false;
@@ -273,8 +274,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   for (int y = 0; y < img_height; y += 10)
     for (int x = 0; x < img_width; x += 10)
       {
-         scr_to_img_map.to_scr (x, y, &sx, &sy);
-         if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+         point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y});
+         if (other.img_pixel_known_p (scr.x + xpos, scr.y + ypos))
 	   {
 	     rxmin = std::min (rxmin, x);
 	     rymin = std::min (rymin, y);
@@ -320,7 +321,7 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
       for (int x = rxmin; x <= rxmax; x++)
 	{
 	  int r = 0, g = 0, b = 0;
-          scr_to_img_map.to_scr (x, y, &sx, &sy);
+          point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y});
           if (other.img_pixel_known_p (sx + xpos, sy + ypos))
 	   {
 	     rgbdata c1 = render.sample_pixel_scr (sx + xpos, sy + ypos);
@@ -1329,12 +1330,11 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
       if ((!progress || !progress->cancel_requested ()) && !*error)
 	for (int xx = xmin; xx < xmax; xx+= step)
 	  {
-	    coord_t common_x, common_y;
-	    img_to_common_scr (xx, yy, &common_x, &common_y);
+	    point_t common = img_to_common_scr ({(coord_t)xx, (coord_t)yy});
 
-	    if (!other.pixel_maybe_in_range_p (common_x, common_y))
+	    if (!other.pixel_maybe_in_range_p (common.x, common.y))
 	      continue;
-	    point_t imgp = other.common_scr_to_img ({common_x, common_y});
+	    point_t imgp = other.common_scr_to_img ({common.x, common.y});
 	    if (imgp.x < xmin2 || imgp.x >=xmax2 || imgp.y < ymin2 || imgp.y >= ymax2)
 	      continue;
 	    luminosity_t weight = (luminosity_t)

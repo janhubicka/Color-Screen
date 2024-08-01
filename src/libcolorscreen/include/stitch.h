@@ -148,12 +148,10 @@ class stitch_image
       return false;
     return scr_to_img_map.to_img_in_mesh_range (sx - xpos, sy - ypos);
   }
-  void img_to_common_scr (coord_t ix, coord_t iy, coord_t *sx, coord_t *sy)
+  inline pure_attr
+  point_t img_to_common_scr (point_t p)
   {
-    coord_t xx, yy;
-    scr_to_img_map.to_scr (ix, iy, &xx, &yy);
-    *sx = xx + xpos;
-    *sy = yy + ypos;
+    return scr_to_img_map.to_scr (p) + (point_t){xpos, ypos};
   }
   void img_scr_to_common_scr (coord_t tsx, coord_t tsy, coord_t *sx, coord_t *sy)
   {

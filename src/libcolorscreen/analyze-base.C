@@ -26,8 +26,7 @@ bool
 analyze_base::find_best_match_using_cpfind (analyze_base &other, coord_t *xshift_ret, coord_t *yshift_ret, int direction, scr_to_img &map, scr_to_img &other_map, int scale, FILE *report_file, progress_info *progress)
 {
   /* Top left corner of other scan in screen coordinates.  */
-  coord_t lx, ly;
-  other_map.to_scr (0, 0, &lx, &ly);
+  point_t l = other_map.to_scr ({(coord_t)0, (coord_t)0});
   FILE *f = fopen (direction ? "project-cpfind-vert.pto" : "project-cpfind-hor.pto","wt");
   if (!f)
     return false;
@@ -199,7 +198,7 @@ analyze_base::find_best_match_using_cpfind (analyze_base &other, coord_t *xshift
 	    {
 	      int xx = -xo / (coord_t)scale - (m_xshift - other.m_xshift);
 	      int yy = -yo / (coord_t)scale - (m_yshift - other.m_yshift);
-	      point_t imgp = map.to_img ({lx + xx, ly + yy});
+	      point_t imgp = map.to_img ({l.x + xx, l.y + yy});
 
 	      if ((direction == 0 && (imgp.x < 0 || fabs (imgp.y) > fabs (imgp.x)/5))
 		  || (direction == 1 && (imgp.y < 0 || fabs (imgp.x) > fabs (imgp.y)/5)))
@@ -272,8 +271,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 {
   bool val_known = false;
   /* Top left corner of other scan in screen coordinates.  */
-  coord_t lx, ly;
-  other_map.to_scr (0, 0, &lx, &ly);
+  point_t l = other_map.to_scr ({(coord_t)0, (coord_t)0});
   if (cpfind)
     {
       if (find_best_match_using_cpfind (other, xshift_ret, yshift_ret, direction, map, other_map, 1, report_file, progress))
@@ -433,7 +431,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
     }
   if (progress)
     progress->set_task ("determining best overlap", (yend - ystart));
-#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, max_percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file,direction,map,lx,ly)
+#pragma omp parallel for default (none) shared (progress, xstart, xend, ystart, yend, other, percentage, max_percentage, found, best_sqsum, best_xshift, best_yshift, best_rscale, best_gscale, best_bscale, best_noverlap, first, last, other_first, other_last, left, right, other_left, other_right, range, other_range, val_known, xshift_ret, yshift_ret, sums, other_sums, report_file,direction,map,l)
   for (int y = ystart; y < yend; y++)
     {
       bool lfound = false;
@@ -456,7 +454,7 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
 #if 1
 	  if (direction >= 0)
 	    {
-	      point_t imgp = map.to_img ({x + lx, y + ly});
+	      point_t imgp = map.to_img ({x + l.x, y + l.y});
 	      if ((direction == 0 && (imgp.x < 0 || fabs (imgp.y) > fabs (imgp.x)/5))
 		  || (direction == 1 && (imgp.y < 0 || fabs (imgp.x) > fabs (imgp.y)/5)))
 		{

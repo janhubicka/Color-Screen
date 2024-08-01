@@ -635,7 +635,7 @@ public:
     for (int y = 0; y < theight; y++)
       for (int x = 0; x < twidth; x++)
 	{
-	  map.to_scr (cur_txmin + x + 0.5, cur_tymin + y + 0.5, &tiles[tileid].pos [y * twidth + x].x, &tiles[tileid].pos[y * twidth + x].y);
+	  tiles[tileid].pos [y * twidth + x] = map.to_scr ({cur_txmin + x + 0.5, cur_tymin + y + 0.5});
 	  if (tiles[tileid].color)
 	    tiles[tileid].color[y * twidth + x] = render.get_unadjusted_rgb_pixel (x + cur_txmin, y + cur_tymin);
 	  if (tiles[tileid].bw)
@@ -1997,14 +1997,13 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
     bw = true;
 
   /* Determine tile to analyze.  */
-  coord_t tx, ty;
-  mapp[0]->to_scr (x[0], y[0], &tx, &ty);
-  int sx = nearest_int (tx);
-  int sy = nearest_int (ty);
+  point_t tp = mapp[0]->to_scr ({(coord_t)x[0], (coord_t)y[0]});
+  int sx = nearest_int (tp.x);
+  int sy = nearest_int (tp.y);
 
   coord_t test_range = fparams.range ? fparams.range : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
   point_t p = mapp[0]->to_img ({(coord_t)sx, (coord_t)sy});
-  coord_t sxmin = tx, sxmax = tx, symin = ty, symax = ty;
+  coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
   p = mapp[0]->to_img ({sx - test_range, sy - test_range});
   sxmin = std::min (sxmin, p.x);
   sxmax = std::max (sxmax, p.x);
@@ -2348,12 +2347,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
 	rgbdata m = scr.interpolated_mult (p);
 	rgbdata am = m;
 #else
-	point_t p;
-        map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
-	point_t px;
-        map.to_scr (x + 1.5, y + 0.5, &px.x, &px.y);
-	point_t py;
-        map.to_scr (x + 0.5, y + 1.5, &py.x, &py.y);
+	point_t p = map.to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	point_t px = map.to_scr ({x + (coord_t)1.5, y + (coord_t)0.5});
+	point_t py = map.to_scr ({x + (coord_t)0.5, y + (coord_t)1.5});
 	rgbdata am = {0, 0, 0};
 	point_t pdx = (px - p) * (1.0 / 6.0);
 	point_t pdy = (py - p) * (1.0 / 6.0);

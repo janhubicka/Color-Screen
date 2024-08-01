@@ -86,9 +86,6 @@ analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, cons
 int
 analyze_paget::find_best_match (int percentage, int max_percentage, analyze_base &other, int cpfind, coord_t *xshift_ret, coord_t *yshift_ret, int direction, scr_to_img &map, scr_to_img &other_map, FILE *report_file, progress_info *progress)
 {
-  /* Top left corner of other scan in screen coordinates.  */
-  coord_t lx, ly;
-  other_map.to_scr (0, 0, &lx, &ly);
   if (cpfind)
     {
       if (find_best_match_using_cpfind (other, xshift_ret, yshift_ret, direction, map, other_map, 2, report_file, progress))

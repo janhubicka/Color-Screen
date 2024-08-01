@@ -53,9 +53,8 @@ public:
   pure_attr inline rgbdata
   sample_pixel_img (int x, int y) const
   {
-    coord_t xx, yy;
-    m_scr_to_img.to_scr (x, y, &xx, &yy);
-    return sample_pixel_scr (xx, yy);
+    point_t p = m_scr_to_img.to_scr ({(coord_t)x, (coord_t)y});
+    return sample_pixel_scr (p.x, p.y);
   }
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress)
   {

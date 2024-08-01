@@ -912,10 +912,9 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  coord_t xt, yt;
-	  map->to_scr (xi, yi, &xt, &yt);
-	  tpoints[i].img_x = xt;
-	  tpoints[i].img_y = yt;
+	  point_t p = map->to_scr ({xi, yi});
+	  tpoints[i].img_x = p.x;
+	  tpoints[i].img_y = p.y;
 	  tpoints[i].screen_x = xs;
 	  tpoints[i].screen_y = ys;
 	}
@@ -1152,28 +1151,28 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
   for (int i = 0; i < n; i++)
     {
       coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      coord_t xt, yt;
+      point_t p;
       /* Apply non-linear transformations.  */
       if (map)
-        map->to_scr (xi, yi, &xt, &yt);
+        p = map->to_scr ({xi, yi});
       else
-	xt = xi, yt = yi;
+	p.x = xi, p.y = yi;
       scrnorm.account1 ({xs, ys}, scanner_type);
-      imgnorm.account1 ({xt, yt}, scanner_type);
+      imgnorm.account1 (p, scanner_type);
     }
   scrnorm.finish1();
   imgnorm.finish1();
   for (int i = 0; i < n; i++)
     {
       coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      coord_t xt, yt;
+      point_t p;
       /* Apply non-linear transformations.  */
       if (map)
-        map->to_scr (xi, yi, &xt, &yt);
+        p = map->to_scr ({xi, yi});
       else
-	xt = xi, yt = yi;
+	p.x = xi, p.y = yi;
       scrnorm.account2 ({xs, ys});
-      imgnorm.account2 ({xt, yt});
+      imgnorm.account2 (p);
     }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
@@ -1254,14 +1253,14 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
       if (w && !weights[i])
 	continue;
       coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      coord_t xt, yt;
+      point_t p;
       /* Apply non-linear transformations.  */
       if (map)
-        map->to_scr (xi, yi, &xt, &yt);
+        p = map->to_scr ({xi, yi});
       else
-	xt = xi, yt = yi;
+	p = {xi, yi};
 
-      init_equation (X, y, eq, false, flags, scanner_type, {xs, ys}, {xt, yt}, ts, td);
+      init_equation (X, y, eq, false, flags, scanner_type, {xs, ys}, p, ts, td);
 
       if (w)
         {
@@ -1293,10 +1292,9 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  coord_t xt, yt;
-	  map->to_scr (xi, yi, &xt, &yt);
-	  tpoints[i].img_x = xt;
-	  tpoints[i].img_y = yt;
+	  point_t p = map->to_scr ({xi, yi});
+	  tpoints[i].img_x = p.x;
+	  tpoints[i].img_y = p.y;
 	  tpoints[i].screen_x = xs;
 	  tpoints[i].screen_y = ys;
 	}

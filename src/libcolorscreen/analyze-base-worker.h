@@ -21,11 +21,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
         if (!progress || !progress->cancel_requested ())
           for (int x = minx; x < maxx; x++)
             {
-              point_t scr;
-              scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr.x,
-                                  &scr.y);
-              scr.x += m_xshift;
-              scr.y += m_yshift;
+              point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
               /* Dufay analyzer shifts red strip and some pixels gets accounted
                  to neighbouring screen tile; add extra bffer of 1 screen tile
                  to be sure we do not access uninitialized memory.  */
@@ -218,11 +215,8 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
         if (!progress || !progress->cancel_requested ())
           for (int x = minx; x < maxx; x++)
             {
-              point_t scr;
-              scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr.x,
-                                  &scr.y);
-              scr.x += m_xshift;
-              scr.y += m_yshift;
+              point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
               if (!GEOMETRY::check_range
                   && (scr.x < 0 || scr.x > m_width - 1 || scr.y < 0
                       || scr.y > m_height - 1))
@@ -457,11 +451,8 @@ analyze_base_worker<GEOMETRY>::analyze_color (
         if (!progress || !progress->cancel_requested ())
           for (int x = minx; x < maxx; x++)
             {
-              point_t scr;
-              scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr.x,
-                                  &scr.y);
-              scr.x += m_xshift;
-              scr.y += m_yshift;
+              point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
               if (!GEOMETRY::check_range
                   && (scr.x < 0 || scr.x > m_width - 1 || scr.y < 0
                       || scr.y > m_height - 1))

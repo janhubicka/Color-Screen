@@ -118,7 +118,7 @@ public:
   }
 
   /* Map screen coordinates to image coordinates.  */
-  pure_attr point_t
+  pure_attr inline point_t
   to_img (point_t p) const
   {
     if (m_param.mesh_trans)
@@ -134,44 +134,38 @@ public:
     return m_param.mesh_trans->in_range_p (x, y);
   }
   /* Map image coordinats to screen.  */
-  void
-  to_scr (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
+  pure_attr inline point_t
+  to_scr (point_t p) const
   {
-    coord_t xx = x, yy = y;
+    point_t inp = p;
     if (m_param.mesh_trans)
-      {
-	point_t p = m_param.mesh_trans->invert ({x, y});
-	*xp = p.x;
-	*yp = p.y;
-	/* (-1,-1) is used to sgnalize that inverse is not computed.  */
-	if (debug && *xp == -1 && *yp == -1)
-	  return;
-      }
+      return m_param.mesh_trans->invert (p);
     else
       {
-	point_t p = apply_early_correction ({xx, yy});
+	p = apply_early_correction (p);
 	/* For scanners with moving lens the inverse transform may not correspond to homography.  */
 	if (m_do_homography)
-	  m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, *xp, *yp);
+	  m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, p.x, p.y);
 	else
 	  {
-	    m_perspective_matrix.inverse_perspective_transform (p.x, p.y, xx, yy);
-	    m_inverse_matrix.apply (xx,yy, xp, yp);
+	    m_perspective_matrix.inverse_perspective_transform (p.x, p.y, p.x, p.y);
+	    m_inverse_matrix.apply (p.x, p.y, &p.x, &p.y);
 	  }
       }
 
     /* Verify that inverse is working.  */
     if (debug)
       {
-        point_t np = to_img ({*xp, *yp});
-	if (fabs (np.x - x) + fabs (np.x - y) > 0.1 && m_nwarnings < 10)
+        point_t np = to_img (p);
+	if (!np.almost_eq (inp) && m_nwarnings < 10)
 	  {
-	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", x, y, np.x, np.y);
+	    printf ("Warning: to_scr is not inverted by to_img %f %f turns to %f %f\n", inp.x, inp.y, np.x, np.y);
 	    m_nwarnings++;
 	    if (colorscreen_checking && 0)
 	      abort ();
 	  }
       }
+    return p;
   }
   void
   scr_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
@@ -186,8 +180,8 @@ public:
   void
   img_to_final (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
   {
-    to_scr (x, y, &x, &y);
-    scr_to_final (x, y, xp, yp);
+    point_t p = to_scr ({x, y});
+    scr_to_final (p.x, p.y, xp, yp);
   }
   void
   final_to_img (coord_t x, coord_t y, coord_t *xp, coord_t *yp) const
@@ -213,11 +207,8 @@ public:
   pure_attr coord_t
   pixel_size (int img_width, int img_height) const
   {
-    coord_t x,x2, y, y2;
     coord_t bx = img_width / 2, by = img_height / 2;
-    to_scr (bx + 0, by + 0, &x, &y);
-    to_scr (bx + 1, by + 0, &x2, &y2);
-    return my_sqrt ((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y));
+    return to_scr ({bx + 0, by + 0}).dist_from (to_scr ({bx + 1, by + 0}));
   }
   void dump (FILE *f);
 private:

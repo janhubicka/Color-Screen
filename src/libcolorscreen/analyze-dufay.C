@@ -23,10 +23,10 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < img->width; x++)
 	  {
-	    coord_t scr_x, scr_y;
-	    scr_to_img->to_scr (x + (coord_t)0.5, y + (coord_t)0.5, &scr_x, &scr_y);
-	    int ix = floor (scr_x);
-	    int iy = floor (scr_y);
+            point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
+	    scr += {(coord_t)m_xshift, (coord_t)m_yshift};
+	    int ix = floor (scr.x);
+	    int iy = floor (scr.y);
 	    ix += m_xshift;
 	    iy += m_yshift;
 	    if (ix >= 0 && ix < m_width && iy >= 0 && iy < m_height)
