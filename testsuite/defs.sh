@@ -37,7 +37,7 @@ pexec() {
 test_all_render_modes() {
   NNAME=$1
   NPARNAME=$2
-  MODES=`$RUNCOLORSCREEN --help 2>&1 | sed -n '/select one/,/--/p' | sed '1d;$d'`
+  MODES=`$RUNCOLORSCREEN render --help 2>&1 | sed -n '/select one/,/--/p' | sed '1d;$d'`
   for mode in $MODES
   do
     echo rendering $NNAME with $NPARNAME.par to $NPARNAME-$mode.tif
