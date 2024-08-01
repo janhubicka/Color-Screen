@@ -137,9 +137,8 @@ public:
   pure_attr
   inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_img (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
-    return sample_pixel_img (xx, yy);
+    point_t p = m_scr_to_img.final_to_img ({x - get_final_xshift (), y - get_final_yshift ()});
+    return sample_pixel_img (p.x, p.y);
   }
   inline rgbdata sample_pixel_scr (coord_t x, coord_t y) 
   {

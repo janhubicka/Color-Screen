@@ -83,27 +83,25 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
       /* TODO: Make this work with stitched projects.  */
       if ((!p->xdpi || !p->ydpi) && scan && scan->xdpi && scan->ydpi)
 	{
-	  coord_t zx, zy, xx, yy;
-	  coord_t cx, cy;
 	  scr_to_img map;
 	  map.set_parameters (*param, *scan);
-	  map.img_to_final (scan->width / 2, scan->height / 2, &cx, &cy);
-	  map.final_to_img (cx, cy, &zx, &zy);
-	  map.final_to_img (cx + p->xstep, cy, &xx, &yy);
+	  point_t c = map.img_to_final ({(coord_t)(scan->width / 2), (coord_t)(scan->height / 2)});
+	  point_t z = map.final_to_img (c);
+	  point_t imgp = map.final_to_img ({c.x + p->xstep, c.y});
 	  //fprintf (stderr, "%f %f %f %f\n",zx,zy,xx,yy);
-	  xx = (xx - zx) / scan->xdpi;
-	  yy = (yy - zy) / scan->ydpi;
-	  coord_t len = sqrt (xx * xx + yy * yy);
+	  imgp.x = (imgp.x - z.x) / scan->xdpi;
+	  imgp.y = (imgp.y - z.y) / scan->ydpi;
+	  coord_t len = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
 	  //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
 	  /* This is approximate for defomated screens, so take average of X and Y resolution.  */
 	  if (len && !p->xdpi)
 	    {
 	      coord_t xdpi = 1 / len;
 
-	      map.final_to_img (cx, cy + p->ystep, &xx, &yy);
-	      xx = (xx - zx) / scan->xdpi;
-	      yy = (yy - zy) / scan->ydpi;
-	      len = sqrt (xx * xx + yy * yy);
+	      imgp = map.final_to_img ({c.x, c.y + p->ystep});
+	      imgp.x = (imgp.x - z.x) / scan->xdpi;
+	      imgp.y = (imgp.y - z.y) / scan->ydpi;
+	      coord_t len = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
 	      if (len && !p->ydpi)
 		{
 		  p->xdpi = p->ydpi = (xdpi + 1 / len) / 2;

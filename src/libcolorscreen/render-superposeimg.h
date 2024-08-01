@@ -42,10 +42,9 @@ public:
   void get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *);
   pure_attr rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
-    point_t p = m_scr_to_img.to_img ({xx, yy});
-    return sample_pixel_img (p.x, p.y, xx, yy);
+    point_t scr = m_scr_to_img.final_to_scr ({x - get_final_xshift (), y - get_final_yshift ()});
+    point_t p = m_scr_to_img.to_img (scr);
+    return sample_pixel_img (p.x, p.y, scr.x, scr.y);
   }
   pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y) const
   {

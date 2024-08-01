@@ -8,17 +8,15 @@ template<typename T>
 inline rgbdata
 sample_data_final_by_img (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
-  coord_t xx, yy;
-  map.final_to_img (x - final_xshift, y - final_yshift, &xx, &yy);
-  return render.sample_pixel_img (xx, yy);
+  point_t p = map.final_to_img ({x - final_xshift, y - final_yshift});
+  return render.sample_pixel_img (p.x, p.y);
 }
 template<typename T>
 inline rgbdata
 sample_data_final_by_scr (T &render, scr_to_img &map,coord_t x, coord_t y, int final_xshift, int final_yshift)
 {
-  coord_t xx, yy;
-  map.final_to_scr (x - final_xshift, y - final_yshift, &xx, &yy);
-  return render.sample_pixel_scr (xx, yy);
+  point_t p = map.final_to_scr ({x - final_xshift, y - final_yshift});
+  return render.sample_pixel_scr (p.x, p.y);
 }
 template<typename T>
 inline rgbdata
@@ -118,10 +116,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
-		  coord_t xx = x * p.xstep + p.xstart;
-		  coord_t yy = (y + row) * p.ystep + p.ystart;
-		  p.common_map->final_to_scr (xx, yy, &xx, &yy);
-		  if (!p.pixel_known_p (p.pixel_known_p_data, xx, yy))
+		  point_t scr = p.common_map->final_to_scr ({x * p.xstep + p.xstart, (y + row) * p.ystep + p.ystart});
+		  if (!p.pixel_known_p (p.pixel_known_p_data, scr.x, scr.y))
 		    {
 		      if (!p.hdr)
 			out.kill_pixel (x, row);
@@ -130,9 +126,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		    }
 		  else
 		    {
-		      xx -= p.xpos;
-		      yy -= p.ypos;
-		      rgbdata d = sample_data_scr (render, map, xx, yy);
+		      scr -= {p.xpos, p.ypos};
+		      rgbdata d = sample_data_scr (render, map, scr.x, scr.y);
 		      if (!p.hdr)
 			{
 			  int rr, gg, bb;
@@ -183,11 +178,9 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
 		{
-		  coord_t xx = x * p.xstep + p.xstart;
-		  coord_t yy = (y + row) * p.ystep + p.ystart;
-		  coord_t xx2, yy2;
-		  p.common_map->final_to_scr (xx, yy, &xx2, &yy2);
-		  if (!p.pixel_known_p (p.pixel_known_p_data, xx2, yy2))
+		  point_t finalp = {x * p.xstep + p.xstart, (y + row) * p.ystep + p.ystart};
+		  point_t scr = p.common_map->final_to_scr (finalp);
+		  if (!p.pixel_known_p (p.pixel_known_p_data, scr.x, scr.y))
 		    {
 		      if (!p.hdr)
 			out.kill_pixel (x, row);
@@ -200,10 +193,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      for (int ay = 0 ; ay < p.antialias; ay++)
 			for (int ax = 0 ; ax < p.antialias; ax++)
 			  {
-			    p.common_map->final_to_scr (xx + ax * asx, yy + ay * asy, &xx2, &yy2);
-			    xx2 -= p.xpos;
-			    yy2 -= p.ypos;
-			    d += sample_data_scr (render, map, xx2 + ax * asx, yy2 + ay * asy);
+			    scr = p.common_map->final_to_scr ({finalp.x + ax * asx, finalp.y + ay * asy}) - (point_t){p.xpos, p.ypos};
+			    d += sample_data_scr (render, map, scr.x + ax * asx, scr.y + ay * asy);
 			  }
 		      d.red *= sc;
 		      d.green *= sc;

@@ -381,16 +381,16 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
       coord_t xul,xur,xdl,xdr;
       coord_t yul,yur,ydl,ydr;
 
-      img_to_final (x1, y1, &xul, &yul);
-      img_to_final (x2, y1, &xur, &yur);
-      img_to_final (x1, y2, &xdl, &ydl);
-      img_to_final (x2, y2, &xdr, &ydr);
+      point_t ul = img_to_final ({x1, y1});
+      point_t ur = img_to_final ({x2, y1});
+      point_t dl = img_to_final ({x1, y2});
+      point_t dr = img_to_final ({x2, y2});
 
       /* Find extremas.  */
-      minx = std::min (std::min (std::min (xul, xur), xdl), xdr);
-      miny = std::min (std::min (std::min (yul, yur), ydl), ydr);
-      maxx = std::max (std::max (std::max (xul, xur), xdl), xdr);
-      maxy = std::max (std::max (std::max (yul, yur), ydl), ydr);
+      minx = std::min (std::min (std::min (ul.x, ur.x), dl.x), dr.x);
+      miny = std::min (std::min (std::min (ul.y, ur.y), dl.y), dr.y);
+      maxx = std::max (std::max (std::max (ul.x, ur.x), dl.x), dr.x);
+      maxy = std::max (std::max (std::max (ul.y, ur.y), dl.y), dr.y);
 
       /* If we correct lens distortion the corners may not be extremes.  */
       if (!m_lens_correction.is_noop () || m_param.tilt_x || m_param.tilt_y || m_param.mesh_trans)
@@ -398,27 +398,26 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1,
 	  const int steps = 16*1024;
 	  for (int i = 1; i < steps; i++)
 	    {
-	      coord_t xx,yy;
-	      img_to_final (x1 + (x2 - x1) * i / steps, y1, &xx, &yy);
-	      minx = std::min (minx, xx);
-	      miny = std::min (miny, yy);
-	      maxx = std::max (maxx, xx);
-	      maxy = std::max (maxy, yy);
-	      img_to_final (x1 + (x2 - x1) * i / steps, y2, &xx, &yy);
-	      minx = std::min (minx, xx);
-	      miny = std::min (miny, yy);
-	      maxx = std::max (maxx, xx);
-	      maxy = std::max (maxy, yy);
-	      img_to_final (x1, y1 + (y2 - y1) * i / steps, &xx, &yy);
-	      minx = std::min (minx, xx);
-	      miny = std::min (miny, yy);
-	      maxx = std::max (maxx, xx);
-	      maxy = std::max (maxy, yy);
-	      img_to_final (x2, y1 + (y2 - y1) * i / steps, &xx, &yy);
-	      minx = std::min (minx, xx);
-	      miny = std::min (miny, yy);
-	      maxx = std::max (maxx, xx);
-	      maxy = std::max (maxy, yy);
+	      point_t p = img_to_final ({x1 + (x2 - x1) * i / steps, y1});
+	      minx = std::min (minx, p.x);
+	      miny = std::min (miny, p.y);
+	      maxx = std::max (maxx, p.x);
+	      maxy = std::max (maxy, p.y);
+	      p = img_to_final ({x1 + (x2 - x1) * i / steps, y2});
+	      minx = std::min (minx, p.x);
+	      miny = std::min (miny, p.y);
+	      maxx = std::max (maxx, p.x);
+	      maxy = std::max (maxy, p.y);
+	      p = img_to_final ({x1, y1 + (y2 - y1) * i / steps});
+	      minx = std::min (minx, p.x);
+	      miny = std::min (miny, p.y);
+	      maxx = std::max (maxx, p.x);
+	      maxy = std::max (maxy, p.y);
+	      p = img_to_final ({x2, y1 + (y2 - y1) * i / steps});
+	      minx = std::min (minx, p.x);
+	      miny = std::min (miny, p.y);
+	      maxx = std::max (maxx, p.x);
+	      maxy = std::max (maxy, p.y);
 	    }
 	}
     }

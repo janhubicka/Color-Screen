@@ -77,10 +77,9 @@ stitch_project::determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
       if (images[y][x].analyzed)
 	{
 	  coord_t x1,y1,x2,y2;
-	  coord_t rxpos, rypos;
-	  common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rxpos, &rypos);
-	  x1 = -images[y][x].final_xshift + rxpos;
-	  y1 = -images[y][x].final_yshift + rypos;
+	  point_t rpos = common_scr_to_img.scr_to_final ({(coord_t)images[y][x].xpos, (coord_t)images[y][x].ypos});
+	  x1 = -images[y][x].final_xshift + rpos.x;
+	  y1 = -images[y][x].final_yshift + rpos.y;
 	  x2 = x1 + images[y][x].final_width;
 	  y2 = y1 + images[y][x].final_height;
 
@@ -112,13 +111,12 @@ stitch_project::print_panorama_map (FILE *out)
 	{
 	  coord_t fx = xmin + (xmax - xmin) * x / 40;
 	  coord_t fy = ymin + (ymax - ymin) * y / 20;
-	  coord_t sx, sy;
 	  int ix = 0, iy = 0;
-	  common_scr_to_img.final_to_scr (fx, fy, &sx, &sy);
+	  point_t scr = common_scr_to_img.final_to_scr ({fx, fy});
 	  for (iy = 0 ; iy < params.height; iy++)
 	    {
 	      for (ix = 0 ; ix < params.width; ix++)
-		if (images[iy][ix].analyzed && images[iy][ix].pixel_known_p (sx, sy))
+		if (images[iy][ix].analyzed && images[iy][ix].pixel_known_p (scr.x, scr.y))
 		  break;
 	      if (ix != params.width)
 		break;
@@ -146,28 +144,24 @@ stitch_project::print_status (FILE *out)
     {
       if (y)
 	{
-	  coord_t rx, ry;
-	  common_scr_to_img.scr_to_final (images[y-1][0].xpos, images[y-1][0].ypos, &rx, &ry);
-	  coord_t rx2, ry2;
-	  common_scr_to_img.scr_to_final (images[y][0].xpos, images[y][0].ypos, &rx2, &ry2);
-	  rx -= images[y-1][0].xshift;
-	  ry -= images[y-1][0].yshift;
-	  rx2 -= images[y][0].xshift;
-	  ry2 -= images[y][0].yshift;
-	  fprintf (out, " down %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
+	  point_t f1 = common_scr_to_img.scr_to_final ({images[y-1][0].xpos, images[y-1][0].ypos});
+	  point_t f2 = common_scr_to_img.scr_to_final ({images[y][0].xpos, images[y][0].ypos});
+	  f1.x -= images[y-1][0].xshift;
+	  f1.y -= images[y-1][0].yshift;
+	  f2.x -= images[y][0].xshift;
+	  f2.y -= images[y][0].yshift;
+	  fprintf (out, " down %+5i, %+5i", (int)(f2.x-f1.x), (int)(f2.y-f1.y));
 	}
       else fprintf (out, "                  ");
       for (int x = 1; x < params.width; x++)
       {
-	coord_t rx, ry;
-	common_scr_to_img.scr_to_final (images[y][x-1].xpos, images[y][x-1].ypos, &rx, &ry);
-	coord_t rx2, ry2;
-	common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx2, &ry2);
-	rx -= images[y][x-1].xshift;
-	ry -= images[y][x-1].yshift;
-	rx2 -= images[y][x].xshift;
-	ry2 -= images[y][x].yshift;
-	fprintf (out, " right %+5i, %+5i", (int)(rx2-rx), (int)(ry2-ry));
+	point_t f1 = common_scr_to_img.scr_to_final ({images[y][x-1].xpos, images[y][x-1].ypos});
+	point_t f2 = common_scr_to_img.scr_to_final ({images[y][x].xpos, images[y][x].ypos});
+	f1.x -= images[y][x-1].xshift;
+	f1.y -= images[y][x-1].yshift;
+	f2.x -= images[y][x].xshift;
+	f2.y -= images[y][x].yshift;
+	fprintf (out, " right %+5i, %+5i", (int)(f2.x-f1.x), (int)(f2.y-f1.y));
 	//printf ("  %-5i,%-5i range: %-5i:%-5i,%-5i:%-5i", (int)rx,(int)ry,(int)rx-images[y][x].xshift+sx,(int)rx-images[y][x].xshift+images[y][x].final_width+sx,(int)ry-images[y][x].yshift+sy,(int)ry-images[y][x].yshift+images[y][x].final_height+sy);
       }
       fprintf (out, "\n");
@@ -176,9 +170,8 @@ stitch_project::print_status (FILE *out)
     {
       for (int x = 0; x < params.width; x++)
       {
-	coord_t rx, ry;
-	common_scr_to_img.scr_to_final (images[y][x].xpos, images[y][x].ypos, &rx, &ry);
-	fprintf (out, "  %-5f,%-5f  rotated:%-5f,%-5f ", images[y][x].xpos, images[y][x].ypos, rx,ry);
+	point_t f = common_scr_to_img.scr_to_final ({images[y][x].xpos, images[y][x].ypos});
+	fprintf (out, "  %-5f,%-5f  rotated:%-5f,%-5f ", images[y][x].xpos, images[y][x].ypos, f.x,f.y);
       }
       fprintf (out, "\n");
     }
@@ -1319,13 +1312,12 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
   for (int y = ymin; y <= ymax; y++)
     for (int x = xmin; x <= xmax; x++)
       {
-	coord_t sx, sy;
 	int tx, ty;
-	common_scr_to_img.final_to_scr (x, y, &sx, &sy);
-	if (!tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	point_t scr = common_scr_to_img.final_to_scr ({(coord_t)x, (coord_t)y});
+	if (!tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
 	  continue;
 	point_t timg;
-	images[ty][tx].common_scr_to_img_scr (sx, sy, &timg.x, &timg.y);
+	images[ty][tx].common_scr_to_img_scr (scr.x, scr.y, &timg.x, &timg.y);
 	int i = ty * params.width + tx;
 	if (!screen_ranges)
 	  timg = images[ty][tx].scr_to_img_map.to_img (timg);

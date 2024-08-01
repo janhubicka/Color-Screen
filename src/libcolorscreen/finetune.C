@@ -1965,16 +1965,15 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
       imgp[tileid] = &img;
       if (img.stitch)
 	{
-	  coord_t sx, sy;
 	  int tx, ty;
-	  img.stitch->common_scr_to_img.final_to_scr (x[tileid] + img.xmin, y[tileid] + img.ymin, &sx, &sy);
+	  point_t scr = img.stitch->common_scr_to_img.final_to_scr ({(coord_t)(x[tileid] + img.xmin), (coord_t)(y[tileid] + img.ymin)});
 	  pixel_size = img.stitch->pixel_size;
-	  if (!img.stitch->tile_for_scr (&rparam, sx, sy, &tx, &ty, true))
+	  if (!img.stitch->tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
 	    {
 	      ret.err = "no tile for given coordinates";
 	      return ret;
 	    }
-	  point_t p = img.stitch->images[ty][tx].common_scr_to_img ({sx, sy});
+	  point_t p = img.stitch->images[ty][tx].common_scr_to_img (scr);
 	  x[tileid] = nearest_int (p.x);
 	  y[tileid] = nearest_int (p.y);
 	  imgp[tileid] = img.stitch->images[ty][tx].img.get ();

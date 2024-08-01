@@ -119,7 +119,7 @@ patches::nearest_patches (coord_t x, coord_t y, int *rx, int *ry, patch_index_t 
        int t = get_patch_color (xx, yy);
        if (id == index[(int)t] || distance_list.list[i].fdist > cdist[(int)t] + 2)
 	 continue;
-       double dist = scr_to_img::my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
+       double dist = my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
        if (dist < cdist[(int)t])
 	 {
 	   cdist[(int)t] = dist;

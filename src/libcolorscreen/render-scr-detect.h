@@ -496,7 +496,7 @@ public:
          //assert (t>=0 && t < 3);
 	 if (distance_list.list[i].fdist > cdist[(int)t] + 2)
 	   continue;
-	 double dist = scr_to_img::my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
+	 double dist = my_sqrt ((xx + (coord_t)0.5 - x) * (xx + (coord_t)0.5 - x) + (yy + (coord_t)0.5 - y) * (yy + (coord_t)0.5 - y));
 	 if (dist < cdist[(int)t])
 	   {
 	     cdist[(int)t] = dist;

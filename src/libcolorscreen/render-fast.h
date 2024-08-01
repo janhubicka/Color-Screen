@@ -36,10 +36,9 @@ public:
   }
   void render_pixel_final (coord_t x, coord_t y, int *r, int *g, int *b)
   {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
-    int ix = xx + 0.5;
-    int iy = yy + 0.5;
+    point_t scr = m_scr_to_img.final_to_scr ({(coord_t)(x - get_final_xshift ()), (coord_t)(y - get_final_yshift ())});
+    int ix = scr.x + 0.5;
+    int iy = scr.y + 0.5;
     point_t p = m_scr_to_img.to_img ({(coord_t)ix, (coord_t)iy});
     rgbdata d = sample_pixel (ix, iy, p.x, p.y);
     set_color (d.red, d.green, d.blue, r, g, b);

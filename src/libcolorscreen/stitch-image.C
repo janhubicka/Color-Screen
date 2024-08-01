@@ -1082,10 +1082,9 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   if (fabs (scr_to_img_map.get_rotation_adjustment () - m_prj->common_scr_to_img.get_rotation_adjustment ()) > 1)
     abort ();
 
-  coord_t final_xpos, final_ypos;
-  m_prj->common_scr_to_img.scr_to_final (xpos, ypos, &final_xpos, &final_ypos);
-  int xmin = floor ((final_xpos - final_xshift) / rfparams.xstep) * rfparams.xstep;
-  int ymin = floor ((final_ypos - final_yshift) / rfparams.ystep) * rfparams.ystep;
+  point_t final_pos = m_prj->common_scr_to_img.scr_to_final ({(coord_t)xpos, (coord_t)ypos});
+  int xmin = floor ((final_pos.x - final_xshift) / rfparams.xstep) * rfparams.xstep;
+  int ymin = floor ((final_pos.y - final_yshift) / rfparams.ystep) * rfparams.ystep;
   coord_t xoffset = (xmin - stitch_xmin) / rfparams.xstep;
   coord_t yoffset = (ymin - stitch_ymin) / rfparams.ystep;
 
@@ -1332,7 +1331,7 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 	  {
 	    point_t common = img_to_common_scr ({(coord_t)xx, (coord_t)yy});
 
-	    if (!other.pixel_maybe_in_range_p (common.x, common.y))
+	    if (!other.pixel_maybe_in_range_p (common))
 	      continue;
 	    point_t imgp = other.common_scr_to_img ({common.x, common.y});
 	    if (imgp.x < xmin2 || imgp.x >=xmax2 || imgp.y < ymin2 || imgp.y >= ymax2)

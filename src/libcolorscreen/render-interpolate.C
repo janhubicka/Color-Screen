@@ -474,14 +474,13 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 				{
 				  coord_t sx, sy;
 				  int ttx, tty;
-				  coord_t fx, fy;
 				  stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
-				  stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
-				  if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
+				  point_t pfin = stitch.common_scr_to_img.scr_to_final ({sx, sy});
+				  if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax || pfin.y > ymax
 				      || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 				      || ttx != tx || tty != ty)
 				    return true;
-				  return analyze (fx - img.xmin, fy - img.ymin, c);
+				  return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
 				},
 				"analyzing tile",
 				tile, rparam, stitch.images[ty][tx].param,
@@ -550,15 +549,14 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 				    {
 				      coord_t sx, sy;
 				      int ttx, tty;
-				      coord_t fx, fy;
 				      stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
-				      stitch.common_scr_to_img.scr_to_final (sx, sy, &fx, &fy);
+				      point_t pfin = stitch.common_scr_to_img.scr_to_final ({sx, sy});
 				      //printf ("tile %i %i tilescreen %f %f screen %f %f final %f %f range %i:%i %i:%i\n",tx,ty, tsx,tsy,sx,sy,fx,fy,xmin,xmax,ymin,ymax);
-				      if (fx < xmin || fy < ymin || fx > xmax || fy > ymax
+				      if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax || pfin.y > ymax
 					  || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
 					  || ttx != tx || tty != ty)
 					return true;
-				      return analyze (fx - img.xmin, fy - img.ymin, r, g, b);
+				      return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r, g, b);
 				    },
 				    "analyzing tile",
 				    tile, rparam, stitch.images[ty][tx].param,

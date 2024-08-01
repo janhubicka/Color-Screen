@@ -298,9 +298,8 @@ void render_stitched(RP &rtparam, P &outer_param,
 	  for (int x = 0; x < width; x++)
 	    {
 	      int ix, iy;
-	      coord_t sx, sy;
-	      stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
-	      if (stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
+	      point_t scr = stitch.common_scr_to_img.final_to_scr ({(x + xoffset) * step + xmin, py});
+	      if (stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
 		renders[iy * stitch.params.width + ix] = (T *)(size_t)1;
 	    }
 	if (progress)
@@ -344,13 +343,12 @@ void render_stitched(RP &rtparam, P &outer_param,
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  {
-	    coord_t sx, sy;
-	    stitch.common_scr_to_img.final_to_scr ((x + xoffset) * step + xmin, py, &sx, &sy);
+	    point_t scr = stitch.common_scr_to_img.final_to_scr ({(x + xoffset) * step + xmin, py});
 
 	    int ix, iy;
 
 	    /* If no tile was found, just render black pixel. */
-	    if (!stitch.tile_for_scr (&rparam, sx, sy, &ix, &iy, true))
+	    if (!stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
 	      {
 		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;
@@ -395,7 +393,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 		lastx = ix;
 		lasty = iy;
 	      }
-	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, sx - stitch.images[lasty][lastx].xpos, sy - stitch.images[lasty][lastx].ypos, step);
+	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, scr.x - stitch.images[lasty][lastx].xpos, scr.y - stitch.images[lasty][lastx].ypos, step);
 	  int r, g, b;
 	  lastrender->set_color (d.red, d.green, d.blue, &r, &g, &b);
 	  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);

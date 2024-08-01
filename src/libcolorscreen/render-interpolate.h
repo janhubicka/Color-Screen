@@ -17,9 +17,8 @@ public:
   bool precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_t ymax, progress_info *progress);
   pure_attr inline rgbdata sample_pixel_final (coord_t x, coord_t y) const
   {
-    coord_t xx, yy;
-    m_scr_to_img.final_to_scr (x - get_final_xshift (), y - get_final_yshift (), &xx, &yy);
-    return sample_pixel_scr (xx, yy);
+    point_t p = m_scr_to_img.final_to_scr ({x - get_final_xshift (), y - get_final_yshift ()});
+    return sample_pixel_scr (p.x, p.y);
   }
   void set_render_type (render_type_parameters rtparam);
   void set_precise_rgb ()

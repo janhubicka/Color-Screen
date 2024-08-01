@@ -665,19 +665,17 @@ analyze_base::find_best_match (int percentage, int max_percentage, analyze_base 
     }
   free (sums);
   free (other_sums);
-  coord_t fx, fy;
-  map.scr_to_final (best_xshift, best_yshift, &fx, &fy);
+  point_t finalp = map.scr_to_final ({(coord_t)best_xshift, (coord_t)best_yshift});
   if (found && report_file)
-    fprintf (report_file, "Best match on offset %i,%i (final %f, %f0 sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, fx, fy, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
+    fprintf (report_file, "Best match on offset %i,%i (final %f, %f0 sqsum %f scales %f,%f,%f overlap %f%%\n", best_xshift, best_yshift, finalp.x, finalp.y, best_sqsum, best_rscale, best_gscale, best_bscale, 100.0 * best_noverlap / std::min (m_n_known_pixels, other.m_n_known_pixels));
   if (val_known && (*xshift_ret != best_xshift || *yshift_ret != best_yshift))
     {
       if (progress)
 	progress->pause_stdout ();
-      coord_t fx1, fy1;
-      map.scr_to_final (*xshift_ret, *yshift_ret, &fx1, &fy1);
+      point_t finalp1 = map.scr_to_final ({(coord_t)*xshift_ret, (coord_t)*yshift_ret});
       if (report_file)
-        fprintf (report_file, "Mismatch with cpfind: %f,%f (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, fx1, fy1, best_xshift, best_yshift, fx, fy);
-      printf ("Mismatch with cpfind: %f,%f (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, fx1, fy1, best_xshift, best_yshift, fx, fy);
+        fprintf (report_file, "Mismatch with cpfind: %f,%f (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, finalp1.x, finalp1.y, best_xshift, best_yshift, finalp.x, finalp.y);
+      printf ("Mismatch with cpfind: %f,%f (final: %f,%f) compared to %i,%i (final: %f,%f)\n", *xshift_ret, *yshift_ret, finalp1.x, finalp1.y, best_xshift, best_yshift, finalp.x, finalp.y);
       if (progress)
 	progress->resume_stdout ();
       return false;

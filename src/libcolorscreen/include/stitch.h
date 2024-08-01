@@ -138,15 +138,15 @@ class stitch_image
 
   inline analyze_base & get_analyzer ();
   static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
-  bool pixel_maybe_in_range_p (coord_t sx, coord_t sy)
+  bool pixel_maybe_in_range_p (point_t scr)
   {
-    coord_t ax = sx + xshift - xpos;
+    coord_t ax = scr.x + xshift - xpos;
     if (ax < 0 || ax >= width)
       return false;
-    coord_t ay = sy + yshift - ypos;
+    coord_t ay = scr.y + yshift - ypos;
     if (ay < 0 || ay >= height)
       return false;
-    return scr_to_img_map.to_img_in_mesh_range (sx - xpos, sy - ypos);
+    return scr_to_img_map.to_img_in_mesh_range (scr - (point_t){xpos, ypos});
   }
   inline pure_attr
   point_t img_to_common_scr (point_t p)
@@ -250,7 +250,7 @@ public:
 	for (ix = 0 ; ix < params.width; ix++)
 	  if ((!only_loaded || images[iy][ix].img)
 	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
-	      && images[iy][ix].pixel_maybe_in_range_p (sx, sy))
+	      && images[iy][ix].pixel_maybe_in_range_p ({sx, sy}))
 	    {
 	      /* Compute image coordinates.  */
 	      point_t pp = images[iy][ix].common_scr_to_img ({sx, sy});

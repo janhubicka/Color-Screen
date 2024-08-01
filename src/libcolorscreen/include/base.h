@@ -13,6 +13,11 @@ static constexpr const bool colorscreen_checking = true;
 static constexpr const bool colorscreen_checking = false;
 #endif
 
+/* Windows does not seem to define this by default.  */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /* Prevent conversion to wrong data type when doing math.  */
 static inline float
 my_pow (float x, float y)
