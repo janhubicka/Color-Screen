@@ -26,7 +26,7 @@ struct solver_parameters
     blue,
     max_point_color
   };
-  struct point_t
+  struct solver_point_t
   {
     coord_t img_x, img_y;
     coord_t screen_x, screen_y;
@@ -46,22 +46,22 @@ struct solver_parameters
 
   /* Vector holding points.  */
   int npoints;
-  struct point_t *point;
+  struct solver_point_t *point;
   /* If true, lens parameters are auto-optimized.  */
   bool optimize_lens;
   /* If true, image tilt is auto-optimized.  */
   bool optimize_tilt;
   /* If true then weights of points are set according to the
-     distance to center_x and center_y.   */
+     distance to center.x and center.y.   */
   bool weighted;
-  coord_t center_x, center_y;
+  point_t center;
 
   DLL_PUBLIC_EXP int
   add_point (coord_t img_x, coord_t img_y, coord_t screen_x, coord_t screen_y,
              enum point_color color)
   {
     npoints++;
-    point = (point_t *)realloc ((void *)point, npoints * sizeof (point_t));
+    point = (solver_point_t *)realloc ((void *)point, npoints * sizeof (solver_point_t));
     point[npoints - 1].img_x = img_x;
     point[npoints - 1].img_y = img_y;
     point[npoints - 1].screen_x = screen_x;

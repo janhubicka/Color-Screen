@@ -41,9 +41,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
 	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type]) < 0
 	  //|| fprintf (f, "lens_center: %f %f\n", param->lens_center_x, param->lens_center_y) < 0
-	  || fprintf (f, "screen_shift: %f %f\n", param->center_x, param->center_y) < 0
-	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1_x, param->coordinate1_y) < 0
-	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2_x, param->coordinate2_y) < 0
+	  || fprintf (f, "screen_shift: %f %f\n", param->center.x, param->center.y) < 0
+	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1.x, param->coordinate1.y) < 0
+	  || fprintf (f, "coordinate_y: %f %f\n", param->coordinate2.x, param->coordinate2.y) < 0
 	  || fprintf (f, "projection_distance: %f\n", param->projection_distance) < 0
 	  /* Needs large precision close to zero - so use %g.  */
 	  || fprintf (f, "tilt: %g %g\n", param->tilt_x, param->tilt_y) < 0
@@ -443,7 +443,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "screen_shift"))
 	{
-	  if (!read_vector (f, param_check (center_x), param_check (center_y)))
+	  if (!read_vector (f, param_check (center.x), param_check (center.y)))
 	    {
 	      *error = "error parsing screen_shift";
 	      return false;
@@ -451,7 +451,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "coordinate_x"))
 	{
-	  if (!read_vector (f, param_check (coordinate1_x), param_check (coordinate1_y)))
+	  if (!read_vector (f, param_check (coordinate1.x), param_check (coordinate1.y)))
 	    {
 	      *error = "error parsing coordinate_x";
 	      return false;
@@ -459,7 +459,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "coordinate_y"))
 	{
-	  if (!read_vector (f, param_check (coordinate2_x), param_check (coordinate2_y)))
+	  if (!read_vector (f, param_check (coordinate2.x), param_check (coordinate2.y)))
 	    {
 	      *error = "error parsing coordinate_y";
 	      return false;

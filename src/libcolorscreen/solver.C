@@ -253,23 +253,20 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type, bool inver
    If FINAL is true output info on results.  */
 
 coord_t
-solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::point_t *points,
+solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parameters::solver_point_t *points,
 	coord_t wcenter_x, coord_t wcenter_y,
 	int flags, bool final = false)
 {
   if (debug_output && final)
     {
-      printf ("Old Translation %f %f\n", param->center_x, param->center_y);
-      printf ("Old coordinate1 %f %f\n", param->coordinate1_x, param->coordinate1_y);
-      printf ("Old coordinate2 %f %f\n", param->coordinate2_x, param->coordinate2_y);
+      printf ("Old Translation %f %f\n", param->center.x, param->center.y);
+      printf ("Old coordinate1 %f %f\n", param->coordinate1.x, param->coordinate1.y);
+      printf ("Old coordinate2 %f %f\n", param->coordinate2.x, param->coordinate2.y);
     }
   /* Clear previous map.  */
-  param->center_x = 0;
-  param->center_y = 0;
-  param->coordinate1_x = 1;
-  param->coordinate1_y = 0;
-  param->coordinate2_x = 0;
-  param->coordinate2_y = 1;
+  param->center = {(coord_t)0, (coord_t)0};
+  param->coordinate1 = {(coord_t)1, (coord_t)0};
+  param->coordinate2 = {(coord_t)0, (coord_t)1};
   if (flags & homography::solve_rotation)
     {
       param->tilt_x = 0;
@@ -302,12 +299,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   point_t coordinate1 = map.to_img ({coordinate1_x, coordinate1_y}) - center;
   point_t coordinate2 = map.to_img ({coordinate2_x, coordinate2_y}) - center;
 
-  param->center_x = center.x;
-  param->center_y = center.y;
-  param->coordinate1_x = coordinate1.x;
-  param->coordinate1_y = coordinate1.y;
-  param->coordinate2_x = coordinate2.x;
-  param->coordinate2_y = coordinate2.y;
+  param->center = center;
+  param->coordinate1 = coordinate1;
+  param->coordinate2 = coordinate2;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the parameters?  */
   if (flags & homography::solve_rotation)
     {
@@ -413,9 +407,9 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
     }
   if (debug_output && final)
     {
-      printf ("New Translation %f %f\n", param->center_x, param->center_y);
-      printf ("New coordinate1 %f %f\n", param->coordinate1_x, param->coordinate1_y);
-      printf ("New coordinate2 %f %f\n", param->coordinate2_x, param->coordinate2_y);
+      printf ("New Translation %f %f\n", param->center.x, param->center.y);
+      printf ("New coordinate1 %f %f\n", param->coordinate1.x, param->coordinate1.y);
+      printf ("New coordinate2 %f %f\n", param->coordinate2.x, param->coordinate2.y);
     }
   if (final && ((debug || debug_output)))
     {
@@ -456,7 +450,7 @@ simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parame
 {
   if (progress)
     progress->set_task ("determing geometry by linear regression", 1);
-  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0), true);
+  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0), true);
 }
 
 namespace
@@ -526,12 +520,9 @@ public:
   objfunc (coord_t *vals)
   {
     static const coord_t bad_val = 100000000;
-    m_param.center_x = 0;
-    m_param.center_y = 0;
-    m_param.coordinate1_x = 1;
-    m_param.coordinate1_y = 0;
-    m_param.coordinate2_x = 0;
-    m_param.coordinate2_y = 1;
+    m_param.center = {(coord_t)0, (coord_t)0};
+    m_param.coordinate1 = {(coord_t)1, (coord_t)0};
+    m_param.coordinate2 = {(coord_t)0, (coord_t)1};
     int n = num_coordinates ();
     if (is_fixed_lens (m_param.scanner_type))
       m_param.lens_correction.center = {vals[0], vals[1]};
@@ -611,7 +602,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
-  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center_x, sparam.center_y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
+  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 }
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
@@ -856,7 +847,7 @@ compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homogr
 #endif
 
 static double
-screen_compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homography)
+screen_compute_chisq (solver_parameters::solver_point_t *points, int n, trans_4d_matrix homography)
 {
   double chisq = 0;
   for (int i = 0; i < n; i++)
@@ -880,7 +871,7 @@ screen_compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int flags,
+homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
 			       enum scanner_type scanner_type,
 			       scr_to_img *map,
 			       coord_t wcenter_x, coord_t wcenter_y,
@@ -891,7 +882,7 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   int nvariables = equation_variables (flags);
   int nsamples = nvariables / 2;
   trans_4d_matrix ret;
-  solver_parameters::point_t *tpoints = points;
+  solver_parameters::solver_point_t *tpoints = points;
   int max_inliners = 0;
   double min_chisq = INT_MAX;
   double min_inliner_chisq = INT_MAX;
@@ -908,7 +899,7 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
   gsl_vector *v = gsl_vector_alloc (nsamples * 2);
   if (map)
     {
-      tpoints = (solver_parameters::point_t *)malloc (sizeof (solver_parameters::point_t) * n);
+      tpoints = (solver_parameters::solver_point_t *)malloc (sizeof (solver_parameters::solver_point_t) * n);
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
@@ -1137,7 +1128,7 @@ homography::get_matrix_ransac (solver_parameters::point_t *points, int n, int fl
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
+homography::get_matrix (solver_parameters::solver_point_t *points, int n, int flags,
 			enum scanner_type scanner_type,
 			scr_to_img *map,
 			coord_t wcenter_x, coord_t wcenter_y,
@@ -1288,7 +1279,7 @@ homography::get_matrix (solver_parameters::point_t *points, int n, int flags,
      To make get same range as in ransac we need to recompute.  */
   if (chisq_ret)
     {
-      std::unique_ptr <solver_parameters::point_t []> tpoints (new solver_parameters::point_t[n]);
+      std::unique_ptr <solver_parameters::solver_point_t []> tpoints (new solver_parameters::solver_point_t[n]);
       for (int i = 0; i < n; i++)
 	{
 	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;

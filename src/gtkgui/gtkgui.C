@@ -191,8 +191,8 @@ openimage (const char *name)
       exit (1);
     }
 #if 0
-  current.lens_center_x = scan.width * 0.5;
-  current.lens_center_y = scan.height * 0.5;
+  current.lens_center.x = scan.width * 0.5;
+  current.lens_center.y = scan.height * 0.5;
 #endif
   rparams.gamma = scan.gamma != -2 ? scan.gamma : 2.2;
 }
@@ -1409,9 +1409,9 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 					   pxsize,
 					   pysize,
 					   bigrowstride);
-  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x, current.center_y, 0, 0, 1);
-  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate1_x, current.center_y + current.coordinate1_y, 1, 0, 0);
-  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center_x + current.coordinate2_x, current.center_y + current.coordinate2_y, 0, 1, 0);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center.x, current.center.y, 0, 0, 1);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center.x + current.coordinate1.x, current.center.y + current.coordinate1.y, 1, 0, 0);
+  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.center.x + current.coordinate2.x, current.center.y + current.coordinate2.y, 0, 1, 0);
 
   draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, current.lens_correction.center.x * scan.width, current.lens_correction.center.y * scan.height, 1, 0, 1);
 
@@ -1492,7 +1492,7 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, b, g, r);
 	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 3*b/4, 3*g/4, 3*r/4);
 
-	  coord_t patch_diam = sqrt (current.coordinate1_x * current.coordinate1_x + current.coordinate1_y * current.coordinate1_y) / 2;
+	  coord_t patch_diam = sqrt (current.coordinate1.x * current.coordinate1.x + current.coordinate1.y * current.coordinate1.y) / 2;
 	  double scale = 200 / patch_diam / bigscale;
 	  coord_t xd = p.x - xi;
 	  coord_t yd = p.y - yi;
@@ -1585,11 +1585,11 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 #if 0
   if (event->button == 1 && 0)
     {
-      double newcenter_x = (event->x + shift_x) / scale_x;
-      double newcenter_y = (event->y + shift_y) / scale_y;
+      double newcenter.x = (event->x + shift_x) / scale_x;
+      double newcenter.y = (event->y + shift_y) / scale_y;
       solver_parameters::point_t p;
       file_progress_info progress (stdout);
-      finetune (rparams, current, scan, p, newcenter_x, newcenter_y, &progress);
+      finetune (rparams, current, scan, p, newcenter.x, newcenter.y, &progress);
       setvals ();
       display_scheduled = true;
     }
@@ -1806,13 +1806,11 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
     {
       if (event->button == 1 && setcenter)
 	{
-	  double newcenter_x = (event->x + shift_x) / scale_x;
-	  double newcenter_y = (event->y + shift_y) / scale_y;
+	  point_t newcenter = {(event->x + shift_x) / scale_x, (event->y + shift_y) / scale_y};
           setcenter = false;
-	  if (newcenter_x != current.center_x || newcenter_y != current.center_y)
+	  if (newcenter != current.center)
 	    {
-	      current.center_x = newcenter_x;
-	      current.center_y = newcenter_y;
+	      current.center = newcenter;
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;
@@ -1820,13 +1818,11 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	}
       if (event->button == 1 && set_lens_center)
 	{
-	  double newcenter_x = ((event->x + shift_x) / scale_x) / scan.width;
-	  double newcenter_y = ((event->y + shift_y) / scale_y) / scan.height;
+	  point_t newcenter = {(event->x + shift_x) / scale_x, (event->y + shift_y) / scale_y};
           set_lens_center = false;
-	  if (newcenter_x != current.lens_correction.center.x || newcenter_y != current.lens_correction.center.y)
+	  if (newcenter != current.lens_correction.center)
 	    {
-	      current.lens_correction.center.x = newcenter_x;
-	      current.lens_correction.center.y = newcenter_y;
+	      current.lens_correction.center = newcenter;
 	      setvals ();
 	      display_scheduled = true;
 	      preview_display_scheduled = true;
@@ -1915,38 +1911,38 @@ handle_drag (int x, int y, int button)
     {
       double xoffset = (x - xpress1) / scale_x;
       double yoffset = (y - ypress1) / scale_y;
-      if (current.center_x == press_parameters.center_x + xoffset
-          && current.center_y == press_parameters.center_y + yoffset)
+      if (current.center.x == press_parameters.center.x + xoffset
+          && current.center.y == press_parameters.center.y + yoffset)
 	return;
-      current.center_x = press_parameters.center_x + xoffset;
-      current.center_y = press_parameters.center_y + yoffset;
+      current.center.x = press_parameters.center.x + xoffset;
+      current.center.y = press_parameters.center.y + yoffset;
       setvals ();
       display_scheduled = true;
       preview_display_scheduled = true;
     }
   else if (button == 3)
     {
-      double x1 = (xpress - current.center_x);
-      double y1 = (ypress - current.center_y);
-      double x2 = (x + shift_x) / scale_x - current.center_x;
-      double y2 = (y + shift_y) / scale_y - current.center_y;
+      double x1 = (xpress - current.center.x);
+      double y1 = (ypress - current.center.y);
+      double x2 = (x + shift_x) / scale_x - current.center.x;
+      double y2 = (y + shift_y) / scale_y - current.center.y;
       double scale = sqrt ((x2 * x2) + (y2 * y2))/sqrt ((x1*x1) + (y1*y1));
       double angle = atan2f (y2, x2) - atan2f (y1, x1);
       if (!angle)
 	return;
       if (!freeze_x)
 	{
-	  current.coordinate1_x = (press_parameters.coordinate1_x * cos (angle)
-				  + press_parameters.coordinate1_y * sin (angle)) * scale;
-	  current.coordinate1_y = (press_parameters.coordinate1_x * sin (angle)
-				  + press_parameters.coordinate1_y * cos (angle)) * scale;
+	  current.coordinate1.x = (press_parameters.coordinate1.x * cos (angle)
+				  + press_parameters.coordinate1.y * sin (angle)) * scale;
+	  current.coordinate1.y = (press_parameters.coordinate1.x * sin (angle)
+				  + press_parameters.coordinate1.y * cos (angle)) * scale;
 	}
       if (!freeze_y)
 	{
-	  current.coordinate2_x = (press_parameters.coordinate2_x * cos (-angle)
-				  + press_parameters.coordinate2_y * sin (-angle)) * scale;
-	  current.coordinate2_y = (press_parameters.coordinate2_x * sin (-angle)
-				  + press_parameters.coordinate2_y * cos (-angle)) * scale;
+	  current.coordinate2.x = (press_parameters.coordinate2.x * cos (-angle)
+				  + press_parameters.coordinate2.y * sin (-angle)) * scale;
+	  current.coordinate2.y = (press_parameters.coordinate2.x * sin (-angle)
+				  + press_parameters.coordinate2.y * cos (-angle)) * scale;
 	}
       setvals ();
       display_scheduled = true;
@@ -2038,13 +2034,11 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	    {
 	      if (set_solver_center)
 		{
-		  double newcenter_x = (event->x + shift_x) / scale_x;
-		  double newcenter_y = (event->y + shift_y) / scale_y;
+		  point_t newcenter = {(event->x + shift_x) / scale_x, (event->y + shift_y) / scale_y};
 		  set_solver_center = false;
 		  current_solver.weighted = true;
-		  current_solver.center_x = newcenter_x;
-		  current_solver.center_y = newcenter_y;
-		  printf ("Solver center: %f %f\n", newcenter_x, newcenter_y);
+		  current_solver.center = newcenter;
+		  printf ("Solver center: %f %f\n", newcenter.x, newcenter.y);
 		  file_progress_info progress (stdout);
 		  solver (&current, scan, current_solver, &progress);
 		  preview_display_scheduled = true;

@@ -57,6 +57,11 @@ struct point_t
   {
     return my_sqrt (dist_sq2_from (p));
   }
+  pure_attr inline coord_t
+  length () const
+  {
+    return my_sqrt (x * x + y * y);
+  }
   point_t inline &operator+=(const point_t other)
   {
     x += other.x;

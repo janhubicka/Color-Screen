@@ -9,7 +9,7 @@ class mesh;
 
 /* Windows does not seem to define this by default.  */
 #ifndef M_PI
-    #define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846
 #endif
 class render;
 struct render_parameters;
@@ -17,38 +17,42 @@ struct render_parameters;
 /* Types of supported screens.  */
 enum scr_type
 {
-   Random,
-   Paget,
-   Thames,
-   Finlay,
-   Dufay,
-   max_scr_type
+  Random,
+  Paget,
+  Thames,
+  Finlay,
+  Dufay,
+  max_scr_type
 };
-DLL_PUBLIC extern const char * const scr_names[max_scr_type];
-pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t, const render_parameters *);
+DLL_PUBLIC extern const char *const scr_names[max_scr_type];
+pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
+                                                const render_parameters *);
 
 /* Type of a scanner used.  */
-enum scanner_type {
-	fixed_lens,
-	fixed_lens_sensor_move_horisontally,
-	fixed_lens_sensor_move_vertically,
-	lens_move_horisontally,
-	lens_move_vertically,
-	max_scanner_type
+enum scanner_type
+{
+  fixed_lens,
+  fixed_lens_sensor_move_horisontally,
+  fixed_lens_sensor_move_vertically,
+  lens_move_horisontally,
+  lens_move_vertically,
+  max_scanner_type
 };
 
-inline bool is_fixed_lens (scanner_type type)
+inline bool
+is_fixed_lens (scanner_type type)
 {
-  return type == fixed_lens || type == fixed_lens_sensor_move_horisontally || type == fixed_lens_sensor_move_vertically;
+  return type == fixed_lens || type == fixed_lens_sensor_move_horisontally
+         || type == fixed_lens_sensor_move_vertically;
 }
 
-DLL_PUBLIC extern const char * const scanner_type_names[max_scanner_type];
+DLL_PUBLIC extern const char *const scanner_type_names[max_scanner_type];
 
-/* This implements to translate image coordiantes to coordinates of the viewing screen.
-   In the viewing screen the coordinats (0,0) describe a green dot and
-   the screen is periodic with period 1: that is all integer coordinates describes
-   gren dots again.
- 
+/* This implements to translate image coordiantes to coordinates of the viewing
+   screen. In the viewing screen the coordinats (0,0) describe a green dot and
+   the screen is periodic with period 1: that is all integer coordinates
+   describes gren dots again.
+
    In order to turn scan coordinates to screen the following transformations
    are performed
      1) motor correction
@@ -56,21 +60,22 @@ DLL_PUBLIC extern const char * const scanner_type_names[max_scanner_type];
      3) lens correction
      4) perspective correction (with tilt applied)
      5) translation to move center to (0,0)
-     6) change of basis so center+coordinate1 becomes (1.0) and center+coordinate2 becomes (0,1)
+     6) change of basis so center+coordinate1 becomes (1.0) and
+   center+coordinate2 becomes (0,1)
 */
 
 struct scr_to_img_parameters
 {
   /* Coordinates (in the image) of the center of the screen (a green dot).  */
-  coord_t center_x, center_y;
+  point_t center;
   /* First coordinate vector:
-     image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
+     image's (center.x+coordinate1.x, centr.y+coordinate1.y) should describe
      a green dot just on the right side of (center_x, center_y).  */
-  coord_t coordinate1_x, coordinate1_y;
+  point_t coordinate1;
   /* Second coordinate vector:
-     image's (center_x+coordinate1_x, centr_y+coordinate1_y) should describe
-     a green dot just below (center_x, center_y).  */
-  coord_t coordinate2_x, coordinate2_y;
+     image's (center.x+coordinate1.x, centr_y+coordinate1.y) should describe
+     a green dot just below (center.x, center.y).  */
+  point_t coordinate2;
 
   /* Distance of the perspective pane from the camera coordinate.  */
   coord_t projection_distance;
@@ -96,51 +101,63 @@ struct scr_to_img_parameters
   lens_warp_correction_parameters lens_correction;
 
   scr_to_img_parameters ()
-  : center_x (0), center_y (0), coordinate1_x(5), coordinate1_y (0), coordinate2_x (0), coordinate2_y (5),
-    projection_distance (1), tilt_x (0), tilt_y(0), 
-    final_rotation (0), final_angle (90), final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
-    n_motor_corrections (0), mesh_trans (NULL), type (Finlay), scanner_type (fixed_lens), lens_correction ()
-  { }
+      : center{ (coord_t)0, (coord_t)0 },
+        coordinate1{ (coord_t)1, (coord_t)0 },
+        coordinate2{ (coord_t)0, (coord_t)1 }, projection_distance (1),
+        tilt_x (0), tilt_y (0), final_rotation (0), final_angle (90),
+        final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
+        n_motor_corrections (0), mesh_trans (NULL), type (Finlay),
+        scanner_type (fixed_lens), lens_correction ()
+  {
+  }
   scr_to_img_parameters (const scr_to_img_parameters &from)
-  : center_x (from.center_x), center_y (from.center_y),
-    coordinate1_x(from.coordinate1_x), coordinate1_y (from.coordinate1_y),
-    coordinate2_x (from.coordinate2_x), coordinate2_y (from.coordinate2_y),
-    projection_distance (from.projection_distance), tilt_x (from.tilt_x), tilt_y(from.tilt_y), 
-    final_rotation (from.final_rotation), final_angle (from.final_angle), final_ratio (from.final_ratio), motor_correction_x (NULL), motor_correction_y (NULL),
-    n_motor_corrections (from.n_motor_corrections),
-    mesh_trans (from.mesh_trans), type (from.type), scanner_type (from.scanner_type), lens_correction (from.lens_correction)
+      : center (from.center), coordinate1 (from.coordinate1), coordinate2 (from.coordinate2), 
+        projection_distance (from.projection_distance), tilt_x (from.tilt_x),
+        tilt_y (from.tilt_y), final_rotation (from.final_rotation),
+        final_angle (from.final_angle), final_ratio (from.final_ratio),
+        motor_correction_x (NULL), motor_correction_y (NULL),
+        n_motor_corrections (from.n_motor_corrections),
+        mesh_trans (from.mesh_trans), type (from.type),
+        scanner_type (from.scanner_type),
+        lens_correction (from.lens_correction)
   {
     if (n_motor_corrections)
       {
-        motor_correction_x = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-        motor_correction_y = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-	memcpy (motor_correction_x, from.motor_correction_x, n_motor_corrections * sizeof (coord_t));
-	memcpy (motor_correction_y, from.motor_correction_y, n_motor_corrections * sizeof (coord_t));
+        motor_correction_x
+            = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+        motor_correction_y
+            = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+        memcpy (motor_correction_x, from.motor_correction_x,
+                n_motor_corrections * sizeof (coord_t));
+        memcpy (motor_correction_y, from.motor_correction_y,
+                n_motor_corrections * sizeof (coord_t));
       }
   }
-  scr_to_img_parameters &operator= (const scr_to_img_parameters &other)
+  scr_to_img_parameters &
+  operator= (const scr_to_img_parameters &other)
   {
     free (motor_correction_x);
     free (motor_correction_y);
     n_motor_corrections = 0;
     copy_from_cheap (other);
     n_motor_corrections = other.n_motor_corrections;
-    motor_correction_x = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-    motor_correction_y = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-    memcpy (motor_correction_x, other.motor_correction_x, n_motor_corrections * sizeof (coord_t));
-    memcpy (motor_correction_y, other.motor_correction_y, n_motor_corrections * sizeof (coord_t));
+    motor_correction_x
+        = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+    motor_correction_y
+        = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+    memcpy (motor_correction_x, other.motor_correction_x,
+            n_motor_corrections * sizeof (coord_t));
+    memcpy (motor_correction_y, other.motor_correction_y,
+            n_motor_corrections * sizeof (coord_t));
     return *this;
   }
   /* Copy everything except for motor corrections.  */
   void
   copy_from_cheap (const scr_to_img_parameters &from)
   {
-    center_x = from.center_x;
-    center_y = from.center_y;
-    coordinate1_x = from.coordinate1_x;
-    coordinate1_y = from.coordinate1_y;
-    coordinate2_x = from.coordinate2_x;
-    coordinate2_y = from.coordinate2_y;
+    center = from.center;
+    coordinate1 = from.coordinate1;
+    coordinate2 = from.coordinate2;
     projection_distance = from.projection_distance;
     tilt_x = from.tilt_x;
     tilt_y = from.tilt_y;
@@ -159,31 +176,28 @@ struct scr_to_img_parameters
     free (motor_correction_x);
     free (motor_correction_y);
   }
-  bool operator== (scr_to_img_parameters &other) const
+  bool
+  operator== (scr_to_img_parameters &other) const
   {
     if (n_motor_corrections != other.n_motor_corrections)
       return false;
     for (int i = 0; i < n_motor_corrections; i++)
       if (motor_correction_x[i] != other.motor_correction_x[i]
-	  || motor_correction_y[i] != other.motor_correction_y[i])
-	return false;
-    return center_x == other.center_x
-	   && center_y == other.center_y
-	   && coordinate1_x == other.coordinate1_x
-	   && coordinate1_y == other.coordinate1_y
-	   && coordinate2_x == other.coordinate2_x
-	   && coordinate2_y == other.coordinate2_y
-	   && projection_distance == other.projection_distance
-	   && final_rotation == other.final_rotation
-	   && final_angle == other.final_angle
-	   && final_ratio == other.final_ratio
-	   && tilt_x == other.tilt_x
-	   && tilt_y == other.tilt_y
-	   && type == other.type
-	   && scanner_type == other.scanner_type
-	   && lens_correction == other.lens_correction;
+          || motor_correction_y[i] != other.motor_correction_y[i])
+        return false;
+    return center == other.center 
+           && coordinate1 == other.coordinate1
+           && coordinate2 == other.coordinate2
+           && projection_distance == other.projection_distance
+           && final_rotation == other.final_rotation
+           && final_angle == other.final_angle
+           && final_ratio == other.final_ratio && tilt_x == other.tilt_x
+           && tilt_y == other.tilt_y && type == other.type
+           && scanner_type == other.scanner_type
+           && lens_correction == other.lens_correction;
   }
-  bool operator!= (scr_to_img_parameters &other) const
+  bool
+  operator!= (scr_to_img_parameters &other) const
   {
     return !(*this == other);
   }
@@ -192,14 +206,18 @@ struct scr_to_img_parameters
   {
     int p = 0;
 
-    motor_correction_x = (coord_t *)realloc ((void *)motor_correction_x, (n_motor_corrections + 1) * sizeof (coord_t));
-    motor_correction_y = (coord_t *)realloc ((void *)motor_correction_y, (n_motor_corrections + 1) * sizeof (coord_t));
-    for (p = n_motor_corrections; p > 0 && motor_correction_x[p-1] > x; p--)
+    motor_correction_x
+        = (coord_t *)realloc ((void *)motor_correction_x,
+                              (n_motor_corrections + 1) * sizeof (coord_t));
+    motor_correction_y
+        = (coord_t *)realloc ((void *)motor_correction_y,
+                              (n_motor_corrections + 1) * sizeof (coord_t));
+    for (p = n_motor_corrections; p > 0 && motor_correction_x[p - 1] > x; p--)
       ;
-    for (int p2 = n_motor_corrections; p2 > p; p2 --)
+    for (int p2 = n_motor_corrections; p2 > p; p2--)
       {
-	motor_correction_x[p2] = motor_correction_x[p2 - 1];
-	motor_correction_y[p2] = motor_correction_y[p2 - 1];
+        motor_correction_x[p2] = motor_correction_x[p2 - 1];
+        motor_correction_y[p2] = motor_correction_y[p2 - 1];
       }
     motor_correction_x[p] = x;
     motor_correction_y[p] = y;
@@ -210,10 +228,10 @@ struct scr_to_img_parameters
   remove_motor_correction_point (int i)
   {
     for (; i < n_motor_corrections; i++)
-    {
-	motor_correction_x[i] = motor_correction_x[i + 1];
-	motor_correction_y[i] = motor_correction_y[i + 1];
-    }
+      {
+        motor_correction_x[i] = motor_correction_x[i + 1];
+        motor_correction_y[i] = motor_correction_y[i + 1];
+      }
     n_motor_corrections--;
   }
   coord_t
@@ -229,19 +247,20 @@ struct scr_to_img_parameters
   pure_attr coord_t
   get_xlen () const
   {
-    return sqrt (coordinate1_x * coordinate1_x + coordinate1_y * coordinate1_y);
+    return coordinate1.length ();
   }
   pure_attr coord_t
   get_ylen () const
   {
-    return sqrt (coordinate2_x * coordinate2_x + coordinate2_y * coordinate2_y);
+    return coordinate2.length ();
   }
   pure_attr coord_t
   get_angle () const
   {
-    coord_t dot = coordinate1_x*coordinate2_x + coordinate1_y*coordinate2_y;
-    //coord_t det = coordinate1_x*coordinate2_y - coordinate1_y*coordinate2_x;
-    //return atan2(det, dot) * 180 / M_PI;
+    coord_t dot
+        = coordinate1.x * coordinate2.x + coordinate1.y * coordinate2.y;
+    // coord_t det = coordinate1_x*coordinate2_y - coordinate1_y*coordinate2_x;
+    // return atan2(det, dot) * 180 / M_PI;
     return acos (dot / (get_xlen () * get_ylen ())) * (180 / M_PI);
   }
 };

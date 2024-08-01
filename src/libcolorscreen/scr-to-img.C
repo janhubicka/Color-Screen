@@ -169,13 +169,11 @@ scr_to_img::initialize ()
   m_perspective_matrix = rd;
   /* Center and base vectors are in the scan coordinates.  */
   point_t corrected_center
-      = apply_early_correction ({ m_param.center_x, m_param.center_y });
+      = apply_early_correction (m_param.center);
   point_t c1
-      = apply_early_correction ({ m_param.coordinate1_x + m_param.center_x,
-                                  m_param.coordinate1_y + m_param.center_y });
+      = apply_early_correction (m_param.center + m_param.coordinate1);
   point_t c2
-      = apply_early_correction ({ m_param.coordinate2_x + m_param.center_x,
-                                  m_param.coordinate2_y + m_param.center_y });
+      = apply_early_correction (m_param.center + m_param.coordinate2);
 
   m_perspective_matrix.inverse_perspective_transform (
       corrected_center.x, corrected_center.y, corrected_center.x,

@@ -717,7 +717,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   
   if (!m_prj->stitch_info_scale)
-    m_prj->stitch_info_scale = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y) + 1;
+    m_prj->stitch_info_scale = param.coordinate1.length () + 1;
   if (m_prj->params.outliers_info && !detected.smap->write_outliers_info (((std::string)"outliers-"+ filename).c_str (), img->width, img->height, m_prj->stitch_info_scale, scr_to_img_map, &error, progress))
     {
       progress->pause_stdout ();

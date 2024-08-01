@@ -105,7 +105,7 @@ public:
       return true;
     return m_param.mesh_trans->in_range_p (p.x, p.y);
   }
-  /* Map image coordinats to screen.  */
+  /* Map image coordinates to screen.  */
   pure_attr inline point_t
   to_scr (point_t p) const
   {
@@ -116,7 +116,7 @@ public:
       {
         p = apply_early_correction (p);
         /* For scanners with moving lens the inverse transform may not
-         * correspond to homography.  */
+           correspond to homography.  */
         if (m_do_homography)
           m_img_to_scr_homography_matrix.perspective_transform (p.x, p.y, p.x,
                                                                 p.y);
@@ -176,7 +176,7 @@ public:
   {
     return m_param;
   }
-  rgbdata
+  pure_attr rgbdata
   patch_proportions (const render_parameters *rparam) const
   {
     return ::patch_proportions (m_param.type, rparam);

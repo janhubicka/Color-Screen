@@ -587,8 +587,8 @@ confirm_patch (FILE *report_file, color_class_map *color_map,
 
 bool
 confirm (render_scr_detect *render,
-	 coord_t coordinate1_x, coord_t coordinate1_y,
-	 coord_t coordinate2_x, coord_t coordinate2_y,
+	 point_t coordinate1,
+	 point_t coordinate2,
 	 coord_t x, coord_t y, scr_detect::color_class t,
 	 int width, int height,
 	 coord_t max_distance,
@@ -621,10 +621,10 @@ confirm (render_scr_detect *render,
   /* We go to both directions from given X and Y coordinates.  */
   sum_range = 0.5 * sum_range;
 
-  int xmin = ceil (std::min (std::min (coordinate1_x * sum_range, coordinate2_x * sum_range), std::min (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
-  int xmax = ceil (std::max (std::max (coordinate1_x * sum_range, coordinate2_x * sum_range), std::max (-coordinate1_x * sum_range, -coordinate2_x * sum_range)));
-  int ymin = ceil (std::min (std::min (coordinate1_y * sum_range, coordinate2_y * sum_range), std::min (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
-  int ymax = ceil (std::max (std::max (coordinate1_y * sum_range, coordinate2_y * sum_range), std::max (-coordinate1_y * sum_range, -coordinate2_y * sum_range)));
+  int xmin = ceil (std::min (std::min (coordinate1.x * sum_range, coordinate2.x * sum_range), std::min (-coordinate1.x * sum_range, -coordinate2.x * sum_range)));
+  int xmax = ceil (std::max (std::max (coordinate1.x * sum_range, coordinate2.x * sum_range), std::max (-coordinate1.x * sum_range, -coordinate2.x * sum_range)));
+  int ymin = ceil (std::min (std::min (coordinate1.y * sum_range, coordinate2.y * sum_range), std::min (-coordinate1.y * sum_range, -coordinate2.y * sum_range)));
+  int ymax = ceil (std::max (std::max (coordinate1.y * sum_range, coordinate2.y * sum_range), std::max (-coordinate1.y * sum_range, -coordinate2.y * sum_range)));
   coord_t scaled_max_distance = max_distance / max_distance_scale;
   coord_t pixel_step = scaled_max_distance / 5;
 
@@ -791,8 +791,8 @@ confirm (render_scr_detect *render,
   luminosity_t min = 0;
   if (verbose_confirm > 1)
     {
-      printf ("coordinate1 %f %f\n", coordinate1_x, coordinate1_y);
-      printf ("coordinate2 %f %f\n", coordinate2_x, coordinate2_y);
+      printf ("coordinate1 %f %f\n", coordinate1.x, coordinate1.y);
+      printf ("coordinate2 %f %f\n", coordinate2.x, coordinate2.y);
       printf ("patch_xscale %f %f t %i strip %i corner %i\n", patch_xscale, patch_yscale, t, strip, corners);
     }
   for (int yy = -sample_steps - outer_space; yy <= sample_steps + outer_space; yy++)
@@ -804,8 +804,8 @@ confirm (render_scr_detect *render,
 	{
 	  if (xx == -sample_steps - outer_space + 1 || xx == sample_steps)
 	    xx += outer_space;
-	  coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_x + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_x;
-	  coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1_y + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2_y;
+	  coord_t ax = bestcx + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1.x + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2.x;
+	  coord_t ay = bestcy + (xx * ( 1 / ((coord_t)sample_steps + 2 * outer_space) * patch_xscale)) * coordinate1.y + (yy * (1 / ((coord_t)sample_steps + 2 * outer_space) * patch_yscale)) * coordinate2.y;
 
 	  rgbdata d = render->get_adjusted_pixel (ax, ay);
 	  luminosity_t color[3] = {d.red, d.green, d.blue};
@@ -1003,15 +1003,15 @@ diagonal_coordinates_to_color (int x, int y)
 std::unique_ptr <screen_map>
 flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t greeny, scr_to_img_parameters &param, image_data &img, render_scr_detect *render, color_class_map *color_map, solver_parameters *sparam, bitmap_2d *visited, int *npatches, detect_regular_screen_params *dsparams, progress_info *progress)
 {
-  double screen_xsize = sqrt (param.coordinate1_x * param.coordinate1_x + param.coordinate1_y * param.coordinate1_y);
-  double screen_ysize = sqrt (param.coordinate2_x * param.coordinate2_x + param.coordinate2_y * param.coordinate2_y);
+  double screen_xsize = sqrt (param.coordinate1.x * param.coordinate1.x + param.coordinate1.y * param.coordinate1.y);
+  double screen_ysize = sqrt (param.coordinate2.x * param.coordinate2.x + param.coordinate2.y * param.coordinate2.y);
 
   /* If screen is estimated too small or too large give up.  */
   if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 || screen_ysize > 100)
     return NULL;
 
   /* Do not flip the image.  */
-  if (param.type == Dufay && param.coordinate1_y < 0)
+  if (param.type == Dufay && param.coordinate1.y < 0)
     return NULL;
 
   scr_to_img scr_map;
@@ -1043,14 +1043,14 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     height = yshift + 1;
 #endif
   int nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
-  //printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+  //printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
   /* Be sure that coordinates 0,0 are on screen.
      Normally, this should always be the case since screen discovery always
      places point 0,0 on screen. But in case of large deformations we may hit this.   */
   if (width <= xshift || height <= yshift)
     return NULL;
   if (report_file)
-    fprintf (report_file, "Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+    fprintf (report_file, "Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
   if (progress)
     progress->set_task ("Flood fill", nexpected);
   if (param.type == Dufay)
@@ -1108,7 +1108,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   map->set_coord (0, 0, greenx, greeny);
   if (sparam)
     sparam->remove_points ();
-  //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y);
+  //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
   queue_entry e;
   while (queue.extract_min (e)
 	 && (!progress || !progress->cancel_requested ()))
@@ -1117,7 +1117,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       int priority = 0;
       int priority2 = 0;
       //if (verbose)
-        //printf ("visiting %i %i %f %f %f %f\n", e.scr_x, e.scr_y, e.img_x, e.img_y, param.coordinate1_x, param.coordinate1_y);
+        //printf ("visiting %i %i %f %f %f %f\n", e.scr_x, e.scr_y, e.img_x, e.img_y, param.coordinate1.x, param.coordinate1.y);
       if (progress)
         progress->inc_progress ();
       if (param.type == Dufay)
@@ -1127,34 +1127,34 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 
   // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
 #define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (slow && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false, dsparams->min_patch_contrast)))
+				 || (slow && confirm (render, param.coordinate1, param.coordinate2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false, dsparams->min_patch_contrast)))
 #define cstrip(x,y,t, priority) ((fast && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
-				 || (slow && confirm (render, param.coordinate1_x, param.coordinate1_y, param.coordinate2_x, param.coordinate2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
+				 || (slow && confirm (render, param.coordinate1, param.coordinate2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
 	  if (!map->known_p (e.scr_x - 1, e.scr_y)
-	      && cpatch (e.img_x - param.coordinate1_x / 2, e.img_y - param.coordinate1_y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	      && cpatch (e.img_x - param.coordinate1.x / 2, e.img_y - param.coordinate1.y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
 	      map->safe_set_coord (e.scr_x - 1, e.scr_y, ix, iy);
 	      queue.insert ((struct queue_entry){e.scr_x - 1, e.scr_y, ix, iy}, priority);
 	      nfound++;
 	    }
 	  if (!map->known_p (e.scr_x + 1, e.scr_y)
-	      && cpatch (e.img_x + param.coordinate1_x / 2, e.img_y + param.coordinate1_y / 2, ((e.scr_x + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	      && cpatch (e.img_x + param.coordinate1.x / 2, e.img_y + param.coordinate1.y / 2, ((e.scr_x + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
 	      map->safe_set_coord (e.scr_x + 1, e.scr_y, ix, iy);
 	      queue.insert ((struct queue_entry){e.scr_x + 1, e.scr_y, ix, iy}, priority);
 	      nfound++;
 	    }
 	  if (!map->known_p (e.scr_x, e.scr_y - 1)
-	      && cstrip (e.img_x - param.coordinate2_x / 2, e.img_y - param.coordinate2_y / 2, scr_detect::red, priority)
-	      && cpatch (e.img_x - param.coordinate2_x, e.img_y - param.coordinate2_y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	      && cstrip (e.img_x - param.coordinate2.x / 2, e.img_y - param.coordinate2.y / 2, scr_detect::red, priority)
+	      && cpatch (e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	    {
 	      map->safe_set_coord (e.scr_x, e.scr_y - 1, ix, iy);
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
 	      nfound++;
 	    }
 	  if (!map->known_p (e.scr_x, e.scr_y + 1)
-	      && cstrip (e.img_x + param.coordinate2_x / 2, e.img_y + param.coordinate2_y / 2, scr_detect::red, priority)
-	      && cpatch (e.img_x + param.coordinate2_x, e.img_y + param.coordinate2_y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	      && cstrip (e.img_x + param.coordinate2.x / 2, e.img_y + param.coordinate2.y / 2, scr_detect::red, priority)
+	      && cpatch (e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	    {
 	      map->safe_set_coord (e.scr_x, e.scr_y + 1, ix, iy);
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
@@ -1167,12 +1167,10 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	{
 	  /* Blue patches are smaller.  */
 	  int blue_min_patch_size = (min_patch_size + 1) / 2;
-	  coord_t c1_x = (-param.coordinate1_x + param.coordinate2_x);
-	  coord_t c1_y = (-param.coordinate1_y + param.coordinate2_y);
-	  coord_t c2_x = (param.coordinate1_x + param.coordinate2_x);
-	  coord_t c2_y = (param.coordinate1_y + param.coordinate2_y);
+	  point_t c1 = param.coordinate2 - param.coordinate1;
+	  point_t c2 = param.coordinate1 + param.coordinate2;
 #define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, t == scr_detect::blue ? blue_min_patch_size : min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
-				 || (slow && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue, dsparams->min_patch_contrast)))
+				 || (slow && confirm (render, c1, c2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.20, t == scr_detect::blue ? 0.18 : 0.25, false, t == scr_detect::blue, dsparams->min_patch_contrast)))
 				 //|| (!fast && confirm (render, c1_x, c1_y, c2_x, c2_y, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 6, 0.33 / 2, 0.33 / 2, false)))
 	  if (sparam)
 	    {
@@ -1188,7 +1186,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 		{
 	          analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){xx, yy});
 		  solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x + xx, e.scr_y + yy);
-		  if (cpatch (e.img_x + p.x * param.coordinate1_x / 4 + p.y * param.coordinate2_x / 4, e.img_y + p.x * param.coordinate1_y / 4 + p.y * param.coordinate2_y / 4, (scr_detect::color_class)color, priority))
+		  if (cpatch (e.img_x + p.x * param.coordinate1.x / 4 + p.y * param.coordinate2.x / 4, e.img_y + p.x * param.coordinate1.y / 4 + p.y * param.coordinate2.y / 4, (scr_detect::color_class)color, priority))
 		    {
 		      map->safe_set_coord (e.scr_x + xx, e.scr_y + yy, ix, iy);
 		      queue.insert ((struct queue_entry){e.scr_x + xx, e.scr_y + yy, ix, iy}, priority);
@@ -1215,8 +1213,8 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   simple_solver (&param2, img, sparam2, progress);
   if (progress && progress->cancel_requested ())
     return NULL;
-  screen_xsize = sqrt (param2.coordinate1_x * param2.coordinate1_x + param2.coordinate1_y * param2.coordinate1_y);
-  screen_ysize = sqrt (param2.coordinate2_x * param2.coordinate2_x + param2.coordinate2_y * param2.coordinate2_y);
+  screen_xsize = sqrt (param2.coordinate1.x * param2.coordinate1.x + param2.coordinate1.y * param2.coordinate1.y);
+  screen_ysize = sqrt (param2.coordinate2.x * param2.coordinate2.x + param2.coordinate2.y * param2.coordinate2.y);
   nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
 
   /* Check for large unanalyzed areas.  */
@@ -1704,12 +1702,12 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
     progress->set_task ("Checking screen consistency", 1);
   int errs;
   if (type == Dufay)
-    errs = smap->check_consistency (report_file, ret.param.coordinate1_x / 2, ret.param.coordinate1_y / 2, ret.param.coordinate2_x, ret.param.coordinate2_y,
-				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 2);
+    errs = smap->check_consistency (report_file, ret.param.coordinate1.x / 2, ret.param.coordinate1.y / 2, ret.param.coordinate2.x, ret.param.coordinate2.y,
+				    sqrt (ret.param.coordinate1.x * ret.param.coordinate1.x + ret.param.coordinate1.y * ret.param.coordinate1.y) / 2);
   else
-    errs = smap->check_consistency (report_file, (ret.param.coordinate1_x - ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y - ret.param.coordinate2_y) / 4,
-				    (ret.param.coordinate1_x + ret.param.coordinate2_x) / 4, (ret.param.coordinate1_y + ret.param.coordinate2_y) / 4,
-				    sqrt (ret.param.coordinate1_x * ret.param.coordinate1_x + ret.param.coordinate1_y * ret.param.coordinate1_y) / 3);
+    errs = smap->check_consistency (report_file, (ret.param.coordinate1.x - ret.param.coordinate2.x) / 4, (ret.param.coordinate1.y - ret.param.coordinate2.y) / 4,
+				    (ret.param.coordinate1.x + ret.param.coordinate2.x) / 4, (ret.param.coordinate1.y + ret.param.coordinate2.y) / 4,
+				    sqrt (ret.param.coordinate1.x * ret.param.coordinate1.x + ret.param.coordinate1.y * ret.param.coordinate1.y) / 3);
   /* If we do mesh, insert fake control points to the detected screen so the binding tapes are not curly.  */
   if (dsparams->do_mesh
       && (dsparams->left || dsparams->top || dsparams->right || dsparams->bottom))

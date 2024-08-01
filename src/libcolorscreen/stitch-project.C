@@ -556,7 +556,7 @@ stitch_project::load (FILE *f, const char **error)
       params.type = images[y][x].param.type;
     }
   if (stitch_info_scale)
-    stitch_info_scale = sqrt (images[0][0].param.coordinate1_x * images[0][0].param.coordinate1_x + images[0][0].param.coordinate1_y * images[0][0].param.coordinate1_y) + 1;
+    stitch_info_scale = images[0][0].param.coordinate1.length () + 1;
   return true;
 }
 std::string stitch_project::add_path (std::string name)
