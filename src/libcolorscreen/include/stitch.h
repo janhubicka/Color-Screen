@@ -5,7 +5,6 @@
 #include <memory>
 #include "imagedata.h"
 #include "scr-to-img.h"
-//#include "solver.h"
 #include "colorscreen.h"
 struct tiff;
 typedef struct tiff TIFF;
@@ -56,13 +55,20 @@ struct stitching_params
   std::string hugin_pto_filename;
   std::string report_filename;
 
-
   stitching_params ()
-  : type (Dufay), screen_tiles (false), known_screen_tiles (false),
-    cpfind (true), panorama_map (false), optimize_colors (true), reoptimize_colors (false), slow_floodfill (true), fast_floodfill (true), limit_directions (false), mesh_trans (true),
-    geometry_info (false), individual_geometry_info (false), outliers_info (false), diffs (false), load_registration (false),
-    outer_tile_border (30), inner_tile_border (10), min_overlap_percentage (10), max_overlap_percentage (65), max_unknown_screen_range (100), max_contrast (-1), min_patch_contrast (-1), num_control_points (100), min_screen_percentage (75), hfov (28.534),
-    max_avg_distance (2), max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0), height (0), path("")
+      : type (Dufay), screen_tiles (false), known_screen_tiles (false),
+        cpfind (true), panorama_map (false), optimize_colors (true),
+        reoptimize_colors (false), slow_floodfill (true),
+        fast_floodfill (true), limit_directions (false), mesh_trans (true),
+        geometry_info (false), individual_geometry_info (false),
+        outliers_info (false), diffs (false), load_registration (false),
+        outer_tile_border (30), inner_tile_border (10),
+        min_overlap_percentage (10), max_overlap_percentage (65),
+        max_unknown_screen_range (100), max_contrast (-1),
+        min_patch_contrast (-1), num_control_points (100),
+        min_screen_percentage (75), hfov (28.534), max_avg_distance (2),
+        max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0),
+        height (0), path ("")
   {
   }
 };
@@ -72,7 +78,7 @@ class analyze_base;
 
 class stitch_image
 {
-  public:
+public:
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
@@ -87,10 +93,11 @@ class stitch_image
   int xshift, yshift, width, height;
   int final_xshift, final_yshift;
   int final_width, final_height;
-  std::unique_ptr <analyze_base> analyzer;
+  std::unique_ptr<analyze_base> analyzer;
   /* Screen patches that was detected by screen detection algorithm.  */
   std::unique_ptr<bitmap_2d> screen_detected_patches;
-  /* Known pixels used by stitching algorithm.  This is basically the image without borders.  */
+  /* Known pixels used by stitching algorithm.  This is basically the image
+   * without borders.  */
   std::unique_ptr<bitmap_2d> known_pixels;
 
   detected_screen detected;
@@ -102,11 +109,14 @@ class stitch_image
      Computed at analysis time and used in final output.  */
   coord_t angle, ratio;
 
-  struct stitch_info {coord_t x,y;
-    		      int sum;} *stitch_info;
+  struct stitch_info
+  {
+    coord_t x, y;
+    int sum;
+  } *stitch_info;
 
-  /* Position of the top left cornder in the stitched image in screen coordinates.
-     Determined during analysis.  */
+  /* Position of the top left cornder in the stitched image in screen
+     coordinates. Determined during analysis.  */
   point_t pos;
   bool analyzed;
   bool output;
@@ -122,23 +132,34 @@ class stitch_image
   bool load_part (int *permille, const char **error, progress_info *progress);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
-  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, lens_warp_correction_parameters &lens_correction, progress_info *);
+  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p,
+                bool right_p, lens_warp_correction_parameters &lens_correction,
+                progress_info *);
   void release_image_data (progress_info *);
-  bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress);
-  int output_common_points (FILE *f, stitch_image &other, int n1, int n2, bool collect_stitch_info, progress_info *progress = NULL);
+  bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img,
+                                   int skiptop, int skipbottom, int skipleft,
+                                   int skipright, progress_info *progress);
+  int output_common_points (FILE *f, stitch_image &other, int n1, int n2,
+                            bool collect_stitch_info,
+                            progress_info *progress = NULL);
   bool pixel_known_p (coord_t sx, coord_t sy);
   bool img_pixel_known_p (coord_t sx, coord_t sy);
   bool patch_detected_p (int sx, int sy);
-  bool write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin, render_to_file_params rfparams, render_type_parameters &rtparam, const char **error, progress_info *progress);
+  bool write_tile (render_parameters rparam, int stitch_xmin, int stitch_ymin,
+                   render_to_file_params rfparams,
+                   render_type_parameters &rtparam, const char **error,
+                   progress_info *progress);
   void compare_contrast_with (stitch_image &other, progress_info *progress);
-  void write_stitch_info (progress_info *progress, int x = -1, int y = -1, int xx = -1, int yy = -1);
+  void write_stitch_info (progress_info *progress, int x = -1, int y = -1,
+                          int xx = -1, int yy = -1);
   void clear_stitch_info ();
   bool diff (stitch_image &other, progress_info *progress);
   bool save (FILE *f);
   bool load (stitch_project *, FILE *f, const char **error);
 
-  inline analyze_base & get_analyzer ();
-  static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
+  inline analyze_base &get_analyzer ();
+  static bool write_row (TIFF *out, int y, uint16_t *outrow,
+                         const char **error, progress_info *progress);
   inline bool
   pixel_maybe_in_range_p (point_t scr) const
   {
@@ -150,18 +171,18 @@ class stitch_image
       return false;
     return scr_to_img_map.to_img_in_mesh_range (scr - pos);
   }
-  inline pure_attr
-  point_t img_to_common_scr (point_t p) const
+  inline pure_attr point_t
+  img_to_common_scr (point_t p) const
   {
     return scr_to_img_map.to_scr (p) + pos;
   }
-  inline pure_attr
-  point_t img_scr_to_common_scr (point_t p) const
+  inline pure_attr point_t
+  img_scr_to_common_scr (point_t p) const
   {
     return p + pos;
   }
-  inline pure_attr
-  point_t common_scr_to_img_scr (point_t p) const
+  inline pure_attr point_t
+  common_scr_to_img_scr (point_t p) const
   {
     return p - pos;
   }
@@ -178,7 +199,12 @@ class stitch_image
     luminosity_t weight;
   };
   typedef std::vector<common_sample> common_samples;
-  common_samples find_common_points (stitch_image &other, int outerborder, int innerborder, render_parameters &rparams, progress_info *progress, const char **error);
+  common_samples find_common_points (stitch_image &other, int outerborder,
+                                     int innerborder,
+                                     render_parameters &rparams,
+                                     progress_info *progress,
+                                     const char **error);
+
 private:
   static uint64_t current_time;
   static int nloaded;
@@ -202,26 +228,31 @@ public:
   scr_to_img common_scr_to_img;
   /* Screen detection parameters used at analysis stage only.  */
   scr_detect_parameters dparam;
-  /* Solver parameters used to analyze images.  Needed in analysis stage only.  */
+  /* Solver parameters used to analyze images.  Needed in analysis stage only.
+   */
   solver_parameters solver_param;
   /* Used to determine output file size.  */
   coord_t pixel_size;
   DLL_PUBLIC stitch_project ();
   DLL_PUBLIC ~stitch_project ();
-  bool initialize();
+  bool initialize ();
   void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
   void determine_angle ();
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC bool load (FILE *f, const char **error);
-  std::string adjusted_filename (std::string filename, std::string suffix, std::string extension, int x = -1, int y = -1);
+  std::string adjusted_filename (std::string filename, std::string suffix,
+                                 std::string extension, int x = -1,
+                                 int y = -1);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
-  void keep_all_images ()
+  void
+  keep_all_images ()
   {
     release_images = false;
   }
   bool
-  tile_for_scr (render_parameters *rparams, coord_t sx, coord_t sy, int *x, int *y, bool only_loaded)
+  tile_for_scr (render_parameters *rparams, coord_t sx, coord_t sy, int *x,
+                int *y, bool only_loaded)
   {
 #if 0
     /* Lookup tile to use. */
@@ -247,29 +278,32 @@ public:
     int bdist = 0;
     /* Lookup tile to use. */
     int ix = 0, iy;
-    for (iy = 0 ; iy < params.height; iy++)
+    for (iy = 0; iy < params.height; iy++)
       {
-	for (ix = 0 ; ix < params.width; ix++)
-	  if ((!only_loaded || images[iy][ix].img)
-	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
-	      && images[iy][ix].pixel_maybe_in_range_p ({sx, sy}))
-	    {
-	      /* Compute image coordinates.  */
-	      point_t pp = images[iy][ix].common_scr_to_img ({sx, sy});
-	      /* Shortest distance from the edge.  */
-	      if (pp.x < 0 || pp.x >= images[iy][ix].img_width || pp.y < 0 || pp.y >= images[iy][ix].img_height)
-		continue;
-	      int dd = std::min (std::min ((int)pp.x, images[iy][ix].img_width - (int)pp.x),
-				 std::min ((int)pp.y, images[iy][ix].img_height - (int)pp.y));
-	      /* Try to minimize distances to edges.  */
-	      if (dd>0 && (!found || dd > bdist))
-	        {
-		  bx = ix;
-		  by = iy;
-		  bdist = dd;
-		  found = true;
-	        }
-	    }
+        for (ix = 0; ix < params.width; ix++)
+          if ((!only_loaded || images[iy][ix].img)
+              && (!rparams
+                  || rparams->get_tile_adjustment (this, ix, iy).enabled)
+              && images[iy][ix].pixel_maybe_in_range_p ({ sx, sy }))
+            {
+              /* Compute image coordinates.  */
+              point_t pp = images[iy][ix].common_scr_to_img ({ sx, sy });
+              /* Shortest distance from the edge.  */
+              if (pp.x < 0 || pp.x >= images[iy][ix].img_width || pp.y < 0
+                  || pp.y >= images[iy][ix].img_height)
+                continue;
+              int dd = std::min (
+                  std::min ((int)pp.x, images[iy][ix].img_width - (int)pp.x),
+                  std::min ((int)pp.y, images[iy][ix].img_height - (int)pp.y));
+              /* Try to minimize distances to edges.  */
+              if (dd > 0 && (!found || dd > bdist))
+                {
+                  bx = ix;
+                  by = iy;
+                  bdist = dd;
+                  found = true;
+                }
+            }
       }
     if (!found)
       return false;
@@ -278,7 +312,10 @@ public:
     return true;
 #endif
   }
-  bool write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, struct render_type_parameters &rtparam, int n, progress_info * progress, const char **error);
+  bool write_tiles (render_parameters rparam,
+                    struct render_to_file_params *rfparams,
+                    struct render_type_parameters &rtparam, int n,
+                    progress_info *progress, const char **error);
   enum optimize_tile_adjustments_flags
   {
     OPTIMIZE_BACKLIGHT_BLACK = 1,
@@ -287,15 +324,18 @@ public:
     VERBOSE = 8,
     OPTIMIZE_ALL = -1 & ~VERBOSE
   };
-  DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams, int flags, const char **rerror, progress_info *info = NULL);
-  void set_dpi (coord_t new_xdpi, coord_t new_ydpi)
+  DLL_PUBLIC bool optimize_tile_adjustments (render_parameters *rparams,
+                                             int flags, const char **rerror,
+                                             progress_info *info = NULL);
+  void
+  set_dpi (coord_t new_xdpi, coord_t new_ydpi)
   {
     params.scan_xdpi = new_xdpi;
     params.scan_ydpi = new_ydpi;
-    for (int iy = 0 ; iy < params.height; iy++)
-      for (int ix = 0 ; ix < params.width; ix++)
-	if (images[iy][ix].img)
-	  images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
+    for (int iy = 0; iy < params.height; iy++)
+      for (int ix = 0; ix < params.width; ix++)
+        if (images[iy][ix].img)
+          images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
   }
 
   struct tile_range
@@ -303,8 +343,12 @@ public:
     int tile_x, tile_y;
     coord_t xmin, ymin, xmax, ymax;
   };
-  std::vector <tile_range> find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t ymax, bool only_loaded, bool screen_ranges);
-  DLL_PUBLIC bool stitch (progress_info *progress, const char *load_project_filename);
+  std::vector<tile_range> find_ranges (coord_t xmin, coord_t xmax,
+                                       coord_t ymin, coord_t ymax,
+                                       bool only_loaded, bool screen_ranges);
+  DLL_PUBLIC bool stitch (progress_info *progress,
+                          const char *load_project_filename);
+
 private:
   bool analyze_images (progress_info *progress);
   bool produce_hugin_pto_file (const char *name, progress_info *progress);
@@ -327,14 +371,15 @@ private:
     stitch_image::common_samples samples;
     luminosity_t add, mul, weight;
   };
-  double solve_equations (render_parameters *in_rparams, std::vector <overlap> &overlaps, int flags, progress_info *progress, bool finished, const char **error);
+  double solve_equations (render_parameters *in_rparams,
+                          std::vector<overlap> &overlaps, int flags,
+                          progress_info *progress, bool finished,
+                          const char **error);
 };
 
-
-analyze_base & 
+analyze_base &
 stitch_image::get_analyzer ()
 {
   return *analyzer;
 }
-
 #endif
