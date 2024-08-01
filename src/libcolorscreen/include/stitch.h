@@ -105,8 +105,9 @@ class stitch_image
   struct stitch_info {coord_t x,y;
     		      int sum;} *stitch_info;
 
-  /* Position in the stitched image.  Determined during analysis.  */
-  coord_t xpos, ypos;
+  /* Position of the top left cornder in the stitched image in screen coordinates.
+     Determined during analysis.  */
+  point_t pos;
   bool analyzed;
   bool output;
   /* Gray max of the original data..  */
@@ -138,35 +139,36 @@ class stitch_image
 
   inline analyze_base & get_analyzer ();
   static bool write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress);
-  bool pixel_maybe_in_range_p (point_t scr)
+  inline bool
+  pixel_maybe_in_range_p (point_t scr) const
   {
-    coord_t ax = scr.x + xshift - xpos;
+    coord_t ax = scr.x + xshift - pos.x;
     if (ax < 0 || ax >= width)
       return false;
-    coord_t ay = scr.y + yshift - ypos;
+    coord_t ay = scr.y + yshift - pos.y;
     if (ay < 0 || ay >= height)
       return false;
-    return scr_to_img_map.to_img_in_mesh_range (scr - (point_t){xpos, ypos});
+    return scr_to_img_map.to_img_in_mesh_range (scr - pos);
   }
   inline pure_attr
-  point_t img_to_common_scr (point_t p)
+  point_t img_to_common_scr (point_t p) const
   {
-    return scr_to_img_map.to_scr (p) + (point_t){xpos, ypos};
+    return scr_to_img_map.to_scr (p) + pos;
   }
-  void img_scr_to_common_scr (coord_t tsx, coord_t tsy, coord_t *sx, coord_t *sy)
+  inline pure_attr
+  point_t img_scr_to_common_scr (point_t p) const
   {
-    *sx = tsx + xpos;
-    *sy = tsy + ypos;
+    return p + pos;
   }
-  void common_scr_to_img_scr (coord_t sx, coord_t sy, coord_t *isx, coord_t *isy)
+  inline pure_attr
+  point_t common_scr_to_img_scr (point_t p) const
   {
-    *isx = sx - xpos;
-    *isy = sy - ypos;
+    return p - pos;
   }
-  pure_attr point_t
+  inline pure_attr point_t
   common_scr_to_img (point_t p) const
   {
-    return scr_to_img_map.to_img ({p.x - xpos, p.y - ypos});
+    return scr_to_img_map.to_img (p - pos);
   }
   struct common_sample
   {

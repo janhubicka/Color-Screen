@@ -204,8 +204,8 @@ stitch_image::clear_stitch_info ()
 bool
 stitch_image::patch_detected_p (int sx, int sy)
 {
-  sx = sx - xpos + xshift;
-  sy = sy - ypos + yshift;
+  sx = sx - pos.x + xshift;
+  sy = sy - pos.y + yshift;
   if (sx < 0 || sy < 0 || sx >= screen_detected_patches->width || sy >= screen_detected_patches->height)
     return false;
   return screen_detected_patches->test_range (sx, sy, 2);
@@ -216,7 +216,6 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   coord_t sx, sy;
   bool found = false;
   int stack = 0;
-  point_t pos = {(coord_t)xpos, (coord_t)ypos};
   point_t s = scr_to_img_map.to_scr ({(coord_t)0, (coord_t)0}) + pos;
   if (other.img_pixel_known_p (s.x, s.y))
     found = true;
@@ -274,8 +273,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   for (int y = 0; y < img_height; y += 10)
     for (int x = 0; x < img_width; x += 10)
       {
-         point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y});
-         if (other.img_pixel_known_p (scr.x + xpos, scr.y + ypos))
+         point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y}) + pos;
+         if (other.img_pixel_known_p (scr.x, scr.y))
 	   {
 	     rxmin = std::min (rxmin, x);
 	     rymin = std::min (rymin, y);
@@ -321,17 +320,17 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
       for (int x = rxmin; x <= rxmax; x++)
 	{
 	  int r = 0, g = 0, b = 0;
-          point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y});
-          if (other.img_pixel_known_p (sx + xpos, sy + ypos))
+          point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y}) + pos;
+          if (other.img_pixel_known_p (sx, sy))
 	   {
-	     rgbdata c1 = render.sample_pixel_scr (sx + xpos, sy + ypos);
-	     rgbdata c2 = render.sample_pixel_scr (sx + other.xpos, sy + other.ypos);
+	     rgbdata c1 = render.sample_pixel_scr (sx + pos.x, sy + pos.y);
+	     rgbdata c2 = render.sample_pixel_scr (sx + other.pos.x, sy + other.pos.y);
 	     int r = c1.red * 65535, g = c1.green * 65535, b = c1.blue * 65545;
 	     int r2 = c2.red * 65535, g2 = c2.green * 65535, b2 = c2.blue * 65545;
 #if 0
 	     render_pixel (65535, sx + xpos, sy + ypos, &r, &g, &b, progress);
 #endif
-	     if (patch_detected_p (sx + xpos, sy + ypos) && other.patch_detected_p (sx + xpos, sy + ypos))
+	     if (patch_detected_p (sx + pos.x, sy + pos.y) && other.patch_detected_p (sx + other.pos.x, sy + other.pos.y))
 	       {
 		 sumdiff[0] += abs (r2-r);
 		 sumdiff[1] += abs (g2-b);
@@ -389,11 +388,11 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
   const int range = 2;
   for (int y = -yshift; y < -yshift + height; y++)
     {
-      coord_t yy = y + ypos - other.ypos;
+      coord_t yy = y + pos.y - other.pos.y;
       if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	for (int x = -xshift; x < -xshift + width; x++)
 	  {
-	    coord_t xx = x + xpos - other.xpos;
+	    coord_t xx = x + pos.x - other.pos.x;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
 		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
@@ -425,11 +424,11 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 
   for (int y = -yshift, m = 0, next = 0; y < -yshift + height; y++)
     {
-      coord_t yy = y + ypos - other.ypos;
+      coord_t yy = y + pos.y - other.pos.y;
       if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	for (int x = -xshift; x < -xshift + width; x++)
 	  {
-	    coord_t xx = x + xpos - other.xpos;
+	    coord_t xx = x + pos.x - other.pos.x;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
 		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
 		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
@@ -493,11 +492,11 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 #define C(i) (gsl_vector_get(c,(i)))
       for (int y = -yshift; y < -yshift + height; y++)
 	{
-	  coord_t yy = y + ypos - other.ypos;
+	  coord_t yy = y + pos.y - other.pos.y;
 	  if (yy >= -other.yshift && yy < -other.yshift + other.height)
 	    for (int x = -xshift; x < -xshift + width; x++)
 	      {
-		coord_t xx = x + xpos - other.xpos;
+		coord_t xx = x + pos.x - other.pos.x;
 		if (xx >= -other.xshift && xx < -other.xshift + other.width
 		    && screen_detected_patches->test_bit (x + xshift, y + yshift)
 		    && other.screen_detected_patches->test_bit (floor (xx) + other.xshift, floor (yy) + other.yshift))
@@ -803,8 +802,8 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 bool
 stitch_image::pixel_known_p (coord_t sx, coord_t sy)
 {
-  int ax = floor (sx) + xshift - xpos;
-  int ay = floor (sy) + yshift - ypos;
+  int ax = floor (sx) + xshift - pos.x;
+  int ay = floor (sy) + yshift - pos.y;
   if (ax < 0 || ay < 0 || ax >= width || ay >= height)
     return false;
   return known_pixels->test_range (ax, ay, 2);
@@ -817,7 +816,7 @@ pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 bool
 stitch_image::img_pixel_known_p (coord_t sx, coord_t sy)
 {
-  point_t imgp = scr_to_img_map.to_img ({sx - xpos, sy - ypos});
+  point_t imgp = scr_to_img_map.to_img ({sx - pos.x, sy - pos.y});
   return imgp.x >= (left ? 5 : img_width * 0.02)
 	 && imgp.y >= (top ? 5 : img_height * 0.02)
 	 && imgp.x <= (right ? img_width - 5 : img_width * 0.98)
@@ -856,8 +855,8 @@ void
 stitch_image::compare_contrast_with (stitch_image &other, progress_info *progress)
 {
   int x1, y1, x2, y2;
-  int xs = other.xpos - xpos;
-  int ys = other.ypos - ypos;
+  int xs = other.pos.x - pos.x;
+  int ys = other.pos.y - pos.y;
   if (!m_prj)
     return;
   if (m_prj->params.max_contrast < 0)
@@ -1082,7 +1081,7 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   if (fabs (scr_to_img_map.get_rotation_adjustment () - m_prj->common_scr_to_img.get_rotation_adjustment ()) > 1)
     abort ();
 
-  point_t final_pos = m_prj->common_scr_to_img.scr_to_final ({(coord_t)xpos, (coord_t)ypos});
+  point_t final_pos = m_prj->common_scr_to_img.scr_to_final (pos);
   int xmin = floor ((final_pos.x - final_xshift) / rfparams.xstep) * rfparams.xstep;
   int ymin = floor ((final_pos.y - final_yshift) / rfparams.ystep) * rfparams.ystep;
   coord_t xoffset = (xmin - stitch_xmin) / rfparams.xstep;
@@ -1109,8 +1108,8 @@ stitch_image::write_tile (render_parameters rparam, int stitch_xmin, int stitch_
   rfparams.xstart = xmin + (xmin - stitch_xmin) - rfparams.xoffset * rfparams.xstep;
   rfparams.ystart = ymin + (ymin - stitch_ymin) - rfparams.yoffset * rfparams.ystep;
   rfparams.common_map = &m_prj->common_scr_to_img;
-  rfparams.xpos = xpos;
-  rfparams.ypos = ypos;
+  rfparams.xpos = pos.x;
+  rfparams.ypos = pos.y;
   rfparams.width = final_width / rfparams.xstep;
   rfparams.height = final_height / rfparams.ystep;
   /* TODO, handle by flags.  Is it still needed? */
@@ -1134,7 +1133,7 @@ stitch_image::save (FILE *f)
   if (fprintf (f, "stitch_image_filename: %s\n", filename.c_str ()) < 0
       || fprintf (f, "stitch_image_angle: %f\n", angle) < 0
       || fprintf (f, "stitch_image_ratio: %f\n", ratio) < 0
-      || fprintf (f, "stitch_image_position: %f %f\n", xpos, ypos) < 0
+      || fprintf (f, "stitch_image_position: %f %f\n", pos.x, pos.y) < 0
       || fprintf (f, "stitch_image_size: %i %i\n", img_width, img_height) < 0
       || fprintf (f, "stitch_image_scr_size: %i %i\n", width, height) < 0
       || fprintf (f, "stitch_image_scr_shift: %i %i\n", xshift, yshift) < 0)
@@ -1181,8 +1180,8 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
       return false;
     }
   if (!expect_keyword (f, "stitch_image_position: ")
-      || !read_scalar (f, &xpos)
-      || !read_scalar (f, &ypos))
+      || !read_scalar (f, &pos.x)
+      || !read_scalar (f, &pos.y))
     {
       *error = "expected stitch_image_position";
       return false;

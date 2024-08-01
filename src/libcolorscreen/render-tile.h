@@ -393,7 +393,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 		lastx = ix;
 		lasty = iy;
 	      }
-	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, scr.x - stitch.images[lasty][lastx].xpos, scr.y - stitch.images[lasty][lastx].ypos, step);
+	  rgbdata d = render_loop (*lastrender, stitch.images[lasty][lastx].scr_to_img_map, antialias, scr.x - stitch.images[lasty][lastx].pos.x, scr.y - stitch.images[lasty][lastx].pos.y, step);
 	  int r, g, b;
 	  lastrender->set_color (d.red, d.green, d.blue, &r, &g, &b);
 	  putpixel (pixels, pixelbytes, rowstride, x, y, r, g, b);

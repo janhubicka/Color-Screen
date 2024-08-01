@@ -472,12 +472,11 @@ analyze_patches (analyzer analyze, const char *task, image_data &img, render_par
 	    stack = progress->push ();
 	  if (!analyze_patches ([&] (coord_t tsx, coord_t tsy, rgbdata c)
 				{
-				  coord_t sx, sy;
 				  int ttx, tty;
-				  stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
-				  point_t pfin = stitch.common_scr_to_img.scr_to_final ({sx, sy});
+				  point_t src = stitch.images[ty][tx].img_scr_to_common_scr ({tsx, tsy});
+				  point_t pfin = stitch.common_scr_to_img.scr_to_final (src);
 				  if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax || pfin.y > ymax
-				      || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
+				      || !stitch.tile_for_scr (&rparam, src.x, src.y, &ttx, &tty, true)
 				      || ttx != tx || tty != ty)
 				    return true;
 				  return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
@@ -547,13 +546,12 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, re
 	    stack = progress->push ();
 	  if (!analyze_rgb_patches ([&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g, rgbdata b)
 				    {
-				      coord_t sx, sy;
 				      int ttx, tty;
-				      stitch.images[ty][tx].img_scr_to_common_scr (tsx, tsy, &sx, &sy);
-				      point_t pfin = stitch.common_scr_to_img.scr_to_final ({sx, sy});
-				      //printf ("tile %i %i tilescreen %f %f screen %f %f final %f %f range %i:%i %i:%i\n",tx,ty, tsx,tsy,sx,sy,fx,fy,xmin,xmax,ymin,ymax);
+				      point_t src = stitch.images[ty][tx].img_scr_to_common_scr ({tsx, tsy});
+				      point_t pfin = stitch.common_scr_to_img.scr_to_final (src);
+				      //printf ("tile %i %i tilescreen %f %f screen %f %f final %f %f range %i:%i %i:%i\n",tx,ty, tsx,tsy,src.x,src.y,fx,fy,xmin,xmax,ymin,ymax);
 				      if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax || pfin.y > ymax
-					  || !stitch.tile_for_scr (&rparam, sx, sy, &ttx, &tty, true)
+					  || !stitch.tile_for_scr (&rparam, src.x, src.y, &ttx, &tty, true)
 					  || ttx != tx || tty != ty)
 					return true;
 				      return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r, g, b);

@@ -77,7 +77,7 @@ stitch_project::determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax)
       if (images[y][x].analyzed)
 	{
 	  coord_t x1,y1,x2,y2;
-	  point_t rpos = common_scr_to_img.scr_to_final ({(coord_t)images[y][x].xpos, (coord_t)images[y][x].ypos});
+	  point_t rpos = common_scr_to_img.scr_to_final (images[y][x].pos);
 	  x1 = -images[y][x].final_xshift + rpos.x;
 	  y1 = -images[y][x].final_yshift + rpos.y;
 	  x2 = x1 + images[y][x].final_width;
@@ -144,8 +144,8 @@ stitch_project::print_status (FILE *out)
     {
       if (y)
 	{
-	  point_t f1 = common_scr_to_img.scr_to_final ({images[y-1][0].xpos, images[y-1][0].ypos});
-	  point_t f2 = common_scr_to_img.scr_to_final ({images[y][0].xpos, images[y][0].ypos});
+	  point_t f1 = common_scr_to_img.scr_to_final (images[y-1][0].pos);
+	  point_t f2 = common_scr_to_img.scr_to_final (images[y][0].pos);
 	  f1.x -= images[y-1][0].xshift;
 	  f1.y -= images[y-1][0].yshift;
 	  f2.x -= images[y][0].xshift;
@@ -155,8 +155,8 @@ stitch_project::print_status (FILE *out)
       else fprintf (out, "                  ");
       for (int x = 1; x < params.width; x++)
       {
-	point_t f1 = common_scr_to_img.scr_to_final ({images[y][x-1].xpos, images[y][x-1].ypos});
-	point_t f2 = common_scr_to_img.scr_to_final ({images[y][x].xpos, images[y][x].ypos});
+	point_t f1 = common_scr_to_img.scr_to_final (images[y][x-1].pos);
+	point_t f2 = common_scr_to_img.scr_to_final (images[y][x].pos);
 	f1.x -= images[y][x-1].xshift;
 	f1.y -= images[y][x-1].yshift;
 	f2.x -= images[y][x].xshift;
@@ -170,8 +170,8 @@ stitch_project::print_status (FILE *out)
     {
       for (int x = 0; x < params.width; x++)
       {
-	point_t f = common_scr_to_img.scr_to_final ({images[y][x].xpos, images[y][x].ypos});
-	fprintf (out, "  %-5f,%-5f  rotated:%-5f,%-5f ", images[y][x].xpos, images[y][x].ypos, f.x,f.y);
+	point_t f = common_scr_to_img.scr_to_final (images[y][x].pos);
+	fprintf (out, "  %-5f,%-5f  rotated:%-5f,%-5f ", images[y][x].pos.x, images[y][x].pos.y, f.x,f.y);
       }
       fprintf (out, "\n");
     }
@@ -197,8 +197,7 @@ stitch_project::analyze_images (progress_info *progress)
     {
       if (!y)
 	{
-	  images[0][0].xpos = 0;
-	  images[0][0].ypos = 0;
+	  images[0][0].pos = {(coord_t)0, (coord_t)0};
 	}
       else
 	{
@@ -225,8 +224,8 @@ stitch_project::analyze_images (progress_info *progress)
 	      progress->resume_stdout ();
 	      return false;
 	    }
-	  images[y][0].xpos = images[y - 1][0].xpos + xs;
-	  images[y][0].ypos = images[y - 1][0].ypos + ys;
+	  images[y][0].pos.x = images[y - 1][0].pos.x + xs;
+	  images[y][0].pos.y = images[y - 1][0].pos.y + ys;
 	  images[y - 1][0].compare_contrast_with (images[y][0], progress);
 	  if (params.geometry_info || params.individual_geometry_info)
 	    images[y - 1][0].output_common_points (NULL, images[y][0], 0, 0,
@@ -286,8 +285,8 @@ stitch_project::analyze_images (progress_info *progress)
 	      progress->resume_stdout ();
 	      return false;
 	    }
-	  images[y][x + 1].xpos = images[y][x].xpos + xs;
-	  images[y][x + 1].ypos = images[y][x].ypos + ys;
+	  images[y][x + 1].pos.x = images[y][x].pos.x + xs;
+	  images[y][x + 1].pos.y = images[y][x].pos.y + ys;
 	  if (params.panorama_map)
 	    {
 	      progress->pause_stdout ();
@@ -318,24 +317,24 @@ stitch_project::analyze_images (progress_info *progress)
 		  progress->resume_stdout ();
 		  return false;
 		}
-	      if (images[y][x + 1].xpos != images[y - 1][x + 1].xpos + xs
-		  || images[y][x + 1].ypos != images[y - 1][x + 1].ypos + ys)
+	      if (images[y][x + 1].pos.x != images[y - 1][x + 1].pos.x + xs
+		  || images[y][x + 1].pos.y != images[y - 1][x + 1].pos.y + ys)
 		{
 		  progress->pause_stdout ();
 		  fprintf (stderr,
 			   "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n",
 			   images[y][x + 1].filename.c_str (),
-			   images[y][x + 1].xpos, images[y][x + 1].ypos,
-			   images[y - 1][x + 1].xpos + xs,
-			   images[y - 1][x + 1].ypos + ys);
+			   images[y][x + 1].pos.x, images[y][x + 1].pos.y,
+			   images[y - 1][x + 1].pos.x + xs,
+			   images[y - 1][x + 1].pos.y + ys);
 		  if (report_file)
 		    {
 		      fprintf (report_file,
 			       "Stitching mismatch in %s: %f,%f is not equal to %f,%f\n",
 			       images[y][x + 1].filename.c_str (),
-			       images[y][x + 1].xpos, images[y][x + 1].ypos,
-			       images[y - 1][x + 1].xpos + xs,
-			       images[y - 1][x + 1].ypos + ys);
+			       images[y][x + 1].pos.x, images[y][x + 1].pos.y,
+			       images[y - 1][x + 1].pos.x + xs,
+			       images[y - 1][x + 1].pos.y + ys);
 		      print_status (report_file);
 		    }
 		}
@@ -1316,8 +1315,7 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
 	point_t scr = common_scr_to_img.final_to_scr ({(coord_t)x, (coord_t)y});
 	if (!tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
 	  continue;
-	point_t timg;
-	images[ty][tx].common_scr_to_img_scr (scr.x, scr.y, &timg.x, &timg.y);
+	point_t timg = images[ty][tx].common_scr_to_img_scr (scr);
 	int i = ty * params.width + tx;
 	if (!screen_ranges)
 	  timg = images[ty][tx].scr_to_img_map.to_img (timg);
