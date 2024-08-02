@@ -5,11 +5,13 @@
 #include "colorscreen-config.h"
 #define flatten_attr __attribute__ ((__flatten__))
 #define always_inline_attr __attribute__ ((__always_inline__))
-#define pure_attr __attribute__ ((__pure__))
-#define const_attr __attribute__ ((__const__))
 #ifdef COLORSCREEN_CHECKING
+#define pure_attr
+#define const_attr
 static constexpr const bool colorscreen_checking = true;
 #else
+#define pure_attr __attribute__ ((__pure__))
+#define const_attr __attribute__ ((__const__))
 static constexpr const bool colorscreen_checking = false;
 #endif
 

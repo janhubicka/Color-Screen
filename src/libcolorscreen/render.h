@@ -86,7 +86,7 @@ public:
   get_linearized_rgb_pixel (int x, int y) const
   {
     if (colorscreen_checking)
-      assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+      assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
     rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
 		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
@@ -225,7 +225,7 @@ render::get_unadjusted_data (int x, int y) const
 {
   /* TODO do inversion and film curves if requested.  */
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   return m_sharpened_data [y * m_img.width + x];
 }
 
@@ -252,7 +252,7 @@ pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_red (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
   /* TODO do inversion and film curves if requested.  */
 }
@@ -261,7 +261,7 @@ pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_green (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
   /* TODO do inversion and film curves if requested.  */
 }
@@ -269,7 +269,7 @@ pure_attr inline luminosity_t always_inline_attr
 render::get_linearized_data_blue (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
   /* TODO do inversion and film curves if requested.  */
 }
@@ -280,7 +280,7 @@ pure_attr inline luminosity_t
 render::get_data_red (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].r];
   if (m_backlight_correction)
     {
@@ -295,7 +295,7 @@ pure_attr inline luminosity_t
 render::get_data_green (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].g];
   if (m_backlight_correction)
     {
@@ -310,7 +310,7 @@ pure_attr inline luminosity_t
 render::get_data_blue (int x, int y) const
 {
   if (colorscreen_checking)
-    assert (x >= 0 && x <= m_img.width && y >= 0 && y <= m_img.height);
+    assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
   luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].b];
   if (m_backlight_correction)
     {

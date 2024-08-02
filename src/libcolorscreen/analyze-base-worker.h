@@ -8,7 +8,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
     luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
     int maxy, progress_info *progress)
 {
-  int size = (openmp_min_size + (maxx - minx) - 1) / (maxx - minx);
+  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
   int size2 = (openmp_min_size + m_width - 1) / m_width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
@@ -16,10 +16,10 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
             maxy) default(none) if (maxy - miny > size || m_height > size2)
   {
 #pragma omp for
-    for (int y = miny; y < maxy; y++)
+    for (int y = miny; y <= maxy; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x < maxx; x++)
+          for (int x = minx; x <= maxx; x++)
             {
               point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
 	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
@@ -202,7 +202,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
     luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
     int maxy, progress_info *progress)
 {
-  int size = (openmp_min_size + (maxx - minx) - 1) / (maxx - minx);
+  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
   int size2 = (openmp_min_size + m_width - 1) / m_width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
@@ -210,10 +210,10 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
             maxy) default(none) if (maxy - miny > size || m_height > size2)
   {
 #pragma omp for
-    for (int y = miny; y < maxy; y++)
+    for (int y = miny; y <= maxy; y++)
       {
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x < maxx; x++)
+          for (int x = minx; x <= maxx; x++)
             {
               point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
 	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
@@ -408,7 +408,7 @@ analyze_base_worker<GEOMETRY>::analyze_color (
 {
   luminosity_t weights[256];
   luminosity_t half_weights[256];
-  int size = (openmp_min_size + (maxx - minx) - 1) / (maxx - minx);
+  int size = (openmp_min_size + (maxx - minx)) / (maxx - minx + 1);
   int size2 = (openmp_min_size + m_width - 1) / m_width;
 
   /* FIXME: technically not right for paget where diagonal coordinates are not
@@ -442,14 +442,14 @@ analyze_base_worker<GEOMETRY>::analyze_color (
                                            || m_height > size2)
   {
 #pragma omp for
-    for (int y = miny; y < maxy; y++)
+    for (int y = miny; y <= maxy; y++)
       {
         int64_t red_minx = -2, red_miny = -2, green_minx = -2, green_miny = -2,
                 blue_minx = -2, blue_miny = -2;
         int64_t red_maxx = 2, red_maxy = 2, green_maxx = 2, green_maxy = 2,
                 blue_maxx = 2, blue_maxy = 2;
         if (!progress || !progress->cancel_requested ())
-          for (int x = minx; x < maxx; x++)
+          for (int x = minx; x <= maxx; x++)
             {
               point_t scr = scr_to_img->to_scr ({x + (coord_t)0.5, y + (coord_t)0.5});
 	      scr += {(coord_t)m_xshift, (coord_t)m_yshift};
@@ -832,8 +832,8 @@ analyze_base_worker<GEOMETRY>::analyze (
 
       minx = std::max (minx, 0);
       miny = std::max (miny, 0);
-      maxx = std::min (maxx, img->width);
-      maxy = std::min (maxy, img->height);
+      maxx = std::min (maxx, img->width - 1);
+      maxy = std::min (maxy, img->height - 1);
 
       if (progress)
         {

@@ -431,7 +431,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 	    printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
 		px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
 #endif
-	  if (!p.almost_eq (t))
+	  if (!p.almost_eq (t, 1))
 	    {
 	      printf ("Solver model mismatch %f %f should be %f %f (ideally %f %f)\n", t.x, t.y, p.x, p.y, xi, yi);
 	      found = true;
