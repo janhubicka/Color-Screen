@@ -604,6 +604,37 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     progress->set_task ("optimizing perspective correction", 1);
   return solver (param, img_data, sparam.npoints, sparam.point, sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 }
+
+static void
+compute_mesh_point (solver_parameters &sparam, scanner_type type, mesh *mesh_trans, int x, int y)
+{
+  coord_t xx, yy;
+  coord_t sx = x * mesh_trans->get_xstep () - mesh_trans->get_xshift ();
+  coord_t sy = y * mesh_trans->get_ystep () - mesh_trans->get_yshift ();
+  trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+					       type, NULL, sx, sy, NULL);
+  h.perspective_transform (sx, sy, xx, yy);
+
+  /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
+     distance we can not set one, so iteratively find right one.  */
+  if (type != fixed_lens)
+    {
+      int i;
+      for (i = 0; i < 100; i++)
+	{
+	  coord_t last_xx = xx, last_yy = yy;
+	  trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
+						       type, NULL, xx, yy, NULL);
+	  h.perspective_transform (sx, sy, xx, yy);
+	  if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
+	    break;
+	}
+      if (i == 100)
+	printf ("Osclation instability\n");
+    }
+  mesh_trans->set_point ({x,y}, {xx, yy});
+}
+
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
@@ -626,35 +657,65 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
     for (int x = 0; x < width; x++)
        if (!progress || !progress->cancel_requested ())
 	  {
-            scr_to_img_parameters lparam = *param;
-	    coord_t xx, yy;
-	    coord_t sx = x * step - xshift;
-	    coord_t sy = y * step - yshift;
-	    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-							 lparam.scanner_type, NULL, sx, sy, NULL);
-	    h.perspective_transform (sx, sy, xx, yy);
-
-	    /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
-	       distance we can not set one, so iteratively find right one.  */
-	    if (param->scanner_type != fixed_lens)
-	      {
-		int i;
-		for (i = 0; i < 100; i++)
-		  {
-		    coord_t last_xx = xx, last_yy = yy;
-		    trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-								 lparam.scanner_type, NULL, xx, yy, NULL);
-		    h.perspective_transform (sx, sy, xx, yy);
-		    if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
-		      break;
-		  }
-		if (i == 100)
-		  printf ("Osclation instability\n");
-	      }
-	    mesh_trans->set_point ({x,y}, {xx, yy});
+	    compute_mesh_point (sparam, param->scanner_type, mesh_trans, x, y);
 	    if (progress)
 	      progress->inc_progress ();
 	  }
+  int miter = width + height;
+  if (progress)
+    progress->set_task ("growing mesh", miter);
+  while (miter > 0)
+    {
+      int grow_left = mesh_trans->need_to_grow_left (img_data.width, img_data.height) ? 1 : 0;
+      int grow_right = mesh_trans->need_to_grow_right (img_data.width, img_data.height) ? 1 : 0;
+      int grow_top = mesh_trans->need_to_grow_top (img_data.width, img_data.height) ? 1 : 0;
+      int grow_bottom = mesh_trans->need_to_grow_bottom (img_data.width, img_data.height) ? 1 : 0;
+      miter --;
+      if (!grow_left && !grow_right && !grow_top && !grow_bottom)
+	break;
+      if (progress && progress->cancel_requested ())
+	{
+	  delete mesh_trans;
+	  return NULL;
+	}
+      if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
+	break;
+      if (grow_left || grow_right)
+        {
+	  for (int y = 0; y < mesh_trans->get_height (); y++)
+	    {
+	      if (grow_left)
+	        compute_mesh_point (sparam, param->scanner_type, mesh_trans, 0, y);
+	      if (grow_right)
+	        compute_mesh_point (sparam, param->scanner_type, mesh_trans, mesh_trans->get_width () - 1, y);
+	    }
+        }
+      if (grow_top || grow_bottom)
+        {
+	  for (int x = 0; x < mesh_trans->get_width (); x++)
+	    {
+	      if (grow_top)
+	        compute_mesh_point (sparam, param->scanner_type, mesh_trans, x, 0);
+	      if (grow_bottom)
+	        compute_mesh_point (sparam, param->scanner_type, mesh_trans, x, mesh_trans->get_height () - 1);
+	    }
+        }
+      if (progress)
+	progress->inc_progress ();
+    }
+  if (!miter)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("Maximum number of iterations reached.\n");
+      if (progress)
+	progress->resume_stdout ();
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      delete mesh_trans;
+      return NULL;
+    }
   if (progress && progress->cancel_requested ())
     {
       delete mesh_trans;
@@ -735,10 +796,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	  if (progress)
 	    progress->inc_progress ();
 	}
-  if (progress)
-    progress->set_task ("growing mesh", height);
   scr_to_img_parameters lparam = *param;
   int miter = width + height;
+  if (progress)
+    progress->set_task ("growing mesh", miter);
   while (miter > 0)
     {
       int grow_left = mesh_trans->need_to_grow_left (img_data.width, img_data.height) ? 1 : 0;
@@ -748,6 +809,11 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
       miter --;
       if (!grow_left && !grow_right && !grow_top && !grow_bottom)
 	break;
+      if (progress && progress->cancel_requested ())
+	{
+	  delete mesh_trans;
+	  return NULL;
+	}
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
 	break;
       solver_parameters sparam;/* = sparam2;*/
@@ -771,6 +837,8 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 		compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, mesh_trans->get_height () - 1);
 	    }
         }
+      if (progress)
+	progress->inc_progress ();
     }
   if (!miter)
     {

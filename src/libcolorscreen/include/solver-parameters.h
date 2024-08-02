@@ -57,6 +57,17 @@ struct solver_parameters
   point_t center;
 
   DLL_PUBLIC_EXP int
+  find_img (point_t img)
+  {
+    for (int n = 0; n < npoints; n++)
+      {
+	if (fabs (point[n].img_x - img.x) < 0.1 && fabs (point[n].img_y - img.y) < 0.1)
+          return n;
+      }
+    return -1;
+  }
+
+  DLL_PUBLIC_EXP int
   add_point (coord_t img_x, coord_t img_y, coord_t screen_x, coord_t screen_y,
              enum point_color color)
   {

@@ -1773,17 +1773,17 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
       if (progress)
 	progress->set_task ("Determinig solver points", 1);
       sparam.remove_points ();
-      for (int y = img.height / (ysteps + 2); y < img.height - img.height / (ysteps + 2); y += img.height / (ysteps + 2))
-	for (int x = img.width / (xsteps + 2); x < img.width - img.height / (ysteps + 2); x += img.width / (xsteps + 2))
+      for (int y = 0; y < ysteps; y ++)
+	for (int x = 0; x < xsteps; x ++)
 	  {
-	    coord_t ix, iy;
-	    point_t p = m->invert ({(coord_t)x, (coord_t)y});
-	    p.x = (int)p.x;
-	    p.y = (int)p.y;
-	    point_t ap = m->apply (p);
-	    ix = ap.x;
-	    iy = ap.y;
-	    sparam.add_point (ix, iy, p.x, p.y, solver_parameters::green);
+	    int border = 1;
+	    point_t p = m->invert ({(x + border) * img.width / (coord_t)(xsteps + border),
+				    (y + border) * img.height / (coord_t)(ysteps + border)});
+	    p.x = nearest_int (p.x);
+	    p.y = nearest_int (p.y);
+	    point_t imgp = m->apply (p);
+	    if (sparam.find_img (imgp) < 0)
+	      sparam.add_point (imgp.x, imgp.y, p.x, p.y, solver_parameters::green);
 	  }
       ret.mesh_trans = m;
       ret.param.mesh_trans = m;
