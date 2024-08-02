@@ -606,33 +606,42 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
 }
 
 static void
-compute_mesh_point (solver_parameters &sparam, scanner_type type, mesh *mesh_trans, int x, int y)
+compute_mesh_point (solver_parameters &sparam, scanner_type type,
+                    mesh *mesh_trans, int x, int y)
 {
-  coord_t xx, yy;
-  coord_t sx = x * mesh_trans->get_xstep () - mesh_trans->get_xshift ();
-  coord_t sy = y * mesh_trans->get_ystep () - mesh_trans->get_yshift ();
-  trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-					       type, NULL, sx, sy, NULL);
-  h.perspective_transform (sx, sy, xx, yy);
+  int_point_t e = {x, y};
+  point_t scrp = mesh_trans->get_screen_point (e);
+  trans_4d_matrix h = homography::get_matrix (
+      sparam.point, sparam.npoints,
+      homography::solve_screen_weights /*homography::solve_limit_ransac_iterations
+                                          | homography::solve_free_rotation*/
+      ,
+      type, NULL, scrp.x, scrp.y, NULL);
+  point_t imgp;
+  h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
 
-  /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
-     distance we can not set one, so iteratively find right one.  */
+  /* We need to set weight assymetrically based on image distance.  Problem is
+     that without knowing the image distance we can not set one, so iteratively
+     find right one.  */
   if (type != fixed_lens)
     {
       int i;
       for (i = 0; i < 100; i++)
-	{
-	  coord_t last_xx = xx, last_yy = yy;
-	  trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-						       type, NULL, xx, yy, NULL);
-	  h.perspective_transform (sx, sy, xx, yy);
-	  if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
-	    break;
-	}
+        {
+          point_t last_imgp = imgp;
+          trans_4d_matrix h = homography::get_matrix (
+              sparam.point, sparam.npoints,
+              homography::solve_image_weights,
+	      /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/
+              type, NULL, imgp.x, imgp.y, NULL);
+          h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+          if (last_imgp.almost_eq (imgp, 0.5))
+            break;
+        }
       if (i == 100)
-	printf ("Osclation instability\n");
+        printf ("Osclation instability\n");
     }
-  mesh_trans->set_point ({x,y}, {xx, yy});
+  mesh_trans->set_point (e, imgp);
 }
 
 mesh *
@@ -729,45 +738,39 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 }
 
 static void
-compute_mesh_point (screen_map &smap, solver_parameters &sparam, scr_to_img_parameters &lparam, image_data &img_data, mesh *mesh_trans, int x, int y)
+compute_mesh_point (screen_map &smap, solver_parameters &sparam,
+                    scr_to_img_parameters &lparam, image_data &img_data,
+                    mesh *mesh_trans, int x, int y)
 {
-  coord_t sx = x * mesh_trans->get_xstep () - mesh_trans->get_xshift ();
-  coord_t sy = y * mesh_trans->get_ystep () - mesh_trans->get_yshift ();
-  coord_t xx, yy;
-  smap.get_solver_points_nearby (sx, sy, 100, sparam);
-  if (0
-      && (sparam.point[0].screen_x == sx
-	  || sparam.point[0].screen_y == sy))
+  int_point_t e = { x, y };
+  point_t scrp = mesh_trans->get_screen_point (e);
+  smap.get_solver_points_nearby (scrp.x, scrp.y, 100, sparam);
+  trans_4d_matrix h = homography::get_matrix (
+      sparam.point, sparam.npoints, homography::solve_screen_weights,
+      lparam.scanner_type, NULL, scrp.x, scrp.y, NULL);
+  point_t imgp;
+  h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+  /* We need to set weight assymetrically based on image distance.  Problem is
+     that without knowing the image distance we can not set one, so iteratively
+     find right one.  */
+  if (lparam.scanner_type != fixed_lens)
     {
-      xx = sparam.point[0].img_x;
-      yy = sparam.point[0].img_y;
+      int i;
+      for (i = 0; i < 100; i++)
+        {
+          point_t last_imgp = imgp;
+          trans_4d_matrix h = homography::get_matrix (
+              sparam.point, sparam.npoints,
+              homography:: solve_image_weights,
+              lparam.scanner_type, NULL, imgp.x, imgp.y, NULL);
+          h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
+          if (last_imgp.almost_eq (imgp, 0.5))
+            break;
+        }
+      if (i == 100)
+        printf ("Osclation instability\n");
     }
-  else
-    {
-      trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_screen_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-						   lparam.scanner_type, NULL, sx, sy, NULL);
-      h.perspective_transform (sx, sy, xx, yy);
-      /* We need to set weight assymetrically based on image distance.  Problem is that without knowing the image
-	 distance we can not set one, so iteratively find right one.  */
-      if (lparam.scanner_type != fixed_lens)
-	{
-	  int i;
-	  for (i = 0; i < 100; i++)
-	    {
-	      coord_t last_xx = xx, last_yy = yy;
-	      trans_4d_matrix h = homography::get_matrix (sparam.point, sparam.npoints, homography::solve_image_weights /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/,
-							   lparam.scanner_type, NULL, xx, yy, NULL);
-	      h.perspective_transform (sx, sy, xx, yy);
-	      if (fabs (last_xx - xx) < 0.5 && fabs (last_yy - yy) < 0.5)
-		break;
-	    }
-	  if (i == 100)
-	    printf ("Osclation instability\n");
-	}
-	//h.print (stdout);
-       //printf ("%f %f %f %f\n",sx,sy,xx,yy);
-    }
-  mesh_trans->set_point ({x,y}, {xx, yy});
+  mesh_trans->set_point (e, imgp);
 }
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam2, screen_map &smap, progress_info *progress)

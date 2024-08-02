@@ -32,8 +32,8 @@ screen_map::get_solver_points_nearby (coord_t sx, coord_t sy, int n,
     }
   x += xshift;
   y += yshift;
-  x = std::max (std::min (x, width), 0);
-  y = std::max (std::min (y, height), 0);
+  x = std::max (std::min (x, width - 1), 0);
+  y = std::max (std::min (y, height - 1), 0);
   x -= xshift;
   y -= yshift;
   sparams.remove_points ();
@@ -43,47 +43,43 @@ screen_map::get_solver_points_nearby (coord_t sx, coord_t sy, int n,
       int lnpoints = npoints;
       for (int i = 0; i <= 2 * d; i++)
         {
-          if (known_p (x - d + i, y - d))
+	  int_point_t e = {x - d + i, y - d};
+          if (known_p (e))
             {
-              coord_t img_x, img_y;
-              get_coord (x - d + i, y - d, &img_x, &img_y);
-              coord_t ssx, ssy;
+              point_t img = get_coord (e);
               solver_parameters::point_color color;
-              get_screen_coord ((x - d + i), y - d, &ssx, &ssy, &color);
-              sparams.add_point (img_x, img_y, ssx, ssy, color);
+              point_t scr = get_screen_coord (e, &color);
+              sparams.add_point (img, scr, color);
               npoints++;
             }
-          if (d && known_p (x - d + i, y + d))
+	  e = {x - d + i, y + d};
+          if (d && known_p (e))
             {
-              coord_t img_x, img_y;
-              get_coord (x - d + i, y + d, &img_x, &img_y);
-              coord_t ssx, ssy;
+              point_t img = get_coord (e);
               solver_parameters::point_color color;
-              get_screen_coord ((x - d + i), y + d, &ssx, &ssy, &color);
-              sparams.add_point (img_x, img_y, ssx, ssy, color);
+              point_t scr = get_screen_coord (e, &color);
+              sparams.add_point (img, scr, color);
               npoints++;
             }
         }
       for (int i = 1; i < 2 * d; i++)
         {
-          if (known_p (x - d, y - d + i))
+	  int_point_t e = {x - d, y - d + i};
+          if (known_p (e))
             {
-              coord_t img_x, img_y;
-              get_coord (x - d, y - d + i, &img_x, &img_y);
-              coord_t ssx, ssy;
+              point_t img = get_coord (e);
               solver_parameters::point_color color;
-              get_screen_coord ((x - d), y - d + i, &ssx, &ssy, &color);
-              sparams.add_point (img_x, img_y, ssx, ssy, color);
+              point_t scr = get_screen_coord (e, &color);
+              sparams.add_point (img, scr, color);
               npoints++;
             }
-          if (known_p (x + d, y - d + i))
+	  e = {x + d, y - d + i};
+          if (known_p (e))
             {
-              coord_t img_x, img_y;
-              get_coord (x + d, y - d + i, &img_x, &img_y);
-              coord_t ssx, ssy;
+              point_t img = get_coord (e);
               solver_parameters::point_color color;
-              get_screen_coord ((x + d), y - d + i, &ssx, &ssy, &color);
-              sparams.add_point (img_x, img_y, ssx, ssy, color);
+              point_t scr = get_screen_coord (e, &color);
+              sparams.add_point (img, scr, color);
               npoints++;
             }
         }
@@ -197,14 +193,14 @@ screen_map::add_solver_points (solver_parameters *sparam, int xgrid, int ygrid)
         bool found = false;
         for (int yy = y; yy < y + ystep && !found; yy++)
           for (int xx = x; xx < x + xstep && !found; xx++)
-            if (known_p (xx - xshift, yy - yshift))
+            if (known_p ({xx - xshift, yy - yshift}))
               {
                 coord_t ix, iy, sx, sy;
                 solver_parameters::point_color color;
                 found = true;
-                get_coord (xx - xshift, yy - yshift, &ix, &iy);
-                get_screen_coord (xx - xshift, yy - yshift, &sx, &sy, &color);
-                sparam->add_point (ix, iy, sx, sy, color);
+                point_t img = get_coord ({xx - xshift, yy - yshift});
+                point_t scr = get_screen_coord ({xx - xshift, yy - yshift}, &color);
+                sparam->add_point (img, scr, color);
               }
       }
 }
@@ -217,14 +213,13 @@ screen_map::get_known_range (int *xminr, int *yminr, int *xmaxr, int *ymaxr)
   ymax = std::numeric_limits<int>::min ();
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width * 2; x++)
-      if (known_p (x - xshift, y - yshift))
+      if (known_p ({x - xshift, y - yshift}))
         {
-          coord_t ix, iy;
-          get_coord (x - xshift, y - yshift, &ix, &iy);
-          xmin = std::min (xmin, (int)floor (ix));
-          ymin = std::min (ymin, (int)floor (iy));
-          xmax = std::max (xmax, (int)ceil (ix));
-          ymax = std::max (ymax, (int)ceil (iy));
+          point_t img = get_coord ({x - xshift, y - yshift});
+          xmin = std::min (xmin, (int)floor (img.x));
+          ymin = std::min (ymin, (int)floor (img.y));
+          xmax = std::max (xmax, (int)ceil (img.x));
+          ymax = std::max (ymax, (int)ceil (img.y));
         }
   *xminr = xmin;
   *yminr = ymin;
@@ -240,15 +235,13 @@ screen_map::determine_solver_points (int patches_found,
            step = std::max (patches_found / 1000, 1);
        y < height - yshift; y++)
     for (int x = -xshift; x < width - xshift; x++)
-      if (known_p (x, y) && nf++ > next)
+      if (known_p ({x, y}) && nf++ > next)
         {
           next += step;
-          coord_t ix, iy;
-          get_coord (x, y, &ix, &iy);
-          coord_t sx, sy;
+          point_t img = get_coord ({x, y});
           solver_parameters::point_color color;
-          get_screen_coord (x, y, &sx, &sy, &color);
-          sparam->add_point (ix, iy, sx, sy, color);
+          point_t scr = get_screen_coord ({x, y}, &color);
+          sparam->add_point (img, scr, color);
         }
 }
 
@@ -296,19 +289,17 @@ screen_map::write_outliers_info (const char *filename, int imgwidth,
     }
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
-      if (known_p (x - xshift, y - yshift))
+      if (known_p ({x - xshift, y - yshift}))
         {
-          coord_t ix1, iy1;
-          coord_t sx, sy;
-          get_coord (x - xshift, y - yshift, &ix1, &iy1);
-          get_screen_coord (x - xshift, y - yshift, &sx, &sy);
-          if (ix1 < 0 || ix1 >= imgwidth || iy1 < 0 || iy1 >= imgheight)
+          point_t img1 = get_coord ({x - xshift, y - yshift});
+          point_t scr = get_screen_coord ({x - xshift, y - yshift});
+          if (img1.x < 0 || img1.x >= imgwidth || img1.y < 0 || img1.y >= imgheight)
             continue;
-          point_t imgp = map.to_img ({sx, sy});
+          point_t imgp = map.to_img (scr);
           struct summary &i
-              = info[((int)ix1) / scale + (((int)iy1) / scale) * infowidth];
-          i.x = std::max (i.x, fabs (ix1 - imgp.x) + 1);
-          i.y = std::max (i.y, fabs (iy1 - imgp.y) + 1);
+              = info[((int)img1.x) / scale + (((int)img1.y) / scale) * infowidth];
+          i.x = std::max (i.x, fabs (img1.x - imgp.x) + 1);
+          i.y = std::max (i.y, fabs (img1.y - imgp.y) + 1);
         }
   TIFF *out = TIFFOpen (filename, "wb");
   if (!out)

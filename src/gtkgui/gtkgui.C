@@ -1421,14 +1421,12 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
         {
 	  int xx = x - detected.smap->xshift;
 	  int yy = y - detected.smap->yshift;
-	    if (detected.smap->known_p (xx, yy))
+	    if (detected.smap->known_p ({xx, yy}))
               {
-		coord_t sx, sy;
-		coord_t ix, iy;
 		solver_parameters::point_color t;
-		detected.smap->get_screen_coord (xx, yy, &sx, &sy, &t);
-		detected.smap->get_coord (xx, yy, &ix, &iy);
-		draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, ix, iy, t == solver_parameters::blue, t == solver_parameters::green, t == solver_parameters::red, 1);
+		point_t scr = detected.smap->get_screen_coord ({xx, yy}, &t);
+		point_t img = detected.smap->get_coord ({xx, yy});
+		draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, img.x, img.y, t == solver_parameters::blue, t == solver_parameters::green, t == solver_parameters::red, 1);
               }
          }
 

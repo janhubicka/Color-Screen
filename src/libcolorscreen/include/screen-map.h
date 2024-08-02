@@ -19,104 +19,103 @@ public:
                                        const char **error,
                                        progress_info *progress) const;
   bool
-  in_range_p (int x, int y) const
+  in_range_p (int_point_t p) const
   {
-    x += xshift;
-    y += yshift;
-    return (x >= 0 && x < width && y >= 0 && y < height);
+    p.x += xshift;
+    p.y += yshift;
+    return (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height);
   }
   bool
-  known_p (int x, int y) const
+  known_p (int_point_t p) const
   {
-    if (!in_range_p (x, y))
+    if (!in_range_p (p))
       return false;
-    x += xshift;
-    y += yshift;
-    return (map[y * width + x].x != 0);
+    p.x += xshift;
+    p.y += yshift;
+    return (map[p.y * width + p.x].x != 0);
   }
   /* We insert fake points to straighten areas without grid detected.  */
   bool
-  known_and_not_fake_p (int x, int y) const
+  known_and_not_fake_p (int_point_t p) const
   {
-    if (!in_range_p (x, y))
+    if (!in_range_p (p))
       return false;
-    x += xshift;
-    y += yshift;
-    coord_t ix = map[y * width + x].x;
-    coord_t iy = map[y * width + x].y;
+    p.x += xshift;
+    p.y += yshift;
+    coord_t ix = map[p.y * width + p.x].x;
+    coord_t iy = map[p.y * width + p.x].y;
     assert (xmin != xmax);
-    return (map[y * width + x].x != 0 && ix >= xmin && ix <= xmax && iy >= ymin
+    return (map[p.y * width + p.x].x != 0 && ix >= xmin && ix <= xmax && iy >= ymin
             && iy <= ymax);
   }
   void
-  set_coord (int xx, int yy, coord_t img_x, coord_t img_y)
+  set_coord (int_point_t e, point_t img)
   {
     if (colorscreen_checking)
-      assert (in_range_p (xx, yy));
-    int x = xx + xshift;
-    int y = yy + yshift;
-    if (img_x == 0)
-      img_x = 0.00001;
-    if (img_y == 0)
-      img_y = 0.00001;
-    map[y * width + x].x = img_x;
-    map[y * width + x].y = img_y;
+      assert (in_range_p (e));
+    int x = e.x + xshift;
+    int y = e.y + yshift;
+    if (img.x == 0)
+      img.x = 0.00001;
+    if (img.y == 0)
+      img.y = 0.00001;
+    map[y * width + x].x = img.x;
+    map[y * width + x].y = img.y;
   }
   void
-  safe_set_coord (int xx, int yy, coord_t img_x, coord_t img_y)
+  safe_set_coord (int_point_t e, point_t img)
   {
-    int x = xx + xshift;
-    int y = yy + yshift;
+    int x = e.x + xshift;
+    int y = e.y + yshift;
     if (x < 0 || x >= width || y < 0 || y >= height)
       {
         grow (x < 0, x >= width, y < 0, y >= height);
-        x = xx + xshift;
-        y = yy + yshift;
+        x = e.x + xshift;
+        y = e.y + yshift;
         assert (x >= 0 && x < width && y >= 0 && y < height);
       }
-    if (img_x == 0)
-      img_x = 0.00001;
-    if (img_y == 0)
-      img_y = 0.00001;
-    map[y * width + x].x = img_x;
-    map[y * width + x].y = img_y;
+    if (img.x == 0)
+      img.x = 0.00001;
+    if (img.y == 0)
+      img.y = 0.00001;
+    map[y * width + x].x = img.x;
+    map[y * width + x].y = img.y;
   }
-  void
-  get_coord (int x, int y, coord_t *img_x, coord_t *img_y) const
+  inline pure_attr point_t
+  get_coord (int_point_t e) const
   {
     if (colorscreen_checking)
-      assert (in_range_p (x, y));
-    x += xshift;
-    y += yshift;
-    *img_x = map[y * width + x].x;
-    *img_y = map[y * width + x].y;
+      assert (in_range_p (e));
+    e.x += xshift;
+    e.y += yshift;
+    return {(coord_t)map[e.y * width + e.x].x, (coord_t)map[e.y * width + e.x].y};
   }
-  void
-  get_screen_coord (int x, int y, coord_t *scr_x, coord_t *scr_y,
-                    solver_parameters::point_color *color = NULL) const
+  inline point_t
+  get_screen_coord (int_point_t e, solver_parameters::point_color *color = NULL) const
   {
+    point_t scr;
     if (type == Dufay)
       {
-        *scr_x = x / 2.0;
-        *scr_y = y;
+        scr.x = e.x / 2.0;
+        scr.y = e.y;
         if (!color)
-          return;
-        *color = (x & 1) ? solver_parameters::blue : solver_parameters::green;
+          return scr;
+        *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::green;
       }
     else
       {
-        int_point_t p
-            = paget_geometry::from_diagonal_coordinates (int_point_t{ x, y });
-        *scr_x = p.x / 4.0;
-        *scr_y = p.y / 4.0;
+        int_point_t p = paget_geometry::from_diagonal_coordinates (e);
+        scr.x = p.x / 4.0;
+        scr.y = p.y / 4.0;
         if (!color)
-          return;
-        if (!(y & 1))
+          return scr;
+        if (!(e.y & 1))
           *color
-              = (x & 1) ? solver_parameters::blue : solver_parameters::green;
+              = (e.x & 1) ? solver_parameters::blue : solver_parameters::green;
         else
-          *color = (x & 1) ? solver_parameters::red : solver_parameters::blue;
+          *color = (e.x & 1) ? solver_parameters::red : solver_parameters::blue;
       }
+    return scr;
   }
 
   /* API used only by libcolorscreen.  */

@@ -80,6 +80,11 @@ struct solver_parameters
     point[npoints - 1].color = color;
     return npoints;
   }
+  DLL_PUBLIC_EXP int
+  add_point (point_t img, point_t screen, enum point_color color)
+  {
+    return add_point (img.x, img.y, screen.x, screen.y, color);
+  }
 
   DLL_PUBLIC_EXP void
   remove_point (int n)

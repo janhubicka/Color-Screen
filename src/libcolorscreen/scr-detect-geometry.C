@@ -1105,7 +1105,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   };
   priority_queue<N_PRIORITIES,queue_entry> queue;
   queue.insert ((struct queue_entry){0, 0, greenx, greeny}, 0);
-  map->set_coord (0, 0, greenx, greeny);
+  map->set_coord ({0, 0}, {greenx, greeny});
   if (sparam)
     sparam->remove_points ();
   //printf ("%i %i %f %f %f %f\n", queue.size (), map.in_range_p (0, 0), param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
@@ -1130,33 +1130,33 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 				 || (slow && confirm (render, param.coordinate1, param.coordinate2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, false, false, dsparams->min_patch_contrast)))
 #define cstrip(x,y,t, priority) ((fast && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
 				 || (slow && confirm (render, param.coordinate1, param.coordinate2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
-	  if (!map->known_p (e.scr_x - 1, e.scr_y)
+	  if (!map->known_p ({e.scr_x - 1, e.scr_y})
 	      && cpatch (e.img_x - param.coordinate1.x / 2, e.img_y - param.coordinate1.y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
-	      map->safe_set_coord (e.scr_x - 1, e.scr_y, ix, iy);
+	      map->safe_set_coord ({e.scr_x - 1, e.scr_y}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x - 1, e.scr_y, ix, iy}, priority);
 	      nfound++;
 	    }
-	  if (!map->known_p (e.scr_x + 1, e.scr_y)
+	  if (!map->known_p ({e.scr_x + 1, e.scr_y})
 	      && cpatch (e.img_x + param.coordinate1.x / 2, e.img_y + param.coordinate1.y / 2, ((e.scr_x + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
 	    {
-	      map->safe_set_coord (e.scr_x + 1, e.scr_y, ix, iy);
+	      map->safe_set_coord ({e.scr_x + 1, e.scr_y}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x + 1, e.scr_y, ix, iy}, priority);
 	      nfound++;
 	    }
-	  if (!map->known_p (e.scr_x, e.scr_y - 1)
+	  if (!map->known_p ({e.scr_x, e.scr_y - 1})
 	      && cstrip (e.img_x - param.coordinate2.x / 2, e.img_y - param.coordinate2.y / 2, scr_detect::red, priority)
 	      && cpatch (e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	    {
-	      map->safe_set_coord (e.scr_x, e.scr_y - 1, ix, iy);
+	      map->safe_set_coord ({e.scr_x, e.scr_y - 1}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
 	      nfound++;
 	    }
-	  if (!map->known_p (e.scr_x, e.scr_y + 1)
+	  if (!map->known_p ({e.scr_x, e.scr_y + 1})
 	      && cstrip (e.img_x + param.coordinate2.x / 2, e.img_y + param.coordinate2.y / 2, scr_detect::red, priority)
 	      && cpatch (e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
 	    {
-	      map->safe_set_coord (e.scr_x, e.scr_y + 1, ix, iy);
+	      map->safe_set_coord ({e.scr_x, e.scr_y + 1}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
 	      nfound++;
 	    }
@@ -1182,13 +1182,13 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	  for (int xx = -1; xx <= 1; xx++)
 	    for (int yy = -1; yy <= 1; yy++)
 	      if ((xx || yy)// && ((xx != 0) + (yy != 0)) == 1
-	          && !map->known_p (e.scr_x + xx, e.scr_y + yy))
+	          && !map->known_p ({e.scr_x + xx, e.scr_y + yy}))
 		{
 	          analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){xx, yy});
 		  solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x + xx, e.scr_y + yy);
 		  if (cpatch (e.img_x + p.x * param.coordinate1.x / 4 + p.y * param.coordinate2.x / 4, e.img_y + p.x * param.coordinate1.y / 4 + p.y * param.coordinate2.y / 4, (scr_detect::color_class)color, priority))
 		    {
-		      map->safe_set_coord (e.scr_x + xx, e.scr_y + yy, ix, iy);
+		      map->safe_set_coord ({e.scr_x + xx, e.scr_y + yy}, {ix, iy});
 		      queue.insert ((struct queue_entry){e.scr_x + xx, e.scr_y + yy, ix, iy}, priority);
 		      nfound++;
 		    }
@@ -1262,11 +1262,10 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       if (progress && progress->cancel_requested ())
 	return NULL;
       for (int x = -map->xshift; x < map->width - map->xshift; x++, last_seen++)
-	if (!map->known_p (x, y))
+	if (!map->known_p ({x, y}))
 	  {
-	    coord_t sx, sy;
-	    map->get_screen_coord (x, y, &sx, &sy);
-	    point_t img = map2.to_img ({sx, sy});
+	    point_t scr = map->get_screen_coord ({x, y});
+	    point_t img = map2.to_img (scr);
 	    if (img.x < xmin || img.x > xmax || img.y < ymin || img.y > ymax)
 	      continue;
 	    int xrmul = 2;
@@ -1274,7 +1273,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    bool found = last_seen < dsparams->max_unknown_screen_range * xrmul;
 	    for (int yy = std::max (y - dsparams->max_unknown_screen_range * yrmul, -map->yshift); yy < std::min (map->height - map->yshift, y + dsparams->max_unknown_screen_range * yrmul) && !found; yy++)
 	      for (int xx = std::max (x - dsparams->max_unknown_screen_range * xrmul, -map->xshift); xx < std::min (map->width - map->xshift, x + dsparams->max_unknown_screen_range * xrmul) && !found; xx++)
-		if (map->known_p (xx, yy))
+		if (map->known_p ({xx, yy}))
 		  {
 		    last_seen = -xx;
 		    found = true;
@@ -1382,16 +1381,13 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
   map.set_parameters (param, img);
   for (int y = -smap->yshift; y < smap->height - smap->yshift; y++)
     for (int x = -smap->xshift; x < smap->width - smap->xshift; x++)
-      if (smap->known_and_not_fake_p (x, y))
+      if (smap->known_and_not_fake_p ({x, y}))
 	{
-	  coord_t ix, iy;
-	  coord_t ix2, iy2;
-	  coord_t sx, sy;
 	  solver_parameters::point_color color;
-	  smap->get_screen_coord (x, y, &sx, &sy, &color);
-	  point_t imgp = map.to_img ({sx, sy});
-	  smap->get_coord (x, y, &ix2, &iy2);
-	  coord_t dist = sqrt ((imgp.x-ix2) * (imgp.x - ix2) + (imgp.y - iy2) * (imgp.y - iy2));
+	  point_t scrp = smap->get_screen_coord ({x, y}, &color);
+	  point_t imgp = map.to_img (scrp);
+	  point_t imgp2 = smap->get_coord ({x, y});
+	  coord_t dist = imgp.dist_from (imgp2);
 	  int t = (int)color;
 	  max_distance [t] = std::max (max_distance[t], dist);
 	  distance_sum [t] += dist;
@@ -1721,24 +1717,22 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	{
 	  int last_seen = INT_MAX / 2;
 	  for (int x = -smap->xshift; x < smap->width - smap->xshift; x++, last_seen++)
-	    if (!smap->known_p (x, y))
+	    if (!smap->known_p ({x, y}))
 	      {
 		int xrmul = 2;
 		int yrmul = type != Dufay ? 2 : 1;
 		bool found = last_seen < range * xrmul;
 		for (int yy = std::max (y - range * yrmul, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range * yrmul) && !found; yy++)
 		  for (int xx = std::max (x - range * xrmul, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * xrmul) && !found; xx++)
-		    if (smap->known_p (xx, yy))
+		    if (smap->known_p ({xx, yy}))
 		      found = true;
 		if (!found)
 		  {
-		    coord_t ix, iy;
-		    coord_t sx, sy;
-		    smap->get_screen_coord (x, y, &sx, &sy);
-		    point_t imgp = map.to_img ({sx, sy});
+		    point_t scrp = smap->get_screen_coord ({x, y});
+		    point_t imgp = map.to_img (scrp);
 	            last_seen = 0;
 		    if ((imgp.x <= ret.xmin && dsparams->left) || (imgp.y < ret.ymin && dsparams->top) || (imgp.x >= ret.xmax && dsparams->right) || (imgp.y >= ret.ymax && dsparams->bottom))
-		      smap->set_coord (x, y, ix, iy);
+		      smap->set_coord ({x, y}, imgp);
 		    
 		  }
 		//else
@@ -1808,8 +1802,8 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	  ret.known_patches = new bitmap_2d (smap->width / 2, smap->height);
 	  for (int y = 0; y < smap->height; y ++)
 	    for (int x = 0; x < smap->width / 2; x ++)
-	      if (smap->known_p (x * 2 - ret.xshift * 2, y - ret.yshift)
-		  && smap->known_p (x * 2 - ret.xshift * 2 + 1, y - ret.yshift))
+	      if (smap->known_p ({x * 2 - ret.xshift * 2, y - ret.yshift})
+		  && smap->known_p ({x * 2 - ret.xshift * 2 + 1, y - ret.yshift}))
 		ret.known_patches->set_bit (x, y);
 	}
       else
@@ -1817,29 +1811,25 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	  int xmin = INT_MAX, xmax = INT_MIN, ymin = INT_MAX, ymax = INT_MIN;
 	  for (int y = 0; y < smap->height; y ++)
 	    for (int x = 0; x < smap->width; x ++)
-	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
+	       if (smap->known_p ({x - smap->xshift, y - smap->yshift}))
 		 {
-		   coord_t sx, sy;
-		   smap->get_screen_coord (x - smap->xshift, y - smap->yshift, &sx, &sy);
-		   int xx = sx, yy = sy;
-		   xmin = std::min (xmin, xx);
-		   xmax = std::max (xmax, xx);
-		   ymin = std::min (ymin, yy);
-		   ymax = std::max (ymax, yy);
+		   point_t scrp = smap->get_screen_coord ({x - smap->xshift, y - smap->yshift});
+		   xmin = std::min (xmin, (int)scrp.x);
+		   xmax = std::max (xmax, (int)scrp.x);
+		   ymin = std::min (ymin, (int)scrp.y);
+		   ymax = std::max (ymax, (int)scrp.y);
 		 }
 	  ret.xshift = -xmin;
 	  ret.yshift = -ymin;
 	  ret.known_patches = new bitmap_2d (xmax - xmin + 1, ymax - ymin + 1);
 	  for (int y = 0; y < smap->height; y ++)
 	    for (int x = 0; x < smap->width; x ++)
-	       if (smap->known_p (x - smap->xshift, y - smap->yshift))
+	       if (smap->known_p ({x - smap->xshift, y - smap->yshift}))
 		 {
-		   coord_t sx, sy;
-		   smap->get_screen_coord (x - smap->xshift, y - smap->yshift, &sx, &sy);
-		   int xx = sx, yy = sy;
+		   point_t scr = smap->get_screen_coord ({x - smap->xshift, y - smap->yshift});
 		   /* TODO: perhaps we should be conservative here and require all entries
 		      to be set.  But most likely this makes no difference.  */
-		   ret.known_patches->set_bit (xx + ret.xshift, yy + ret.yshift);
+		   ret.known_patches->set_bit ((int)scr.x + ret.xshift, (int)scr.y + ret.yshift);
 		 }
 	}
     }

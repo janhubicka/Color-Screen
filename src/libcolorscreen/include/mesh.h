@@ -35,6 +35,13 @@ public:
       abort ();
     return {(coord_t) m_data[p.y * m_width + p.x].x, (coord_t) m_data[p.y * m_width + p.x].y};
   }
+  pure_attr point_t
+  get_screen_point (int_point_t p) const
+  {
+    if (debug && (p.y < 0 || p.y >= m_height || p.x < 0 || p.x >= m_width))
+      abort ();
+    return {(coord_t) (p.x * m_xstep - m_xshift), (coord_t) (coord_t) (p.y * m_ystep - m_yshift)};
+  }
   point_t pure_attr
   apply (point_t p) const
   {
