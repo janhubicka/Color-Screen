@@ -193,6 +193,20 @@ private:
       m_invystepinv;
   int m_invwidth, m_invheight;
 
+  /* Entry is useful if it is in the image area or its neightbours are.  */
+  inline bool
+  entry_useful_p (int_point_t e, int xmin, int xmax, int ymin, int ymax) const
+  {
+    for (int yy = std::max ((int)e.y - 1, 0); yy < std::min ((int)e.y + 2, m_height); yy++)
+      for (int xx = std::max ((int)e.x - 1, 0); xx < std::min ((int)e.x + 2, m_width); xx++)
+        {
+	  point_t p = get_point ({xx, yy});
+	  if (p.x >= xmin && p.x <= xmax && p.y >= ymin && p.y < ymax)
+	    return true;
+        }
+    return false;
+  }
+
   static mesh_coord_t
   sign (mesh_point p1, mesh_point p2, mesh_point p3)
   {

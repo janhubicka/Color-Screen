@@ -365,9 +365,7 @@ mesh::need_to_grow_left (int width, int height) const
     return true;
   int xo = m_width == 1 ? 0 : 1;
   for (int y = 0; y < m_height; y++)
-    if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
-        && m_data[y * m_width + xo].y >= 0
-        && m_data[y * m_width + xo].y < height)
+    if (entry_useful_p ({xo, y}, 0, width - 1, 0, height - 1))
       return true;
   return false;
 }
@@ -377,10 +375,9 @@ mesh::need_to_grow_top (int width, int height) const
   /* Avoid missing triangles on corners.  */
   if (!m_height)
     return true;
-  int yo = m_height == 1 ? 0 : m_width;
+  int yo = m_height == 1 ? 0 : 1;
   for (int x = 0; x < m_width; x++)
-    if (m_data[x + yo].x >= 0 && m_data[x + yo].x < width
-        && m_data[x + yo].y >= 0 && m_data[x + yo].y < height)
+    if (entry_useful_p ({x, yo}, 0, width - 1, 0, height - 1))
       return true;
   return false;
 }
@@ -392,9 +389,7 @@ mesh::need_to_grow_right (int width, int height) const
     return true;
   int xo = m_width == 1 ? 0 : m_width - 2;
   for (int y = 0; y < m_height; y++)
-    if (m_data[y * m_width + xo].x >= 0 && m_data[y * m_width + xo].x < width
-        && m_data[y * m_width + xo].y >= 0
-        && m_data[y * m_width + xo].y < height)
+    if (entry_useful_p ({xo, y}, 0, width - 1, 0, height - 1))
       return true;
   return false;
 }
@@ -404,10 +399,9 @@ mesh::need_to_grow_bottom (int width, int height) const
   /* Avoid missing triangles on corners.  */
   if (!m_height)
     return true;
-  int yo = m_height == 1 ? 0 : (m_height - 2) * m_width;
+  int yo = m_height == 1 ? 0 : m_height - 2;
   for (int x = 0; x < m_width; x++)
-    if (m_data[yo + x].x >= 0 && m_data[yo + x].x < width
-        && m_data[yo + x].y >= 0 && m_data[yo + x].y < height)
+    if (entry_useful_p ({x, yo}, 0, width - 1, 0, height - 1))
       return true;
   return false;
 }
