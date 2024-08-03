@@ -762,6 +762,8 @@ autodetect (int argc, char **argv)
 	rparam.gamma = scan.gamma != -2 ? scan.gamma : 0;
       if (scanner_type != max_scanner_type)
 	dsparams.scanner_type = scanner_type;
+      else
+	dsparams.scanner_type = fixed_lens;
       dsparams.gamma = rparam.gamma;
      
       if (verbose)

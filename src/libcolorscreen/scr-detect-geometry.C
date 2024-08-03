@@ -1425,7 +1425,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
   render_parameters empty;
   std::unique_ptr <screen_map> smap = NULL;
   scr_type type = dsparams->scr_type;
-  assert (type != max_scr_type);
+  assert (dsparams->scanner_type != max_scanner_type);
 
   empty.gamma = dsparams->gamma;
   assert (empty.gamma != -2);
