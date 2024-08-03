@@ -7,6 +7,8 @@
 #include "render-tile.h"
 #include "render-to-file.h"
 #include "mapalloc.h"
+namespace colorscreen
+{
 struct color_data
 {
   luminosity_t *m_data[3];
@@ -631,4 +633,5 @@ prune_render_scr_detect_caches ()
 {
   color_class_cache.prune ();
   precomputed_rgbdata_cache.prune ();
+}
 }

@@ -1,19 +1,20 @@
 #include <stdlib.h>
 #include <sys/time.h>
+#include "icc-srgb.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "include/stitch.h"
 #include "render-scr-detect.h"
 #include "render-interpolate.h"
 #include "render-superposeimg.h"
-#include "icc-srgb.h"
 #include "icc.h"
 #include "render-to-file.h"
 #ifdef RENDER_EXTRA
 #include "extra-render/render-extra.h"
 #endif
 #include "render-fast.h"
-
+namespace colorscreen
+{
 bool
 complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
 {
@@ -239,4 +240,5 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   if (free_profile)
     free (icc_profile);
   return true;
+}
 }

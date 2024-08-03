@@ -12,6 +12,8 @@
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/stitch.h"
 
+using namespace colorscreen;
+
 static bool verbose = false;
 static bool verbose_tasks = false;
 const char *binname;
@@ -424,7 +426,7 @@ parse_common_flags (int argc, char **argv, int *i)
 }
 
 static int
-render (int argc, char **argv)
+render_cmd (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
   float age = -100;
@@ -2211,7 +2213,7 @@ main (int argc, char **argv)
   if (argc == 0)
     print_help ();
   else if (!strcmp (argv[0], "render"))
-    ret = render (argc-1, argv+1);
+    ret = render_cmd (argc-1, argv+1);
   else if (!strcmp (argv[0], "autodetect"))
     ret = autodetect (argc-1, argv+1);
   else if (!strcmp (argv[0], "analyze-backlight"))

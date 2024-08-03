@@ -2,7 +2,8 @@
 #include "render-to-scr.h"
 #include "screen.h"
 #include "lru-cache.h"
-
+namespace colorscreen
+{
 namespace
 {
 struct screen_params
@@ -88,4 +89,5 @@ render_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width, int 
     downscale<render_img, rgbdata, &render_img::get_profiled_rgb_pixel, &account_rgb_pixel> (data, x, y, width, height, pixelsize, progress);
   else
     render::get_color_data (data, x, y, width, height, pixelsize, progress);
+}
 }

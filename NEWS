@@ -13,6 +13,7 @@ Changes in version 1.1
      helps for every command
    - `--disable-16bit-float` configure option now dsables use of more memory
      effecient but slower 16bit floats for temporary data
+   - library now uses namespace `colorscreen`
  - Infrastructure improvements:
    - `make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,

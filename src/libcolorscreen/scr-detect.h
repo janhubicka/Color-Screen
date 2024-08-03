@@ -1,7 +1,7 @@
 #ifndef SCR_DETECT_H
 #define SCR_DETECT_H
 #include "include/scr-detect-parameters.h"
-
+namespace colorscreen {
 
 class scr_detect
 {
@@ -137,5 +137,5 @@ public:
   int width, height;
 private:
 };
-
+}
 #endif

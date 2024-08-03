@@ -4,7 +4,8 @@
 #include <cassert>
 
 #include "backlight-correction.h"
-
+namespace colorscreen
+{
 
 static
 std::string read_string (memory_buffer *f)
@@ -401,3 +402,4 @@ main()
 	return 0;
 }
 #endif
+}

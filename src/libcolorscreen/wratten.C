@@ -1,6 +1,8 @@
 #include "include/wratten.h"
 #include "include/dufaycolor.h"
 #include "include/spectrum-to-xyz.h"
+namespace colorscreen
+{
 constexpr xyz wratten::filter_25_red;
 constexpr xyz wratten::filter_58_green;
 constexpr xyz wratten::filter_47_blue;
@@ -24,4 +26,5 @@ wratten::print_spectra_report ()
   spec.set_backlight (spectrum_dyes_to_xyz::il_C);
   spec.set_dyes (spectrum_dyes_to_xyz::wratten_25_58_47_kodak_1945);
   report_illuminant (spec, "CIE C", "wratten-screen.tif");
+}
 }

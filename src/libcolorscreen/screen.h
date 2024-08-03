@@ -2,6 +2,7 @@
 #define SCREEN_H
 #include "include/color.h"
 #include "include/scr-to-img.h"
+namespace colorscreen {
 template<typename T> class precomputed_function;
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
@@ -85,4 +86,5 @@ private:
   void initialize_with_2D_fft (screen &scr, precomputed_function<luminosity_t> *mft[3], rgbdata scale);
   void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);
 };
+}
 #endif

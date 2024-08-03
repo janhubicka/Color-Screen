@@ -1,7 +1,8 @@
 #include "analyze-base-worker.h"
 #include "analyze-dufay.h"
 #include "screen.h"
-
+namespace colorscreen
+{
 bool
 analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, scr_to_img *scr_to_img, progress_info *progress)
 {
@@ -128,4 +129,5 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
   *x2 = imgp.x;
   *y2 = imgp.y;
   return max_ratio;
+}
 }

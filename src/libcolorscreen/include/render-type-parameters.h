@@ -1,5 +1,7 @@
 #ifndef RENDER_TYPE_PARAMETERS_H
 #define RENDER_TYPE_PARAMETERS_H
+namespace colorscreen
+{
 enum render_type_t
 {
   render_type_original,
@@ -83,5 +85,5 @@ public:
   {
   }
 };
-
+}
 #endif

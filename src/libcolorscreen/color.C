@@ -2,6 +2,8 @@
 #include "include/color.h"
 #include "include/scr-to-img.h"
 #include "include/spectrum-to-xyz.h"
+namespace colorscreen
+{
 color_matrix
 matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 		  luminosity_t gx, luminosity_t gy,
@@ -313,4 +315,5 @@ find_best_whitepoint (xyz red, xyz green, xyz blue,
 	}
       }
   return best_white;
+}
 }

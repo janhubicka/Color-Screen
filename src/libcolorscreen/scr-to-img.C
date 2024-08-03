@@ -6,7 +6,8 @@
 #include "solver.h"
 #include "render-to-scr.h"
 #include "spline.h"
-
+namespace colorscreen
+{
 std::atomic_ulong scr_to_img::m_nwarnings;
 namespace
 {
@@ -509,4 +510,5 @@ scr_to_img::dump (FILE *f)
   if (m_param.mesh_trans)
     fprintf (f, "have mesh trans\n");
   save_csp (f, &m_param, NULL, NULL, NULL);
+}
 }

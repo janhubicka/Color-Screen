@@ -7,6 +7,8 @@
 #include "tone-curve.h"
 #include "scr-to-img-parameters.h"
 #include "backlight-correction-parameters.h"
+namespace colorscreen
+{
 class render_type_parameters;
 class render_type_property;
 class stitch_project;
@@ -373,4 +375,5 @@ private:
                                          rgbdata patch_proportions,
                                          xyz target_whitepoint = d50_white);
 };
+}
 #endif

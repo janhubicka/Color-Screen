@@ -1,5 +1,7 @@
 #include "include/tone-curve.h"
 #include "include/sensitivity.h"
+namespace colorscreen
+{
 namespace
 {
 static const luminosity_t dng_curve[] = {
@@ -331,4 +333,5 @@ tone_curve::save_tone_curve (FILE *f, tone_curves curve, bool hd)
          fprintf (f, "%f %f\n", log10(i)/*-log10 (0.001)*/, log10 (1/val));
      }
    return true;
+}
 }

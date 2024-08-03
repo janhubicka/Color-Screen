@@ -17,7 +17,8 @@
 #ifdef HAVE_LIBRAW
 #include <libraw/libraw.h>
 #endif
-
+namespace colorscreen
+{
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
@@ -1006,4 +1007,5 @@ image_data::has_grayscale_or_ir ()
   if (stitch)
     return stitch->images[0][0].img->has_grayscale_or_ir ();
   return data != NULL;
+}
 }

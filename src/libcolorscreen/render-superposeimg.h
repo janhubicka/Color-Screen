@@ -3,6 +3,8 @@
 #include <assert.h>
 #include "render-to-scr.h"
 #include "screen.h"
+namespace colorscreen
+{
 class render_superpose_img : public render_to_scr
 {
 public:
@@ -166,5 +168,6 @@ render_superpose_img::analyze_tile (int xs, int ys, int w, int h, int stepx, int
     *b = bb / bw;
   else
     *b = 0;
+}
 }
 #endif

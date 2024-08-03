@@ -1,7 +1,10 @@
 #include <stdlib.h>
 #include "include/tiff-writer.h"
 #include "include/progress-info.h"
-
+extern const unsigned char sRGB_icc[];
+extern const unsigned int sRGB_icc_len;
+namespace colorscreen
+{
 /* Needed to build at ubuntu-latest.  */
 #ifndef TIFFTAG_FORWARDMATRIX1
 #  define TIFFTAG_FORWARDMATRIX1 50964              /* &matrix for mapping white balanced camera colors to XYZ D50 */
@@ -15,8 +18,6 @@ static const TIFFFieldInfo tiffFields[] = {
 	{TIFFTAG_PROFILETONECURVE, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1, (char *)"ToneCurve"},
 };
     /* end DNG tags */
-extern unsigned char sRGB_icc[];
-extern unsigned int sRGB_icc_len;
 tiff_writer::tiff_writer (tiff_writer_params &p, const char **error)
 {
   *error = NULL;
@@ -203,4 +204,5 @@ tiff_writer::~tiff_writer()
   out = NULL;
   free (outrow);
   outrow = NULL;
+}
 }

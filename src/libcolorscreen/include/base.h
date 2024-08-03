@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdint>
 #include "colorscreen-config.h"
+namespace colorscreen
+{
 #define flatten_attr __attribute__ ((__flatten__))
 #define always_inline_attr __attribute__ ((__always_inline__))
 #ifdef COLORSCREEN_CHECKING
@@ -43,6 +45,17 @@ static inline double
 my_sqrt (double x)
 {
   return sqrt (x);
+}
+
+static inline double
+my_floor (double x)
+{
+  return floor (x);
+}
+static inline float
+my_floor (float x)
+{
+  return floorf (x);
 }
 
 typedef double coord_t;
@@ -185,5 +198,6 @@ static inline int64_t
 nearest_int (double x)
 {
   return round (x);
+}
 }
 #endif

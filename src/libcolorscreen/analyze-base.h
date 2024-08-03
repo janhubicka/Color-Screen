@@ -6,6 +6,7 @@
 #include "render-to-scr.h"
 #include "screen.h"
 #include "bitmap.h"
+namespace colorscreen {
 class analyze_base
 {
 protected:
@@ -483,5 +484,6 @@ analyze_base_worker<GEOMETRY>::bicubic_interpolate (point_t scr, rgbdata patch_p
     return bicubic_bw_interpolate (scr);
   else
     return bicubic_rgb_interpolate (scr, patch_proportions);
+}
 }
 #endif

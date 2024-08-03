@@ -8,7 +8,8 @@
 #include "include/stitch.h"
 #include "include/finetune.h"
 #include "render-interpolate.h"
-
+namespace colorscreen
+{
 namespace {
 
 struct analyzer_params
@@ -600,4 +601,5 @@ dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param, r
   if (!render.precompute_all (progress))
     return false;
   return render.dump_patch_density (out);
+}
 }

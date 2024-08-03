@@ -1,6 +1,8 @@
 #ifndef MEM_LUMINOSITY_H
 #define MEM_LUMINOSITY_H
 #include "config.h"
+namespace colorscreen
+{
 #ifndef COLORSCREEN_16BIT_FLOAT
 typedef float mem_luminosity_t;
 #else
@@ -72,5 +74,6 @@ struct mem_rgbdata
 inline rgbdata::rgbdata (mem_rgbdata color)
 : red (color.red), green (color.green), blue (color.blue)
 {
+}
 }
 #endif

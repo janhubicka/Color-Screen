@@ -1,6 +1,8 @@
 #include "include/mesh.h"
 #include "lru-cache.h"
 #include "loadsave.h"
+namespace colorscreen
+{
 mesh::mesh (coord_t xshift, coord_t yshift, coord_t xstep, coord_t ystep,
             int width, int height)
     : id (lru_caches::get ()), m_data (NULL), m_invdata (NULL),
@@ -404,4 +406,5 @@ mesh::need_to_grow_bottom (int width, int height) const
     if (entry_useful_p ({x, yo}, 0, width - 1, 0, height - 1))
       return true;
   return false;
+}
 }

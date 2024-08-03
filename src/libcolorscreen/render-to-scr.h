@@ -4,6 +4,8 @@
 #include "include/scr-to-img.h"
 #include "render.h"
 
+namespace colorscreen
+{
 class screen;
 struct render_to_file_params;
 
@@ -207,5 +209,5 @@ render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
 
 struct scr_detect_parameters;
 struct solver_parameters;
-
+}
 #endif

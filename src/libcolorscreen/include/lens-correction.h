@@ -5,6 +5,9 @@
 #include "progress-info.h"
 #include "lens-warp-correction-parameters.h"
 
+namespace colorscreen
+{
+
 struct lens_warp_correction
 {
   static constexpr const bool debug = colorscreen_checking;
@@ -91,4 +94,5 @@ private:
   // coord_t m_max;
   bool m_noop;
 };
+}
 #endif

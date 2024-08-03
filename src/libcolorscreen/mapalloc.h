@@ -8,7 +8,8 @@
 #endif
 
 #define _MAPALLOC_
-
+namespace colorscreen
+{
 class MapAlloc {
 private:
 	MapAlloc();
@@ -52,3 +53,4 @@ public:
 	static bool LastFile() { return objects.back()->IsFile(); }
 //	static bool last_mapped;
 };
+}

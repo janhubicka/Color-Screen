@@ -2,7 +2,8 @@
 #include "analyze-paget.h"
 #include "screen.h"
 #include "include/tiff-writer.h"
-
+namespace colorscreen
+{
 /* For stitching we need to write screen with 2 pixels per repetition of screen pattern.  */
 bool
 analyze_paget::write_screen (const char *filename, bitmap_2d *known_pixels, const char **error, progress_info *progress, luminosity_t rmin, luminosity_t rmax, luminosity_t gmin, luminosity_t gmax, luminosity_t bmin, luminosity_t bmax)
@@ -121,4 +122,5 @@ analyze_paget::dump_patch_density (FILE *out)
       fprintf (out, "\n");
     }
   return true;
+}
 }

@@ -11,6 +11,8 @@
 #include "render-to-scr.h"
 #include "analyze-base.h"
 #include "loadsave.h"
+namespace colorscreen
+{
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     common_scr_to_img (), dparam (), solver_param (),
@@ -1563,4 +1565,5 @@ stitch_project::stitch (progress_info *progress, const char *load_project_filena
   if (report_file)
     fclose (report_file);
   return true;
+}
 }

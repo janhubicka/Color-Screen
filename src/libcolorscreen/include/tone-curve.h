@@ -5,6 +5,8 @@
 #include "color.h"
 #include "spectrum-to-xyz.h"
 #include "dllpublic.h"
+namespace colorscreen
+{
 
 /* Implement DNG-style tone curve.  */
 class tone_curve:public precomputed_function <luminosity_t>
@@ -97,4 +99,5 @@ private:
   bool m_linear;
   void init_by_sensitivity (enum spectrum_dyes_to_xyz::characteristic_curves curve);
 };
+}
 #endif

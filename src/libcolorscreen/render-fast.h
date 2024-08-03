@@ -1,6 +1,8 @@
 #ifndef RENDERFAST_H
 #define RENDERFAST_H
 #include "render-to-scr.h"
+namespace colorscreen
+{
 class render_fast : public render_to_scr
 {
 public:
@@ -47,4 +49,5 @@ private:
   pure_attr 
   rgbdata sample_pixel (int x, int y, coord_t zx, coord_t zy);
 };
+}
 #endif

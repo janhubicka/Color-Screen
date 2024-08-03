@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "include/precomputed-function.h"
-
+namespace colorscreen
+{
 /* Cubic spline implementation.  Based on numerical recipes in C. */
 
 template<typename T>class spline
@@ -125,4 +126,5 @@ private:
   T *m_x, *m_y, *m_y2;
   int m_n;
 };
+}
 #endif

@@ -10,6 +10,8 @@
 #include "render.h"
 #include "icc.h"
 #include "render-interpolate.h"
+namespace colorscreen
+{
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
@@ -1135,4 +1137,5 @@ render_parameters::get_gray_range (int *min, int *max, int maxval)
 	      * maxval)
 	     - 0.5;
     }
+}
 }

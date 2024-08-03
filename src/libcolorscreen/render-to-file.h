@@ -1,7 +1,9 @@
 #include <atomic>
 #include "include/tiff-writer.h"
-
-namespace {
+namespace colorscreen
+{
+namespace
+{
 
 
 template<typename T>
@@ -278,5 +280,5 @@ produce_file (render_to_file_params &rfparams,
   // TODO: For HDR output we want to linearize the ICC profile.
   return produce_file<T, sample_data_final, sample_data_scr> (rfparams, sparam, img, render, black, progress);
 }
-
+}
 }

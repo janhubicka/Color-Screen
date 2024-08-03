@@ -3,8 +3,8 @@
 #include "include/tiff-writer.h"
 #include "render-to-scr.h"
 #include "analyze-base.h"
-
-
+namespace colorscreen
+{
 static void
 add(unsigned char ov[256][256][3], int c, double x, double y)
 {
@@ -870,4 +870,5 @@ analyze_base::analyze_range (luminosity_t *rrmin, luminosity_t *rrmax, luminosit
    *rbmin = bmin;
    *rbmax = bmax;
 #endif
+}
 }

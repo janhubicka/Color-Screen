@@ -3,6 +3,8 @@
 #include "base.h"
 #include "color.h"
 #include "dllpublic.h"
+namespace colorscreen
+{
 
 /* Class expressing all knowledge on dufaycolor we have so far.  */
 class dufaycolor
@@ -259,4 +261,5 @@ struct dufay_geometry
 };
 
 void report_illuminant (class spectrum_dyes_to_xyz &spec, const char *name, const char *filename, const char *filename2 = NULL);
+}
 #endif

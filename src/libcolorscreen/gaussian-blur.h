@@ -1,6 +1,8 @@
 #ifndef GAUSIAN_BLUR_H
 #define GAUSIAN_BLUR_H
 #include <functional>
+namespace colorscreen
+{
 
 #define BLUR_EPSILON 0.000001
 #ifndef M_PI
@@ -110,5 +112,5 @@ private:
 	      exp (-(x * x) / (2.0 * sigma * sigma));
     }
 };
-
+}
 #endif

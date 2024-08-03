@@ -1,5 +1,7 @@
 #include "patches.h"
 #include "render-scr-detect.h"
+namespace colorscreen
+{
 
 patches::patches (const image_data &img, render &render, color_class_map &color_map, int max_patch_size, progress_info *progress)
  : m_width (img.width), m_height (img.height)
@@ -169,4 +171,5 @@ patches::fast_nearest_patches (int x, int y, patch_index_t *rx, patch_index_t *r
 patches::~patches ()
 {
   free (m_map);
+}
 }

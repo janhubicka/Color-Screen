@@ -9,6 +9,8 @@
 #include <vector>
 #include "dllpublic.h"
 
+namespace colorscreen
+{
 /* Class to communicate progress info from rendering kernels.  It can also be
    used to cancel computation in the middle.  */
 class progress_info
@@ -155,4 +157,5 @@ private:
   std::vector<status> m_last_status;
   bool m_initialized;
 };
+}
 #endif

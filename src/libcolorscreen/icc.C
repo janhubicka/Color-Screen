@@ -1,7 +1,8 @@
 #include <lcms2.h>
 #include "icc.h"
 #include "include/color.h"
-
+namespace colorscreen
+{
 static const cmsCIEXYZ d65 = {0.95045471, 1.00000000, 1.08905029};
 //D65 (sRGB, AdobeRGB, Rec2020)
 static const cmsCIExyY D65xyY = {0.312700492, 0.329000939, 1.0};
@@ -110,4 +111,5 @@ size_t
 create_linear_srgb_profile (void **buffer, xyz whitepoint)
 {
   return create_profile ("Colorscreen linear sRGB", {0.4124564, 0.2126729, 0.0193339}, {0.3575761, 0.7151522, 0.1191920}, {0.1804375, 0.0721750, 0.9503041}, whitepoint, 1, buffer);
+}
 }

@@ -5,7 +5,8 @@
 #include "solver-parameters.h"
 #include "paget.h"
 #include "progress-info.h"
-
+namespace colorscreen
+{
 class scr_to_img;
 class image_data;
 class screen_map
@@ -143,4 +144,5 @@ private:
 mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data,
                    solver_parameters &sparam2, screen_map &smap,
                    progress_info *progress);
+}
 #endif

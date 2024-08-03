@@ -1,4 +1,6 @@
 #include <include/sensitivity.h>
+namespace colorscreen
+{
 struct hd_curve film_sensitivity::ilfrod_galerie_FB1
 {
   (luminosity_t[]){1.493581907, 1.576100244, 1.661369193, 1.754889976, 1.878667482, 1.994193154, 2.159229829, 2.269254279, 2.503056235, 2.640586797, 2.758863081, 2.849633252, 2.9349022, 3.006418093, 3.099938875, 3.215464548, 3.319987775, 3.50702934},
@@ -62,3 +64,4 @@ struct synthetic_hd_curve_parameters safe_reversal_output_curve_params = {0, 1,
 									  0, 1,
 									  0.7, 0.3,
 									  3, 0};
+}

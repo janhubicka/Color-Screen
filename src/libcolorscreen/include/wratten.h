@@ -3,6 +3,8 @@
 #include "base.h"
 #include "color.h"
 #include "dllpublic.h"
+namespace colorscreen
+{
 class wratten
 {
 public:
@@ -25,4 +27,5 @@ public:
   DLL_PUBLIC static void print_xyz_report ();
   DLL_PUBLIC static void print_spectra_report ();
 };
+}
 #endif

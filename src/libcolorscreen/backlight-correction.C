@@ -3,6 +3,8 @@
 #include "backlight-correction.h"
 #include "loadsave.h"
 #include "lru-cache.h"
+namespace colorscreen
+{
 bool
 backlight_correction_parameters::alloc (int width, int height, bool enabled[4])
 {
@@ -328,4 +330,5 @@ backlight_correction::backlight_correction (
         else
           m_weights[x].mult[i] = correct[i];
       }
+}
 }

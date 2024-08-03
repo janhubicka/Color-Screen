@@ -7,6 +7,8 @@
 #include "include/base.h"
 #include "include/imagedata.h"
 #include "include/backlight-correction-parameters.h"
+namespace colorscreen
+{
 struct memory_buffer 
 {
   void *data;
@@ -69,5 +71,5 @@ private:
   coord_t m_img_height_rec;
   entry *m_weights;
 };
-
+}
 #endif

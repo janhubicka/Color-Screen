@@ -8,7 +8,8 @@
 #include "gaussian-blur.h"
 #include "sharpen.h"
 #include "mapalloc.h"
-
+namespace colorscreen
+{
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
 
@@ -634,4 +635,5 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx, 
 	    n++;
 	  }
    return n ? color / n : color;
+}
 }

@@ -2,6 +2,8 @@
 #define SENSITIVITY_H
 #include "dllpublic.h"
 #include "color.h"
+namespace colorscreen
+{
 /* Hurter–Driffield characteristic curve based on data points
    with simple linear interpolation.  */
 struct hd_curve
@@ -232,4 +234,5 @@ private:
 
   luminosity_t Dfog, Dmax, mid;
 };
+}
 #endif

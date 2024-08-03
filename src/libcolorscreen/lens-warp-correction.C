@@ -1,6 +1,9 @@
 #include "include/lens-correction.h"
 #include "lru-cache.h"
-namespace {
+namespace colorscreen
+{
+namespace
+{
 struct lens_inverse_parameters
 {
   lens_warp_correction_parameters param;
@@ -101,4 +104,5 @@ lens_warp_correction::~lens_warp_correction ()
 {
   if (m_inverted_ratio)
     lens_inverse_cache.release (m_inverted_ratio);
+}
 }

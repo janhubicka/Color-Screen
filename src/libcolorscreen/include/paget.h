@@ -1,6 +1,8 @@
 #ifndef PAGET_H
 #define PAGET_H
 #include "base.h"
+namespace colorscreen
+{
 struct paget_geometry
 {
   static constexpr const int red_width_scale = 1;
@@ -177,4 +179,5 @@ struct paget_geometry
     return {e.x * (coord_t)0.5 + (coord_t)0.25, e.y * (coord_t)0.5 + (coord_t)0.25};
   }
 };
+}
 #endif

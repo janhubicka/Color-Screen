@@ -1,5 +1,8 @@
 /* Based on nmsimplex.c by Michael F. Hutt used by dcamprof.  */
 
+namespace colorscreen
+{
+
 /* If progress_report is false, do not report progress about solving, but still honor cancel.
    This is useful when running multiple solvers in parallel.  */
 template<typename T,typename C>
@@ -334,4 +337,5 @@ simplex (C &c, const char *task = NULL, progress_info *progress = NULL, bool pro
     }
   free (v);
   return min;
+}
 }

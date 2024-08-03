@@ -1,6 +1,8 @@
 #ifndef SHAPREN_H
 #define SHAPREN_H
 #include "gaussian-blur.h"
+namespace colorscreen
+{
 
 /* Kernel for "sharpening" with with either radius or amount being zero.
    Flattened so avoid doing unnecesary stuff.  */
@@ -167,5 +169,6 @@ sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius,
   if (progress && progress->cancelled ())
     return false;
   return true;
+}
 }
 #endif

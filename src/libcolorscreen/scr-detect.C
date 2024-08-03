@@ -1,7 +1,8 @@
 #include <cassert>
 #include "scr-detect.h"
 #include "render.h"
-
+namespace colorscreen
+{
 void
 scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval)
 {
@@ -60,4 +61,5 @@ scr_detect::~scr_detect ()
 {
   if (lookup_table)
     render::release_lookup_table (lookup_table);
+}
 }

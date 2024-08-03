@@ -3,6 +3,8 @@
 #include "include/color.h"
 #include "include/spectrum-to-xyz.h"
 
+namespace colorscreen
+{
 #define XSPECT_MAX_BANDS 77		/* Enough for 5nm from 380 to 760 */
 #define CLAMP -65535
 typedef struct {
@@ -36,4 +38,5 @@ void log_sensitivity_to_reversal_transmitance(spectrum response);
 void log2_sensitivity_to_reversal_transmitance(spectrum response);
 void set_illuminant_to (spectrum backlight, enum spectrum_dyes_to_xyz::illuminants il, luminosity_t temperature = 5400);
 void set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type);
+}
 #endif

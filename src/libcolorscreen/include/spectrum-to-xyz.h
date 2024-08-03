@@ -4,6 +4,9 @@
 #include "color.h"
 #include "sensitivity.h"
 
+namespace colorscreen
+{
+
 #define SPECTRUM_START 380
 #define SPECTRUM_STEP  5
 #define SPECTRUM_END   780
@@ -406,5 +409,5 @@ color_matrix dufaycolor_correction_photography_its_materials_and_processes_matri
 color_matrix dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, luminosity_t backlight_temeperature, progress_info *progress = NULL);
 bool tiff_with_strips (const char *filename, xyz filter_red, xyz filter_green, xyz filter_blue, xyz background, xyz white);
 bool write_optimal_response (color_matrix m, const char *redname, const char *greenname, const char *bluename, luminosity_t rw, luminosity_t gw, luminosity_t bw);
-
+}
 #endif

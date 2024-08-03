@@ -2,6 +2,8 @@
 #define BACKLIGHT_CORRECTION_PARAMETERS_H
 #include "base.h"
 #include "color.h"
+namespace colorscreen
+{
 class backlight_correction;
 class image_data;
 class memory_buffer;
@@ -64,4 +66,5 @@ private:
   entry *m_luminosities;
   bool m_channel_enabled[4];
 };
+}
 #endif

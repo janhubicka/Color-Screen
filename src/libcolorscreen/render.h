@@ -19,7 +19,8 @@
 #include "include/stitch.h"
 #include "backlight-correction.h"
 #include "mem-luminosity.h"
-
+namespace colorscreen
+{
 /* Helper for downscaling template for color rendering
    data += lum * scale.  */
 inline void
@@ -828,5 +829,5 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   free (weights);
   return !progress || !progress->cancelled ();
 }
-
+}
 #endif

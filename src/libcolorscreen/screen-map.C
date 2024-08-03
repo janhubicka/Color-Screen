@@ -1,7 +1,8 @@
 #include <tiffio.h>
 #include "include/screen-map.h"
 #include "include/scr-to-img.h"
-
+namespace colorscreen
+{
 screen_map::screen_map (enum scr_type type1, int xshift1, int yshift1,
                         int width1, int height1)
     : type (type1), width (width1), height (height1), xshift (xshift1),
@@ -360,4 +361,5 @@ screen_map::write_outliers_info (const char *filename, int imgwidth,
   free (info);
   TIFFClose (out);
   return true;
+}
 }

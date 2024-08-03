@@ -9,7 +9,8 @@
 #include "icc.h"
 #include "spectrum.h"
 #include "spectrum-dyes.h"
-
+namespace colorscreen
+{
 constexpr const char *spectrum_dyes_to_xyz::dyes_names[spectrum_dyes_to_xyz::dyes_max];
 constexpr const char *spectrum_dyes_to_xyz::illuminants_names[spectrum_dyes_to_xyz::illuminants_max];
 constexpr const char *spectrum_dyes_to_xyz::responses_names[spectrum_dyes_to_xyz::responses_max];
@@ -5066,4 +5067,5 @@ spectrum_dyes_to_xyz::set_characteristic_curve (enum characteristic_curves curve
   default:
     abort ();
   }
+}
 }

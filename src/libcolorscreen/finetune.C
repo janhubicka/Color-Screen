@@ -12,8 +12,10 @@
 #include "nmsimplex.h"
 #include "bitmap.h"
 #include "icc.h"
-
-namespace {
+namespace colorscreen
+{
+namespace
+{
 
 static coord_t
 sign (point_t p1, point_t p2, point_t p3)
@@ -2397,4 +2399,5 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
   ret_blue->print (stdout);
 #endif
   return true;
+}
 }

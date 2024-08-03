@@ -4,6 +4,8 @@
 #include "icc.h"
 #include "screen.h"
 #include "lru-cache.h"
+namespace colorscreen
+{
 constexpr xyY dufaycolor::red_dye;
 constexpr xyY dufaycolor::green_dye;
 constexpr xyY dufaycolor::blue_dye;
@@ -648,4 +650,5 @@ dufaycolor_correction_collins_and_giles_matrix (luminosity_t temperature, lumino
   color_matrix ret = *m;
   color_matrix_cache.release (m);
   return ret;
+}
 }

@@ -10,7 +10,8 @@
 #include "mesh.h"
 #include "lens-correction.h"
 #include "scr-to-img-parameters.h"
-
+namespace colorscreen
+{
 typedef matrix4x4<coord_t> trans_4d_matrix;
 typedef matrix3x3<coord_t> trans_3d_matrix;
 typedef matrix2x2<coord_t> trans_2d_matrix;
@@ -179,7 +180,7 @@ public:
   pure_attr rgbdata
   patch_proportions (const render_parameters *rparam) const
   {
-    return ::patch_proportions (m_param.type, rparam);
+    return colorscreen::patch_proportions (m_param.type, rparam);
   }
   pure_attr coord_t
   pixel_size (int img_width, int img_height) const
@@ -243,4 +244,5 @@ private:
   static const bool debug = colorscreen_checking;
   void initialize ();
 };
+}
 #endif

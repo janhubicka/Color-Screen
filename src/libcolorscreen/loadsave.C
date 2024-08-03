@@ -3,6 +3,8 @@
 #include "include/mesh.h"
 #include "loadsave.h"
 #define HEADER "screen_alignment_version: 1"
+namespace colorscreen
+{
 
 const char * const scr_names[max_scr_type] =
 {
@@ -1065,4 +1067,5 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   if (rparam && gray_min >=0)
     rparam->set_gray_range (gray_min, gray_max, 65535);
   return true;
+}
 }

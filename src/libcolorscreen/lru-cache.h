@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <atomic>
 #include <include/progress-info.h>
+namespace colorscreen
+{
 class lru_caches
 {
 public:
@@ -371,5 +373,5 @@ increase_lru_cache_sizes_for_stitch_projects (int n)
    render_increase_lru_cache_sizes_for_stitch_projects (n);
    render_interpolated_increase_lru_cache_sizes_for_stitch_projects (n);
 }
-
+}
 #endif

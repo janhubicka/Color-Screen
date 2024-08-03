@@ -5,6 +5,8 @@
 #include "base.h"
 #include "color.h"
 #include "scr-to-img-parameters.h"
+namespace colorscreen
+{
 struct solver_parameters
 {
   DLL_PUBLIC_EXP
@@ -52,7 +54,7 @@ struct solver_parameters
   bool weighted;
   point_t center;
 
-  size_t
+  int
   n_points ()
   {
     return points.size ();
@@ -98,4 +100,5 @@ struct solver_parameters
   /* Names of colors in enum point_color.  */
   DLL_PUBLIC static const char * const point_color_names[(int)max_point_color];
 };
+}
 #endif

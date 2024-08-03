@@ -7,6 +7,8 @@
 #include "screen.h"
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
+namespace colorscreen
+{
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
 typedef std::function <bool (coord_t, coord_t, rgbdata, rgbdata, rgbdata)> rgb_analyzer;
 class render_interpolate : public render_to_scr
@@ -90,4 +92,5 @@ private:
 };
 bool analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 bool analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
+}
 #endif

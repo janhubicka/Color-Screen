@@ -3,7 +3,8 @@
 #include "include/dufaycolor.h"
 #include "render-to-scr.h"
 #include "analyze-base.h"
-
+namespace colorscreen
+{
 
 template class analyze_base_worker <dufay_geometry>;
 
@@ -23,4 +24,5 @@ public:
   luminosity_t compare_contrast (analyze_dufay &other, int xpos, int ypos, int *x1, int *y1, int *x2, int *y2, scr_to_img &map, scr_to_img &other_map, progress_info *progress);
 private:
 };
+}
 #endif

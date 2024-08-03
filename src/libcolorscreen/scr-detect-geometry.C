@@ -8,7 +8,8 @@
 #include "bitmap.h"
 #include "analyze-paget.h"
 #include "render-scr-detect.h"
-
+namespace colorscreen
+{
 extern void prune_render_scr_detect_caches ();
 namespace
 {
@@ -1857,4 +1858,5 @@ detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameter
   detected_screen ret = detect_regular_screen_1 (img, type, dparam, gamma, sparam, dsparams, progress, report_file);
   prune_render_scr_detect_caches ();
   return ret;
+}
 }

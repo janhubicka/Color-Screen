@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include "base.h"
 
+namespace colorscreen
+{
 
 /* Square matrix template.  */
 template <typename T, size_t dim>
@@ -390,4 +392,5 @@ public:
    return ret;
   }
 };
+}
 #endif

@@ -4,6 +4,8 @@
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
+namespace colorscreen
+{
 
 class image_data_loader;
 class stitch_project;
@@ -77,4 +79,5 @@ private:
 
   bool parse_icc_profile();
 };
+}
 #endif

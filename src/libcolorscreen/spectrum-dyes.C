@@ -1,5 +1,7 @@
 #include "include/spectrum-to-xyz.h"
 #include "spectrum.h"
+namespace colorscreen
+{
 namespace {
 // transmitance charts with iregular step
 const static spectra_entry autochrome_violet[] = {
@@ -4073,4 +4075,5 @@ set_dyes_to (spectrum red, spectrum green, spectrum blue, spectrum cyan, spectru
 	abort ();
     }
   return false;
+}
 }

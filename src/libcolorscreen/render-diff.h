@@ -1,6 +1,8 @@
 #ifndef RENDER_DIFF_H
 #define RENDER_DIFF_H
 #include "render-interpolate.h"
+namespace colorscreen
+{
 class render_diff : public render_to_scr
 {
 public:
@@ -65,4 +67,5 @@ private:
   render_interpolate r1;
   render_interpolate r2;
 };
+}
 #endif

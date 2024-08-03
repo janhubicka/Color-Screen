@@ -1,5 +1,7 @@
 #ifndef BITMAP_H
 #define BITMAP_H
+namespace colorscreen
+{
 /* Constanly sized bitmap datastructure.  */
 class bitmap
 {
@@ -127,4 +129,5 @@ public:
   }
   int width, height;
 };
+}
 #endif

@@ -1,4 +1,5 @@
 #include "analyze-base.h"
+namespace colorscreen {
 /* Collect luminosity of individual color patches.  */
 template <typename GEOMETRY>
 bool
@@ -876,4 +877,5 @@ analyze_base_worker<GEOMETRY>::analyze (
       ok = analyze_fast (render, progress);
     }
   return ok && (!progress || !progress->cancelled ());
+}
 }

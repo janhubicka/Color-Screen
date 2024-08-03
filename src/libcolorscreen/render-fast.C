@@ -1,6 +1,7 @@
 #include "include/colorscreen.h"
 #include "render-fast.h"
-
+namespace colorscreen
+{
 render_fast::render_fast (scr_to_img_parameters &param, image_data &img, render_parameters &params, int dst_maxval)
  : render_to_scr (param, img, params, dst_maxval)
 {
@@ -68,4 +69,5 @@ render_preview (image_data &scan, scr_to_img_parameters &param, render_parameter
 	*(pixels + y * rowstride + x * 3 + 2) = blue;
       }
   return true;
+}
 }

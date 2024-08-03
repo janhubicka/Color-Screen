@@ -5,17 +5,8 @@
 #include <algorithm>
 #include "base.h"
 
-static inline double
-my_floor (double x)
+namespace colorscreen
 {
-  return floor (x);
-}
-static inline float
-my_floor (float x)
-{
-  return floorf (x);
-}
-
 /* Lookup table defined 1d function.  */
 
 template <typename T> class precomputed_function
@@ -222,4 +213,5 @@ private:
   bool increasing;
   static const bool debug = colorscreen_checking;
 };
+}
 #endif

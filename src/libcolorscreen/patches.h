@@ -6,6 +6,8 @@
 #include "scr-detect.h"
 #include "render.h"
 
+namespace colorscreen
+{
 class patches
 {
   public:
@@ -59,4 +61,5 @@ private:
     patch_index_t *m_map;
     static const bool debug = false;
 };
+}
 #endif

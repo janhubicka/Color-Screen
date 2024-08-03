@@ -5,6 +5,8 @@
 #include "base.h"
 #include "matrix.h"
 
+namespace colorscreen
+{
 typedef double luminosity_t;
 
 inline luminosity_t
@@ -677,8 +679,6 @@ static const xyz d55_white (0.9568, 1.0000, 0.9214);
 static const xyz d65_white (0.9504, 1.0000, 1.088);
 static const xyz il_A_white (1.0985, 1.0000, 0.3558);
 static const xyz il_C_white (0.9807, 1.0000, 1.1822);
-//static const xyz netural_white = xyY (0.33,0.33, 1);     // neutral white
-//static const xyz il_A_white = xyY (0.44757, 0.40745, 1); // Illuminant B white
 static const xyz il_B_white = xyY (0.34842, 0.35161, 1); // Illuminant B white
-//static const xyz il_C_white = xyY (0.31006, 0.31616, 1); // Illuminant C white
+}
 #endif

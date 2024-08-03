@@ -4,7 +4,8 @@
 #include "base.h"
 #include "dllpublic.h"
 #include "lens-warp-correction-parameters.h"
-
+namespace colorscreen
+{
 class mesh;
 
 /* Windows does not seem to define this by default.  */
@@ -264,4 +265,5 @@ struct scr_to_img_parameters
     return acos (dot / (get_xlen () * get_ylen ())) * (180 / M_PI);
   }
 };
+}
 #endif

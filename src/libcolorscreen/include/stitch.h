@@ -8,6 +8,8 @@
 #include "colorscreen.h"
 struct tiff;
 typedef struct tiff TIFF;
+
+namespace colorscreen {
 class screen;
 
 struct stitching_params
@@ -381,5 +383,6 @@ analyze_base &
 stitch_image::get_analyzer ()
 {
   return *analyzer;
+}
 }
 #endif

@@ -4,7 +4,7 @@
 #include "base.h"
 #include "color.h"
 #include "dllpublic.h"
-
+namespace colorscreen {
 class progress_info;
 
 inline uint16_t
@@ -66,7 +66,7 @@ struct tiff_writer_params
   /* True if we xoffset and yoffset should be stored in file.  */
   bool tile;
   /* ICC profile.  NULL will lead to embedding sRGB.  */
-  void *icc_profile;
+  const void *icc_profile;
   size_t icc_profile_len;
   /* Offset of the tile.  */
   int xoffset, yoffset;
@@ -285,4 +285,5 @@ private:
   int bytestride;
   int height;
 };
+}
 #endif

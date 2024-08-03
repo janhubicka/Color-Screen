@@ -5,6 +5,8 @@
 #include <cstring>
 #include <cstdlib>
 #include "include/progress-info.h"
+namespace colorscreen
+{
 progress_info::progress_info ()
 : m_record_time (false), m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
 {
@@ -383,4 +385,5 @@ file_progress_info::pop (int expected)
   progress_info::pop ();
   if (paused)
     resume_stdout ();
+}
 }

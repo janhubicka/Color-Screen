@@ -7,6 +7,8 @@
 #include "render-interpolate.h"
 #include "gsl-utils.h"
 #include "nmsimplex.h"
+namespace colorscreen
+{
 
 #define C(i) (gsl_vector_get(c,(i)))
 
@@ -503,4 +505,5 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
        return true;
      }
    return false;
+}
 }

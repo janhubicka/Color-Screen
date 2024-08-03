@@ -3,6 +3,8 @@
 #include "base.h"
 #include "color.h"
 #include <string>
+namespace colorscreen
+{
 class screen;
 class render_parameters;
 class scr_to_img_parameters;
@@ -97,4 +99,5 @@ bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green,
                            rgbdata *ret_blue, screen &scr,
                            luminosity_t threshold, scr_to_img &map, int xmin,
                            int ymin, int xmax, int ymax);
+}
 #endif

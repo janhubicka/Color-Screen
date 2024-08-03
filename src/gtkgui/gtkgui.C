@@ -18,6 +18,8 @@
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
 
+using namespace colorscreen;
+
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
 

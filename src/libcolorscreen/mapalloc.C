@@ -17,7 +17,8 @@
 #endif
 
 #include "include/base.h"
-
+namespace colorscreen
+{
 static const bool debug = false;
 static bool destroyed = false;
 
@@ -212,4 +213,5 @@ MapAlloc::~MapAlloc ()
 	if (colorscreen_checking)
 	  for (auto it = objects.begin(); it < objects.end(); ++it) 
 	    printf ("Mapallocated %li bytes during global destruction\n", (long)(*it)->GetSize());
+}
 }

@@ -1,5 +1,7 @@
 #ifndef DETECT_REGULAR_SCREEN_PARAMETERS_H
 #define DETECT_REGULAR_SCREEN_PARAMETERS_H
+namespace colorscreen
+{
 class bitmap_2d;
 /* Parameters for reglar screen detection.  */
 struct detect_regular_screen_params
@@ -48,4 +50,5 @@ struct detected_screen
 
   class screen_map *smap;
 };
+}
 #endif

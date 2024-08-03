@@ -4,7 +4,8 @@
 #include <assert.h>
 #include "include/color.h"
 #include "include/mesh.h"
-
+namespace colorscreen
+{
 namespace {
 void
 test_matrix ()
@@ -71,13 +72,14 @@ test_color ()
   assert (fabs (r - 0.4174) < 0.0001 && fabs (g - 0.7434) < 0.0001 && fabs (b - 0.2152) < 1.0888);
 }
 }
+}
 int
 main()
 {
   printf ("1..2\n");
-  test_matrix ();
+  colorscreen::test_matrix ();
   printf ("ok 1 - matrix tests\n");
-  test_color ();
+  colorscreen::test_color ();
   printf ("ok 2 - color tests\n");
   return 0;
 }

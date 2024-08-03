@@ -2,7 +2,10 @@
 #include "include/base.h"
 #include "include/spectrum-to-xyz.h"
 #include "spectrum.h"
-namespace{
+namespace colorscreen
+{
+namespace
+{
 /* from Argyll 107 bands from 300 to 830 nm in 5nm steps
    CIE 15.2-1986 Table 1.1
    Part 1: CIE Standard Illuminant A relative spectral power distribution
@@ -1031,4 +1034,5 @@ set_illuminant_to (spectrum backlight, spectrum_dyes_to_xyz::illuminants il, lum
       break;
     default: abort ();
   }
+}
 }

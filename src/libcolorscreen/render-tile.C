@@ -10,7 +10,8 @@
 #endif
 #include "render-fast.h"
 #include "render-scr-detect.h"
-
+namespace colorscreen
+{
 static void
 sanitize_render_parameters (render_type_parameters &rtparam, scr_to_img_parameters &param, image_data &img)
 {
@@ -226,4 +227,5 @@ render_tile(image_data &scan, scr_to_img_parameters &param, scr_detect_parameter
     return render_scr_detect::render_tile (rtparam, dparam, scan, rparam,
 					   tile.pixels, tile.pixelbytes, tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y, tile.step, progress);
 
+}
 }

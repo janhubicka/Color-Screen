@@ -1,5 +1,7 @@
 #include "spectrum.h"
 #include "render.h"
+namespace colorscreen
+{
 /* Output gnuplottable data.  */
 void
 print_transmitance_spectrum (FILE * out, const spectrum spec, int start, int end)
@@ -171,4 +173,5 @@ log2_sensitivity_to_reversal_transmitance(spectrum response)
     else
       response[i]=0;
   }
+}
 }

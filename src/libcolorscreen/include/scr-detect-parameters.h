@@ -3,6 +3,8 @@
 #include "dllpublic.h"
 #include "color.h"
 #include "base.h"
+namespace colorscreen
+{
 struct scr_detect_parameters
 {
   scr_detect_parameters ()
@@ -37,4 +39,5 @@ struct scr_detect_parameters
     return !(*this == other);
   }
 };
+}
 #endif

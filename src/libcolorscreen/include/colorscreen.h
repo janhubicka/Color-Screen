@@ -5,7 +5,8 @@
 #include "solver-parameters.h"
 #include "detect-regular-screen-parameters.h"
 #include "scr-detect-parameters.h"
-
+namespace colorscreen
+{
 class scr_to_img;
 
 struct render_to_file_params
@@ -16,7 +17,7 @@ struct render_to_file_params
   bool hdr;
   bool dng;
   coord_t scale;
-  void *icc_profile;
+  const void *icc_profile;
   int icc_profile_len;
   int antialias;
   coord_t xdpi, ydpi;
@@ -132,4 +133,5 @@ DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
                                              std::vector<point_t> &points,
                                              std::vector<color_match> *report,
                                              progress_info *progress);
+}
 #endif

@@ -10,8 +10,10 @@
 #include "analyze-paget.h"
 #include "render-interpolate.h"
 #include "loadsave.h"
-extern unsigned char sRGB_icc[];
-extern unsigned int sRGB_icc_len;
+extern const unsigned char sRGB_icc[];
+extern const unsigned int sRGB_icc_len;
+namespace colorscreen
+{
 uint64_t stitch_image::current_time;
 int stitch_image::nloaded;
 
@@ -1403,4 +1405,5 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
        delete render1;
      }
    return samples;
+}
 }

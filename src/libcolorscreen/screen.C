@@ -8,7 +8,8 @@
 #include "dj_fft.h"
 #include "spline.h"
 #include "icc.h"
-
+namespace colorscreen
+{
 /* Produce empty screen.  */
 void
 screen::empty ()
@@ -1038,4 +1039,5 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
   precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
   screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
 #endif
+}
 }

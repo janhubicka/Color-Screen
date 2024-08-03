@@ -4,7 +4,10 @@
 #include <mutex>
 #include "include/colorscreen.h"
 #include "include/stitch.h"
-namespace {
+namespace colorscreen
+{
+namespace
+{
 
 static int stats = -1;
 std::mutex global_rendering_lock;
@@ -489,5 +492,6 @@ bool do_render_tile_img(render_type_parameters &rtparam,
     return render_img_downscale<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
   else
     return render_img_normal<T> (rtparam, param, img, rparam, pixels, pixelbytes, rowstride, width, height, xoffset, yoffset, step, progress);
+}
 }
 }

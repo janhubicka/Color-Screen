@@ -1,6 +1,9 @@
 #include "include/spectrum-to-xyz.h"
 #include "spectrum.h"
-namespace {
+namespace colorscreen
+{
+namespace
+{
 #if 0
 /* Absolutes spectral sensitivity of panchromatic emulsion. log.  */
 const static spectra_entry absolute_panchromatic[] = {
@@ -1745,4 +1748,5 @@ set_response (spectrum film_response, spectrum_dyes_to_xyz::responses type)
     break;
   default: abort ();
   }
+}
 }

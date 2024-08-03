@@ -9,6 +9,8 @@
 #include "gsl-utils.h"
 #include "sharpen.h"
 #include "nmsimplex.h"
+namespace colorscreen
+{
 namespace {
 
 /* Helper for sharpening part of the scan.  */
@@ -449,4 +451,5 @@ optimize_screen_colors (scr_detect_parameters *param,
     }
   if (report)
     fflush (report);
+}
 }

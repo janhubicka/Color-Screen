@@ -1,6 +1,8 @@
 #ifndef LENS_WARP_CORRECTION_PARAMETERS_H
 #define LENS_WARP_CORRECTION_PARAMETERS_H
 #include "base.h"
+namespace colorscreen
+{
 struct lens_warp_correction_parameters
 {
   /* Radial correction coefficients, same as in the DNG specs.  */
@@ -73,4 +75,5 @@ struct lens_warp_correction_parameters
       abort ();
   }
 };
+}
 #endif

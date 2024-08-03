@@ -4,6 +4,8 @@
 #include "scr-detect.h"
 #include "render.h"
 #include "patches.h"
+namespace colorscreen
+{
 struct render_to_file_params;
 class render_scr_detect : public render
 {
@@ -609,4 +611,5 @@ public:
 private:
   patches *m_patches;
 };
+}
 #endif

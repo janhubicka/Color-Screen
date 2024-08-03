@@ -1,6 +1,8 @@
 #ifndef HISTOGRAM_H
 #define HISTOGRAM_H
 #include <limits>
+namespace colorscreen
+{
 
 /* Basic datastructure for value histograms.  */
 class histogram
@@ -253,4 +255,5 @@ public:
 private:
   histogram m_histogram[3];
 };
+}
 #endif

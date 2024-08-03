@@ -8,6 +8,8 @@
 #include "include/screen-map.h"
 #include "solver.h"
 #include "nmsimplex.h"
+namespace colorscreen
+{
 
 const char * const solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
@@ -1549,4 +1551,4 @@ print_system (FILE *f, const gsl_matrix *m, gsl_vector *v, gsl_vector *w, gsl_ve
 
   return n;
 }
-
+}
