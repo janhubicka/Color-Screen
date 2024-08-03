@@ -1298,7 +1298,6 @@ digital_laboratory (int argc, char **argv)
 #endif
         }
 #endif
-      fclose (f);
     }
   else if (!strcmp (argv[0], "scan-primaries"))
     {
@@ -1973,7 +1972,7 @@ dump_patch_density (int argc, char **argv)
   if (!dump_patch_density (out, scan, param, rparam, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Saving failed\n", argv[1], error);
+      fprintf (stderr, "Saving of %s failed\n", argv[1], error);
       return 1;
     }
   fclose (out);
