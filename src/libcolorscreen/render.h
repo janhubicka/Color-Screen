@@ -770,7 +770,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
 #define ypixelpos(p) ((int)floor (y + pixelsize * (p)))
 #define weight(p) (1 - (y + pixelsize * (p) - ypixelpos (p)))
 
-  int size = width * height * (pixelsize * pixelsize);
+  size_t size = width * (size_t)height * (pixelsize * pixelsize);
   bool openmp = size > openmp_size ();
 
 #pragma omp parallel shared(progress,data,pixelsize,width,height,pixelpos,x,y,pxstart,pxend,weights,openmp) default (none) if (openmp)

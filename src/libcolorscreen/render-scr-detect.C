@@ -517,7 +517,7 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int 
 		  ip = s->to_img ({(coord_t)isx, (coord_t)(isy + 1)});
 		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
-		  s->to_img ({(coord_t)(isx + 1), (coord_t)(isy + 1)});
+		  ip = s->to_img ({(coord_t)(isx + 1), (coord_t)(isy + 1)});
 		  if (ip.x < xmin || ip.x > xmax || ip.y < ymin || ip.y > ymax)
 		    continue;
 	        }

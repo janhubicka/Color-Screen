@@ -96,10 +96,12 @@ public:
     struct cache_entry *longest_unused = NULL, *e;
 
     /* Do not set task to unlocking cache if object is not locked.  */
+#if 0
     struct timespec timeoutTime;
     timeoutTime.tv_nsec = 0;
     timeoutTime.tv_sec = 0;
     if (/*pthread_mutex_timedlock(&lock, &timeoutTime)*/ true)
+#endif
       {
 	if (progress)
 	  progress->wait ("unlocking cache");
