@@ -730,6 +730,20 @@ autodetect (int argc, char **argv)
   render_parameters rparam;
   solver_parameters solver_param;
   const char *error;
+  /* Load scan data.  */
+  image_data scan;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", infname);
+      progress.resume_stdout ();
+    }
+  if (!scan.load (infname, false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      return 1;
+    }
   if (cspname)
     {
       FILE *in = fopen (cspname, "rt");
@@ -752,28 +766,26 @@ autodetect (int argc, char **argv)
 	  return 1;
 	}
       fclose (in);
+
+      /* Copy parameters from par file except those specified by user.  */
       if (dsparams.scr_type == max_scr_type)
 	dsparams.scr_type = param.type;
+      else
+	param.type = dsparams.scr_type;
       if (!dsparams.gamma)
 	dsparams.gamma = rparam.gamma;
+      else
+	rparam.gamma = dsparams.gamma;
       if (dsparams.scanner_type == max_scanner_type)
 	dsparams.scanner_type = param.scanner_type;
+      else
+	param.scanner_type = dsparams.scanner_type;
     }
-  if (dsparams.scanner_type == max_scanner_type)
-    dsparams.scanner_type = fixed_lens;
-  /* Load scan data.  */
-  image_data scan;
-  if (verbose)
+  else
     {
-      progress.pause_stdout ();
-      printf ("Loading scan %s\n", infname);
-      progress.resume_stdout ();
-    }
-  if (!scan.load (infname, false, &error, &progress))
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", infname, error);
-      return 1;
+      /* Fixed lens is a reasonable default.  */
+      if (dsparams.scanner_type == max_scanner_type)
+        dsparams.scanner_type = fixed_lens;
     }
   if (!scan.rgbdata && !scan.stitch)
     {
@@ -781,6 +793,7 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "Autodetection is only implemented for RGB scans and stitched projects");
       return 1;
     }
+  rparam.gamma = dsparams.gamma;
   if (scan.rgbdata)
     {
       FILE *report = NULL;
@@ -790,8 +803,8 @@ autodetect (int argc, char **argv)
 	  perror (repname);
 	  return 1;
 	}
-      if (!dsparams.gamma && !cspname)
-	dsparams.gamma = scan.gamma != -2 ? scan.gamma : 0;
+      if (!dsparams.gamma)
+	rparam.gamma = dsparams.gamma = scan.gamma != -2 ? scan.gamma : 0;
      
       if (verbose)
 	{
@@ -819,15 +832,13 @@ autodetect (int argc, char **argv)
   else
     {
       param.type = scan.stitch->images[0][0].param.type;
-      if (dsparams.gamma)
-	rparam.gamma = dsparams.gamma;
-      else if (!cspname)
-	rparam.gamma = scan.stitch->images[0][0].img->gamma != -2 ? scan.stitch->images[0][0].img->gamma : 0;
+      if (!dsparams.gamma)
+	rparam.gamma = dsparams.gamma = scan.stitch->images[0][0].img->gamma != -2 ? scan.stitch->images[0][0].img->gamma : 0;
     }
   if (rparam.gamma == 0)
     {
       fprintf (stderr, "Warning: unable to detect gamma and assuming 2.2; please use --gamma parameter\n");
-      rparam.gamma = 2.2;
+      dsparams.gamma = rparam.gamma = 2.2;
     }
   if (scan_dpi)
     scan.set_dpi (scan_dpi, scan_dpi);
