@@ -941,6 +941,9 @@ autodetect (int argc, char **argv)
           delete param.mesh_trans;
           param.mesh_trans = NULL;
         }
+      /* We will warn later on using default.  */
+      if (dsparams.gamma == 0)
+	dsparams.gamma = 2.2;
       auto detected = detect_regular_screen (scan, dparam, solver_param,
                                              &dsparams, &progress, report);
       param = detected.param;
