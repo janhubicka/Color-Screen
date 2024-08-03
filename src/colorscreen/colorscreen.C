@@ -566,7 +566,7 @@ render (int argc, char **argv)
 	    }
 	}
     }
-  else if (solver && solver_param.npoints)
+  else if (solver && solver_param.n_points ())
     {
       if (verbose)
 	{

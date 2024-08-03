@@ -142,14 +142,14 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       if (fprintf (f, "solver_optimize_lens: %s\n", bool_names [(int)sparam->optimize_lens]) < 0
 	  || fprintf (f, "solver_optimize_tilt: %s\n", bool_names [(int)sparam->optimize_tilt]) < 0)
 	return false;
-      for (int i = 0; i < sparam->npoints; i++)
+      for (auto point : sparam->points)
 	{
 	  if (fprintf (f, "solver_point: %f %f %f %f %s\n",
-		       sparam->point[i].img_x,
-		       sparam->point[i].img_y,
-		       sparam->point[i].screen_x,
-		       sparam->point[i].screen_y,
-		       solver_parameters::point_color_names [(int)sparam->point[i].color]) < 0)
+		       point.img.x,
+		       point.img.y,
+		       point.scr.x,
+		       point.scr.y,
+		       solver_parameters::point_color_names [(int)point.color]) < 0)
 	   return false;
 	}
     }
@@ -943,7 +943,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		  return false;
 		}
 	      if (sparam)
-		sparam->add_point (img_x, img_y, screen_x, screen_y, (solver_parameters::point_color)j);
+		sparam->add_point ({img_x, img_y}, {screen_x, screen_y}, (solver_parameters::point_color)j);
 	    }
 	  else
 	    {

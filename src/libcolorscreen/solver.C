@@ -9,7 +9,7 @@
 #include "solver.h"
 #include "nmsimplex.h"
 
-const char *solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
+const char * const solver_parameters::point_color_names[(int)max_point_color] = {"red", "green", "blue"};
 
 namespace
 {
@@ -287,7 +287,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
   else
      h = homography::get_matrix (points, n, flags,
 				 param->scanner_type, &map,
-				 wcenter_x, wcenter_y, &chisq);
+				 {wcenter_x, wcenter_y}, &chisq);
   coord_t center_x, center_y, coordinate1_x, coordinate1_y, coordinate2_x, coordinate2_y;
 
   /* Determine center and coordinate vectors.  */
@@ -419,10 +419,11 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
       bool found = false;
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  point_t t = map2.to_img ({xs, ys});
+	  point_t img = points[i].img;
+	  point_t scr = points[i].scr;
+	  point_t t = map2.to_img (scr);
 	  point_t p;
-	  h.perspective_transform (xs, ys, p.x, p.y);
+	  h.perspective_transform (scr.x, scr.y, p.x, p.y);
 	  p = map.to_img (p);
 
 #if 0
@@ -433,7 +434,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 #endif
 	  if (!p.almost_eq (t, 1))
 	    {
-	      printf ("Solver model mismatch %f %f should be %f %f (ideally %f %f)\n", t.x, t.y, p.x, p.y, xi, yi);
+	      printf ("Solver model mismatch %f %f should be %f %f (ideally %f %f)\n", t.x, t.y, p.x, p.y, img.x, img.y);
 	      found = true;
 	    }
 	}
@@ -445,12 +446,23 @@ solver (scr_to_img_parameters *param, image_data &img_data, int n, solver_parame
 
 } 
 
+void
+solver_parameters::dump (FILE *out)
+{
+  for (int i = 0; i < n_points (); i++)
+    {
+      fprintf (out, "point %i img %f %f maps to scr %f %f color %i\n", i,
+	       points[i].img.x, points[i].img.y, points[i].scr.x,
+	       points[i].scr.y, (int)points[i].color);
+    }
+}
+
 coord_t
 simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
   if (progress)
     progress->set_task ("determing geometry by linear regression", 1);
-  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0), true);
+  return solver (param, img_data, sparam.n_points (), sparam.points.data () , sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0), true);
 }
 
 namespace
@@ -547,8 +559,8 @@ public:
     homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 				   m_param.scanner_type, &map, 0, 0, &chi, false);
 #endif
-    homography::get_matrix (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
-			    m_param.scanner_type, &map, 0, 0, &chi);
+    homography::get_matrix (m_sparam.points.data (), m_sparam.n_points (),  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.n_points () > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
+			    m_param.scanner_type, &map, {(coord_t)0, (coord_t)0}, &chi);
 #if 0
     printf ("Lens correction center %f,%f: k0 %f k1 %f k2 %f k3 %f chi %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3], chi);
 #endif
@@ -565,14 +577,14 @@ public:
 coord_t
 solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.npoints < 3)
+  if (sparam.n_points () < 3)
     return 0;
 
   if (param->mesh_trans)
     abort ();
 
-  bool optimize_lens = sparam.optimize_lens && sparam.npoints > 100;
-  bool optimize_rotation = (sparam.optimize_tilt && sparam.npoints > 10);
+  bool optimize_lens = sparam.optimize_lens && sparam.n_points () > 100;
+  bool optimize_rotation = (sparam.optimize_tilt && sparam.n_points () > 10);
 
 
   if (optimize_lens)
@@ -602,7 +614,7 @@ solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &s
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
-  return solver (param, img_data, sparam.npoints, sparam.point, sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
+  return solver (param, img_data, sparam.n_points (), sparam.points.data (), sparam.center.x, sparam.center.y, (sparam.weighted ? homography::solve_image_weights : 0) | (optimize_rotation ? homography::solve_rotation : 0), true);
 }
 
 static void
@@ -612,11 +624,11 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
   int_point_t e = {x, y};
   point_t scrp = mesh_trans->get_screen_point (e);
   trans_4d_matrix h = homography::get_matrix (
-      sparam.point, sparam.npoints,
+      sparam.points.data (), sparam.n_points (),
       homography::solve_screen_weights /*homography::solve_limit_ransac_iterations
                                           | homography::solve_free_rotation*/
       ,
-      type, NULL, scrp.x, scrp.y, NULL);
+      type, NULL, scrp, NULL);
   point_t imgp;
   h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
 
@@ -630,10 +642,10 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
         {
           point_t last_imgp = imgp;
           trans_4d_matrix h = homography::get_matrix (
-              sparam.point, sparam.npoints,
+              sparam.points.data (), sparam.n_points (),
               homography::solve_image_weights,
 	      /*homography::solve_limit_ransac_iterations | homography::solve_free_rotation*/
-              type, NULL, imgp.x, imgp.y, NULL);
+              type, NULL, imgp, NULL);
           h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
@@ -647,7 +659,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
 mesh *
 solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.npoints < 10)
+  if (sparam.n_points () < 10)
     return NULL;
   int xshift, yshift, width, height;
   int step = 10;
@@ -746,8 +758,8 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
   point_t scrp = mesh_trans->get_screen_point (e);
   smap.get_solver_points_nearby (scrp.x, scrp.y, 100, sparam);
   trans_4d_matrix h = homography::get_matrix (
-      sparam.point, sparam.npoints, homography::solve_screen_weights,
-      lparam.scanner_type, NULL, scrp.x, scrp.y, NULL);
+      sparam.points.data (), sparam.n_points (), homography::solve_screen_weights,
+      lparam.scanner_type, NULL, scrp, NULL);
   point_t imgp;
   h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
   /* We need to set weight assymetrically based on image distance.  Problem is
@@ -760,9 +772,9 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
         {
           point_t last_imgp = imgp;
           trans_4d_matrix h = homography::get_matrix (
-              sparam.point, sparam.npoints,
+              sparam.points.data (), sparam.n_points (),
               homography:: solve_image_weights,
-              lparam.scanner_type, NULL, imgp.x, imgp.y, NULL);
+              lparam.scanner_type, NULL, imgp, NULL);
           h.perspective_transform (scrp.x, scrp.y, imgp.x, imgp.y);
           if (last_imgp.almost_eq (imgp, 0.5))
             break;
@@ -923,10 +935,9 @@ screen_compute_chisq (solver_parameters::solver_point_t *points, int n, trans_4d
   double chisq = 0;
   for (int i = 0; i < n; i++)
     {
-      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      coord_t xt, yt;
-      homography.inverse_perspective_transform (xi, yi, xt, yt);
-      coord_t dist = (xt - xs) * (xt - xs) + (yt - ys) * (yt - ys);
+      point_t t;
+      homography.inverse_perspective_transform (points[i].img.x, points[i].img.y, t.x, t.y);
+      coord_t dist = points[i].scr.dist_sq2_from (t);
       if (dist > 10000)
 	dist = 10000;
       chisq += dist;
@@ -973,12 +984,8 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
       tpoints = (solver_parameters::solver_point_t *)malloc (sizeof (solver_parameters::solver_point_t) * n);
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  point_t p = map->to_scr ({xi, yi});
-	  tpoints[i].img_x = p.x;
-	  tpoints[i].img_y = p.y;
-	  tpoints[i].screen_x = xs;
-	  tpoints[i].screen_y = ys;
+	  tpoints[i].img = map->to_scr (points[i].img);
+	  tpoints[i].scr = points[i].scr;
 	}
     }
   if (nsamples > n)
@@ -1032,16 +1039,16 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
 	for (int i = 0; i < nsamples; i ++)
 	  {
 	    int p = sample[i];
-	    scrnorm.account1 ({tpoints[p].screen_x, tpoints[p].screen_y}, scanner_type);
-	    imgnorm.account1 ({tpoints[p].img_x, tpoints[p].img_y}, scanner_type);
+	    scrnorm.account1 (tpoints[p].scr, scanner_type);
+	    imgnorm.account1 (tpoints[p].img, scanner_type);
 	  }
 	scrnorm.finish1();
 	imgnorm.finish1();
 	for (int i = 0; i < nsamples; i ++)
 	  {
 	    int p = sample[i];
-	    scrnorm.account2 ({tpoints[p].screen_x, tpoints[p].screen_y});
-	    imgnorm.account2 ({tpoints[p].img_x, tpoints[p].img_y});
+	    scrnorm.account2 (tpoints[p].scr);
+	    imgnorm.account2 (tpoints[p].img);
 	  }
 
 	ts = scrnorm.get_matrix ();
@@ -1050,8 +1057,7 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
 	for (int i = 0; i < nsamples; i ++)
 	  {
 	    int p = sample[i];
-	    coord_t xi = tpoints[p].img_x, yi = tpoints[p].img_y, xs = tpoints[p].screen_x, ys = tpoints[p].screen_y;
-	    init_equation (A, v, i, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
+	    init_equation (A, v, i, false, flags, scanner_type, {tpoints[p].scr}, {tpoints[p].img}, ts, td);
 	  }
 	if (!i_work)
 	  colinear = (gsl_linalg_HH_svx (A, v) != GSL_SUCCESS);
@@ -1078,14 +1084,13 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
       double cur_chisq = 0, cur_inliner_chisq = 0;
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = tpoints[i].img_x, yi = tpoints[i].img_y, xs = tpoints[i].screen_x, ys = tpoints[i].screen_y;
-	  coord_t xt, yt;
-	  cur.perspective_transform (xs, ys, xt, yt);
-	  cur_chisq += (xt - xi) * (xt - xi) + (yt - yi) * (yt - yi);
-	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
+	  point_t t;
+	  cur.perspective_transform (tpoints[i].scr.x, tpoints[i].scr.y, t.x, t.y);
+	  cur_chisq += t.dist_sq2_from (tpoints[i].img);
+	  if (t.almost_eq (tpoints[i].img, dist))
 	    {
 	      ninliners++;
-	      cur_inliner_chisq += (xt - xi) * (xt - xi) + (yt - yi) * (yt - yi);
+	      cur_inliner_chisq += t.dist_sq2_from (tpoints[i].img);
 	    }
 	}
       if (ninliners < nsamples)
@@ -1133,26 +1138,26 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
       normalize_points scrnorm (max_inliners), imgnorm (max_inliners);
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = tpoints[i].img_x, yi = tpoints[i].img_y, xs = tpoints[i].screen_x, ys = tpoints[i].screen_y;
-	  coord_t xt, yt;
-	  ret.perspective_transform (xs, ys, xt, yt);
-	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
+	  point_t scr = tpoints[i].scr;
+	  point_t t;
+	  ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	  if (tpoints[i].img.almost_eq (t, dist))
 	    {
-	      scrnorm.account1 ({xs, ys}, scanner_type);
-	      imgnorm.account1 ({xi, yi}, scanner_type);
+	      scrnorm.account1 (scr, scanner_type);
+	      imgnorm.account1 (tpoints[i].img, scanner_type);
 	    }
 	}
       scrnorm.finish1();
       imgnorm.finish1();
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = tpoints[i].img_x, yi = tpoints[i].img_y, xs = tpoints[i].screen_x, ys = tpoints[i].screen_y;
-	  coord_t xt, yt;
-	  ret.perspective_transform (xs, ys, xt, yt);
-	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
+	  point_t scr = tpoints[i].scr;
+	  point_t t;
+	  ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	  if (tpoints[i].img.almost_eq (t, dist))
 	    {
-	      scrnorm.account2 ({xs, ys});
-	      imgnorm.account2 ({xi, yi});
+	      scrnorm.account2 (scr);
+	      imgnorm.account2 (tpoints[i].img);
 	    }
 	}
       ts = scrnorm.get_matrix ();
@@ -1161,12 +1166,12 @@ homography::get_matrix_ransac (solver_parameters::solver_point_t *points, int n,
       int p = 0;
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = tpoints[i].img_x, yi = tpoints[i].img_y, xs = tpoints[i].screen_x, ys = tpoints[i].screen_y;
-	  coord_t xt, yt;
-	  ret.perspective_transform (xs, ys, xt, yt);
-	  if (fabs (xt - xi) <= dist && fabs (yt - yi) <= dist)
+	  point_t scr = tpoints[i].scr;
+	  point_t t;
+	  ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	  if (tpoints[i].img.almost_eq (t, dist))
 	    {
-	      init_equation (X, y, p, false, flags, scanner_type, {xs, ys}, {xi, yi}, ts, td);
+	      init_equation (X, y, p, false, flags, scanner_type, scr, tpoints[i].img, ts, td);
 	      p++;
 	    }
 	}
@@ -1202,7 +1207,7 @@ trans_4d_matrix
 homography::get_matrix (solver_parameters::solver_point_t *points, int n, int flags,
 			enum scanner_type scanner_type,
 			scr_to_img *map,
-			coord_t wcenter_x, coord_t wcenter_y,
+			point_t wcenter,
 			coord_t *chisq_ret)
 {
   int nvariables = equation_variables (flags);
@@ -1212,29 +1217,25 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
   normalize_points scrnorm (n), imgnorm (n);
   for (int i = 0; i < n; i++)
     {
-      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      point_t p;
+      point_t scr = points[i].scr;
+      point_t t = points[i].img;
       /* Apply non-linear transformations.  */
       if (map)
-        p = map->to_scr ({xi, yi});
-      else
-	p.x = xi, p.y = yi;
-      scrnorm.account1 ({xs, ys}, scanner_type);
-      imgnorm.account1 (p, scanner_type);
+        t = map->to_scr (t);
+      scrnorm.account1 (scr, scanner_type);
+      imgnorm.account1 (t, scanner_type);
     }
   scrnorm.finish1();
   imgnorm.finish1();
   for (int i = 0; i < n; i++)
     {
-      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      point_t p;
+      point_t scr = points[i].scr;
+      point_t t = points[i].img;
       /* Apply non-linear transformations.  */
       if (map)
-        p = map->to_scr ({xi, yi});
-      else
-	p.x = xi, p.y = yi;
-      scrnorm.account2 ({xs, ys});
-      imgnorm.account2 (p);
+        t = map->to_scr (t);
+      scrnorm.account2 (scr);
+      imgnorm.account2 (t);
     }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
@@ -1251,7 +1252,7 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
   if (flags & solve_image_weights)
     for (int i = 0; i < n; i++)
       {
-	coord_t dist = /*sqrt*/ ((points[i].img_x - wcenter_x) * (points[i].img_x - wcenter_x) * (xscale * xscale) + (points[i].img_y - wcenter_y) * (points[i].img_y - wcenter_y) * (yscale * yscale));
+	coord_t dist = points[i].img.dist_sq2_from (wcenter);
 	dist *= dist;
 	double weight = 1 / (dist + 0.5);
 	weights[i] = weight;
@@ -1261,7 +1262,7 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
   else if (flags & solve_screen_weights)
     for (int i = 0; i < n; i++)
       {
-	coord_t dist = sqrt ((points[i].screen_x - wcenter_x) * (points[i].screen_x - wcenter_x) + (points[i].screen_y - wcenter_y) * (points[i].screen_y - wcenter_y));
+	coord_t dist = points[i].scr.dist_from (wcenter);
 	double weight = 1 / (dist + 0.5);
 	weights[i] = weight;
 	normscale = std::max (normscale, weight);
@@ -1314,15 +1315,12 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
     {
       if (w && !weights[i])
 	continue;
-      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      point_t p;
+      point_t p = points[i].img;
       /* Apply non-linear transformations.  */
       if (map)
-        p = map->to_scr ({xi, yi});
-      else
-	p = {xi, yi};
+        p = map->to_scr (p);
 
-      init_equation (X, y, eq, false, flags, scanner_type, {xs, ys}, p, ts, td);
+      init_equation (X, y, eq, false, flags, scanner_type, points[i].scr, p, ts, td);
 
       if (w)
         {
@@ -1353,12 +1351,8 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
       std::unique_ptr <solver_parameters::solver_point_t []> tpoints (new solver_parameters::solver_point_t[n]);
       for (int i = 0; i < n; i++)
 	{
-	  coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-	  point_t p = map->to_scr ({xi, yi});
-	  tpoints[i].img_x = p.x;
-	  tpoints[i].img_y = p.y;
-	  tpoints[i].screen_x = xs;
-	  tpoints[i].screen_y = ys;
+	  tpoints[i].img = map->to_scr (points[i].img);
+	  tpoints[i].scr = points[i].scr;
 	}
       /* Use screen so we do not get biass with lens correction.  */
       *chisq_ret = screen_compute_chisq (tpoints.get(), n, ret);

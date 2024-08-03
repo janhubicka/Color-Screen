@@ -130,7 +130,7 @@ solve ()
 void
 maybe_solve ()
 {
-  if (autosolving && current_solver.npoints >= 3)
+  if (autosolving && current_solver.n_points () >= 3)
     solve ();
 }
 
@@ -609,9 +609,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       if ((k == GDK_KEY_Delete || k == GDK_KEY_BackSpace) && !(event->state & GDK_CONTROL_MASK))
         {
  	  printf ("Deleting %f %f %f %f\n", sel1x, sel1y, sel2x, sel2y);
-	  for (int n = 0; n < current_solver.npoints;)
-	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
-	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	  for (int n = 0; n < current_solver.n_points ();)
+	    if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
+	        && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y)
 	      current_solver.remove_point (n);
 	    else
 	      n++;
@@ -623,31 +623,31 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  histogram hist;
 	  scr_to_img map;
 	  map.set_parameters (current, scan);
-	  for (int n = 0; n < current_solver.npoints;n++)
-	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
-	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	  for (int n = 0; n < current_solver.n_points ();n++)
+	    if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
+	        && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y)
 	      {
-		point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
-		coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
+		point_t p = map.to_img (current_solver.points[n].scr);
+		coord_t dist = p.dist_from (current_solver.points[n].img);
 		hist.pre_account (dist);
 	      }
 	  hist.finalize_range (65536);
-	  for (int n = 0; n < current_solver.npoints;n++)
-	    if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
-	        && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y)
+	  for (int n = 0; n < current_solver.n_points ();n++)
+	    if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
+	        && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y)
 	      {
-		point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
-		coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
+		point_t p = map.to_img (current_solver.points[n].scr);
+		coord_t dist = p.dist_from (current_solver.points[n].img);
 		hist.account (dist);
 	      }
 	  hist.finalize ();
 	  coord_t thresholt = hist.find_max (0.1);
-	  for (int n = 0; n < current_solver.npoints;)
+	  for (int n = 0; n < current_solver.n_points ();)
 	    {
-	      point_t p = map.to_img ({current_solver.point[n].screen_x, current_solver.point[n].screen_y});
-	      coord_t dist = sqrt ((p.x - current_solver.point[n].img_x) * (p.x - current_solver.point[n].img_x) + (p.y - current_solver.point[n].img_y) * (p.y - current_solver.point[n].img_y));
-	      if (current_solver.point[n].img_x > sel1x && current_solver.point[n].img_x < sel2x
-		  && current_solver.point[n].img_y > sel1y && current_solver.point[n].img_y < sel2y
+	      point_t p = map.to_img (current_solver.points[n].scr);
+	      coord_t dist = p.dist_from (current_solver.points[n].img);
+	      if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
+		  && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y
 		  && dist > thresholt)
 		current_solver.remove_point (n);
 	      else
@@ -1475,20 +1475,19 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	    draw_line (surface, bigscale, xoffset, yoffset, 0, current.motor_correction_y[i], scan.width, current.motor_correction_y[i], 0, 1, 1);
 	  }
       }
-  if (current_solver.npoints && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
+  if (current_solver.n_points() && (ui_mode == motor_correction_editing || ui_mode == solver_editing))
     {
       scr_to_img map;
       map.set_parameters (current, scan);
-      for (int i = 0; i <current_solver.npoints; i++)
+      for (int i = 0; i <current_solver.n_points (); i++)
 	{
-	  luminosity_t r,g,b;
-	  coord_t xi = current_solver.point[i].img_x;
-	  coord_t yi = current_solver.point[i].img_y;
-	  current_solver.point[i].get_rgb (&r,&g,&b);
-	  point_t p = map.to_img ({current_solver.point[i].screen_x, current_solver.point[i].screen_y});
+	  coord_t xi = current_solver.points[i].img.x;
+	  coord_t yi = current_solver.points[i].img.y;
+	  rgbdata color = current_solver.points[i].get_rgb ();
+	  point_t p = map.to_img (current_solver.points[i].scr);
 
-	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, b, g, r);
-	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 3*b/4, 3*g/4, 3*r/4);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, color.blue, color.green, color.red);
+	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 3*color.blue/4, 3*color.green/4, 3*color.red/4);
 
 	  coord_t patch_diam = sqrt (current.coordinate1.x * current.coordinate1.x + current.coordinate1.y * current.coordinate1.y) / 2;
 	  double scale = 200 / patch_diam / bigscale;
@@ -1501,9 +1500,9 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 
 	  if (bad)
 	    draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, 0, 0, 1, 16);
-	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, b,g,r, 6);
-	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 + yd * 0.2, yi + yd * 0.7 - xd * 0.2, b, g, r, 6);
-	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 - yd * 0.2, yi + yd * 0.7 + xd * 0.2, b, g, r, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, color.blue, color.green, color.red, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 + yd * 0.2, yi + yd * 0.7 - xd * 0.2, color.blue, color.green, color.red, 6);
+	  draw_line (surface, bigscale, xoffset, yoffset, xi + xd, yi + yd, xi + xd * 0.7 - yd * 0.2, yi + yd * 0.7 + xd * 0.2, color.blue, color.green, color.red, 6);
 	  draw_line (surface, bigscale, xoffset, yoffset, xi, yi, xi + xd, yi + yd, 1, 1, 1, 3);
 	}
     }
@@ -1782,9 +1781,9 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
 	  int n;
 	  int best_n = -1;
 	  double best_dist = INT_MAX;
-	  for (n = 0; n < current_solver.npoints; n++)
+	  for (n = 0; n < current_solver.n_points (); n++)
 	    {
-	      double dist = sqrt ((current_solver.point[n].img_x - x) * (current_solver.point[n].img_x - x) + (current_solver.point[n].img_y - y) * (current_solver.point[n].img_y - y));
+	      double dist = sqrt ((current_solver.points[n].img.x - x) * (current_solver.points[n].img.x - x) + (current_solver.points[n].img.y - y) * (current_solver.points[n].img.y - y));
 	      if (dist < 5 * std::min (scale_x, (gdouble)1) && dist < best_dist)
 		{
 		  best_n = n;
@@ -1979,7 +1978,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	  finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	  if (res.success)
 	    {
-	      current_solver.add_point (res.solver_point_img_location.x, res.solver_point_img_location.y, res.solver_point_screen_location.x, res.solver_point_screen_location.y, res.solver_point_color);
+	      current_solver.add_point (res.solver_point_img_location, res.solver_point_screen_location, res.solver_point_color);
 	      display_scheduled = true;
 	      maybe_solve ();
 	    }
@@ -2043,7 +2042,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 		  display_scheduled = true;
 		  return;
 		}
-	      current_solver.add_point (x, y, rscreenx, rscreeny, rcolor);
+	      current_solver.add_point ({x, y}, {rscreenx, rscreeny}, rcolor);
 #if 0
 	      int n;
 	      for (n = 0; n < n_solver_points; n++)

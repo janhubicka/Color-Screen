@@ -31,7 +31,7 @@ public:
   static trans_4d_matrix get_matrix (solver_parameters::solver_point_t *points, int n, int flags,
 				     scanner_type type,
 				     scr_to_img *map,
-				     coord_t wcenter_x, coord_t wcenter_y,
+				     point_t wcenter,
 				     coord_t *chisq_ret = NULL);
 };
 coord_t simple_solver (scr_to_img_parameters *param, image_data &img_data, solver_parameters &sparam, progress_info *progress = NULL);

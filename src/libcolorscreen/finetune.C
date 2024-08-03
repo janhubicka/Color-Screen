@@ -2321,7 +2321,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
       {
 	finetune_result &r = res[x+y*xsteps];
 	if (r.success && r.uncertainity <= max_uncertainity)
-	  solver->add_point (r.solver_point_img_location.x, r.solver_point_img_location.y, r.solver_point_screen_location.x, r.solver_point_screen_location.y, r.solver_point_color);
+	  solver->add_point (r.solver_point_img_location, r.solver_point_screen_location, r.solver_point_color);
       }
   return true;
 }

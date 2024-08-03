@@ -256,7 +256,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   sparam.remove_points ();
   for (int r = 0; r < npatches; r++)
     for (int p = 0; p < npatches * 2; p++)
-      sparam.add_point (rbpatches[r][p].x, rbpatches[r][p].y, p / 2.0, r, (p & 1) ? solver_parameters::blue : solver_parameters::green);
+      sparam.add_point ({rbpatches[r][p].x, rbpatches[r][p].y}, {p / (coord_t)2.0, (coord_t)r}, (p & 1) ? solver_parameters::blue : solver_parameters::green);
   return true;
 }
 
@@ -522,8 +522,8 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
   for (int r = 0; r < npatches; r++)
     for (int p = 0; p < npatches; p++)
     {
-      sparam.add_point (gpatches[r][p].x, gpatches[r][p].y, (r+p)/2.0, (p-r)/2.0, solver_parameters::green);
-      sparam.add_point (bpatches[r*2][p].x, bpatches[r*2][p].y, (r+p+0.5)/2.0, (p-r+0.5)/2.0, solver_parameters::blue);
+      sparam.add_point ({gpatches[r][p].x, gpatches[r][p].y}, {(r+p)/2.0, (p-r)/2.0}, solver_parameters::green);
+      sparam.add_point ({bpatches[r*2][p].x, bpatches[r*2][p].y}, {(r+p+0.5)/2.0, (p-r+0.5)/2.0}, solver_parameters::blue);
     }
   if (verbose)
     printf ("Paget: Initial screen found\n");
@@ -1123,7 +1123,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
       if (param.type == Dufay)
 	{
 	  if (sparam)
-	    sparam->add_point (e.img_x, e.img_y, e.scr_x / 2.0, e.scr_y, e.scr_y ? solver_parameters::blue : solver_parameters::green);
+	    sparam->add_point ({e.img_x, e.img_y}, {e.scr_x / 2.0, (coord_t)e.scr_y}, e.scr_y ? solver_parameters::blue : solver_parameters::green);
 
   // search range should be 1/2 but 1/3 seems to work better in practice. Maybe it is because we look into orthogonal bounding box of the area we really should compute.
 #define cpatch(x,y,t, priority) ((fast && confirm_patch (report_file, color_map, x, y, t, min_patch_size, max_patch_size, max_distance, &ix, &iy, &priority, visited)) \
@@ -1177,7 +1177,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	      analyze_base::data_entry p = paget_geometry::from_diagonal_coordinates ((analyze_base::data_entry){e.scr_x, e.scr_y});
 	      solver_parameters::point_color color = diagonal_coordinates_to_color (e.scr_x, e.scr_y);
 	      if (sparam)
-		sparam->add_point (e.img_x, e.img_y, p.x / 2.0, p.y / 2.0, color);
+		sparam->add_point ({e.img_x, e.img_y}, {p.x / 2.0, p.y / 2.0}, color);
 	    }
 	  for (int xx = -1; xx <= 1; xx++)
 	    for (int yy = -1; yy <= 1; yy++)
@@ -1580,7 +1580,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 		      visited.clear ();
 		      param.type = current_type;
 		      simple_solver (&param, img, sparam, progress);
-		      smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.point[0].img_x, sparam.point[0].img_y, param, img, render.get (),
+		      smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.points[0].img.x, sparam.points[0].img.y, param, img, render.get (),
 				         this_cmap, NULL /*sparam*/, &visited, &ret.patches_found, dsparams, progress);
 		      if (!smap)
 			{
@@ -1777,7 +1777,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	    p.y = nearest_int (p.y);
 	    point_t imgp = m->apply (p);
 	    if (sparam.find_img (imgp) < 0)
-	      sparam.add_point (imgp.x, imgp.y, p.x, p.y, solver_parameters::green);
+	      sparam.add_point (imgp, p, solver_parameters::green);
 	  }
       ret.mesh_trans = m;
       ret.param.mesh_trans = m;
