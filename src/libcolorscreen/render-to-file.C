@@ -55,7 +55,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	    {
 	      p->pixel_size = stitch->pixel_size;
 	      if (prop.flags & render_type_property::PATCH_RESOLUTION)
-		p->pixel_size = stitch->params.type == Dufay ? 0.5 : 1.0/3;
+		p->pixel_size = stitch->param.type == Dufay ? 0.5 : 1.0/3;
 	      else if (prop.flags & render_type_property::SCREEN_RESOLUTION)
 		p->pixel_size = 1;
 	    }

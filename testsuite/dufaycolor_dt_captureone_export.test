@@ -11,7 +11,7 @@ fi
 echo 1..3
 . $srcdir/defs.sh
 NAME=dufaycolor_dt_captureone_export
-pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind || exit 1
+pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind --scanner-type=horisontally-moving-lens || exit 1
 grep "Best match on offset -16,-10" "out-${NAME}.txt" || exit 1
 echo 'ok 1 - stitch project construction'
 PARNAME=out-${NAME}

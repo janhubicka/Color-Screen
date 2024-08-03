@@ -16,59 +16,85 @@ struct stitching_params
 {
   static const int max_dim = 10;
 
-  enum scr_type type;
-
+  /* If true output tiffs of individual tiles in screen geometry.  */
   bool screen_tiles;
+  /* If true output tiffs of individual tiles in screen geometry but with
+     undetected patches missing.  */
   bool known_screen_tiles;
+  /* Controls whether tiles are matched using internal algorithm or external
+     too cpfind. If set to 0 cpfind is not used, if set to 1 cpfind is used, if
+     set to 2 cpfind is used and verified to match with internal algorithm.  */
   int cpfind;
+  /* If true panorama map in ascii-art it output to the standard output.  */
   bool panorama_map;
-  bool optimize_colors;
+  /* If true colors are reoptimized fater screen detection and detection is
+   * redone.  */
   bool reoptimize_colors;
-  bool slow_floodfill;
-  bool fast_floodfill;
+  /* If true, tiles must match in expected direction.  */
   bool limit_directions;
-  bool mesh_trans;
+  /* If true geometry info tiffs are produced.  */
   bool geometry_info;
+  /* If ture, geometry info tiffs are produced for every pair of images.  */
   bool individual_geometry_info;
+  /* If true, outliers info is produced.  */
   bool outliers_info;
+  /* If true, diff of each overlapping pair of tiles is produced.  */
   bool diffs;
+  /* If true, registration is load from parameter files.  */
   bool load_registration;
 
-  int outer_tile_border;
-  int inner_tile_border;
+  /* Border of tiles on the boundary of the stitched scan which can be ignored
+     by screen and tile overlap analysis. */
+  coord_t outer_tile_border;
+  /* Border of tiles within the stitched scan.  */
+  coord_t inner_tile_border;
+  /* Specifies minimum and maximum overlap of the beighboring tiles.  */
   int min_overlap_percentage;
   int max_overlap_percentage;
+  /* Specifies maximum percentage of undetected patches in a given tile.  */
   int max_unknown_screen_range;
-  luminosity_t max_contrast;
-  luminosity_t min_patch_contrast;
-
-  int num_control_points;
   int min_screen_percentage;
+
+  /* Maximal acceptable change in contrast.  */
+  luminosity_t max_contrast;
+
+  /* Number of control points to output into hugin prject.  */
+  int num_control_points;
+  /* Horisontal field of view for hugin project.  */
   coord_t hfov;
+
+  /* Maximal average distance between patch and the geometry model which is
+     considred acceptable.  */
   coord_t max_avg_distance;
+  /* Maximal maximal distance between patch and the geometry model which is
+     considred acceptable.  */
   coord_t max_max_distance;
+  /* Resolution of scans.  */
   coord_t scan_xdpi, scan_ydpi;
 
+  /* Dimension of tile gird.  */
   int width, height;
   /* Path to a directory where the stitch project is located.  */
   std::string path;
+  /* Filenames of individual tiles.  */
   std::string filename[max_dim][max_dim];
+  /* Filename of parameter file to read prior detection.  */
   std::string csp_filename;
+  /* Filename of hugin project file to be output.  */
   std::string hugin_pto_filename;
+  /* Filename of report file to be output.  */
   std::string report_filename;
 
   stitching_params ()
-      : type (Dufay), screen_tiles (false), known_screen_tiles (false),
-        cpfind (true), panorama_map (false), optimize_colors (true),
-        reoptimize_colors (false), slow_floodfill (true),
-        fast_floodfill (true), limit_directions (false), mesh_trans (true),
-        geometry_info (false), individual_geometry_info (false),
-        outliers_info (false), diffs (false), load_registration (false),
-        outer_tile_border (30), inner_tile_border (10),
-        min_overlap_percentage (10), max_overlap_percentage (65),
-        max_unknown_screen_range (100), max_contrast (-1),
-        min_patch_contrast (-1), num_control_points (100),
-        min_screen_percentage (75), hfov (28.534), max_avg_distance (2),
+      : screen_tiles (false), known_screen_tiles (false), cpfind (true),
+        panorama_map (false), reoptimize_colors (false),
+        limit_directions (false), geometry_info (false),
+        individual_geometry_info (false), outliers_info (false), diffs (false),
+        load_registration (false), outer_tile_border (30),
+        inner_tile_border (10), min_overlap_percentage (10),
+        max_overlap_percentage (65), max_unknown_screen_range (100),
+        min_screen_percentage (75), max_contrast (-1), 
+        num_control_points (100), hfov (28.534), max_avg_distance (2),
         max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0),
         height (0), path ("")
   {
@@ -134,7 +160,7 @@ public:
   bool load_part (int *permille, const char **error, progress_info *progress);
   void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
-  bool analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p,
+  bool analyze (stitch_project *prj, detect_regular_screen_params *dsparams, bool top_p, bool bottom_p, bool left_p,
                 bool right_p, lens_warp_correction_parameters &lens_correction,
                 progress_info *);
   void release_image_data (progress_info *);
@@ -348,16 +374,16 @@ public:
   std::vector<tile_range> find_ranges (coord_t xmin, coord_t xmax,
                                        coord_t ymin, coord_t ymax,
                                        bool only_loaded, bool screen_ranges);
-  DLL_PUBLIC bool stitch (progress_info *progress,
+  DLL_PUBLIC bool stitch (progress_info *progress, detect_regular_screen_params *dsparam,
                           const char *load_project_filename);
 
 private:
-  bool analyze_images (progress_info *progress);
+  bool analyze_images (detect_regular_screen_params *dsparam, progress_info *progress);
   bool produce_hugin_pto_file (const char *name, progress_info *progress);
   /* Passed from initialize to analyze_angle to determine scr param.
      TODO: Localize to analyze_angle.  */
   scr_to_img_parameters scr_param;
-  bool analyze (int x, int y, progress_info *);
+  bool analyze (detect_regular_screen_params *dsparam, int x, int y, progress_info *);
   void print_panorama_map (FILE *out);
   void print_status (FILE *out);
   /* Screen used to collect patch density at analysis stage.  */

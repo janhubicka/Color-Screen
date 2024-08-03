@@ -571,7 +571,7 @@ stitch_image::update_scr_to_final_parameters (coord_t ratio, coord_t anlge)
 }
 
 bool
-stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left_p, bool right_p, lens_warp_correction_parameters &lens_correction, progress_info *progress)
+stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dsparamsptr, bool top_p, bool bottom_p, bool left_p, bool right_p, lens_warp_correction_parameters &lens_correction, progress_info *progress)
 {
   if (analyzed)
     return true;
@@ -611,30 +611,28 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 
   if (!m_prj->params.load_registration)
     {
-      detect_regular_screen_params dsparams;
-      dsparams.min_screen_percentage = m_prj->params.min_screen_percentage;
+      detect_regular_screen_params dsparams = *dsparamsptr;
       dsparams.border_top = skiptop;
       dsparams.border_bottom = skipbottom;
       dsparams.border_left = skipleft;
       dsparams.border_right = skipright;
       dsparams.top = top;
       dsparams.bottom = bottom;
-      dsparams.lens_correction = lens_correction;
       dsparams.left = left;
       dsparams.right = right;
-      dsparams.optimize_colors = m_prj->params.optimize_colors;
-      dsparams.slow_floodfill = m_prj->params.slow_floodfill;
-      dsparams.fast_floodfill = m_prj->params.fast_floodfill;
-      dsparams.max_unknown_screen_range = m_prj->params.max_unknown_screen_range;
-      if (m_prj->params.min_patch_contrast > 0)
-	dsparams.min_patch_contrast = m_prj->params.min_patch_contrast;
       dsparams.return_known_patches = true;
-      dsparams.do_mesh = m_prj->params.mesh_trans;
       dsparams.return_screen_map = true;
-      dsparams.scr_type = m_prj->params.type;
-      /* TODO */
-      dsparams.scanner_type = fixed_lens;
-      dsparams.gamma = m_prj->rparam.gamma;
+      if (dsparams.gamma)
+	dsparams.gamma = dsparams.gamma;
+      else 
+	dsparams.gamma = img->gamma != -2 ? img->gamma : 0;
+      if (dsparams.scanner_type == max_scanner_type)
+	dsparams.scanner_type = fixed_lens;
+      if (dsparams.gamma == 0)
+	{
+	  fprintf (stderr, "Warning: unable to detect gamma and assuming 2.2\n");
+	  dsparams.gamma = 2.2;
+	}
       detected = detect_regular_screen (*img, m_prj->dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
       if (!detected.success)
 	{
@@ -646,7 +644,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       if (m_prj->params.reoptimize_colors)
 	{
 	  scr_detect_parameters optimized_dparam = m_prj->dparam;
-	  optimize_screen_colors (&optimized_dparam, m_prj->params.type, img.get (), mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
+	  optimize_screen_colors (&optimized_dparam, detected.param.type, img.get (), mesh_trans.get (), detected.xshift, detected.yshift, detected.known_patches, m_prj->rparam.gamma, progress, m_prj->report_file);
 	  mesh_trans= NULL;
 	  delete detected.known_patches;
 	  delete detected.smap;
@@ -700,7 +698,6 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
   param.mesh_trans = mesh_trans.get ();
-  param.type = m_prj->params.type;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, false, progress);
   if (!m_prj->my_screen)
@@ -715,7 +712,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 	return false;
       m_prj->pixel_size = r.pixel_size ();
     }
-  m_prj->my_screen = render_to_scr::get_screen (m_prj->params.type, false, m_prj->pixel_size * my_rparam.screen_blur_radius, 0, 0, progress);
+  m_prj->my_screen = render_to_scr::get_screen (param.type, false, m_prj->pixel_size * my_rparam.screen_blur_radius, 0, 0, progress);
   scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
   
@@ -760,7 +757,18 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
     }
   analyze_dufay *dufay;
   analyze_paget *paget;
-  if (m_prj->params.type == Dufay)
+  if (m_prj->scr_param.type == Random)
+    {
+      m_prj->scr_param.type = param.type;
+      m_prj->scr_param.scanner_type = param.scanner_type;
+    }
+  else if (m_prj->scr_param.type != param.type)
+    {
+      progress->pause_stdout ();
+      fprintf (stderr, "Tiles with different screen types can not stitch together\n");
+      return false;
+    }
+  if (param.type == Dufay)
     {
       dufay = new (analyze_dufay);
       dufay->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);

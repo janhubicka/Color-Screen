@@ -9,7 +9,7 @@ struct detect_regular_screen_params
 {
   DLL_PUBLIC_EXP
   detect_regular_screen_params ()
-      : scr_type (max_scr_type), scanner_type (max_scanner_type), gamma (-2), 
+      : scr_type (max_scr_type), scanner_type (max_scanner_type), gamma (0), 
 	min_screen_percentage (20), border_top (50), border_bottom (50),
         border_left (50), border_right (50), top (false), bottom (false),
         left (false), right (false), lens_correction (),

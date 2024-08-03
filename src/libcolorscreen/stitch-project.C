@@ -32,7 +32,7 @@ stitch_project::initialize ()
 {
 
   image_data data;
-  scr_param.type = params.type;
+  scr_param.type = Random;
   data.width=1000;
   data.height=1000;
   common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment);
@@ -60,9 +60,9 @@ stitch_project::initialize ()
 }
 
 bool
-stitch_project::analyze (int x, int y, progress_info *progress)
+stitch_project::analyze (detect_regular_screen_params *dsparam, int x, int y, progress_info *progress)
 {
-  return images[y][x].analyze (this, !y, y == params.height - 1,
+  return images[y][x].analyze (this, dsparam, !y, y == params.height - 1,
 			       !x, x == params.width - 1, param.lens_correction,
 			       progress);
 }
@@ -181,7 +181,7 @@ stitch_project::print_status (FILE *out)
 }
 
 bool
-stitch_project::analyze_images (progress_info *progress)
+stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_info *progress)
 {
   if (progress)
     progress->set_task ("analyzing tiles", params.width * params.height);
@@ -190,7 +190,7 @@ stitch_project::analyze_images (progress_info *progress)
       int stack = 0;
       if (progress)
 	stack = progress->push ();
-      bool ret = analyze (0, 0, progress);
+      bool ret = analyze (dsparam, 0, 0, progress);
       if (progress)
         progress->pop (stack);
       return ret;
@@ -208,8 +208,8 @@ stitch_project::analyze_images (progress_info *progress)
 	  int stack = 0;
 	  if (progress)
 	    stack = progress->push ();
-	  analyze (0, y - 1, progress);
-	  analyze (0, y, progress);
+	  analyze (dsparam, 0, y - 1, progress);
+	  analyze (dsparam, 0, y, progress);
 	  if (!images[y - 1][0].get_analyzer ().
 	      find_best_match (params.min_overlap_percentage,
 			       params.max_overlap_percentage,
@@ -259,8 +259,8 @@ stitch_project::analyze_images (progress_info *progress)
 	  int stack = 0;
 	  if (progress)
 	    stack = progress->push ();
-	  if (!analyze (x, y, progress)
-	      || !analyze (x + 1, y, progress))
+	  if (!analyze (dsparam, x, y, progress)
+	      || !analyze (dsparam, x + 1, y, progress))
 	    {
 	      if (progress)
 		progress->pop (stack);
@@ -554,7 +554,7 @@ stitch_project::load (FILE *f, const char **error)
       images[y][x].top = !x;
       images[y][x].right = x == params.width - 1;
       images[y][x].bottom = y == params.height - 1;
-      params.type = images[y][x].param.type;
+      scr_param.type = images[y][x].param.type;
     }
   if (stitch_info_scale)
     stitch_info_scale = images[0][0].param.coordinate1.length () + 1;
@@ -1421,7 +1421,7 @@ stitch_project::produce_hugin_pto_file (const char *name, progress_info *progres
 }
 
 bool
-stitch_project::stitch (progress_info *progress, const char *load_project_filename)
+stitch_project::stitch (progress_info *progress, detect_regular_screen_params *dsparam, const char *load_project_filename)
 {
   if (!initialize ())
     return false;
@@ -1477,7 +1477,7 @@ stitch_project::stitch (progress_info *progress, const char *load_project_filena
 	  fprintf (report_file, "Color screen parameters:\n");
 	  save_csp (report_file, &param, &dparam, &rparam, &solver_param);
 	}
-      if (!analyze_images (progress))
+      if (!analyze_images (dsparam, progress))
 	{
 	  fflush (report_file);
 	  return false;

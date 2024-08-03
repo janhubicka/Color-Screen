@@ -13,7 +13,12 @@ Changes in version 1.1
      helps for every command
    - `--disable-16bit-float` configure option now dsables use of more memory
      effecient but slower 16bit floats for temporary data
-   - library now uses namespace `colorscreen`
+   - Library now uses namespace `colorscreen`
+   - `colorscreen render --detect-geometry` and `colorscreen stitch` now allow
+     specification of screen detection parameters
+   - Signifiacntly improved screen detection precision for scanners with
+     moving sensors and/or lens (includuing phase one cameras that collect
+     data sequentially from top to bottom).
  - Infrastructure improvements:
    - `make check` now executes unit tests and a testsuite for colorscreen
      features `colorscreen autodetect`, `colorscreen stitch`,

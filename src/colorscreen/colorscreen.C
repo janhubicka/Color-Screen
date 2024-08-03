@@ -90,30 +90,6 @@ print_help ()
     {
       fprintf (stderr, "      --par=name.par            load parameters\n");
       fprintf (stderr, "      --report=name.txt         save report\n");
-      fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
-      fprintf (stderr, "                                suported scanner types:");
-      for (int j = 0; j < max_scanner_type; j++)
-	{
-	  if (!(j % 4))
-	    fprintf (stderr, "\n                                 ");
-	  fprintf (stderr, " %s", scanner_type_names[j]);
-	}
-      fprintf (stderr, "\n");
-      fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
-      fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
-      fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
-      fprintf (stderr, "      --no-slow-floodfill       disable use of slow patch detection\n");
-      fprintf (stderr, "      --mesh                    compute mesh of non-linear transformations\n");
-      fprintf (stderr, "      --no-mesh                 do not compute mesh of non-linear transformations\n");
-      fprintf (stderr, "      --optimize-colors         try to automatically optimize colors of patches for screen discovery\n");
-      fprintf (stderr, "      --no-optimize-colors      do not automatically optimize colors of patches for screen discovery\n");
-      fprintf (stderr, "      --top/bottom/left/right   asume that given part of scan is not part of an image and insert fake point to improve geometry of binding tape\n");
-      fprintf (stderr, "      --min-screen-percentage   specify minimum perdentage of screen to be detected\n");
-      fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
-      fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
-      fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
-      fprintf (stderr, "      --border-left=percent     same for left\n");
-      fprintf (stderr, "      --border-right=percent    same for right\n");
       fprintf (stderr, "      --auto-color-model        automatically choose color model for given screen type\n");
       fprintf (stderr, "      --no-auto-color-model     do not choose color model for given screen type\n");
       fprintf (stderr, "      --auto-levels             automatically choose brightness and dark point\n");
@@ -172,14 +148,7 @@ print_help ()
       fprintf (stderr, "      --hfov=val                 lens horisontal field of view saved to hugin file\n");
       fprintf (stderr, "     other:\n");
       fprintf (stderr, "      --panorama-map             print panorama map in ascii-art\n");
-      fprintf (stderr, "      --min-screen-precentage    minimum portion of screen required to be recognized by screen detection\n");
-      fprintf (stderr, "      --optimize-colors          auto-optimize screen colors (default)\n");
-      fprintf (stderr, "      --no-optimize-colors       do not auto-optimize screen colors\n");
       fprintf (stderr, "      --reoptimize-colors        auto-optimize screen colors after initial screen analysis\n");
-      fprintf (stderr, "      --slow-floodfill           use slower discovery of patches (by default both slow and fast methods are used)\n");
-      fprintf (stderr, "      --no-slow-floodfill        do not use slower discovery of patches (by default both slow and fast methods are used)\n");
-      fprintf (stderr, "      --fast-floodfill           use faster discovery of patches (by default both slow and fast methods are used)\n");
-      fprintf (stderr, "      --no-fast-floodfill        do not use faster discovery of patches (by default both slow and fast methods are used)\n");
       fprintf (stderr, "      --limit-directions         do limit overlap checking to expected directions\n");
       fprintf (stderr, "      --no-limit-directions      do not limit overlap checking to expected directions\n");
       fprintf (stderr, "      --min-patch-contrast=val   specify minimal contrast accepted in patch discovery\n");
@@ -252,6 +221,46 @@ print_help ()
     {
       fprintf (stderr, "  read-chemcad-spectra <out_filename> <in_filename>\n");
       fprintf (stderr, "    read spectrum in checad database format and output it in format that can be built into libcolorscreen\n");
+    }
+  if (subhelp == help_render || subhelp == help_autodetect || subhelp == help_stitch)
+    {
+      fprintf (stderr, "     parameters of screen geometry detection:\n");
+      fprintf (stderr, "      --scanner-type=type       specify scanner type\n");
+      fprintf (stderr, "                                suported scanner types:");
+      for (int j = 0; j < max_scanner_type; j++)
+	{
+	  if (!(j % 4))
+	    fprintf (stderr, "\n                                 ");
+	  fprintf (stderr, " %s", scanner_type_names[j]);
+	}
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --screen-type=type       specify scanner type\n");
+      fprintf (stderr, "                                suported scanner types:");
+      for (int j = 0; j < max_scr_type; j++)
+	{
+	  if (!(j % 4))
+	    fprintf (stderr, "\n                                 ");
+	  fprintf (stderr, " %s", scr_names[j]);
+	}
+      fprintf (stderr, "\n");
+      fprintf (stderr, "      --mesh                    compute mesh of non-linear transformations\n");
+      fprintf (stderr, "      --no-mesh                 do not compute mesh of non-linear transformations\n");
+      fprintf (stderr, "      --optimize-colors         try to automatically optimize colors of patches for screen discovery\n");
+      fprintf (stderr, "      --no-optimize-colors      do not automatically optimize colors of patches for screen discovery\n");
+      fprintf (stderr, "      --min-screen-percentage   specify minimum perdentage of screen to be detected\n");
+      fprintf (stderr, "      --min-patch-contrast      specify minimum contrast for patch detection\n");
+      fprintf (stderr, "      --fast-floodfill          enable use of fast patch detection\n");
+      fprintf (stderr, "      --no-fast-floodfill       disable use of fast patch detection\n");
+      fprintf (stderr, "      --slow-floodfill          enable use of slow patch detection\n");
+      fprintf (stderr, "      --no-slow-floodfill       disable use of slow patch detection\n");
+    }
+  if (subhelp == help_autodetect)
+    {
+      fprintf (stderr, "      --top/bottom/left/right   asume that given part of scan is not part of an image and insert fake point to improve geometry of binding tape\n");
+      fprintf (stderr, "      --border-top=percent      assume that given percent from the top of the scan is a border and does not contain screen\n");
+      fprintf (stderr, "      --border-bottom=percent   same for bottom\n");
+      fprintf (stderr, "      --border-left=percent     same for left\n");
+      fprintf (stderr, "      --border-right=percent    same for right\n");
     }
   fprintf (stderr, "\n");
   if (subhelp == help_basic)
@@ -425,6 +434,59 @@ parse_common_flags (int argc, char **argv, int *i)
   return false;
 }
 
+static bool
+parse_detect_regular_screen_params (detect_regular_screen_params &dsparams, bool in_panorama, int argc, char **argv, int *i)
+{
+  float flt;
+  if (!strcmp (argv[*i], "--slow-floodfill"))
+    dsparams.slow_floodfill = true;
+  else if (!strcmp (argv[*i], "--fast-floodfill"))
+    dsparams.fast_floodfill = true;
+  else if (!strcmp (argv[*i], "--no-slow-floodfill"))
+    dsparams.slow_floodfill = false; 
+  else if (!strcmp (argv[*i], "--no-fast-floodfill"))
+    dsparams.fast_floodfill = false;
+  else if (const char *str = arg_with_param (argc, argv, i, "scanner-type"))
+    dsparams.scanner_type = parse_scanner_type (str);
+  else if (const char *str = arg_with_param (argc, argv, i, "screen-type"))
+    dsparams.scr_type = parse_scr_type (str);
+  else if (!strcmp (argv[*i], "--mesh"))
+    dsparams.do_mesh = true; 
+  else if (!strcmp (argv[*i], "--no-mesh"))
+    dsparams.do_mesh = false; 
+  else if (!strcmp (argv[*i], "--optimize-colors"))
+    dsparams.optimize_colors = true; 
+  else if (!strcmp (argv[*i], "--no-optimize-colors"))
+    dsparams.optimize_colors = false; 
+  else if (parse_float_param (argc, argv, i, "gamma", flt, -2, 100))
+    dsparams.gamma = flt;
+  else if (parse_float_param (argc, argv, i, "min-screen-percentage", flt, 0, 100))
+    dsparams.min_screen_percentage = flt;
+  else if (parse_float_param (argc, argv, i, "min-patch-contrast", flt, 0, 1000))
+    dsparams.min_patch_contrast = flt;
+  else if (in_panorama)
+    return false;
+  else if (!strcmp (argv[*i], "--top"))
+    dsparams.top = true; 
+  else if (!strcmp (argv[*i], "--bottom"))
+    dsparams.bottom = true; 
+  else if (!strcmp (argv[*i], "--left"))
+    dsparams.left = true; 
+  else if (!strcmp (argv[*i], "--right"))
+    dsparams.right = true; 
+  else if (parse_float_param (argc, argv, i, "border-top", flt, 0, 100))
+    dsparams.border_top = flt;
+  else if (parse_float_param (argc, argv, i, "border-bottom", flt, 0, 100))
+    dsparams.border_bottom = flt;
+  else if (parse_float_param (argc, argv, i, "border-left", flt, 0, 100))
+    dsparams.border_left = flt;
+  else if (parse_float_param (argc, argv, i, "border-right", flt, 0, 100))
+    dsparams.border_right = flt;
+  else
+    return false;
+  return true;
+}
+
 static int
 render_cmd (int argc, char **argv)
 {
@@ -445,11 +507,14 @@ render_cmd (int argc, char **argv)
   float scale = 0;
   float output_gamma = -4;
   subhelp = help_render;
+  detect_regular_screen_params dsparams;
 
 
   for (int i = 0; i < argc; i++)
     {
       if (parse_common_flags (argc, argv, &i))
+	;
+      else if (parse_detect_regular_screen_params (dsparams, false, argc, argv, &i))
 	;
       else if (const char *str = arg_with_param (argc, argv, &i, "mode"))
 	rtparam.type = parse_mode (str);
@@ -558,10 +623,12 @@ render_cmd (int argc, char **argv)
 	{
 	  progress.pause_stdout ();
 	  printf ("Detecting geometry\n");
-	  detect_regular_screen_params dsparams;
-	  dsparams.scr_type = param.type;
-	  dsparams.gamma = rparam.gamma;
-	  dsparams.scanner_type = param.scanner_type;
+	  if (dsparams.scr_type == max_scr_type)
+	    dsparams.scr_type = param.type;
+	  if (!dsparams.gamma)
+	    dsparams.gamma = rparam.gamma;
+	  if (dsparams.scanner_type == max_scanner_type)
+	    dsparams.scanner_type = param.scanner_type;
 	  auto detected = detect_regular_screen (scan, dparam, solver_param, &dsparams, &progress);
 	  if (!detected.success)
 	    {
@@ -626,62 +693,21 @@ autodetect (int argc, char **argv)
   const char *outname = NULL;
   const char *repname = NULL;
   float scan_dpi = 0;
-  float gamma = 0;
   bool detect_color_model = true;
   bool detect_brightness = true;
-  scanner_type scanner_type = max_scanner_type;
   scr_detect_parameters dparam;
   detect_regular_screen_params dsparams;
   subhelp = help_autodetect;
   for (int i = 0; i < argc; i++)
     {
-      float flt;
       if (parse_common_flags (argc, argv, &i))
+	;
+      else if (parse_detect_regular_screen_params (dsparams, false, argc, argv, &i))
 	;
       else if (const char *str = arg_with_param (argc, argv, &i, "par"))
 	cspname = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "report"))
 	repname = str;
-      else if (!strcmp (argv[i], "--slow-floodfill"))
-	dsparams.slow_floodfill = true;
-      else if (!strcmp (argv[i], "--fast-floodfill"))
-	dsparams.fast_floodfill = true;
-      else if (!strcmp (argv[i], "--no-slow-floodfill"))
-	dsparams.slow_floodfill = false; 
-      else if (!strcmp (argv[i], "--no-fast-floodfill"))
-	dsparams.fast_floodfill = false;
-      else if (const char *str = arg_with_param (argc, argv, &i, "scanner-type"))
-	scanner_type = parse_scanner_type (str);
-      else if (!strcmp (argv[i], "--mesh"))
-	dsparams.do_mesh = true; 
-      else if (!strcmp (argv[i], "--no-mesh"))
-	dsparams.do_mesh = false; 
-      else if (!strcmp (argv[i], "--optimize-colors"))
-	dsparams.optimize_colors = true; 
-      else if (!strcmp (argv[i], "--no-optimize-colors"))
-	dsparams.optimize_colors = false; 
-      else if (!strcmp (argv[i], "--top"))
-	dsparams.top = true; 
-      else if (!strcmp (argv[i], "--bottom"))
-	dsparams.bottom = true; 
-      else if (!strcmp (argv[i], "--left"))
-	dsparams.left = true; 
-      else if (!strcmp (argv[i], "--right"))
-	dsparams.right = true; 
-      else if (parse_float_param (argc, argv, &i, "gamma", gamma, -2, 100))
-	;
-      else if (parse_float_param (argc, argv, &i, "min-screen-percentage", flt, 0, 100))
-	dsparams.min_screen_percentage = flt;
-      else if (parse_float_param (argc, argv, &i, "border-top", flt, 0, 100))
-	dsparams.border_top = flt;
-      else if (parse_float_param (argc, argv, &i, "border-bottom", flt, 0, 100))
-	dsparams.border_bottom = flt;
-      else if (parse_float_param (argc, argv, &i, "border-left", flt, 0, 100))
-	dsparams.border_left = flt;
-      else if (parse_float_param (argc, argv, &i, "border-right", flt, 0, 100))
-	dsparams.border_right = flt;
-      else if (parse_float_param (argc, argv, &i, "min-patch-contrast", flt, 0, 1000))
-	dsparams.min_patch_contrast = flt;
       else if (!strcmp (argv[i], "--auto-color-model"))
 	detect_color_model = true;
       else if (!strcmp (argv[i], "--no-auto-color-model"))
@@ -726,7 +752,15 @@ autodetect (int argc, char **argv)
 	  return 1;
 	}
       fclose (in);
+      if (dsparams.scr_type == max_scr_type)
+	dsparams.scr_type = param.type;
+      if (!dsparams.gamma)
+	dsparams.gamma = rparam.gamma;
+      if (dsparams.scanner_type == max_scanner_type)
+	dsparams.scanner_type = param.scanner_type;
     }
+  if (dsparams.scanner_type == max_scanner_type)
+    dsparams.scanner_type = fixed_lens;
   /* Load scan data.  */
   image_data scan;
   if (verbose)
@@ -756,15 +790,8 @@ autodetect (int argc, char **argv)
 	  perror (repname);
 	  return 1;
 	}
-      if (gamma)
-	rparam.gamma = gamma;
-      else if (!cspname)
-	rparam.gamma = scan.gamma != -2 ? scan.gamma : 0;
-      if (scanner_type != max_scanner_type)
-	dsparams.scanner_type = scanner_type;
-      else
-	dsparams.scanner_type = fixed_lens;
-      dsparams.gamma = rparam.gamma;
+      if (!dsparams.gamma && !cspname)
+	dsparams.gamma = scan.gamma != -2 ? scan.gamma : 0;
      
       if (verbose)
 	{
@@ -792,8 +819,8 @@ autodetect (int argc, char **argv)
   else
     {
       param.type = scan.stitch->images[0][0].param.type;
-      if (gamma)
-	rparam.gamma = gamma;
+      if (dsparams.gamma)
+	rparam.gamma = dsparams.gamma;
       else if (!cspname)
 	rparam.gamma = scan.stitch->images[0][0].img->gamma != -2 ? scan.stitch->images[0][0].img->gamma : 0;
     }
@@ -1993,6 +2020,7 @@ stitch(int argc, char **argv)
   std::vector<std::string> fnames;
   int ncols = 0;
   subhelp = help_stitch;
+  detect_regular_screen_params dsparams;
 
   auto prj = std::make_unique<stitch_project> ();
 
@@ -2000,6 +2028,8 @@ stitch(int argc, char **argv)
     {
       float flt;
       if (parse_common_flags (argc, argv, &i))
+	;
+      else if (parse_detect_regular_screen_params (dsparams, true, argc, argv, &i))
 	;
       else if (const char *str = arg_with_param (argc, argv, &i, "report"))
 	prj->params.report_filename = str;
@@ -2027,24 +2057,12 @@ stitch(int argc, char **argv)
 	verbose = true;
       else if (!strcmp (argv[i], "--panorama-map"))
 	prj->params.panorama_map = true;
-      else if (!strcmp (argv[i], "--optimize-colors"))
-	prj->params.optimize_colors = true;
-      else if (!strcmp (argv[i], "--no-optimize-colors"))
-	prj->params.optimize_colors = false;
       else if (!strcmp (argv[i], "--reoptimize-colors"))
 	prj->params.reoptimize_colors = true;
       else if (!strcmp (argv[i], "--limit-directions"))
 	prj->params.limit_directions = true;
       else if (!strcmp (argv[i], "--no-limit-directions"))
 	prj->params.limit_directions = false;
-      else if (!strcmp (argv[i], "--slow-floodfill"))
-	prj->params.slow_floodfill = true;
-      else if (!strcmp (argv[i], "--fast-floodfill"))
-	prj->params.fast_floodfill = true;
-      else if (!strcmp (argv[i], "--no-slow-floodfill"))
-	prj->params.slow_floodfill = false;
-      else if (!strcmp (argv[i], "--no-fast-floodfill"))
-	prj->params.fast_floodfill = false;
       else if (parse_float_param (argc, argv, &i, "outer-tile-border", flt, 0, 100))
 	prj->params.outer_tile_border = flt;
       else if (parse_float_param (argc, argv, &i, "inner-tile-border", flt, 0, 100))
@@ -2069,14 +2087,6 @@ stitch(int argc, char **argv)
 	prj->params.max_avg_distance = flt;
       else if (parse_float_param (argc, argv, &i, "max-max-distance", flt, 0, 100000))
 	prj->params.max_max_distance = flt;
-      else if (parse_float_param (argc, argv, &i, "min-patch-contrast", flt, 0, 100000))
-	prj->params.min_patch_contrast = flt;
-      else if (const char *str = arg_with_param (argc, argv, &i, "screen-type"))
-	prj->params.type = parse_scr_type (str);
-      else if (!strcmp (argv[i], "--mesh"))
-	prj->params.mesh_trans = true;
-      else if (!strcmp (argv[i], "--no-mesh"))
-	prj->params.mesh_trans = false;
       else if (!strcmp (argv[i], "--geometry-info"))
 	prj->params.geometry_info = true;
       else if (!strcmp (argv[i], "--individual-geometry-info"))
@@ -2178,7 +2188,7 @@ stitch(int argc, char **argv)
 
   {
     file_progress_info progress (stdout, verbose, verbose_tasks);
-    if (!prj->stitch (&progress, load_project_filename))
+    if (!prj->stitch (&progress, &dsparams, load_project_filename))
       return 1;
   }
   if (save_project_filename)
