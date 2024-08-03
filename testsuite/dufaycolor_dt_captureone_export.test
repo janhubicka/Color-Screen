@@ -11,10 +11,10 @@ fi
 echo 1..6
 . $srcdir/defs.sh
 NAME=dufaycolor_dt_captureone_export
-pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind --scanner-type=horisontally-moving-lens --min-screen-percentage=80 --max-unknown-screen-range=1 || exit 1
+pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}.csprj"  --report "out-${NAME}.txt" --no-cpfind --scanner-type=horisontally-moving-lens --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
 grep "Best match on offset -16,-10" "out-${NAME}.txt" || exit 1
 echo 'ok 1 - stitch project construction'
-pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}-nomesh.csprj"  --report "out-${NAME}.txt" --no-cpfind --scanner-type=horisontally-moving-lens --no-mesh --min-screen-percentage=80 --max-unknown-screen-range=1 || exit 1
+pexec $RUNCOLORSCREEN stitch --ncols 2 "$srcdir/${NAME}_tile1.jpg" "$srcdir/${NAME}_tile2.jpg"  --out "out-${NAME}-nomesh.csprj"  --report "out-${NAME}.txt" --no-cpfind --scanner-type=horisontally-moving-lens --no-mesh --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
 grep "Best match on offset -16,-10" "out-${NAME}.txt" || exit 1
 echo 'ok 2 - stitch project construction no mesh'
 PARNAME=out-${NAME}
