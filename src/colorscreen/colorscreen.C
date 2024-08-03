@@ -1972,7 +1972,7 @@ dump_patch_density (int argc, char **argv)
   if (!dump_patch_density (out, scan, param, rparam, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Saving of %s failed\n", argv[1], error);
+      fprintf (stderr, "Saving of %s failed: %s\n", argv[1], error);
       return 1;
     }
   fclose (out);

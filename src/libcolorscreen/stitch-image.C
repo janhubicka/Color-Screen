@@ -215,7 +215,6 @@ stitch_image::patch_detected_p (int sx, int sy)
 bool
 stitch_image::diff (stitch_image &other, progress_info *progress)
 {
-  coord_t sx, sy;
   bool found = false;
   int stack = 0;
   point_t s = scr_to_img_map.to_scr ({(coord_t)0, (coord_t)0}) + pos;
@@ -324,14 +323,14 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
           point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y}) + pos;
           if (other.img_pixel_known_p (scr.x, scr.y))
 	   {
-	     rgbdata c1 = render.sample_pixel_scr (sx + pos.x, sy + pos.y);
-	     rgbdata c2 = render.sample_pixel_scr (sx + other.pos.x, sy + other.pos.y);
+	     rgbdata c1 = render.sample_pixel_scr (scr.x + pos.x, scr.y + pos.y);
+	     rgbdata c2 = render.sample_pixel_scr (scr.x + other.pos.x, scr.y + other.pos.y);
 	     int r = c1.red * 65535, g = c1.green * 65535, b = c1.blue * 65545;
 	     int r2 = c2.red * 65535, g2 = c2.green * 65535, b2 = c2.blue * 65545;
 #if 0
 	     render_pixel (65535, sx + xpos, sy + ypos, &r, &g, &b, progress);
 #endif
-	     if (patch_detected_p (sx + pos.x, sy + pos.y) && other.patch_detected_p (sx + other.pos.x, sy + other.pos.y))
+	     if (patch_detected_p (scr.x + pos.x, scr.y + pos.y) && other.patch_detected_p (scr.x + other.pos.x, scr.y + other.pos.y))
 	       {
 		 sumdiff[0] += abs (r2-r);
 		 sumdiff[1] += abs (g2-b);
@@ -768,7 +767,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       paget = new (analyze_paget);
       assert (detected.param.type != Dufay);
       paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
-      analyzer = (std::unique_ptr <analyze_base>) (dufay);
+      analyzer = (std::unique_ptr <analyze_base>) (paget);
     }
   if (m_prj->params.max_contrast >= 0)
     dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress);

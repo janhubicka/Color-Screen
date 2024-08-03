@@ -315,8 +315,8 @@ public:
 #endif
   }
   bool write_tiles (render_parameters rparam,
-                    struct render_to_file_params *rfparams,
-                    struct render_type_parameters &rtparam, int n,
+                    render_to_file_params *rfparams,
+                    render_type_parameters &rtparam, int n,
                     progress_info *progress, const char **error);
   enum optimize_tile_adjustments_flags
   {

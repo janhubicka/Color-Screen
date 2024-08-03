@@ -6,8 +6,8 @@
 namespace colorscreen
 {
 class screen;
-class render_parameters;
-class scr_to_img_parameters;
+struct render_parameters;
+struct scr_to_img_parameters;
 class image_data;
 enum finetune_flags
 {

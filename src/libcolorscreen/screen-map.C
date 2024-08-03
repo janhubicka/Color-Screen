@@ -196,7 +196,6 @@ screen_map::add_solver_points (solver_parameters *sparam, int xgrid, int ygrid)
           for (int xx = x; xx < x + xstep && !found; xx++)
             if (known_p ({xx - xshift, yy - yshift}))
               {
-                coord_t ix, iy, sx, sy;
                 solver_parameters::point_color color;
                 found = true;
                 point_t img = get_coord ({xx - xshift, yy - yshift});

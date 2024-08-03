@@ -586,7 +586,7 @@ std::string stitch_project::adjusted_filename (std::string filename, std::string
    We support multiple modes at once since it is more memory effective.  */
 
 bool 
-stitch_project::write_tiles (render_parameters rparam, struct render_to_file_params *rfparams, struct render_type_parameters &rtparam, int n, progress_info * progress, const char **error)
+stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rfparams, render_type_parameters &rtparam, int n, progress_info * progress, const char **error)
 {
   for (int i = 0; i < n; i++)
     if (!complete_rendered_file_parameters (&rtparam, NULL, NULL, this, &rfparams[i]))

@@ -6,7 +6,7 @@ namespace colorscreen
 {
 class backlight_correction;
 class image_data;
-class memory_buffer;
+struct memory_buffer;
 class backlight_correction_parameters
 {
   struct entry
