@@ -21,7 +21,7 @@ stitch_image::stitch_image ()
 : filename (""), img (), mesh_trans (), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (), known_pixels (),
-  stitch_info (NULL), refcount (0), analyzed (false)
+  stitch_info (NULL), analyzed (false), refcount (0)
 {
 }
 
@@ -208,9 +208,9 @@ stitch_image::patch_detected_p (int sx, int sy)
 {
   sx = sx - pos.x + xshift;
   sy = sy - pos.y + yshift;
-  if (sx < 0 || sy < 0 || sx >= screen_detected_patches->width || sy >= screen_detected_patches->height)
+  if (sx < 0 || sy < 0 || sx >= (int)screen_detected_patches->width || sy >= (int)screen_detected_patches->height)
     return false;
-  return screen_detected_patches->test_range (sx, sy, 2);
+  return screen_detected_patches->test_range ({sx, sy}, 2);
 }
 bool
 stitch_image::diff (stitch_image &other, progress_info *progress)
@@ -321,9 +321,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     {
       for (int x = rxmin; x <= rxmax; x++)
 	{
-	  int r = 0, g = 0, b = 0;
           point_t scr = scr_to_img_map.to_scr ({(coord_t)x, (coord_t)y}) + pos;
-          if (other.img_pixel_known_p (sx, sy))
+          if (other.img_pixel_known_p (scr.x, scr.y))
 	   {
 	     rgbdata c1 = render.sample_pixel_scr (sx + pos.x, sy + pos.y);
 	     rgbdata c2 = render.sample_pixel_scr (sx + other.pos.x, sy + other.pos.y);
@@ -396,8 +395,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    coord_t xx = x + pos.x - other.pos.x;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
-		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
+		&& screen_detected_patches->test_range ({x + xshift, y + yshift}, range)
+		&& other.screen_detected_patches->test_range ({(int64_t)floor (xx) + other.xshift, (int64_t)floor (yy) + other.yshift}, range))
 	    {
 	      point_t p1 = scr_to_img_map.to_img ({(coord_t)x, (coord_t)y});
 	      point_t p2 = other.scr_to_img_map.to_img ({(coord_t)xx, (coord_t)yy});
@@ -432,8 +431,8 @@ stitch_image::output_common_points (FILE *f, stitch_image &other, int n1, int n2
 	  {
 	    coord_t xx = x + pos.x - other.pos.x;
 	    if (xx >= -other.xshift && xx < -other.xshift + other.width
-		&& screen_detected_patches->test_range (x + xshift, y + yshift, range)
-		&& other.screen_detected_patches->test_range (floor (xx) + other.xshift, floor (yy) + other.yshift, range))
+		&& screen_detected_patches->test_range ({x + xshift, y + yshift}, range)
+		&& other.screen_detected_patches->test_range ({(int64_t)floor (xx) + other.xshift, (int64_t)floor (yy) + other.yshift}, range))
 	      {
 		point_t p1 = scr_to_img_map.to_img ({(coord_t)x, (coord_t)y});
 		point_t p2 = other.scr_to_img_map.to_img ({(coord_t)xx, (coord_t)yy});
@@ -748,9 +747,9 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
     {
       screen_detected_patches =  std::make_unique<bitmap_2d> (width, height);
       for (int y = 0; y < height; y++)
-	if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < detected.known_patches->height)
+	if (y - yshift +  detected.yshift > 0 && y - yshift +  detected.yshift < (int)detected.known_patches->height)
 	  for (int x = 0; x < width; x++)
-	    if (x - xshift +  detected.xshift > 0 && x - xshift +  detected.xshift < detected.known_patches->width
+	    if (x - xshift +  detected.xshift > 0 && x - xshift +  detected.xshift < (int)detected.known_patches->width
 		&& detected.known_patches->test_bit (x - xshift + detected.xshift, y - yshift +  detected.yshift))
 	       screen_detected_patches->set_bit (x, y);
       delete detected.known_patches;
@@ -808,7 +807,7 @@ stitch_image::pixel_known_p (coord_t sx, coord_t sy)
   int ay = floor (sy) + yshift - pos.y;
   if (ax < 0 || ay < 0 || ax >= width || ay >= height)
     return false;
-  return known_pixels->test_range (ax, ay, 2);
+  return known_pixels->test_range ({ax, ay}, 2);
 }
 bool
 pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)

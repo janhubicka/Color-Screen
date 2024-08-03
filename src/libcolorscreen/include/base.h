@@ -63,14 +63,14 @@ struct point_t
 {
   coord_t x, y;
   pure_attr inline coord_t
-  dist_sq2_from (point_t p) const
+  dist_sq2_from (point_t p, coord_t xscale = 1, coord_t yscale = 1) const
   {
-    return (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y);
+    return (x - p.x) * (x - p.x) * (xscale * xscale) + (y - p.y) * (y - p.y) * (yscale * yscale);
   }
   pure_attr inline coord_t
-  dist_from (point_t p) const
+  dist_from (point_t p, coord_t xscale = 1, coord_t yscale = 1) const
   {
-    return my_sqrt (dist_sq2_from (p));
+    return my_sqrt (dist_sq2_from (p, xscale, yscale));
   }
   pure_attr inline coord_t
   length () const

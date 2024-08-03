@@ -346,9 +346,6 @@ scr_to_img::get_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
   if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
-      coord_t xul, xur, xdl, xdr;
-      coord_t yul, yur, ydl, ydr;
-
       point_t ul = to_scr ({ x1, y1 });
       point_t ur = to_scr ({ x2, y1 });
       point_t dl = to_scr ({ x1, y2 });
@@ -430,9 +427,6 @@ scr_to_img::get_final_range (coord_t x1, coord_t y1, coord_t x2, coord_t y2,
   if (!m_param.mesh_trans)
     {
       /* Compute all the corners.  */
-      coord_t xul, xur, xdl, xdr;
-      coord_t yul, yur, ydl, ydr;
-
       point_t ul = img_to_final ({ x1, y1 });
       point_t ur = img_to_final ({ x2, y1 });
       point_t dl = img_to_final ({ x1, y2 });

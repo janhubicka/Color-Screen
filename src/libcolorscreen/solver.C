@@ -1254,7 +1254,7 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
   if (flags & solve_image_weights)
     for (int i = 0; i < n; i++)
       {
-	coord_t dist = points[i].img.dist_sq2_from (wcenter);
+	coord_t dist = points[i].img.dist_sq2_from (wcenter, xscale, yscale);
 	dist *= dist;
 	double weight = 1 / (dist + 0.5);
 	weights[i] = weight;
@@ -1264,7 +1264,7 @@ homography::get_matrix (solver_parameters::solver_point_t *points, int n, int fl
   else if (flags & solve_screen_weights)
     for (int i = 0; i < n; i++)
       {
-	coord_t dist = points[i].scr.dist_from (wcenter);
+	coord_t dist = points[i].scr.dist_from (wcenter, xscale, yscale);
 	double weight = 1 / (dist + 0.5);
 	weights[i] = weight;
 	normscale = std::max (normscale, weight);

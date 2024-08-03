@@ -234,8 +234,7 @@ static int
 print_task (FILE *f, std::vector<progress_info::status> &status, timeval *start_time)
 {
   int len;
-  bool repeat;
-  for (int i = 0; i < status.size () - 1; i++)
+  for (size_t i = 0; i < status.size () - 1; i++)
     len += fprintf (f, "  ");
   auto s = status [status.size () - 1];
   if (!start_time)

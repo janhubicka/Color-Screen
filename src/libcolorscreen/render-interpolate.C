@@ -344,7 +344,6 @@ render_interpolate::analyze_patches (analyzer analyze,
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
-		coord_t xp, yp;
 		coord_t xs = x - m_paget->get_xshift (), ys = y - m_paget->get_yshift ();
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
@@ -382,7 +381,6 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < m_dufay->get_width (); x++)
 	      {
-		coord_t xp, yp;
 		coord_t xs = x - m_dufay->get_xshift (), ys = y - m_dufay->get_yshift ();
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;
@@ -410,7 +408,6 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 	  if (!progress || !progress->cancel_requested ())
 	    for (int x = 0; x < m_paget->get_width (); x++)
 	      {
-		coord_t xp, yp;
 		coord_t xs = x - m_paget->get_xshift (), ys = y - m_paget->get_yshift ();
 		if (screen && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
 		  continue;

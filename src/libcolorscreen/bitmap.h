@@ -106,7 +106,7 @@ public:
   clear_bit (int_point_t p)
   {
     if (colorscreen_checking)
-      assert (p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height);
+      assert (p.x >= 0 && p.y >= 0 && (size_t)p.x <= width && (size_t)p.y <= height);
     return bitmap::clear_bit (p.y * width + p.x);
   }
   bool
@@ -115,8 +115,8 @@ public:
     if (p.x < (int)r || p.y < (int)r || (size_t)p.x + r >= (size_t)width
         || (size_t)p.y + r >= (size_t)height)
       return false;
-    for (size_t yy = p.y - r; yy < p.y + r; yy++)
-      for (size_t xx = p.x - r; xx < p.x + r; xx++)
+    for (size_t yy = p.y - r; yy < (size_t)(p.y + r); yy++)
+      for (size_t xx = p.x - r; xx < (size_t)(p.x + r); xx++)
         if (!test_bit (xx, yy))
           return false;
     return true;

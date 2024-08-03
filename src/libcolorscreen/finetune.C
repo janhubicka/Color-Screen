@@ -88,9 +88,9 @@ public:
     screen *scr;
 
     tile_data ()
-    : outliers (), color (NULL), bw (NULL), pos (NULL), fixed_offset {-10, -10}, fixed_emulsion_offset {-10, -10},
-      last_emulsion_intensities (-1, -1, -1), last_emulsion_offset {-10, -10}, merged_scr (NULL),
-      scr (NULL), simulated_screen (NULL)
+    : outliers (), color (NULL), bw (NULL), pos (NULL), fixed_offset {-10, -10}, fixed_emulsion_offset {-10, -10}, merged_scr (NULL), scr (NULL),
+      last_emulsion_intensities (-1, -1, -1), last_emulsion_offset {-10, -10},
+      simulated_screen (NULL)
     { }
     ~tile_data ()
     {

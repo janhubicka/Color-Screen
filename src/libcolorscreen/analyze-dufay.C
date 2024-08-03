@@ -121,7 +121,6 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
     }
   if (!max_ratio)
     return -1;
-  coord_t xi, yi;
   point_t imgp = map.to_img ({maxx + tile_size / (coord_t)2 - m_xshift, maxy + tile_size / (coord_t)2 - m_yshift});
   *x1 = imgp.x;
   *y1 = imgp.y;

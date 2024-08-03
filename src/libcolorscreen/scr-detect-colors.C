@@ -56,9 +56,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 {
   int count = 0;
   const int range = 2;
-  for (int y = 0; y < known_patches->height; y++)
-    for (int x = 0; x < known_patches->width; x++)
-      if (known_patches->test_range (x, y, range))
+  for (int y = 0; y < (int)known_patches->height; y++)
+    for (int x = 0; x < (int)known_patches->width; x++)
+      if (known_patches->test_range ({x, y}, range))
 	count++;
   const int samples = 1000;
   int nnr = 0, nng = 0, nnb = 0;
@@ -67,9 +67,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   rgbdata blues[samples];
   luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
 
-  for (int y = -yshift, nf = 0, next =0, step = count / samples; y < known_patches->height - yshift; y++)
-    for (int x = -xshift; x < known_patches->width - xshift; x++)
-      if (known_patches->test_range (x + xshift,y + yshift, range) && nf++ > next)
+  for (int y = -yshift, nf = 0, next =0, step = count / samples; y < (int)known_patches->height - yshift; y++)
+    for (int x = -xshift; x < (int)known_patches->width - xshift; x++)
+      if (known_patches->test_range ({x + xshift,y + yshift}, range) && nf++ > next)
 	{
 	  coord_t ix, iy;
 	  next += step;
