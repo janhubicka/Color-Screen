@@ -11,15 +11,15 @@ fi
 echo 1..6
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
-test_autodetect $NAME out-$NAME-mesh-fixed-lens --gamma 1 --mesh
+test_autodetect $NAME out-$NAME-mesh-fixed-lens --gamma 1 --mesh --min-screen-percentage=99
 echo 'ok 1 - autodetect with mesh and fixed lens'
-test_autodetect_and_render $NAME out-$NAME-mesh --gamma 1 --mesh --scanner-type=horisontally-moving-lens
+test_autodetect_and_render $NAME out-$NAME-mesh --gamma 1 --mesh --scanner-type=horisontally-moving-lens --min-screen-percentage=99 
 echo 'ok 2 - autodetect and render with mesh and horisontally moving'
-test_autodetect $NAME out-$NAME-nomesh-fixed-lens --gamma 1 --no-mesh 
+test_autodetect $NAME out-$NAME-nomesh-fixed-lens --gamma 1 --no-mesh  --min-screen-percentage=99 
 echo 'ok 3 - autodetect with mesh and fixed lens'
-test_autodetect_and_render $NAME out-$NAME-nomesh --gamma 1 --no-mesh --scanner-type=horisontally-moving-lens
+test_autodetect_and_render $NAME out-$NAME-nomesh --gamma 1 --no-mesh --scanner-type=horisontally-moving-lens --min-screen-percentage=99 
 echo 'ok 4 - autodetect and render without mesh and horisonatlly moving'
-test_autodetect90 $NAME out-$NAME-nomesh-fast --gamma 1 --no-mesh --no-slow-floodfill --fast-floodfill --scanner-type=horisontally-moving-lens 
+test_autodetect $NAME out-$NAME-nomesh-fast --gamma 1 --no-mesh --no-slow-floodfill --fast-floodfill --scanner-type=horisontally-moving-lens  --min-screen-percentage=90 
 echo 'ok 5 - autodetect using fast floodfill only'
-test_autodetect80 $NAME out-$NAME-nomesh-slow --gamma 1 --no-mesh --no-fast-floodfill --slow-floodfill --scanner-type=horisontally-moving-lens
+test_autodetect $NAME out-$NAME-nomesh-slow --gamma 1 --no-mesh --no-fast-floodfill --slow-floodfill --scanner-type=horisontally-moving-lens --min-screen-percentage=80 
 echo 'ok 6 - autodetect using slow floodfill only'
