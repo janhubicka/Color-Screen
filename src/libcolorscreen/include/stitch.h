@@ -51,9 +51,6 @@ struct stitching_params
   /* Specifies minimum and maximum overlap of the beighboring tiles.  */
   int min_overlap_percentage;
   int max_overlap_percentage;
-  /* Specifies maximum percentage of undetected patches in a given tile.  */
-  int max_unknown_screen_range;
-  int min_screen_percentage;
 
   /* Maximal acceptable change in contrast.  */
   luminosity_t max_contrast;
@@ -92,8 +89,7 @@ struct stitching_params
         individual_geometry_info (false), outliers_info (false), diffs (false),
         load_registration (false), outer_tile_border (30),
         inner_tile_border (10), min_overlap_percentage (10),
-        max_overlap_percentage (65), max_unknown_screen_range (100),
-        min_screen_percentage (75), max_contrast (-1), 
+        max_overlap_percentage (65), max_contrast (-1), 
         num_control_points (100), hfov (28.534), max_avg_distance (2),
         max_max_distance (10), scan_xdpi (0), scan_ydpi (0), width (0),
         height (0), path ("")

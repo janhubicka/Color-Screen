@@ -338,6 +338,7 @@ print_help ()
                        "optimize colors of patches for screen discovery\n");
       fprintf (stderr, "      --min-screen-percentage   specify minimum "
                        "perdentage of screen to be detected\n");
+      fprintf (stderr, "      --max-unknown-screen-range maximum range of screen with undetected patches considered to be acceptable.");
       fprintf (stderr, "      --min-patch-contrast      specify minimum "
                        "contrast for patch detection\n");
       fprintf (stderr, "      --fast-floodfill          enable use of fast "
@@ -571,6 +572,9 @@ parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
   else if (parse_float_param (argc, argv, i, "min-screen-percentage", flt, 0,
                               100))
     dsparams.min_screen_percentage = flt;
+  else if (parse_int_param (argc, argv, i, "max-unknown-screen-range",
+	   dsparams.max_unknown_screen_range, 0, 100000))
+    ;
   else if (parse_float_param (argc, argv, i, "min-patch-contrast", flt, 0,
                               1000))
     dsparams.min_patch_contrast = flt;
@@ -2363,9 +2367,6 @@ stitch (int argc, char **argv)
         prj->params.inner_tile_border = flt;
       else if (parse_float_param (argc, argv, &i, "max-contrast", flt, 0, 100))
         prj->params.max_contrast = flt;
-      else if (parse_float_param (argc, argv, &i, "max-unknown-screen-range",
-                                  flt, 0, 100))
-        prj->params.max_unknown_screen_range = atoi (argv[i]);
       else if (parse_float_param (argc, argv, &i, "max-overlap", flt, 0, 100))
         prj->params.max_overlap_percentage = atoi (argv[i]);
       else if (parse_int_param (argc, argv, &i, "ncols", ncols, 0,
@@ -2375,9 +2376,6 @@ stitch (int argc, char **argv)
                                 prj->params.num_control_points, 0,
                                 stitching_params::max_dim))
         ;
-      else if (parse_float_param (argc, argv, &i, "min-screen-percentage", flt,
-                                  0, 100))
-        prj->params.min_screen_percentage = flt;
       else if (parse_float_param (argc, argv, &i, "scan-ppi", flt, 0, 100))
         prj->params.scan_xdpi = prj->params.scan_ydpi = flt;
       else if (parse_float_param (argc, argv, &i, "hfov", flt, 0, 100))
