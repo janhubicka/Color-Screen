@@ -677,10 +677,11 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  if (current_mesh)
 	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
-	  dsparams.slow_floodfill = true;
-	  dsparams.fast_floodfill = true;
 	  dsparams.return_screen_map = true;
-	  detected = detect_regular_screen (scan, current.type, current_scr_detect, rparams.gamma, current_solver, &dsparams, &progress);
+	  dsparams.gamma = rparams.gamma;
+	  dsparams.scr_type = current.type;
+	  dsparams.scanner_type = current.scanner_type;
+	  detected = detect_regular_screen (scan, current_scr_detect, current_solver, &dsparams, &progress);
 	  if (detected.success)
 	    {
 	      int xmin = std::min (sel1x, sel2x);

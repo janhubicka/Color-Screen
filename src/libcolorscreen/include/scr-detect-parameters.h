@@ -15,12 +15,12 @@ struct scr_detect_parameters
   }
 
   /* Typical valus of red, green and blue dyes scaled to range (0,1) in the
-   * scan's gamma.  */
+     scan's gamma.  */
   color_t black, red, green, blue;
   /* Minimal luminosity for detection to be performed.  */
   luminosity_t min_luminosity;
   /* Determine dye as a given color if its luminosity is greater than ratio
-   * times the sum of luminosities of the other two colors.  */
+     times the sum of luminosities of the other two colors.  */
   luminosity_t min_ratio;
 
   /* Sharpening info.  */

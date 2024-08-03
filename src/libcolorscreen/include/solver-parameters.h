@@ -14,6 +14,13 @@ struct solver_parameters
       : points (), optimize_lens (true), optimize_tilt (true), weighted (false)
   {
   }
+  DLL_PUBLIC_EXP void
+  copy_without_points (const solver_parameters &other)
+  {
+    optimize_lens = other.optimize_lens;
+    optimize_tilt = other.optimize_tilt;
+    weighted = other.weighted;
+  }
   DLL_PUBLIC_EXP ~solver_parameters () {}
 
   /* Solver takes as input set of points.  Every point records
@@ -98,7 +105,7 @@ struct solver_parameters
                                                          int *n);
   DLL_PUBLIC void dump (FILE *out);
   /* Names of colors in enum point_color.  */
-  DLL_PUBLIC static const char * const point_color_names[(int)max_point_color];
+  DLL_PUBLIC static const char *const point_color_names[(int)max_point_color];
 };
 }
 #endif

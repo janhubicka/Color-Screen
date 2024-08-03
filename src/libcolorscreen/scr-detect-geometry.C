@@ -1415,7 +1415,7 @@ summarise_quality (image_data &img, screen_map *smap, scr_to_img_parameters &par
 }
 
 detected_screen
-detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
+detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
   /* Try both screen types; it is cheap to do so and seems to work quite reliable now.  */
   const bool try_dufay = true;
@@ -1424,15 +1424,20 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
   detected_screen ret;
   render_parameters empty;
   std::unique_ptr <screen_map> smap = NULL;
+  scr_type type = dsparams->scr_type;
+  assert (type != max_scr_type);
 
-  empty.gamma = gamma;
+  empty.gamma = dsparams->gamma;
+  assert (empty.gamma != -2);
   ret.mesh_trans = NULL;
   ret.success = false;
   ret.known_patches = NULL;
   ret.smap = NULL;
   ret.param.type = type;
+  ret.param.scanner_type = dsparams->scanner_type;
   scr_to_img_parameters param;
   param.type = type;
+  param.scanner_type = dsparams->scanner_type;
 
   {
     bitmap_2d visited (img.width, img.height);
@@ -1463,7 +1468,7 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 	    progress->push ();
 	  if (dsparams->optimize_colors)
 	    {
-	      if (!optimize_screen_colors (&dparam, &img, gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
+	      if (!optimize_screen_colors (&dparam, &img, dsparams->gamma, xmin, ymin, std::min (1000, xmax - xmin), std::min (1000, ymax - ymin), progress, report_file))
 		{
 		  if (progress)
 		    progress->pause_stdout ();
@@ -1850,12 +1855,12 @@ detect_regular_screen_1 (image_data &img, enum scr_type type, scr_detect_paramet
 
 
 detected_screen
-detect_regular_screen (image_data &img, enum scr_type type, scr_detect_parameters &dparam, luminosity_t gamma, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
+detect_regular_screen (image_data &img, scr_detect_parameters &dparam, solver_parameters &sparam, detect_regular_screen_params *dsparams, progress_info *progress, FILE *report_file)
 {
   //dsparams->slow_floodfill = false;
   //dsparams->fast_floodfill = true;
   //dsparams->optimize_colors = false;
-  detected_screen ret = detect_regular_screen_1 (img, type, dparam, gamma, sparam, dsparams, progress, report_file);
+  detected_screen ret = detect_regular_screen_1 (img, dparam, sparam, dsparams, progress, report_file);
   prune_render_scr_detect_caches ();
   return ret;
 }

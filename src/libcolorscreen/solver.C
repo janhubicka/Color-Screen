@@ -801,14 +801,15 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
   if (progress)
     progress->set_task ("computing mesh from detected points", width * height);
   mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
-#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(progress, xshift, yshift, step, width, height, img_data, mesh_trans, param, smap, sparam2)
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       if (!progress || !progress->cancel_requested ())
 	{
 	  // TODO: copying motor corrections is unnecesary and expensive.
 	  scr_to_img_parameters lparam = *param;
-	  solver_parameters sparam;/* = sparam2;*/
+	  solver_parameters sparam;
+	  sparam.copy_without_points (sparam2);
 	  compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x, y);
 	  if (progress)
 	    progress->inc_progress ();
@@ -833,7 +834,8 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data, solver_paramete
 	}
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
 	break;
-      solver_parameters sparam;/* = sparam2;*/
+      solver_parameters sparam;
+      sparam.copy_without_points (sparam2);
       if (grow_left || grow_right)
         {
 	  for (int y = 0; y < mesh_trans->get_height (); y++)

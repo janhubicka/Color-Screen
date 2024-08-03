@@ -559,7 +559,10 @@ render_cmd (int argc, char **argv)
 	  progress.pause_stdout ();
 	  printf ("Detecting geometry\n");
 	  detect_regular_screen_params dsparams;
-	  auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress);
+	  dsparams.scr_type = param.type;
+	  dsparams.gamma = rparam.gamma;
+	  dsparams.scanner_type = param.scanner_type;
+	  auto detected = detect_regular_screen (scan, dparam, solver_param, &dsparams, &progress);
 	  if (!detected.success)
 	    {
 	      progress.pause_stdout ();
@@ -758,7 +761,8 @@ autodetect (int argc, char **argv)
       else if (!cspname)
 	rparam.gamma = scan.gamma != -2 ? scan.gamma : 0;
       if (scanner_type != max_scanner_type)
-	param.scanner_type = scanner_type;
+	dsparams.scanner_type = scanner_type;
+      dsparams.gamma = rparam.gamma;
      
       if (verbose)
 	{
@@ -771,7 +775,7 @@ autodetect (int argc, char **argv)
 	  delete param.mesh_trans;
 	  param.mesh_trans = NULL;
 	}
-      auto detected = detect_regular_screen (scan, param.type, dparam, rparam.gamma, solver_param, &dsparams, &progress, report);
+      auto detected = detect_regular_screen (scan, dparam, solver_param, &dsparams, &progress, report);
       param = detected.param;
       param.mesh_trans = detected.mesh_trans;
       if (report)

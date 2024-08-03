@@ -118,9 +118,10 @@ DLL_PUBLIC mesh *solver_mesh (scr_to_img_parameters *param,
                               image_data &img_data, solver_parameters &sparam,
                               progress_info *progress = NULL);
 DLL_PUBLIC detected_screen detect_regular_screen (
-    image_data &img, enum scr_type type, scr_detect_parameters &dparam,
-    luminosity_t gamma, solver_parameters &sparam,
-    detect_regular_screen_params *dsparams, progress_info *progress = NULL,
+    image_data &img, scr_detect_parameters &dparam,
+    solver_parameters &sparam,
+    detect_regular_screen_params *dsparams,
+    progress_info *progress = NULL,
     FILE *report_file = NULL);
 DLL_PUBLIC color_matrix determine_color_matrix (
     rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white,

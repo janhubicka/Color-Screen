@@ -631,7 +631,11 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
       dsparams.return_known_patches = true;
       dsparams.do_mesh = m_prj->params.mesh_trans;
       dsparams.return_screen_map = true;
-      detected = detect_regular_screen (*img, m_prj->params.type, m_prj->dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
+      dsparams.scr_type = m_prj->params.type;
+      /* TODO */
+      dsparams.scanner_type = fixed_lens;
+      dsparams.gamma = m_prj->rparam.gamma;
+      detected = detect_regular_screen (*img, m_prj->dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
       if (!detected.success)
 	{
 	  progress->pause_stdout ();
@@ -647,7 +651,7 @@ stitch_image::analyze (stitch_project *prj, bool top_p, bool bottom_p, bool left
 	  delete detected.known_patches;
 	  delete detected.smap;
 	  dsparams.optimize_colors = false;
-	  detected = detect_regular_screen (*img, m_prj->params.type, optimized_dparam, m_prj->rparam.gamma, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
+	  detected = detect_regular_screen (*img, optimized_dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
 	  mesh_trans = (std::unique_ptr <mesh>)(detected.mesh_trans);
 	  if (!detected.success)
 	    {
