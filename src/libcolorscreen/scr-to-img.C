@@ -3,7 +3,7 @@
 #include "include/colorscreen.h"
 #include "include/scr-to-img.h"
 #include "include/imagedata.h"
-#include "solver.h"
+#include "homography.h"
 #include "render-to-scr.h"
 #include "spline.h"
 namespace colorscreen
