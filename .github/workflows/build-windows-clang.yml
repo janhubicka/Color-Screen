@@ -47,9 +47,9 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-    - name: make install-strip
+    - name: make install
       shell: msys2 {0}
-      run: make install-strip
+      run: make install
     - name: print dlls gtk
       shell: msys2 {0}
       run: ldd /c/Color-Screen-install/bin/colorscreen-gtk.exe 
