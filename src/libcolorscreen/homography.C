@@ -8,7 +8,6 @@ namespace colorscreen
 namespace
 {
 bool debug_output = false;
-bool debug = colorscreen_checking;
 
 inline int
 fast_rand16 (unsigned int *g_seed)
@@ -241,14 +240,14 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
 }
 
 static double
-screen_compute_chisq (solver_parameters::solver_point_t *points, int n, trans_4d_matrix homography)
+screen_compute_chisq (std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography)
 {
   double chisq = 0;
-  for (int i = 0; i < n; i++)
+  for (auto point : points)
     {
       point_t t;
-      homography.inverse_perspective_transform (points[i].img.x, points[i].img.y, t.x, t.y);
-      coord_t dist = points[i].scr.dist_sq2_from (t);
+      homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+      coord_t dist = point.scr.dist_sq2_from (t);
       if (dist > 10000)
 	dist = 10000;
       chisq += dist;
@@ -280,9 +279,9 @@ namespace homography
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
+get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int flags,
                    enum scanner_type scanner_type, scr_to_img *map,
-                   coord_t wcenter_x, coord_t wcenter_y, coord_t *chisq_ret,
+                   point_t wcenter, coord_t *chisq_ret,
                    bool final_run)
 {
   unsigned int seed = 0;
@@ -290,12 +289,12 @@ get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
   int nvariables = equation_variables (flags);
   int nsamples = nvariables / 2;
   trans_4d_matrix ret;
-  solver_parameters::solver_point_t *tpoints = points;
   int max_inliners = 0;
   double min_chisq = INT_MAX;
   double min_inliner_chisq = INT_MAX;
   int iteration;
   coord_t dist = 1;
+  int n = points.size ();
 
   /* Fix non-fixed lens the rotations are specified only by X or Y coordinates.
      We need enough variables in that system, so just double number of samples.
@@ -304,16 +303,17 @@ get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
     nsamples++;
   gsl_matrix *A = gsl_matrix_alloc (nsamples * 2, nvariables);
   gsl_vector *v = gsl_vector_alloc (nsamples * 2);
+  std::vector <solver_parameters::solver_point_t> tpoints_vec;
   if (map)
     {
-      tpoints = (solver_parameters::solver_point_t *)malloc (
-          sizeof (solver_parameters::solver_point_t) * n);
+      tpoints_vec.resize (n);
       for (int i = 0; i < n; i++)
         {
-          tpoints[i].img = map->to_scr (points[i].img);
-          tpoints[i].scr = points[i].scr;
+          tpoints_vec[i].img = map->to_scr (points[i].img);
+          tpoints_vec[i].scr = points[i].scr;
         }
     }
+  std::vector <solver_parameters::solver_point_t> &tpoints = map ? tpoints_vec : points;
   if (nsamples > n)
     {
       fprintf (stderr, "Too few samples in RANSAC\n");
@@ -523,7 +523,7 @@ get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
       gsl_matrix_free (cov);
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
       /* Use screen so we do not get biass with lens correction.  */
-      min_chisq = screen_compute_chisq (tpoints, n, ret);
+      min_chisq = screen_compute_chisq (tpoints, ret);
     }
   else if (final_run)
     printf ("Failed to find inliners for ransac\n");
@@ -532,8 +532,6 @@ get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
 
   if (chisq_ret)
     *chisq_ret = min_chisq;
-  if (map)
-    free (tpoints);
   return ret;
 }
 
@@ -543,11 +541,12 @@ get_matrix_ransac (solver_parameters::solver_point_t *points, int n, int flags,
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
 trans_4d_matrix
-get_matrix (solver_parameters::solver_point_t *points, int n, int flags,
+get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
             enum scanner_type scanner_type, scr_to_img *map, point_t wcenter,
             coord_t *chisq_ret)
 {
   int nvariables = equation_variables (flags);
+  int n = points.size ();
   int nequations = n * 2;
   gsl_matrix *X, *cov;
   gsl_vector *y, *w = NULL, *c;
@@ -689,15 +688,14 @@ get_matrix (solver_parameters::solver_point_t *points, int n, int flags,
      To make get same range as in ransac we need to recompute.  */
   if (chisq_ret)
     {
-      std::unique_ptr<solver_parameters::solver_point_t[]> tpoints (
-          new solver_parameters::solver_point_t[n]);
+      std::vector <solver_parameters::solver_point_t> tpoints (n);
       for (int i = 0; i < n; i++)
         {
           tpoints[i].img = map->to_scr (points[i].img);
           tpoints[i].scr = points[i].scr;
         }
       /* Use screen so we do not get biass with lens correction.  */
-      *chisq_ret = screen_compute_chisq (tpoints.get (), n, ret);
+      *chisq_ret = screen_compute_chisq (tpoints, ret);
     }
   return ret;
 }
