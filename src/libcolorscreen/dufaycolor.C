@@ -610,7 +610,7 @@ get_new_optimized_matrix (struct optimized_matrix_params &p, progress_info *prog
   *m = spec.optimized_xyz_matrix (&view_spec, progress);
   return m;
 }
-static lru_cache <optimized_matrix_params, color_matrix, get_new_optimized_matrix, 10> color_matrix_cache ("color_matrix_cache");
+static lru_cache <optimized_matrix_params, color_matrix, color_matrix *, get_new_optimized_matrix, 10> color_matrix_cache ("color_matrix_cache");
 
 color_matrix
 dufaycolor_correction_color_cinematography_matrix (luminosity_t temperature, luminosity_t backlight_temperature, progress_info *progress)

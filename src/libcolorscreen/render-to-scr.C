@@ -43,7 +43,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   delete s;
   return blurred;
 }
-static lru_cache <screen_params, screen, get_new_screen, 4> screen_cache ("screen");
+static lru_cache <screen_params, screen, screen *, get_new_screen, 4> screen_cache ("screen");
 }
 
 /* Return approximate size of an scan pixel in screen corrdinates.  */

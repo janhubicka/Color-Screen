@@ -76,7 +76,7 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *)
     data[i] = get_inverse (p.param, i * p.max_dist / (lens_warp_correction::size - 1), max, inv_max_dist_sq2);
   return new precomputed_function<coord_t> (0, p.max_dist, data, lens_warp_correction::size);
 }
-static lru_cache <lens_inverse_parameters, precomputed_function<coord_t>, get_new_inverse, 4> lens_inverse_cache ("lens inverse functions");
+static lru_cache <lens_inverse_parameters, precomputed_function<coord_t>, precomputed_function<coord_t> *, get_new_inverse, 4> lens_inverse_cache ("lens inverse functions");
 }
 
 bool

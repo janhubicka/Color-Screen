@@ -68,7 +68,7 @@ get_new_backlight_correction (struct backlight_correction_cache_params &p, progr
     }
   return c;
 }
-static lru_cache <backlight_correction_cache_params, backlight_correction, get_new_backlight_correction, 10> backlight_correction_cache ("backlight corrections");
+static lru_cache <backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_correction_cache ("backlight corrections");
 
 /*****************************************************************************/
 /*    In lookup table (translating scan values to linear values) cache       */
@@ -188,8 +188,8 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 }
 
 /* To improve interactive response we cache conversion tables.  */
-static lru_cache <lookup_table_params, luminosity_t, get_new_lookup_table, 4> lookup_table_cache ("in lookup tables");
-static lru_cache <out_lookup_table_params, luminosity_t, get_new_out_lookup_table, 4> out_lookup_table_cache ("out lookup tables");
+static lru_cache <lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache ("in lookup tables");
+static lru_cache <out_lookup_table_params, luminosity_t[], luminosity_t *, get_new_out_lookup_table, 4> out_lookup_table_cache ("out lookup tables");
 
 /*****************************************************************************/
 /*                     Gray and sharpened data cache                         */
@@ -433,7 +433,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
     }
   return ret;
 }
-static lru_cache <gray_and_sharpen_params, sharpened_data, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
+static lru_cache <gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 1> gray_and_sharpened_data_cache ("gray and sharpened data");
 
 }
 /* Prune render cache.  We need to do this so destruction order of MapAlloc and
