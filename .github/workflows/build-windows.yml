@@ -47,7 +47,8 @@ jobs:
         path: |
           testsuite/*.txt
           testsuite/*.log
-    - name: make install
+          testsuite/*.par
+    - name: make install-strip
       shell: msys2 {0}
       run: make install
     - name: print dlls gtk

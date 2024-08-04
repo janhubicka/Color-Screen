@@ -67,6 +67,7 @@ jobs:
         path: |
           testsuite/*.txt
           testsuite/*.log
+          testsuite/*.par
     - name: make install-strip
       run: make install-strip
     - name: tar

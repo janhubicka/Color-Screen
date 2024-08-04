@@ -41,6 +41,7 @@ jobs:
         path: |
           testsuite/*.txt
           testsuite/*.log
+          testsuite/*.par
     - name: make distcheck
       run: make distcheck
     - uses: actions/upload-artifact@v4
@@ -63,3 +64,4 @@ jobs:
         path: |
           testsuite/*.txt
           testsuite/*.log
+          testsuite/*.par
