@@ -96,7 +96,7 @@ do_test_homography (scr_to_img_parameters &param, int width, int height, bool le
   scr_to_img map;
   image_data img;
   unsigned int g_seed = 0;
-  img.create_empty (width, height);
+  img.set_dimensions (width, height);
   map.set_parameters (param, img);
   solver_parameters sparam;
   sparam.optimize_lens = lens_correction;

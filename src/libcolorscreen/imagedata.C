@@ -1010,7 +1010,7 @@ image_data::has_grayscale_or_ir ()
 }
 
 void
-image_data::create_empty (int w, int h)
+image_data::set_dimensions (int w, int h)
 {
   width = w;
   height = h;
