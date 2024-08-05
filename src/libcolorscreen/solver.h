@@ -5,7 +5,6 @@
 #include "include/progress-info.h"
 #include "include/scr-detect-parameters.h"
 #include "include/imagedata.h"
-#include "include/detect-regular-screen-parameters.h"
 #include "include/solver-parameters.h"
 
 namespace colorscreen
