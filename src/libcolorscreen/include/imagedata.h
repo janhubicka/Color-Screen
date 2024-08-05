@@ -59,6 +59,7 @@ public:
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
+  void create_empty (int w, int h);
 
   pure_attr DLL_PUBLIC bool has_rgb ();
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir ();

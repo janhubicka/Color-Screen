@@ -11,4 +11,9 @@ libcolorscreen_la_LDFLAGS = -version-info 2:0:0 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
 
 noinst_PROGRAMS=unittests
+if static_link
+  unittests_LDFLAGS = -static
+  unittests_CXXFLAGS = -static
+endif
+unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES=unittests.C

@@ -187,9 +187,12 @@ libcolorscreen_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) \
 	$(libcolorscreen_la_LDFLAGS) $(LDFLAGS) -o $@
-am_unittests_OBJECTS = unittests.$(OBJEXT)
+am_unittests_OBJECTS = unittests-unittests.$(OBJEXT)
 unittests_OBJECTS = $(am_unittests_OBJECTS)
-unittests_LDADD = $(LDADD)
+unittests_DEPENDENCIES = libcolorscreen.la
+unittests_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(unittests_CXXFLAGS) \
+	$(CXXFLAGS) $(unittests_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -250,7 +253,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo \
 	./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo \
 	./$(DEPDIR)/libcolorscreen_la-wratten.Plo \
-	./$(DEPDIR)/unittests.Po \
+	./$(DEPDIR)/unittests-unittests.Po \
 	render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -444,6 +447,9 @@ EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  rende
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 2:0:0 $(WIN_NO_UNDEFINED)
 libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
+@static_link_TRUE@unittests_LDFLAGS = -static
+@static_link_TRUE@unittests_CXXFLAGS = -static
+unittests_LDADD = libcolorscreen.la 
 unittests_SOURCES = unittests.C
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -553,7 +559,7 @@ libcolorscreen.la: $(libcolorscreen_la_OBJECTS) $(libcolorscreen_la_DEPENDENCIES
 
 unittests$(EXEEXT): $(unittests_OBJECTS) $(unittests_DEPENDENCIES) $(EXTRA_unittests_DEPENDENCIES) 
 	@rm -f unittests$(EXEEXT)
-	$(AM_V_CXXLD)$(CXXLINK) $(unittests_OBJECTS) $(unittests_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(unittests_LINK) $(unittests_OBJECTS) $(unittests_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -608,7 +614,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-wratten.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unittests.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unittests-unittests.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -963,6 +969,20 @@ render-extra/libcolorscreen_la-render-extra.lo: render-extra/render-extra.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o render-extra/libcolorscreen_la-render-extra.lo `test -f 'render-extra/render-extra.C' || echo '$(srcdir)/'`render-extra/render-extra.C
 
+unittests-unittests.o: unittests.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(unittests_CXXFLAGS) $(CXXFLAGS) -MT unittests-unittests.o -MD -MP -MF $(DEPDIR)/unittests-unittests.Tpo -c -o unittests-unittests.o `test -f 'unittests.C' || echo '$(srcdir)/'`unittests.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/unittests-unittests.Tpo $(DEPDIR)/unittests-unittests.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='unittests.C' object='unittests-unittests.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(unittests_CXXFLAGS) $(CXXFLAGS) -c -o unittests-unittests.o `test -f 'unittests.C' || echo '$(srcdir)/'`unittests.C
+
+unittests-unittests.obj: unittests.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(unittests_CXXFLAGS) $(CXXFLAGS) -MT unittests-unittests.obj -MD -MP -MF $(DEPDIR)/unittests-unittests.Tpo -c -o unittests-unittests.obj `if test -f 'unittests.C'; then $(CYGPATH_W) 'unittests.C'; else $(CYGPATH_W) '$(srcdir)/unittests.C'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/unittests-unittests.Tpo $(DEPDIR)/unittests-unittests.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='unittests.C' object='unittests-unittests.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(unittests_CXXFLAGS) $(CXXFLAGS) -c -o unittests-unittests.obj `if test -f 'unittests.C'; then $(CYGPATH_W) 'unittests.C'; else $(CYGPATH_W) '$(srcdir)/unittests.C'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1165,7 +1185,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
-	-rm -f ./$(DEPDIR)/unittests.Po
+	-rm -f ./$(DEPDIR)/unittests-unittests.Po
 	-rm -f render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -1257,7 +1277,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tiff-writer.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-tone-curve.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-wratten.Plo
-	-rm -f ./$(DEPDIR)/unittests.Po
+	-rm -f ./$(DEPDIR)/unittests-unittests.Po
 	-rm -f render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

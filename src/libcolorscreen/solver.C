@@ -329,12 +329,7 @@ public:
     homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
 				   m_param.scanner_type, &map, 0, 0, &chi, false);
 #endif
-    homography::get_matrix (
-        m_sparam.points,
-        (m_sparam.weighted ? homography::solve_image_weights : 0)
-            | (m_sparam.n_points () > 10 ? homography::solve_rotation : 0)
-            | homography::solve_limit_ransac_iterations,
-        m_param.scanner_type, &map, m_sparam.center, &chi);
+    homography::get_matrix (m_sparam.points, homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
 #if 0
     printf ("Lens correction center %f,%f: k0 %f k1 %f k2 %f k3 %f chi %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3], chi);
 #endif

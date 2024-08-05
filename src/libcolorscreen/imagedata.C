@@ -1008,4 +1008,12 @@ image_data::has_grayscale_or_ir ()
     return stitch->images[0][0].img->has_grayscale_or_ir ();
   return data != NULL;
 }
+
+void
+image_data::create_empty (int w, int h)
+{
+  width = w;
+  height = h;
+  maxval = 65535;
+}
 }
