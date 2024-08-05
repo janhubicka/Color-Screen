@@ -13,16 +13,22 @@ Changes in version 1.1
      helps for every command
    - `--disable-16bit-float` configure option now dsables use of more memory
      effecient but slower 16bit floats for temporary data
-   - Library now uses namespace `colorscreen`
    - `colorscreen render --detect-geometry` and `colorscreen stitch` now allow
      specification of screen detection parameters
-   - Signifiacntly improved screen detection precision for scanners with
+   - Significantly improved screen detection precision for scanners with
      moving sensors and/or lens (includuing phase one cameras that collect
      data sequentially from top to bottom).
  - Infrastructure improvements:
-   - `make check` now executes unit tests and a testsuite for colorscreen
-     features `colorscreen autodetect`, `colorscreen stitch`,
-     `colorscreen render` and `colorscreen finetune`.
+   - `make check` now executes unit tests for
+      - matrix implementation
+      - color conversions
+      - homography Random Sample Concensus (RANSAC) solver
+      - lens warp correction solver
+     and also tests `colorscreen` commands:
+      - `colorscreen autodetect`
+      - `colorscreen stitch`
+      - `colorscreen render`
+      - `colorscreen finetune`
      Tests are run regularly on Ubuntu, MacOS Aarch64 and Windows x86 builbots.
    - `--enable-checking` configure option now enables extra runtime sanity
      checking.
@@ -47,5 +53,6 @@ Changes in version 1.1
      `-Ofast -flto` into `CXXFLAGS` as documented in `README.md`.
    - Removed some obsolette files from git (such as original presentation
      and low quality examples) from the git source tree.
+   - Library now uses namespace `colorscreen`
 
 Version 1.0 was the first public release
