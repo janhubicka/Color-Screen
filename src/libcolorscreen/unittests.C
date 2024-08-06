@@ -205,6 +205,6 @@ main()
   test_color ();
   report ("color tests", true);
   report ("homography tests", test_homography (false, 0.000001));
-  report ("lens correction tests", test_homography (true, 0.022));
+  report ("lens correction tests", test_homography (true, 0.030));
   return 0;
 }

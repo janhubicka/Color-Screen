@@ -258,7 +258,7 @@ public:
   coord_t
   scale ()
   {
-    return 1;
+    return 0.3;
   }
   bool
   verbose ()
@@ -269,10 +269,11 @@ public:
   constrain (coord_t *vals)
   {
     int n = num_coordinates ();
-    if (vals[0] < 0)
-      vals[0] = 0;
-    if (vals[0] > 1)
-      vals[0] = 1;
+    /* Also consider the case that lens center is outside of the scan.  */
+    if (vals[0] < -10)
+      vals[0] = -10;
+    if (vals[0] > 10)
+      vals[0] = 10;
     if (n == 2)
       {
         if (vals[1] < 0)
