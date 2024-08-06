@@ -48,16 +48,14 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       param->tilt_y = 0;
     }
   /* This map applies only non-linear part of corrections (that are not
-   * optimized).  */
+     optimized).  */
   scr_to_img map;
   map.set_parameters (*param, img_data);
 
   double chisq;
-  bool do_ransac = /*(flags & (homography::solve_rotation |
-                      homography::solve_free_rotation)) &&*/
-      !(flags
-        & (homography::solve_image_weights
-           | homography::solve_screen_weights));
+  bool do_ransac = !(flags
+		     & (homography::solve_image_weights
+			| homography::solve_screen_weights));
   trans_4d_matrix h;
   if (do_ransac)
     h = homography::get_matrix_ransac (points, flags, param->scanner_type,
@@ -73,13 +71,9 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   h.perspective_transform (1, 0, coordinate1_x, coordinate1_y);
   h.perspective_transform (0, 1, coordinate2_x, coordinate2_y);
 
-  point_t center = map.to_img ({ center_x, center_y });
-  point_t coordinate1 = map.to_img ({ coordinate1_x, coordinate1_y }) - center;
-  point_t coordinate2 = map.to_img ({ coordinate2_x, coordinate2_y }) - center;
-
-  param->center = center;
-  param->coordinate1 = coordinate1;
-  param->coordinate2 = coordinate2;
+  param->center = map.inverse_early_correction ({ center_x, center_y });
+  param->coordinate1 = map.inverse_early_correction ({ coordinate1_x, coordinate1_y }) - param->center;
+  param->coordinate2 = map.inverse_early_correction ({ coordinate2_x, coordinate2_y }) - param->center;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the
    * parameters?  */
   if (flags & homography::solve_rotation)
@@ -109,7 +103,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                       point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
                       point_t p;
                       h.perspective_transform (sx, sy, p.x, p.y);
-                      p = map.to_img (p);
+                      p = map.inverse_early_correction (p);
                       sq += p.dist_sq2_from (t);
                     }
 
@@ -206,7 +200,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
           point_t t = map2.to_img (scr);
           point_t p;
           h.perspective_transform (scr.x, scr.y, p.x, p.y);
-          p = map.to_img (p);
+          p = map.inverse_early_correction (p);
 
 #if 0
 	  map.to_img (px, py, &px, &py);
@@ -322,17 +316,14 @@ public:
       }
     m_param.lens_correction.normalize ();
     scr_to_img map;
-    map.set_parameters (m_param, m_img_data);
+    /* We may save some inversions if points are relatively few.  */
+    if (m_sparam.n_points () * 2 < lens_warp_correction::size)
+      map.set_parameters_for_early_correction (m_param, m_img_data);
+    else
+      map.set_parameters (m_param, m_img_data);
     coord_t chi = -5;
-#if 0
-    /* Ransac is unstable.  */
-    homography::get_matrix_ransac (m_sparam.point, m_sparam.npoints,  (m_sparam.weighted ? homography::solve_image_weights : 0) | (m_sparam.npoints > 10 ? homography::solve_rotation : 0) | homography::solve_limit_ransac_iterations,
-				   m_param.scanner_type, &map, 0, 0, &chi, false);
-#endif
+    /* Do not use ransac here, since it is not smooth and will confuse solver.  */
     homography::get_matrix (m_sparam.points, homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
-#if 0
-    printf ("Lens correction center %f,%f: k0 %f k1 %f k2 %f k3 %f chi %f\n", m_param.lens_correction.center.x, m_param.lens_correction.center.y, m_param.lens_correction.kr[0], m_param.lens_correction.kr[1], m_param.lens_correction.kr[2], m_param.lens_correction.kr[3], chi);
-#endif
     if (!(chi >= 0 && chi < bad_val))
       {
         printf ("Bad chi %f\n", chi);
@@ -386,15 +377,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       param->lens_correction.kr[3]
           = s.start[n + 2] * (1 / lens_solver::scale_kr);
       param->lens_correction.normalize ();
-#if 0
-      if (progress)
-	progress->pause_stdout ();
-      printf ("Lens correction center: %f,%f k0 %f k1 %f k2 %f k3 %f\n",
-	      param->lens_correction.center.x, param->lens_correction.center.y,
-	      param->lens_correction.kr[0], param->lens_correction.kr[1], param->lens_correction.kr[2], param->lens_correction.kr[3]);
-      if (progress)
-	progress->resume_stdout ();
-#endif
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);

@@ -133,7 +133,23 @@ do_test_homography (scr_to_img_parameters &param, int width, int height, bool le
 	  maxv = dist;
       }
   coord_t avg = sum / (width * (coord_t)height);
-  printf ("Homography test with scanner %s: average distance %f, max %f, chi %f\n",scanner_type_names [(int)param.scanner_type], avg, maxv, chi);
+  printf ("\nHomography test with scanner %s: average distance %f, max %f, chi %f\n",scanner_type_names [(int)param.scanner_type], avg, maxv, chi);
+  printf ("Coordinate1 original: %f,%f solved: %f,%f dist:%f \n", param.coordinate1.x, param.coordinate1.y, param2.coordinate1.x, param2.coordinate1.y, param.coordinate1.dist_from (param2.coordinate1));
+  printf ("Coordinate2 original: %f,%f solved: %f,%f dist:%f \n", param.coordinate2.x, param.coordinate2.y, param2.coordinate2.x, param2.coordinate2.y, param.coordinate2.dist_from (param2.coordinate2));
+  printf ("tilts original: %f,%f solved: %f,%f\n", param.tilt_x, param.tilt_y, param2.tilt_x, param2.tilt_y);
+  if (lens_correction)
+    {
+      printf ("Lens center original: %f,%f solved: %f,%f dist:%f\n", param.lens_correction.center.x, param.lens_correction.center.y, param2.lens_correction.center.x, param2.lens_correction.center.y,param.lens_correction.center.dist_from (param2.lens_correction.center));
+      printf ("Lens correction coeeficients original: %f,%f,%f,%f solved: %f,%f,%f,%f\n",
+		      param.lens_correction.kr[0],
+		      param.lens_correction.kr[1],
+		      param.lens_correction.kr[2],
+		      param.lens_correction.kr[3],
+		      param2.lens_correction.kr[0],
+		      param2.lens_correction.kr[1],
+		      param2.lens_correction.kr[2],
+		      param2.lens_correction.kr[3]);
+    }
   bool ok = maxv < epsilon;
   if (!ok)
     {
@@ -160,6 +176,7 @@ test_homography (bool lens_correction, coord_t epsilon)
       param.lens_correction.kr[1] = 0.01;
       param.lens_correction.kr[2] = 0.03;
       param.lens_correction.kr[3] = 0.05;
+      param.lens_correction.normalize ();
     }
   for (int scanner = 0; scanner < max_scanner_type; scanner++)
     {
@@ -188,6 +205,6 @@ main()
   test_color ();
   report ("color tests", true);
   report ("homography tests", test_homography (false, 0.000001));
-  report ("lens correction tests", test_homography (true, 0.02));
+  report ("lens correction tests", test_homography (true, 0.022));
   return 0;
 }

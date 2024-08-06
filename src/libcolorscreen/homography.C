@@ -274,7 +274,7 @@ namespace homography
 {
 
 /* Return homography matrix determined from POINTS using least squares
-   method.  Trainsform image coordinates by MAP if non-NULL.
+   method.  If MAP is non-null apply early corrections (such as lens correction).
    If FLAGS is set to solve_screen_weights or solve_image_weights
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
@@ -304,12 +304,13 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
   gsl_matrix *A = gsl_matrix_alloc (nsamples * 2, nvariables);
   gsl_vector *v = gsl_vector_alloc (nsamples * 2);
   std::vector <solver_parameters::solver_point_t> tpoints_vec;
+  /* Apply non-linear transformations.  */
   if (map)
     {
       tpoints_vec.resize (n);
       for (int i = 0; i < n; i++)
         {
-          tpoints_vec[i].img = map->to_scr (points[i].img);
+          tpoints_vec[i].img = map->apply_early_correction (points[i].img);
           tpoints_vec[i].scr = points[i].scr;
         }
     }
@@ -536,7 +537,7 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
 }
 
 /* Return homography matrix determined from POINTS using least squares
-   method.  Trainsform image coordinates by MAP if non-NULL.
+   method.  If MAP is non-null apply early corrections (such as lens correction).
    If FLAGS is set to solve_screen_weights or solve_image_weights
    then adjust weight according to distance from WCENTER_X and WCENTER_Y.
    If CHISQ_RET is non-NULL initialize it to square of errors.  */
@@ -551,27 +552,37 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   gsl_matrix *X, *cov;
   gsl_vector *y, *w = NULL, *c;
   normalize_points scrnorm (n), imgnorm (n);
+  std::vector <solver_parameters::solver_point_t> tpoints_vec;
+  /* Apply non-linear transformations.  */
+  if (map)
+    {
+      tpoints_vec.resize (n);
+      /* For lens solving it is faster to avoid precomputing lens inverse.  */
+      if (map->early_correction_precoputed ())
+	for (int i = 0; i < n; i++)
+	  {
+	    tpoints_vec[i].img = map->apply_early_correction (points[i].img);
+	    tpoints_vec[i].scr = points[i].scr;
+	  }
+      else
+	for (int i = 0; i < n; i++)
+	  {
+	    tpoints_vec[i].img = map->nonprecomputed_apply_early_correction (points[i].img);
+	    tpoints_vec[i].scr = points[i].scr;
+	  }
+    }
+  std::vector <solver_parameters::solver_point_t> &tpoints = map ? tpoints_vec : points;
   for (int i = 0; i < n; i++)
     {
-      point_t scr = points[i].scr;
-      point_t t = points[i].img;
-      /* Apply non-linear transformations.  */
-      if (map)
-        t = map->to_scr (t);
-      scrnorm.account1 (scr, scanner_type);
-      imgnorm.account1 (t, scanner_type);
+      scrnorm.account1 (tpoints[i].scr, scanner_type);
+      imgnorm.account1 (tpoints[i].img, scanner_type);
     }
   scrnorm.finish1 ();
   imgnorm.finish1 ();
   for (int i = 0; i < n; i++)
     {
-      point_t scr = points[i].scr;
-      point_t t = points[i].img;
-      /* Apply non-linear transformations.  */
-      if (map)
-        t = map->to_scr (t);
-      scrnorm.account2 (scr);
-      imgnorm.account2 (t);
+      scrnorm.account2 (tpoints[i].scr);
+      imgnorm.account2 (tpoints[i].img);
     }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
@@ -589,7 +600,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   if (flags & solve_image_weights)
     for (int i = 0; i < n; i++)
       {
-        coord_t dist = points[i].img.dist_sq2_from (wcenter, xscale, yscale);
+        coord_t dist = tpoints[i].img.dist_sq2_from (wcenter, xscale, yscale);
         dist *= dist;
         double weight = 1 / (dist + 0.5);
         weights[i] = weight;
@@ -599,7 +610,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   else if (flags & solve_screen_weights)
     for (int i = 0; i < n; i++)
       {
-        coord_t dist = points[i].scr.dist_from (wcenter, xscale, yscale);
+        coord_t dist = tpoints[i].scr.dist_from (wcenter, xscale, yscale);
         double weight = 1 / (dist + 0.5);
         weights[i] = weight;
         normscale = std::max (normscale, weight);
@@ -654,12 +665,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
     {
       if (w && !weights[i])
         continue;
-      point_t p = points[i].img;
-      /* Apply non-linear transformations.  */
-      if (map)
-        p = map->to_scr (p);
-
-      init_equation (X, y, eq, false, flags, scanner_type, points[i].scr, p,
+      init_equation (X, y, eq, false, flags, scanner_type, tpoints[i].scr, tpoints[i].img,
                      ts, td);
 
       if (w)
@@ -688,12 +694,6 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
      To make get same range as in ransac we need to recompute.  */
   if (chisq_ret)
     {
-      std::vector <solver_parameters::solver_point_t> tpoints (n);
-      for (int i = 0; i < n; i++)
-        {
-          tpoints[i].img = map->to_scr (points[i].img);
-          tpoints[i].scr = points[i].scr;
-        }
       /* Use screen so we do not get biass with lens correction.  */
       *chisq_ret = screen_compute_chisq (tpoints, ret);
     }

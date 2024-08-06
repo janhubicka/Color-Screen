@@ -24,8 +24,9 @@ class scr_to_img
 public:
   DLL_PUBLIC void set_parameters (const scr_to_img_parameters &param,
                                   const image_data &img,
-                                  coord_t rotation_adjustment = 0,
-                                  bool need_inverse = true);
+                                  coord_t rotation_adjustment = 0);
+  void set_parameters_for_early_correction (const scr_to_img_parameters &param,
+                                            const image_data &img);
   void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio,
                                        coord_t final_angle);
@@ -46,7 +47,7 @@ public:
     return m_rotation_adjustment;
   }
 
-  scr_to_img () : m_motor_correction (NULL) {}
+  scr_to_img () : m_motor_correction (NULL), m_early_correction_precomputed (false) {}
   ~scr_to_img ()
   {
     if (m_motor_correction)
@@ -58,8 +59,23 @@ public:
   pure_attr point_t
   apply_early_correction (point_t p) const
   {
+    assert (!debug || m_early_correction_precomputed);
     p = apply_motor_correction (p);
     return m_lens_correction.scan_to_corrected (p)
+           * m_inverted_projection_distance;
+  }
+
+  bool
+  early_correction_precoputed () const
+  {
+    return m_early_correction_precomputed;
+  }
+
+  pure_attr point_t
+  nonprecomputed_apply_early_correction (point_t p) const
+  {
+    p = apply_motor_correction (p);
+    return m_lens_correction.nonprecomputed_scan_to_corrected (p)
            * m_inverted_projection_distance;
   }
   pure_attr point_t
@@ -207,6 +223,7 @@ private:
      We disable it for moving lens scanners since inverse transform is not
      necessarily a homography.  */
   bool m_do_homography;
+  bool m_early_correction_precomputed;
 
   /* Matrix transforming final cordinates to screen coordinates.  */
   trans_2d_matrix m_final_to_scr_matrix;

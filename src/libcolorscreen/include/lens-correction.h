@@ -32,7 +32,8 @@ struct lens_warp_correction
   }
 
   bool precompute (point_t center, point_t c1, point_t c2, point_t c3,
-                   point_t c4, bool need_inverse = true);
+                   point_t c4);
+  bool precompute_inverse ();
 
   inline pure_attr point_t
   corrected_to_scan (point_t p) const
@@ -77,6 +78,8 @@ struct lens_warp_correction
       }
     return ret;
   }
+  pure_attr point_t
+  nonprecomputed_scan_to_corrected (point_t p) const;
 
   pure_attr bool
   is_noop ()

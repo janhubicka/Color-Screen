@@ -268,18 +268,15 @@ scr_to_img::initialize ()
   update_scr_to_final_parameters (m_param.final_ratio, m_param.final_angle);
 }
 
-/* Initilalize the translation matrix to PARAM.  */
 void
-scr_to_img::set_parameters (const scr_to_img_parameters &param,
-                            const image_data &img, coord_t rotation_adjustment,
-                            bool need_inverse)
+scr_to_img::set_parameters_for_early_correction (
+    const scr_to_img_parameters &param, const image_data &img)
 {
   /* We do not need to copy motor corrections since we already constructed the
-   * function.  */
+     function.  */
   m_param.copy_from_cheap (param);
   m_inverted_projection_distance = 1 / param.projection_distance;
   m_nwarnings = 0;
-  m_rotation_adjustment = rotation_adjustment;
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;
@@ -319,7 +316,19 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
     c1.x = c2.x = c3.x = c4.x = center.x = param.lens_correction.center.x;
   if (m_param.scanner_type == lens_move_vertically)
     c1.y = c2.y = c3.y = c4.y = center.y = param.lens_correction.center.y;
-  m_lens_correction.precompute (center, c1, c2, c3, c4, need_inverse);
+  m_lens_correction.precompute (center, c1, c2, c3, c4);
+  /* For non-noop conversion we need to also precompute inverse.  */
+  m_early_correction_precomputed = m_lens_correction.is_noop ();
+}
+
+void
+scr_to_img::set_parameters (const scr_to_img_parameters &param,
+                            const image_data &img, coord_t rotation_adjustment)
+{
+  m_rotation_adjustment = rotation_adjustment;
+  scr_to_img::set_parameters_for_early_correction (param, img);
+  m_lens_correction.precompute_inverse ();
+  m_early_correction_precomputed = true;
   initialize ();
 }
 
