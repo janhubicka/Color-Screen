@@ -15,7 +15,7 @@ struct lens_inverse_parameters
     return param == o.param && max_dist == o.max_dist;
   }
 };
-coord_t
+pure_attr inline coord_t
 get_inverse (const lens_warp_correction_parameters &param, coord_t dist,
              coord_t max, coord_t inv_max_dist_sq2)
 {
