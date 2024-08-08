@@ -277,6 +277,7 @@ scr_to_img::set_parameters_for_early_correction (
   m_param.copy_from_cheap (param);
   m_inverted_projection_distance = 1 / param.projection_distance;
   m_nwarnings = 0;
+  assert (!debug || (img.width && img.height));
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;

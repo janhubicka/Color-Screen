@@ -8,6 +8,7 @@
 #include <lcms2.h>
 #include "include/imagedata.h"
 #include "include/stitch.h"
+#include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "backlight-correction.h"
 #include "mapalloc.h"
@@ -1059,4 +1060,40 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb, bool allocate_grays
   own = true;
   maxval = 65535;
 }
+
+/* Save image to tiff file.  Intended mostly for debugging.  */
+bool
+image_data::save_tiff (const char *filename, progress_info *progress)
+{
+  tiff_writer_params tp;
+  const char *error = NULL;
+  tp.filename = filename;
+  tp.width = width;
+  tp.height = height;
+  tp.depth = 16;
+  tp.icc_profile = icc_profile;
+  tp.icc_profile_len = icc_profile_size;
+  tp.xdpi = xdpi;
+  tp.ydpi = ydpi;
+  if (progress)
+    progress->set_task ("Opening tiff file", 1);
+  tiff_writer out(tp, &error);
+  if (error)
+    return false;
+  if (progress)
+    progress->set_task ("Writting tiff file", height);
+  for (int y = 0; y < height; y++)
+    {
+      for (int x = 0; x < height; x++)
+	out.put_pixel (x, rgbdata[y][x].r, rgbdata[y][x].g, rgbdata[y][x].b);
+      if (!out.write_rows (progress))
+	return false;
+      if (progress && progress->cancel_requested ())
+	return false;
+      if (progress)
+        progress->inc_progress ();
+    }
+  return true;
+}
+
 }

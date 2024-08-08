@@ -2410,12 +2410,12 @@ render_screen (image_data &img, scr_to_img_parameters &param,
                int width, int height)
 {
   scr_to_img map;
+  img.set_dimensions (width, height, true, false);
   map.set_parameters (param, img);
   coord_t pixel_size = map.pixel_size (width, height);
   screen *scr = render_to_scr::get_screen (
       param.type, false, rparam.screen_blur_radius * pixel_size, rparam.dufay_red_strip_width,
       rparam.dufay_green_strip_width);
-  img.set_dimensions (width, height, true, false);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {

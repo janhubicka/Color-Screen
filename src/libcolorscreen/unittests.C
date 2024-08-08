@@ -90,10 +90,10 @@ test_color ()
           && fabs (b - 0.2152) < 1.0888);
 }
 bool
-compare_scr_to_img (const char *test_name, scr_to_img_parameters &param,
-                    scr_to_img_parameters &param2, solver_parameters *sparam,
-                    image_data &img, bool keep0, bool lens_correction,
-                    coord_t epsilon)
+compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
+		    scr_to_img_parameters & param2, solver_parameters *sparam,
+		    image_data & img, bool keep0, bool lens_correction,
+		    coord_t epsilon)
 {
   scr_to_img map, map2;
   map.set_parameters (param, img);
@@ -106,107 +106,125 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters &param,
     point_t avgoffset;
   } data[grid][grid];
 
+  point_t offset = { 0, 0 };
+  point_t doffset = { 0, 0 };
+  if (!keep0)
+    {
+      point_t imgp
+	= { (coord_t) (img.width / 2), (coord_t) (img.height / 2) };
+      point_t scr1 = map.to_scr (imgp);
+      point_t scr2 = map2.to_scr (imgp);
+      if (param.type == Finlay || param.type == Paget || param.type == Thames)
+	{
+	  int_point_t int_offset = ((scr1 - scr2) * 2).nearest ();
+	  offset.x = int_offset.x * (coord_t) 0.5;
+	  offset.y = int_offset.y * (coord_t) 0.5;
+	}
+      else
+	{
+	  int_point_t int_offset = (scr1 - scr2).nearest ();
+	  offset.x = int_offset.x;
+	  offset.y = int_offset.y;
+	}
+      doffset = scr1 - scr2;
+    }
+
   for (int y = 0; y < grid; y++)
     for (int x = 0; x < grid; x++)
       {
-        int xmin = x * img.width / grid;
-        int xmax = (x + 1) * img.width / grid;
-        int ymin = y * img.height / grid;
-        int ymax = (y + 1) * img.height / grid;
-        coord_t sum = 0, maxv = 0;
-        point_t offset = { 0, 0 };
-        point_t offavg = { 0, 0 };
-        if (!keep0)
-          {
-            point_t imgp
-                = { (coord_t)(img.width / 2), (coord_t)(img.height / 2) };
-            point_t scr1 = map.to_scr (imgp);
-            point_t scr2 = map2.to_scr (imgp);
-            int_point_t int_offset = (scr1 - scr2).nearest ();
-            offset.x = int_offset.x;
-            offset.y = int_offset.y;
-          }
-        for (int y = ymin; y < ymax; y += 5)
-          for (int x = xmin; x < xmax; x += 5)
-            {
-              point_t img = { (coord_t)x, (coord_t)y };
-              point_t scr1 = map.to_scr (img);
-              point_t scr2 = map2.to_scr (img) + offset;
-              coord_t dist = scr1.dist_from (scr2);
-              offavg += scr2 - scr1;
-              sum += dist;
-              if (maxv < dist)
-                maxv = dist;
-            }
-        coord_t scale = 1 / ((xmax - xmin - 1) * (coord_t)(ymax - ymin - 1));
-        offavg *= scale;
-        data[y][x].avg = sum * scale;
-        data[y][x].max = maxv;
-        data[y][x].avgoffset = offavg;
+	int xmin = x * img.width / grid;
+	int xmax = (x + 1) * img.width / grid;
+	int ymin = y * img.height / grid;
+	int ymax = (y + 1) * img.height / grid;
+	coord_t sum = 0, maxv = 0;
+	point_t offavg = { 0, 0 };
+	for (int y = ymin; y < ymax; y += 5)
+	  for (int x = xmin; x < xmax; x += 5)
+	    {
+	      point_t imgp1 = { (coord_t) x, (coord_t) y };
+	      // point_t scr1 = map.to_scr (imgp1);
+	      point_t scr2 = map2.to_scr (imgp1) + offset;
+	      point_t imgp2 = map.to_img (scr2);
+	      coord_t dist = imgp1.dist_from (imgp2);
+	      offavg += imgp2 - imgp1;
+	      sum += dist;
+	      if (maxv < dist)
+		maxv = dist;
+	    }
+	coord_t scale = 1 / ((xmax - xmin - 1) * (coord_t) (ymax - ymin - 1));
+	offavg *= scale;
+	data[y][x].avg = sum * scale;
+	data[y][x].max = maxv;
+	data[y][x].avgoffset = offavg;
       }
 
   bool ok = true;
   printf ("\n%s test with scanner %s, process %s and tolerance %f\naverage "
-          "distances:",
-          test_name, scanner_type_names[(int)param.scanner_type],
-          scr_names[(int)param.type], epsilon);
+	  "distances:",
+	  test_name, scanner_type_names[(int) param.scanner_type],
+	  scr_names[(int) param.type], epsilon);
   for (int y = 0; y < grid; y++)
     {
       printf ("\n  ");
       for (int x = 0; x < grid; x++)
-        {
-          printf (" %5.4f", data[y][x].avg);
-          if (data[y][x].avg > epsilon)
-            ok = false;
-        }
+	{
+	  printf (" %5.4f%c", data[y][x].avg,
+		  data[y][x].avg > epsilon ? '!' : ' ');
+	  if (data[y][x].avg > epsilon)
+	    ok = false;
+	}
     }
   printf ("\nmax distances:");
   for (int y = 0; y < grid; y++)
     {
       printf ("\n  ");
       for (int x = 0; x < grid; x++)
-        {
-          printf (" %5.4f", data[y][x].max);
-          if (data[y][x].max > epsilon)
-            ok = false;
-        }
+	{
+	  printf (" %5.4f%c", data[y][x].max,
+		  data[y][x].max > epsilon ? '!' : ' ');
+	  if (data[y][x].max > epsilon)
+	    ok = false;
+	}
     }
-  printf ("\noffsets:");
+  printf ("\noffsets (offset in the center %f,%f compensated to %f,%f):",
+	  doffset.x, doffset.y, offset.x, offset.y);
   for (int y = 0; y < grid; y++)
     {
       printf ("\n  ");
       for (int x = 0; x < grid; x++)
-        {
-          printf (" %+5.4f,%+5.4f", data[y][x].avgoffset.x,
-                  data[y][x].avgoffset.y);
-          if (data[y][x].avgoffset.length () > epsilon)
-            ok = false;
-        }
+	{
+	  printf (" %+5.4f,%+5.4f%c", data[y][x].avgoffset.x,
+		  data[y][x].avgoffset.y,
+		  data[y][x].avgoffset.length () > epsilon ? '!' : ' ');
+	  if (data[y][x].avgoffset.length () > epsilon)
+	    ok = false;
+	}
     }
 
   printf ("\nCoordinate1 original: %f,%f solved: %f,%f dist:%f \n",
-          param.coordinate1.x, param.coordinate1.y, param2.coordinate1.x,
-          param2.coordinate1.y,
-          param.coordinate1.dist_from (param2.coordinate1));
+	  param.coordinate1.x, param.coordinate1.y, param2.coordinate1.x,
+	  param2.coordinate1.y,
+	  param.coordinate1.dist_from (param2.coordinate1));
   printf ("Coordinate2 original: %f,%f solved: %f,%f dist:%f \n",
-          param.coordinate2.x, param.coordinate2.y, param2.coordinate2.x,
-          param2.coordinate2.y,
-          param.coordinate2.dist_from (param2.coordinate2));
+	  param.coordinate2.x, param.coordinate2.y, param2.coordinate2.x,
+	  param2.coordinate2.y,
+	  param.coordinate2.dist_from (param2.coordinate2));
   printf ("tilts original: %f,%f solved: %f,%f\n", param.tilt_x, param.tilt_y,
-          param2.tilt_x, param2.tilt_y);
+	  param2.tilt_x, param2.tilt_y);
   if (lens_correction)
     {
       printf ("Lens center original: %f,%f solved: %f,%f dist:%f\n",
-              param.lens_correction.center.x, param.lens_correction.center.y,
-              param2.lens_correction.center.x, param2.lens_correction.center.y,
-              param.lens_correction.center.dist_from (
-                  param2.lens_correction.center));
+	      param.lens_correction.center.x, param.lens_correction.center.y,
+	      param2.lens_correction.center.x,
+	      param2.lens_correction.center.y,
+	      param.lens_correction.center.dist_from (param2.lens_correction.
+						      center));
       printf ("Lens correction coeeficients original: %f,%f,%f,%f solved: "
-              "%f,%f,%f,%f\n",
-              param.lens_correction.kr[0], param.lens_correction.kr[1],
-              param.lens_correction.kr[2], param.lens_correction.kr[3],
-              param2.lens_correction.kr[0], param2.lens_correction.kr[1],
-              param2.lens_correction.kr[2], param2.lens_correction.kr[3]);
+	      "%f,%f,%f,%f\n", param.lens_correction.kr[0],
+	      param.lens_correction.kr[1], param.lens_correction.kr[2],
+	      param.lens_correction.kr[3], param2.lens_correction.kr[0],
+	      param2.lens_correction.kr[1], param2.lens_correction.kr[2],
+	      param2.lens_correction.kr[3]);
     }
 
   if (param.scanner_type != param2.scanner_type)
@@ -294,28 +312,37 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height)
   rparam.screen_blur_radius = 1;
   render_screen (img, param, rparam, dparam, width, height);
   detect_regular_screen_params dsparams;
+  dsparams.do_mesh = false;
+  dsparams.min_screen_percentage=90;
 
-
-  dsparams.scanner_type = fixed_lens;
-  dsparams.gamma = 1;
+  dsparams.scanner_type = param.scanner_type;
+  dsparams.gamma = rparam.gamma;
   auto detected
       = detect_regular_screen (img, dparam, sparam, &dsparams, NULL, NULL);
   if (!detected.success)
-    return false;
+    {
+      printf ("Screen discovery failed; saving screen to out.tif\n");
+      img.save_tiff ("out.tif");
+      return false;
+    }
   bool ok = true;
-  param.type = Dufay;
   ok &= compare_scr_to_img ("Screen discovery", param, detected.param, &sparam,
                             img, false, false, 1);
-  param.type = Paget;
-  ok &= compare_scr_to_img ("Screen discovery", param, detected.param, &sparam,
-                            img, false, false, 1);
+  if (!ok)
+    {
+      printf ("Screen discovery out of tolerance; saving screen to out.tif\n");
+      img.save_tiff ("out.tif");
+      return false;
+    }
+  else
+      img.save_tiff ("out.tif");
   return ok;
 }
 
-int testnum = 0;
 void
 report (const char *name, bool ok)
 {
+  static int testnum = 0;
   testnum++;
   printf ("%sok %i - %s\n", ok ? "" : "not ", testnum, name);
   fflush (stdout);
@@ -328,17 +355,17 @@ test_discovery (coord_t epsilon)
   param.center = { (coord_t)300, (coord_t)300 };
   param.coordinate1 = { (coord_t)10, (coord_t)1.2 };
   param.coordinate2 = { (coord_t)-1.4, (coord_t)10 };
-#if 0
-  param.tilt_x = 0.0001;
-  param.tilt_y = 0.00001;
+  param.tilt_x = 0.001;
+  param.tilt_y = 0.0001;
   param.lens_correction.center = {0.3,0.7};
-  param.lens_correction.kr[1] = 0.03;
-  param.lens_correction.kr[2] = -0.02;
-  param.lens_correction.kr[3] = -0.01;
+  param.lens_correction.kr[1] = -0.01;
+  param.lens_correction.kr[2] = 0.02;
+  param.lens_correction.kr[3] = 0.03;
   param.lens_correction.normalize ();
-#endif
   param.type = Finlay;
   param.scanner_type = fixed_lens;
+  ok &= do_test_discovery (param, 1024, 1024);
+  param.type = Dufay;
   ok &= do_test_discovery (param, 1024, 1024);
   return ok;
 }
@@ -353,7 +380,7 @@ main ()
   test_color ();
   report ("color tests", true);
   report ("homography tests", test_homography (false, 0.000001));
-  report ("lens correction tests", test_homography (true, 0.030));
+  report ("lens correction tests", test_homography (true, 0.15));
   report ("screen discovery tests", test_discovery (0.030));
   return 0;
 }

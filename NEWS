@@ -25,6 +25,7 @@ Changes in version 1.1
       - color conversions
       - homography Random Sample Concensus (RANSAC) solver
       - lens warp correction solver
+      - screen geometry discovery
      and also tests `colorscreen` commands:
       - `colorscreen autodetect`
       - `colorscreen stitch`
