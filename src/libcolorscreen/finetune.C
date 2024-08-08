@@ -2400,4 +2400,37 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
 #endif
   return true;
 }
+
+/* Render screen to IMG.  This is used for unit-testing of the screen
+   discovery.  */
+
+void
+render_screen (image_data &img, scr_to_img_parameters &param,
+               render_parameters &rparam, scr_detect_parameters &dparam,
+               int width, int height)
+{
+  scr_to_img map;
+  map.set_parameters (param, img);
+  coord_t pixel_size = map.pixel_size (width, height);
+  screen *scr = render_to_scr::get_screen (
+      param.type, false, rparam.screen_blur_radius * pixel_size, rparam.dufay_red_strip_width,
+      rparam.dufay_green_strip_width);
+  img.set_dimensions (width, height, true, false);
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      {
+	const int steps = 4;
+	rgbdata d = {0, 0, 0};
+	for (int xx = 0; xx < steps; xx++)
+	  for (int yy = 0; yy < steps; yy++)
+            d += scr->interpolated_mult (map.to_scr ({x + (xx + 1) / (coord_t)(steps + 1), y +  (yy + 1) / (coord_t)(steps + 1) }));
+	d *= 1/ (coord_t)(steps * steps);
+        img.rgbdata[y][x] = {
+          (unsigned short)(invert_gamma (d.red, rparam.gamma) * 65535),
+          (unsigned short)(invert_gamma (d.green, rparam.gamma) * 65535),
+          (unsigned short)(invert_gamma (d.blue, rparam.gamma) * 65535)
+        };
+      }
+  render_to_scr::release_screen (scr);
+}
 }

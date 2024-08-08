@@ -59,9 +59,9 @@ public:
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
   DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
-  /* set dimensions of the image.  This can be used to produce image_data without loading it.
-     First set dimensions and then allocate.  */
-  DLL_PUBLIC void set_dimensions (int w, int h);
+  /* set dimensions of the image.  This can be used to produce image_data without loading it.  */
+  DLL_PUBLIC void set_dimensions (int w, int h,
+				  bool allocate_rgb = false, bool allocate_grayscale = false);
 
   pure_attr DLL_PUBLIC bool has_rgb ();
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir ();

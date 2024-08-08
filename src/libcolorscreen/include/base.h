@@ -59,6 +59,7 @@ my_floor (float x)
 }
 
 typedef double coord_t;
+struct int_point_t;
 struct point_t
 {
   coord_t x, y;
@@ -123,6 +124,9 @@ struct point_t
   {
     return other.x != x || other.y != y;
   }
+  inline int_point_t floor ();
+  inline int_point_t nearest ();
+  inline point_t modf (int_point_t *ret = NULL);
 };
 struct int_point_t
 {
@@ -198,6 +202,26 @@ static inline int64_t
 nearest_int (double x)
 {
   return round (x);
+}
+
+int_point_t
+point_t::floor ()
+{
+  return {(int64_t)my_floor (x), (int64_t)my_floor (y)};
+}
+int_point_t
+point_t::nearest ()
+{
+  return {(int64_t)nearest_int (x), (int64_t)nearest_int (y)};
+}
+point_t
+point_t::modf (int_point_t *val)
+{
+  int xx, yy;
+  point_t ret = {my_modf (x, &xx), my_modf (y, &yy)};
+  if (val)
+    *val = {(int64_t)xx, (int64_t)yy};
+  return ret;
 }
 }
 #endif

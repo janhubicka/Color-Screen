@@ -1010,10 +1010,53 @@ image_data::has_grayscale_or_ir ()
 }
 
 void
-image_data::set_dimensions (int w, int h)
+image_data::set_dimensions (int w, int h, bool allocate_rgb, bool allocate_grayscale)
 {
   width = w;
   height = h;
+  if (allocate_grayscale)
+    {
+      assert (!data);
+      data = (gray **)malloc (sizeof (*data) * height);
+      if (!data)
+	return;
+      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),"grayscale data");
+      if (!data [0])
+	{
+	  free (data);
+	  data = NULL;
+	  return;
+	}
+      for (int i = 1; i < height; i++)
+	data[i] = data[0] + i * width;
+    }
+  if (allocate_rgb)
+    {
+      assert (!rgbdata);
+      rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
+      if (!rgbdata)
+	{
+	  free (*data);
+	  if (data)
+	    free (data);
+	  data = NULL;
+	  return;
+	}
+      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata), "RGB data");
+      if (!rgbdata [0])
+	{
+	  free (*data);
+	  if (data)
+	    free (data);
+	  data = NULL;
+	  free (rgbdata);
+	  rgbdata = NULL;
+	  return;
+	}
+      for (int i = 1; i < height; i++)
+	rgbdata[i] = rgbdata[0] + i * width;
+    }
+  own = true;
   maxval = 65535;
 }
 }
