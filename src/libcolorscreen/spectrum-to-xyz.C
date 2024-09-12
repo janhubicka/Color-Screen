@@ -4260,7 +4260,7 @@ spectrum_dyes_to_xyz::generate_color_target_tiff (const char *filename, const ch
   tiff_writer_params par;
   par.filename = filename;
   par.width = 12;
-  par.height = (nsamples + 5) / 6;
+  par.height = ((nsamples + 5) / 6) * 2;
   par.depth = 32;
   par.hdr = true;
   par.icc_profile = buffer;
