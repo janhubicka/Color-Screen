@@ -730,6 +730,8 @@ static xspect TLCI_2012_TCS[] = {
     44.34373}
    },
 #endif
+
+
 // http://www2.uef.fi/sv/spectral/natural-colors retrieved April 2015,
 // taken from dcamprof.
 //green leaf (leskenlehti)
@@ -3653,7 +3655,6 @@ static xspect TLCI_2012_TCS[] = {
     489, 521, 503, 498, 508, 466, 449, 404, 395, 374, 361, 399, 514, 734,
     1061,
     1400}}
-
 };
 
 /*    https://law.resource.org/pub/us/cfr/ibr/003/cie.15.2004.tables.xls

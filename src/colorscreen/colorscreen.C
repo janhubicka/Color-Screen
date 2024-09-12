@@ -279,6 +279,7 @@ print_help ()
       fprintf (stderr, "      save-film-hd-characteristic-curve: save film "
                        "characteristic H&D (Hurter and Driffield) curve\n");
       fprintf (stderr, "      save-dyes: save spectra of dyes\n");
+      fprintf (stderr, "      save-responses: save responses of filter+emulsion\n");
       fprintf (stderr, "      save-ssf-jason: save spectral sensitivity "
                        "functions to jsason file for dcamprof\n");
       fprintf (stderr, "      render-target: render color target\n");

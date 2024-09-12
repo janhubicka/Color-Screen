@@ -640,7 +640,7 @@ const static spectra_entry rollei_retro_80s[] = {
   {774.6835443037975, 0.21413721413721376},
   {775.9493670886078, -0.004158004158004935}
 };
-/* Approximation of spicer-dufay. Rollei emulsion with faster cut after 750.  */
+/* Approximation of spicer-dufay. Rollei emulsion with faster cut after 650.  */
 const static spectra_entry spicer_dufay_guess[] = {
   {335.44303797468365, 0},
   {340.50632911392404, 0.21413721413721376},
