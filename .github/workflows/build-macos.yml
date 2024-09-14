@@ -108,7 +108,7 @@ jobs:
         mkdir Color-Screen-GUI-package
         mkdir Color-Screen-GUI-package/lib
         cp Color-Screen-GUI/target/lib/librender.dylib Color-Screen-GUI-package/lib
-        cp -r Color-Screen-GUI/target/src Color-Screen-GUI-package/src
+        #cp -r Color-Screen-GUI/target/src Color-Screen-GUI-package/src
         dylibbundler -od -b -x Color-Screen-GUI-package/librender.dylib -d Color-Screen-GUI-package/libs -p @loader_path/libs
         otool -L Color-Screen-GUI-package/lib/librender.dylib
         cp Color-Screen-GUI/target/*dependencies*jar Color-Screen-GUI-package/Color-Screen-GUI.jar
