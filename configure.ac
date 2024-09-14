@@ -29,9 +29,17 @@ AC_CHECK_LIB([gslcblas],[cblas_dgemm])
 AC_CHECK_LIB([gsl],[gsl_blas_dgemm])
 
 
-# The following may be useful if we put javaglue to the library.
-# TODO add necessary ' so JAVA_HOME can contain spaces.  It does no Windows machines
+AC_ARG_WITH(libfftw3,
+ [  --with-libfftw3=PATH      enter the PATH to fftw3 package],
+ [ if test "$withval" != "no"; then
+    LDFLAGS="-L$withval/lib $LDFLAGS";\
+   fi ])
+if test -n "$with_fftw3"; then echo "option: with_fftw3 $with_fftw3"; fi
 
+if test "$with_fftw3" != "no"; then
+AC_SEARCH_LIBS(fftw_plan_null_destroy,[fftw3],[check_fftw3_h="fftw3.h"],
+ [ echo " * * * try option --with-fftw3=PATH"])
+fi
 
 AC_ARG_WITH(libtiff,
  [  --with-libtiff=PATH      enter the PATH to libtiff package],
