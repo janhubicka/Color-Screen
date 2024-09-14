@@ -101,7 +101,7 @@ jobs:
         cp /c/Color-Screen-install/bin/libcolorscreen*dll /c/Color-Screen-GUI
         mkdir /c/Color-Screen-GUI/lib
         cp Color-Screen-GUI/target/lib/*.dll /c/Color-Screen-GUI/lib
-        cp -r Color-Screen-GUI/target/src /c/Color-Screen-GUI/src
+        #cp -r Color-Screen-GUI/target/src /c/Color-Screen-GUI/src
         cp Color-Screen-GUI/target/*depend*.jar /c/Color-Screen-GUI/Color-Screen-GUI.jar
     - name: copy dlls
       shell: msys2 {0}
