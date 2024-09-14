@@ -22,7 +22,7 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools 
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv

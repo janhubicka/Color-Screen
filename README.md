@@ -35,6 +35,7 @@ additional libraries:
  - [libgsl](https://www.gnu.org/software/gsl/)
  - [libraw](https://www.libraw.org/)
  - [liblcms2](https://www.littlecms.com/)
+ - [libfftw3](https://www.fftw.org/)
 
 If you wish to develop colorscreen, additional packages are recommended
 
