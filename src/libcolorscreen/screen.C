@@ -6,6 +6,7 @@
 #include "screen.h"
 #include "gaussian-blur.h"
 #include "dj_fft.h"
+#include "fftw3.h"
 #include "spline.h"
 #include "icc.h"
 namespace colorscreen
@@ -548,6 +549,37 @@ gaussian_blur_mtf (coord_t blur_radius, luminosity_t out [screen::size])
   return clen;
 }
 
+/* Result of real fft is symmetric.  We need only N /2 + 1 complex values.  */
+static constexpr const int fft_size = screen::size / 2 + 1;
+typedef fftw_complex fft_1d[fft_size];
+typedef fftw_complex fft_2d[screen::size * fft_size];
+
+static int
+gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
+{
+  fftw_plan plan_1d;
+  luminosity_t *cmatrix;
+  //blur_radius = 0;
+  int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
+  int half_clen = clen / 2;
+  luminosity_t nrm = std::sqrt(screen::size);
+  double in[screen::size];
+  for (int i = 0; i < screen::size; i++)
+    in[i] = 0;
+  for (int i = 0; i < clen; i++)
+    {
+      int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
+      in[idx] += cmatrix[i] /** nrm*/;
+    }
+  plan_1d = fftw_plan_dft_r2c_1d (screen::size, in, out, FFTW_ESTIMATE);
+  fftw_execute (plan_1d);
+  fftw_destroy_plan (plan_1d);
+  //for (int i = 0; i < fft_size; i++)
+    //printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
+  free (cmatrix);
+  return clen;
+}
+
 void
 screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin, int cmax)
 {
@@ -570,6 +602,81 @@ screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin
 	      mult[y][x][c] = 0;
 	  }
     }
+}
+
+static void
+initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int cmin, int cmax)
+{
+  fftw_plan plan_2d_inv, plan_2d;
+  fft_2d in;
+  double out[screen::size * screen::size];
+
+  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out, FFTW_ESTIMATE);
+  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in, FFTW_ESTIMATE);
+  for (int c = cmin; c <= cmax; c++)
+    {
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  out[y * screen::size + x] = scr.mult[y][x][c];
+      fftw_execute (plan_2d);
+#if 0
+      for (int y = 0; y < fft_size; y++)
+	{
+	  for (int x = 0; x < fft_size; x++)
+	    {
+	      std::complex w1(weights[x][0], weights[x][1]);
+	      std::complex w2(weights[y][0], weights[y][1]);
+	      std::complex v(in [y * screen::size + x][0], in [y * screen::size + x][1]);
+	      in [y * screen::size + x][0] = real (v * w1 * w2);
+	      in [y * screen::size + x][1] = imag (v * w1 * w2);
+	    }
+	  for (int x = 1; x < fft_size; x++)
+	    {
+	      std::complex w1(weights[x][0], -weights[x][1]);
+	      std::complex w2(weights[y][0], weights[y][1]);
+	      std::complex v(in [y * screen::size + screen::size - x][0], in [y * screen::size + screen::size - x][1]);
+	      in [y * screen::size + screen::size - x][0] = real (v * w1 * w2);
+	      in [y * screen::size + screen::size - x][1] = imag (v * w1 * w2);
+	    }
+	}
+#else
+      for (int y = 0; y < fft_size; y++)
+	{
+          std::complex w2(weights[y][0], weights[y][1]);
+	  for (int x = 0; x < fft_size; x++)
+	    {
+	      std::complex w1(weights[x][0], weights[x][1]);
+	      std::complex v(in [y * fft_size + x][0], in [y * fft_size + x][1]);
+	      in [y * fft_size + x][0] = real (v * w1 * w2);
+	      in [y * fft_size + x][1] = imag (v * w1 * w2);
+	    }
+	}
+      for (int y = 1; y < fft_size; y++)
+	{
+          std::complex w2(weights[y][0], -weights[y][1]);
+	  for (int x = 0; x < fft_size; x++)
+	    {
+	      std::complex w1(weights[x][0], weights[x][1]);
+	      std::complex v(in [(screen::size - y) * fft_size + x][0], in [(screen::size - y) * fft_size + x][1]);
+	      in [(screen::size - y) * fft_size + x][0] = real (v * w1 * w2);
+	      in [(screen::size - y) * fft_size + x][1] = imag (v * w1 * w2);
+	    }
+	}
+#endif
+      fftw_execute (plan_2d_inv);
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  {
+	    out_scr.mult[y][x][c] = out[y * screen::size + x] * ((luminosity_t)1 / (screen::size * screen::size));
+	    //printf ("%f\n", out[y * screen::size + x]);
+	    if (out_scr.mult[y][x][c] < 0)
+	      out_scr.mult[y][x][c] = 0;
+	    if (out_scr.mult[y][x][c] > 1)
+	      out_scr.mult[y][x][c] = 1;
+	  }
+    }
+  fftw_destroy_plan (plan_2d);
+  fftw_destroy_plan (plan_2d_inv);
 }
 
 void
@@ -615,6 +722,7 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
       bool do_fft = ((blur_radius[c] >= max_blur_radius) || verify || clen > 15) && !no_fft;
       if (!do_fft)
         initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 2 : c);
+#if 0
       else
         {
 	  luminosity_t weights[size];
@@ -622,6 +730,15 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
 	  screen::initialize_with_1D_fft (scr, weights, c, all ? 2 : c);
 	  fft_used = true;
         }
+#else
+      else
+        {
+	  fft_1d weights;
+	  gaussian_blur_mtf_fast (blur_radius[c] * screen::size, weights);
+	  initialize_with_1D_fft_fast (*this, scr, weights, c, all ? 2 : c);
+	  fft_used = true;
+        }
+#endif
       if (all)
 	break;
     }
