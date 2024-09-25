@@ -59,6 +59,18 @@ public:
     /* MTF from IMOD's mtffliter.  */
     blur_mtffilter
   };
+
+  /* Algorithm to use for bluring.  For small blurs
+     direct algorthm is better, for large blur fft wins.
+     This is used primarily for testing.  */
+  enum blur_alg
+  {
+    blur_auto,
+    blur_direct,
+    blur_fft
+  };
+  /* Compare two screens.  */
+  bool almost_eq (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */

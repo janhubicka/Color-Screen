@@ -562,7 +562,7 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
   //blur_radius = 0;
   int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
   int half_clen = clen / 2;
-  luminosity_t nrm = std::sqrt(screen::size);
+  //luminosity_t nrm = std::sqrt(screen::size);
   double in[screen::size];
   for (int i = 0; i < screen::size; i++)
     in[i] = 0;
@@ -679,6 +679,24 @@ initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int c
   fftw_destroy_plan (plan_2d_inv);
 }
 
+bool
+screen::almost_eq (const screen &scr, luminosity_t *delta_ret, luminosity_t maxdelta) const
+{
+  luminosity_t delta = 0;
+  /* Compute average error between the two implementations.  */
+  for (int y = 0; y < size; y++)
+   for (int x = 0; x < size; x++)
+     for (int c = 0; c < 3; c++)
+       {
+	 delta += fabs (scr.mult[y][x][c] - mult[y][x][c]);
+	 //scrdiff->mult[y][x][c] = 0.5 + (scr2->mult[y][x][c] - mult[y][x][c]);
+       }
+  delta /= size * size * 3;
+  if (delta_ret)
+    *delta_ret = delta;
+  return delta < maxdelta;
+}
+
 void
 screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no_fft)
 {
@@ -748,27 +766,15 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
       std::unique_ptr <screen> scr2 (new screen);
       std::unique_ptr <screen> scrdiff (new screen);
       scr2->initialize_with_gaussian_blur (scr, blur_radius, true);
-      luminosity_t delta = 0;
-      /* Compute average error between the two implementations.  */
-      for (int y = 0; y < size; y++)
-       for (int x = 0; x < size; x++)
-	 for (int c = 0; c < 3; c++)
-	   {
-	     delta += fabs (scr2->mult[y][x][c] - mult[y][x][c]);
-	     scrdiff->mult[y][x][c] = 0.5 + (scr2->mult[y][x][c] - mult[y][x][c]);
-	   }
-      delta /= size * size * 3;
       static luminosity_t maxdelta;
-      if (delta > 1.0/2048 && delta > maxdelta)
+      luminosity_t delta;
+      if (!almost_eq (*scr2, &delta) && delta > maxdelta)
 	{
 	  maxdelta = delta;
 	  fprintf (stderr, "FFT Gaussian blur does not match direct version radius %f %f %f delta %f clen %i; see /tmp/scr-*.tif \n", blur_radius[0], blur_radius[1], blur_radius[2], delta, clen);
 	  save_tiff ("/tmp/scr-fft.tif");
 	  scr2->save_tiff ("/tmp/scr-nofft.tif");
-	  scrdiff->save_tiff ("/tmp/scr-diff.tif");
 	}
-      //else
-	//fprintf (stderr, "FFT Gaussian blur OK radius %f %f %f delta %f\n", blur_radius[0], blur_radius[1], blur_radius[2], delta);
     }
 }
 void
