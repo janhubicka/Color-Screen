@@ -74,10 +74,10 @@ public:
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian);
+  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
-  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian);
-  void initialize_with_blur (screen &scr, luminosity_t mtf[4]);
+  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
+  void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
@@ -93,7 +93,7 @@ private:
   void preview_dufay ();
   __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
-  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no_fft = false);
+  void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
   void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);
   void initialize_with_2D_fft (screen &scr, precomputed_function<luminosity_t> *mft[3], rgbdata scale);
   void initialize_with_fft_blur (screen &scr, rgbdata blur_radius);

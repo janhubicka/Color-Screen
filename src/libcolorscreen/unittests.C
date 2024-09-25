@@ -1,14 +1,16 @@
-#include "include/color.h"
-#include "include/matrix.h"
-#include "include/mesh.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
+#include <memory>
 
 #include "include/colorscreen.h"
 #include "include/imagedata.h"
 #include "include/scr-to-img.h"
 #include "include/finetune.h"
+#include "include/color.h"
+#include "include/matrix.h"
+#include "include/mesh.h"
+#include "screen.h"
 using namespace colorscreen;
 namespace
 {
@@ -386,16 +388,48 @@ test_discovery (coord_t epsilon)
   ok &= do_test_discovery (param, 1024, 1024, epsilon);
   return ok;
 }
+
+bool
+test_screen_blur ()
+{
+  screen mstr;
+  mstr.initialize (Paget);
+  std::unique_ptr <screen> scr1 (new screen);
+  std::unique_ptr <screen> scr2 (new screen);
+
+  for (int i = 0; i < 100; i++)
+    {
+      luminosity_t radius = i * screen::max_blur_radius / 100;
+      scr1->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_fft);
+      scr2->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_direct);
+      luminosity_t delta;
+      if (!scr1->almost_eq (*scr1, &delta))
+        {
+	  fprintf (stderr, "FFT Gaussian blur does not match direct version radius %f delta %f (step %i); see /tmp/scr-*.tif \n", radius, delta, i);
+	  scr1->save_tiff ("/tmp/scr-fft.tif");
+	  scr2->save_tiff ("/tmp/scr-nofft.tif");
+	  std::unique_ptr <screen> diff (new screen);
+	  for (int y = 0; y < screen::size; y++)
+	   for (int x = 0; x < screen::size; x++)
+	     for (int c = 0; c < 3; c++)
+		diff->mult[y][x][c] = 0.5 + (scr2->mult[y][x][c] - scr1->mult[y][x][c]);
+	  diff->save_tiff ("/tmp/scr-diff.tif");
+	  return false;
+        }
+    }
+  return true;
+}
 }
 
 int
 main ()
 {
-  printf ("1..5\n");
+  printf ("1..6\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
   report ("color tests", true);
+  report ("screen blur tests", test_screen_blur ());
   report ("homography tests", test_homography (false, 0.000001));
   report ("lens correction tests", test_homography (true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));

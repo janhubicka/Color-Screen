@@ -679,18 +679,15 @@ initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int c
   fftw_destroy_plan (plan_2d_inv);
 }
 
+/* Compute average error between the two implementations.  */
 bool
 screen::almost_eq (const screen &scr, luminosity_t *delta_ret, luminosity_t maxdelta) const
 {
   luminosity_t delta = 0;
-  /* Compute average error between the two implementations.  */
   for (int y = 0; y < size; y++)
    for (int x = 0; x < size; x++)
      for (int c = 0; c < 3; c++)
-       {
-	 delta += fabs (scr.mult[y][x][c] - mult[y][x][c]);
-	 //scrdiff->mult[y][x][c] = 0.5 + (scr2->mult[y][x][c] - mult[y][x][c]);
-       }
+       delta += fabs (scr.mult[y][x][c] - mult[y][x][c]);
   delta /= size * size * 3;
   if (delta_ret)
     *delta_ret = delta;
@@ -698,16 +695,16 @@ screen::almost_eq (const screen &scr, luminosity_t *delta_ret, luminosity_t maxd
 }
 
 void
-screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no_fft)
+screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg)
 {
-  bool fft_used = false;
+  //bool fft_used = false;
   memcpy (add, scr.add, sizeof (add));
   if (blur_radius.red <= 0 && blur_radius.green <= 0 && blur_radius.blue <= 0)
     {
       memcpy (mult, scr.mult, sizeof (mult));
       return;
     }
-  const bool verify = false;
+  //const bool verify = false;
 #if 0
   if (blur_radius.red >= max_blur_radius)
     blur_radius.red = max_blur_radius;
@@ -717,7 +714,7 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
     blur_radius.blue = max_blur_radius;
 #endif
   bool all = (blur_radius.red == blur_radius.green) && (blur_radius.red == blur_radius.blue);
-  bool maxradius = false;
+  //bool maxradius = false;
   int clen = 0;
   for (int c = 0; c < 3; c++)
     {
@@ -735,9 +732,13 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
 	    }
 	  continue;
 	}
-      if (blur_radius[c] > max_blur_radius)
-	maxradius = true;
-      bool do_fft = ((blur_radius[c] >= max_blur_radius) || verify || clen > 15) && !no_fft;
+      //if (blur_radius[c] > max_blur_radius)
+	//maxradius = true;
+      bool do_fft = false;
+      if (alg == blur_fft)
+	do_fft = true;
+      else if (alg == blur_auto)
+	do_fft = (blur_radius[c] >= max_blur_radius) || clen > 15;
       if (!do_fft)
         initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 2 : c);
 #if 0
@@ -754,27 +755,10 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, bool no
 	  fft_1d weights;
 	  gaussian_blur_mtf_fast (blur_radius[c] * screen::size, weights);
 	  initialize_with_1D_fft_fast (*this, scr, weights, c, all ? 2 : c);
-	  fft_used = true;
         }
 #endif
       if (all)
 	break;
-    }
-
-  if (verify && !maxradius && fft_used)
-    {
-      std::unique_ptr <screen> scr2 (new screen);
-      std::unique_ptr <screen> scrdiff (new screen);
-      scr2->initialize_with_gaussian_blur (scr, blur_radius, true);
-      static luminosity_t maxdelta;
-      luminosity_t delta;
-      if (!almost_eq (*scr2, &delta) && delta > maxdelta)
-	{
-	  maxdelta = delta;
-	  fprintf (stderr, "FFT Gaussian blur does not match direct version radius %f %f %f delta %f clen %i; see /tmp/scr-*.tif \n", blur_radius[0], blur_radius[1], blur_radius[2], delta, clen);
-	  save_tiff ("/tmp/scr-fft.tif");
-	  scr2->save_tiff ("/tmp/scr-nofft.tif");
-	}
     }
 }
 void
@@ -1132,20 +1116,20 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 }
 
 void
-screen::initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type type)
+screen::initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type type, enum blur_alg alg)
 {
-  initialize_with_blur (scr, {blur_radius, blur_radius, blur_radius}, type);
+  initialize_with_blur (scr, {blur_radius, blur_radius, blur_radius}, type, alg);
 }
 void
-screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type type)
+screen::initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type type, enum blur_alg alg)
 {
   if (type == blur_gaussian)
-    initialize_with_gaussian_blur (scr, blur_radius);
+    initialize_with_gaussian_blur (scr, blur_radius, alg);
   else
     initialize_with_fft_blur (scr, blur_radius);
 }
 void
-screen::initialize_with_blur (screen &scr, luminosity_t mtf[4])
+screen::initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg)
 {
 #if 0
   /* An attempt to get more data points form MTF. Way too slow.  */
