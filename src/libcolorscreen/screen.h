@@ -49,7 +49,7 @@ public:
   /* Initialize empty screen (so rendering will show original image).  */
   void empty ();
   /* Initialize to a given screen.  */
-  void initialize (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
+  DLL_PUBLIC void initialize (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
   /* Initialize to a given screen for preview window.  */
   void initialize_preview (enum scr_type type);
   enum blur_type
@@ -70,17 +70,17 @@ public:
     blur_fft
   };
   /* Compare two screens.  */
-  bool almost_eq (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
+  DLL_PUBLIC bool almost_eq (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
   void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
   void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
-  void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
+  DLL_PUBLIC void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
-  bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
+  DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
   static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
   void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
 private:
