@@ -74,9 +74,9 @@ public:
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
-  void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
+  DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
-  void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
+  DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   DLL_PUBLIC void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
