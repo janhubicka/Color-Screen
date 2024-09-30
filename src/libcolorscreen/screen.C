@@ -1,14 +1,18 @@
 #include <math.h>
 #include <memory>
 #include <array>
+#include <complex>
+#include <mutex>
 #include "include/tiff-writer.h"
 #include "include/dufaycolor.h"
 #include "screen.h"
 #include "gaussian-blur.h"
-#include "dj_fft.h"
 #include "fftw3.h"
 #include "spline.h"
 #include "icc.h"
+namespace {
+std::mutex fftw_lock;
+}
 namespace colorscreen
 {
 /* Produce empty screen.  */
@@ -810,34 +814,10 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
   free (cmatrix);
 }
 
-#if 0
-static int
-gaussian_blur_mtf (coord_t blur_radius, luminosity_t out [screen::size])
-{
-  luminosity_t *cmatrix;
-  int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
-  int half_clen = clen / 2;
-  luminosity_t nrm = std::sqrt(screen::size);
-  dj::fft_arg_fix<double, screen::size> in;
-  for (int i = 0; i < screen::size; i++)
-    in[i] = 0;
-  for (int i = 0; i < clen; i++)
-    {
-      int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
-      in[idx] += cmatrix[i] * nrm;
-    }
-  free (cmatrix);
-  dj::fft_arg_fix<double, screen::size> outf = dj::fft1d_fix<double,screen::size>(in, dj::fft_dir::DIR_FWD);
-  for (int i = 0; i < screen::size; i++)
-    {
-      out[i] = outf[i].real ();
-      //printf ("%i: %f+%fi %f %f\n",i, outf[i].real(), outf[i].imag(), in[i].real (), out[i]);
-    }
-  return clen;
-}
-#endif
-
-/* Result of real fft is symmetric.  We need only N /2 + 1 complex values.  */
+/* Result of real fft is symmetric.  We need only N /2 + 1 complex values.
+   Moreover point spread functions we compute are symmetric real functions so
+   the FFT result is again a real function (all complex values should be 0 up
+   to roundoff errors).  */
 static constexpr const int fft_size = screen::size / 2 + 1;
 typedef fftw_complex fft_1d[fft_size];
 typedef fftw_complex fft_2d[screen::size * fft_size];
@@ -859,40 +839,18 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
       int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
       in[idx] += cmatrix[i] /** nrm*/;
     }
+  fftw_lock.lock ();
   plan_1d = fftw_plan_dft_r2c_1d (screen::size, in, out, FFTW_ESTIMATE);
+  fftw_lock.unlock ();
   fftw_execute (plan_1d);
+  fftw_lock.lock ();
   fftw_destroy_plan (plan_1d);
+  fftw_lock.unlock ();
   // for (int i = 0; i < fft_size; i++)
   // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
   free (cmatrix);
   return clen;
 }
-
-#if 0
-void
-screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin, int cmax)
-{
-  dj::fft_arg_fix<double, size * size> imgData;
-  for (int c = cmin; c <= cmax; c++)
-    {
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  imgData[y * size + x] = scr.mult[y][x][c];
-      dj::fft_arg_fix<double, size * size> imgDataFFT = dj::fft2d_fix<double,size>(imgData, dj::fft_dir::DIR_FWD);
-      for (int y = 0; y < size; y++)
-	for (int x = 0; x < size; x++)
-	  imgDataFFT [y * size + x] *= weights[x] * weights[y];
-      dj::fft_arg_fix<double, size * size> imgDataInvFFT = dj::fft2d_fix<double,size>(imgDataFFT, dj::fft_dir::DIR_BWD);
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  {
-	    mult[y][x][c] = imgDataInvFFT[y * size + x].real ();
-	    if (mult[y][x][c] < 0)
-	      mult[y][x][c] = 0;
-	  }
-    }
-}
-#endif
 
 static void
 initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
@@ -902,10 +860,12 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
   fft_2d in;
   double out[screen::size * screen::size];
 
+  fftw_lock.lock ();
   plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out,
                                       FFTW_ESTIMATE);
   plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in,
                                   FFTW_ESTIMATE);
+  fftw_lock.unlock ();
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -950,46 +910,10 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
               out_scr.mult[y][x][c] = 1;
           }
     }
+  fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
   fftw_destroy_plan (plan_2d_inv);
-}
-
-static const int tiles = 1;
-
-static void
-point_spread_fft (fft_2d &weights,
-                  const precomputed_function<luminosity_t> *mtf,
-                  luminosity_t scale)
-{
-  double data[screen::size * screen::size];
-  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data,
-                                            weights, FFTW_ESTIMATE);
-  luminosity_t step = scale / tiles;
-  for (int y = 0; y <= screen::size * tiles / 2; y++)
-    for (int x = 0; x <= screen::size * tiles / 2; x++)
-      if (!x && !y)
-        ;
-      else
-        {
-          luminosity_t w = mtf->apply (sqrt (x * x + y * y) * step);
-          if (w < 0)
-            w = 0;
-          if (w > 1)
-            w = 1;
-          data[y * screen::size * tiles + x] *= w;
-          if (x && (x != screen::size * tiles / 2))
-            data[y * screen::size * tiles + (screen::size * tiles - x)] *= w;
-          if (y && (y != screen::size * tiles / 2))
-            {
-              data[(screen::size * tiles - y) * screen::size * tiles + x] *= w;
-              if (x && (x != screen::size * tiles / 2))
-                data[(screen::size * tiles - y) * screen::size * tiles
-                     + (screen::size * tiles - x)]
-                    *= w;
-            }
-        }
-  fftw_execute (plan_2d);
-  fftw_destroy_plan (plan_2d);
+  fftw_lock.unlock ();
 }
 
 static void
@@ -997,13 +921,14 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
                              const fft_2d weights, int cmin, int cmax)
 {
   fftw_plan plan_2d_inv, plan_2d;
-  assert (tiles == 1);
   fft_2d in;
   double out[screen::size * screen::size];
+  fftw_lock.lock ();
   plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out,
                                       FFTW_ESTIMATE);
   plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in,
                                   FFTW_ESTIMATE);
+  fftw_lock.unlock ();
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -1030,8 +955,10 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
               out_scr.mult[y][x][c] = 1;
           }
     }
+  fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
   fftw_destroy_plan (plan_2d_inv);
+  fftw_lock.unlock ();
 }
 
 /* Compute average error between the two implementations.  */
@@ -1236,35 +1163,12 @@ point_spread_by_4_vals (luminosity_t mtf[4])
   return p.precompute (0, mtf[3] + 1, 1024);
 }
 
-/* Sily way of computing fourier integral.  */
-static precomputed_function<luminosity_t> *
-mtf_to_point_spread (precomputed_function<luminosity_t> *mtf)
-{
-  /* we only need sqrt(2)/2 = 1.41/2 = 0.71 */
-  std::complex<double> vals[screen::size];
-  double v = mtf->apply (0);
-  for (int i = 0; i < screen::size; i++)
-    vals[i] = v;
-  for (double a = 0.1; a < screen::size; a += 0.1)
-    {
-      double v = mtf->apply (a);
-      if (v)
-        for (int i = 0; i < screen::size; i++)
-          vals[i] += std::polar ((double)1, (double)(a * i)) * v;
-    }
-  luminosity_t vv[screen::size];
-  for (int i = 0; screen::size; i++)
-    vv[i] = vals[i].real ();
-  return new precomputed_function<luminosity_t> (0, screen::size, vv,
-                                                 screen::size);
-}
-
 void
 screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 {
   std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
       mtf_by_4_vals (mtf));
-  luminosity_t step = 1.0 / tiles;
+  luminosity_t step = 1.0;
   coord_t dpi = 4500;
   printf ("mtf75:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
           "lp/mm at %f DPI\n",
@@ -1278,7 +1182,7 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
   printf ("mtf0: %f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
           "lp/mm at %f DPI\n",
           mtf[3], mtf[3] * pixel_size, mtf[3] * pixel_size * dpi / 25.4, dpi);
-  for (int x = 0; x <= (size * tiles) / 2; x++)
+  for (int x = 0; x <= size / 2; x++)
     {
       luminosity_t w = mtfc->apply (x * step);
       if (w > 0)
@@ -1299,7 +1203,7 @@ screen::initialize_with_2D_fft (screen &scr,
   fft_2d fft;
   for (int c = 0; c < 3; c++)
     {
-      luminosity_t step = scale[c] / tiles;
+      luminosity_t step = scale[c];
       for (int y = 0; y < fft_size; y++)
         for (int x = 0; x < fft_size; x++)
           {
@@ -1308,70 +1212,29 @@ screen::initialize_with_2D_fft (screen &scr,
               w = 0;
             if (w > 1)
               w = 1;
-            fft[y * fft_size + x][0] = w / (screen::size * screen::size);
+            fft[y * fft_size + x][0] = w * (1.0 / (screen::size * screen::size));
             fft[y * fft_size + x][1] = 0;
             if (y)
               {
                 fft[(screen::size - y) * fft_size + x][0]
-                    = w / (screen::size * screen::size);
+                    = w * (1.0 / (screen::size * screen::size));
                 fft[(screen::size - y) * fft_size + x][1] = 0;
               }
           }
       initialize_with_2D_fft_fast (*this, scr, fft, c, c);
     }
-#if 0
-  dj::fft_arg_fix<double, size * size * tiles * tiles> imgData;
-  for (int c = 0; c < 3; c++)
-    {
-      for (int yy = 0; yy < tiles; yy++)
-        for (int y = 0; y < size; y++)
-	  for (int xx = 0; xx < tiles; xx++)
-            for (int x = 0; x < size; x++)
-	      imgData[(y + yy * size) * size * tiles + x + xx * size] = scr.mult[y][x][c];
-
-      dj::fft_arg_fix<double, size * size * tiles * tiles> imgDataFFT = dj::fft2d_fix<double,size * tiles>(imgData, dj::fft_dir::DIR_FWD);
-      luminosity_t step = scale[c] / tiles;
-
-
-      for (int y = 0; y <= size * tiles / 2; y++)
-	for (int x = 0; x <= size * tiles / 2; x++)
-	  if (!x && !y)
-	    ;
-	  else
-	    {
-	      luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
-	      if (w < 0)
-		w = 0;
-	      if (w > 1)
-		w = 1;
-	      imgDataFFT [y * size * tiles + x] *= w;
-	      if (x && (x != size * tiles / 2))
-		imgDataFFT [y * size * tiles + (size * tiles - x)] *= w;
-	      if (y && (y != size * tiles / 2))
-		{
-		  imgDataFFT [(size * tiles - y) * size * tiles + x] *= w;
-		  if (x && (x != size * tiles / 2))
-		    imgDataFFT [(size * tiles - y) * size * tiles + (size * tiles - x)] *= w;
-		}
-	    }
-      dj::fft_arg_fix<double, size * size * tiles * tiles> imgDataInvFFT = dj::fft2d_fix<double,size * tiles>(imgDataFFT, dj::fft_dir::DIR_BWD);
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-	  {
-	    mult[y][x][c] = imgDataInvFFT[y * size * tiles + x].real ();
-	    if (mult[y][x][c] < 0)
-	      mult[y][x][c] = 0;
-	  }
-    }
-#endif
 }
 
-dj::fft_arg_fix<double, screen::size * screen::size>
-point_spread_fft (precomputed_function<luminosity_t> &point_spread,
+static void
+point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spread,
                   luminosity_t scale)
 {
-  dj::fft_arg_fix<double, screen::size * screen::size> in;
-  double sum = 0;
+  double data[screen::size * screen::size];
+  fftw_lock.lock ();
+  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data,
+                                            weights, FFTW_ESTIMATE);
+  fftw_lock.unlock ();
+  luminosity_t sum = 0;
   for (int y = 0; y < screen::size; y++)
     for (int x = 0; x < screen::size; x++)
       {
@@ -1385,13 +1248,16 @@ point_spread_fft (precomputed_function<luminosity_t> &point_spread,
                                              * (scale * screen::size));
         if (w < 0)
           w = 0;
-        in[y * screen::size + x] = w;
+        data[y * screen::size + x] = w;
         sum += w;
       }
-  luminosity_t nrm = std::sqrt (screen::size * screen::size);
+  luminosity_t nrm = /*std::sqrt (screen::size * screen::size)*/1;
   for (int x = 0; x < screen::size * screen::size; x++)
-    in[x] *= (nrm / sum);
-  return dj::fft2d_fix<double, screen::size> (in, dj::fft_dir::DIR_FWD);
+    data[x] *= (nrm / sum);
+  fftw_lock.lock ();
+  fftw_execute (plan_2d);
+  fftw_destroy_plan (plan_2d);
+  fftw_lock.unlock ();
 }
 
 void
@@ -1399,36 +1265,11 @@ screen::initialize_with_point_spread (
     screen &scr, precomputed_function<luminosity_t> *point_spread[3],
     rgbdata scale)
 {
-  std::unique_ptr<dj::fft_arg_fix<double, size * size> > scaleFFT (
-      new (dj::fft_arg_fix<double, size * size>));
-  std::unique_ptr<dj::fft_arg_fix<double, size * size> > imgData (
-      new (dj::fft_arg_fix<double, size * size>));
-  std::unique_ptr<dj::fft_arg_fix<double, size * size> > imgDataFFT (
-      new (dj::fft_arg_fix<double, size * size>));
-  std::unique_ptr<dj::fft_arg_fix<double, size * size> > imgDataInvFFT (
-      new (dj::fft_arg_fix<double, size * size>));
+  fft_2d mtf;
   for (int c = 0; c < 3; c++)
     {
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-          (*imgData)[y * size + x] = scr.mult[y][x][c];
-
-      *imgDataFFT
-          = dj::fft2d_fix<double, size> (*imgData, dj::fft_dir::DIR_FWD);
-
-      *scaleFFT = point_spread_fft (*point_spread[c], scale[c] / size);
-      for (int x = 0; x < size * size; x++)
-        (*imgDataFFT)[x] *= (*scaleFFT)[x];
-
-      *imgDataInvFFT
-          = dj::fft2d_fix<double, size> (*imgDataFFT, dj::fft_dir::DIR_BWD);
-      for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
-          {
-            mult[y][x][c] = (*imgDataInvFFT)[y * size + x].real ();
-            if (mult[y][x][c] < 0)
-              mult[y][x][c] = 0;
-          }
+      point_spread_fft (mtf, *(point_spread[c]), scale[c]);
+      initialize_with_2D_fft_fast (*this, scr, mtf, c, c);
     }
 }
 
@@ -1460,35 +1301,6 @@ screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
       bool all = (blur_radius.red == blur_radius.green)
                  && (blur_radius.red == blur_radius.blue);
       for (int c = 0; c < 3; c++)
-#if 0
-        {
-          luminosity_t weights[size];
-	  /* blur_radius is blur in the screen dimensions.
-	     step should be 1 / size, but blur_radius of 1 corresponds to size so this evens out.
-	     Compensate so the blur is approximately same as gaussian blur.	 */
-	  luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
-	  luminosity_t f = step;
-	  weights[0] = 1;
-	  for (int x = 1, p = 0; x <= size / 2; x++, f+= step)
-	    {
-	      while (p < data_size - 1 && data[p + 1][0] < f)
-		p++;
-	      luminosity_t w = data[p][1] + (data[p + 1][1] - data[p][1]) * (f - data[p][0]) / (data[p + 1][0] - data[p][0]);
-	      //printf ("%f %i %f d1 %f %f d2 %f %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
-	      if (w < 0)
-		w = 0;
-	      if (w > 1)
-		w = 1;
-	      if (x == size / 2)
-		weights[x] = w;
-	      else
-		weights[x] = weights[size - x] = w;
-	    }
-          initialize_with_1D_fft (scr, weights, c, all ? 2 : c);
-	  if (all)
-	    break;
-        }
-#else
         {
           fft_1d weights;
           /* blur_radius is blur in the screen dimensions.
@@ -1520,7 +1332,6 @@ screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
           if (all)
             break;
         }
-#endif
     }
   else
     {
@@ -1557,7 +1368,7 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
   std::unique_ptr <precomputed_function<luminosity_t>> ps(mtf_to_point_spread (mtfc.get ()));
   precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
   screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
-#elif 1
+#elif 0
   std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
       point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]
@@ -1565,9 +1376,9 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
   initialize_with_2D_fft (scr, vv, { 1.0, 1.0, 1.0 });
 #else
   std::unique_ptr<precomputed_function<luminosity_t> > point_spreadc (
-      ps_by_4_vals (mtf));
+      point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]
-      = { ps.get (), ps.get (), ps.get () };
+      = { point_spreadc.get (), point_spreadc.get (), point_spreadc.get () };
   screen::initialize_with_point_spread (scr, vv, { 1.0, 1.0, 1.0 });
 #endif
 }
