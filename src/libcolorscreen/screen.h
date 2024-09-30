@@ -91,7 +91,8 @@ private:
   /* Initialize screen to the preview screen that corresponds to Finlay or Paget plate.  */
   void preview ();
   void preview_dufay ();
-  __attribute__ ((always_inline)) inline void initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
+  __attribute__ ((always_inline)) inline void initialize_with_1d_kernel (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
+  __attribute__ ((always_inline)) inline void initialize_with_2d_kernel (screen &scr, int clen, luminosity_t *cmatrix2d, int c);
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
   void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
   void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);

@@ -334,7 +334,7 @@ screen::preview_dufay ()
 
 __attribute__ ((always_inline))
 inline void
-screen::initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c)
+screen::initialize_with_1d_kernel (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c)
 {
 //#pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
   for (int y = 0; y < size; y++)
@@ -370,6 +370,23 @@ screen::initialize_with_gaussian_blur (screen &scr, int clen, luminosity_t *cmat
     }
 }
 
+__attribute__ ((always_inline))
+inline void
+screen::initialize_with_2d_kernel (screen &scr, int clen, luminosity_t *cmatrix2d, int c)
+{
+//#pragma omp parallel shared(scr, clen, cmatrix, hblur,c)
+  for (int y = 0; y < size; y++)
+    for (int x= 0; x < size; x++)
+      {
+	luminosity_t sum = 0;
+	for (int yd = - clen / 2; yd < clen / 2 ; yd++)
+	  for (int xd = - clen / 2; xd < clen / 2 ; xd++)
+	    sum += cmatrix2d[(yd + clen / 2) * clen + xd + clen / 2] * 
+		    scr.mult[(y + yd + size) % (size - 1)][(x + xd + size) % (size - 1)][c];
+	mult[y][x][c] = sum;
+      }
+}
+
 void
 screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax)
 {
@@ -385,137 +402,137 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmi
     switch (clen)
       {
 #if 1
-       case 1: initialize_with_gaussian_blur (scr, 1, cmatrix, &hblur[0][0], channel); break;
-       case 3: initialize_with_gaussian_blur (scr, 3, cmatrix, &hblur[0][0], channel); break;
-       case 5: initialize_with_gaussian_blur (scr, 5, cmatrix, &hblur[0][0], channel); break;
-       case 7: initialize_with_gaussian_blur (scr, 7, cmatrix, &hblur[0][0], channel); break;
-       case 9: initialize_with_gaussian_blur (scr, 9, cmatrix, &hblur[0][0], channel); break;
-       case 11: initialize_with_gaussian_blur (scr, 11, cmatrix, &hblur[0][0], channel); break;
-       case 13: initialize_with_gaussian_blur (scr, 13, cmatrix, &hblur[0][0], channel); break;
-       case 15: initialize_with_gaussian_blur (scr, 15, cmatrix, &hblur[0][0], channel); break;
-       case 17: initialize_with_gaussian_blur (scr, 17, cmatrix, &hblur[0][0], channel); break;
-       case 19: initialize_with_gaussian_blur (scr, 19, cmatrix, &hblur[0][0], channel); break;
-       case 21: initialize_with_gaussian_blur (scr, 21, cmatrix, &hblur[0][0], channel); break;
-       case 23: initialize_with_gaussian_blur (scr, 23, cmatrix, &hblur[0][0], channel); break;
-       case 25: initialize_with_gaussian_blur (scr, 25, cmatrix, &hblur[0][0], channel); break;
-       case 27: initialize_with_gaussian_blur (scr, 27, cmatrix, &hblur[0][0], channel); break;
-       case 29: initialize_with_gaussian_blur (scr, 29, cmatrix, &hblur[0][0], channel); break;
-       case 31: initialize_with_gaussian_blur (scr, 31, cmatrix, &hblur[0][0], channel); break;
-       case 33: initialize_with_gaussian_blur (scr, 33, cmatrix, &hblur[0][0], channel); break;
-       case 35: initialize_with_gaussian_blur (scr, 35, cmatrix, &hblur[0][0], channel); break;
-       case 37: initialize_with_gaussian_blur (scr, 37, cmatrix, &hblur[0][0], channel); break;
-       case 39: initialize_with_gaussian_blur (scr, 39, cmatrix, &hblur[0][0], channel); break;
-       case 41: initialize_with_gaussian_blur (scr, 41, cmatrix, &hblur[0][0], channel); break;
-       case 43: initialize_with_gaussian_blur (scr, 43, cmatrix, &hblur[0][0], channel); break;
-       case 45: initialize_with_gaussian_blur (scr, 45, cmatrix, &hblur[0][0], channel); break;
-       case 47: initialize_with_gaussian_blur (scr, 47, cmatrix, &hblur[0][0], channel); break;
-       case 49: initialize_with_gaussian_blur (scr, 49, cmatrix, &hblur[0][0], channel); break;
-       case 51: initialize_with_gaussian_blur (scr, 51, cmatrix, &hblur[0][0], channel); break;
-       case 53: initialize_with_gaussian_blur (scr, 53, cmatrix, &hblur[0][0], channel); break;
-       case 55: initialize_with_gaussian_blur (scr, 55, cmatrix, &hblur[0][0], channel); break;
-       case 57: initialize_with_gaussian_blur (scr, 57, cmatrix, &hblur[0][0], channel); break;
-       case 59: initialize_with_gaussian_blur (scr, 59, cmatrix, &hblur[0][0], channel); break;
-       case 61: initialize_with_gaussian_blur (scr, 61, cmatrix, &hblur[0][0], channel); break;
-       case 63: initialize_with_gaussian_blur (scr, 63, cmatrix, &hblur[0][0], channel); break;
-       case 65: initialize_with_gaussian_blur (scr, 65, cmatrix, &hblur[0][0], channel); break;
-       case 67: initialize_with_gaussian_blur (scr, 67, cmatrix, &hblur[0][0], channel); break;
-       case 69: initialize_with_gaussian_blur (scr, 69, cmatrix, &hblur[0][0], channel); break;
-       case 71: initialize_with_gaussian_blur (scr, 71, cmatrix, &hblur[0][0], channel); break;
-       case 73: initialize_with_gaussian_blur (scr, 73, cmatrix, &hblur[0][0], channel); break;
-       case 75: initialize_with_gaussian_blur (scr, 75, cmatrix, &hblur[0][0], channel); break;
-       case 77: initialize_with_gaussian_blur (scr, 77, cmatrix, &hblur[0][0], channel); break;
-       case 79: initialize_with_gaussian_blur (scr, 79, cmatrix, &hblur[0][0], channel); break;
-       case 81: initialize_with_gaussian_blur (scr, 81, cmatrix, &hblur[0][0], channel); break;
-       case 83: initialize_with_gaussian_blur (scr, 83, cmatrix, &hblur[0][0], channel); break;
-       case 85: initialize_with_gaussian_blur (scr, 85, cmatrix, &hblur[0][0], channel); break;
-       case 87: initialize_with_gaussian_blur (scr, 87, cmatrix, &hblur[0][0], channel); break;
-       case 89: initialize_with_gaussian_blur (scr, 89, cmatrix, &hblur[0][0], channel); break;
-       case 91: initialize_with_gaussian_blur (scr, 91, cmatrix, &hblur[0][0], channel); break;
-       case 93: initialize_with_gaussian_blur (scr, 93, cmatrix, &hblur[0][0], channel); break;
-       case 95: initialize_with_gaussian_blur (scr, 95, cmatrix, &hblur[0][0], channel); break;
-       case 97: initialize_with_gaussian_blur (scr, 97, cmatrix, &hblur[0][0], channel); break;
-       case 99: initialize_with_gaussian_blur (scr, 99, cmatrix, &hblur[0][0], channel); break;
+       case 1: initialize_with_1d_kernel (scr, 1, cmatrix, &hblur[0][0], channel); break;
+       case 3: initialize_with_1d_kernel (scr, 3, cmatrix, &hblur[0][0], channel); break;
+       case 5: initialize_with_1d_kernel (scr, 5, cmatrix, &hblur[0][0], channel); break;
+       case 7: initialize_with_1d_kernel (scr, 7, cmatrix, &hblur[0][0], channel); break;
+       case 9: initialize_with_1d_kernel (scr, 9, cmatrix, &hblur[0][0], channel); break;
+       case 11: initialize_with_1d_kernel (scr, 11, cmatrix, &hblur[0][0], channel); break;
+       case 13: initialize_with_1d_kernel (scr, 13, cmatrix, &hblur[0][0], channel); break;
+       case 15: initialize_with_1d_kernel (scr, 15, cmatrix, &hblur[0][0], channel); break;
+       case 17: initialize_with_1d_kernel (scr, 17, cmatrix, &hblur[0][0], channel); break;
+       case 19: initialize_with_1d_kernel (scr, 19, cmatrix, &hblur[0][0], channel); break;
+       case 21: initialize_with_1d_kernel (scr, 21, cmatrix, &hblur[0][0], channel); break;
+       case 23: initialize_with_1d_kernel (scr, 23, cmatrix, &hblur[0][0], channel); break;
+       case 25: initialize_with_1d_kernel (scr, 25, cmatrix, &hblur[0][0], channel); break;
+       case 27: initialize_with_1d_kernel (scr, 27, cmatrix, &hblur[0][0], channel); break;
+       case 29: initialize_with_1d_kernel (scr, 29, cmatrix, &hblur[0][0], channel); break;
+       case 31: initialize_with_1d_kernel (scr, 31, cmatrix, &hblur[0][0], channel); break;
+       case 33: initialize_with_1d_kernel (scr, 33, cmatrix, &hblur[0][0], channel); break;
+       case 35: initialize_with_1d_kernel (scr, 35, cmatrix, &hblur[0][0], channel); break;
+       case 37: initialize_with_1d_kernel (scr, 37, cmatrix, &hblur[0][0], channel); break;
+       case 39: initialize_with_1d_kernel (scr, 39, cmatrix, &hblur[0][0], channel); break;
+       case 41: initialize_with_1d_kernel (scr, 41, cmatrix, &hblur[0][0], channel); break;
+       case 43: initialize_with_1d_kernel (scr, 43, cmatrix, &hblur[0][0], channel); break;
+       case 45: initialize_with_1d_kernel (scr, 45, cmatrix, &hblur[0][0], channel); break;
+       case 47: initialize_with_1d_kernel (scr, 47, cmatrix, &hblur[0][0], channel); break;
+       case 49: initialize_with_1d_kernel (scr, 49, cmatrix, &hblur[0][0], channel); break;
+       case 51: initialize_with_1d_kernel (scr, 51, cmatrix, &hblur[0][0], channel); break;
+       case 53: initialize_with_1d_kernel (scr, 53, cmatrix, &hblur[0][0], channel); break;
+       case 55: initialize_with_1d_kernel (scr, 55, cmatrix, &hblur[0][0], channel); break;
+       case 57: initialize_with_1d_kernel (scr, 57, cmatrix, &hblur[0][0], channel); break;
+       case 59: initialize_with_1d_kernel (scr, 59, cmatrix, &hblur[0][0], channel); break;
+       case 61: initialize_with_1d_kernel (scr, 61, cmatrix, &hblur[0][0], channel); break;
+       case 63: initialize_with_1d_kernel (scr, 63, cmatrix, &hblur[0][0], channel); break;
+       case 65: initialize_with_1d_kernel (scr, 65, cmatrix, &hblur[0][0], channel); break;
+       case 67: initialize_with_1d_kernel (scr, 67, cmatrix, &hblur[0][0], channel); break;
+       case 69: initialize_with_1d_kernel (scr, 69, cmatrix, &hblur[0][0], channel); break;
+       case 71: initialize_with_1d_kernel (scr, 71, cmatrix, &hblur[0][0], channel); break;
+       case 73: initialize_with_1d_kernel (scr, 73, cmatrix, &hblur[0][0], channel); break;
+       case 75: initialize_with_1d_kernel (scr, 75, cmatrix, &hblur[0][0], channel); break;
+       case 77: initialize_with_1d_kernel (scr, 77, cmatrix, &hblur[0][0], channel); break;
+       case 79: initialize_with_1d_kernel (scr, 79, cmatrix, &hblur[0][0], channel); break;
+       case 81: initialize_with_1d_kernel (scr, 81, cmatrix, &hblur[0][0], channel); break;
+       case 83: initialize_with_1d_kernel (scr, 83, cmatrix, &hblur[0][0], channel); break;
+       case 85: initialize_with_1d_kernel (scr, 85, cmatrix, &hblur[0][0], channel); break;
+       case 87: initialize_with_1d_kernel (scr, 87, cmatrix, &hblur[0][0], channel); break;
+       case 89: initialize_with_1d_kernel (scr, 89, cmatrix, &hblur[0][0], channel); break;
+       case 91: initialize_with_1d_kernel (scr, 91, cmatrix, &hblur[0][0], channel); break;
+       case 93: initialize_with_1d_kernel (scr, 93, cmatrix, &hblur[0][0], channel); break;
+       case 95: initialize_with_1d_kernel (scr, 95, cmatrix, &hblur[0][0], channel); break;
+       case 97: initialize_with_1d_kernel (scr, 97, cmatrix, &hblur[0][0], channel); break;
+       case 99: initialize_with_1d_kernel (scr, 99, cmatrix, &hblur[0][0], channel); break;
 
-       case 101: initialize_with_gaussian_blur (scr, 101, cmatrix, &hblur[0][0], channel); break;
-       case 103: initialize_with_gaussian_blur (scr, 103, cmatrix, &hblur[0][0], channel); break;
-       case 105: initialize_with_gaussian_blur (scr, 105, cmatrix, &hblur[0][0], channel); break;
-       case 107: initialize_with_gaussian_blur (scr, 107, cmatrix, &hblur[0][0], channel); break;
-       case 109: initialize_with_gaussian_blur (scr, 109, cmatrix, &hblur[0][0], channel); break;
-       case 111: initialize_with_gaussian_blur (scr, 111, cmatrix, &hblur[0][0], channel); break;
-       case 113: initialize_with_gaussian_blur (scr, 113, cmatrix, &hblur[0][0], channel); break;
-       case 115: initialize_with_gaussian_blur (scr, 115, cmatrix, &hblur[0][0], channel); break;
-       case 117: initialize_with_gaussian_blur (scr, 117, cmatrix, &hblur[0][0], channel); break;
-       case 119: initialize_with_gaussian_blur (scr, 119, cmatrix, &hblur[0][0], channel); break;
-       case 121: initialize_with_gaussian_blur (scr, 121, cmatrix, &hblur[0][0], channel); break;
-       case 123: initialize_with_gaussian_blur (scr, 123, cmatrix, &hblur[0][0], channel); break;
-       case 125: initialize_with_gaussian_blur (scr, 125, cmatrix, &hblur[0][0], channel); break;
-       case 127: initialize_with_gaussian_blur (scr, 127, cmatrix, &hblur[0][0], channel); break;
-       case 129: initialize_with_gaussian_blur (scr, 129, cmatrix, &hblur[0][0], channel); break;
-       case 131: initialize_with_gaussian_blur (scr, 131, cmatrix, &hblur[0][0], channel); break;
-       case 133: initialize_with_gaussian_blur (scr, 133, cmatrix, &hblur[0][0], channel); break;
-       case 135: initialize_with_gaussian_blur (scr, 135, cmatrix, &hblur[0][0], channel); break;
-       case 137: initialize_with_gaussian_blur (scr, 137, cmatrix, &hblur[0][0], channel); break;
-       case 139: initialize_with_gaussian_blur (scr, 139, cmatrix, &hblur[0][0], channel); break;
-       case 141: initialize_with_gaussian_blur (scr, 141, cmatrix, &hblur[0][0], channel); break;
-       case 143: initialize_with_gaussian_blur (scr, 143, cmatrix, &hblur[0][0], channel); break;
-       case 145: initialize_with_gaussian_blur (scr, 145, cmatrix, &hblur[0][0], channel); break;
-       case 147: initialize_with_gaussian_blur (scr, 147, cmatrix, &hblur[0][0], channel); break;
-       case 149: initialize_with_gaussian_blur (scr, 149, cmatrix, &hblur[0][0], channel); break;
-       case 151: initialize_with_gaussian_blur (scr, 151, cmatrix, &hblur[0][0], channel); break;
-       case 153: initialize_with_gaussian_blur (scr, 153, cmatrix, &hblur[0][0], channel); break;
-       case 155: initialize_with_gaussian_blur (scr, 155, cmatrix, &hblur[0][0], channel); break;
-       case 157: initialize_with_gaussian_blur (scr, 157, cmatrix, &hblur[0][0], channel); break;
-       case 159: initialize_with_gaussian_blur (scr, 159, cmatrix, &hblur[0][0], channel); break;
-       case 161: initialize_with_gaussian_blur (scr, 161, cmatrix, &hblur[0][0], channel); break;
-       case 163: initialize_with_gaussian_blur (scr, 163, cmatrix, &hblur[0][0], channel); break;
-       case 165: initialize_with_gaussian_blur (scr, 165, cmatrix, &hblur[0][0], channel); break;
-       case 167: initialize_with_gaussian_blur (scr, 167, cmatrix, &hblur[0][0], channel); break;
-       case 169: initialize_with_gaussian_blur (scr, 169, cmatrix, &hblur[0][0], channel); break;
-       case 171: initialize_with_gaussian_blur (scr, 171, cmatrix, &hblur[0][0], channel); break;
-       case 173: initialize_with_gaussian_blur (scr, 173, cmatrix, &hblur[0][0], channel); break;
-       case 175: initialize_with_gaussian_blur (scr, 175, cmatrix, &hblur[0][0], channel); break;
-       case 177: initialize_with_gaussian_blur (scr, 177, cmatrix, &hblur[0][0], channel); break;
-       case 179: initialize_with_gaussian_blur (scr, 179, cmatrix, &hblur[0][0], channel); break;
-       case 181: initialize_with_gaussian_blur (scr, 181, cmatrix, &hblur[0][0], channel); break;
-       case 183: initialize_with_gaussian_blur (scr, 183, cmatrix, &hblur[0][0], channel); break;
-       case 185: initialize_with_gaussian_blur (scr, 185, cmatrix, &hblur[0][0], channel); break;
-       case 187: initialize_with_gaussian_blur (scr, 187, cmatrix, &hblur[0][0], channel); break;
-       case 189: initialize_with_gaussian_blur (scr, 189, cmatrix, &hblur[0][0], channel); break;
-       case 191: initialize_with_gaussian_blur (scr, 191, cmatrix, &hblur[0][0], channel); break;
-       case 193: initialize_with_gaussian_blur (scr, 193, cmatrix, &hblur[0][0], channel); break;
-       case 195: initialize_with_gaussian_blur (scr, 195, cmatrix, &hblur[0][0], channel); break;
-       case 197: initialize_with_gaussian_blur (scr, 197, cmatrix, &hblur[0][0], channel); break;
-       case 199: initialize_with_gaussian_blur (scr, 199, cmatrix, &hblur[0][0], channel); break;
+       case 101: initialize_with_1d_kernel (scr, 101, cmatrix, &hblur[0][0], channel); break;
+       case 103: initialize_with_1d_kernel (scr, 103, cmatrix, &hblur[0][0], channel); break;
+       case 105: initialize_with_1d_kernel (scr, 105, cmatrix, &hblur[0][0], channel); break;
+       case 107: initialize_with_1d_kernel (scr, 107, cmatrix, &hblur[0][0], channel); break;
+       case 109: initialize_with_1d_kernel (scr, 109, cmatrix, &hblur[0][0], channel); break;
+       case 111: initialize_with_1d_kernel (scr, 111, cmatrix, &hblur[0][0], channel); break;
+       case 113: initialize_with_1d_kernel (scr, 113, cmatrix, &hblur[0][0], channel); break;
+       case 115: initialize_with_1d_kernel (scr, 115, cmatrix, &hblur[0][0], channel); break;
+       case 117: initialize_with_1d_kernel (scr, 117, cmatrix, &hblur[0][0], channel); break;
+       case 119: initialize_with_1d_kernel (scr, 119, cmatrix, &hblur[0][0], channel); break;
+       case 121: initialize_with_1d_kernel (scr, 121, cmatrix, &hblur[0][0], channel); break;
+       case 123: initialize_with_1d_kernel (scr, 123, cmatrix, &hblur[0][0], channel); break;
+       case 125: initialize_with_1d_kernel (scr, 125, cmatrix, &hblur[0][0], channel); break;
+       case 127: initialize_with_1d_kernel (scr, 127, cmatrix, &hblur[0][0], channel); break;
+       case 129: initialize_with_1d_kernel (scr, 129, cmatrix, &hblur[0][0], channel); break;
+       case 131: initialize_with_1d_kernel (scr, 131, cmatrix, &hblur[0][0], channel); break;
+       case 133: initialize_with_1d_kernel (scr, 133, cmatrix, &hblur[0][0], channel); break;
+       case 135: initialize_with_1d_kernel (scr, 135, cmatrix, &hblur[0][0], channel); break;
+       case 137: initialize_with_1d_kernel (scr, 137, cmatrix, &hblur[0][0], channel); break;
+       case 139: initialize_with_1d_kernel (scr, 139, cmatrix, &hblur[0][0], channel); break;
+       case 141: initialize_with_1d_kernel (scr, 141, cmatrix, &hblur[0][0], channel); break;
+       case 143: initialize_with_1d_kernel (scr, 143, cmatrix, &hblur[0][0], channel); break;
+       case 145: initialize_with_1d_kernel (scr, 145, cmatrix, &hblur[0][0], channel); break;
+       case 147: initialize_with_1d_kernel (scr, 147, cmatrix, &hblur[0][0], channel); break;
+       case 149: initialize_with_1d_kernel (scr, 149, cmatrix, &hblur[0][0], channel); break;
+       case 151: initialize_with_1d_kernel (scr, 151, cmatrix, &hblur[0][0], channel); break;
+       case 153: initialize_with_1d_kernel (scr, 153, cmatrix, &hblur[0][0], channel); break;
+       case 155: initialize_with_1d_kernel (scr, 155, cmatrix, &hblur[0][0], channel); break;
+       case 157: initialize_with_1d_kernel (scr, 157, cmatrix, &hblur[0][0], channel); break;
+       case 159: initialize_with_1d_kernel (scr, 159, cmatrix, &hblur[0][0], channel); break;
+       case 161: initialize_with_1d_kernel (scr, 161, cmatrix, &hblur[0][0], channel); break;
+       case 163: initialize_with_1d_kernel (scr, 163, cmatrix, &hblur[0][0], channel); break;
+       case 165: initialize_with_1d_kernel (scr, 165, cmatrix, &hblur[0][0], channel); break;
+       case 167: initialize_with_1d_kernel (scr, 167, cmatrix, &hblur[0][0], channel); break;
+       case 169: initialize_with_1d_kernel (scr, 169, cmatrix, &hblur[0][0], channel); break;
+       case 171: initialize_with_1d_kernel (scr, 171, cmatrix, &hblur[0][0], channel); break;
+       case 173: initialize_with_1d_kernel (scr, 173, cmatrix, &hblur[0][0], channel); break;
+       case 175: initialize_with_1d_kernel (scr, 175, cmatrix, &hblur[0][0], channel); break;
+       case 177: initialize_with_1d_kernel (scr, 177, cmatrix, &hblur[0][0], channel); break;
+       case 179: initialize_with_1d_kernel (scr, 179, cmatrix, &hblur[0][0], channel); break;
+       case 181: initialize_with_1d_kernel (scr, 181, cmatrix, &hblur[0][0], channel); break;
+       case 183: initialize_with_1d_kernel (scr, 183, cmatrix, &hblur[0][0], channel); break;
+       case 185: initialize_with_1d_kernel (scr, 185, cmatrix, &hblur[0][0], channel); break;
+       case 187: initialize_with_1d_kernel (scr, 187, cmatrix, &hblur[0][0], channel); break;
+       case 189: initialize_with_1d_kernel (scr, 189, cmatrix, &hblur[0][0], channel); break;
+       case 191: initialize_with_1d_kernel (scr, 191, cmatrix, &hblur[0][0], channel); break;
+       case 193: initialize_with_1d_kernel (scr, 193, cmatrix, &hblur[0][0], channel); break;
+       case 195: initialize_with_1d_kernel (scr, 195, cmatrix, &hblur[0][0], channel); break;
+       case 197: initialize_with_1d_kernel (scr, 197, cmatrix, &hblur[0][0], channel); break;
+       case 199: initialize_with_1d_kernel (scr, 199, cmatrix, &hblur[0][0], channel); break;
 
-       case 201: initialize_with_gaussian_blur (scr, 201, cmatrix, &hblur[0][0], channel); break;
-       case 203: initialize_with_gaussian_blur (scr, 203, cmatrix, &hblur[0][0], channel); break;
-       case 205: initialize_with_gaussian_blur (scr, 205, cmatrix, &hblur[0][0], channel); break;
-       case 207: initialize_with_gaussian_blur (scr, 207, cmatrix, &hblur[0][0], channel); break;
-       case 209: initialize_with_gaussian_blur (scr, 209, cmatrix, &hblur[0][0], channel); break;
-       case 211: initialize_with_gaussian_blur (scr, 211, cmatrix, &hblur[0][0], channel); break;
-       case 213: initialize_with_gaussian_blur (scr, 213, cmatrix, &hblur[0][0], channel); break;
-       case 215: initialize_with_gaussian_blur (scr, 215, cmatrix, &hblur[0][0], channel); break;
-       case 217: initialize_with_gaussian_blur (scr, 217, cmatrix, &hblur[0][0], channel); break;
-       case 219: initialize_with_gaussian_blur (scr, 219, cmatrix, &hblur[0][0], channel); break;
-       case 221: initialize_with_gaussian_blur (scr, 221, cmatrix, &hblur[0][0], channel); break;
-       case 223: initialize_with_gaussian_blur (scr, 223, cmatrix, &hblur[0][0], channel); break;
-       case 225: initialize_with_gaussian_blur (scr, 225, cmatrix, &hblur[0][0], channel); break;
-       case 227: initialize_with_gaussian_blur (scr, 227, cmatrix, &hblur[0][0], channel); break;
-       case 229: initialize_with_gaussian_blur (scr, 229, cmatrix, &hblur[0][0], channel); break;
-       case 231: initialize_with_gaussian_blur (scr, 231, cmatrix, &hblur[0][0], channel); break;
-       case 233: initialize_with_gaussian_blur (scr, 233, cmatrix, &hblur[0][0], channel); break;
-       case 235: initialize_with_gaussian_blur (scr, 235, cmatrix, &hblur[0][0], channel); break;
-       case 237: initialize_with_gaussian_blur (scr, 237, cmatrix, &hblur[0][0], channel); break;
-       case 239: initialize_with_gaussian_blur (scr, 239, cmatrix, &hblur[0][0], channel); break;
-       case 241: initialize_with_gaussian_blur (scr, 241, cmatrix, &hblur[0][0], channel); break;
-       case 243: initialize_with_gaussian_blur (scr, 243, cmatrix, &hblur[0][0], channel); break;
-       case 245: initialize_with_gaussian_blur (scr, 245, cmatrix, &hblur[0][0], channel); break;
-       case 247: initialize_with_gaussian_blur (scr, 247, cmatrix, &hblur[0][0], channel); break;
-       case 249: initialize_with_gaussian_blur (scr, 249, cmatrix, &hblur[0][0], channel); break;
+       case 201: initialize_with_1d_kernel (scr, 201, cmatrix, &hblur[0][0], channel); break;
+       case 203: initialize_with_1d_kernel (scr, 203, cmatrix, &hblur[0][0], channel); break;
+       case 205: initialize_with_1d_kernel (scr, 205, cmatrix, &hblur[0][0], channel); break;
+       case 207: initialize_with_1d_kernel (scr, 207, cmatrix, &hblur[0][0], channel); break;
+       case 209: initialize_with_1d_kernel (scr, 209, cmatrix, &hblur[0][0], channel); break;
+       case 211: initialize_with_1d_kernel (scr, 211, cmatrix, &hblur[0][0], channel); break;
+       case 213: initialize_with_1d_kernel (scr, 213, cmatrix, &hblur[0][0], channel); break;
+       case 215: initialize_with_1d_kernel (scr, 215, cmatrix, &hblur[0][0], channel); break;
+       case 217: initialize_with_1d_kernel (scr, 217, cmatrix, &hblur[0][0], channel); break;
+       case 219: initialize_with_1d_kernel (scr, 219, cmatrix, &hblur[0][0], channel); break;
+       case 221: initialize_with_1d_kernel (scr, 221, cmatrix, &hblur[0][0], channel); break;
+       case 223: initialize_with_1d_kernel (scr, 223, cmatrix, &hblur[0][0], channel); break;
+       case 225: initialize_with_1d_kernel (scr, 225, cmatrix, &hblur[0][0], channel); break;
+       case 227: initialize_with_1d_kernel (scr, 227, cmatrix, &hblur[0][0], channel); break;
+       case 229: initialize_with_1d_kernel (scr, 229, cmatrix, &hblur[0][0], channel); break;
+       case 231: initialize_with_1d_kernel (scr, 231, cmatrix, &hblur[0][0], channel); break;
+       case 233: initialize_with_1d_kernel (scr, 233, cmatrix, &hblur[0][0], channel); break;
+       case 235: initialize_with_1d_kernel (scr, 235, cmatrix, &hblur[0][0], channel); break;
+       case 237: initialize_with_1d_kernel (scr, 237, cmatrix, &hblur[0][0], channel); break;
+       case 239: initialize_with_1d_kernel (scr, 239, cmatrix, &hblur[0][0], channel); break;
+       case 241: initialize_with_1d_kernel (scr, 241, cmatrix, &hblur[0][0], channel); break;
+       case 243: initialize_with_1d_kernel (scr, 243, cmatrix, &hblur[0][0], channel); break;
+       case 245: initialize_with_1d_kernel (scr, 245, cmatrix, &hblur[0][0], channel); break;
+       case 247: initialize_with_1d_kernel (scr, 247, cmatrix, &hblur[0][0], channel); break;
+       case 249: initialize_with_1d_kernel (scr, 249, cmatrix, &hblur[0][0], channel); break;
 #endif
        default:
 	  printf ("unspecialized clen %i %f %i\n", clen, blur_radius, channel);
-	  initialize_with_gaussian_blur (scr, clen, cmatrix, &hblur[0][0], channel);
+	  initialize_with_1d_kernel (scr, clen, cmatrix, &hblur[0][0], channel);
       }
 
   memcpy (add, scr.add, sizeof (add));
@@ -524,6 +541,7 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmi
   free (cmatrix);
 }
 
+#if 0
 static int
 gaussian_blur_mtf (coord_t blur_radius, luminosity_t out [screen::size])
 {
@@ -548,6 +566,7 @@ gaussian_blur_mtf (coord_t blur_radius, luminosity_t out [screen::size])
     }
   return clen;
 }
+#endif
 
 /* Result of real fft is symmetric.  We need only N /2 + 1 complex values.  */
 static constexpr const int fft_size = screen::size / 2 + 1;
@@ -580,6 +599,7 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
   return clen;
 }
 
+#if 0
 void
 screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin, int cmax)
 {
@@ -603,9 +623,10 @@ screen::initialize_with_1D_fft(screen &scr, luminosity_t weights[size], int cmin
 	  }
     }
 }
+#endif
 
 static void
-initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int cmin, int cmax)
+initialize_with_1D_fft_fast (screen &out_scr, const screen &scr, const fft_1d weights, int cmin, int cmax)
 {
   fftw_plan plan_2d_inv, plan_2d;
   fft_2d in;
@@ -619,27 +640,6 @@ initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int c
         for (int x = 0; x < screen::size; x++)
 	  out[y * screen::size + x] = scr.mult[y][x][c];
       fftw_execute (plan_2d);
-#if 0
-      for (int y = 0; y < fft_size; y++)
-	{
-	  for (int x = 0; x < fft_size; x++)
-	    {
-	      std::complex w1(weights[x][0], weights[x][1]);
-	      std::complex w2(weights[y][0], weights[y][1]);
-	      std::complex v(in [y * screen::size + x][0], in [y * screen::size + x][1]);
-	      in [y * screen::size + x][0] = real (v * w1 * w2);
-	      in [y * screen::size + x][1] = imag (v * w1 * w2);
-	    }
-	  for (int x = 1; x < fft_size; x++)
-	    {
-	      std::complex w1(weights[x][0], -weights[x][1]);
-	      std::complex w2(weights[y][0], weights[y][1]);
-	      std::complex v(in [y * screen::size + screen::size - x][0], in [y * screen::size + screen::size - x][1]);
-	      in [y * screen::size + screen::size - x][0] = real (v * w1 * w2);
-	      in [y * screen::size + screen::size - x][1] = imag (v * w1 * w2);
-	    }
-	}
-#else
       for (int y = 0; y < fft_size; y++)
 	{
           std::complex w2(weights[y][0], weights[y][1]);
@@ -662,13 +662,82 @@ initialize_with_1D_fft_fast (screen &out_scr, screen &scr, fft_1d weights, int c
 	      in [(screen::size - y) * fft_size + x][1] = imag (v * w1 * w2);
 	    }
 	}
-#endif
       fftw_execute (plan_2d_inv);
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
 	  {
 	    out_scr.mult[y][x][c] = out[y * screen::size + x] * ((luminosity_t)1 / (screen::size * screen::size));
 	    //printf ("%f\n", out[y * screen::size + x]);
+	    if (out_scr.mult[y][x][c] < 0)
+	      out_scr.mult[y][x][c] = 0;
+	    if (out_scr.mult[y][x][c] > 1)
+	      out_scr.mult[y][x][c] = 1;
+	  }
+    }
+  fftw_destroy_plan (plan_2d);
+  fftw_destroy_plan (plan_2d_inv);
+}
+
+static const int tiles = 1;
+
+static void
+point_spread_fft (fft_2d &weights, const precomputed_function<luminosity_t> *mtf, luminosity_t scale)
+{
+  double data[screen::size * screen::size];
+  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data, weights, FFTW_ESTIMATE);
+  luminosity_t step = scale / tiles;
+  for (int y = 0; y <= screen::size * tiles / 2; y++)
+    for (int x = 0; x <= screen::size * tiles / 2; x++)
+      if (!x && !y)
+	;
+      else
+	{
+	  luminosity_t w = mtf->apply (sqrt (x * x + y * y) * step);
+	  if (w < 0)
+	    w = 0;
+	  if (w > 1)
+	    w = 1;
+	  data [y * screen::size * tiles + x] *= w;
+	  if (x && (x != screen::size * tiles / 2))
+	    data [y * screen::size * tiles + (screen::size * tiles - x)] *= w;
+	  if (y && (y != screen::size * tiles / 2))
+	    {
+	      data [(screen::size * tiles - y) * screen::size * tiles + x] *= w;
+	      if (x && (x != screen::size * tiles / 2))
+		data [(screen::size * tiles - y) * screen::size * tiles + (screen::size * tiles - x)] *= w;
+	    }
+	}
+  fftw_execute (plan_2d);
+  fftw_destroy_plan (plan_2d);
+}
+
+static void
+initialize_with_2D_fft_fast (screen &out_scr, const screen &scr, const fft_2d weights, int cmin, int cmax)
+{
+  fftw_plan plan_2d_inv, plan_2d;
+  assert (tiles == 1);
+  fft_2d in;
+  double out[screen::size * screen::size];
+  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out, FFTW_ESTIMATE);
+  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in, FFTW_ESTIMATE);
+  for (int c = cmin; c <= cmax; c++)
+    {
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  out[y * screen::size + x] = scr.mult[y][x][c];
+      fftw_execute (plan_2d);
+      for (int i = 0; i < fft_size * screen::size; i++)
+	{
+	  std::complex w(weights[i][0], weights[i][1]);
+	  std::complex v(in [i][0], in [i][1]);
+	  in [i][0] = real (v * w);
+	  in [i][1] = imag (v * w);
+	}
+      fftw_execute (plan_2d_inv);
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  {
+	    out_scr.mult[y][x][c] = out[y * screen::size + x] /** ((luminosity_t)1 / (screen::size * screen::size))*/;
 	    if (out_scr.mult[y][x][c] < 0)
 	      out_scr.mult[y][x][c] = 0;
 	    if (out_scr.mult[y][x][c] > 1)
@@ -704,15 +773,6 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_al
       memcpy (mult, scr.mult, sizeof (mult));
       return;
     }
-  //const bool verify = false;
-#if 0
-  if (blur_radius.red >= max_blur_radius)
-    blur_radius.red = max_blur_radius;
-  if (blur_radius.green >= max_blur_radius)
-    blur_radius.green = max_blur_radius;
-  if (blur_radius.blue >= max_blur_radius)
-    blur_radius.blue = max_blur_radius;
-#endif
   bool all = (blur_radius.red == blur_radius.green) && (blur_radius.red == blur_radius.blue);
   //bool maxradius = false;
   int clen = 0;
@@ -901,8 +961,6 @@ mtf_to_point_spread (precomputed_function<luminosity_t> *mtf)
   return new precomputed_function<luminosity_t> (0, screen::size, vv, screen::size);
 }
 
-static const int tiles = 1;
-
 void
 screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 {
@@ -929,6 +987,29 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 void
 screen::initialize_with_2D_fft(screen &scr, precomputed_function<luminosity_t> *mtf[3], rgbdata scale)
 {
+  fft_2d fft;
+  for (int c = 0; c < 3; c++)
+    {
+      luminosity_t step = scale[c] / tiles;
+      for (int y = 0; y < fft_size; y++)
+	for (int x = 0; x < fft_size; x++)
+	  {
+	    luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
+	    if (w < 0)
+	      w = 0;
+	    if (w > 1)
+	      w = 1;
+	    fft [y * fft_size + x][0] = w / (screen::size * screen::size);
+	    fft [y * fft_size + x][1] = 0;
+	    if (y)
+	      {
+		fft [(screen::size - y) * fft_size + x][0] = w / (screen::size * screen::size);
+		fft [(screen::size - y) * fft_size + x][1] = 0;
+	      }
+	  }
+      initialize_with_2D_fft_fast (*this, scr, fft, c, c);
+    }
+#if 0
   dj::fft_arg_fix<double, size * size * tiles * tiles> imgData;
   for (int c = 0; c < 3; c++)
     {
@@ -972,6 +1053,7 @@ screen::initialize_with_2D_fft(screen &scr, precomputed_function<luminosity_t> *
 	      mult[y][x][c] = 0;
 	  }
     }
+#endif
 }
 
 dj::fft_arg_fix<double,screen::size * screen::size>
@@ -1079,6 +1161,7 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
     {
       bool all = (blur_radius.red == blur_radius.green) && (blur_radius.red == blur_radius.blue);
       for (int c = 0; c < 3; c++)
+#if 0
         {
           luminosity_t weights[size];
 	  /* blur_radius is blur in the screen dimensions.
@@ -1106,6 +1189,34 @@ screen::initialize_with_fft_blur(screen &scr, rgbdata blur_radius)
 	  if (all)
 	    break;
         }
+#else
+      {
+	fft_1d weights;
+	/* blur_radius is blur in the screen dimensions.
+	   step should be 1 / size, but blur_radius of 1 corresponds to size so this evens out.
+	   Compensate so the blur is approximately same as gaussian blur.	 */
+	luminosity_t step = blur_radius[c] * 0.5 * (0.75 / 0.61);
+	luminosity_t f = step;
+	weights[0][0] = 1;
+	weights[0][1] = 0;
+	for (int x = 1, p = 0; x < fft_size; x++, f+= step)
+	  {
+	    while (p < data_size - 1 && data[p + 1][0] < f)
+	      p++;
+	    luminosity_t w = data[p][1] + (data[p + 1][1] - data[p][1]) * (f - data[p][0]) / (data[p + 1][0] - data[p][0]);
+	    //printf ("%f %i %f d1 %f %f d2 %f %f\n",f,p,w,data[p][0],data[p][1],data[p+1][0],data[p+1][1]);
+	    if (w < 0)
+	      w = 0;
+	    if (w > 1)
+	      w = 1;
+	    weights[x][0] = w;
+	    weights[x][1] = 0;
+	  }
+	initialize_with_1D_fft_fast (*this, scr, weights, c, all ? 2 : c);
+	if (all)
+	  break;
+      }
+#endif
     }
   else
     {
