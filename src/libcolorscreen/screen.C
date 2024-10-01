@@ -11,6 +11,7 @@
 #include "spline.h"
 #include "icc.h"
 namespace {
+/* FFTW execute is thread safe. Everything else is not.  */
 std::mutex fftw_lock;
 }
 namespace colorscreen
@@ -963,8 +964,8 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
 
 /* Compute average error between the two implementations.  */
 bool
-screen::almost_eq (const screen &scr, luminosity_t *delta_ret,
-                   luminosity_t maxdelta) const
+screen::almost_equal_p (const screen &scr, luminosity_t *delta_ret,
+                        luminosity_t maxdelta) const
 {
   luminosity_t delta = 0;
   for (int y = 0; y < size; y++)
@@ -975,6 +976,28 @@ screen::almost_eq (const screen &scr, luminosity_t *delta_ret,
   if (delta_ret)
     *delta_ret = delta;
   return delta < maxdelta;
+}
+
+/* Compare sums of individual channels.  */
+bool
+screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
+			    luminosity_t maxdelta) const
+{
+  rgbdata sum1, sum2, delta;
+  for (int y = 0; y < size; y++)
+    for (int x = 0; x < size; x++)
+      {
+	sum1[0] += scr.mult[y][x][0];
+	sum1[1] += scr.mult[y][x][1];
+	sum1[2] += scr.mult[y][x][2];
+	sum2[0] += mult[y][x][0];
+	sum2[1] += mult[y][x][1];
+	sum2[2] += mult[y][x][2];
+      }
+  delta = sum1 - sum2;
+  if (delta_ret)
+    *delta_ret = delta;
+  return sum1.almost_equal_p (sum2);
 }
 
 void
@@ -1153,14 +1176,18 @@ mtf_by_4_vals (luminosity_t mtf[4])
 static precomputed_function<luminosity_t> *
 point_spread_by_4_vals (luminosity_t mtf[4])
 {
+  //luminosity_t mtf[4]={0.1,0.2,0.3,0.4};
   luminosity_t y[] = { 0, 0, 0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25, 0, 0, 0 };
   luminosity_t x[]
       = { -(mtf[3] + 0.02), -(mtf[3] + 0.01), -mtf[3], -mtf[2],
           -mtf[1],          -mtf[0],          0,       mtf[0],
           mtf[1],           mtf[2],           mtf[3],  mtf[3] + 0.01,
           mtf[3] + 0.02 };
+#if 0
   spline<luminosity_t> p (x, y, 13);
   return p.precompute (0, mtf[3] + 1, 1024);
+#endif
+  return new precomputed_function<luminosity_t> (0, mtf[3] + 1, 1024, x, y, 13);
 }
 
 void
@@ -1203,24 +1230,27 @@ screen::initialize_with_2D_fft (screen &scr,
   fft_2d fft;
   for (int c = 0; c < 3; c++)
     {
-      luminosity_t step = scale[c];
-      for (int y = 0; y < fft_size; y++)
-        for (int x = 0; x < fft_size; x++)
-          {
-            luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
-            if (w < 0)
-              w = 0;
-            if (w > 1)
-              w = 1;
-            fft[y * fft_size + x][0] = w * (1.0 / (screen::size * screen::size));
-            fft[y * fft_size + x][1] = 0;
-            if (y)
-              {
-                fft[(screen::size - y) * fft_size + x][0]
-                    = w * (1.0 / (screen::size * screen::size));
-                fft[(screen::size - y) * fft_size + x][1] = 0;
-              }
-          }
+      if (!c || scale[c] != scale[c-1] || (mtf[c] != mtf[c - 1] && *mtf[c] != *mtf[c-1]))
+	{
+	  luminosity_t step = scale[c] /** (1 / screen::size)*/;
+	  for (int y = 0; y < fft_size; y++)
+	    for (int x = 0; x < fft_size; x++)
+	      {
+		luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
+		if (w < 0)
+		  w = 0;
+		if (w > 1)
+		  w = 1;
+		fft[y * fft_size + x][0] = w * (1.0 / (screen::size * screen::size));
+		fft[y * fft_size + x][1] = 0;
+		if (y)
+		  {
+		    fft[(screen::size - y) * fft_size + x][0]
+			= w * (1.0 / (screen::size * screen::size));
+		    fft[(screen::size - y) * fft_size + x][1] = 0;
+		  }
+	      }
+	}
       initialize_with_2D_fft_fast (*this, scr, fft, c, c);
     }
 }
@@ -1235,27 +1265,56 @@ point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spr
                                             weights, FFTW_ESTIMATE);
   fftw_lock.unlock ();
   luminosity_t sum = 0;
-  for (int y = 0; y < screen::size; y++)
-    for (int x = 0; x < screen::size; x++)
+  for (int y = 0; y <= screen::size / 2; y++)
+    for (int x = 0; x <= screen::size / 2; x++)
       {
-        int x2 = screen::size - x;
-        int y2 = screen::size - y;
-        int dist = std::min (
-            (x * x + y * y),
-            std::min ((x2 * x2 + y * y),
-                      std::min ((x * x + y2 * y2), (x2 * x2 + y2 * y2))));
-        luminosity_t w = point_spread.apply (my_sqrt ((luminosity_t)dist)
-                                             * (scale * screen::size));
+	luminosity_t w = 0;
+
+	for (int yy = -4 * screen::size; yy <= 4 * screen::size; yy += screen::size)
+	  for (int xx = -4 * screen::size; xx <= 4 * screen::size; xx += screen::size)
+	    {
+	      luminosity_t dist = my_sqrt ((luminosity_t)((x - xx) * (x - xx) + (y - yy) * (y - yy))) * (scale * (1 / (luminosity_t)screen::size));
+	      w += point_spread.apply (dist);
+	    }
         if (w < 0)
           w = 0;
         data[y * screen::size + x] = w;
-        sum += w;
+	sum += w;
+	if (x)
+	  {
+	    data[y * screen::size + (screen::size - x)] = w;
+	    sum += w;
+	  }
+	if (y)
+	  {
+	    data[(screen::size - y) * screen::size + x] = w;
+	    sum += w;
+	    if (x)
+	      {
+		data[(screen::size - y) * screen::size + (screen::size - x)] = w;
+		sum += w;
+	      }
+	  }
       }
-  luminosity_t nrm = /*std::sqrt (screen::size * screen::size)*/1;
-  for (int x = 0; x < screen::size * screen::size; x++)
-    data[x] *= (nrm / sum);
-  fftw_lock.lock ();
+  luminosity_t nrm = 1.0 / (screen::size * screen::size);
+  //luminosity_t nrm = 1;
+  //luminosity_t nrm = screen::size * screen::size;
+  if (!sum)
+    {
+      sum = nrm;
+      data[0] = 1;
+    }
+  else
+    {
+      for (int x = 0; x < screen::size * screen::size; x++)
+	data[x] *= (nrm / sum);
+    }
+#if 0
+  for (int x = 0; x < screen::size; x++)
+    printf ("%i %f\n", x, data[x]);
+#endif
   fftw_execute (plan_2d);
+  fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
   fftw_lock.unlock ();
 }
@@ -1368,7 +1427,7 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
   std::unique_ptr <precomputed_function<luminosity_t>> ps(mtf_to_point_spread (mtfc.get ()));
   precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
   screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
-#elif 0
+#elif 1
   std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
       point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]

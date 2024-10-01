@@ -376,6 +376,7 @@ public:
     if (optimize_screen_mtf_blur)
       {
 	/* Frequency should drop to 0 after reaching pixel size.  */
+#if 1
 	coord_t maxfreq = 128 / pixel_size;
 	if (maxfreq > 128)
 	   maxfreq = 128;
@@ -383,6 +384,12 @@ public:
 	mtf[1] = mtf[0]+v[screen_index + 1] * maxfreq + 0.1;
 	mtf[2] = mtf[1]+v[screen_index + 2] * maxfreq + 0.1;
 	mtf[3] = mtf[2]+v[screen_index + 3] * maxfreq + 0.1;
+#else
+	mtf[0] = v[screen_index] * 3;
+	mtf[1] = mtf[0]+v[screen_index + 1] * 3;
+	mtf[2] = mtf[1]+v[screen_index + 2] * 3;
+	mtf[3] = mtf[2]+v[screen_index + 3] * 3;
+#endif
       }
     else
       mtf[0] = mtf[1] = mtf[2] = mtf[3] = -1;

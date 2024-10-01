@@ -201,6 +201,21 @@ public:
       }
     increasing = y[0] < y[len - 1];
   }
+  bool
+  operator==(const precomputed_function &o) const
+  {
+    if (m_min_x != o.m_min_x || m_max_x != o.m_max_x || m_entries != o.m_entries)
+      return false;
+    for (int i = 0; i < m_entries; i++)
+      if (m_entry[i].slope != o.m_entry[i].slope || m_entry[i].add != o.m_entry[i].add)
+	return false;
+    return true;
+  }
+  bool
+  operator!=(const precomputed_function &o) const
+  {
+    return !(*this == o);
+  }
 
 private:
   const T epsilon = 0.001;

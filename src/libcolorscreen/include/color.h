@@ -474,6 +474,12 @@ struct rgbdata
     b = std::max (std::min (blue * 255, (luminosity_t)255), (luminosity_t)0);
     fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
   }
+  bool almost_equal_p (rgbdata other, luminosity_t epsilon = 0.001)
+  {
+    return (fabs (red - other.red) < epsilon 
+	    || fabs (green - other.green) > epsilon
+	    || fabs (blue - other.blue) > epsilon);
+  }
 };
 
 inline rgbdata operator+(rgbdata lhs, luminosity_t rhs)

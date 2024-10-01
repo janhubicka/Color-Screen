@@ -70,7 +70,8 @@ public:
     blur_fft
   };
   /* Compare two screens.  */
-  DLL_PUBLIC bool almost_eq (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
+  DLL_PUBLIC bool almost_equal_p (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
+  DLL_PUBLIC bool sum_almost_equal_p (const screen &scr, rgbdata *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
   /* Initialize screen with single dot in middle.  Use to compute dot spread function.  */
   void initialize_dot ();
   /* Initialize imitating lens blur.  */
