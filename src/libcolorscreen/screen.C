@@ -1421,24 +1421,20 @@ void
 screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
                               enum blur_alg alg)
 {
-#if 0
-  /* An attempt to get more data points form MTF. Way too slow.  */
-  std::unique_ptr <precomputed_function<luminosity_t>> mtfc(point_spread_by_4_vals (mtf));
-  std::unique_ptr <precomputed_function<luminosity_t>> ps(mtf_to_point_spread (mtfc.get ()));
-  precomputed_function<luminosity_t> *vv[3] = {ps.get (), ps.get (), ps.get ()};
-  screen::initialize_with_point_spread (scr, vv, {1.0, 1.0, 1.0});
-#elif 1
   std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
       point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]
       = { mtfc.get (), mtfc.get (), mtfc.get () };
   initialize_with_2D_fft (scr, vv, { 1.0, 1.0, 1.0 });
-#else
+}
+void
+screen::initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4],
+					   enum blur_alg alg)
+{
   std::unique_ptr<precomputed_function<luminosity_t> > point_spreadc (
-      point_spread_by_4_vals (mtf));
+      point_spread_by_4_vals (ps));
   precomputed_function<luminosity_t> *vv[3]
       = { point_spreadc.get (), point_spreadc.get (), point_spreadc.get () };
   screen::initialize_with_point_spread (scr, vv, { 1.0, 1.0, 1.0 });
-#endif
 }
 }

@@ -432,7 +432,29 @@ test_screen_blur ()
 	  diff->save_tiff ("/tmp/scr-diff.tif");
 	  return false;
         }
+      scr1->initialize_with_blur (mstr, radius, screen::blur_mtffilter, screen::blur_fft);
+      if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
+        {
+	  fprintf (stderr, "FFT mtffilter blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
+	  scr1->save_tiff ("/tmp/scr-fft.tif");
+	  return false;
+        }
     }
+  for (int i1 = 1; i1 < 10; i1++)
+    for (int i2 = 1; i2 < 10; i2++)
+      for (int i3 = 1; i3 < 10; i3++)
+        for (int i4 = 1; i4 < 10; i4++)
+	  {
+	    luminosity_t c[4] = {i1 * 0.1, (i1+i2) * 0.1, (i1+i2+i3) * 0.1, (i1+i2+i3+i4) * 0.1};
+	    scr1->initialize_with_blur_point_spread (mstr, c, screen::blur_fft);
+	    rgbdata rgbdelta;
+	    if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
+	      {
+		fprintf (stderr, "FFT point spread blur result overall tonality does not match original curve %f %f %f %f delta %f %f %f; see /tmp/scr-fft.tif \n", c[0], c[1], c[2], c[3], rgbdelta.red, rgbdelta.green, rgbdelta.blue);
+		scr1->save_tiff ("/tmp/scr-fft.tif");
+		return false;
+	      }
+	  }
   return true;
 }
 }
