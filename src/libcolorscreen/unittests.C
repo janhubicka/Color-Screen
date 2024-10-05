@@ -396,6 +396,7 @@ test_screen_blur ()
   mstr.initialize (Paget);
   std::unique_ptr <screen> scr1 (new screen);
   std::unique_ptr <screen> scr2 (new screen);
+  std::unique_ptr <screen> scr3 (new screen);
 
   for (int i = 0; i < 100; i++)
     {
@@ -421,17 +422,28 @@ test_screen_blur ()
       rgbdata rgbdelta;
       if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
         {
-	  fprintf (stderr, "FFT Gaussian blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-*.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
+	  fprintf (stderr, "FFT Gaussian blur result overall tonality does not match original radius %f delta %f %f %f (step %i); see /tmp/scr-fft.tif \n", radius, rgbdelta.red, rgbdelta.green, rgbdelta.blue, i);
+	  scr1->save_tiff ("/tmp/scr-fft.tif");
+	  return false;
+        }
+      scr3->initialize_with_blur (mstr, radius, screen::blur_gaussian, screen::blur_fft2d);
+      /* For very small blurs fft produces roundoff errors along sharp edges.  */
+      if (!scr1->almost_equal_p (*scr3, &delta, i < 20 || i > 80 ? 0.006 : 1.0/1024))
+        {
+	  fprintf (stderr, "FFT Gaussian blur does not FFT2D version radius %f delta %f (step %i); see /tmp/scr-*.tif \n", radius, delta, i);
 	  scr1->save_tiff ("/tmp/scr-fft.tif");
 	  scr2->save_tiff ("/tmp/scr-nofft.tif");
+	  scr3->save_tiff ("/tmp/scr-fft2d.tif");
 	  std::unique_ptr <screen> diff (new screen);
 	  for (int y = 0; y < screen::size; y++)
 	   for (int x = 0; x < screen::size; x++)
 	     for (int c = 0; c < 3; c++)
-		diff->mult[y][x][c] = 0.5 + (scr2->mult[y][x][c] - scr1->mult[y][x][c]);
+		diff->mult[y][x][c] = 0.5 + (scr3->mult[y][x][c] - scr1->mult[y][x][c]);
 	  diff->save_tiff ("/tmp/scr-diff.tif");
+	  exit (0);
 	  return false;
         }
+
       scr1->initialize_with_blur (mstr, radius, screen::blur_mtffilter, screen::blur_fft);
       if (!scr1->sum_almost_equal_p (mstr, &rgbdelta))
         {
@@ -440,6 +452,14 @@ test_screen_blur ()
 	  return false;
         }
     }
+  return true;
+}
+bool
+test_screen_point_spread_blur ()
+{
+  screen mstr;
+  mstr.initialize (Paget);
+  std::unique_ptr <screen> scr1 (new screen);
   for (int i1 = 1; i1 < 10; i1++)
     for (int i2 = 1; i2 < 10; i2++)
       for (int i3 = 1; i3 < 10; i3++)
@@ -462,12 +482,13 @@ test_screen_blur ()
 int
 main ()
 {
-  printf ("1..6\n");
+  printf ("1..7\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
   report ("color tests", true);
   report ("screen blur tests", test_screen_blur ());
+  report ("screen point spread blur tests", test_screen_point_spread_blur ());
   report ("homography tests", test_homography (false, 0.000001));
   report ("lens correction tests", test_homography (true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));

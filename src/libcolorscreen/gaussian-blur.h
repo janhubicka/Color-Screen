@@ -102,7 +102,6 @@ public:
       clen = clen + ((clen + 1) % 2);
       return clen;
     }
-private:
 
   static luminosity_t
   gaussian_func_1d (luminosity_t x,
@@ -111,6 +110,7 @@ private:
       return (1.0 / (sigma * sqrt (2.0 * M_PI))) *
 	      exp (-(x * x) / (2.0 * sigma * sigma));
     }
+private:
 };
 }
 #endif

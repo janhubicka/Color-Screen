@@ -65,9 +65,15 @@ public:
      This is used primarily for testing.  */
   enum blur_alg
   {
+    /* Choose best algorithm for given blur type and radius.  */
     blur_auto,
+    /* Apply the kernel directly (faster for small radiuses)
+       Useful only for gaussian blur.  */
     blur_direct,
-    blur_fft
+    /* Apply FFT (faster for bigger radiuses)  */
+    blur_fft,
+    /* Apply 2dFFT (faster for bigger radiuses)  */
+    blur_fft2d
   };
   /* Compare two screens.  */
   DLL_PUBLIC bool almost_equal_p (const screen &scr, luminosity_t *delta_ret = NULL, luminosity_t maxdelta = 1.0/2048) const;
@@ -94,7 +100,7 @@ private:
   void preview ();
   void preview_dufay ();
   __attribute__ ((always_inline)) inline void initialize_with_1d_kernel (screen &scr, int clen, luminosity_t *cmatrix, luminosity_t *hblur, int c);
-  __attribute__ ((always_inline)) inline void initialize_with_2d_kernel (screen &scr, int clen, luminosity_t *cmatrix2d, int c);
+  //__attribute__ ((always_inline)) inline void initialize_with_2d_kernel (screen &scr, int clen, luminosity_t *cmatrix2d, int c);
   void initialize_with_gaussian_blur (screen &scr, coord_t blur_radius, int cmin, int cmax);
   void initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius, blur_alg alg = blur_auto);
   void initialize_with_1D_fft (screen &scr, luminosity_t weights[size], int cmin = 0, int cmax = 3);

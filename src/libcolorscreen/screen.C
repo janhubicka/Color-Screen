@@ -391,6 +391,7 @@ screen::initialize_with_1d_kernel (screen &scr, int clen,
     }
 }
 
+#if 0
 __attribute__ ((always_inline)) inline void
 screen::initialize_with_2d_kernel (screen &scr, int clen,
                                    luminosity_t *cmatrix2d, int c)
@@ -408,6 +409,7 @@ screen::initialize_with_2d_kernel (screen &scr, int clen,
         mult[y][x][c] = sum;
       }
 }
+#endif
 
 void
 screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
@@ -962,6 +964,109 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
   fftw_lock.unlock ();
 }
 
+template<typename T>
+static void
+compute_point_spread (T *data, precomputed_function<luminosity_t> &point_spread, luminosity_t scale)
+{
+  luminosity_t sum = 0;
+  for (int y = 0; y <= screen::size / 2; y++)
+    for (int x = 0; x <= screen::size / 2; x++)
+      {
+	luminosity_t w = 0;
+	int range = 4;
+
+	for (int yy = -range * screen::size; yy <= (1 + range) * screen::size; yy += screen::size)
+	  for (int xx = -range * screen::size; xx <= (1 + range) * screen::size; xx += screen::size)
+	    {
+	      luminosity_t dist = my_sqrt ((luminosity_t)((x - xx) * (x - xx) + (y - yy) * (y - yy))) * (scale * (1 / (luminosity_t)screen::size));
+	      w += point_spread.apply (dist);
+	    }
+        if (w < 0)
+          w = 0;
+        data[y * screen::size + x] = w;
+	sum += w;
+	if (x)
+	  {
+	    data[y * screen::size + (screen::size - x)] = w;
+	    sum += w;
+	  }
+	if (y)
+	  {
+	    data[(screen::size - y) * screen::size + x] = w;
+	    sum += w;
+	    if (x)
+	      {
+		data[(screen::size - y) * screen::size + (screen::size - x)] = w;
+		sum += w;
+	      }
+	  }
+      }
+  luminosity_t nrm = 1.0 / (screen::size * screen::size);
+  //luminosity_t nrm = 1;
+  //luminosity_t nrm = screen::size * screen::size;
+  if (!sum)
+    {
+      sum = nrm;
+      data[0] = 1;
+    }
+  else
+    {
+      for (int x = 0; x < screen::size * screen::size; x++)
+	data[x] *= (nrm / sum);
+    }
+  if (0)
+    {
+      tiff_writer_params p;
+      int tiles = 3;
+      p.filename = "/tmp/ps.tif";
+      p.width = screen::size * tiles;
+      p.height = screen::size * tiles;
+      //p.icc_profile = buffer;
+      //p.icc_profile_len = len;
+      p.depth = 16;
+      const char *error;
+      tiff_writer out (p, &error);
+      //free (buffer);
+      if (error)
+	return;
+      //printf ("%f\n", sum);
+      T max = 0;
+      for (int x = 0; x < screen::size * screen::size; x++)
+	max = std::max (max, data[x]);
+      for (int y = 0; y < screen::size * tiles; y++)
+	{
+	  for (int x = 0; x < screen::size * tiles; x++)
+	    {
+	      int i = (data[(y % screen::size) * screen::size + (x % screen::size)] * 65535 / max);
+	      out.put_pixel (x, i, i, i);
+	    }
+	  if (!out.write_row ())
+	    return;
+	}
+    }
+}
+
+static void
+point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spread,
+                  luminosity_t scale)
+{
+  double data[screen::size * screen::size];
+  compute_point_spread (data, point_spread, scale);
+  fftw_lock.lock ();
+  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data,
+                                            weights, FFTW_ESTIMATE);
+  fftw_lock.unlock ();
+#if 0
+  for (int x = 0; x < screen::size; x++)
+    printf ("%i %f\n", x, data[x]);
+#endif
+  fftw_execute (plan_2d);
+  fftw_lock.lock ();
+  fftw_destroy_plan (plan_2d);
+  fftw_lock.unlock ();
+}
+
+
 /* Compute average error between the two implementations.  */
 bool
 screen::almost_equal_p (const screen &scr, luminosity_t *delta_ret,
@@ -1000,6 +1105,36 @@ screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
   return sum1.almost_equal_p (sum2);
 }
 
+/* Compute gaussiab blur using 2d point spread and fft.
+   Implemented primarily for testing.  It is always slower than
+   1d fft version.  */
+
+static void
+initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr, luminosity_t radius, int clen, int cmin, int cmax)
+{
+  int nvals = (clen + 1) / 2;
+  //printf ("nvals %i\n", nvals);
+  std::unique_ptr <luminosity_t[]> vals (new luminosity_t[nvals + 2]);
+  radius *= screen::size;
+  if (nvals == 1)
+    vals[0] = 1;
+  else for (int i = 0; i < nvals; i++)
+    vals[i]=fir_blur::gaussian_func_1d (i, radius);
+  vals[nvals] = vals[nvals + 1] = 0;
+  precomputed_function<luminosity_t> point_spread (0, (nvals + 2 - 1) * (1 / (luminosity_t)screen::size), vals.get (), nvals + 2);
+#if 0
+  for (int i = 0; i < nvals; i++)
+  {
+    printf ("%f %f\n", fir_blur::gaussian_func_1d (i, radius), point_spread.apply (i * (1 / (luminosity_t)screen::size)));
+    assert ((fir_blur::gaussian_func_1d (i, radius) - point_spread.apply (i * (1 / (luminosity_t)screen::size))) < 0.000000001);
+  }
+#endif
+  fft_2d mtf;
+  point_spread_fft (mtf, point_spread, 1);
+  initialize_with_2D_fft_fast (dst, scr, mtf, cmin, cmax);
+}
+
+
 void
 screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
                                        blur_alg alg)
@@ -1034,11 +1169,21 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
       // if (blur_radius[c] > max_blur_radius)
       // maxradius = true;
       bool do_fft = false;
-      if (alg == blur_fft)
+      bool do_fft2d = false;
+      if (alg == blur_fft2d)
+        do_fft2d = true;
+      else if (alg == blur_fft)
         do_fft = true;
       else if (alg == blur_auto)
-        do_fft = (blur_radius[c] >= max_blur_radius) || clen > 15;
-      if (!do_fft)
+        {
+	  if (clen > screen::size / 2)
+	    do_fft2d = true;
+	  else
+            do_fft = (blur_radius[c] >= max_blur_radius) || clen > 15;
+	}
+      if (do_fft2d)
+	 initialize_with_gaussian_blur_fft2d (*this, scr, blur_radius[c], clen, c, all ? 2 : c);
+      else if (!do_fft)
         initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 2 : c);
 #if 0
       else
@@ -1254,71 +1399,6 @@ screen::initialize_with_2D_fft (screen &scr,
       initialize_with_2D_fft_fast (*this, scr, fft, c, c);
     }
 }
-
-static void
-point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spread,
-                  luminosity_t scale)
-{
-  double data[screen::size * screen::size];
-  fftw_lock.lock ();
-  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data,
-                                            weights, FFTW_ESTIMATE);
-  fftw_lock.unlock ();
-  luminosity_t sum = 0;
-  for (int y = 0; y <= screen::size / 2; y++)
-    for (int x = 0; x <= screen::size / 2; x++)
-      {
-	luminosity_t w = 0;
-
-	for (int yy = -4 * screen::size; yy <= 4 * screen::size; yy += screen::size)
-	  for (int xx = -4 * screen::size; xx <= 4 * screen::size; xx += screen::size)
-	    {
-	      luminosity_t dist = my_sqrt ((luminosity_t)((x - xx) * (x - xx) + (y - yy) * (y - yy))) * (scale * (1 / (luminosity_t)screen::size));
-	      w += point_spread.apply (dist);
-	    }
-        if (w < 0)
-          w = 0;
-        data[y * screen::size + x] = w;
-	sum += w;
-	if (x)
-	  {
-	    data[y * screen::size + (screen::size - x)] = w;
-	    sum += w;
-	  }
-	if (y)
-	  {
-	    data[(screen::size - y) * screen::size + x] = w;
-	    sum += w;
-	    if (x)
-	      {
-		data[(screen::size - y) * screen::size + (screen::size - x)] = w;
-		sum += w;
-	      }
-	  }
-      }
-  luminosity_t nrm = 1.0 / (screen::size * screen::size);
-  //luminosity_t nrm = 1;
-  //luminosity_t nrm = screen::size * screen::size;
-  if (!sum)
-    {
-      sum = nrm;
-      data[0] = 1;
-    }
-  else
-    {
-      for (int x = 0; x < screen::size * screen::size; x++)
-	data[x] *= (nrm / sum);
-    }
-#if 0
-  for (int x = 0; x < screen::size; x++)
-    printf ("%i %f\n", x, data[x]);
-#endif
-  fftw_execute (plan_2d);
-  fftw_lock.lock ();
-  fftw_destroy_plan (plan_2d);
-  fftw_lock.unlock ();
-}
-
 void
 screen::initialize_with_point_spread (
     screen &scr, precomputed_function<luminosity_t> *point_spread[3],
