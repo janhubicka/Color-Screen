@@ -19,6 +19,8 @@ Changes in version 1.1
      moving sensors and/or lens (includuing phase one cameras that collect
      data sequentially from top to bottom).
    - Significantly faster lens warp solver
+   - FFTW 3 library is now used for fast fourier transform and is significantly
+     faster than previous implementation.
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation

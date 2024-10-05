@@ -19,7 +19,7 @@ public:
   luminosity_t add[size][size][3];
 
   /* Return multiplicative factor of point p with bilinear interpolation.  */
-  inline pure_attr rgbdata
+  __attribute__ ((always_inline)) inline pure_attr rgbdata
   interpolated_mult (point_t p)
   {
     int sx, sy;

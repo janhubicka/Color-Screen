@@ -217,6 +217,12 @@ public:
     return !(*this == o);
   }
 
+  T
+  get_max ()
+  {
+    return m_max_x;
+  }
+
 private:
   const T epsilon = 0.001;
   T m_min_x, m_max_x, m_step, m_step_inv;

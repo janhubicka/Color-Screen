@@ -969,11 +969,11 @@ static void
 compute_point_spread (T *data, precomputed_function<luminosity_t> &point_spread, luminosity_t scale)
 {
   luminosity_t sum = 0;
+  int range = point_spread.get_max ();
   for (int y = 0; y <= screen::size / 2; y++)
     for (int x = 0; x <= screen::size / 2; x++)
       {
 	luminosity_t w = 0;
-	int range = 4;
 
 	for (int yy = -range * screen::size; yy <= (1 + range) * screen::size; yy += screen::size)
 	  for (int xx = -range * screen::size; xx <= (1 + range) * screen::size; xx += screen::size)
