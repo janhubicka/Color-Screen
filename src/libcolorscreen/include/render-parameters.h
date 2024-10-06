@@ -7,6 +7,7 @@
 #include "tone-curve.h"
 #include "scr-to-img-parameters.h"
 #include "backlight-correction-parameters.h"
+#include "scanner-blur-correction-parameters.h"
 namespace colorscreen
 {
 class render_type_parameters;
@@ -25,6 +26,8 @@ struct render_parameters
   /* TODO; Invert is applied before backlight correction which is wrong.  */
   class backlight_correction_parameters *backlight_correction;
   luminosity_t backlight_correction_black;
+
+  class scanner_blur_correction_parameters *scanner_blur_correction;
 
   /* After linearizing we apply (val - dark_point) * scan_exposure  */
   luminosity_t dark_point, scan_exposure;
@@ -230,7 +233,7 @@ struct render_parameters
   render_parameters ()
       : /* Scan linearization.  */
         gamma (2.2), backlight_correction (NULL),
-        backlight_correction_black (0), dark_point (0), scan_exposure (1),
+        backlight_correction_black (0), scanner_blur_correction (NULL), dark_point (0), scan_exposure (1),
         ignore_infrared (false), invert (false), mix_dark (0, 0, 0),
         mix_red (0.3), mix_green (0.1), mix_blue (1), sharpen_radius (0),
         sharpen_amount (0),
@@ -322,6 +325,7 @@ struct render_parameters
            && film_characteristics_curve == other.film_characteristics_curve
            && restore_original_luminosity == other.restore_original_luminosity
            && output_curve == other.output_curve
+           && scanner_blur_correction == other.scanner_blur_correction
            && backlight_correction == other.backlight_correction
            && backlight_correction_black == other.backlight_correction_black;
   }

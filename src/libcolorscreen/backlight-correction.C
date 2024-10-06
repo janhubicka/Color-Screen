@@ -197,7 +197,7 @@ backlight_correction_parameters::load (FILE *f, const char **error)
   bool enabled[4] = { 0, 0, 0, 0 };
   if (!expect_keyword (f, "backlight_correction_channels:"))
     {
-      *error = "expected backlight_correction_dimensions";
+      *error = "expected backlight_correction_channels";
       return false;
     }
   while (true)

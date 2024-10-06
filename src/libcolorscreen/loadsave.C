@@ -128,6 +128,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!rparam->backlight_correction->save (f))
 	    return false;
 	}
+      if (rparam->scanner_blur_correction)
+	{
+	  if (fprintf (f, "scanner_blur_correction: yes\n") < 0)
+	    return false;
+	  if (!rparam->scanner_blur_correction->save (f))
+	    return false;
+	}
       if (rparam->tile_adjustments_width)
 	{
 	  if (fprintf (f, "tile_adjustments_dimensions: %i %i\n", rparam->tile_adjustments_width, rparam->tile_adjustments_height) < 0)
