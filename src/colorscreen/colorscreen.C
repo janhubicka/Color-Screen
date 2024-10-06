@@ -23,6 +23,7 @@ static enum subhelp {
   help_render,
   help_autodetect,
   help_analyze_backlight,
+  help_analyze_scanner_blur,
   help_dump_lcc,
   help_stitch,
   help_dump_patch_density,
@@ -116,6 +117,11 @@ print_help ()
   if (subhelp == help_analyze_backlight)
     {
       fprintf (stderr, "    Supported args:\n");
+    }
+  if (subhelp == help_analyze_scanner_blur || subhelp == help_basic)
+    {
+      fprintf (stderr, "  analyze-scanner-blur <scan> <par> [<args>]\n");
+      fprintf (stderr, "    produce scanner blur correction table and save it into <par>\n");
     }
   if (subhelp == help_dump_lcc || subhelp == help_basic)
     {
@@ -1058,6 +1064,165 @@ analyze_backlight (int argc, char **argv)
     }
   delete cor;
 }
+
+bool
+analyze_scanner_blur (int argc, char **argv)
+{
+  const char *infname = NULL, *cspname = NULL, *error = NULL;
+  const char *outcspname = NULL;
+  subhelp = help_analyze_scanner_blur;
+  int xsteps = 0, ysteps = 0;
+  int xsubsteps = 0, ysubsteps = 0;
+
+  for (int i = 0; i < argc; i++)
+    {
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (!infname)
+        infname = argv[i];
+      else if (!cspname)
+        cspname = argv[i];
+      else
+        {
+	  fprintf (stderr, "Extra argument: %s\n", argv[i]);
+          print_help ();
+        }
+    }
+  if (!infname || !cspname)
+    print_help ();
+
+  file_progress_info progress (stdout, verbose, verbose_tasks);
+  /* Load scan data.  */
+  image_data scan;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", infname);
+      progress.resume_stdout ();
+    }
+  if (!scan.load (infname, false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      return 1;
+    }
+  /* Load color screen and rendering parameters.  */
+  struct solver_parameters solver_param;
+  scr_to_img_parameters param;
+  render_parameters rparam;
+  scr_detect_parameters dparam;
+  FILE *in = fopen (cspname, "rt");
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading color screen parameters: %s\n", cspname);
+      progress.resume_stdout ();
+    }
+  if (!in)
+    {
+      progress.pause_stdout ();
+      perror (cspname);
+      return 1;
+    }
+  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+      return 1;
+    }
+  fclose (in);
+  if (!xsteps && !ysteps)
+    xsteps = 10;
+  if (!xsteps)
+    xsteps = (ysteps * scan.width + scan.height / 2) / scan.height;
+  if (!ysteps)
+    ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
+  if (!xsubsteps && !ysubsteps)
+    xsubsteps = ysubsteps = 8;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i)\n", xsteps, ysteps, xsubsteps, ysubsteps, xsteps * ysteps * xsubsteps * ysubsteps);
+      progress.resume_stdout ();
+    }
+  if (rparam.scanner_blur_correction)
+    {
+      delete rparam.scanner_blur_correction;
+      rparam.scanner_blur_correction = 0;
+    }
+  luminosity_t *blurs = (luminosity_t *)malloc (xsteps * xsubsteps * ysteps * ysubsteps * sizeof (luminosity_t));
+  progress.set_task ("analyzing samples", ysteps * xsteps * xsubsteps * ysubsteps);
+#pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
+    shared(xsteps, ysteps, xsubsteps, ysubsteps, rparam, scan, progress, param, blurs)
+  for (int y = 0; y < ysteps * ysubsteps; y++)
+    for (int x = 0; x < xsteps * xsubsteps; x++)
+      {
+        finetune_parameters fparam;
+        fparam.flags = finetune_position | finetune_screen_blur | finetune_dufay_strips | finetune_no_progress_report;
+        fparam.multitile = 1;
+	finetune_result res = finetune (rparam, param, scan, { {(coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps), (coord_t) (y + 0.5) * scan.height / (ysteps * ysubsteps) }}, NULL, fparam, &progress);
+	if (res.success)
+          blurs[y * xsteps * xsubsteps + x] = res.screen_blur_radius;
+	else
+	  blurs[y * xsteps * xsubsteps + x] = - 1;
+        progress.inc_progress ();
+      }
+  rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
+  rparam.scanner_blur_correction->alloc (xsteps, ysteps);
+  for (int y = 0; y < ysteps; y++)
+    for (int x = 0; x < xsteps; x++)
+      {
+	int nok = 0;
+	histogram hist;
+	for (int yy = 0; yy < ysteps; yy++)
+	  for (int xx = 0; xx < xsteps; xx++)
+	    {
+	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
+	      if (blur >= 0)
+	        {
+		  nok++;
+		  hist.pre_account (blur);
+	        }
+	    }
+	if (!nok)
+	  printf ("Analysis failed for sample %i,%i\n", x, y);
+	hist.finalize_range (65536);
+	for (int yy = 0; yy < ysteps; yy++)
+	  for (int xx = 0; xx < xsteps; xx++)
+	    {
+	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
+	      if (blur >= 0)
+		hist.account (blur);
+	    }
+	hist.finalize ();
+	rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, hist.find_avg (0.1, 0.1));
+      }
+  if (!outcspname)
+    outcspname = cspname;
+  FILE *out = fopen (outcspname, "wt");
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Saving color screen parameters: %s\n", outcspname);
+      progress.resume_stdout ();
+    }
+  if (!out)
+    {
+      progress.pause_stdout ();
+      perror (outcspname);
+      return 1;
+    }
+  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not save %s\n", outcspname);
+      return 1;
+    }
+  fclose (out);
+  free (blurs);
+  return 0;
+}
+
 bool
 dump_lcc (int argc, char **argv)
 {
@@ -2587,6 +2752,8 @@ main (int argc, char **argv)
     ret = autodetect (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "analyze-backlight"))
     analyze_backlight (argc - 1, argv + 1);
+  else if (!strcmp (argv[0], "analyze-scanner-blur"))
+    ret = analyze_scanner_blur (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "finetune"))
     finetune (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "export-lcc"))

@@ -5,6 +5,11 @@
 #include "lru-cache.h"
 namespace colorscreen
 {
+scanner_blur_correction_parameters::scanner_blur_correction_parameters ()
+    : id (lru_caches::get ()), m_width (0), m_height (0),
+      m_gaussian_blurs (NULL)
+{
+}
 bool
 scanner_blur_correction_parameters::alloc (int width, int height)
 {
@@ -84,7 +89,6 @@ scanner_blur_correction_parameters::load (FILE *f, const char **error)
       *error = "failed to parse scanner_blur_correction_dimensions";
       return false;
     }
-  bool enabled[4] = { 0, 0, 0, 0 };
   if (!expect_keyword (f, "scanner_blur_correction_type: gaussian_blur"))
     {
       *error = "expected scanner_blur_correction_type";
