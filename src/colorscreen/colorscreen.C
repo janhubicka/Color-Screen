@@ -2035,6 +2035,22 @@ finetune (int argc, char **argv)
               for (int x = 0; x < xsteps; x++)
                 if (!results[y * xsteps + x].success)
                   sharpness.put_pixel (x, 65535, 0, 0);
+                else if (flags & finetune_screen_ps_blur)
+                  {
+                    int vr
+                        = std::min (results[y * xsteps + x].screen_mtf_blur[0]
+                                        * 10 * 65535,
+                                    (coord_t)65535);
+                    int vg
+                        = std::min (results[y * xsteps + x].screen_mtf_blur[1]
+                                        * 10 * 65535,
+                                    (coord_t)65535);
+                    int vb
+                        = std::min (results[y * xsteps + x].screen_mtf_blur[2]
+                                        * 10 * 65535,
+                                    (coord_t)65535);
+                    sharpness.put_pixel (x, vr, vg, vb);
+                  }
                 else if (flags & finetune_screen_mtf_blur)
                   {
                     int vr
