@@ -187,6 +187,8 @@ public:
   bool optimize_screen_channel_blurs;
   /* Try to optimize screen blur guessing lens MTF.  */
   bool optimize_screen_mtf_blur;
+  /* Try to optimize screen blur guessing lens point spread.  */
+  bool optimize_screen_ps_blur;
   /* Try to optimize dufay strip widths (otherwise fixed_width, fixed_height is used).  */
   bool optimize_dufay_strips;
   /* Try to optimize dark point.  */
@@ -371,6 +373,19 @@ public:
     return v[dufay_strips_index + 1];
   }
 
+  void get_ps (luminosity_t ps[4], coord_t *v)
+  {
+    if (optimize_screen_ps_blur)
+      {
+	ps[0] = v[screen_index] * 3;
+	ps[1] = ps[0]+v[screen_index + 1] * 3;
+	ps[2] = ps[1]+v[screen_index + 2] * 3;
+	ps[3] = ps[2]+v[screen_index + 3] * 3;
+      }
+    else
+      ps[0] = ps[1] = ps[2] = ps[3] = -1;
+  }
+
   void get_mtf (luminosity_t mtf[4], coord_t *v)
   {
     if (optimize_screen_mtf_blur)
@@ -418,6 +433,12 @@ public:
 	luminosity_t mtf[4];
 	get_mtf (mtf, v);
 	screen::print_mtf (stdout, mtf, pixel_size);
+      }
+    if (optimize_screen_ps_blur)
+      {
+	luminosity_t ps[4];
+	get_ps (ps, v);
+	screen::print_mtf (stdout, ps, pixel_size);
       }
     if (optimize_screen_blur)
       printf ("Screen blur %f (pixel size %f, scaled %f)\n", get_blur_radius (v), pixel_size, get_blur_radius (v) * pixel_size);
@@ -526,7 +547,7 @@ public:
         to_range (v[screen_index + 1], 0, 1);
         to_range (v[screen_index + 2], 0, 1);
       }
-    if (optimize_screen_mtf_blur)
+    if (optimize_screen_mtf_blur || optimize_screen_ps_blur)
       {
         to_range (v[screen_index + 0], 0, 1);
         to_range (v[screen_index + 1], 0, 1);
@@ -660,6 +681,7 @@ public:
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
+    optimize_screen_ps_blur = (flags & finetune_screen_ps_blur) && !optimize_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_dufay_strips = (flags & finetune_dufay_strips) && type == Dufay;
     /* For one tile the effect of fog can always be simulated by adjusting the colors of screen.
@@ -728,12 +750,12 @@ public:
       {
         emulsion_blur_index = n_values;
 	if (!optimize_emulsion_intensities)
-	  optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = false;
+	  optimize_screen_blur = optimize_screen_channel_blurs = optimize_screen_mtf_blur = optimize_screen_ps_blur = false;
 	n_values += 1;
       }
     else
       emulsion_blur_index = -1;
-    if (optimize_screen_mtf_blur)
+    if (optimize_screen_mtf_blur || optimize_screen_ps_blur)
       {
         screen_index = n_values;
 	n_values += 4;
@@ -884,7 +906,7 @@ public:
 	    abort ();
 	  }
       }
-    if (optimize_screen_mtf_blur)
+    if (optimize_screen_mtf_blur || optimize_screen_ps_blur)
       {
         start[screen_index] = 0;
         start[screen_index + 1] = 0;
@@ -994,7 +1016,10 @@ public:
   {
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t mtf[4];
-    get_mtf (mtf, v);
+    if (optimize_screen_ps_blur)
+      get_ps (mtf, v);
+    else
+      get_mtf (mtf, v);
 
     if (weight_scr)
       {
@@ -1023,7 +1048,9 @@ public:
 	src_scr = tiles[tileid].merged_scr;
       }
 
-    if (optimize_screen_mtf_blur)
+    if (optimize_screen_ps_blur)
+      dst_scr->initialize_with_blur_point_spread (*src_scr, mtf);
+    else if (optimize_screen_mtf_blur)
       dst_scr->initialize_with_blur (*src_scr, mtf);
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
@@ -1062,7 +1089,7 @@ public:
       for (int t = 0; t < n_tiles; t++)
 	tiles[t].last_emulsion_offset = {-10,-10};
     
-    if (blur != last_blur || optimize_screen_mtf_blur || mtf_differs (mtf, last_mtf) || tiles[tileid].last_emulsion_intensities != intensities || tiles[tileid].last_emulsion_offset != emulsion_offset)
+    if (blur != last_blur || ((optimize_screen_mtf_blur || optimize_screen_ps_blur) && mtf_differs (mtf, last_mtf)) || tiles[tileid].last_emulsion_intensities != intensities || tiles[tileid].last_emulsion_offset != emulsion_offset)
       {
 	apply_blur (v, tileid, tiles[tileid].scr,
 		    optimize_emulsion_blur && !optimize_emulsion_intensities? emulsion_scr.get () : original_scr.get (),
@@ -1822,7 +1849,10 @@ public:
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     ret.emulsion_blur_radius = get_emulsion_blur_radius (start);
-    get_mtf (ret.screen_mtf_blur, start);
+    if (optimize_screen_ps_blur)
+      get_ps (ret.screen_mtf_blur, start);
+    else
+      get_mtf (ret.screen_mtf_blur, start);
     ret.screen_coord_adjust = get_offset (start, 0);
     ret.emulsion_coord_adjust = get_emulsion_offset (start, 0);
     ret.fog = get_fog (start);

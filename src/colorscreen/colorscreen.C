@@ -219,6 +219,8 @@ print_help ()
                "screen blur radius with each channel independently\n");
       fprintf (stderr, "      --optimize-screen-mtf-blur enable finetuning of "
                        "screen blur MTF\n");
+      fprintf (stderr, "      --optimize-screen-ps-blur enable finetuning of "
+                       "screen blur point spread\n");
       fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of "
                        "emulsion blur radius\n");
       fprintf (stderr, "                                requres known screen blur, "
@@ -1685,6 +1687,8 @@ finetune (int argc, char **argv)
         flags |= finetune_screen_blur;
       else if (!strcmp (argv[i], "--optimize-screen-mtf-blur"))
         flags |= finetune_screen_mtf_blur;
+      else if (!strcmp (argv[i], "--optimize-screen-ps-blur"))
+        flags |= finetune_screen_ps_blur;
       else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
         flags |= finetune_screen_channel_blurs;
       else if (!strcmp (argv[i], "--optimize-emulsion-blur"))
@@ -1854,7 +1858,7 @@ finetune (int argc, char **argv)
     }
 
   if (flags
-      & (finetune_screen_mtf_blur | finetune_screen_blur
+      & (finetune_screen_mtf_blur | finetune_screen_ps_blur | finetune_screen_blur
          | finetune_screen_channel_blurs | finetune_emulsion_blur))
     {
       histogram hist, emulsion_hist;
@@ -1896,9 +1900,12 @@ finetune (int argc, char **argv)
       channel_hist.finalize ();
       for (int i = 0; i < 4; i++)
         mtf_hist[i].finalize ();
-      if (flags & finetune_screen_mtf_blur)
+      if (flags & (finetune_screen_mtf_blur | finetune_screen_ps_blur))
         {
-          printf ("Detected screen mtf (mtf75,mtf50,mtf25,mtf0)\n");
+	  if (flags & finetune_screen_mtf_blur)
+            printf ("Detected screen mtf (mtf75,mtf50,mtf25,mtf0)\n");
+	  else
+            printf ("Detected screen point spread (75%%,50%%,25%%,0%%)\n");
           for (int y = 0; y < ysteps; y++)
             {
               for (int x = 0; x < xsteps; x++)
@@ -1912,18 +1919,36 @@ finetune (int argc, char **argv)
                   printf ("  ------,------,------,------");
               printf ("\n");
             }
-          printf ("Screen mtf75 robust min %f, avg %f, max %f\n",
-                  mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1, 0.1),
-                  mtf_hist[0].find_max (0.1));
-          printf ("Screen mtf50 robust min %f, avg %f, max %f\n",
-                  mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1, 0.1),
-                  mtf_hist[1].find_max (0.1));
-          printf ("Screen mtf25 robust min %f, avg %f, max %f\n",
-                  mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1, 0.1),
-                  mtf_hist[2].find_max (0.1));
-          printf ("Screen mtf0  robust min %f, avg %f, max %f\n",
-                  mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1, 0.1),
-                  mtf_hist[3].find_max (0.1));
+	  if (flags & finetune_screen_mtf_blur)
+	    {
+	      printf ("Screen mtf75 robust min %f, avg %f, max %f\n",
+		      mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1, 0.1),
+		      mtf_hist[0].find_max (0.1));
+	      printf ("Screen mtf50 robust min %f, avg %f, max %f\n",
+		      mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1, 0.1),
+		      mtf_hist[1].find_max (0.1));
+	      printf ("Screen mtf25 robust min %f, avg %f, max %f\n",
+		      mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1, 0.1),
+		      mtf_hist[2].find_max (0.1));
+	      printf ("Screen mtf0  robust min %f, avg %f, max %f\n",
+		      mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1, 0.1),
+		      mtf_hist[3].find_max (0.1));
+	    }
+	  else
+	    {
+	      printf ("Screen point spread 75%% robust min %f, avg %f, max %f\n",
+		      mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1, 0.1),
+		      mtf_hist[0].find_max (0.1));
+	      printf ("Screen point spread 50%% robust min %f, avg %f, max %f\n",
+		      mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1, 0.1),
+		      mtf_hist[1].find_max (0.1));
+	      printf ("Screen point spread 25%% robust min %f, avg %f, max %f\n",
+		      mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1, 0.1),
+		      mtf_hist[2].find_max (0.1));
+	      printf ("Screen point spread 0%%  robust min %f, avg %f, max %f\n",
+		      mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1, 0.1),
+		      mtf_hist[3].find_max (0.1));
+	    }
         }
       else if (flags & finetune_screen_blur)
         {
