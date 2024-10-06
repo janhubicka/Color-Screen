@@ -7,8 +7,8 @@ namespace colorscreen
 class scanner_blur_correction_parameters
 {
 public:
-  scanner_blur_correction_parameters ();
-  bool alloc (int width, int height);
+  DLL_PUBLIC scanner_blur_correction_parameters ();
+  DLL_PUBLIC bool alloc (int width, int height);
   DLL_PUBLIC ~scanner_blur_correction_parameters ();
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC const char *save_tiff (const char *name);
