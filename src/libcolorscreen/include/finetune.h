@@ -97,7 +97,7 @@ DLL_PUBLIC bool finetune_area (solver_parameters *sparam,
                                const image_data &img, int xmin, int ymin,
                                int xmax, int ymax, progress_info *progress);
 bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green,
-                           rgbdata *ret_blue, screen &scr,
+                           rgbdata *ret_blue, screen &scr, screen &collection_scr,
                            luminosity_t threshold, scr_to_img &map, int xmin,
                            int ymin, int xmax, int ymax);
 DLL_PUBLIC void render_screen (image_data &img, scr_to_img_parameters &param,

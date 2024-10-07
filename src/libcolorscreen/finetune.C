@@ -2367,15 +2367,18 @@ finetune_area (solver_parameters *solver, render_parameters &rparam, const scr_t
 
 /* Simulate data collection of scan of given color screen (assumed to be blurred) and
    return colected red, green and blue.  This can be used to increase color saturation
-   to compensate loss caused by the collection.  */
+   to compensate loss caused by the collection.
+   
+   src is screen used to render the pattern, while collection_str is used to do the
+   data collection*/
 
 bool
-determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax)
+determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, screen &scr, screen &collection_scr, luminosity_t threshold, scr_to_img &map, int xmin, int ymin, int xmax, int ymax)
 {
   rgbdata red = {0,0,0}, green = {0,0,0}, blue = {0,0,0};
   coord_t wr = 0, wg = 0, wb = 0;
 #pragma omp declare reduction (+:rgbdata:omp_out=omp_out+omp_in)
-#pragma omp parallel for default(none) collapse (2) shared (ymin,ymax,xmin,xmax,threshold,map,scr) reduction(+:wr,wg,wb,red,green,blue)
+#pragma omp parallel for default(none) collapse (2) shared (ymin,ymax,xmin,xmax,threshold,map,scr,collection_scr) reduction(+:wr,wg,wb,red,green,blue)
   for (int y = ymin; y <= ymax; y++)
     for (int x = xmin; x <= xmax; x++)
       {
@@ -2395,7 +2398,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
 	  for (int xx = -2; xx <= 2; xx++)
 	    am+= scr.interpolated_mult (p + pdx * xx + pdy * yy);
 	am *= ((coord_t)1.0 / 25);
-	rgbdata m = scr.noninterpolated_mult (p);
+	rgbdata m = collection_scr.noninterpolated_mult (p);
 #endif
 	if (m.red > threshold)
 	  {
@@ -2424,11 +2427,6 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
   *ret_red = (rgbdata){red.red, green.red, blue.red};
   *ret_green = (rgbdata){red.green, green.green, blue.green};
   *ret_blue = (rgbdata){red.blue, green.blue, blue.blue};
-#if 0
-  *ret_red = red / wr;
-  *ret_green = green / wg;
-  *ret_blue = blue / wb;
-#endif
 #if 0
   printf ("Color loss info\n");
   ret_red->print (stdout);

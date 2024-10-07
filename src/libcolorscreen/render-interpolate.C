@@ -175,7 +175,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		    m_screens[idx] = get_screen (m_scr_to_img.get_type (), false, m_params.scanner_blur_correction->get_gaussian_blur_radius (x, y) * pixel_size (), m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
 		    int xp =  (x + 0.5) * m_img.width / m_saturation_width;
 		    int yp =  (y + 0.5) * m_img.height / m_saturation_height;
-		    if (determine_color_loss (&cred, &cgreen, &cblue, *m_screens[idx], m_params.collection_threshold, m_scr_to_img, xp - 100, yp - 100, xp + 100, yp + 100))
+		    if (determine_color_loss (&cred, &cgreen, &cblue, *m_screens[idx], *m_screen, m_params.collection_threshold, m_scr_to_img, xp - 100, yp - 100, xp + 100, yp + 100))
 		      {
 			color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
 					  cred.green, cgreen.green, cblue.green, 0,
@@ -190,7 +190,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 		      }
 		  }
 	    }
-	  else if (determine_color_loss (&cred, &cgreen, &cblue, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
+	  else if (determine_color_loss (&cred, &cgreen, &cblue, *m_screen, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
 	    {
 	      color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
 				cred.green, cgreen.green, cblue.green, 0,
