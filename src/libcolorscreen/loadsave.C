@@ -1012,6 +1012,25 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		delete c;
 	    }
 	}
+      else if (!strcmp (buf, "scanner_blur_correction"))
+	{
+	  bool correction;
+	  if (!parse_bool (f, &correction))
+	    {
+	      *error = "error parsing scanner_blur_correction";
+	      return false;
+	    }
+	  if (correction)
+	    {
+	      scanner_blur_correction_parameters *c = new scanner_blur_correction_parameters ();
+	      if (!c->load (f, error))
+		return false;
+	      if (rparam)
+		rparam->scanner_blur_correction = c;
+	      else
+		delete c;
+	    }
+	}
       else if (!strcmp (buf, "scr_detect_gamma"))
 	{
 	  if (!read_luminosity (f, NULL))

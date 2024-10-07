@@ -77,7 +77,7 @@ static lru_tile_cache <analyzer_params, analyze_paget, analyze_paget *, get_new_
 }
 
 render_interpolate::render_interpolate (scr_to_img_parameters &param, image_data &img, render_parameters &rparam, int dst_maxval)
-   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (false), m_profiled (false), m_precise_rgb (false), m_dufay (NULL), m_paget (NULL)
+   : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL), m_screen_compensation (false), m_adjust_luminosity (false), m_original_color (false), m_unadjusted (false), m_profiled (false), m_precise_rgb (false), m_dufay (NULL), m_paget (NULL), m_saturation_matrices (NULL), m_screens (NULL)
 {
 }
 void
@@ -88,6 +88,57 @@ render_interpolate::set_render_type (render_type_parameters rtparam)
   if (rtparam.type == render_type_interpolated_original
       || rtparam.type == render_type_interpolated_profiled_original)
     original_color (rtparam.type == render_type_interpolated_profiled_original);
+}
+
+color_matrix
+render_interpolate::saturation_matrix_scr (point_t p) const
+{
+  if (!m_saturation_matrices)
+    return m_saturation_matrix;
+  return saturation_matrix_img (m_scr_to_img.to_img (p));
+}
+color_matrix
+render_interpolate::saturation_matrix_img (point_t p) const
+{
+  if (!m_saturation_matrices)
+    return m_saturation_matrix;
+  /* Linear interpolation.  */
+  if (1)
+    {
+      int x, y;
+      coord_t rx = my_modf (p.x * m_saturation_xstepinv - 0.5, &x);
+      coord_t ry = my_modf (p.y * m_saturation_ystepinv - 0.5, &y);
+      if (x < 0)
+	x = 0, rx = 0;
+      if (y < 0)
+	y = 0, ry = 0;
+      if (x >= m_saturation_width - 1)
+	x = m_saturation_width - 2, rx = 1;
+      if (y >= m_saturation_height - 1)
+	y = m_saturation_height - 2, ry = 1;
+      color_matrix ret;
+      for (int i = 0; i < 4; i++)
+	for (int j = 0; j < 4; j++)
+	  ret.m_elements[i][j] = 
+	      (m_saturation_matrices [y * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [y * m_saturation_width + x + 1].m_elements[i][j] * rx) * (1 - ry) +
+	      (m_saturation_matrices [(y + 1) * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [(y + 1) * m_saturation_width + x + 1].m_elements[i][j] * rx) * ry;
+       return ret;
+    }
+  /* Nearest matrix.  */
+  else
+    {
+      int x = p.x * m_saturation_xstepinv;
+      int y = p.y * m_saturation_ystepinv;
+      if (x < 0)
+	x = 0;
+      if (y < 0)
+	y = 0;
+      if (x >= m_saturation_width)
+	x = m_saturation_width - 1;
+      if (y >= m_saturation_height)
+	y = m_saturation_height - 1;
+      return m_saturation_matrices [y * m_saturation_width + x];
+    }
 }
 
 bool
@@ -107,23 +158,47 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       if (!m_screen)
 	return false;
       rgbdata cred, cgreen, cblue;
-      if (!m_original_color && !m_precise_rgb
-	  && determine_color_loss (&cred, &cgreen, &cblue, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
-        {
-	  color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
-			    cred.green, cgreen.green, cblue.green, 0,
-			    cred.blue , cgreen.blue , cblue.blue , 0,
-			    0         , 0           , 0          , 1);
-#if 0
-	  printf ("Matrix \n");
-	  sat.print (stdout);
-#endif
-	  m_saturation_matrix = sat.invert ();
-#if 0
-	  printf ("Saturation \n");
-	  m_saturation_matrix.print (stdout);
-#endif
-        }
+      if (!m_original_color && !m_precise_rgb)
+	{
+	  if (m_params.scanner_blur_correction)
+	    {
+	      m_saturation_width = m_params.scanner_blur_correction->get_width ();
+	      m_saturation_height = m_params.scanner_blur_correction->get_height ();
+	      m_saturation_xstepinv = m_saturation_width / (coord_t)m_img.width;
+	      m_saturation_ystepinv = m_saturation_height / (coord_t)m_img.height;
+	      m_saturation_matrices = (color_matrix *)malloc (m_saturation_width * m_saturation_height * sizeof (color_matrix));
+	      m_screens = (screen **)malloc (m_saturation_width * m_saturation_height * sizeof (screen *));
+	      for (int y = 0; y < m_saturation_height; y++)
+	        for (int x = 0; x < m_saturation_width; x++)
+		  {
+		    int idx = y * m_saturation_width + x;
+		    m_screens[idx] = get_screen (m_scr_to_img.get_type (), false, m_params.scanner_blur_correction->get_gaussian_blur_radius (x, y) * pixel_size (), m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
+		    int xp =  (x + 0.5) * m_img.width / m_saturation_width;
+		    int yp =  (y + 0.5) * m_img.height / m_saturation_height;
+		    if (determine_color_loss (&cred, &cgreen, &cblue, *m_screens[idx], m_params.collection_threshold, m_scr_to_img, xp - 100, yp - 100, xp + 100, yp + 100))
+		      {
+			color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+					  cred.green, cgreen.green, cblue.green, 0,
+					  cred.blue , cgreen.blue , cblue.blue , 0,
+					  0         , 0           , 0          , 1);
+			m_saturation_matrices[idx] = sat.invert ();
+		      }
+		    else
+		      {
+			color_matrix id;
+			m_saturation_matrix = id;
+		      }
+		  }
+	    }
+	  else if (determine_color_loss (&cred, &cgreen, &cblue, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
+	    {
+	      color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+				cred.green, cgreen.green, cblue.green, 0,
+				cred.blue , cgreen.blue , cblue.blue , 0,
+				0         , 0           , 0          , 1);
+	      m_saturation_matrix = sat.invert ();
+	    }
+	}
     }
   int xshift = -xmin;
   int yshift = -ymin;
@@ -194,7 +269,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
   else
     c = m_dufay->bicubic_interpolate ({x,y}, m_scr_to_img.patch_proportions (&m_params));
   if (!m_original_color)
-    m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+    saturation_matrix_scr ({x, y}).apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
   if (m_unadjusted)
     ;
   else if (!m_original_color)
@@ -284,6 +359,14 @@ render_interpolate::~render_interpolate ()
     dufay_analyzer_cache.release (m_dufay);
   if (m_paget)
     paget_analyzer_cache.release (m_paget);
+  if (m_saturation_matrices)
+    free (m_saturation_matrices);
+  if (m_screens)
+    {
+      for (int i = 0; i < m_saturation_width * m_saturation_height; i++)
+	release_screen (m_screens[i]);
+      free (m_screens);
+    }
 }
 void
 render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
@@ -327,7 +410,7 @@ render_interpolate::analyze_patches (analyzer analyze,
 		      continue;
 		  }
 		rgbdata c = m_dufay->screen_tile_color (x, y);
-		m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+		saturation_matrix_scr ({xs, ys}).apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
 		if (!analyze (xs, ys, c))
 		  return false;
 	      }
@@ -354,7 +437,7 @@ render_interpolate::analyze_patches (analyzer analyze,
 		      continue;
 		  }
 		rgbdata c = m_paget->screen_tile_color (x, y);
-		m_saturation_matrix.apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
+		saturation_matrix_scr ({xs, ys}).apply_to_rgb (c.red, c.green, c.blue, &c.red, &c.green, &c.blue);
 		if (!analyze (xs, ys, c))
 		  return false;
 	      }

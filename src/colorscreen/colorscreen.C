@@ -1138,11 +1138,11 @@ analyze_scanner_blur (int argc, char **argv)
   if (!ysteps)
     ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
   if (!xsubsteps && !ysubsteps)
-    xsubsteps = ysubsteps = 8;
+    xsubsteps = ysubsteps = 5;
   if (verbose)
     {
       progress.pause_stdout ();
-      printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i)\n", xsteps, ysteps, xsubsteps, ysubsteps, xsteps * ysteps * xsubsteps * ysubsteps);
+      printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i solutions to be computed)\n", xsteps, ysteps, xsubsteps, ysubsteps, xsteps * ysteps * xsubsteps * ysubsteps);
       progress.resume_stdout ();
     }
   if (rparam.scanner_blur_correction)
@@ -1162,20 +1162,24 @@ analyze_scanner_blur (int argc, char **argv)
         fparam.multitile = 1;
 	finetune_result res = finetune (rparam, param, scan, { {(coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps), (coord_t) (y + 0.5) * scan.height / (ysteps * ysubsteps) }}, NULL, fparam, &progress);
 	if (res.success)
-          blurs[y * xsteps * xsubsteps + x] = res.screen_blur_radius;
+	  {
+            blurs[y * xsteps * xsubsteps + x] = res.screen_blur_radius;
+	    assert (res.screen_blur_radius >= 0 && res.screen_blur_radius <= 1024);
+	  }
 	else
 	  blurs[y * xsteps * xsubsteps + x] = - 1;
         progress.inc_progress ();
       }
   rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
   rparam.scanner_blur_correction->alloc (xsteps, ysteps);
+  progress.set_task ("summarizing results", 1);
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
 	int nok = 0;
 	histogram hist;
-	for (int yy = 0; yy < ysteps; yy++)
-	  for (int xx = 0; xx < xsteps; xx++)
+	for (int yy = 0; yy < ysubsteps; yy++)
+	  for (int xx = 0; xx < xsubsteps; xx++)
 	    {
 	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
 	      if (blur >= 0)
@@ -1185,20 +1189,27 @@ analyze_scanner_blur (int argc, char **argv)
 	        }
 	    }
 	if (!nok)
-	  printf ("Analysis failed for sample %i,%i\n", x, y);
+	  {
+            progress.pause_stdout ();
+	    fprintf (stderr, "Analysis failed for sample %i,%i\n", x, y);
+	    return 1;
+	  }
 	hist.finalize_range (65536);
-	for (int yy = 0; yy < ysteps; yy++)
-	  for (int xx = 0; xx < xsteps; xx++)
+	for (int yy = 0; yy < ysubsteps; yy++)
+	  for (int xx = 0; xx < xsubsteps; xx++)
 	    {
 	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
 	      if (blur >= 0)
 		hist.account (blur);
 	    }
 	hist.finalize ();
-	rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, hist.find_avg (0.1, 0.1));
+	luminosity_t b = hist.find_avg (0.1, 0.1);
+	assert (b >= 0 && b <= 1024);
+	rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b);
       }
   if (!outcspname)
     outcspname = cspname;
+  progress.set_task ("writting parameters", 1);
   FILE *out = fopen (outcspname, "wt");
   if (verbose)
     {

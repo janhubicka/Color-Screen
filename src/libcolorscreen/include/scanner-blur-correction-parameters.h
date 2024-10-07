@@ -13,9 +13,21 @@ public:
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC const char *save_tiff (const char *name);
   DLL_PUBLIC bool load (FILE *f, const char **);
-  DLL_PUBLIC inline void set_gaussian_blur_radius (int x, int y, luminosity_t radius)
+  inline void set_gaussian_blur_radius (int x, int y, luminosity_t radius)
   {
     m_gaussian_blurs[y * m_width + x] = radius;
+  }
+  inline luminosity_t get_gaussian_blur_radius (int x, int y)
+  {
+    return m_gaussian_blurs[y * m_width + x];
+  }
+  inline int get_width ()
+  {
+    return m_width;
+  }
+  inline int get_height ()
+  {
+    return m_height;
   }
 
   /* Unique id of the image (used for caching).  */

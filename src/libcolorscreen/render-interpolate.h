@@ -78,6 +78,8 @@ public:
   //bool finetune (render_parameters &rparam, solver_parameters::point_t &point, int x, int y, progress_info *progress);
   //void collect_rgb_histograms (rgb_histogram &red_histogram, rgb_histogram &green_histogram, rgb_histogram &blue_histogram, int xmin, int xmax, int ymin, int ymax, progress_info *progress = NULL);
 private:
+  color_matrix saturation_matrix_scr (point_t p) const;
+  color_matrix saturation_matrix_img (point_t p) const;
   screen *m_screen;
   bool m_screen_compensation;
   bool m_adjust_luminosity;
@@ -88,6 +90,10 @@ private:
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
   color_matrix m_saturation_matrix;
+  color_matrix *m_saturation_matrices;
+  screen **m_screens;
+  int m_saturation_width, m_saturation_height;
+  coord_t m_saturation_xstepinv, m_saturation_ystepinv;
   color_matrix profile_matrix;
 };
 bool analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
