@@ -117,6 +117,12 @@ print_help ()
   if (subhelp == help_analyze_backlight)
     {
       fprintf (stderr, "    Supported args:\n");
+      fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwritting original\n");
+      fprintf (stderr, "      --width=n                 width of the correction table\n");
+      fprintf (stderr, "      --height=n                height of the correction table\n");
+      fprintf (stderr, "      --xsamples=n              number of horisontal samples to analyze for every entry in table\n");
+      fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
+      fprintf (stderr, "      --toerance=max            maximal difference between minimal and maximal blur radius in robust average\n");
     }
   if (subhelp == help_analyze_scanner_blur || subhelp == help_basic)
     {
@@ -1073,11 +1079,30 @@ analyze_scanner_blur (int argc, char **argv)
   subhelp = help_analyze_scanner_blur;
   int xsteps = 0, ysteps = 0;
   int xsubsteps = 0, ysubsteps = 0;
+  float skipmin = 24;
+  float skipmax = 24;
+  float tolerance = -1;
 
   for (int i = 0; i < argc; i++)
     {
       if (parse_common_flags (argc, argv, &i))
         ;
+      else if (const char *str = arg_with_param (argc, argv, &i, "out"))
+        outcspname = str;
+      else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 1024 * 1024))
+	;
+      else if (parse_int_param (argc, argv, &i, "height", ysteps, 1, 1024 * 1024))
+	;
+      else if (parse_int_param (argc, argv, &i, "xsamples", xsubsteps, 1, 1024 * 1024))
+	;
+      else if (parse_int_param (argc, argv, &i, "ysamples", ysubsteps, 1, 1024 * 1024))
+	;
+      else if (parse_float_param (argc, argv, &i, "tolerance", tolerance, 0, 10))
+	;
+      else if (parse_float_param (argc, argv, &i, "skip-min", skipmin, 0, 50))
+	;
+      else if (parse_float_param (argc, argv, &i, "skip-max", skipmin, 0, 50))
+	;
       else if (!infname)
         infname = argv[i];
       else if (!cspname)
@@ -1173,6 +1198,7 @@ analyze_scanner_blur (int argc, char **argv)
   rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
   rparam.scanner_blur_correction->alloc (xsteps, ysteps);
   progress.set_task ("summarizing results", 1);
+  bool fail = false;
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
@@ -1203,10 +1229,18 @@ analyze_scanner_blur (int argc, char **argv)
 		hist.account (blur);
 	    }
 	hist.finalize ();
-	luminosity_t b = hist.find_avg (0.1, 0.1);
+	if (tolerance && hist.find_max (skipmax / 100.0) - hist.find_min (skipmin / 100) > tolerance)
+	  {
+	    printf ("Tolerance threshold %f exceeded for entry %i,%i: blur radius range is %f...%f (diff %f)\n",
+		    tolerance, x, y, hist.find_min (skipmin / 100), hist.find_max (skipmax / 100.0), hist.find_max (skipmax / 100.0)- hist.find_min (skipmin / 100));
+	    fail = true;
+	  }
+	luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
 	assert (b >= 0 && b <= 1024);
 	rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b);
       }
+  if (fail)
+    return 1;
   if (!outcspname)
     outcspname = cspname;
   progress.set_task ("writting parameters", 1);
