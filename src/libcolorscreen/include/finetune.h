@@ -11,20 +11,22 @@ struct scr_to_img_parameters;
 class image_data;
 enum finetune_flags
 {
-  finetune_position = 1,
-  finetune_screen_blur = 2,
-  finetune_screen_channel_blurs = 4,
-  finetune_screen_mtf_blur = 8,
-  finetune_screen_ps_blur = 16,
-  finetune_dufay_strips = 32,
-  finetune_fog = 64,
-  finetune_bw = 128,
-  finetune_no_data_collection = 256,
-  finetune_no_least_squares = 512,
-  finetune_no_progress_report = 1024,
-  finetune_no_normalize = 2048,
-  finetune_emulsion_blur = 4096,
-  finetune_verbose = 8192
+  finetune_position = 1 << 0,
+  finetune_screen_blur = 1 << 1,
+  finetune_screen_channel_blurs = 1 << 2,
+  finetune_screen_mtf_blur = 1 << 3,
+  finetune_screen_ps_blur = 1 << 4,
+  finetune_dufay_strips = 1 << 5,
+  finetune_fog = 1 << 6,
+  finetune_bw = 1 << 7,
+  finetune_no_data_collection = 1 << 8,
+  finetune_no_least_squares = 1 << 9,
+  finetune_no_progress_report = 1 << 10,
+  finetune_no_normalize = 1 << 11,
+  finetune_emulsion_blur = 1 << 12,
+  finetune_verbose = 1 << 13,
+  finetune_use_dufay_srip_widths = 1 << 14,
+  finetune_use_screen_blur = 1 << 14
 };
 struct finetune_parameters
 {

@@ -63,7 +63,6 @@ scanner_blur_correction_parameters::save_tiff (const char *filename)
     return error;
   for (int y = 0; y < m_height; y++)
     {
-      printf ("%i\n", y);
       for (int x = 0; x < m_width; x++)
         {
           out.put_hdr_pixel (x, m_gaussian_blurs[y * m_width + x] * 0.5,

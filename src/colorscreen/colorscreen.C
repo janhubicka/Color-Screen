@@ -114,20 +114,24 @@ print_help ()
       fprintf (stderr, "    produce backlight correction table from photo of "
                        "empty backlight\n");
     }
-  if (subhelp == help_analyze_backlight)
+  if (subhelp == help_analyze_scanner_blur || subhelp == help_basic)
+    {
+      fprintf (stderr, "  analyze-scanner-blur <scan> <par> [<args>]\n");
+      fprintf (stderr, "    produce scanner blur correction table and save it into <par>\n");
+    }
+  if (subhelp == help_analyze_scanner_blur)
     {
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwritting original\n");
+      fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
+      fprintf (stderr, "      --strip-width=n           number of horisontal samples used to detect Dufay strip widths\n");
+      fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect Dufay strip widths\n");
+      fprintf (stderr, "      --reoptimize-strip-widths optimize strip widths also during blur detection\n");
       fprintf (stderr, "      --width=n                 width of the correction table\n");
       fprintf (stderr, "      --height=n                height of the correction table\n");
       fprintf (stderr, "      --xsamples=n              number of horisontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
       fprintf (stderr, "      --toerance=max            maximal difference between minimal and maximal blur radius in robust average\n");
-    }
-  if (subhelp == help_analyze_scanner_blur || subhelp == help_basic)
-    {
-      fprintf (stderr, "  analyze-scanner-blur <scan> <par> [<args>]\n");
-      fprintf (stderr, "    produce scanner blur correction table and save it into <par>\n");
     }
   if (subhelp == help_dump_lcc || subhelp == help_basic)
     {
@@ -1076,12 +1080,17 @@ analyze_scanner_blur (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
   const char *outcspname = NULL;
+  const char *outtifname = NULL;
   subhelp = help_analyze_scanner_blur;
   int xsteps = 0, ysteps = 0;
   int xsubsteps = 0, ysubsteps = 0;
-  float skipmin = 24;
-  float skipmax = 24;
+  float skipmin = 25;
+  float skipmax = 25;
   float tolerance = -1;
+  int strip_xsteps = 0;
+  int strip_ysteps = 0;
+  bool reoptimize_strip_widths = 0;
+  int flags = finetune_position | finetune_no_progress_report | finetune_screen_channel_blurs;
 
   for (int i = 0; i < argc; i++)
     {
@@ -1089,27 +1098,66 @@ analyze_scanner_blur (int argc, char **argv)
         ;
       else if (const char *str = arg_with_param (argc, argv, &i, "out"))
         outcspname = str;
-      else if (parse_int_param (argc, argv, &i, "width", xsteps, 1, 1024 * 1024))
-	;
-      else if (parse_int_param (argc, argv, &i, "height", ysteps, 1, 1024 * 1024))
-	;
-      else if (parse_int_param (argc, argv, &i, "xsamples", xsubsteps, 1, 1024 * 1024))
-	;
-      else if (parse_int_param (argc, argv, &i, "ysamples", ysubsteps, 1, 1024 * 1024))
-	;
-      else if (parse_float_param (argc, argv, &i, "tolerance", tolerance, 0, 10))
-	;
+      else if (const char *str = arg_with_param (argc, argv, &i, "out-tiff"))
+        outtifname = str;
+      else if (!strcmp (argv[i], "--reoptimize-strip-widths"))
+        reoptimize_strip_widths = true;
+      else if (!strcmp (argv[i], "--no-reoptimize-strip-widths"))
+        reoptimize_strip_widths = false;
+      else if (!strcmp (argv[i], "--optimize-screen-blur"))
+        {
+          flags &= ~finetune_screen_channel_blurs;
+          flags |= finetune_screen_blur;
+        }
+      else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
+        {
+          flags |= finetune_screen_channel_blurs;
+          flags &= ~finetune_screen_blur;
+        }
+      else if (!strcmp (argv[i], "--optimize-fog"))
+        flags |= finetune_fog;
+      else if (!strcmp (argv[i], "--no-optimize-fog"))
+        flags &= finetune_fog;
+      else if (!strcmp (argv[i], "--normalize"))
+        flags &= finetune_no_normalize;
+      else if (!strcmp (argv[i], "--no-normalize"))
+        flags |= finetune_no_normalize;
+      else if (!strcmp (argv[i], "--data-collection"))
+        flags &= finetune_no_data_collection;
+      else if (!strcmp (argv[i], "--no-data-collection"))
+        flags |= finetune_no_data_collection;
+      else if (parse_int_param (argc, argv, &i, "width", xsteps, 1,
+                                1024 * 1024))
+        ;
+      else if (parse_int_param (argc, argv, &i, "height", ysteps, 1,
+                                1024 * 1024))
+        ;
+      else if (parse_int_param (argc, argv, &i, "xsamples", xsubsteps, 1,
+                                1024 * 1024))
+        ;
+      else if (parse_int_param (argc, argv, &i, "ysamples", ysubsteps, 1,
+                                1024 * 1024))
+        ;
+      else if (parse_float_param (argc, argv, &i, "tolerance", tolerance, 0,
+                                  10))
+        ;
       else if (parse_float_param (argc, argv, &i, "skip-min", skipmin, 0, 50))
-	;
+        ;
       else if (parse_float_param (argc, argv, &i, "skip-max", skipmin, 0, 50))
-	;
+        ;
+      else if (parse_int_param (argc, argv, &i, "strip-width", xsteps, 1,
+                                1024 * 1024))
+        ;
+      else if (parse_int_param (argc, argv, &i, "strip-height", ysteps, 1,
+                                1024 * 1024))
+        ;
       else if (!infname)
         infname = argv[i];
       else if (!cspname)
         cspname = argv[i];
       else
         {
-	  fprintf (stderr, "Extra argument: %s\n", argv[i]);
+          fprintf (stderr, "Extra argument: %s\n", argv[i]);
           print_help ();
         }
     }
@@ -1164,35 +1212,184 @@ analyze_scanner_blur (int argc, char **argv)
     ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
   if (!xsubsteps && !ysubsteps)
     xsubsteps = ysubsteps = 5;
-  if (verbose)
-    {
-      progress.pause_stdout ();
-      printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i solutions to be computed)\n", xsteps, ysteps, xsubsteps, ysubsteps, xsteps * ysteps * xsubsteps * ysubsteps);
-      progress.resume_stdout ();
-    }
+  if (!strip_xsteps && !strip_ysteps)
+    strip_xsteps = 10;
+  if (!strip_xsteps)
+    strip_xsteps = (strip_ysteps * scan.width + scan.height / 2) / scan.height;
+  if (!strip_ysteps)
+    strip_ysteps = (strip_xsteps * scan.height + scan.width / 2) / scan.width;
   if (rparam.scanner_blur_correction)
     {
       delete rparam.scanner_blur_correction;
       rparam.scanner_blur_correction = 0;
     }
-  luminosity_t *blurs = (luminosity_t *)malloc (xsteps * xsubsteps * ysteps * ysubsteps * sizeof (luminosity_t));
-  progress.set_task ("analyzing samples", ysteps * xsteps * xsubsteps * ysubsteps);
+#ifdef _OPENMP
+  omp_set_nested (1);
+#endif
+
+  coord_t *strips = NULL;
+  if (param.type == Dufay)
+    strips = (luminosity_t *)malloc (strip_xsteps * strip_ysteps * 2 * sizeof (luminosity_t));
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      if (strips)
+        printf ("Analyzing %ix%i areas to determine Dufay strip widths and "
+                "screen blur (overall %i solutions to be computed)\n",
+                strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
+      else
+        printf ("Analyzing %ix%i areas to determine screen blur (overall %i "
+                "solutions to be computed)\n",
+                strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
+      progress.resume_stdout ();
+    }
+  progress.set_task (strips ? "analyzing Dufay strip sizes and screen burs"
+                            : "analyzing screen blurs",
+                     strip_xsteps * strip_ysteps);
+  coord_t *pre_blurs = (luminosity_t *)malloc (strip_xsteps * strip_ysteps
+                                               * sizeof (luminosity_t));
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
-    shared(xsteps, ysteps, xsubsteps, ysubsteps, rparam, scan, progress, param, blurs)
+    shared(strip_xsteps, strip_ysteps, rparam, scan, progress, param, strips, \
+               flags, pre_blurs)
+  for (int y = 0; y < strip_ysteps; y++)
+    for (int x = 0; x < strip_xsteps; x++)
+      {
+        finetune_parameters fparam;
+        fparam.flags = flags | (strips ? finetune_dufay_strips : 0);
+        fparam.multitile = 1;
+        finetune_result res = finetune (
+            rparam, param, scan,
+            { { (coord_t)(x + 0.5) * scan.width / strip_xsteps,
+                (coord_t)(y + 0.5) * scan.height / strip_ysteps } },
+            NULL, fparam, &progress);
+        if (res.success)
+          {
+            if (strips)
+              {
+                strips[y * strip_xsteps * 2 + 2 * x]
+                    = res.dufay_red_strip_width;
+                strips[y * strip_xsteps * 2 + 2 * x + 1]
+                    = res.dufay_green_strip_width;
+              }
+            pre_blurs[y * strip_xsteps + x] = res.screen_blur_radius;
+          }
+        else
+          {
+            if (strips)
+              strips[y * strip_xsteps * 2 + 2 * x] = -1;
+            pre_blurs[y * strip_xsteps + x] = -1;
+          }
+        progress.inc_progress ();
+      }
+  histogram red_hist;
+  histogram green_hist;
+  histogram blur_hist;
+  int nok = 0;
+  for (int y = 0; y < strip_ysteps; y++)
+    for (int x = 0; x < strip_xsteps; x++)
+      {
+        if (strips && strips[y * strip_xsteps * 2 + 2 * x] >= 0)
+          {
+            red_hist.pre_account (strips[y * strip_xsteps * 2 + 2 * x]);
+            green_hist.pre_account (strips[y * strip_xsteps * 2 + 2 * x + 1]);
+          }
+        if (pre_blurs[y * strip_xsteps + x] >= 0)
+          {
+            blur_hist.pre_account (pre_blurs[y * strip_xsteps + x]);
+            nok++;
+          }
+      }
+  if (!nok)
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Analysis failed\n");
+      return 1;
+    }
+  if (strips)
+    {
+      red_hist.finalize_range (65536);
+      green_hist.finalize_range (65536);
+    }
+  blur_hist.finalize_range (65536);
+  for (int y = 0; y < strip_ysteps; y++)
+    for (int x = 0; x < strip_xsteps; x++)
+      {
+        if (strips && strips[y * strip_xsteps * 2 + 2 * x] >= 0)
+          {
+            red_hist.account (strips[y * strip_xsteps * 2 + 2 * x]);
+            green_hist.account (strips[y * strip_xsteps * 2 + 2 * x + 1]);
+          }
+        if (pre_blurs[y * strip_xsteps + x] >= 0)
+          {
+            blur_hist.account (pre_blurs[y * strip_xsteps + x]);
+            nok++;
+          }
+      }
+  free (strips);
+  free (pre_blurs);
+  if (strips)
+    {
+      red_hist.finalize ();
+      green_hist.finalize ();
+    }
+  blur_hist.finalize ();
+  if (strips)
+    {
+      rparam.dufay_red_strip_width
+          = red_hist.find_avg (skipmin / 100, skipmax / 100);
+      rparam.dufay_green_strip_width
+          = green_hist.find_avg (skipmin / 100, skipmax / 100);
+    }
+  rparam.screen_blur_radius
+      = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      if (strips)
+        {
+          printf ("Red strip width %.2f%%\n",
+                  rparam.dufay_red_strip_width * 100);
+          printf ("Green strip width %.2f%%\n",
+                  rparam.dufay_green_strip_width * 100);
+        }
+      printf ("Average screen blur %.2f pixels\n", rparam.screen_blur_radius);
+      progress.resume_stdout ();
+    }
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Analyzing %ix%i areas each subsampled %ix%i (overall %i "
+              "solutions to be computed)\n",
+              xsteps, ysteps, xsubsteps, ysubsteps,
+              xsteps * ysteps * xsubsteps * ysubsteps);
+      progress.resume_stdout ();
+    }
+  luminosity_t *blurs = (luminosity_t *)malloc (
+      xsteps * xsubsteps * ysteps * ysubsteps * sizeof (luminosity_t));
+  progress.set_task ("analyzing samples",
+                     ysteps * xsteps * xsubsteps * ysubsteps);
+#pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
+    shared(xsteps, ysteps, xsubsteps, ysubsteps, rparam, scan, progress,      \
+               param, blurs, reoptimize_strip_widths, flags)
   for (int y = 0; y < ysteps * ysubsteps; y++)
     for (int x = 0; x < xsteps * xsubsteps; x++)
       {
         finetune_parameters fparam;
-        fparam.flags = finetune_position | finetune_screen_blur | finetune_dufay_strips | finetune_no_progress_report;
+        fparam.flags = flags | (reoptimize_strip_widths ? finetune_dufay_strips : 0);
         fparam.multitile = 1;
-	finetune_result res = finetune (rparam, param, scan, { {(coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps), (coord_t) (y + 0.5) * scan.height / (ysteps * ysubsteps) }}, NULL, fparam, &progress);
-	if (res.success)
-	  {
+        finetune_result res = finetune (
+            rparam, param, scan,
+            { { (coord_t)(x + 0.5) * scan.width / (xsteps * xsubsteps),
+                (coord_t)(y + 0.5) * scan.height / (ysteps * ysubsteps) } },
+            NULL, fparam, &progress);
+        if (res.success)
+          {
             blurs[y * xsteps * xsubsteps + x] = res.screen_blur_radius;
-	    assert (res.screen_blur_radius >= 0 && res.screen_blur_radius <= 1024);
-	  }
-	else
-	  blurs[y * xsteps * xsubsteps + x] = - 1;
+            assert (res.screen_blur_radius >= 0
+                    && res.screen_blur_radius <= 1024);
+          }
+        else
+          blurs[y * xsteps * xsubsteps + x] = -1;
         progress.inc_progress ();
       }
   rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
@@ -1202,43 +1399,54 @@ analyze_scanner_blur (int argc, char **argv)
   for (int y = 0; y < ysteps; y++)
     for (int x = 0; x < xsteps; x++)
       {
-	int nok = 0;
-	histogram hist;
-	for (int yy = 0; yy < ysubsteps; yy++)
-	  for (int xx = 0; xx < xsubsteps; xx++)
-	    {
-	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
-	      if (blur >= 0)
-	        {
-		  nok++;
-		  hist.pre_account (blur);
-	        }
-	    }
-	if (!nok)
-	  {
+        int nok = 0;
+        histogram hist;
+        for (int yy = 0; yy < ysubsteps; yy++)
+          for (int xx = 0; xx < xsubsteps; xx++)
+            {
+              luminosity_t blur
+                  = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps
+                          + x * xsubsteps + xx];
+              if (blur >= 0)
+                {
+                  nok++;
+                  hist.pre_account (blur);
+                }
+            }
+        if (!nok)
+          {
             progress.pause_stdout ();
-	    fprintf (stderr, "Analysis failed for sample %i,%i\n", x, y);
-	    return 1;
-	  }
-	hist.finalize_range (65536);
-	for (int yy = 0; yy < ysubsteps; yy++)
-	  for (int xx = 0; xx < xsubsteps; xx++)
-	    {
-	      luminosity_t blur = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
-	      if (blur >= 0)
-		hist.account (blur);
-	    }
-	hist.finalize ();
-	if (tolerance && hist.find_max (skipmax / 100.0) - hist.find_min (skipmin / 100) > tolerance)
-	  {
-	    printf ("Tolerance threshold %f exceeded for entry %i,%i: blur radius range is %f...%f (diff %f)\n",
-		    tolerance, x, y, hist.find_min (skipmin / 100), hist.find_max (skipmax / 100.0), hist.find_max (skipmax / 100.0)- hist.find_min (skipmin / 100));
-	    fail = true;
-	  }
-	luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
-	assert (b >= 0 && b <= 1024);
-	rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b);
+            fprintf (stderr, "Analysis failed for sample %i,%i\n", x, y);
+            return 1;
+          }
+        hist.finalize_range (65536);
+        for (int yy = 0; yy < ysubsteps; yy++)
+          for (int xx = 0; xx < xsubsteps; xx++)
+            {
+              luminosity_t blur
+                  = blurs[(y * ysubsteps + yy) * xsteps * xsubsteps
+                          + x * xsubsteps + xx];
+              if (blur >= 0)
+                hist.account (blur);
+            }
+        hist.finalize ();
+        if (tolerance >= 0
+            && hist.find_max (skipmax / 100.0) - hist.find_min (skipmin / 100)
+                   > tolerance)
+          {
+            printf ("Tolerance threshold %f exceeded for entry %i,%i: blur "
+                    "radius range is %f...%f (diff %f)\n",
+                    tolerance, x, y, hist.find_min (skipmin / 100),
+                    hist.find_max (skipmax / 100.0),
+                    hist.find_max (skipmax / 100.0)
+                        - hist.find_min (skipmin / 100));
+            fail = true;
+          }
+        luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
+        assert (b >= 0 && b <= 1024);
+        rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b);
       }
+  free (blurs);
   if (fail)
     return 1;
   if (!outcspname)
@@ -1264,7 +1472,12 @@ analyze_scanner_blur (int argc, char **argv)
       return 1;
     }
   fclose (out);
-  free (blurs);
+  if (outtifname && (error = rparam.scanner_blur_correction->save_tiff (outtifname)))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Failed saving tiff file %s: %s\n", outtifname, error);
+      return 1;
+    }
   return 0;
 }
 

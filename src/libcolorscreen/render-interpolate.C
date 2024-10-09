@@ -157,7 +157,6 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
       m_screen = get_screen (m_scr_to_img.get_type (), false, radius, m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
       if (!m_screen)
 	return false;
-      rgbdata cred, cgreen, cblue;
       if (!m_original_color && !m_precise_rgb)
 	{
 	  if (m_params.scanner_blur_correction)
@@ -168,13 +167,20 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 	      m_saturation_ystepinv = m_saturation_height / (coord_t)m_img.height;
 	      m_saturation_matrices = (color_matrix *)malloc (m_saturation_width * m_saturation_height * sizeof (color_matrix));
 	      m_screens = (screen **)malloc (m_saturation_width * m_saturation_height * sizeof (screen *));
+	      if (progress)
+		progress->set_task ("computing saturation loss table", m_saturation_height * m_saturation_width);
+#pragma omp parallel for default (none) shared (progress) collapse (2)
 	      for (int y = 0; y < m_saturation_height; y++)
 	        for (int x = 0; x < m_saturation_width; x++)
 		  {
+		    if (progress && progress->cancel_requested ())
+		      continue;
 		    int idx = y * m_saturation_width + x;
-		    m_screens[idx] = get_screen (m_scr_to_img.get_type (), false, m_params.scanner_blur_correction->get_gaussian_blur_radius (x, y) * pixel_size (), m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, progress, &screen_id);
+		    // No progress here since we compute in parallel
+		    m_screens[idx] = get_screen (m_scr_to_img.get_type (), false, m_params.scanner_blur_correction->get_gaussian_blur_radius (x, y) * pixel_size (), m_params.dufay_red_strip_width, m_params.dufay_green_strip_width, /*progress*/ NULL);
 		    int xp =  (x + 0.5) * m_img.width / m_saturation_width;
 		    int yp =  (y + 0.5) * m_img.height / m_saturation_height;
+		    rgbdata cred, cgreen, cblue;
 		    if (determine_color_loss (&cred, &cgreen, &cblue, *m_screens[idx], *m_screen, m_params.collection_threshold, m_scr_to_img, xp - 100, yp - 100, xp + 100, yp + 100))
 		      {
 			color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
@@ -188,15 +194,23 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax, coord_
 			color_matrix id;
 			m_saturation_matrix = id;
 		      }
+		    if (progress)
+		      progress->inc_progress ();
 		  }
+	      if (progress && progress->cancelled ())
+		return false;
 	    }
-	  else if (determine_color_loss (&cred, &cgreen, &cblue, *m_screen, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
+	  else 
 	    {
-	      color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
-				cred.green, cgreen.green, cblue.green, 0,
-				cred.blue , cgreen.blue , cblue.blue , 0,
-				0         , 0           , 0          , 1);
-	      m_saturation_matrix = sat.invert ();
+	      rgbdata cred, cgreen, cblue;
+	      if (determine_color_loss (&cred, &cgreen, &cblue, *m_screen, *m_screen, m_params.collection_threshold, m_scr_to_img, m_img.width / 2 - 100, m_img.height / 2 - 100, m_img.width / 2 + 100, m_img.height / 2 + 100))
+	      {
+		color_matrix sat (cred.red  , cgreen.red  , cblue.red,   0,
+				  cred.green, cgreen.green, cblue.green, 0,
+				  cred.blue , cgreen.blue , cblue.blue , 0,
+				  0         , 0           , 0          , 1);
+		m_saturation_matrix = sat.invert ();
+	      }
 	    }
 	}
     }

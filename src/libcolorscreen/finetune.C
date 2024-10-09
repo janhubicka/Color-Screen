@@ -675,7 +675,7 @@ public:
   }
 
   void
-  init (int flags, coord_t blur_radius, const std::vector <finetune_result> *results)
+  init (int flags, coord_t blur_radius, coord_t red_strip_width, coord_t green_strip_height, const std::vector <finetune_result> *results)
   {
     optimize_position = flags & finetune_position;
     optimize_screen_blur = flags & finetune_screen_blur;
@@ -887,7 +887,10 @@ public:
       {
 	/* Optimization seem to work better when it starts from small blur.  */
         if (optimize_screen_blur && !results)
-	  blur_radius = 0.3;
+	  {
+	    if (!(flags & finetune_use_screen_blur))
+	      blur_radius = 0.3;
+	  }
 	if (results)
 	  {
 	    histogram hist;
@@ -915,8 +918,16 @@ public:
       }
     if (optimize_dufay_strips)
       {
-	start[dufay_strips_index + 0] = dufaycolor::red_width;
-	start[dufay_strips_index + 1] = dufaycolor::green_height;
+	if (flags & finetune_use_dufay_srip_widths)
+	  {
+	    start[dufay_strips_index + 0] = red_strip_width;
+	    start[dufay_strips_index + 1] = green_strip_height;
+	  }
+	else
+	  {
+	    start[dufay_strips_index + 0] = dufaycolor::red_width;
+	    start[dufay_strips_index + 1] = dufaycolor::green_height;
+	  }
       }
 
     maxgray = 0;
@@ -2160,7 +2171,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 		  failed = true;
 		  continue;
 		}
-	      solver.init (fparams.flags, rparam.screen_blur_radius, results);
+	      solver.init (fparams.flags, rparam.screen_blur_radius, rparam.dufay_red_strip_width, rparam.dufay_green_strip_width, results);
 	      if (progress && progress->cancel_requested ()) 
 		continue;
 	      coord_t uncertainity = solver.solve (progress, !(fparams.flags & finetune_no_progress_report) && maxtiles == 1);
@@ -2215,7 +2226,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param, const i
 	      return ret;
 	    }
 	}
-      best_solver.init (fparams.flags, rparam.screen_blur_radius, results);
+      best_solver.init (fparams.flags, rparam.screen_blur_radius, rparam.dufay_red_strip_width, rparam.dufay_green_strip_width, results);
       best_uncertainity = best_solver.solve (progress, !(fparams.flags & finetune_no_progress_report));
     }
   if (progress && progress->cancel_requested ()) 
@@ -2424,9 +2435,15 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue, s
   red /= wr;
   green /= wg;
   blue /= wb;
+#if 0
+  *ret_red = red;
+  *ret_green = green;
+  *ret_blue = blue;
+#else
   *ret_red = (rgbdata){red.red, green.red, blue.red};
   *ret_green = (rgbdata){red.green, green.green, blue.green};
   *ret_blue = (rgbdata){red.blue, green.blue, blue.blue};
+#endif
 #if 0
   printf ("Color loss info\n");
   ret_red->print (stdout);
