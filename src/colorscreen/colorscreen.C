@@ -87,6 +87,7 @@ print_help ()
       fprintf (stderr, "      --scan-ppi=val            specify resolution of scan\n");
       fprintf (stderr, "      --age=val                 specify age of color model\n");
       fprintf (stderr, "      --scale=val               specify scale of output file\n");
+      fprintf (stderr, "      --ignore-infrared         force use of simulated IR channel\n");
     }
   if (subhelp == help_autodetect || subhelp == help_basic)
     {
@@ -644,6 +645,7 @@ render_cmd (int argc, char **argv)
   float output_gamma = -4;
   subhelp = help_render;
   detect_regular_screen_params dsparams;
+  bool ignore_infrared = false;
 
   for (int i = 0; i < argc; i++)
     {
@@ -660,6 +662,8 @@ render_cmd (int argc, char **argv)
         rfparams.dng = true;
       else if (!strcmp (argv[i], "--solver"))
         solver = true;
+      else if (!strcmp (argv[i], "--ignore-infrared"))
+        ignore_infrared = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "output-profile"))
         output_profile = parse_output_profile (str);
@@ -816,6 +820,8 @@ render_cmd (int argc, char **argv)
     rparam.output_gamma = output_gamma;
   if (scale)
     rfparams.scale = scale;
+  if (ignore_infrared)
+    rparam.ignore_infrared = true;
 
   /* ... and render!  */
   rfparams.verbose = verbose;
