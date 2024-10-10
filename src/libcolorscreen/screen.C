@@ -1176,7 +1176,9 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
         do_fft = true;
       else if (alg == blur_auto)
         {
-	  if (clen > screen::size / 2)
+	  // technically it is more precise to do 2d fft, but it is slower
+	  // and practically seems to make little difference.  
+	  if (clen > screen::size / 2 && 0)
 	    do_fft2d = true;
 	  else
             do_fft = (blur_radius[c] >= max_blur_radius) || clen > 15;

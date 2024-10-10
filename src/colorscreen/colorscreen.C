@@ -1434,6 +1434,7 @@ analyze_scanner_blur (int argc, char **argv)
             && hist.find_max (skipmax / 100.0) - hist.find_min (skipmin / 100)
                    > tolerance)
           {
+	    progress.pause_stdout ();
             printf ("Tolerance threshold %f exceeded for entry %i,%i: blur "
                     "radius range is %f...%f (diff %f)\n",
                     tolerance, x, y, hist.find_min (skipmin / 100),
@@ -1441,6 +1442,7 @@ analyze_scanner_blur (int argc, char **argv)
                     hist.find_max (skipmax / 100.0)
                         - hist.find_min (skipmin / 100));
             fail = true;
+	    progress.resume_stdout ();
           }
         luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
         assert (b >= 0 && b <= 1024);
