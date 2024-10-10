@@ -133,6 +133,11 @@ print_help ()
       fprintf (stderr, "      --xsamples=n              number of horisontal samples to analyze for every entry in table\n");
       fprintf (stderr, "      --ysamples=n              number of vertical samples to analyze for every entry in table\n");
       fprintf (stderr, "      --toerance=max            maximal difference between minimal and maximal blur radius in robust average\n");
+      fprintf (stderr, "      --optimize-fog            enable finetuning of fog (dark point)\n");
+      fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
+      fprintf (stderr, "      --normalize               normalize colors\n");
+      fprintf (stderr, "      --no-normalize            do not normalize colors\n");
+      fprintf (stderr, "      --no-data-collection      do not determine colors by data collection\n");
     }
   if (subhelp == help_dump_lcc || subhelp == help_basic)
     {
@@ -254,6 +259,8 @@ print_help ()
                        "samples and choose best result on each spot\n");
       fprintf (stderr,
                "      --no-normalize            do not normalize colors\n");
+      fprintf (stderr,
+               "      --simulate-infrared       simuate infrared layer\n");
       fprintf (stderr, "      --blur-tiff=name          write finetuned blur "
                        "radius (either screen, screen channel or emulsion) "
                        "parameters as tiff file\n");
@@ -269,6 +276,7 @@ print_help ()
                        "tiles into tiff files <name>-y-x.tif\n");
       fprintf (stderr, "      --diff-tiff-base=name     write diff between "
                        "original and simultated tiles to <name>-y-x.tif\n");
+      fprintf (stderr, "      --simulate-infrared       simuate infrared layer\n");
     }
   if (subhelp == help_lab || subhelp == help_basic)
     {
@@ -1123,13 +1131,17 @@ analyze_scanner_blur (int argc, char **argv)
       else if (!strcmp (argv[i], "--optimize-fog"))
         flags |= finetune_fog;
       else if (!strcmp (argv[i], "--no-optimize-fog"))
-        flags &= finetune_fog;
+        flags &= ~finetune_fog;
+      else if (!strcmp (argv[i], "--simulate-infrared"))
+        flags |= finetune_simulate_infrared;
       else if (!strcmp (argv[i], "--normalize"))
-        flags &= finetune_no_normalize;
+        flags &= ~finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-normalize"))
         flags |= finetune_no_normalize;
+      else if (!strcmp (argv[i], "--simulate-infrared"))
+        flags |= finetune_simulate_infrared;
       else if (!strcmp (argv[i], "--data-collection"))
-        flags &= finetune_no_data_collection;
+        flags &= ~finetune_no_data_collection;
       else if (!strcmp (argv[i], "--no-data-collection"))
         flags |= finetune_no_data_collection;
       else if (parse_int_param (argc, argv, &i, "width", xsteps, 1,
@@ -2134,6 +2146,8 @@ finetune (int argc, char **argv)
         flags |= finetune_no_least_squares;
       else if (!strcmp (argv[i], "--no-data-collection"))
         flags |= finetune_no_data_collection;
+      else if (!strcmp (argv[i], "--simulate-infrared"))
+        flags |= finetune_simulate_infrared;
       else if (parse_int_param (argc, argv, &i, "multitile", multitile, 1,
                                 100))
         ;
