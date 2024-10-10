@@ -26,7 +26,8 @@ enum finetune_flags
   finetune_emulsion_blur = 1 << 12,
   finetune_verbose = 1 << 13,
   finetune_use_dufay_srip_widths = 1 << 14,
-  finetune_use_screen_blur = 1 << 14
+  finetune_use_screen_blur = 1 << 15,
+  finetune_simulate_infrared = 1 << 16
 };
 struct finetune_parameters
 {

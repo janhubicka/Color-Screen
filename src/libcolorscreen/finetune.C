@@ -204,6 +204,8 @@ public:
      in RGB simulation to eliminate underlying silver image (which works as
      netural density filter) of the input scan is linear.  */
   bool normalize;
+  /* Use simulated infrared channel when rendering.  */
+  bool simulate_infrared;
 
   /* True if emulsion patch intensities should be finetuned.
      Initialized in init call.  */
@@ -514,9 +516,9 @@ public:
 	}
     if (optimize_fog && !fog_by_least_squares)
       {
-	to_range (v[fog_index + 0], 0, 1);
-	to_range (v[fog_index + 1], 0, 1);
-	to_range (v[fog_index + 2], 0, 1);
+	to_range (v[fog_index + 0], -1, 1);
+	to_range (v[fog_index + 1], -1, 1);
+	to_range (v[fog_index + 2], -1, 1);
       }
     if (tiles[0].bw && !least_squares && !data_collection)
       {
@@ -689,6 +691,9 @@ public:
     optimize_fog = (flags & finetune_fog) && tiles[0].color /*&& n_tiles > 1*/;
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
+    simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
+    if (simulate_infrared)
+      least_squares = data_collection = normalize = optimize_emulsion_blur = false;
     optimize_emulsion_offset = false;
     normalize = !(flags & finetune_no_normalize);
     if (tiles[0].color && normalize)
@@ -832,6 +837,7 @@ public:
       {
 	if (tiles[0].color)
 	  {
+#if 1
 	    start[color_index] = finetune_solver::rgbscale;
 	    start[color_index + 1] = 0;
 	    start[color_index + 2] = 0;
@@ -843,6 +849,19 @@ public:
 	    start[color_index + 6] = 0;
 	    start[color_index + 7] = 0;
 	    start[color_index + 8] = finetune_solver::rgbscale;
+#else
+	    start[color_index] = 0;
+	    start[color_index + 1] = 0;
+	    start[color_index + 2] = 0;
+
+	    start[color_index + 3] = 0;
+	    start[color_index + 4] = 0;
+	    start[color_index + 5] = 0;
+
+	    start[color_index + 6] = 0;
+	    start[color_index + 7] = 0;
+	    start[color_index + 8] = 0;
+#endif
 	  }
 	else
 	  {
@@ -950,7 +969,7 @@ public:
 	    for (int x = 0; x < twidth; x++)
 	      hist.account (tiles[tileid].color[y * twidth + x]);
 	hist.finalize ();
-	fog_range = hist.find_min (0.01);
+	fog_range = hist.find_min (0.3);
 	if (!fog_by_least_squares)
 	  {
 	    start[fog_index + 1] = 0;
@@ -1139,10 +1158,19 @@ public:
   /* Evaulate pixel at (x,y) using RGB values v and offsets offx, offy
      compensating coordates stored in tole_pos.  */
   pure_attr inline rgbdata
-  evaulate_pixel (int tileid, rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off)
+  evaulate_pixel (coord_t *v, int tileid, rgbdata red, rgbdata green, rgbdata blue, int x, int y, point_t off, rgbdata mix_weights)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, x, y);
-    return ((red * m.red + green * m.green + blue * m.blue) * ((coord_t)1.0 / rgbscale));
+    rgbdata c = ((red * m.red + green * m.green + blue * m.blue) * ((coord_t)1.0 / rgbscale));
+    if (simulate_infrared)
+      {
+	rgbdata p = get_pixel (v, tileid, x, y);
+	luminosity_t intensity = p.red * mix_weights.red
+				 + p.green * mix_weights.green
+				 + p.blue * mix_weights.blue;
+	c *= intensity;
+      }
+    return c;
   }
 
   void
@@ -1455,15 +1483,19 @@ public:
   {
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
-    color_matrix process_colors (red.red,   green.red,   blue.red, 0,
-				 red.green, green.green, blue.green, 0,
-				 red.blue,  green.blue,  blue.blue, 0,
+    color_matrix process_colors (red  .red,   red  .green, red  .blue, 0,
+				 green.red,   green.green, green.blue, 0,
+				 blue .red,   blue .green, blue .blue, 0,
 				 0, 0, 0, 1);
-    process_colors.transpose ();
     rgbdata ret;
-    process_colors.invert ().apply_to_rgb (1/3.0, 1/3.0, 1/3.0, &ret.red, &ret.green, &ret.blue);
+    process_colors.invert ().apply_to_rgb (1, 1, 1, &ret.red, &ret.green, &ret.blue);
+
+#if 0
+    if (simulate_infrared)
+      return ret;
+#endif
     luminosity_t sum = ret.red + ret.green + ret.blue;
-    return ret * (1 / sum);
+    return ret * (3 / sum);
   }
 
   rgbdata
@@ -1484,7 +1516,7 @@ public:
       {
 	*red = {v[color_index], v[color_index + 1], v[color_index + 2]};
 	*green = {v[color_index + 3], v[color_index + 4], v[color_index + 5]};
-	*green = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
+	*blue = {v[color_index + 6], v[color_index + 7], v[color_index + 8]};
       }
     else if (data_collection)
       determine_colors_using_data_collection (v, red, green, blue);
@@ -1503,6 +1535,9 @@ public:
   objfunc (coord_t *v)
   {
     coord_t sum = 0;
+    rgbdata mix_weights;
+    if (simulate_infrared)
+      mix_weights = get_mix_weights (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
 	init_screen (v, tileid);
@@ -1522,7 +1557,7 @@ public:
 	      for (int x = 0; x < twidth; x++)
 		if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
 		  {
-		    rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+		    rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 		    rgbdata d = get_pixel (v, tileid, x, y);
 
 		    /* Bayer pattern. */
@@ -1627,6 +1662,9 @@ public:
   {
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
+    rgbdata mix_weights;
+    if (simulate_infrared)
+      mix_weights = get_mix_weights (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
 	histogram hist;
@@ -1634,7 +1672,7 @@ public:
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+	      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 	      rgbdata d = get_pixel (v, tileid, x, y);
 	      coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
 	      hist.pre_account (err);
@@ -1643,7 +1681,7 @@ public:
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+	      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 	      rgbdata d = get_pixel (v, tileid, x, y);
 	      coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
 	      hist.account (err);
@@ -1654,7 +1692,7 @@ public:
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+	      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 	      rgbdata d = get_pixel (v, tileid, x, y);
 	      coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green) + fabs (c.blue - d.blue);
 	      if (err > merr)
@@ -1755,11 +1793,14 @@ public:
       {
 	luminosity_t rmax = 0, gmax = 0, bmax = 0;
 	rgbdata red, green, blue;
+	rgbdata mix_weights;
+	if (simulate_infrared)
+	  mix_weights = get_mix_weights (v);
 	get_colors (v, &red, &green, &blue);
 	for (int y = 0; y < theight; y++)
 	  for (int x = 0; x < twidth; x++)
 	    {
-	      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+	      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 	      rmax = std::max (c.red, rmax);
 	      gmax = std::max (c.green, gmax);
 	      bmax = std::max (c.blue, bmax);
@@ -1777,7 +1818,7 @@ public:
 		  {
 		  case 0:
 		    {
-		      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+		      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 		      rendered.put_pixel (x, c.red * 65535 / rmax, c.green * 65535 / gmax, c.blue * 65535 / bmax);
 		    }
 		    break;
@@ -1789,7 +1830,7 @@ public:
 		    break;
 		  case 2:
 		    {
-		      rgbdata c = evaulate_pixel (tileid, red, green, blue, x, y, off);
+		      rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y, off, mix_weights);
 		      rgbdata d = get_pixel (v, tileid, x, y);
 		      rendered.put_pixel (x, (c.red - d.red) * 65535 / rmax + 65536/2, (c.green - d.green) * 65535 / gmax + 65536/2, (c.blue - d.blue) * 65535 / bmax + 65536/2);
 		    }
@@ -1867,7 +1908,7 @@ public:
     ret.screen_coord_adjust = get_offset (start, 0);
     ret.emulsion_coord_adjust = get_emulsion_offset (start, 0);
     ret.fog = get_fog (start);
-    if (optimize_emulsion_intensities)
+    if (optimize_emulsion_intensities || simulate_infrared)
       {
 	ret.mix_weights = get_mix_weights (start);
 	ret.mix_dark = get_fog (start);
