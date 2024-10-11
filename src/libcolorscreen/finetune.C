@@ -556,8 +556,9 @@ public:
           to_range (v[tileid * 2 + 0], -1, 1);
           to_range (v[tileid * 2 + 1], -1, 1);
         }
-    if (optimize_fog && !fog_by_least_squares)
+    if (fog_index >= 0)
       {
+	assert (colorscreen_checking || optimize_fog);
         to_range (v[fog_index + 0], -1, 1);
         to_range (v[fog_index + 1], -1, 1);
         to_range (v[fog_index + 2], -1, 1);
@@ -1030,13 +1031,15 @@ public:
               hist.account (tiles[tileid].color[y * twidth + x]);
         hist.finalize ();
         fog_range = hist.find_min (0.3);
-        if (!fog_by_least_squares)
+        if (fog_index >= 0)
           {
             start[fog_index + 0] = 0;
             start[fog_index + 1] = 0;
             start[fog_index + 2] = 0;
           }
       }
+    else
+      assert (colorscreen_checking || fog_index == -1);
     if (colorscreen_checking)
       for (int i = 0; i < n_values; i++)
         assert (start[i] != INT_MAX);
@@ -1550,6 +1553,7 @@ public:
       return { 0, 0, 0 };
     if (fog_by_least_squares)
       return last_fog;
+    assert (colorscreen_checking || fog_index >= 0);
     return { v[fog_index] * fog_range.red, v[fog_index + 1] * fog_range.green,
              v[fog_index + 2] * fog_range.blue };
   }
