@@ -140,6 +140,7 @@ private:
   int emulsion_blur_index;
   int screen_index;
   int dufay_strips_index;
+  int mix_weights_index;
   /* Number of values needed.  */
   int n_values;
 
@@ -215,6 +216,8 @@ public:
   bool normalize;
   /* Use simulated infrared channel when rendering.  */
   bool simulate_infrared;
+  /* True if mixing weights should be optimized.  */
+  bool optimize_mix_weights;
 
   /* True if emulsion patch intensities should be finetuned.
      Initialized in init call.  */
@@ -524,6 +527,8 @@ public:
           {
             printf ("Fog ");
             get_fog (v).print (stdout);
+            printf ("Fog range ");
+            fog_range.print (stdout);
           }
         for (int tileid = 0; tileid < n_tiles; tileid++)
           if (optimize_emulsion_intensities)
@@ -617,7 +622,7 @@ public:
         gsl_X = NULL;
         gsl_vector_free (gsl_y[0]);
         gsl_y[0] = NULL;
-        if (tiles[0].color)
+        if (tiles[0].color && !simulate_infrared)
           {
             gsl_vector_free (gsl_y[1]);
             gsl_y[1] = NULL;
@@ -633,13 +638,32 @@ public:
   void
   alloc_least_squares ()
   {
-    int matrixw = tiles[0].color ? (fog_by_least_squares ? 4 : 3) : 1;
+    int matrixw;
+    if (tiles[0].color)
+      {
+	if (!simulate_infrared)
+	  {
+	    matrixw = 3;
+	    if (fog_by_least_squares)
+	      matrixw++;
+	  }
+	else
+	  {
+	    matrixw = 6;
+	    if (fog_by_least_squares)
+	      matrixw += 3;
+	  }
+      }
+    else
+      matrixw = 1;
     int matrixh = sample_points () + (fog_by_least_squares != 0);
+    if (simulate_infrared)
+      matrixh *= 3;
     gsl_work = gsl_multifit_linear_alloc (matrixh, matrixw);
     gsl_X = gsl_matrix_alloc (matrixh, matrixw);
     gsl_y[0] = gsl_vector_alloc (matrixh);
     least_squares_initialized = false;
-    if (tiles[0].color)
+    if (tiles[0].color && !simulate_infrared)
       {
         gsl_y[1] = gsl_vector_alloc (matrixh);
         gsl_y[2] = gsl_vector_alloc (matrixh);
@@ -651,7 +675,7 @@ public:
   init_least_squares (coord_t *v)
   {
     last_fog = { 0, 0, 0 };
-    if (tiles[0].color)
+    if (tiles[0].color && !simulate_infrared)
       {
         int e = 0;
         for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -659,7 +683,7 @@ public:
             for (int x = 0; x < twidth; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
-                  rgbdata c = get_pixel (v, tileid, x, y);
+                  rgbdata c = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
                   gsl_vector_set (gsl_y[0], e, c.red);
                   gsl_vector_set (gsl_y[1], e, c.green);
                   gsl_vector_set (gsl_y[2], e, c.blue);
@@ -676,6 +700,8 @@ public:
         if (e != (int)gsl_y[0]->size)
           abort ();
       }
+    else if (tiles[0].color && simulate_infrared)
+      ;
     else
       {
         int e = 0;
@@ -746,8 +772,11 @@ public:
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
     if (simulate_infrared)
-      least_squares = data_collection = normalize = optimize_emulsion_blur
-          = false;
+      {
+        data_collection = normalize = optimize_emulsion_blur = false;
+	if (least_squares)
+	  optimize_mix_weights = true;
+      }
     optimize_emulsion_offset = false;
     normalize = !(flags & finetune_no_normalize);
     if (tiles[0].color && normalize)
@@ -762,7 +791,9 @@ public:
       }
     else
       optimize_emulsion_intensities = optimize_emulsion_offset = false;
-    fog_by_least_squares = (optimize_fog && !normalize && least_squares);
+    /* When simulating infrared fog needs to be subtracted before applying mixing weights.
+       This makes equations non-linear.  */
+    fog_by_least_squares = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
 
     n_values = 0;
     /* 2 values for position.  */
@@ -792,6 +823,14 @@ public:
       }
     else
       fog_index = -1;
+
+    if (optimize_mix_weights)
+      {
+        mix_weights_index = n_values;
+        n_values += 2;
+      }
+    else
+      mix_weights_index = -1;
 
     if (optimize_emulsion_intensities)
       {
@@ -1030,7 +1069,7 @@ public:
             for (int x = 0; x < twidth; x++)
               hist.account (tiles[tileid].color[y * twidth + x]);
         hist.finalize ();
-        fog_range = hist.find_min (0.3);
+        fog_range = hist.find_min (0.1);
         if (fog_index >= 0)
           {
             start[fog_index + 0] = 0;
@@ -1040,6 +1079,11 @@ public:
       }
     else
       assert (colorscreen_checking || fog_index == -1);
+    if (mix_weights_index >= 0)
+      {
+	start[mix_weights_index + 0] = 1;
+	start[mix_weights_index + 1] = 1;
+      }
     if (colorscreen_checking)
       for (int i = 0; i < n_values; i++)
         assert (start[i] != INT_MAX);
@@ -1281,6 +1325,12 @@ public:
   }
 
   pure_attr rgbdata
+  get_pixel_nofog (int tileid, int x, int y)
+  {
+    return tiles[tileid].color[y * twidth + x];
+  }
+
+  pure_attr rgbdata
   get_pixel (coord_t *v, int tileid, int x, int y)
   {
     if (!optimize_fog)
@@ -1395,51 +1445,186 @@ public:
       abort ();
 
     int e = 0;
-    for (int tileid = 0; tileid < n_tiles; tileid++)
-      for (int y = 0; y < theight; y++)
-        for (int x = 0; x < twidth; x++)
-          if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
-            {
-              rgbdata c = get_simulated_screen_pixel (tileid, x, y);
-              gsl_matrix_set (gsl_X, e, 0, c.red);
-              gsl_matrix_set (gsl_X, e, 1, c.green);
-              gsl_matrix_set (gsl_X, e, 2, c.blue);
-              if (fog_by_least_squares)
-                gsl_matrix_set (gsl_X, e, 3, 1);
-              e++;
-            }
-    if (fog_by_least_squares)
+    if (simulate_infrared)
       {
-        gsl_matrix_set (gsl_X, e, 0, 0);
-        gsl_matrix_set (gsl_X, e, 1, 0);
-        gsl_matrix_set (gsl_X, e, 2, 0);
-        gsl_matrix_set (gsl_X, e, 3, sample_points () * ((double)4 / 65546));
-        e++;
-      }
-    if (e != (int)gsl_X->size1)
-      abort ();
+	rgbdata mix_weights = get_mix_weights (v);
+	for (int tileid = 0; tileid < n_tiles; tileid++)
+	  for (int y = 0; y < theight; y++)
+	    for (int x = 0; x < twidth; x++)
+	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+		{
+		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
+                  rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
+		  /* ??? This is not right when fog is optimized by least squares.
+		     For this reason we use non-linear solver to optimize fog.  */
+		  c *= d.red * mix_weights.red + d.green * mix_weights.green + d.blue * mix_weights.blue;
+		  gsl_matrix_set (gsl_X, e, 0, c.red); /* red.red */
+		  gsl_matrix_set (gsl_X, e, 1, c.green); /* green.red */
+		  gsl_matrix_set (gsl_X, e, 2, c.blue); /* blue.red */
+		  gsl_matrix_set (gsl_X, e, 3, 0); /* red.green */
+		  gsl_matrix_set (gsl_X, e, 4, 0); /* green.green */
+		  gsl_matrix_set (gsl_X, e, 5, 0); /* blue.green  */
+		  if (fog_by_least_squares)
+		    {
+		      gsl_matrix_set (gsl_X, e, 6, 1);
+		      gsl_matrix_set (gsl_X, e, 7, 0);
+		      gsl_matrix_set (gsl_X, e, 8, 0);
+		    }
+                  gsl_vector_set (gsl_y[0], e, d.red);
+		  e++;
+		  gsl_matrix_set (gsl_X, e, 0, 0); /* red.red */
+		  gsl_matrix_set (gsl_X, e, 1, 0); /* green.red */
+		  gsl_matrix_set (gsl_X, e, 2, 0); /* blue.red */
+		  gsl_matrix_set (gsl_X, e, 3, c.red); /* red.green */
+		  gsl_matrix_set (gsl_X, e, 4, c.green); /* green.green */
+		  gsl_matrix_set (gsl_X, e, 5, c.blue); /* blue.green  */
+		  if (fog_by_least_squares)
+		    {
+		      gsl_matrix_set (gsl_X, e, 6, 0);
+		      gsl_matrix_set (gsl_X, e, 7, 1);
+		      gsl_matrix_set (gsl_X, e, 8, 0);
+		    }
+                  gsl_vector_set (gsl_y[0], e, d.green);
+		  e++;
 
-    for (int ch = 0; ch < 3; ch++)
-      {
-        double chisq;
-        gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov, &chisq,
-                             gsl_work);
-        sqsum += chisq;
-        /* Colors should be real reactions of scanner, so no negative values
-           and also no excessively large values. Allow some overexposure.  */
-        (*red)[ch] = gsl_vector_get (gsl_c, 0);
-        to_range ((*red)[ch], 0, 2);
-        (*green)[ch] = gsl_vector_get (gsl_c, 1);
-        to_range ((*green)[ch], 0, 2);
-        (*blue)[ch] = gsl_vector_get (gsl_c, 2);
-        to_range ((*blue)[ch], 0, 2);
-        if (fog_by_least_squares)
-          {
-            last_fog[ch] = gsl_vector_get (gsl_c, 3);
-            to_range (last_fog[ch], 0, fog_range[ch]);
-          }
+		  /* red.blue = (1 - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  */
+		  /* green.blue = (1 - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue  */
+		  /* blue.blue = (1 - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue  */
+		   
+		  gsl_matrix_set (gsl_X, e, 0, -c.red * (mix_weights.red/mix_weights.blue)); /* red.red */
+		  gsl_matrix_set (gsl_X, e, 1, -c.green * (mix_weights.red/mix_weights.blue)); /* green.red */
+		  gsl_matrix_set (gsl_X, e, 2, -c.blue * (mix_weights.red/mix_weights.blue)); /* blue.red */
+		  gsl_matrix_set (gsl_X, e, 3, -c.red * (mix_weights.green/mix_weights.blue)); /* red.green */
+		  gsl_matrix_set (gsl_X, e, 4, -c.green * (mix_weights.green/mix_weights.blue)); /* green.green */
+		  gsl_matrix_set (gsl_X, e, 5, -c.blue * (mix_weights.green/mix_weights.blue)); /* blue.green  */
+		  if (fog_by_least_squares)
+		    {
+		      gsl_matrix_set (gsl_X, e, 6, 0);
+		      gsl_matrix_set (gsl_X, e, 7, 0);
+		      gsl_matrix_set (gsl_X, e, 8, 1);
+		    }
+                  gsl_vector_set (gsl_y[0], e, d.blue - (c.red + c.green + c.blue)/mix_weights.blue);
+		  e++;
+		}
+	if (fog_by_least_squares)
+	  {
+	    gsl_matrix_set (gsl_X, e, 0, 0);
+	    gsl_matrix_set (gsl_X, e, 1, 0);
+	    gsl_matrix_set (gsl_X, e, 2, 0);
+	    gsl_matrix_set (gsl_X, e, 3, 0);
+	    gsl_matrix_set (gsl_X, e, 4, 0);
+	    gsl_matrix_set (gsl_X, e, 5, 0);
+	    gsl_matrix_set (gsl_X, e, 6, sample_points () * ((double)4 / 65546));
+	    gsl_matrix_set (gsl_X, e, 7, 0);
+	    gsl_matrix_set (gsl_X, e, 8, 0);
+            gsl_vector_set (gsl_y[0], e, 0);
+	    e++;
+	    gsl_matrix_set (gsl_X, e, 0, 0);
+	    gsl_matrix_set (gsl_X, e, 1, 0);
+	    gsl_matrix_set (gsl_X, e, 2, 0);
+	    gsl_matrix_set (gsl_X, e, 3, 0);
+	    gsl_matrix_set (gsl_X, e, 4, 0);
+	    gsl_matrix_set (gsl_X, e, 5, 0);
+	    gsl_matrix_set (gsl_X, e, 6, 0);
+	    gsl_matrix_set (gsl_X, e, 7, sample_points () * ((double)4 / 65546));
+	    gsl_matrix_set (gsl_X, e, 8, 0);
+            gsl_vector_set (gsl_y[0], e, 0);
+	    e++;
+	    gsl_matrix_set (gsl_X, e, 0, 0);
+	    gsl_matrix_set (gsl_X, e, 1, 0);
+	    gsl_matrix_set (gsl_X, e, 2, 0);
+	    gsl_matrix_set (gsl_X, e, 3, 0);
+	    gsl_matrix_set (gsl_X, e, 4, 0);
+	    gsl_matrix_set (gsl_X, e, 5, 0);
+	    gsl_matrix_set (gsl_X, e, 6, 0);
+	    gsl_matrix_set (gsl_X, e, 7, 0);
+	    gsl_matrix_set (gsl_X, e, 8, sample_points () * ((double)4 / 65546));
+            gsl_vector_set (gsl_y[0], e, 0);
+	    e++;
+	  }
+	double chisq;
+	gsl_multifit_linear (gsl_X, gsl_y[0], gsl_c, gsl_cov, &chisq,
+			     gsl_work);
+	/* Colors should be real reactions of scanner, so no negative values
+	   and also no excessively large values. Allow some overexposure.  */
+	(*red).red = gsl_vector_get (gsl_c, 0);
+	to_range ((*red).red, 0, 2);
+	(*green).red = gsl_vector_get (gsl_c, 1);
+	to_range ((*green).red, 0, 2);
+	(*blue).red = gsl_vector_get (gsl_c, 2);
+	to_range ((*blue).red, 0, 2);
+	(*red).green = gsl_vector_get (gsl_c, 3);
+	to_range ((*red).green, 0, 2);
+	(*green).green = gsl_vector_get (gsl_c, 4);
+	to_range ((*green).green, 0, 2);
+	(*blue).green = gsl_vector_get (gsl_c, 5);
+	to_range ((*blue).green, 0, 2);
+	(*red).blue = (1 - (*red).red * mix_weights.red - (*red).green * mix_weights.green) / mix_weights.blue;
+	to_range ((*red).blue, 0, 2);
+	(*green).blue = (1 - (*green).red * mix_weights.red - (*green).green * mix_weights.green) / mix_weights.blue;
+	to_range ((*green).blue, 0, 2);
+	(*blue).blue = (1 - (*blue).red * mix_weights.red - (*blue).green * mix_weights.green) / mix_weights.blue;
+	to_range ((*blue).blue, 0, 2);
+
+	if (fog_by_least_squares)
+	  {
+	    last_fog.red = gsl_vector_get (gsl_c, 6);
+	    to_range (last_fog.red, /*-fog_range.red*/0, fog_range.red);
+	    last_fog.green = gsl_vector_get (gsl_c, 7);
+	    to_range (last_fog.green, /*-fog_range.green*/0, fog_range.green);
+	    last_fog.blue = gsl_vector_get (gsl_c, 8);
+	    to_range (last_fog.blue, /*-fog_range.blue*/0, fog_range.blue);
+	  }
+         return chisq;
       }
-    return sqsum;
+    else
+      {
+	for (int tileid = 0; tileid < n_tiles; tileid++)
+	  for (int y = 0; y < theight; y++)
+	    for (int x = 0; x < twidth; x++)
+	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
+		{
+		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
+		  gsl_matrix_set (gsl_X, e, 0, c.red);
+		  gsl_matrix_set (gsl_X, e, 1, c.green);
+		  gsl_matrix_set (gsl_X, e, 2, c.blue);
+		  if (fog_by_least_squares)
+		    gsl_matrix_set (gsl_X, e, 3, 1);
+		  e++;
+		}
+	if (fog_by_least_squares)
+	  {
+	    gsl_matrix_set (gsl_X, e, 0, 0);
+	    gsl_matrix_set (gsl_X, e, 1, 0);
+	    gsl_matrix_set (gsl_X, e, 2, 0);
+	    gsl_matrix_set (gsl_X, e, 3, sample_points () * ((double)4 / 65546));
+	    e++;
+	  }
+	if (e != (int)gsl_X->size1)
+	  abort ();
+	for (int ch = 0; ch < 3; ch++)
+	  {
+	    double chisq;
+	    gsl_multifit_linear (gsl_X, gsl_y[ch], gsl_c, gsl_cov, &chisq,
+				 gsl_work);
+	    sqsum += chisq;
+	    /* Colors should be real reactions of scanner, so no negative values
+	       and also no excessively large values. Allow some overexposure.  */
+	    (*red)[ch] = gsl_vector_get (gsl_c, 0);
+	    to_range ((*red)[ch], 0, 2);
+	    (*green)[ch] = gsl_vector_get (gsl_c, 1);
+	    to_range ((*green)[ch], 0, 2);
+	    (*blue)[ch] = gsl_vector_get (gsl_c, 2);
+	    to_range ((*blue)[ch], 0, 2);
+	    if (fog_by_least_squares)
+	      {
+		last_fog[ch] = gsl_vector_get (gsl_c, 3);
+		to_range (last_fog[ch], -fog_range[ch], fog_range[ch]);
+	      }
+	  }
+	return sqsum;
+      }
+
   }
 
   rgbdata
@@ -1585,6 +1770,8 @@ public:
   rgbdata
   get_mix_weights (coord_t *v)
   {
+    if (mix_weights_index >= 0)
+      return {v[mix_weights_index], v[mix_weights_index + 1], 3 - v[mix_weights_index] - v[mix_weights_index + 1]};
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     color_matrix process_colors (red.red, red.green, red.blue, 0, green.red,
@@ -1640,9 +1827,6 @@ public:
   objfunc (coord_t *v)
   {
     coord_t sum = 0;
-    rgbdata mix_weights;
-    if (simulate_infrared)
-      mix_weights = get_mix_weights (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         init_screen (v, tileid);
@@ -1653,6 +1837,9 @@ public:
       get_colors (v, &red, &green, &blue);
     else
       color = bw_get_color (v);
+    rgbdata mix_weights;
+    if (simulate_infrared)
+      mix_weights = get_mix_weights (v);
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         point_t off = get_offset (v, tileid);
