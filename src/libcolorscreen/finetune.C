@@ -1032,7 +1032,7 @@ public:
         fog_range = hist.find_min (0.3);
         if (!fog_by_least_squares)
           {
-            start[fog_index + 1] = 0;
+            start[fog_index + 0] = 0;
             start[fog_index + 1] = 0;
             start[fog_index + 2] = 0;
           }
