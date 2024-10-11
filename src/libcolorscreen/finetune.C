@@ -771,6 +771,7 @@ public:
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
+    optimize_mix_weights = false;
     if (simulate_infrared)
       {
         data_collection = normalize = optimize_emulsion_blur = false;
