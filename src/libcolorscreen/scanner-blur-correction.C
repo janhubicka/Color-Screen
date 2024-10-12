@@ -41,7 +41,7 @@ scanner_blur_correction_parameters::save (FILE *f)
         fprintf (f, "\n                             ");
       for (int x = 0; x < m_width; x++)
         for (int i = 0; i < 4; i++)
-          if (fprintf (f, " %f", m_gaussian_blurs[y * m_width + x]) < 0)
+          if (fprintf (f, " %e", m_gaussian_blurs[y * m_width + x]) < 0)
              return false;
     }
   if (fprintf (f, "\n  scanner_blur_correction_end\n") < 0)

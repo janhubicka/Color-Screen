@@ -2,12 +2,89 @@
 #define RENDER_TO_SCR_H
 #include "include/progress-info.h"
 #include "include/scr-to-img.h"
+#include "include/render-parameters.h"
 #include "render.h"
+#include "screen.h"
 
 namespace colorscreen
 {
 class screen;
 struct render_to_file_params;
+
+class screen_table
+{
+public:
+  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, progress_info *progress);
+  screen &get_screen (int x, int y)
+  {
+    return m_screen_table[y * m_width + y];
+  }
+  uint64_t get_id ()
+  {
+    return m_id;
+  }
+  int get_width ()
+  {
+    return m_width;
+  }
+  int get_height ()
+  {
+    return m_height;
+  }
+private:
+  /* Unique id of the image (used for caching).  */
+  uint64_t m_id;
+  int m_width, m_height;
+  std::vector <screen> m_screen_table;
+};
+class saturation_loss_table
+{
+public:
+  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, progress_info *progress);
+  color_matrix &get_saturation_loss (int x, int y)
+  {
+    return m_saturation_loss_table[y * m_width + y];
+  }
+  __attribute__ ((pure))
+  rgbdata
+  compensate_saturation_loss_img (point_t p, rgbdata c)
+  {
+      int x, y;
+      coord_t rx = my_modf (p.x * m_xstepinv - 0.5, &x);
+      coord_t ry = my_modf (p.y * m_ystepinv - 0.5, &y);
+      if (x < 0)
+	x = 0, rx = 0;
+      if (y < 0)
+	y = 0, ry = 0;
+      if (x >= m_width - 1)
+	x = m_width - 2, rx = 1;
+      if (y >= m_height - 1)
+	y = m_height - 2, ry = 1;
+      rgbdata c00, c01, c10, c11;
+      m_saturation_loss_table [y * m_width + x].apply_to_rgb (c.red, c.green, c.blue, &c00.red, &c00.green, &c00.blue);
+      m_saturation_loss_table [y * m_width + x + 1].apply_to_rgb (c.red, c.green, c.blue, &c10.red, &c10.green, &c10.blue);
+      m_saturation_loss_table [(y + 1) * m_width + x].apply_to_rgb (c.red, c.green, c.blue, &c01.red, &c01.green, &c01.blue);
+      m_saturation_loss_table [(y + 1) * m_width + x + 1].apply_to_rgb (c.red, c.green, c.blue, &c11.red, &c11.green, &c11.blue);
+#if 0
+      color_matrix ret;
+      for (int i = 0; i < 4; i++)
+	for (int j = 0; j < 4; j++)
+	  ret.m_elements[i][j] = 
+	      (m_saturation_matrices [y * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [y * m_saturation_width + x + 1].m_elements[i][j] * rx) * (1 - ry) +
+	      (m_saturation_matrices [(y + 1) * m_saturation_width + x].m_elements[i][j] * (1 - rx) + m_saturation_matrices [(y + 1) * m_saturation_width + x + 1].m_elements[i][j] * rx) * ry;
+       return ret;
+#endif
+       return (c00 * (1 - rx) + c10 * rx) * (1 - ry)
+	       + (c10 * (1 - rx) + c11 * rx) * ry;
+  }
+private:
+  /* Unique id of the image (used for caching).  */
+  uint64_t m_id;
+  int m_width, m_height;
+  int m_img_width, m_img_height;
+  coord_t m_xstepinv, m_ystepinv;
+  std::vector <color_matrix> m_saturation_loss_table;
+};
 
 /* Base class for renderes that use mapping between image and screen
  * coordinates.  */
@@ -16,7 +93,9 @@ class render_to_scr : public render
 public:
   render_to_scr (const scr_to_img_parameters &param, const image_data &img,
                  render_parameters &rparam, int dstmaxval)
-      : render (img, rparam, dstmaxval)
+      : render (img, rparam, dstmaxval),
+	m_scr_to_img_param (param),
+	m_screen_table (NULL), m_saturation_loss_table (NULL)
   {
     m_scr_to_img.set_parameters (param, img);
     m_final_width = -1;
@@ -24,6 +103,7 @@ public:
     m_final_xshift = INT_MIN;
     m_final_yshift = INT_MIN;
   }
+  ~render_to_scr ();
   pure_attr inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y) const;
   pure_attr inline luminosity_t get_unadjusted_img_pixel_scr (coord_t x,
                                                               coord_t y) const;
@@ -95,10 +175,16 @@ public:
                              progress_info *progress = NULL,
                              uint64_t *id = NULL);
   static void release_screen (screen *scr);
+  bool compute_screen_table (progress_info *progress);
+  bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, progress_info *progress = NULL);
 
 protected:
   /* Transformation between screen and image coordinates.  */
   scr_to_img m_scr_to_img;
+  const scr_to_img_parameters &m_scr_to_img_param;
+  screen_table *m_screen_table;
+  saturation_loss_table *m_saturation_loss_table;
+  uint64_t m_screen_table_uid;
 
 private:
   int m_final_xshift, m_final_yshift;

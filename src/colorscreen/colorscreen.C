@@ -1412,6 +1412,10 @@ analyze_scanner_blur (int argc, char **argv)
       }
   rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
   rparam.scanner_blur_correction->alloc (xsteps, ysteps);
+  coord_t pixel_size;
+  scr_to_img map;
+  map.set_parameters (param, scan);
+  pixel_size = map.pixel_size (scan.width, scan.height);
   progress.set_task ("summarizing results", 1);
   bool fail = false;
   for (int y = 0; y < ysteps; y++)
@@ -1464,7 +1468,7 @@ analyze_scanner_blur (int argc, char **argv)
           }
         luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
         assert (b >= 0 && b <= 1024);
-        rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b);
+        rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b * pixel_size);
       }
   free (blurs);
   if (fail)

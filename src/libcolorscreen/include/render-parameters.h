@@ -55,6 +55,8 @@ struct render_parameters
     luminosity_t exposure;
     /* Additive correction to stitch-project dark point.  */
     luminosity_t dark_point;
+    /* Scanner blur usually differs for every capture  */
+    class scanner_blur_correction_parameters *scanner_blur_correction;
     /* If true tile is rendered, if false tile is not rendered.  */
     bool enabled;
     /* Coordinates of the tile in stitch project (used to check that tile
@@ -62,14 +64,16 @@ struct render_parameters
     unsigned char x, y;
     constexpr
     tile_adjustment ()
-        : exposure (1), dark_point (0), enabled (true), x (0), y (0)
+        : exposure (1), dark_point (0), scanner_blur_correction (NULL),
+          enabled (true), x (0), y (0)
     {
     }
     bool
     operator== (tile_adjustment &other) const
     {
       return enabled == other.enabled && dark_point == other.dark_point
-             && exposure == other.exposure;
+             && exposure == other.exposure
+             && scanner_blur_correction == other.scanner_blur_correction;
     }
     bool
     operator!= (tile_adjustment &other) const
@@ -81,6 +85,8 @@ struct render_parameters
     {
       p->dark_point = dark_point + exposure * p->dark_point;
       p->scan_exposure *= exposure;
+      if (scanner_blur_correction)
+        p->scanner_blur_correction = scanner_blur_correction;
     }
   };
 
@@ -233,10 +239,10 @@ struct render_parameters
   render_parameters ()
       : /* Scan linearization.  */
         gamma (2.2), backlight_correction (NULL),
-        backlight_correction_black (0), scanner_blur_correction (NULL), dark_point (0), scan_exposure (1),
-        ignore_infrared (false), invert (false), mix_dark (0, 0, 0),
-        mix_red (0.3), mix_green (0.1), mix_blue (1), sharpen_radius (0),
-        sharpen_amount (0),
+        backlight_correction_black (0), scanner_blur_correction (NULL),
+        dark_point (0), scan_exposure (1), ignore_infrared (false),
+        invert (false), mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
+        mix_blue (1), sharpen_radius (0), sharpen_amount (0),
 
         /* Tile adjustment.  */
         tile_adjustments_width (0), tile_adjustments_height (0),
@@ -366,10 +372,12 @@ struct render_parameters
 
   /* Initialize render parameters for showing original scan.
      In this case we do not want to apply color models etc.  */
-  void original_render_from (render_parameters &rparam, bool color, bool profiled);
+  void original_render_from (render_parameters &rparam, bool color,
+                             bool profiled);
 
   void adjust_for (render_type_parameters &rtparam, render_parameters &rparam);
   color_matrix get_profile_matrix (rgbdata patch_proportions);
+
 private:
   static const bool debug = colorscreen_checking;
   color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized,

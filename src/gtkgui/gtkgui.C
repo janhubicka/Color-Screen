@@ -769,7 +769,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      display_scheduled = true;
 	    }
 	}
-      bool tmphack = false;
+      bool tmphack = true;
       if (k == 'f' && (event->state & GDK_MOD1_MASK))
       {
 	int x = (sel1x + sel2x)/2;
@@ -882,9 +882,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.collected_file = "/tmp/colorscr-collected.tif";
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
-	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
-	fparam.range = 4;
+	//fparam.multitile = 3;
+	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared;
+	//fparam.range = 4;
+	fparam.range = 16;
+	fparam.ignore_outliers=0.001;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	tune_points.push_back ({(coord_t)x, (coord_t)y});

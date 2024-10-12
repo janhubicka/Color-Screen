@@ -141,9 +141,15 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    return false;
 	  for (int y = 0; y < rparam->tile_adjustments_height; y++)
 	    for (int x = 0; x < rparam->tile_adjustments_width; x++)
-	      if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0
-	          || fprintf (f, "tile_adjustment_dark_point: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).dark_point) < 0)
-		return false;
+	      {
+		if (fprintf (f, "tile_adjustment_exposure: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).exposure) < 0
+		    || fprintf (f, "tile_adjustment_dark_point: %i %i %f\n", x, y, rparam->get_tile_adjustment (x, y).dark_point) < 0)
+		  return false;
+		if (rparam->get_tile_adjustment (x, y).scanner_blur_correction
+		    && (fprintf (f, "tile_adjustment_scanner_blur_correction: %i %i yes\n", x, y)< 0
+			|| !rparam->get_tile_adjustment (x, y).scanner_blur_correction->save (f)))
+		  return false;
+	      }
 	}
     }
   if (sparam)
@@ -1031,6 +1037,42 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		delete c;
 	    }
 	}
+      else if (!strcmp (buf, "tile_adjustment_scanner_blur_correction"))
+        {
+	  int x, y;
+	  luminosity_t val;
+	  if (fscanf (f, "%i %i", &x, &y) != 2
+	      || x < 0
+	      || y < 0)
+	    {
+	      *error = "error parsing tile_adjustment_exposure";
+	      return false;
+	    }
+	  if (rparam)
+	    {
+	      if (x >= rparam->tile_adjustments_width
+		  || y >= rparam->tile_adjustments_height)
+		{
+		  *error = "tile_adjustment_scanner_blur_correction out of range";
+		  return false;
+		}
+	      rparam->get_tile_adjustment (x, y).exposure = val;
+	    }
+	  bool enb;
+	  if (!parse_bool (f, &enb))
+	    {
+	      *error = "error parsing tile_adjustment_scanner_blur_correction";
+	      return false;
+	    }
+	  if (enb)
+	    {
+	      scanner_blur_correction_parameters *c = new scanner_blur_correction_parameters ();
+	      if (!c->load (f, error))
+		return false;
+	      if (rparam)
+		rparam->get_tile_adjustment (x, y).scanner_blur_correction = c;
+	    }
+        }
       else if (!strcmp (buf, "scr_detect_gamma"))
 	{
 	  if (!read_luminosity (f, NULL))
