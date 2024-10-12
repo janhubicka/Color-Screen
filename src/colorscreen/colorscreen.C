@@ -1525,12 +1525,25 @@ analyze_scanner_blur (int argc, char **argv)
 	  {
 	    //if (!scan.stitch->images[y][x].param.load (scan.stitch,)
 	    int stack = progress.push ();
+	    const char *error;
+	    if (!scan.stitch->images[y][x].load_img (&error, &progress))
+	      {
+		if (error)
+		  {
+		    progress.pause_stdout ();
+		    printf ("Failed to load image: %s\n", error);
+		    progress.resume_stdout ();
+		    return 1;
+		  }
+	        return 1;
+	      }
 	    rparam.get_tile_adjustment (x, y).scanner_blur_correction = analyze_scanner_blur_img (
 		scan.stitch->images[y][x].param, rparam, *scan.stitch->images[y][x].img.get(), strip_xsteps, strip_ysteps, xsteps, ysteps,
 		xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
 		tolerance, &progress);
 	    if (!rparam.get_tile_adjustment (x, y).scanner_blur_correction)
 	      return 1;
+	    scan.stitch->images[y][x].release_img ();
 	    //scan.stitch->images[y][x].release_image_data (&progress);
 	    progress.pop (stack);
 	  }
