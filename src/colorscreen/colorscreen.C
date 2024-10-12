@@ -1576,7 +1576,7 @@ analyze_scanner_blur (int argc, char **argv)
 	  for (int x = 0; x < scan.stitch->params.width; x++)
 	  {
 	    char pos[100];
-	    sprintf (pos, "%2i%2i",y,x);
+	    sprintf (pos, "%-02i-%02i",y,x);
 	    std::string name = (std::string)outtifname + (std::string)pos + (std::string)".tif";
 	    if ((error = rparam.get_tile_adjustment (x,y).scanner_blur_correction->save_tiff (name.c_str ())))
 	      {

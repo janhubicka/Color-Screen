@@ -1045,7 +1045,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      || x < 0
 	      || y < 0)
 	    {
-	      *error = "error parsing tile_adjustment_exposure";
+	      *error = "error parsing tile_adjustment_correction";
 	      return false;
 	    }
 	  if (rparam)
@@ -1056,7 +1056,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		  *error = "tile_adjustment_scanner_blur_correction out of range";
 		  return false;
 		}
-	      rparam->get_tile_adjustment (x, y).exposure = val;
 	    }
 	  bool enb;
 	  if (!parse_bool (f, &enb))
