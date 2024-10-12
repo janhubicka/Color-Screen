@@ -65,9 +65,9 @@ scanner_blur_correction_parameters::save_tiff (const char *filename)
     {
       for (int x = 0; x < m_width; x++)
         {
-          out.put_hdr_pixel (x, m_gaussian_blurs[y * m_width + x] * 0.5,
-                             m_gaussian_blurs[y * m_width + x] * 0.5,
-                             m_gaussian_blurs[y * m_width + x] * 0.5);
+          out.put_hdr_pixel (x, m_gaussian_blurs[y * m_width + x] * 2,
+                             m_gaussian_blurs[y * m_width + x] * 2,
+                             m_gaussian_blurs[y * m_width + x] * 2);
         }
       if (!out.write_row ())
         return "Write error";

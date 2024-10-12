@@ -243,7 +243,7 @@ public:
   struct stitching_params params;
   FILE *report_file;
   stitch_image images[stitching_params::max_dim][stitching_params::max_dim];
-  /* Expected to by initialized by user and used during analysis stage only
+  /* Expected to be initialized by user and used during analysis stage only
      to pass lens correction.  */
   scr_to_img_parameters param;
   /* Rendering parameters. Expected to be initialized by user.  */

@@ -1089,7 +1089,7 @@ analyze_backlight (int argc, char **argv)
   delete cor;
 }
 
-static bool
+scanner_blur_correction_parameters *
 analyze_scanner_blur_img (scr_to_img_parameters &param, 
 			  render_parameters &rparam,
 			  image_data &scan,
@@ -1178,7 +1178,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
     {
       progress->pause_stdout ();
       fprintf (stderr, "Analysis failed\n");
-      return false;
+      return NULL;
     }
   if (strips)
     {
@@ -1267,8 +1267,8 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           blurs[y * xsteps * xsubsteps + x] = -1;
         progress->inc_progress ();
       }
-  rparam.scanner_blur_correction = new scanner_blur_correction_parameters;
-  rparam.scanner_blur_correction->alloc (xsteps, ysteps);
+  scanner_blur_correction_parameters *scanner_blur_correction = new scanner_blur_correction_parameters;
+  scanner_blur_correction->alloc (xsteps, ysteps);
   coord_t pixel_size;
   scr_to_img map;
   map.set_parameters (param, scan);
@@ -1296,7 +1296,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           {
             progress->pause_stdout ();
             fprintf (stderr, "Analysis failed for sample %i,%i\n", x, y);
-            return false;
+            return NULL;
           }
         hist.finalize_range (65536);
         for (int yy = 0; yy < ysubsteps; yy++)
@@ -1325,15 +1325,18 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           }
         luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
         assert (b >= 0 && b <= 1024);
-        rparam.scanner_blur_correction->set_gaussian_blur_radius (x, y, b * pixel_size);
+        scanner_blur_correction->set_gaussian_blur_radius (x, y, b * pixel_size);
       }
   free (blurs);
   if (fail)
-    return false;
-  return true;
+    {
+      delete scanner_blur_correction;
+      return NULL;
+    }
+  return scanner_blur_correction;
 }
 
-bool
+static bool
 analyze_scanner_blur (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
@@ -1348,7 +1351,8 @@ analyze_scanner_blur (int argc, char **argv)
   int strip_xsteps = 0;
   int strip_ysteps = 0;
   bool reoptimize_strip_widths = false;
-  int flags = finetune_position | finetune_no_progress_report | finetune_screen_channel_blurs;
+  int flags = finetune_position | finetune_no_progress_report
+              | finetune_screen_channel_blurs;
 
   for (int i = 0; i < argc; i++)
     {
@@ -1495,14 +1499,42 @@ analyze_scanner_blur (int argc, char **argv)
   if (rparam.scanner_blur_correction)
     {
       delete rparam.scanner_blur_correction;
-      rparam.scanner_blur_correction = 0;
+      rparam.scanner_blur_correction = NULL;
     }
 #ifdef _OPENMP
   omp_set_nested (1);
 #endif
 
-  if (!analyze_scanner_blur_img (param, rparam, scan, strip_xsteps, strip_ysteps, xsteps, ysteps, xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax, tolerance, &progress))
-    return 1;
+  if (!scan.stitch)
+    {
+      rparam.scanner_blur_correction = analyze_scanner_blur_img (
+	  param, rparam, scan, strip_xsteps, strip_ysteps, xsteps, ysteps,
+	  xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
+	  tolerance, &progress);
+      if (!rparam.scanner_blur_correction)
+	return 1;
+    }
+  else
+    {
+      if (rparam.tile_adjustments_width != scan.stitch->params.width
+	  || rparam.tile_adjustments_height != scan.stitch->params.height)
+	rparam.set_tile_adjustments_dimensions (scan.stitch->params.width, scan.stitch->params.height);
+      progress.set_task ("analyzig tiles", scan.stitch->params.width * scan.stitch->params.height);
+      for (int y = 0; y < scan.stitch->params.height; y++)
+        for (int x = 0; x < scan.stitch->params.width; x++)
+	  {
+	    //if (!scan.stitch->images[y][x].param.load (scan.stitch,)
+	    int stack = progress.push ();
+	    rparam.get_tile_adjustment (x, y).scanner_blur_correction = analyze_scanner_blur_img (
+		scan.stitch->images[y][x].param, rparam, *scan.stitch->images[y][x].img.get(), strip_xsteps, strip_ysteps, xsteps, ysteps,
+		xsubsteps, ysubsteps, flags, reoptimize_strip_widths, skipmin, skipmax,
+		tolerance, &progress);
+	    if (!rparam.get_tile_adjustment (x, y).scanner_blur_correction)
+	      return 1;
+	    //scan.stitch->images[y][x].release_image_data (&progress);
+	    progress.pop (stack);
+	  }
+    }
 
   if (!outcspname)
     outcspname = cspname;
@@ -1527,12 +1559,34 @@ analyze_scanner_blur (int argc, char **argv)
       return 1;
     }
   fclose (out);
-  if (outtifname && (error = rparam.scanner_blur_correction->save_tiff (outtifname)))
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Failed saving tiff file %s: %s\n", outtifname, error);
-      return 1;
-    }
+  if (outtifname)
+  {
+    if (!scan.stitch)
+      {
+	if ((error = rparam.scanner_blur_correction->save_tiff (outtifname)))
+	  {
+	    progress.pause_stdout ();
+	    fprintf (stderr, "Failed saving tiff file %s: %s\n", outtifname, error);
+	    return 1;
+	  }
+      }
+    else
+      {
+	for (int y = 0; y < scan.stitch->params.height; y++)
+	  for (int x = 0; x < scan.stitch->params.width; x++)
+	  {
+	    char pos[100];
+	    sprintf (pos, "%2i%2i",y,x);
+	    std::string name = (std::string)outtifname + (std::string)pos + (std::string)".tif";
+	    if ((error = rparam.get_tile_adjustment (x,y).scanner_blur_correction->save_tiff (name.c_str ())))
+	      {
+		progress.pause_stdout ();
+		fprintf (stderr, "Failed saving tiff file %s: %s\n", outtifname, error);
+		return 1;
+	      }
+	  }
+      }
+  }
   return 0;
 }
 
