@@ -1546,6 +1546,7 @@ analyze_scanner_blur (int argc, char **argv)
 	    scan.stitch->images[y][x].release_img ();
 	    //scan.stitch->images[y][x].release_image_data (&progress);
 	    progress.pop (stack);
+	    progress.inc_progress ();
 	  }
     }
 
