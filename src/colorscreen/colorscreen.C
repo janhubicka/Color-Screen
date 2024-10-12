@@ -1103,7 +1103,7 @@ analyze_scanner_blur (int argc, char **argv)
   float tolerance = -1;
   int strip_xsteps = 0;
   int strip_ysteps = 0;
-  bool reoptimize_strip_widths = 0;
+  bool reoptimize_strip_widths = false;
   int flags = finetune_position | finetune_no_progress_report | finetune_screen_channel_blurs;
 
   for (int i = 0; i < argc; i++)
@@ -1228,7 +1228,15 @@ analyze_scanner_blur (int argc, char **argv)
     xsteps = (ysteps * scan.width + scan.height / 2) / scan.height;
   if (!ysteps)
     ysteps = (xsteps * scan.height + scan.width / 2) / scan.width;
-  if (!xsubsteps && !ysubsteps)
+  if (xsteps <= 1)
+    xsteps = 2;
+  if (ysteps <= 1)
+    ysteps = 2;
+  if (!ysubsteps)
+    ysubsteps = xsubsteps;
+  if (!xsubsteps)
+    xsubsteps = ysubsteps;
+  if (!xsubsteps)
     xsubsteps = ysubsteps = 5;
   if (!strip_xsteps && !strip_ysteps)
     strip_xsteps = 10;
@@ -1236,6 +1244,10 @@ analyze_scanner_blur (int argc, char **argv)
     strip_xsteps = (strip_ysteps * scan.width + scan.height / 2) / scan.height;
   if (!strip_ysteps)
     strip_ysteps = (strip_xsteps * scan.height + scan.width / 2) / scan.width;
+  if (!strip_xsteps)
+    strip_xsteps = 1;
+  if (!strip_ysteps)
+    strip_ysteps = 1;
   if (rparam.scanner_blur_correction)
     {
       delete rparam.scanner_blur_correction;

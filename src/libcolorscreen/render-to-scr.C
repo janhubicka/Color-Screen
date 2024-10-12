@@ -24,7 +24,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
         if (progress && progress->cancel_requested ())
           continue;
         m_screen_table[y * m_width + x].initialize_with_blur (
-            s, param->get_gaussian_blur_radius (x, y) * 2);
+            s, param->get_gaussian_blur_radius (x, y)/* * (1 + (x & 1) + (y & 1))*/);
         if (progress)
           progress->inc_progress ();
       }
@@ -35,14 +35,15 @@ saturation_loss_table::saturation_loss_table (
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
-      m_img_height (img_height), m_xstepinv (m_width / (coord_t)img_width),
+      m_img_height (img_height),
+      m_xstepinv (m_width / (coord_t)img_width),
       m_ystepinv (m_height / (coord_t)img_height),
       m_saturation_loss_table (m_width * m_height)
 {
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map,stdout)
+    shared(screen_table, collection_screen, collection_threshold, map)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {

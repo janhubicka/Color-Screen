@@ -1,0 +1,6 @@
+for name in $*
+do
+  nname=`echo $name | sed s/orig/simulated/g`
+  aname=`echo $name | sed s/orig/animated/g | sed s/\.tif/.apng/`
+  echo convert -delay 100 -loop 0 $name $nname $aname
+done

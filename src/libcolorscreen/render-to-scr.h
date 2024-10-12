@@ -17,7 +17,7 @@ public:
   screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, progress_info *progress);
   screen &get_screen (int x, int y)
   {
-    return m_screen_table[y * m_width + y];
+    return m_screen_table[y * m_width + x];
   }
   uint64_t get_id ()
   {
@@ -43,7 +43,7 @@ public:
   saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, progress_info *progress);
   color_matrix &get_saturation_loss (int x, int y)
   {
-    return m_saturation_loss_table[y * m_width + y];
+    return m_saturation_loss_table[y * m_width + x];
   }
   __attribute__ ((pure))
   rgbdata
@@ -66,6 +66,8 @@ public:
       m_saturation_loss_table [(y + 1) * m_width + x].apply_to_rgb (c.red, c.green, c.blue, &c01.red, &c01.green, &c01.blue);
       m_saturation_loss_table [(y + 1) * m_width + x + 1].apply_to_rgb (c.red, c.green, c.blue, &c11.red, &c11.green, &c11.blue);
 #if 0
+      c01.red = 1;
+      c11.green = 1;
       color_matrix ret;
       for (int i = 0; i < 4; i++)
 	for (int j = 0; j < 4; j++)
@@ -75,7 +77,7 @@ public:
        return ret;
 #endif
        return (c00 * (1 - rx) + c10 * rx) * (1 - ry)
-	       + (c10 * (1 - rx) + c11 * rx) * ry;
+	       + (c01 * (1 - rx) + c11 * rx) * ry;
   }
 private:
   /* Unique id of the image (used for caching).  */
