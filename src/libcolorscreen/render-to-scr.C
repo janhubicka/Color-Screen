@@ -32,6 +32,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 saturation_loss_table::saturation_loss_table (
     screen_table *screen_table, screen *collection_screen, int img_width,
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
+    luminosity_t sharpen_radius, luminosity_t sharpen_amount,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -43,7 +44,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -56,7 +57,7 @@ saturation_loss_table::saturation_loss_table (
         rgbdata cred, cgreen, cblue;
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
-                *collection_screen, collection_threshold, *map, xp - 100,
+                *collection_screen, collection_threshold, sharpen_radius, sharpen_amount, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
@@ -155,7 +156,7 @@ struct saturation_loss_params
   screen *collection_screen;
   uint64_t collection_screen_id;
   int img_width, img_height;
-  luminosity_t collection_threshold;
+  luminosity_t collection_threshold, sharpen_radius, sharpen_amount;
   uint64_t mesh_id;
   scr_to_img_parameters scr_to_img_params;
   scr_to_img *map;
@@ -165,6 +166,8 @@ struct saturation_loss_params
   {
     return scr_table_id == o.scr_table_id
            && collection_threshold == o.collection_threshold
+           && sharpen_radius == o.sharpen_radius
+           && sharpen_amount == o.sharpen_amount
            && img_width == o.img_width && img_height == o.img_height
            && mesh_id == o.mesh_id
            && (mesh_id || scr_to_img_params == o.scr_to_img_params);
@@ -176,7 +179,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   saturation_loss_table *s = new saturation_loss_table (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, progress);
+      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -248,7 +251,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
 bool
 render_to_scr::compute_saturation_loss_table (
     screen *collection_screen, uint64_t collection_screen_uid,
-    luminosity_t collection_threshold, progress_info *progress)
+    luminosity_t collection_threshold, luminosity_t sharpen_radius,
+    luminosity_t sharpen_amount, progress_info *progress)
 {
   assert (!m_saturation_loss_table);
   if (!m_screen_table)
@@ -262,6 +266,8 @@ render_to_scr::compute_saturation_loss_table (
           m_img.width,
           m_img.height,
           collection_threshold,
+	  sharpen_radius,
+	  sharpen_amount,
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,

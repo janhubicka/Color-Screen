@@ -27,16 +27,18 @@ enum finetune_flags
   finetune_verbose = 1 << 13,
   finetune_use_dufay_srip_widths = 1 << 14,
   finetune_use_screen_blur = 1 << 15,
-  finetune_simulate_infrared = 1 << 16
+  finetune_simulate_infrared = 1 << 16,
+  finetune_sharpen = 1L << 32
 };
 struct finetune_parameters
 {
-  int flags;
+  uint64_t flags;
   int range;
   int multitile;
   coord_t ignore_outliers;
   const char *simulated_file;
   const char *orig_file;
+  const char *sharpened_file;
   const char *diff_file;
   const char *screen_file;
   const char *screen_blur_file;
@@ -46,7 +48,7 @@ struct finetune_parameters
   const char *dot_spread_file;
   finetune_parameters ()
       : flags (0), range (0), multitile (1), ignore_outliers (0.1),
-        simulated_file (NULL), orig_file (NULL), diff_file (NULL),
+        simulated_file (NULL), orig_file (NULL), sharpened_file (NULL), diff_file (NULL),
         screen_file (NULL), screen_blur_file (NULL), emulsion_file (NULL),
         merged_file (NULL), collected_file (NULL), dot_spread_file (NULL)
   {
@@ -101,8 +103,8 @@ DLL_PUBLIC bool finetune_area (solver_parameters *sparam,
                                int xmax, int ymax, progress_info *progress);
 bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green,
                            rgbdata *ret_blue, screen &scr, screen &collection_scr,
-                           luminosity_t threshold, scr_to_img &map, int xmin,
-                           int ymin, int xmax, int ymax);
+                           luminosity_t threshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount,
+			   scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
 DLL_PUBLIC void render_screen (image_data &img, scr_to_img_parameters &param,
                                render_parameters &rparam,
                                scr_detect_parameters &dparam, int width,

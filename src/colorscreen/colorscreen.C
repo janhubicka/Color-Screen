@@ -1096,7 +1096,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 			  int strip_xsteps, int strip_ysteps,
 			  int xsteps, int ysteps,
 			  int xsubsteps, int ysubsteps,
-			  int flags,
+			  uint64_t flags,
 			  bool reoptimize_strip_widths,
 			  coord_t skipmin, coord_t skipmax,
 			  coord_t tolerance,
@@ -1351,8 +1351,8 @@ analyze_scanner_blur (int argc, char **argv)
   int strip_xsteps = 0;
   int strip_ysteps = 0;
   bool reoptimize_strip_widths = false;
-  int flags = finetune_position | finetune_no_progress_report
-              | finetune_screen_channel_blurs;
+  uint64_t flags = finetune_position | finetune_no_progress_report
+		   | finetune_screen_channel_blurs;
 
   for (int i = 0; i < argc; i++)
     {
@@ -1590,7 +1590,7 @@ analyze_scanner_blur (int argc, char **argv)
 	  for (int x = 0; x < scan.stitch->params.width; x++)
 	  {
 	    char pos[100];
-	    sprintf (pos, "%02i--%02i",y,x);
+	    sprintf (pos, "-%02i-%02i",y,x);
 	    std::string name = (std::string)outtifname + (std::string)pos + (std::string)".tif";
 	    if ((error = rparam.get_tile_adjustment (x,y).scanner_blur_correction->save_tiff (name.c_str ())))
 	      {
@@ -2217,7 +2217,7 @@ finetune (int argc, char **argv)
   int multitile = 1;
   int xsteps = 32;
   int border = 5;
-  int flags = 0;
+  uint64_t flags = 0;
   //*finetune_no_progress_report | finetune_screen_blur| finetune_dufay_strips;
   subhelp = help_finetune;
 

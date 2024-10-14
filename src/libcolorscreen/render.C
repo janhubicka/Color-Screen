@@ -359,6 +359,8 @@ struct getdata_params
 inline luminosity_t
 getdata_helper_no_correction (unsigned short **graydata, int x, int y, int, getdata_params d)
 {
+  if (colorscreen_checking)
+    assert (x >= 0 && x < d.width && y >= 0 && y < d.height);
   return d.table[graydata[y][x]];
 }
 
@@ -367,6 +369,8 @@ inline luminosity_t
 getdata_helper_correction (unsigned short **graydata, int x, int y, int, getdata_params d)
 {
   luminosity_t v = d.table[graydata[y][x]];
+  if (colorscreen_checking)
+    assert (x >= 0 && x < d.width && y >= 0 && y < d.height);
   v = d.correction->apply (v, x, y, backlight_correction_parameters::ir);
   return v;
 }
@@ -374,6 +378,7 @@ getdata_helper_correction (unsigned short **graydata, int x, int y, int, getdata
 inline luminosity_t
 getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables t)
 {
+  //assert (x >= 0 && x < t.width && y >= 0 && y < t.height);
   luminosity_t val = compute_gray_data (t, img->width, img->height, x, y, img->rgbdata[y][x].r, img->rgbdata[y][x].g, img->rgbdata[y][x].b);
   return val;
 }

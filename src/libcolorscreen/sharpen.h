@@ -37,15 +37,16 @@ do_sharpen_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T
    Flattened so avoid doing unnecesary stuff.  */
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 flatten_attr void
-do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress)
+do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
 {
-#pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data) default(none) if (width * height > 1024 * 128)
+  bool parallel = width * height > 1024 * 128 && parallel;
+#pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data, parallel) default(none) if (width * height > 1024 * 128 && parallel)
   {
     O *hblur = (O *)calloc (width * clen, sizeof (O));
     luminosity_t *rotated_cmatrix = (luminosity_t *)malloc (clen * sizeof (luminosity_t));
 #ifdef _OPENMP
-    int tn = omp_get_thread_num ();
-    int threads = omp_get_max_threads ();
+    int tn = !parallel ? 0 : omp_get_thread_num ();
+    int threads = !parallel ? 1 : omp_get_max_threads ();
 #else
     int tn = 0;
     int threads = 1;
@@ -143,7 +144,7 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
      O is output type name, T is data type name, P is extra bookeeping parameter type.  */
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 bool
-sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
+sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress, bool parallel = true)
 {
   luminosity_t *cmatrix = NULL;
   int clen;
@@ -162,7 +163,7 @@ sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius,
     }
   if (progress)
     progress->set_task ("sharpening", height);
-  do_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress);
+  do_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress, parallel);
 
   free (cmatrix);
   if (progress && progress->cancelled ())

@@ -9,6 +9,7 @@
 #include "include/dufaycolor.h"
 #include "include/tiff-writer.h"
 #include "render-interpolate.h"
+#include "sharpen.h"
 #include "nmsimplex.h"
 #include "bitmap.h"
 #include "icc.h"
@@ -16,6 +17,14 @@ namespace colorscreen
 {
 namespace
 {
+
+rgbdata
+getdata_helper (rgbdata *r, int x, int y, int width, int height)
+{
+  if (colorscreen_checking)
+  assert (x >= 0 && x < width && y >= 0 && y < height);
+  return r[y * width + x];
+}
 
 static coord_t
 sign (point_t p1, point_t p2, point_t p3)
@@ -77,6 +86,8 @@ public:
 
     /* Tile colors */
     rgbdata *color;
+    /* Sharpened tile.  */
+    rgbdata *sharpened_color;
     /* Black and white tile.  */
     luminosity_t *bw;
     /* Tile position  */
@@ -98,6 +109,8 @@ public:
     ~tile_data ()
     {
       delete[] color;
+      if (sharpened_color != color)
+        delete[] sharpened_color;
       delete[] bw;
       delete[] pos;
       delete scr;
@@ -108,6 +121,7 @@ public:
     forget ()
     {
       color = NULL;
+      sharpened_color = NULL;
       bw = NULL;
       pos = NULL;
       scr = NULL;
@@ -138,11 +152,13 @@ private:
   int emulsion_intensity_index;
   int emulsion_offset_index;
   int emulsion_blur_index;
+  int sharpen_index;
   int screen_index;
   int dufay_strips_index;
   int mix_weights_index;
   /* Number of values needed.  */
   int n_values;
+  int border;
 
   rgbdata fog_range;
   luminosity_t maxgray;
@@ -151,6 +167,7 @@ private:
   luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
+  luminosity_t min_nonone_clen;
 
 public:
   /* Unblured screen.  */
@@ -202,7 +219,9 @@ public:
   /* Try to optimize dark point.  */
   bool optimize_fog;
   /* Try to otimize for blur caused by film emulsion.  For this screen blur
-   * needs to be fixed.  */
+     needs to be fixed.  */
+  bool optimize_sharpening;
+  /* Try to optimize sharpening radius and amount.  */
   bool optimize_emulsion_blur;
   /* Optimize colors using least squares method.
      Probably useful only for debugging and better to be true.  */
@@ -267,7 +286,7 @@ public:
   int
   sample_points ()
   {
-    return twidth * theight * n_tiles - noutliers;
+    return (twidth - 2 * border) * (theight - 2 * border) * n_tiles - noutliers;
   }
 
   point_t
@@ -451,6 +470,8 @@ public:
   void
   print_values (coord_t *v)
   {
+    if (sharpen_index >= 0)
+      printf ("sharpen radius %f and amount %f\n", get_sharpen_radius (v), get_sharpen_amount (v));
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         if (optimize_position)
@@ -574,6 +595,11 @@ public:
         to_range (v[color_index + 1], 0, 2);
         to_range (v[color_index + 2], 0, 2);
       }
+    if (sharpen_index >= 0)
+      {
+	to_range (v[sharpen_index], 0, 5); // radius
+	to_range (v[sharpen_index + 1], 0, 1000); // amount
+      }
     if (optimize_emulsion_blur)
       to_range (v[emulsion_blur_index], 0, 1);
     if (optimize_emulsion_intensities)
@@ -679,8 +705,8 @@ public:
       {
         int e = 0;
         for (int tileid = 0; tileid < n_tiles; tileid++)
-          for (int y = 0; y < theight; y++)
-            for (int x = 0; x < twidth; x++)
+          for (int y = border; y < theight - border; y++)
+            for (int x = border; x < twidth - border; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
                   rgbdata c = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
@@ -706,8 +732,8 @@ public:
       {
         int e = 0;
         for (int tileid = 0; tileid < n_tiles; tileid++)
-          for (int y = 0; y < theight; y++)
-            for (int x = 0; x < twidth; x++)
+          for (int y = border; y < theight - border; y++)
+            for (int x = border; x < twidth - border; x++)
               if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                 {
                   gsl_vector_set (gsl_y[0], e,
@@ -752,7 +778,7 @@ public:
   }
 
   void
-  init (int flags, coord_t blur_radius, coord_t red_strip_width,
+  init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
         coord_t green_strip_height,
         const std::vector<finetune_result> *results)
   {
@@ -771,6 +797,7 @@ public:
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
+    optimize_sharpening = (flags & finetune_sharpen) && tiles[0].color != NULL;
     optimize_mix_weights = false;
     if (simulate_infrared)
       {
@@ -779,7 +806,8 @@ public:
 	  optimize_mix_weights = true;
       }
     optimize_emulsion_offset = false;
-    normalize = !(flags & finetune_no_normalize);
+    /* TODO; We probably can sharpen and normalize.  */
+    normalize = !(flags & finetune_no_normalize) && !optimize_sharpening;
     if (tiles[0].color && normalize)
       optimize_emulsion_blur = false;
     if (tiles[0].color && optimize_emulsion_blur
@@ -803,6 +831,24 @@ public:
 
     if (data_collection)
       least_squares = false;
+
+    if (optimize_sharpening)
+      {
+        sharpen_index = n_values;
+	border = 10;
+	n_values += 2;
+        for (int i = 0; i < n_tiles; i++)
+	  tiles[i].sharpened_color = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
+	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
+		;
+      }
+    else
+      {
+        sharpen_index = -1;
+	border = 0;
+        for (int i = 0; i < n_tiles; i++)
+	  tiles[i].sharpened_color = tiles[i].color;
+      }
 
     if (!least_squares && !data_collection)
       {
@@ -930,6 +976,12 @@ public:
           set_emulsion_offset (start, tileid,
                                (*results)[tileid].emulsion_coord_adjust);
         }
+
+    if (sharpen_index >= 0)
+      {
+	start[sharpen_index] = 0;
+	start[sharpen_index + 1] = 0;
+      }
 
     if (!least_squares && !data_collection)
       {
@@ -1324,19 +1376,34 @@ public:
     return ((m.red * color.red + m.green * color.green
              + m.blue * color.blue) /** (2 * maxgray)*/);
   }
+  pure_attr rgbdata
+  get_orig_pixel (coord_t *v, int tileid, int x, int y)
+  {
+    if (!optimize_fog)
+      return tiles[tileid].color[y * twidth + x];
+    rgbdata d = tiles[tileid].color[y * twidth + x] - get_fog (v);
+    if (normalize)
+      {
+        luminosity_t ssum = fabs (d.red + d.green + d.blue);
+        if (ssum == 0)
+          ssum = 0.0000001;
+        d /= ssum;
+      }
+    return d;
+  }
 
   pure_attr rgbdata
   get_pixel_nofog (int tileid, int x, int y)
   {
-    return tiles[tileid].color[y * twidth + x];
+    return tiles[tileid].sharpened_color[y * twidth + x];
   }
 
   pure_attr rgbdata
   get_pixel (coord_t *v, int tileid, int x, int y)
   {
     if (!optimize_fog)
-      return tiles[tileid].color[y * twidth + x];
-    rgbdata d = tiles[tileid].color[y * twidth + x] - get_fog (v);
+      return tiles[tileid].sharpened_color[y * twidth + x];
+    rgbdata d = tiles[tileid].sharpened_color[y * twidth + x] - get_fog (v);
     if (normalize)
       {
         luminosity_t ssum = fabs (d.red + d.green + d.blue);
@@ -1364,8 +1431,8 @@ public:
     coord_t wr = 0, wg = 0, wb = 0;
 
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      for (int y = 0; y < theight; y++)
-        for (int x = 0; x < twidth; x++)
+      for (int y = border; y < theight - border; y++)
+        for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
               rgbdata m = get_simulated_screen_pixel (tileid, x, y);
@@ -1450,8 +1517,8 @@ public:
       {
 	rgbdata mix_weights = get_mix_weights (v);
 	for (int tileid = 0; tileid < n_tiles; tileid++)
-	  for (int y = 0; y < theight; y++)
-	    for (int x = 0; x < twidth; x++)
+	  for (int y = border; y < theight - border; y++)
+	    for (int x = border; x < twidth - border; x++)
 	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
 		{
 		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
@@ -1581,8 +1648,8 @@ public:
     else
       {
 	for (int tileid = 0; tileid < n_tiles; tileid++)
-	  for (int y = 0; y < theight; y++)
-	    for (int x = 0; x < twidth; x++)
+	  for (int y = border; y < theight - border; y++)
+	    for (int x = border; x < twidth - border; x++)
 	      if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
 		{
 		  rgbdata c = get_simulated_screen_pixel (tileid, x, y);
@@ -1637,8 +1704,8 @@ public:
     coord_t wr = 0, wg = 0, wb = 0;
 
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      for (int y = 0; y < theight; y++)
-        for (int x = 0; x < twidth; x++)
+      for (int y = border; y < theight - border; y++)
+        for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
               rgbdata m = get_simulated_screen_pixel (tileid, x, y);
@@ -1704,8 +1771,8 @@ public:
     if (!least_squares_initialized)
       abort ();
     for (int tileid = 0; tileid < n_tiles; tileid++)
-      for (int y = 0; y < theight; y++)
-        for (int x = 0; x < twidth; x++)
+      for (int y = border; y < theight - border; y++)
+        for (int x = border; x < twidth - border; x++)
           if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
             {
               rgbdata c = get_simulated_screen_pixel (tileid, x, y);
@@ -1766,6 +1833,21 @@ public:
       }
     else
       return { 1, 1, 1 };
+  }
+
+  coord_t
+  get_sharpen_radius (coord_t *v)
+  {
+    if (sharpen_index >= 0)
+      return v[sharpen_index] + min_nonone_clen - 0.00001;
+    return 0;
+  }
+  coord_t
+  get_sharpen_amount (coord_t *v)
+  {
+    if (sharpen_index >= 0)
+      return v[sharpen_index + 1];
+    return 0;
   }
 
   rgbdata
@@ -1832,6 +1914,9 @@ public:
       {
         init_screen (v, tileid);
         simulate_screen (v, tileid);
+        /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
+	if (tiles[tileid].sharpened_color && tiles[tileid].sharpened_color != tiles[tileid].color)
+          sharpen<rgbdata, rgbdata, rgbdata *,int, getdata_helper> (tiles[tileid].sharpened_color, tiles[tileid].color, theight, twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v), NULL, false);
       }
     rgbdata red, green, blue, color;
     if (tiles[0].color)
@@ -1846,8 +1931,8 @@ public:
         point_t off = get_offset (v, tileid);
         if (tiles[0].color)
           {
-            for (int y = 0; y < theight; y++)
-              for (int x = 0; x < twidth; x++)
+            for (int y = border; y < theight - border; y++)
+              for (int x = border; x < twidth - border; x++)
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
                     rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x,
@@ -1871,8 +1956,8 @@ public:
           }
         else if (tiles[tileid].bw)
           {
-            for (int y = 0; y < theight; y++)
-              for (int x = 0; x < twidth; x++)
+            for (int y = border; y < theight - border; y++)
+              for (int x = border; x < twidth - border; x++)
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
                     luminosity_t c
@@ -1904,8 +1989,8 @@ public:
             s->mult[y][x][c] = (luminosity_t)0;
             s->add[y][x][c] = (luminosity_t)0;
           }
-    for (int y = 0; y < theight; y++)
-      for (int x = 0; x < twidth; x++)
+    for (int y = border; y < theight - border; y++)
+      for (int x = border; x < twidth - border; x++)
         if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
           {
             point_t p = tiles[tileid].pos[y * twidth + x] + off;
@@ -1915,9 +2000,9 @@ public:
                      & (screen::size - 1);
             if (tiles[tileid].color)
               {
-                s->mult[yy][xx][0] = tiles[tileid].color[y * twidth + x].red;
-                s->mult[yy][xx][1] = tiles[tileid].color[y * twidth + x].green;
-                s->mult[yy][xx][2] = tiles[tileid].color[y * twidth + x].blue;
+                s->mult[yy][xx][0] = tiles[tileid].sharpened_color[y * twidth + x].red;
+                s->mult[yy][xx][1] = tiles[tileid].sharpened_color[y * twidth + x].green;
+                s->mult[yy][xx][2] = tiles[tileid].sharpened_color[y * twidth + x].blue;
               }
             else
               {
@@ -1973,8 +2058,8 @@ public:
       {
         histogram hist;
         point_t off = get_offset (v, tileid);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights);
@@ -1984,8 +2069,8 @@ public:
               hist.pre_account (err);
             }
         hist.finalize_range (65535);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights);
@@ -1997,8 +2082,8 @@ public:
         hist.finalize ();
         coord_t merr = hist.find_max (ratio) * 1.3;
         tiles[tileid].outliers = std::make_unique<bitmap_2d> (twidth, theight);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
                                           off, mix_weights);
@@ -2032,8 +2117,8 @@ public:
       {
         histogram hist;
         point_t off = get_offset (v, tileid);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, x, y);
@@ -2041,8 +2126,8 @@ public:
               hist.pre_account (err);
             }
         hist.finalize_range (65535);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, x, y);
@@ -2052,8 +2137,8 @@ public:
         hist.finalize ();
         coord_t merr = hist.find_max (ratio) * 1.3;
         tiles[tileid].outliers = std::make_unique<bitmap_2d> (twidth, theight);
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
+        for (int y = border; y < theight - border; y++)
+          for (int x = border; x < twidth - border; x++)
             {
               luminosity_t c = bw_evaulate_pixel (tileid, color, x, y, off);
               luminosity_t d = bw_get_pixel (tileid, x, y);
@@ -2138,7 +2223,7 @@ public:
                     break;
                   case 1:
                     {
-                      rgbdata d = get_pixel (v, tileid, x, y);
+                      rgbdata d = get_orig_pixel (v, tileid, x, y);
                       rendered.put_pixel (x, d.red * 65535 / rmax,
                                           d.green * 65535 / gmax,
                                           d.blue * 65535 / bmax);
@@ -2155,6 +2240,14 @@ public:
                           (c.blue - d.blue) * 65535 / bmax + 65536 / 2);
                     }
                     break;
+                  case 3:
+                    {
+                      rgbdata d = get_pixel (v, tileid, x, y);
+                      rendered.put_pixel (x, d.red * 65535 / rmax,
+                                          d.green * 65535 / gmax,
+                                          d.blue * 65535 / bmax);
+                    }
+		    break;
                   }
               else
                 rendered.put_pixel (x, 0, 0, 0);
@@ -2544,6 +2637,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           && !(fparams.flags & finetune_no_progress_report))
         progress->set_task ("finetuning samples", maxtiles * maxtiles);
 
+      gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
     shared(fparams, maxtiles, rparam, pixel_size, best_uncertainity, verbose, \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
@@ -2600,6 +2694,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
                 }
             }
           }
+      gsl_set_error_handler (old_handler);
     }
   else
     {
@@ -2648,8 +2743,11 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
                         rparam.dufay_red_strip_width,
                         rparam.dufay_green_strip_width, results);
+      /* FIXME: For parallel solvnig this will yield race condition  */
+      gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (
           progress, !(fparams.flags & finetune_no_progress_report));
+      gsl_set_error_handler (old_handler);
     }
   if (progress && progress->cancel_requested ())
     {
@@ -2702,6 +2800,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
     best_solver.write_file (best_solver.start, fparams.simulated_file, 0, 0);
   if (fparams.orig_file)
     best_solver.write_file (best_solver.start, fparams.orig_file, 0, 1);
+  if (fparams.sharpened_file)
+    best_solver.write_file (best_solver.start, fparams.sharpened_file, 0, 3);
   if (fparams.diff_file)
     best_solver.write_file (best_solver.start, fparams.diff_file, 0, 2);
   if (fparams.screen_file)
@@ -2832,55 +2932,164 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
-                      luminosity_t threshold, scr_to_img &map, int xmin,
+                      luminosity_t threshold, luminosity_t sharpen_radius,
+                      luminosity_t sharpen_amount, scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
+
+  /* If sharpening is not needed, we can avoid temporary buffer to store
+     rendered screen.  */
+  if (!sharpen_amount || !sharpen_radius)
+    {
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(ymin, ymax, xmin, xmax, threshold, map, scr, collection_scr)       \
     reduction(+ : wr, wg, wb, red, green, blue)
-  for (int y = ymin; y <= ymax; y++)
-    for (int x = xmin; x <= xmax; x++)
-      {
+      for (int y = ymin; y <= ymax; y++)
+        for (int x = xmin; x <= xmax; x++)
+          {
 #if 0
-	point_t p;
-        map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
-	rgbdata m = scr.interpolated_mult (p);
-	rgbdata am = m;
+	    point_t p;
+	    map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
+	    rgbdata m = scr.interpolated_mult (p);
+	    rgbdata am = m;
 #else
-        point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
-        point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
-        point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
-        rgbdata am = { 0, 0, 0 };
-        point_t pdx = (px - p) * (1.0 / 6.0);
-        point_t pdy = (py - p) * (1.0 / 6.0);
-        for (int yy = -2; yy <= 2; yy++)
-          for (int xx = -2; xx <= 2; xx++)
-            am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
-        am *= ((coord_t)1.0 / 25);
-        rgbdata m = collection_scr.noninterpolated_mult (p);
+            point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+            point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
+            point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
+            rgbdata am = { 0, 0, 0 };
+            point_t pdx = (px - p) * (1.0 / 6.0);
+            point_t pdy = (py - p) * (1.0 / 6.0);
+            for (int yy = -2; yy <= 2; yy++)
+              for (int xx = -2; xx <= 2; xx++)
+                am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
+            am *= ((coord_t)1.0 / 25);
+            rgbdata m = collection_scr.noninterpolated_mult (p);
 #endif
-        if (m.red > threshold)
-          {
-            coord_t val = m.red - threshold;
-            wr += val;
-            red += am * val;
+            if (m.red > threshold)
+              {
+                coord_t val = m.red - threshold;
+                wr += val;
+                red += am * val;
+              }
+            if (m.green > threshold)
+              {
+                coord_t val = m.green - threshold;
+                wg += val;
+                green += am * val;
+              }
+            if (m.blue > threshold)
+              {
+                coord_t val = m.blue - threshold;
+                wb += val;
+                blue += am * val;
+              }
           }
-        if (m.green > threshold)
+    }
+  else
+    {
+      int ext = fir_blur::convolve_matrix_length (sharpen_radius) / 2;
+      int xsize = xmax - xmin + 2 * ext + 1;
+      int ysize = ymax - ymin + 2 * ext + 1;
+      std::vector<rgbdata> rendered (xsize * ysize);
+
+      /* Render screen.  */
+      for (int y = ymin - ext; y <= ymax + ext; y++)
+        for (int x = xmin - ext; x <= xmax + ext; x++)
           {
-            coord_t val = m.green - threshold;
-            wg += val;
-            green += am * val;
+            point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+            point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
+            point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
+            rgbdata am = { 0, 0, 0 };
+            point_t pdx = (px - p) * (1.0 / 6.0);
+            point_t pdy = (py - p) * (1.0 / 6.0);
+            for (int yy = -2; yy <= 2; yy++)
+              for (int xx = -2; xx <= 2; xx++)
+                am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
+            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+                = am * ((coord_t)1.0 / 25);
           }
-        if (m.blue > threshold)
+
+      /* Sharpen it  */
+      std::vector<rgbdata> rendered2 (xsize * ysize);
+      /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
+      sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+          rendered2.data (), rendered.data (), ysize, xsize, ysize,
+          sharpen_radius, sharpen_amount, NULL, false);
+
+      if (0)
+	{
+	  tiff_writer_params p;
+	  p.filename = "/tmp/sharpened.tif";
+	  p.width = xsize;
+	  p.height = ysize;
+	  p.depth = 16;
+	  const char *error;
+	  {
+	    tiff_writer renderedt (p, &error);
+	    for (int y = ymin - ext; y <= ymax + ext; y++)
+	      {
+		for (int x = xmin - ext; x <= xmax + ext; x++)
+		  {
+		    rgbdata d
+			= rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
+		    if (x & 1)
+		      d = {1,1,1};
+		    renderedt.put_pixel (x - xmin + ext, d.red * 65535, d.green * 65535,
+					 d.blue * 65535);
+		  }
+		if (!renderedt.write_row ())
+		  return false;
+	      }
+	  }
+	  {
+	    p.filename = "/tmp/unsharpened.tif";
+	    tiff_writer renderedu (p, &error);
+	    for (int y = ymin - ext; y <= ymax + ext; y++)
+	      {
+		for (int x = xmin - ext; x <= xmax + ext; x++)
+		  {
+		    point_t p
+			= map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+		    rgbdata m = collection_scr.noninterpolated_mult (p);
+		    renderedu.put_pixel (x - xmin + ext, m.red * 65535, m.green * 65535,
+					 m.blue * 65535);
+		  }
+		if (!renderedu.write_row ())
+		  return false;
+	      }
+	  }
+	}
+
+      /* Collect data  */
+      for (int y = ymin; y <= ymax; y++)
+        for (int x = xmin; x <= xmax; x++)
           {
-            coord_t val = m.blue - threshold;
-            wb += val;
-            blue += am * val;
+            point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+            rgbdata m = collection_scr.noninterpolated_mult (p);
+            rgbdata am = rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
+            if (m.red > threshold)
+              {
+                coord_t val = m.red - threshold;
+                wr += val;
+                red += am * val;
+              }
+            if (m.green > threshold)
+              {
+                coord_t val = m.green - threshold;
+                wg += val;
+                green += am * val;
+              }
+            if (m.blue > threshold)
+              {
+                coord_t val = m.blue - threshold;
+                wb += val;
+                blue += am * val;
+              }
           }
-      }
+    }
   if (!(wr > 0 && wg > 0 && wb > 0))
     return false;
   red /= wr;
