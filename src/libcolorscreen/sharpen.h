@@ -78,7 +78,6 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	  if (y + clen / 2 - 1 < height)
 	    switch (clen)
 	      {
-	      case 1:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
 	      case 3:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
 	      case 5:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
 	      case 7:fir_blur::blur_horisontal<O, T> (hblur + ((y + clen / 2 - 1 + clen) % clen) * width, line, width, clen, cmatrix); break;
@@ -106,7 +105,6 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	  /* Specialize the inner loop for small clens.  */
 	  switch (clen)
 	    {
-	      case 1: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
 	      case 3: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
 	      case 5: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
 	      case 7: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
@@ -147,20 +145,21 @@ template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data,
 bool
 sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius, luminosity_t amount, progress_info *progress)
 {
-  luminosity_t *cmatrix;
+  luminosity_t *cmatrix = NULL;
+  int clen;
   /* Fast path if we do no sharpening.  */
-  if (!radius || !amount)
+  if (!radius || !amount
+      || (clen = fir_blur::gen_convolve_matrix (radius, &cmatrix)) <= 1)
     {
       if (progress)
 	progress->set_task ("converting to linear HDR image", height);
+      if (cmatrix)
+        free (cmatrix);
       non_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, progress);
       if (progress && progress->cancelled ())
 	return false;
       return true;
     }
-  int clen = fir_blur::gen_convolve_matrix (radius, &cmatrix);
-  if (!clen)
-    return false;
   if (progress)
     progress->set_task ("sharpening", height);
   do_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress);
