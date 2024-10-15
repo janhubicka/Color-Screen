@@ -1,5 +1,6 @@
 #ifndef COLORSCREEN_H
 #define COLORSCREEN_H
+#include <memory>
 #include "render-parameters.h"
 #include "render-type-parameters.h"
 #include "solver-parameters.h"
@@ -114,9 +115,10 @@ DLL_PUBLIC rgbdata analyze_color_proportions (
 DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, image_data &img_data,
                            solver_parameters &sparam,
                            progress_info *progress = NULL);
-DLL_PUBLIC mesh *solver_mesh (scr_to_img_parameters *param,
-                              image_data &img_data, solver_parameters &sparam,
-                              progress_info *progress = NULL);
+DLL_PUBLIC std::unique_ptr<mesh> solver_mesh (scr_to_img_parameters *param,
+                                              image_data &img_data,
+                                              solver_parameters &sparam,
+                                              progress_info *progress = NULL);
 DLL_PUBLIC detected_screen detect_regular_screen (
     image_data &img, scr_detect_parameters &dparam,
     solver_parameters &sparam,

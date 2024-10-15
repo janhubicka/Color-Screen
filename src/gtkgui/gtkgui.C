@@ -37,7 +37,7 @@ enum ui_mode
 #define MAX_SOVER_POINTS 10000
 static struct solver_parameters current_solver;
 static void setvals (void);
-static mesh *current_mesh = NULL;
+static std::shared_ptr <mesh> current_mesh = NULL;
 static const char *binary_name;
 
 detected_screen detected;
@@ -101,7 +101,6 @@ solve ()
   save_parameters ();
   if (current_mesh)
   {
-      delete current_mesh;
       current.mesh_trans = NULL;
       mesh = true;
   }
@@ -675,8 +674,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 
 	  if (detected.smap)
 	    delete detected.smap;
-	  if (current_mesh)
-	    delete current_mesh;
 	  detect_regular_screen_params dsparams;
 	  dsparams.return_screen_map = true;
 	  dsparams.gamma = rparams.gamma;
@@ -955,7 +952,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	file_progress_info progress (stdout);
 	if (current_mesh)
 	  {
-	      delete current_mesh;
 	      current.mesh_trans = NULL;
 	      current_mesh = NULL;
 	  }
@@ -1025,8 +1021,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       }
       if (k == 'N')
       {
-	if (current_mesh)
-	  delete current_mesh;
 	current.mesh_trans = NULL;
 	file_progress_info progress (stdout);
 	current_mesh = solver_mesh (&current, scan, current_solver, &progress);
@@ -1037,7 +1031,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       {
 	if (current_mesh)
 	  {
-	    delete current_mesh;
 	    current.mesh_trans = NULL;
 	    current_mesh = NULL;
 	    display_scheduled = true;

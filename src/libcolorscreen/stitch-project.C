@@ -1464,10 +1464,7 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
 	      return false;
 	    }
 	  if (param.mesh_trans)
-	    {
-	      delete param.mesh_trans;
-	      param.mesh_trans = NULL;
-	    }
+	    param.mesh_trans = NULL;
 	  fclose (in);
 	  solver_param.remove_points ();
 	}
@@ -1506,10 +1503,7 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
 	      return false;
 	    }
 	  if (param.mesh_trans)
-	    {
-	      delete param.mesh_trans;
-	      param.mesh_trans = NULL;
-	    }
+	    param.mesh_trans = NULL;
 	  fclose (in);
 	  solver_param.remove_points ();
 	}

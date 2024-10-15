@@ -427,7 +427,7 @@ compute_mesh_point (solver_parameters &sparam, scanner_type type,
   mesh_trans->set_point (e, imgp);
 }
 
-mesh *
+std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam, progress_info *progress)
 {
@@ -445,7 +445,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   height = (height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh", width * height);
-  mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
+  std::unique_ptr <mesh> mesh_trans = std::make_unique<mesh> (xshift, yshift, step, step, width, height);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(progress, xshift, yshift, step, width, height, sparam, img_data,   \
                mesh_trans, param)
@@ -453,7 +453,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
     for (int x = 0; x < width; x++)
       if (!progress || !progress->cancel_requested ())
         {
-          compute_mesh_point (sparam, param->scanner_type, mesh_trans, x, y);
+          compute_mesh_point (sparam, param->scanner_type, mesh_trans.get (), x, y);
           if (progress)
             progress->inc_progress ();
         }
@@ -481,10 +481,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
       if (!grow_left && !grow_right && !grow_top && !grow_bottom)
         break;
       if (progress && progress->cancel_requested ())
-        {
-          delete mesh_trans;
-          return NULL;
-        }
+        return NULL;
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
         break;
       if (grow_left || grow_right)
@@ -492,10 +489,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
           for (int y = 0; y < mesh_trans->get_height (); y++)
             {
               if (grow_left)
-                compute_mesh_point (sparam, param->scanner_type, mesh_trans, 0,
+                compute_mesh_point (sparam, param->scanner_type, mesh_trans.get (), 0,
                                     y);
               if (grow_right)
-                compute_mesh_point (sparam, param->scanner_type, mesh_trans,
+                compute_mesh_point (sparam, param->scanner_type, mesh_trans.get (),
                                     mesh_trans->get_width () - 1, y);
             }
         }
@@ -504,10 +501,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
           for (int x = 0; x < mesh_trans->get_width (); x++)
             {
               if (grow_top)
-                compute_mesh_point (sparam, param->scanner_type, mesh_trans, x,
+                compute_mesh_point (sparam, param->scanner_type, mesh_trans.get (), x,
                                     0);
               if (grow_bottom)
-                compute_mesh_point (sparam, param->scanner_type, mesh_trans, x,
+                compute_mesh_point (sparam, param->scanner_type, mesh_trans.get (), x,
                                     mesh_trans->get_height () - 1);
             }
         }
@@ -524,12 +521,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
     }
   if (progress && progress->cancel_requested ())
     {
-      delete mesh_trans;
       return NULL;
     }
   if (progress && progress->cancel_requested ())
     {
-      delete mesh_trans;
       return NULL;
     }
   // mesh_trans->print (stdout);
@@ -573,7 +568,7 @@ compute_mesh_point (screen_map &smap, solver_parameters &sparam,
     }
   mesh_trans->set_point (e, imgp);
 }
-mesh *
+std::unique_ptr <mesh>
 solver_mesh (scr_to_img_parameters *param, image_data &img_data,
              solver_parameters &sparam2, screen_map &smap,
              progress_info *progress)
@@ -590,7 +585,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
   height = (height + step - 1) / step;
   if (progress)
     progress->set_task ("computing mesh from detected points", width * height);
-  mesh *mesh_trans = new mesh (xshift, yshift, step, step, width, height);
+  std::unique_ptr<mesh> mesh_trans = std::make_unique<mesh> (xshift, yshift, step, step, width, height);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(progress, xshift, yshift, step, width, height, img_data,           \
                mesh_trans, param, smap, sparam2)
@@ -602,7 +597,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
           scr_to_img_parameters lparam = *param;
           solver_parameters sparam;
           sparam.copy_without_points (sparam2);
-          compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans, x,
+          compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (), x,
                               y);
           if (progress)
             progress->inc_progress ();
@@ -632,10 +627,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
       if (!grow_left && !grow_right && !grow_top && !grow_bottom)
         break;
       if (progress && progress->cancel_requested ())
-        {
-          delete mesh_trans;
-          return NULL;
-        }
+        return NULL;
       if (!mesh_trans->grow (grow_left, grow_right, grow_top, grow_bottom))
         break;
       solver_parameters sparam;
@@ -645,10 +637,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
           for (int y = 0; y < mesh_trans->get_height (); y++)
             {
               if (grow_left)
-                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans,
+                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (),
                                     0, y);
               if (grow_right)
-                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans,
+                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (),
                                     mesh_trans->get_width () - 1, y);
             }
         }
@@ -657,10 +649,10 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
           for (int x = 0; x < mesh_trans->get_width (); x++)
             {
               if (grow_top)
-                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans,
+                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (),
                                     x, 0);
               if (grow_bottom)
-                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans,
+                compute_mesh_point (smap, sparam, lparam, img_data, mesh_trans.get (),
                                     x, mesh_trans->get_height () - 1);
             }
         }
@@ -676,10 +668,7 @@ solver_mesh (scr_to_img_parameters *param, image_data &img_data,
         progress->resume_stdout ();
     }
   if (progress && progress->cancel_requested ())
-    {
-      delete mesh_trans;
-      return NULL;
-    }
+    return NULL;
   // mesh_trans->print (stdout);
   if (progress)
     progress->set_task ("inverting mesh", 1);

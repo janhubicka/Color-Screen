@@ -803,10 +803,7 @@ render_cmd (int argc, char **argv)
           progress.resume_stdout ();
         }
       if (param.mesh_trans)
-        {
-          delete (param.mesh_trans);
-          param.mesh_trans = NULL;
-        }
+        param.mesh_trans = NULL;
       param.mesh_trans = solver_mesh (&param, scan, solver_param);
     }
   if (detect_color_model)
@@ -975,10 +972,7 @@ autodetect (int argc, char **argv)
           progress.resume_stdout ();
         }
       if (param.mesh_trans)
-        {
-          delete param.mesh_trans;
-          param.mesh_trans = NULL;
-        }
+        param.mesh_trans = NULL;
       /* We will warn later on using default.  */
       if (dsparams.gamma == 0)
 	dsparams.gamma = 2.2;

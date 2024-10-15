@@ -1,6 +1,7 @@
 #ifndef SCREEN_MAP_H
 #define SCREEN_MAP_H
 #include <limits>
+#include <memory>
 #include "dllpublic.h"
 #include "solver-parameters.h"
 #include "paget.h"
@@ -141,8 +142,9 @@ private:
   };
   coord_entry *map;
 };
-mesh *solver_mesh (scr_to_img_parameters *param, image_data &img_data,
-                   solver_parameters &sparam2, screen_map &smap,
-                   progress_info *progress);
+std::unique_ptr<mesh> solver_mesh (scr_to_img_parameters *param,
+                                   image_data &img_data,
+                                   solver_parameters &sparam2,
+                                   screen_map &smap, progress_info *progress);
 }
 #endif

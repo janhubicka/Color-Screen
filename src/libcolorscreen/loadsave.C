@@ -1040,7 +1040,6 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       else if (!strcmp (buf, "tile_adjustment_scanner_blur_correction"))
         {
 	  int x, y;
-	  luminosity_t val;
 	  if (fscanf (f, "%i %i", &x, &y) != 2
 	      || x < 0
 	      || y < 0)
@@ -1106,16 +1105,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (b)
 	    {
-	      mesh *m = mesh::load (f, error);
+	      std::unique_ptr <mesh> m = mesh::load (f, error);
 	      if (!m)
 		return false;
 	      if (param)
 		{
 		  m->precompute_inverse ();
-		  param->mesh_trans = m;
+		  param->mesh_trans = std::move (m);
 		}
-	      else
-		delete m;
 	    }
 	}
       else

@@ -1,5 +1,6 @@
 #ifndef MESH_H
 #define MESH_H
+#include <memory>
 #include "dllpublic.h"
 #include "base.h"
 #include "matrix.h"
@@ -185,7 +186,7 @@ public:
     return m_ystep;
   }
   bool save (FILE *f) const;
-  static mesh *load (FILE *f, const char **error);
+  static std::unique_ptr <mesh> load (FILE *f, const char **error);
   /* Unique id of the mesh (used for caching).  */
   uint64_t id;
 

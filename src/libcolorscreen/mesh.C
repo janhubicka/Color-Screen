@@ -264,7 +264,7 @@ mesh::save (FILE *f) const
   return true;
 }
 
-mesh *
+std::unique_ptr<mesh>
 mesh::load (FILE *f, const char **error)
 {
   if (!expect_keyword (f, "mesh_dimensions:"))
@@ -305,7 +305,7 @@ mesh::load (FILE *f, const char **error)
       *error = "expected mesh_points";
       return NULL;
     }
-  mesh *m = new mesh (xshift, yshift, xstep, ystep, width, height);
+  std::unique_ptr <mesh> m = std::make_unique<mesh> (xshift, yshift, xstep, ystep, width, height);
   if (!m)
     {
       *error = "failed to construct mesh";
@@ -321,7 +321,6 @@ mesh::load (FILE *f, const char **error)
               || !expect_keyword (f, ")"))
             // if (fscanf (f, " (%f, %f)", &sx, &sy) != 2)
             {
-              delete m;
               *error = "failed to parse mesh points";
               return NULL;
             }
@@ -330,7 +329,6 @@ mesh::load (FILE *f, const char **error)
     }
   if (!expect_keyword (f, "mesh_end"))
     {
-      delete m;
       *error = "expected mesh_end";
       return NULL;
     }

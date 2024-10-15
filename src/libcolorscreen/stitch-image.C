@@ -640,7 +640,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	  fprintf (stderr, "Failed to analyze screen of %s\n", filename.c_str ());
 	  exit (1);
 	}
-      mesh_trans = (std::unique_ptr <mesh>)(detected.mesh_trans);
+      mesh_trans = detected.mesh_trans;
       if (m_prj->params.reoptimize_colors)
 	{
 	  scr_detect_parameters optimized_dparam = m_prj->dparam;
@@ -650,7 +650,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	  delete detected.smap;
 	  dsparams.optimize_colors = false;
 	  detected = detect_regular_screen (*img, optimized_dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
-	  mesh_trans = (std::unique_ptr <mesh>)(detected.mesh_trans);
+	  mesh_trans = detected.mesh_trans;
 	  if (!detected.success)
 	    {
 	      progress->pause_stdout ();
@@ -685,7 +685,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	  return false;
 	}
       fclose (f);
-      mesh_trans = (std::unique_ptr <mesh>)(param.mesh_trans);
+      mesh_trans = param.mesh_trans;
     }
 
 
@@ -697,7 +697,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
   my_rparam.mix_blue = 1;
-  param.mesh_trans = mesh_trans.get ();
+  param.mesh_trans = mesh_trans;
   render_to_scr render (param, *img, my_rparam, 256);
   render.precompute_all (true, false, progress);
   if (!m_prj->my_screen)
@@ -1244,10 +1244,10 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   //param.mesh_trans = NULL;
   scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();
-  mesh_trans = (std::unique_ptr<mesh>)(param.mesh_trans);
+  mesh_trans = param.mesh_trans;
   param.mesh_trans = NULL;
   basic_scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
-  param.mesh_trans = mesh_trans.get ();
+  param.mesh_trans = mesh_trans;
   known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 5,5,5,5, NULL));
   analyzed = true;
   return true;

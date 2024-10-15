@@ -1760,12 +1760,9 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
     }
   if (dsparams->do_mesh)
     {
-      mesh *m = solver_mesh (&ret.param, img, sparam, *smap, progress);
+      std::shared_ptr <mesh> m = solver_mesh (&ret.param, img, sparam, *smap, progress);
       if (!m || (progress && progress->cancel_requested ()))
-        {
-	  delete m;
-	  return ret;
-        }
+	return ret;
       const int xsteps = 50, ysteps = 50;
       m->precompute_inverse ();
       /* Now produce output (regular) grid of solver points.

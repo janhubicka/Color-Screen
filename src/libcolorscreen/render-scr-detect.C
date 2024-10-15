@@ -25,7 +25,7 @@ color_data::color_data(int width, int height)
   : width(width)
 {
   for (int color = 0; color < 3; color++)
-    m_data[color] = (luminosity_t *)calloc (width * height, sizeof (luminosity_t));
+    m_data[color] = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t), "Color relaxation");
 }
 color_data::~color_data()
 {
@@ -253,7 +253,12 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
       {
 	scr_detect::color_class t = p.map->get_class (x, y);
 	if (t == scr_detect::unknown)
-	  continue;
+	  {
+	    data->m_data[0][y * p.img->width + x] = 0;
+	    data->m_data[1][y * p.img->width + x] = 0;
+	    data->m_data[2][y * p.img->width + x] = 0;
+	    continue;
+	  }
 	struct queue {int x, y;} queue [max_patch_size];
 	luminosity_t sum = p.r->get_data (x, y);
 	int start = 0, end = 1;

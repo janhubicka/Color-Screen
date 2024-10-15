@@ -1,6 +1,7 @@
 #ifndef SCR_TO_IMG_PARAMETERS_H
 #define SCR_TO_IMG_PARAMETERS_H
 #include <cmath>
+#include <memory>
 #include "base.h"
 #include "dllpublic.h"
 #include "lens-warp-correction-parameters.h"
@@ -94,7 +95,7 @@ struct scr_to_img_parameters
   coord_t *motor_correction_x, *motor_correction_y;
   int n_motor_corrections;
 
-  mesh *mesh_trans;
+  std::shared_ptr<mesh> mesh_trans;
 
   enum scr_type type;
   enum scanner_type scanner_type;

@@ -1,5 +1,6 @@
 #ifndef DETECT_REGULAR_SCREEN_PARAMETERS_H
 #define DETECT_REGULAR_SCREEN_PARAMETERS_H
+#include <memory>
 #include "scr-to-img-parameters.h"
 namespace colorscreen
 {
@@ -44,7 +45,7 @@ struct detect_regular_screen_params
 struct detected_screen
 {
   bool success;
-  mesh *mesh_trans;
+  std::shared_ptr <mesh> mesh_trans;
   scr_to_img_parameters param;
   int xmin, ymin, xmax, ymax;
   int patches_found;
