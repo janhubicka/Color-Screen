@@ -841,9 +841,6 @@ public:
 	  tiles[i].sharpened_color = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
 	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
 		;
-	optimize_screen_blur = false;
-	optimize_screen_channel_blurs = false;
-	blur_radius = 0;
       }
     else
       {
@@ -1918,11 +1915,11 @@ public:
     coord_t sum = 0;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
-        init_screen (v, tileid);
-        simulate_screen (v, tileid);
         /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
 	if (tiles[tileid].sharpened_color && tiles[tileid].sharpened_color != tiles[tileid].color)
           sharpen<rgbdata, rgbdata, rgbdata *,int, getdata_helper> (tiles[tileid].sharpened_color, tiles[tileid].color, theight, twidth, theight, get_sharpen_radius (v), get_sharpen_amount (v), NULL, false);
+        init_screen (v, tileid);
+        simulate_screen (v, tileid);
       }
     rgbdata red, green, blue, color;
     if (tiles[0].color)

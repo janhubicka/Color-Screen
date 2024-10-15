@@ -13,6 +13,7 @@ namespace colorscreen
 {
 /* Class to communicate progress info from rendering kernels.  It can also be
    used to cancel computation in the middle.  */
+DLL_PUBLIC
 class progress_info
 {
 public:
@@ -127,6 +128,7 @@ private:
   pthread_mutex_t m_lock;
 };
 
+DLL_PUBLIC
 class file_progress_info : public progress_info
 {
 public:
