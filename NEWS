@@ -22,6 +22,7 @@ Changes in version 1.1
    - FFTW 3 library is now used for fast fourier transform and is significantly
      faster than previous implementation.
    - finetune now support finetuning of point spread function
+     and sharpening parameters
    - `colorscreen analyze-scanner-blur` can now be used to produce scanner blur
      tables
  - Infrastructure improvements:

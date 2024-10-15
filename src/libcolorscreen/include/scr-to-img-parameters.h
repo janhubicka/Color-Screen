@@ -142,14 +142,17 @@ struct scr_to_img_parameters
     n_motor_corrections = 0;
     copy_from_cheap (other);
     n_motor_corrections = other.n_motor_corrections;
-    motor_correction_x
-        = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-    motor_correction_y
-        = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
-    memcpy (motor_correction_x, other.motor_correction_x,
-            n_motor_corrections * sizeof (coord_t));
-    memcpy (motor_correction_y, other.motor_correction_y,
-            n_motor_corrections * sizeof (coord_t));
+    if (n_motor_corrections)
+      {
+	motor_correction_x
+	    = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+	motor_correction_y
+	    = (coord_t *)malloc (n_motor_corrections * sizeof (coord_t));
+	memcpy (motor_correction_x, other.motor_correction_x,
+		n_motor_corrections * sizeof (coord_t));
+	memcpy (motor_correction_y, other.motor_correction_y,
+		n_motor_corrections * sizeof (coord_t));
+      }
     return *this;
   }
   /* Copy everything except for motor corrections.  */
