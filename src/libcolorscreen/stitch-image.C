@@ -154,7 +154,7 @@ stitch_image::release_img ()
 }
 
 bitmap_2d*
-stitch_image::compute_known_pixels (image_data &img, scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress)
+stitch_image::compute_known_pixels (scr_to_img &scr_to_img, int skiptop, int skipbottom, int skipleft, int skipright, progress_info *progress)
 {
   bitmap_2d *known_pixels = new bitmap_2d (width, height);
   if (!known_pixels)
@@ -734,7 +734,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       scr_to_img_parameters p = param;
       p.mesh_trans = NULL;
       basic_scr_to_img_map.set_parameters (p, *img);
-      known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, NULL));
+      known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 0, 0, 0, 0, NULL));
     }
   render.compute_final_range ();
   final_xshift = render.get_final_xshift ();
@@ -783,10 +783,10 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
     }
   if (m_prj->params.max_contrast >= 0)
     dufay->analyze_contrast (&render, img.get(), &scr_to_img_map, progress);
-  get_analyzer().set_known_pixels (compute_known_pixels (*img, scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
+  get_analyzer().set_known_pixels (compute_known_pixels (scr_to_img_map, skiptop, skipbottom, skipleft, skipright, progress) /*screen_detected_patches*/);
   screen_filename = (std::string)"screen"+(std::string)filename;
   known_screen_filename = (std::string)"known_screen"+(std::string)filename;
-  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 0, 0, 0, 0, progress));
+  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 0, 0, 0, 0, progress));
   if (m_prj->params.screen_tiles && !get_analyzer().write_screen (screen_filename.c_str (), NULL, &error, progress, 0, 1, 0, 1, 0, 1))
     {
       progress->pause_stdout ();
@@ -1248,7 +1248,7 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
   param.mesh_trans = NULL;
   basic_scr_to_img_map.set_parameters (param, data, m_prj->rotation_adjustment);
   param.mesh_trans = mesh_trans.get ();
-  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (*img, scr_to_img_map, 5,5,5,5, NULL));
+  known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 5,5,5,5, NULL));
   analyzed = true;
   return true;
 }

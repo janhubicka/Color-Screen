@@ -160,7 +160,7 @@ public:
                 bool right_p, lens_warp_correction_parameters &lens_correction,
                 progress_info *);
   void release_image_data (progress_info *);
-  bitmap_2d *compute_known_pixels (image_data &img, scr_to_img &scr_to_img,
+  bitmap_2d *compute_known_pixels (scr_to_img &scr_to_img,
                                    int skiptop, int skipbottom, int skipleft,
                                    int skipright, progress_info *progress);
   int output_common_points (FILE *f, stitch_image &other, int n1, int n2,
