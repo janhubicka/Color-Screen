@@ -99,7 +99,7 @@ public:
     screen *scr;
 
     tile_data ()
-        : outliers (), color (NULL), bw (NULL), pos (NULL),
+        : outliers (), color (NULL), sharpened_color (NULL), bw (NULL), pos (NULL),
           fixed_offset{ -10, -10 }, fixed_emulsion_offset{ -10, -10 },
           merged_scr (NULL), scr (NULL),
           last_emulsion_intensities (-1, -1, -1),
@@ -797,7 +797,7 @@ public:
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
-    optimize_sharpening = (flags & finetune_sharpen) && tiles[0].color != NULL;
+    optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != NULL;
     optimize_mix_weights = false;
     if (simulate_infrared)
       {
@@ -841,6 +841,9 @@ public:
 	  tiles[i].sharpened_color = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
 	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
 		;
+	optimize_screen_blur = false;
+	optimize_screen_channel_blurs = false;
+	blur_radius = 0;
       }
     else
       {

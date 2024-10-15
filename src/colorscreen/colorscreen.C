@@ -245,6 +245,7 @@ print_help ()
                        "screen blur point spread\n");
       fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of "
                        "emulsion blur radius\n");
+      fprintf (stderr, "      --optimize-sharpening     enable finetuning of image sharpening\n");
       fprintf (stderr, "                                requres known screen blur, "
                "mixing weights in input file and monochrome chanel use\n");
       fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of "
@@ -2243,6 +2244,8 @@ finetune (int argc, char **argv)
         flags |= finetune_bw;
       else if (!strcmp (argv[i], "--optimize-dufay-strips"))
         flags |= finetune_dufay_strips;
+      else if (!strcmp (argv[i], "--optimize-sharpening"))
+        flags |= finetune_sharpening;
       else if (!strcmp (argv[i], "--no-normalize"))
         flags |= finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-least-squares"))

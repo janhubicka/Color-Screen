@@ -885,7 +885,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	//fparam.multitile = 3;
 	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared | finetune_sharpen;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared | finetune_sharpening;
 	//fparam.range = 4;
 	fparam.range = 16;
 	fparam.ignore_outliers=0.001;
