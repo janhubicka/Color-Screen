@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <memory>
 /* Taken from multiblend.  */
 
 #include <vector>
@@ -37,7 +38,7 @@ private:
 	  ~DestructionGuard ();
 	};
 	static DestructionGuard Guard;
-	static std::vector<MapAllocObject*> objects;
+	static std::vector<std::unique_ptr<MapAllocObject>> objects;
 	static char tmpdir[256];
 	static char filename[512];
 	static int suffix;

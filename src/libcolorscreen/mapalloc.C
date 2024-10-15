@@ -7,6 +7,7 @@
 #endif
 #include <cstring>
 #include <cstdio>
+#include <mutex>
 
 #ifndef _WIN32
 #include <cstdlib>
@@ -23,18 +24,17 @@ static const bool debug = false;
 static bool destroyed = false;
 
 MapAlloc::DestructionGuard MapAlloc::Guard;
-std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
+std::vector<std::unique_ptr<MapAlloc::MapAllocObject>> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";
 char MapAlloc::filename[512];
 int MapAlloc::suffix = 0;
 size_t MapAlloc::cache_threshold = 1024*1024*1024;
 size_t MapAlloc::min_file_size = 1024*1024;
 size_t MapAlloc::total_allocated = 0;
+static std::mutex mapalloc_lock;
 
 MapAlloc::DestructionGuard::~DestructionGuard ()
 {
-  for (auto it = objects.begin(); it < objects.end(); ++it)
-    delete (*it);
   destroyed = true;
 }
 
@@ -46,22 +46,28 @@ void MapAlloc::CacheThreshold(size_t limit) {
 }
 
 void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
-	MapAllocObject* m = new MapAllocObject(size, reason, alignment);
-	objects.push_back(m);
-	return m->GetPointer();
+	mapalloc_lock.lock ();
+	objects.push_back(std::make_unique <MapAllocObject>(size, reason, alignment));
+	void *ret = objects.back ()->GetPointer();
+	mapalloc_lock.unlock ();
+	return ret;
 }
 
 void MapAlloc::Free(void* p) {
+	mapalloc_lock.lock ();
 	/* If static destruction already ran; do nothing.  */
 	if (destroyed)
-	  return;
+	  {
+	    mapalloc_lock.unlock ();
+	    return;
+	  }
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
-			delete (*it);
 			objects.erase(it);
 			break;
 		}
 	}
+	mapalloc_lock.unlock ();
 }
 
 size_t MapAlloc::GetSize(void* p) {
