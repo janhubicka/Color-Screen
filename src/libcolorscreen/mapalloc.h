@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <memory>
+#include <mutex>
 /* Taken from multiblend.  */
 
 #include <vector>
@@ -45,6 +46,7 @@ private:
 	static size_t cache_threshold;
 	static size_t min_file_size;
 	static size_t total_allocated;
+	static std::mutex mapalloc_lock;
 
 public:
 	static void* Alloc(size_t size, const char *reason, int alignment = 128);

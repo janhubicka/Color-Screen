@@ -7,7 +7,6 @@
 #endif
 #include <cstring>
 #include <cstdio>
-#include <mutex>
 
 #ifndef _WIN32
 #include <cstdlib>
@@ -31,7 +30,7 @@ int MapAlloc::suffix = 0;
 size_t MapAlloc::cache_threshold = 1024*1024*1024;
 size_t MapAlloc::min_file_size = 1024*1024;
 size_t MapAlloc::total_allocated = 0;
-static std::mutex mapalloc_lock;
+std::mutex MapAlloc::mapalloc_lock;
 
 MapAlloc::DestructionGuard::~DestructionGuard ()
 {
@@ -54,13 +53,10 @@ void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
 }
 
 void MapAlloc::Free(void* p) {
-	mapalloc_lock.lock ();
 	/* If static destruction already ran; do nothing.  */
 	if (destroyed)
-	  {
-	    mapalloc_lock.unlock ();
-	    return;
-	  }
+	  return;
+	mapalloc_lock.lock ();
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			objects.erase(it);
