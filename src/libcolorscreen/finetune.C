@@ -1054,6 +1054,9 @@ public:
             abort ();
           }
       }
+    /* Avoid valgrind warnings on undefined values.  */
+    else
+      set_emulsion_blur_radius (start, -1);
     if (optimize_screen_channel_blurs)
       start[screen_index] = start[screen_index + 1] = start[screen_index + 2]
           = rev_pixel_blur (0.3);
