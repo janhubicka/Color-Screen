@@ -33,6 +33,8 @@ size_t MapAlloc::total_allocated = 0;
 
 MapAlloc::DestructionGuard::~DestructionGuard ()
 {
+  for (auto it = objects.begin(); it < objects.end(); ++it)
+    delete (*it);
   destroyed = true;
 }
 
