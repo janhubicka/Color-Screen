@@ -9,7 +9,7 @@ class screen;
 struct render_parameters;
 struct scr_to_img_parameters;
 class image_data;
-enum finetune_flags
+enum finetune_flags : uint64_t
 {
   finetune_position = 1 << 0,
   finetune_screen_blur = 1 << 1,
@@ -28,7 +28,7 @@ enum finetune_flags
   finetune_use_dufay_srip_widths = 1 << 14,
   finetune_use_screen_blur = 1 << 15,
   finetune_simulate_infrared = 1 << 16,
-  finetune_sharpen = 1L << 32
+  finetune_sharpen = ((int64_t)1) << 32,
 };
 struct finetune_parameters
 {
