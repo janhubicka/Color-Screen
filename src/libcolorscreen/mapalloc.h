@@ -42,6 +42,7 @@ private:
 	static char filename[512];
 	static int suffix;
 	static size_t cache_threshold;
+	static size_t min_file_size;
 	static size_t total_allocated;
 
 public:

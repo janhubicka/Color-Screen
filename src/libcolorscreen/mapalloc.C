@@ -27,7 +27,8 @@ std::vector<MapAlloc::MapAllocObject*> MapAlloc::objects;
 char MapAlloc::tmpdir[256] = "";
 char MapAlloc::filename[512];
 int MapAlloc::suffix = 0;
-size_t MapAlloc::cache_threshold = 1024*1024*10;
+size_t MapAlloc::cache_threshold = 1024*1024*1024;
+size_t MapAlloc::min_file_size = 1024*1024;
 size_t MapAlloc::total_allocated = 0;
 
 MapAlloc::DestructionGuard::~DestructionGuard ()
@@ -81,9 +82,9 @@ void MapAlloc::SetTmpdir(const char* _tmpdir) {
 * MapAllocObject
 ***********************************************************************/
 MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int alignment) : size(_size) {
-	if (total_allocated + size < cache_threshold) {
+	if (total_allocated + size < cache_threshold || size < min_file_size) {
 		if (debug)
-		  printf ("Allocating %li bytes for %s, overall allocation: %li", (long)_size, reason, (long)(total_allocated + size));
+		  printf ("Allocating %li bytes for %s, overall allocation: %li\n", (long)_size, reason, (long)(total_allocated + size));
 #ifdef _WIN32
 		pointer = _aligned_malloc(size, alignment);
 #else
