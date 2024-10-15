@@ -24,10 +24,10 @@ struct render_parameters
   luminosity_t gamma;
 
   /* TODO; Invert is applied before backlight correction which is wrong.  */
-  class backlight_correction_parameters *backlight_correction;
+  std::shared_ptr <backlight_correction_parameters> backlight_correction;
   luminosity_t backlight_correction_black;
 
-  class scanner_blur_correction_parameters *scanner_blur_correction;
+  std::shared_ptr <scanner_blur_correction_parameters> scanner_blur_correction;
 
   /* After linearizing we apply (val - dark_point) * scan_exposure  */
   luminosity_t dark_point, scan_exposure;
@@ -56,7 +56,7 @@ struct render_parameters
     /* Additive correction to stitch-project dark point.  */
     luminosity_t dark_point;
     /* Scanner blur usually differs for every capture  */
-    class scanner_blur_correction_parameters *scanner_blur_correction;
+    std::shared_ptr <scanner_blur_correction_parameters> scanner_blur_correction;
     /* If true tile is rendered, if false tile is not rendered.  */
     bool enabled;
     /* Coordinates of the tile in stitch project (used to check that tile

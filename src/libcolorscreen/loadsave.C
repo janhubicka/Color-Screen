@@ -1009,13 +1009,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (correction)
 	    {
-	      backlight_correction_parameters *c = new backlight_correction_parameters ();
+	      std::unique_ptr <backlight_correction_parameters> c = std::make_unique <backlight_correction_parameters> ();
 	      if (!c->load (f, error))
 		return false;
 	      if (rparam)
-		rparam->backlight_correction = c;
-	      else
-		delete c;
+		rparam->backlight_correction = std::move (c);
 	    }
 	}
       else if (!strcmp (buf, "scanner_blur_correction"))
@@ -1028,13 +1026,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (correction)
 	    {
-	      scanner_blur_correction_parameters *c = new scanner_blur_correction_parameters ();
+	      std::unique_ptr <scanner_blur_correction_parameters> c = std::make_unique <scanner_blur_correction_parameters> ();
 	      if (!c->load (f, error))
 		return false;
 	      if (rparam)
-		rparam->scanner_blur_correction = c;
-	      else
-		delete c;
+		rparam->scanner_blur_correction = std::move (c);
 	    }
 	}
       else if (!strcmp (buf, "tile_adjustment_scanner_blur_correction"))
@@ -1064,11 +1060,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (enb)
 	    {
-	      scanner_blur_correction_parameters *c = new scanner_blur_correction_parameters ();
+	      std::unique_ptr <scanner_blur_correction_parameters> c = std::make_unique <scanner_blur_correction_parameters> ();
 	      if (!c->load (f, error))
 		return false;
 	      if (rparam)
-		rparam->get_tile_adjustment (x, y).scanner_blur_correction = c;
+		rparam->get_tile_adjustment (x, y).scanner_blur_correction = std::move (c);
 	    }
         }
       else if (!strcmp (buf, "scr_detect_gamma"))

@@ -459,7 +459,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 {
   if (m_params.backlight_correction)
     {
-      backlight_correction_cache_params p = {m_params.backlight_correction, m_params.backlight_correction->id,
+      backlight_correction_cache_params p = {m_params.backlight_correction.get (), m_params.backlight_correction->id,
 					     m_img.width, m_img.height,
 					     m_params.backlight_correction_black, /*!grayscale_needed*/true};
       m_backlight_correction = backlight_correction_cache.get (p, progress, &m_backlight_correction_id);

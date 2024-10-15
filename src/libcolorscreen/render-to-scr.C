@@ -241,7 +241,7 @@ render_to_scr::compute_screen_table (progress_info *progress)
 {
   assert (!m_screen_table);
   screen_table_params p
-      = { m_params.scanner_blur_correction,
+      = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
           m_params.dufay_red_strip_width, m_params.dufay_green_strip_width };
   m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);

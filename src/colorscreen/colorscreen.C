@@ -1057,8 +1057,7 @@ analyze_backlight (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
       exit (1);
     }
-  backlight_correction_parameters *cor
-      = backlight_correction_parameters::analyze_scan (scan, 1.0);
+  std::unique_ptr <backlight_correction_parameters> cor (backlight_correction_parameters::analyze_scan (scan, 1.0));
   FILE *out = fopen (argv[1], "wt");
   if (!out)
     {
@@ -1081,10 +1080,9 @@ analyze_backlight (int argc, char **argv)
           exit (1);
         }
     }
-  delete cor;
 }
 
-scanner_blur_correction_parameters *
+std::unique_ptr <scanner_blur_correction_parameters>
 analyze_scanner_blur_img (scr_to_img_parameters &param, 
 			  render_parameters &rparam,
 			  image_data &scan,
@@ -1262,7 +1260,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           blurs[y * xsteps * xsubsteps + x] = -1;
         progress->inc_progress ();
       }
-  scanner_blur_correction_parameters *scanner_blur_correction = new scanner_blur_correction_parameters;
+  std::unique_ptr <scanner_blur_correction_parameters> scanner_blur_correction = std::make_unique<scanner_blur_correction_parameters> ();
   scanner_blur_correction->alloc (xsteps, ysteps);
   coord_t pixel_size;
   scr_to_img map;
@@ -1324,10 +1322,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
       }
   free (blurs);
   if (fail)
-    {
-      delete scanner_blur_correction;
-      return NULL;
-    }
+    return NULL;
   return scanner_blur_correction;
 }
 
@@ -1492,10 +1487,7 @@ analyze_scanner_blur (int argc, char **argv)
   if (!strip_ysteps)
     strip_ysteps = 1;
   if (rparam.scanner_blur_correction)
-    {
-      delete rparam.scanner_blur_correction;
-      rparam.scanner_blur_correction = NULL;
-    }
+    rparam.scanner_blur_correction = NULL;
 #ifdef _OPENMP
   omp_set_nested (1);
 #endif
