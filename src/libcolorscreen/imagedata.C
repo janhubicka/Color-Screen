@@ -122,14 +122,12 @@ private:
 
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), loader (NULL), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), own (false)
 { 
 }
 
 image_data::~image_data ()
 {
-  if (loader)
-    delete loader;
   if (stitch)
     delete stitch;
   if (icc_profile)
@@ -867,15 +865,15 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
   assert (!loader);
   m_preload_all = preload_all;
   if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
-    loader = new tiff_image_data_loader (this);
+    loader = std::make_unique <tiff_image_data_loader> (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
-    loader = new jpg_image_data_loader (this);
+    loader = std::make_unique <jpg_image_data_loader> (this);
   else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq") || has_suffix (name, "NEF") || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
-    loader = new raw_image_data_loader (this);
+    loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".eip"))
-    loader = new raw_image_data_loader (this);
+    loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".csprj"))
-    loader = new stitch_image_data_loader (this, preload_all);
+    loader = std::make_unique <stitch_image_data_loader> (this, preload_all);
   if (!loader)
     {
       *error = "Unknown file extension";
@@ -883,10 +881,7 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
     }
   bool ret = loader->init_loader (name, error, progress);
   if (!ret)
-    {
-      delete loader;
-      loader = NULL;
-    }
+    loader = NULL;
   return ret;
 }
 
@@ -897,7 +892,6 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
   bool ret = loader->load_part (permille, error, progress);
   if (!ret || *permille == 1000)
     {
-      delete loader;
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
@@ -963,7 +957,6 @@ image_data::load (const char *name, bool preload_all, const char **error, progre
   if (!allocate ())
     {
       *error = "out of memory allocating image";
-      delete loader;
       loader = NULL;
       return false;
     }

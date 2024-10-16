@@ -2663,7 +2663,8 @@ finetune (int argc, char **argv)
           p.filename = fog_tiff_name;
           p.width = xsteps;
           p.height = ysteps;
-          p.depth = 16;
+	  p.hdr = true;
+          p.depth = 32;
           const char *error;
           tiff_writer sharpness (p, &error);
           if (error)
@@ -2677,12 +2678,12 @@ finetune (int argc, char **argv)
             {
               for (int x = 0; x < xsteps; x++)
                 if (!results[y * xsteps + x].success)
-                  sharpness.put_pixel (x, 65535, 0, 0);
+                  sharpness.put_hdr_pixel (x, 1, 0, 0);
                 else
-                  sharpness.put_pixel (
-                      x, results[y * xsteps + x].fog.red * 65535,
-                      results[y * xsteps + x].fog.green * 65535,
-                      results[y * xsteps + x].fog.blue * 65535);
+                  sharpness.put_hdr_pixel (
+                      x, results[y * xsteps + x].fog.red * 1,
+                      results[y * xsteps + x].fog.green * 1,
+                      results[y * xsteps + x].fog.blue * 1);
               if (!sharpness.write_row ())
                 {
                   progress.pause_stdout ();
@@ -2807,7 +2808,7 @@ finetune (int argc, char **argv)
           for (int y = 0; y < ysteps; y++)
             {
               for (int x = 0; x < xsteps; x++)
-                if (results[y * xsteps + x].success)
+                if (!results[y * xsteps + x].success)
                   sharpness.put_pixel (x, 65535, 0, 1);
                 else
                   {

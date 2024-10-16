@@ -1,5 +1,6 @@
 #ifndef IMAGEDATA_H
 #define IMAGEDATA_H
+#include <memory>
 #include "dllpublic.h"
 #include "base.h"
 #include "color.h"
@@ -76,7 +77,7 @@ public:
   /* Gamma, -2 if unknown.  */
   luminosity_t gamma;
 private:
-  image_data_loader *loader;
+  std::unique_ptr <image_data_loader> loader;
   /* True of the data is owned by the structure.  */
   bool own;
   bool m_preload_all;
