@@ -271,6 +271,7 @@ print_help ()
                        "position as tiff file\n");
       fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay "
                        "strip parameters as tiff file\n");
+      fprintf (stderr, "      --screen-color-tiff-base=name write screen colors as tiff files\n");
       fprintf (stderr, "      --orig-tiff-base=name     write analyzed tiles "
                        "into tiff files <name>-y-x.tif\n");
       fprintf (stderr, "      --simulated-tiff-base=name write simulated "
@@ -1376,8 +1377,6 @@ analyze_scanner_blur (int argc, char **argv)
         flags &= ~finetune_no_normalize;
       else if (!strcmp (argv[i], "--no-normalize"))
         flags |= finetune_no_normalize;
-      else if (!strcmp (argv[i], "--simulate-infrared"))
-        flags |= finetune_simulate_infrared;
       else if (!strcmp (argv[i], "--data-collection"))
         flags &= ~finetune_no_data_collection;
       else if (!strcmp (argv[i], "--no-data-collection"))
@@ -2187,6 +2186,16 @@ digital_laboratory (int argc, char **argv)
     print_help ();
 }
 
+static rgbdata
+get_screen_chanel (finetune_result &r, int c)
+{
+	if (c == 0)
+		return r.screen_red;
+	else if (c == 1)
+		return r.screen_green;
+	return r.screen_blue;
+}
+
 static void
 finetune (int argc, char **argv)
 {
@@ -2201,6 +2210,7 @@ finetune (int argc, char **argv)
   const char *orig_tiff_base = NULL;
   const char *simulated_tiff_base = NULL;
   const char *diff_tiff_base = NULL;
+  const char *screen_color_tiff_base = NULL;
   int multitile = 1;
   int xsteps = 32;
   int border = 5;
@@ -2256,6 +2266,9 @@ finetune (int argc, char **argv)
       else if (const char *str
                = arg_with_param (argc, argv, &i, "orig-tiff-base"))
         orig_tiff_base = str;
+      else if (const char *str
+               = arg_with_param (argc, argv, &i, "screen-color-tiff-base"))
+        screen_color_tiff_base = str;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "simulated-tiff-base"))
         simulated_tiff_base = str;
@@ -2644,6 +2657,59 @@ finetune (int argc, char **argv)
                 }
             }
         }
+    }
+  if (scan.rgbdata && !(flags & finetune_bw))
+    {
+      for (int c = 0; c < 3; c++)
+	{
+	  const char *cname[3]={"red", "green", "blue"};
+	  printf ("Detected screen %s\n", cname[c]);
+	  for (int y = 0; y < ysteps; y++)
+	    {
+	      for (int x = 0; x < xsteps; x++)
+		if (results[y * xsteps + x].success)
+		  get_screen_chanel (results[y * xsteps + x],c).print (stdout);
+		else
+		  printf ("  ------");
+	      printf ("\n");
+	    }
+	  if (screen_color_tiff_base)
+	    {
+	      tiff_writer_params p;
+	      std::string name = (std::string)screen_color_tiff_base + "-" + cname[c] + ".tif";
+	      p.filename = name.c_str ();
+	      p.width = xsteps;
+	      p.height = ysteps;
+	      p.hdr = true;
+	      p.depth = 32;
+	      const char *error;
+	      tiff_writer sharpness (p, &error);
+	      if (error)
+		{
+		  progress.pause_stdout ();
+		  fprintf (stderr, "Can not open tiff file %s: %s\n",
+			   screen_blur_tiff_name, error);
+		  exit (1);
+		}
+	      for (int y = 0; y < ysteps; y++)
+		{
+		  for (int x = 0; x < xsteps; x++)
+		    if (!results[y * xsteps + x].success)
+		      sharpness.put_hdr_pixel (x, 1, 0, 0);
+		    else
+		      sharpness.put_hdr_pixel (
+			  x, get_screen_chanel (results[y * xsteps + x], c).red * 1,
+			  get_screen_chanel (results[y * xsteps + x], c).green * 1,
+			  get_screen_chanel (results[y * xsteps + x], c).blue * 1);
+		  if (!sharpness.write_row ())
+		    {
+		      progress.pause_stdout ();
+		      fprintf (stderr, "Error writting tiff file %s\n", argv[2]);
+		      exit (1);
+		    }
+		}
+	    }
+	}
     }
   if (flags & finetune_fog)
     {
