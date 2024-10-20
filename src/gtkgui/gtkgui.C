@@ -291,6 +291,7 @@ print_help()
 		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n"
 		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n"
 		   "ctrl+w - set white balance so selection is neutral gray\n"
+		   "ctrl+m - optimize mixing weights to balance selection to neutral gray\n"
 		   "ctrl+i - optimize mixing weights using infrared channel\n");
 	if (ui_mode == solver_editing)
 	   printf ("Motor editing mode\n"
@@ -1079,7 +1080,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
           print_help ();
 	  printf ("Screen editing mode\n");
 	}
-      if (k == 'P' && scan.rgbdata)
+      if (k == 'P' && scan.has_rgb ())
         {
 	  ui_mode = color_profiling;
           preview_display_scheduled = true;
