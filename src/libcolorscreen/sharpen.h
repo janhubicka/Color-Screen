@@ -17,6 +17,8 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
       if (!progress || !progress->cancel_requested ())
 	for (int x = 0; x < width; x++)
 	  out[y * width + x] = (mem_O) getdata (data, x, y, width, param);
+      if (progress)
+	 progress->inc_progress ();
     }
 }
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>

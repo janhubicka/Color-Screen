@@ -548,12 +548,12 @@ stitch_project::load (FILE *f, const char **error)
 	  *error = "wrong color_screen_stitch_image coordinates";
 	  return false;
 	}
-      if (!images[y][x].load (this, f, error))
-	return false;
-      images[y][x].left = !y;
-      images[y][x].top = !x;
+      images[y][x].left = !x;
+      images[y][x].top = !y;
       images[y][x].right = x == params.width - 1;
       images[y][x].bottom = y == params.height - 1;
+      if (!images[y][x].load (this, f, error))
+	return false;
       scr_param.type = images[y][x].param.type;
     }
   if (stitch_info_scale)
