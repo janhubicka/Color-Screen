@@ -338,131 +338,155 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   return ret;
 }
 
-bool
-optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, render_parameters &rparam, std::vector <point_t> &points, std::vector <color_match> *report, progress_info *progress)
+static void
+optimize_color_model_colors_collect (scr_to_img_parameters *param,
+                                     image_data &img,
+				     int x, int y,
+				     rgbdata &proportions,
+                                     render_parameters &rparam,
+                                     std::vector<point_t> &points,
+                                     rgbdata *colors, rgbdata *targets,
+                                     progress_info *progress)
 {
-   bool verbose = false;
-   /* Set up scr-to-img map.  */
-   scr_to_img map;
-   map.set_parameters (*param, img);
-   rgbdata proportions = map.patch_proportions (&rparam);
+  render_parameters my_rparam = rparam;
+  image_data *cimg = &img;
+  /* For stitched project look up, if there is any sample to analyze and return
+     early otherwise.  */
+  if (img.stitch)
+    {
+      size_t i;
+      for (i = 0; i < points.size (); i++)
+        {
+	  point_t scr = points[i];
+	  int tx = -1, ty = -1;
+	  if (img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
+	      && x == tx && y == ty)
+	    break;
+        }
+      /* No samples on this tile.  */
+      if (i == points.size ())
+	return;
+      /* Set up image and parameters of the tile.  */
+      cimg = img.stitch->images[y][x].img.get ();
+      param = &img.stitch->images[y][x].param;
+      rparam.get_tile_adjustment (img.stitch, x, y).apply (&my_rparam);
+    }
 
-   render_parameters my_rparam = rparam;
-   my_rparam.output_profile = render_parameters::output_profile_xyz;
+  /* Set up scr-to-img map.  */
+  scr_to_img map;
+  map.set_parameters (*param, *cimg);
+  proportions = map.patch_proportions (&my_rparam);
 
-   /* First renderer is interpolated with normal data collection with unadjusted mode.  */
-   render_interpolate r (*param, img, my_rparam, 255);
-   r.set_unadjusted ();
+  /* First renderer is interpolated with normal data collection with unadjusted
+     mode.  */
+  render_interpolate r (*param, *cimg, my_rparam, 255);
+  r.set_unadjusted ();
 
-   /* Second renderer is interpolated with original color collection with unadjusted mode.  */
-   render_parameters my_rparam2;
-   my_rparam2.original_render_from (my_rparam, true, true);
-   render_interpolate r2 (*param, img, my_rparam2, 255);
-   r2.set_unadjusted ();
-   r2.original_color (false);
+  /* Second renderer is interpolated with original color collection with
+     unadjusted mode.  */
+  render_parameters my_rparam2;
+  my_rparam2.original_render_from (my_rparam, true, true);
+  render_interpolate r2 (*param, *cimg, my_rparam2, 255);
+  r2.set_unadjusted ();
+  r2.original_color (false);
+
+  r.precompute_all (progress);
+  r2.precompute_all (progress);
+
+  for (size_t i = 0; i < points.size (); i++)
+    {
+      int px = points[i].x;
+      int py = points[i].y;
+      if (img.stitch)
+	{
+	  point_t scr = points[i];
+	  int tx, ty;
+	  if (!img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
+	      || x != tx || y != ty)
+	    continue;
+	  scr = img.stitch->images[y][x].common_scr_to_img_scr (scr);
+	  px = scr.x;
+	  py = scr.y;
+	}
+      const int range = 2;
+      rgbdata color = { 0, 0, 0 };
+      rgbdata target = { 0, 0, 0 };
+      for (int y = py - range; y <= py + range; y++)
+        for (int x = px - range; x <= px + range; x++)
+          {
+            target += r.sample_pixel_scr (x, y);
+            color += r2.sample_pixel_scr (x, y);
+          }
+      target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+      color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+
+      /* We collect normalized patches with R but non-normalized with R2.
+         Compensate.  */
+      target.red *= proportions.red;
+      target.green *= proportions.green;
+      target.blue *= proportions.blue;
+      targets[i] = target;
+      colors[i] = color;
+    }
+}
 
 
-   r.precompute_all (progress);
-   r2.precompute_all (progress);
-   int n = 0;
-   rgbdata *colors = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
-   rgbdata *targets = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
+bool
+optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
+                             render_parameters &rparam,
+                             std::vector<point_t> &points,
+                             std::vector<color_match> *report,
+                             progress_info *progress)
+{
+  bool verbose = false;
+  int n = points.size ();
+  render_parameters my_rparam = rparam;
+  my_rparam.output_profile = render_parameters::output_profile_xyz;
+  rgbdata *colors = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
+  rgbdata *targets = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
+  rgbdata proportions;
+  if (img.stitch)
+    for (int y = 0; y < img.stitch->params.height; y++)
+      for (int x = 0; x < img.stitch->params.width; x++)
+        optimize_color_model_colors_collect (param, img, x, y, proportions, my_rparam, points, colors,
+					     targets, progress);
+  else
+    optimize_color_model_colors_collect (param, img, -1, -1, proportions, my_rparam, points, colors,
+					 targets, progress);
+  if (n >= 4)
+    {
+      render r (img, my_rparam, 255);
+      color_matrix c
+          = determine_color_matrix (colors, NULL, targets, n, d50_white, 3,
+                                    report, &r, proportions, progress);
+      if (progress && progress->cancelled ())
+        return false;
+      /* Do basic sanity check.  All the values should be relative close to
+         range 0...1  */
+      for (int i = 0; i < 4; i++)
+        for (int j = 0; j < 3; j++)
+          if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
+            return false;
+      // printf ("Matrix\n");
+      // c.print (stdout);
+      /* First determine dark point of the scan.  */
+      // rparam.profiled_dark  = {c.m_elements[3][0], c.m_elements[3][1],
+      // c.m_elements[3][2]};
+      color_matrix ci = c.invert ();
+      rparam.profiled_dark
+          = { ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2] };
 
-   for (size_t i = 0; i < points.size (); i++)
-     {
-       int px = points[i].x;
-       int py = points[i].y;
-       const int range = 2;
-       rgbdata color = {0, 0, 0};
-#if 0
-       int xmin, ymin, xmax, ymax;
-       luminosity_t sx, sy;
-       map.to_img (px - range, py - range, &sx, &sy);
-       xmin = my_floor (sx);
-       ymin = my_floor (sy);
-       xmax = ceil (sx);
-       ymax = ceil (sy);
-       map.to_img (px + range, py - range, &sx, &sy);
-       xmin = std::min (xmin, (int)my_floor (sx));
-       ymin = std::min (ymin, (int)my_floor (sy));
-       xmax = std::max (xmax, (int)ceil (sx));
-       ymax = std::max (ymax, (int)ceil (sy));
-       map.to_img (px - range, py + range, &sx, &sy);
-       xmin = std::min (xmin, (int)my_floor (sx));
-       ymin = std::min (ymin, (int)my_floor (sy));
-       xmax = std::max (xmax, (int)ceil (sx));
-       ymax = std::max (ymax, (int)ceil (sy));
-       map.to_img (px - range, py - range, &sx, &sy);
-       xmin = std::min (xmin, (int)my_floor (sx));
-       ymin = std::min (ymin, (int)my_floor (sy));
-       xmax = std::max (xmax, (int)ceil (sx));
-       ymax = std::max (ymax, (int)ceil (sy));
-       xmin -= 5;
-       ymin -= 5;
-       xmax += 5;
-       ymax += 5;
-       if (xmin < 0 || ymin < 0 || xmax >= img.width || ymax >= img.height)
-	 continue;
-       int c = 0;
-       for (int y = ymin; y <= ymax; y++)
-         for (int x = xmin; x <= xmax; x++)
-	   {
-	     luminosity_t sx, sy;
-	     map.to_scr (x, y, &sx, &sy);
-	     if (sx < px - range || sx >= px + range + 1
-	         || sy < py - range || sy >= py + range + 1)
-	       continue;
-	     color += r.get_rgb_pixel (x, y);
-	     c++;
-	   }
-       assert (c);
-       color *= (1 / (luminosity_t)c);
-#endif
-       rgbdata target = {0, 0, 0};
-       for (int y = py - range; y <= py + range; y++)
-         for (int x = px - range; x <= px + range; x++)
-	   {
-	     target += r.sample_pixel_scr (x, y);
-	     color += r2.sample_pixel_scr (x, y);
-	   }
-       target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
-       color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
-
-       /* We collect normalized patches with R but non-normalized with R2.  Compensate.  */
-       target.red *= proportions.red;
-       target.green *= proportions.green;
-       target.blue *= proportions.blue;
-       //printf ("Point %i %i-%i:%i-%i\n", i, xmin,xmax,ymin,ymax);
-       //target.print (stdout);
-       //color.print (stdout);
-       targets [n] = target;
-       colors [n++] = color;
-     }
-   if (n >= 4)
-     {
-       color_matrix c = determine_color_matrix (colors, NULL, targets, n, d50_white, 3, report, &r, proportions, progress);
-       if (progress && progress->cancelled ())
-	 return false;
-       /* Do basic sanity check.  All the values should be relative close to range 0...1  */
-       for (int i = 0; i < 4; i++)
-	 for (int j = 0; j < 3; j++)
-	   if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
-	     return false;
-       //printf ("Matrix\n");
-       //c.print (stdout);
-       /* First determine dark point of the scan.  */
-       //rparam.profiled_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
-       color_matrix ci = c.invert ();
-       rparam.profiled_dark  = {ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2]};
-
-       /* Now obtain scanner response to process red, green and blue.  */
-       c.m_elements[3][0] = 0;
-       c.m_elements[3][1] = 0;
-       c.m_elements[3][2] = 0;
-       c = c.invert ();
-       rparam.profiled_red   = {c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2]};
-       rparam.profiled_green = {c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2]};
-       rparam.profiled_blue  = {c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2]};
+      /* Now obtain scanner response to process red, green and blue.  */
+      c.m_elements[3][0] = 0;
+      c.m_elements[3][1] = 0;
+      c.m_elements[3][2] = 0;
+      c = c.invert ();
+      rparam.profiled_red
+          = { c.m_elements[0][0], c.m_elements[0][1], c.m_elements[0][2] };
+      rparam.profiled_green
+          = { c.m_elements[1][0], c.m_elements[1][1], c.m_elements[1][2] };
+      rparam.profiled_blue
+          = { c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2] };
 
 #if 0
        rgbdata proportions = map.patch_proportions ();
@@ -473,19 +497,19 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
 #if 0
        rparam.optimized_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
 #endif
-       if (verbose)
-	 {
-	   printf ("Dark ");
-	   rparam.profiled_dark.print (stdout);
-	   printf ("Red ");
-	   rparam.profiled_red.print (stdout);
-	   printf ("Green ");
-	   rparam.profiled_green.print (stdout);
-	   printf ("Blue ");
-	   rparam.profiled_blue.print (stdout);
-	   //printf ("Final\n");
-	   //rparam.get_profile_matrix ({1,1,1}).print (stdout);
-	 }
+      if (verbose)
+        {
+          printf ("Dark ");
+          rparam.profiled_dark.print (stdout);
+          printf ("Red ");
+          rparam.profiled_red.print (stdout);
+          printf ("Green ");
+          rparam.profiled_green.print (stdout);
+          printf ("Blue ");
+          rparam.profiled_blue.print (stdout);
+          // printf ("Final\n");
+          // rparam.get_profile_matrix ({1,1,1}).print (stdout);
+        }
 
 #if 0
        auto cm = rparam.color_model;
@@ -502,8 +526,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img, rend
        rparam.optimized_blue /= proportions.blue;
 #endif
 #endif
-       return true;
-     }
-   return false;
+      return true;
+    }
+  return false;
 }
 }

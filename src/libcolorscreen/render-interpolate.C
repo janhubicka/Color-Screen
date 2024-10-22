@@ -556,6 +556,8 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
           int tx = r.tile_x;
           int ty = r.tile_y;
           image_data &tile = *stitch.images[ty][tx].img;
+	  render_parameters my_rparam = rparam;
+	  rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
           if (progress)
             stack = progress->push ();
@@ -567,7 +569,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
                     point_t pfin = stitch.common_scr_to_img.scr_to_final (src);
                     if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
                         || pfin.y > ymax
-                        || !stitch.tile_for_scr (&rparam, src.x, src.y, &ttx,
+                        || !stitch.tile_for_scr (&my_rparam, src.x, src.y, &ttx,
                                                  &tty, true)
                         || ttx != tx || tty != ty)
                       return true;
@@ -637,6 +639,8 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
           int tx = r.tile_x;
           int ty = r.tile_y;
           image_data &tile = *stitch.images[ty][tx].img;
+	  render_parameters my_rparam = rparam;
+	  rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
           if (progress)
             stack = progress->push ();
@@ -652,7 +656,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
                     // tsx,tsy,src.x,src.y,fx,fy,xmin,xmax,ymin,ymax);
                     if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
                         || pfin.y > ymax
-                        || !stitch.tile_for_scr (&rparam, src.x, src.y, &ttx,
+                        || !stitch.tile_for_scr (&my_rparam, src.x, src.y, &ttx,
                                                  &tty, true)
                         || ttx != tx || tty != ty)
                       return true;

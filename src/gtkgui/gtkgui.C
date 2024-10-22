@@ -1432,14 +1432,22 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
               }
          }
 
-  if (ui_mode == color_profiling)
+  if (ui_mode == color_profiling && color_optimizer_points.size ())
     {
       scr_to_img map;
       map.set_parameters (current, scan);
       bradford_whitepoint_adaptation_matrix m(d50_white, srgb_white);
       for (size_t i = 0; i < color_optimizer_points.size (); i++)
         {
-	  point_t p = map.to_img ({color_optimizer_points[i].x, color_optimizer_points[i].y});
+	  point_t p;
+	  if (!scan.stitch)
+	    p = map.to_img ({color_optimizer_points[i].x, color_optimizer_points[i].y});
+	  else
+	    {
+	      p = scan.stitch->common_scr_to_img.scr_to_final ({color_optimizer_points[i].x, color_optimizer_points[i].y});
+	      p.x -= scan.xmin;
+	      p.y -= scan.ymin;
+	    }
 	  rgbdata c2 = {1, 0, 0};
 	  rgbdata c1 = {1, 1, 1};
 	  if (color_optimizer_match.size () > i)
@@ -1601,7 +1609,12 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       coord_t screenx, screeny;
       scr_to_img map;
       map.set_parameters (current, scan);
-      point_t screen = map.to_scr ({x, y});
+      point_t screen;
+     
+      if (!scan.stitch)
+        screen = map.to_scr ({x, y});
+      else
+        screen = scan.stitch->common_scr_to_img.final_to_scr ({x + scan.xmin, y + scan.ymin});
       if (event->button == 1)
 	{
 	  color_optimizer_points.push_back (screen);
@@ -2187,7 +2200,8 @@ main (int argc, char **argv)
   while (true)
     {
       if (ui_mode == color_profiling
-	  && (display_scheduled || preview_display_scheduled))
+	  && (display_scheduled || preview_display_scheduled)
+	  && color_optimizer_points.size ())
 	{
 	  file_progress_info progress (stdout);
 	  optimize_color_model_colors (&current, scan, rparams, color_optimizer_points, &color_optimizer_match, &progress);
