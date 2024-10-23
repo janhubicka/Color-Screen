@@ -512,6 +512,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
   if (n >= 4)
     {
       render r (img, my_rparam, 255);
+      if (!r.precompute_all (false, true, proportions, progress))
+	return false;
       color_matrix c = determine_color_matrix (
           colors.data (), NULL, targets.data (), n, d50_white, 3, report, &r,
           proportions, progress);
