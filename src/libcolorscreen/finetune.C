@@ -2326,7 +2326,8 @@ public:
     ret.dufay_green_strip_width = get_green_strip_width (start);
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
-    get_colors (start, &ret.screen_red, &ret.screen_green, &ret.screen_blue);
+    if (tiles[0].color)
+      get_colors (start, &ret.screen_red, &ret.screen_green, &ret.screen_blue);
     ret.emulsion_blur_radius = get_emulsion_blur_radius (start);
     if (optimize_screen_ps_blur)
       get_ps (ret.screen_mtf_blur, start);
