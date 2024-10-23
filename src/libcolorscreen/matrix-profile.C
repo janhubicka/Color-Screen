@@ -159,11 +159,14 @@ color_solver
    TODO: We should not minimize least squares, we want smallest deltaE2000  */
 
 color_matrix
-determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white, int dark_point_elts, std::vector <color_match> *report, render *r, rgbdata proportions, progress_info *progress)
+determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
+                        int n, xyz white, int dark_point_elts,
+                        std::vector<color_match> *report, render *r,
+                        rgbdata proportions, progress_info *progress)
 {
-  rgbdata avg1 = {0,0,0};
-  xyz avg2 = {0,0,0};
-  rgbdata avg3 = {0,0,0};
+  rgbdata avg1 = { 0, 0, 0 };
+  xyz avg2 = { 0, 0, 0 };
+  rgbdata avg3 = { 0, 0, 0 };
   for (int i = 0; i < n; i++)
     {
       avg1 += colors[i];
@@ -173,8 +176,9 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
         avg3 += rgbtargets[i];
     }
   /* Normalize values to reduce rounoff errors.  */
-  luminosity_t scale1 = 3*n/(avg1.red + avg1.green + avg1.blue);
-  luminosity_t scale2 = targets ? 3*n/(avg2.x + avg2.y + avg2.z) : 3*n/(avg3.red + avg3.green + avg3.blue);
+  luminosity_t scale1 = 3 * n / (avg1.red + avg1.green + avg1.blue);
+  luminosity_t scale2 = targets ? 3 * n / (avg2.x + avg2.y + avg2.z)
+                                : 3 * n / (avg3.red + avg3.green + avg3.blue);
 
   int nvariables = 9;
   const bool verbose = false;
@@ -194,68 +198,81 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   for (int i = 0; i < n; i++)
     {
       for (int j = 0; j < 3; j++)
-	{
-	  for (int k = 0; k < 3; k++)
-	    {
-	      gsl_matrix_set (X, i * 3 + j, 3 * k + 0, j == k ? colors[i].red * scale1 : 0);
-	      gsl_matrix_set (X, i * 3 + j, 3 * k + 1, j == k ? colors[i].green * scale1 : 0);
-	      gsl_matrix_set (X, i * 3 + j, 3 * k + 2, j == k ? colors[i].blue * scale1 : 0);
-	    }
-	  if (dark_point_elts == 1)
-	    gsl_matrix_set (X, i * 3 + j, 9, 1);
-	  else if (dark_point_elts == 3)
-	    {
-	      gsl_matrix_set (X, i * 3 + j, 9, j == 0);
-	      gsl_matrix_set (X, i * 3 + j, 10, j == 1);
-	      gsl_matrix_set (X, i * 3 + j, 11, j == 2);
-	    }
-	  gsl_vector_set (y, i * 3 + j, (targets ? targets[i][j] : rgbtargets[i][j]) * scale2);
-	  gsl_vector_set (w, i * 3 + j, 1);
-	}
+        {
+          for (int k = 0; k < 3; k++)
+            {
+              gsl_matrix_set (X, i * 3 + j, 3 * k + 0,
+                              j == k ? colors[i].red * scale1 : 0);
+              gsl_matrix_set (X, i * 3 + j, 3 * k + 1,
+                              j == k ? colors[i].green * scale1 : 0);
+              gsl_matrix_set (X, i * 3 + j, 3 * k + 2,
+                              j == k ? colors[i].blue * scale1 : 0);
+            }
+          if (dark_point_elts == 1)
+            gsl_matrix_set (X, i * 3 + j, 9, 1);
+          else if (dark_point_elts == 3)
+            {
+              gsl_matrix_set (X, i * 3 + j, 9, j == 0);
+              gsl_matrix_set (X, i * 3 + j, 10, j == 1);
+              gsl_matrix_set (X, i * 3 + j, 11, j == 2);
+            }
+          gsl_vector_set (y, i * 3 + j,
+                          (targets ? targets[i][j] : rgbtargets[i][j])
+                              * scale2);
+          gsl_vector_set (w, i * 3 + j, 1);
+        }
     }
   double chisq;
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
   if (nequations == nvariables && 0)
     {
       for (int i = 0; i < nvariables; i++)
-	gsl_vector_set (c, i, gsl_vector_get (y, i));
+        gsl_vector_set (c, i, gsl_vector_get (y, i));
       gsl_matrix *T = gsl_matrix_alloc (nequations, nvariables);
       for (int i = 0; i < nvariables; i++)
         for (int j = 0; j < nvariables; j++)
-	  gsl_matrix_set (T, i, j, gsl_matrix_get (X, i, j));
+          gsl_matrix_set (T, i, j, gsl_matrix_get (X, i, j));
       bool colinear = gsl_linalg_HH_svx (T, c);
       if (colinear)
-	{
-	  printf ("Colinear input\n");
-	  color_matrix ret;
-	  gsl_matrix_free (X);
-	  gsl_matrix_free (T);
-	  gsl_vector_free (y);
-	  gsl_vector_free (w);
-	  gsl_vector_free (c);
-	  gsl_set_error_handler (old_handler);
-	  return ret;
-	}
+        {
+          printf ("Colinear input\n");
+          color_matrix ret;
+          gsl_matrix_free (X);
+          gsl_matrix_free (T);
+          gsl_vector_free (y);
+          gsl_vector_free (w);
+          gsl_vector_free (c);
+          gsl_set_error_handler (old_handler);
+          return ret;
+        }
       printf ("HH solved\n");
     }
   else
     {
-      gsl_multifit_linear_workspace * work
-	= gsl_multifit_linear_alloc (nequations, nvariables);
+      gsl_multifit_linear_workspace *work
+          = gsl_multifit_linear_alloc (nequations, nvariables);
       gsl_matrix *cov;
       cov = gsl_matrix_alloc (nvariables, nvariables);
-      gsl_multifit_wlinear (X, w, y, c, cov,
-			    &chisq, work);
+      gsl_multifit_wlinear (X, w, y, c, cov, &chisq, work);
       gsl_matrix_free (cov);
       gsl_multifit_linear_free (work);
     }
   if (verbose)
     print_system (stdout, X, y, w, c);
   luminosity_t s = (scale1 / scale2);
-  color_matrix ret (C(0) * s, C(1) * s, C(2) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(9) / scale2 : 0,
-		    C(3) * s, C(4) * s, C(5) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(10) / scale2 : 0,
-		    C(6) * s, C(7) * s, C(8) * s, dark_point_elts == 1? C(9) * s : dark_point_elts == 3 ? C(11) / scale2 : 0,
-		    0, 0, 0, 1);
+  color_matrix ret (C (0) * s, C (1) * s, C (2) * s,
+                    dark_point_elts == 1   ? C (9) * s
+                    : dark_point_elts == 3 ? C (9) / scale2
+                                           : 0,
+                    C (3) * s, C (4) * s, C (5) * s,
+                    dark_point_elts == 1   ? C (9) * s
+                    : dark_point_elts == 3 ? C (10) / scale2
+                                           : 0,
+                    C (6) * s, C (7) * s, C (8) * s,
+                    dark_point_elts == 1   ? C (9) * s
+                    : dark_point_elts == 3 ? C (11) / scale2
+                                           : 0,
+                    0, 0, 0, 1);
 #if 0
   /* If we have no way to produce XYZ data, then we can not minimize deltaE.  */
   if (!targets && !r)
@@ -264,10 +281,10 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   color_solver solver;
   solver.dark_point_elts = dark_point_elts;
   solver.init_by_matrix (ret);
-  //printf ("Initial\n");
-  //ret.print (stdout);
-  //printf ("Initial\n");
-  //solver.matrix_by_vals (solver.start).print (stdout);
+  // printf ("Initial\n");
+  // ret.print (stdout);
+  // printf ("Initial\n");
+  // solver.matrix_by_vals (solver.start).print (stdout);
   solver.colors = colors;
   solver.targets = targets;
   solver.rgbtargets = rgbtargets;
@@ -276,13 +293,16 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
   solver.r = r;
   solver.proportions = proportions;
   if (verbose)
-    printf ("Delta E2000 before nonlinear optimization %f\n", solver.objfunc (solver.start));
-  simplex<luminosity_t, color_solver>(solver, "optimizing color profile", progress);
+    printf ("Delta E2000 before nonlinear optimization %f\n",
+            solver.objfunc (solver.start));
+  simplex<luminosity_t, color_solver> (solver, "optimizing color profile",
+                                       progress);
   if (verbose)
-    printf ("Delta E2000 after nonlinear optimization %f\n", solver.objfunc (solver.start));
+    printf ("Delta E2000 after nonlinear optimization %f\n",
+            solver.objfunc (solver.start));
   ret = solver.matrix_by_vals (solver.start);
-  //printf ("Optimized\n");
-  //ret.print (stdout);
+  // printf ("Optimized\n");
+  // ret.print (stdout);
 
   ret.verify_last_row_0001 ();
   gsl_set_error_handler (old_handler);
@@ -294,46 +314,51 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
     {
       luminosity_t desum = 0, demax = 0;
       if (report)
-	report->clear ();
+        report->clear ();
       for (int i = 0; i < n; i++)
-	{
-	  xyz color1, color2;
-	  if (targets)
-	    {
-	      color1 = targets[i];
-	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
-	    }
-	  else
-	    {
-	      rgbdata c = rgbtargets[i];
-	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
-	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
-	      c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+        {
+          xyz color1, color2;
+          if (targets)
+            {
+              color1 = targets[i];
+              ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue,
+                                &color2.x, &color2.y, &color2.z);
+            }
+          else
+            {
+              rgbdata c = rgbtargets[i];
+              c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+              c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+              c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
+              r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x,
+                                       &color1.y, &color1.z);
 
-	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
-	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
-	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
-	      c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x, &color2.y, &color2.z);
-	    }
-	  luminosity_t d = deltaE2000 (color1, color2, white);
+              ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue,
+                                &c.red, &c.green, &c.blue);
+              c.red = r->adjust_luminosity_ir (c.red / proportions.red);
+              c.green = r->adjust_luminosity_ir (c.green / proportions.green);
+              c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
+              r->set_linear_hdr_color (c.red, c.green, c.blue, &color2.x,
+                                       &color2.y, &color2.z);
+            }
+          luminosity_t d = deltaE2000 (color1, color2, white);
 #if 0
 			    printf ("Compare1 %i\n", i);
 			    targets[i].print (stdout);
 			    color2.print (stdout);
 #endif
-	  if (report)
-	    report->push_back ({color2, color1, d});
-	  desum += d;
-	  if (demax < d)
-	    demax = d;
-	}
+          if (report)
+            report->push_back ({ color2, color1, d });
+          desum += d;
+          if (demax < d)
+            demax = d;
+        }
       if (verbose)
-	{
-          //ret.print (stdout);
-          printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n", desum / n, demax);
-	}
+        {
+          // ret.print (stdout);
+          printf ("Optimized color matrix DeltaE2000 avg %f, max %f\n",
+                  desum / n, demax);
+        }
     }
   return ret;
 }

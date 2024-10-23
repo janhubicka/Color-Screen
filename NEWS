@@ -25,6 +25,7 @@ Changes in version 1.1
      and sharpening parameters
    - `colorscreen analyze-scanner-blur` can now be used to produce scanner blur
      tables
+   - profiling now works on stitched projects.
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation
