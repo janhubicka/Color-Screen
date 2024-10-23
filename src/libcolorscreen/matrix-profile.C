@@ -309,8 +309,8 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
 	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
 	      c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
-
 	      r->set_linear_hdr_color (c.red, c.green, c.blue, &color1.x, &color1.y, &color1.z);
+
 	      ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &c.red, &c.green, &c.blue);
 	      c.red = r->adjust_luminosity_ir (c.red / proportions.red);
 	      c.green = r->adjust_luminosity_ir (c.green / proportions.green);
@@ -340,9 +340,8 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int 
 
 static void
 optimize_color_model_colors_collect (scr_to_img_parameters *param,
-                                     image_data &img,
-				     int x, int y,
-				     rgbdata &proportions,
+                                     image_data &img, int x, int y,
+                                     rgbdata &proportions,
                                      render_parameters &rparam,
                                      std::vector<point_t> &points,
                                      rgbdata *colors, rgbdata *targets,
@@ -357,15 +356,15 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
       size_t i;
       for (i = 0; i < points.size (); i++)
         {
-	  point_t scr = points[i];
-	  int tx = -1, ty = -1;
-	  if (img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
-	      && x == tx && y == ty)
-	    break;
+          point_t scr = points[i];
+          int tx = -1, ty = -1;
+          if (img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
+              && x == tx && y == ty)
+            break;
         }
       /* No samples on this tile.  */
       if (i == points.size ())
-	return;
+        return;
       /* Set up image and parameters of the tile.  */
       cimg = img.stitch->images[y][x].img.get ();
       param = &img.stitch->images[y][x].param;
@@ -398,16 +397,16 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
       int px = points[i].x;
       int py = points[i].y;
       if (img.stitch)
-	{
-	  point_t scr = points[i];
-	  int tx, ty;
-	  if (!img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
-	      || x != tx || y != ty)
-	    continue;
-	  scr = img.stitch->images[y][x].common_scr_to_img_scr (scr);
-	  px = scr.x;
-	  py = scr.y;
-	}
+        {
+          point_t scr = points[i];
+          int tx, ty;
+          if (!img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false)
+              || x != tx || y != ty)
+            continue;
+          scr = img.stitch->images[y][x].common_scr_to_img_scr (scr);
+          px = scr.x;
+          py = scr.y;
+        }
       const int range = 2;
       rgbdata color = { 0, 0, 0 };
       rgbdata target = { 0, 0, 0 };
@@ -430,7 +429,6 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
     }
 }
 
-
 bool
 optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
                              render_parameters &rparam,
@@ -442,23 +440,56 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
   int n = points.size ();
   render_parameters my_rparam = rparam;
   my_rparam.output_profile = render_parameters::output_profile_xyz;
-  rgbdata *colors = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
-  rgbdata *targets = (rgbdata *)malloc (sizeof (rgbdata) * points.size ());
+  std::vector<rgbdata> colors (points.size ());
+  std::vector<rgbdata> targets (points.size ());
   rgbdata proportions;
   if (img.stitch)
-    for (int y = 0; y < img.stitch->params.height; y++)
-      for (int x = 0; x < img.stitch->params.width; x++)
-        optimize_color_model_colors_collect (param, img, x, y, proportions, my_rparam, points, colors,
-					     targets, progress);
+    {
+      std::vector<bool> used (img.stitch->params.width
+                              * img.stitch->params.height);
+      std::fill (used.begin (), used.end (), 0);
+      for (size_t i = 0; i < points.size (); i++)
+        {
+          point_t scr = points[i];
+          int tx = -1, ty = -1;
+          int n;
+          if (img.stitch->tile_for_scr (NULL, scr.x, scr.y, &tx, &ty, false))
+            {
+              if (!used[ty * img.stitch->params.width + tx])
+                n++;
+              used[ty * img.stitch->params.width + tx] = true;
+            }
+          else
+            colors[i] = targets[i] = { 0, 0, 0 };
+        }
+      if (progress)
+        progress->set_task ("analyzing colors in tiles", n);
+      for (int y = 0; y < img.stitch->params.height; y++)
+        for (int x = 0; x < img.stitch->params.width; x++)
+          if (used[y * img.stitch->params.width + x])
+            {
+              int stack = 0;
+              if (progress)
+                stack = progress->push ();
+              optimize_color_model_colors_collect (
+                  param, img, x, y, proportions, my_rparam, points,
+                  colors.data (), targets.data (), progress);
+              if (progress)
+                progress->pop (stack);
+              if (progress)
+                progress->inc_progress ();
+            }
+    }
   else
-    optimize_color_model_colors_collect (param, img, -1, -1, proportions, my_rparam, points, colors,
-					 targets, progress);
+    optimize_color_model_colors_collect (param, img, -1, -1, proportions,
+                                         my_rparam, points, colors.data (),
+                                         targets.data (), progress);
   if (n >= 4)
     {
       render r (img, my_rparam, 255);
-      color_matrix c
-          = determine_color_matrix (colors, NULL, targets, n, d50_white, 3,
-                                    report, &r, proportions, progress);
+      color_matrix c = determine_color_matrix (
+          colors.data (), NULL, targets.data (), n, d50_white, 3, report, &r,
+          proportions, progress);
       if (progress && progress->cancelled ())
         return false;
       /* Do basic sanity check.  All the values should be relative close to
@@ -467,11 +498,6 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
         for (int j = 0; j < 3; j++)
           if (!(c.m_elements[i][j] > -10000 && c.m_elements[i][j] < 10000))
             return false;
-      // printf ("Matrix\n");
-      // c.print (stdout);
-      /* First determine dark point of the scan.  */
-      // rparam.profiled_dark  = {c.m_elements[3][0], c.m_elements[3][1],
-      // c.m_elements[3][2]};
       color_matrix ci = c.invert ();
       rparam.profiled_dark
           = { ci.m_elements[3][0], ci.m_elements[3][1], ci.m_elements[3][2] };
@@ -488,15 +514,6 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
       rparam.profiled_blue
           = { c.m_elements[2][0], c.m_elements[2][1], c.m_elements[2][2] };
 
-#if 0
-       rgbdata proportions = map.patch_proportions ();
-       rparam.profiled_red /= proportions.red;
-       rparam.profiled_green /= proportions.green;
-       rparam.profiled_blue /= proportions.blue;
-#endif
-#if 0
-       rparam.optimized_dark  = {c.m_elements[3][0], c.m_elements[3][1], c.m_elements[3][2]};
-#endif
       if (verbose)
         {
           printf ("Dark ");
@@ -507,25 +524,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
           rparam.profiled_green.print (stdout);
           printf ("Blue ");
           rparam.profiled_blue.print (stdout);
-          // printf ("Final\n");
-          // rparam.get_profile_matrix ({1,1,1}).print (stdout);
         }
 
-#if 0
-       auto cm = rparam.color_model;
-       luminosity_t pres = rparam.presaturation;
-       rparam.presaturation = 1;
-       rparam.color_model = render_parameters::color_model_optimized;
-       rparam.get_rgb_to_xyz_matrix (&img, true, proportions, d50_white).print (stdout);
-       rparam.color_model = cm;
-       rparam.presaturation = pres;
-#if 0
-       rgbdata proportions = map.patch_proportions ();
-       rparam.optimized_red /= proportions.red;
-       rparam.optimized_green /= proportions.green;
-       rparam.optimized_blue /= proportions.blue;
-#endif
-#endif
       return true;
     }
   return false;
