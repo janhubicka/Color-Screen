@@ -18,7 +18,7 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 
 #define pixel(xo,yo) get_img_pixel (z.x + dx.x * (xo) + dy.x * (yo), z.y + dx.y * (xo) + dy.y * (yo))
   
-  if (m_scr_to_img.get_type () != Dufay)
+  if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
       /* Thames, Finlay and Paget screen are organized as follows:
 	
@@ -32,7 +32,7 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
       red = (pixel (0.5, 0) + pixel (0, 0.5) + pixel (1, 0.5) + pixel (0.5, 1)) * 0.25;
       blue = (pixel (0.25, 0.25) + pixel (0.75, 0.25) + pixel (0.25, 0.75) + pixel (0.75, 0.75)) * 0.25;
     }
-  else
+  else if (m_scr_to_img.get_type () == Dufay)
     {
       /* Dufay screen is 
 	 G   B   G
@@ -43,6 +43,30 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
       green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
       red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
       blue = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
+    }
+  else if (m_scr_to_img.get_type () == DioptichromeB)
+    {
+      /* DioptichromeB screen is 
+	 B   B   B
+
+	 G   G   G
+
+	 B   B   B  */
+      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
+      red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
+      blue = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
+    }
+  else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+    {
+      /* Dufay screen is 
+	 G   R   G
+
+	 B   B   B
+
+	 G   R   G  */
+      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
+      blue = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
+      red = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
     }
 #undef getpixel
   return {red, green, blue};

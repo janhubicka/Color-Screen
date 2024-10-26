@@ -1223,6 +1223,20 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
     case Thames:
       thames ();
       break;
+    case DioptichromeB:
+      dufay (green_strip_width ? green_strip_width : 0.33, red_strip_width ? red_strip_width : 0.5);
+      /* Strip is green instead of red, so swap red and green.  */
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  std::swap (mult[y][x][0], mult[y][x][1]);
+      break;
+    case ImprovedDioptichromeB:
+      dufay (red_strip_width ? 1 - red_strip_width : 0.33, green_strip_width ? green_strip_width : 0.5);
+      /* Strip is blue instead of red, so swap blue and red.  */
+      for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+	  std::swap (mult[y][x][0], mult[y][x][2]);
+      break;
     default:
       abort ();
       break;
@@ -1232,8 +1246,25 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 void
 screen::initialize_preview (enum scr_type type)
 {
-  if (type == Dufay)
-    preview_dufay ();
+  if (type == Dufay || type == DioptichromeB || type == ImprovedDioptichromeB)
+    {
+      preview_dufay ();
+      if (type == DioptichromeB)
+        for (int y = 0; y < size; y++)
+          for (int x = 0; x < size; x++)
+	    {
+	      std::swap (mult[y][x][0], mult[y][x][1]);
+	      std::swap (add[y][x][0], add[y][x][1]);
+	    }
+      else if (type == ImprovedDioptichromeB)
+	/* Strip is blue instead of red, so swap blue and red.  */
+	for (int y = 0; y < size; y++)
+	  for (int x = 0; x < size; x++)
+	    {
+	      std::swap (mult[y][x][0], mult[y][x][2]);
+	      std::swap (add[y][x][0], add[y][x][2]);
+	    }
+    }
   else
     preview ();
 }

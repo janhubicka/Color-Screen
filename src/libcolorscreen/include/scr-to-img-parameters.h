@@ -24,8 +24,23 @@ enum scr_type
   Thames,
   Finlay,
   Dufay,
+  DioptichromeB,
+  ImprovedDioptichromeB,
   max_scr_type
 };
+
+inline bool
+paget_like_screen_p (enum scr_type t)
+{
+  return t == Paget || t == Thames || t == Finlay;
+}
+
+inline bool
+dufay_like_screen_p (enum scr_type t)
+{
+  return t == Dufay || t == DioptichromeB || t == ImprovedDioptichromeB;
+}
+
 DLL_PUBLIC extern const char *const scr_names[max_scr_type];
 pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
                                                 const render_parameters *);
@@ -108,7 +123,7 @@ struct scr_to_img_parameters
         coordinate2{ (coord_t)0, (coord_t)1 }, projection_distance (1),
         tilt_x (0), tilt_y (0), final_rotation (0), final_angle (90),
         final_ratio (1), motor_correction_x (NULL), motor_correction_y (NULL),
-        n_motor_corrections (0), mesh_trans (NULL), type (Finlay),
+        n_motor_corrections (0), mesh_trans (NULL), type (Random),
         scanner_type (fixed_lens), lens_correction ()
   {
   }

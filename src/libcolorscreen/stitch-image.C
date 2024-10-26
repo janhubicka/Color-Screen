@@ -768,7 +768,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       fprintf (stderr, "Tiles with different screen types can not stitch together\n");
       return false;
     }
-  if (param.type == Dufay)
+  if (dufay_like_screen_p (param.type))
     {
       dufay = new (analyze_dufay);
       dufay->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
@@ -777,7 +777,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   else
     {
       paget = new (analyze_paget);
-      assert (detected.param.type != Dufay);
+      assert (!dufay_like_screen_p (detected.param.type));
       paget->analyze (&render, img.get(), &scr_to_img_map, m_prj->my_screen, width, height, xshift, yshift, analyze_base::precise, 0.7, progress);
       analyzer = (std::unique_ptr <analyze_base>) (paget);
     }

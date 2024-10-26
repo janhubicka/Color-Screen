@@ -70,11 +70,28 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
     case Finlay:
       /* TODO: Measure actual portions.  */
       return {1/3.0,1/3.0,1/3.0};
+
+    /* Red strips.  */
     case Dufay:
       {
 	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : dufaycolor::red_strip_width;
 	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : dufaycolor::green_strip_width;
         return {red_strip_width, green_strip_width * (1 - red_strip_width), (1 - green_strip_width) *  (1 - red_strip_width)};
+      }
+    /* Green strips.  */
+    case DioptichromeB:
+      {
+	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : 0.5;
+	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : 0.3;
+        return {(1 - green_strip_width) * red_strip_width, green_strip_width, (1 - green_strip_width) *  (1 - red_strip_width)};
+      }
+    /* Blue strips.  */
+    case ImprovedDioptichromeB:
+      {
+	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : 0.66;
+	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : 0.5;
+	return {0.33,0.33,0.33};
+        return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
     default:
       abort ();

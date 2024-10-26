@@ -709,6 +709,17 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
     { 1, 0, solver_parameters::green },  { 0, 1, solver_parameters::green },
     { 0.5, 1, solver_parameters::blue }, { 1, 1, solver_parameters::green },
   };
+  static struct point_location DioptichromeB_points[] = {
+    { 0, 0, solver_parameters::red },  { 0.5, 0, solver_parameters::blue },
+    { 1, 0, solver_parameters::red },  { 0, 1, solver_parameters::red },
+    { 0.5, 1, solver_parameters::blue }, { 1, 1, solver_parameters::red },
+  };
+  static struct point_location ImprovedDioptichromeB_points[] = {
+    /* Green.  */
+    { 0, 0, solver_parameters::green },  { 0.5, 0, solver_parameters::red },
+    { 1, 0, solver_parameters::green },  { 0, 1, solver_parameters::green },
+    { 0.5, 1, solver_parameters::red }, { 1, 1, solver_parameters::green },
+  };
 
   switch (type)
     {
@@ -720,6 +731,12 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
     case Dufay:
       *n = sizeof (dufay_points) / sizeof (point_location);
       return dufay_points;
+    case DioptichromeB:
+      *n = sizeof (DioptichromeB_points) / sizeof (point_location);
+      return DioptichromeB_points;
+    case ImprovedDioptichromeB:
+      *n = sizeof (ImprovedDioptichromeB_points) / sizeof (point_location);
+      return ImprovedDioptichromeB_points;
     default:
       abort ();
     }

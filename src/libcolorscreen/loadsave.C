@@ -12,7 +12,9 @@ const char * const scr_names[max_scr_type] =
   "Paget",
   "Thames",
   "Finlay",
-  "Dufay"
+  "Dufay",
+  "Dioptichrome-B",
+  "ImprovedDioptichrome-B"
 };
 
 const char * const scanner_type_names[max_scanner_type] =

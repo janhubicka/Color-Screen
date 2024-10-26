@@ -19,7 +19,7 @@ screen_map::get_solver_points_nearby (coord_t sx, coord_t sy, int n,
   // TODO: Round properly
   int x;
   int y;
-  if (type == Dufay)
+  if (dufay_like_screen_p (type))
     {
       x = sx * 2;
       y = sy;

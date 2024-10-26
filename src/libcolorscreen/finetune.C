@@ -294,7 +294,7 @@ public:
   {
     if (!optimize_position)
       return tiles[tileid].fixed_offset;
-    coord_t range = type == Dufay ? dufay_range : paget_range;
+    coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
     return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
   }
   void
@@ -305,7 +305,7 @@ public:
         tiles[tileid].fixed_offset = off;
         return;
       }
-    coord_t range = type == Dufay ? dufay_range : paget_range;
+    coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
     v[2 * tileid] = off.x / range;
     v[2 * tileid + 1] = off.y / range;
   }
@@ -316,7 +316,7 @@ public:
       return tiles[tileid].fixed_emulsion_offset;
     /* Reduce dufay range since the screen is not removable and can only be
        adjusted by angle of scanner.  */
-    coord_t range = type == Dufay ? dufay_range / 3 : paget_range;
+    coord_t range = dufay_like_screen_p (type) ? dufay_range / 3 : paget_range;
     range *= 2;
     return { v[emulsion_offset_index + 2 * tileid] * range,
              v[emulsion_offset_index + 2 * tileid + 1] * range };
@@ -329,7 +329,7 @@ public:
         tiles[tileid].fixed_emulsion_offset = off;
         return;
       }
-    coord_t range = type == Dufay ? dufay_range / 3 : paget_range;
+    coord_t range = dufay_like_screen_p (type) ? dufay_range / 3 : paget_range;
     range *= 2;
     v[emulsion_offset_index + 2 * tileid] = off.x / range;
     v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
@@ -789,7 +789,7 @@ public:
     optimize_screen_ps_blur
         = (flags & finetune_screen_ps_blur) && !optimize_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
-    optimize_dufay_strips = (flags & finetune_dufay_strips) && type == Dufay;
+    optimize_dufay_strips = (flags & finetune_dufay_strips) && dufay_like_screen_p (type);
     /* For one tile the effect of fog can always be simulated by adjusting the
        colors of screen. If multiple tiles (and colors) are samples we can try
        to estimate it.  */
@@ -924,7 +924,7 @@ public:
     else
       screen_index = -1;
 
-    if (type != Dufay)
+    if (dufay_like_screen_p (type))
       optimize_dufay_strips = false;
     if (optimize_dufay_strips)
       {

@@ -2076,6 +2076,7 @@ digital_laboratory (int argc, char **argv)
           rgbdata colors[5];
           xyz targets[5];
           rgbdata balance;
+	  bool do_white = false;
           if (do_balance)
             {
               balance = { 1 / white_res.red, 1 / white_res.green,
@@ -2096,7 +2097,8 @@ digital_laboratory (int argc, char **argv)
           // colors[2] = spec.linear_film_rgb_response (white_spectrum) *
           // balance;
           colors[3] = { 0, 0, 0 };
-          colors[4] = spec.linear_film_rgb_response (white_spectrum) * balance;
+	  if (do_white)
+            colors[4] = spec.linear_film_rgb_response (white_spectrum) * balance;
           luminosity_t maxv = 0;
           for (int i = 0; i < 4; i++)
             {
@@ -2112,15 +2114,16 @@ digital_laboratory (int argc, char **argv)
           targets[1] = spec2.dyes_rgb_to_xyz (0, 1, 0);
           targets[2] = spec2.dyes_rgb_to_xyz (0, 0, 1);
           targets[3] = { 0, 0, 0 };
-          targets[4] = spec2.whitepoint_xyz ();
-          for (int i = 0; i < 5; i++)
+	  if (do_white)
+            targets[4] = spec2.whitepoint_xyz ();
+          for (int i = 0; i < (do_white ? 5 : 4); i++)
             {
               printf ("target %i simulated scanner readout: ", i);
               colors[i].print (stdout);
               printf ("target %i actual color: ", i);
               (targets[i] * (1 / 3.0)).print (stdout);
             }
-          color_matrix m1 = determine_color_matrix (colors, targets, NULL, 5,
+          color_matrix m1 = determine_color_matrix (colors, targets, NULL, do_white ? 5 : 4,
                                                     spec2.whitepoint_xyz ());
           printf ("scanner to xyz matrix:\n");
           m1.print (stdout);
@@ -2136,43 +2139,40 @@ digital_laboratory (int argc, char **argv)
             xyz wh;
             m1.apply_to_rgb (colors[4].red, colors[4].green, colors[4].blue,
                              &wh.x, &wh.y, &wh.z);
-            printf ("Whitepoint drifht from:");
+            printf ("Whitepoint drift from:");
             (targets[4] * 0.5).print (stdout);
-            printf ("Whitepoint drifht to: ");
+            printf ("Whitepoint drift to: ");
             (wh * (targets[4].y / wh.y / 2)).print (stdout);
           }
           // printf ("xyz to scanner matrix:\n");
           // m1 = m1.invert ();
           // m1.print (stdout);
           printf ("\nScanner primary red: ");
-          xyz red_primary = { m1.m_elements[0][0], m1.m_elements[0][1],
-                              m1.m_elements[0][2] };
+          xyz red_primary
+		  = { m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2] };
           red_primary.print (stdout);
           printf ("Scanner primary green: ");
-          xyz green_primary = { m1.m_elements[1][0], m1.m_elements[1][1],
-                                m1.m_elements[1][2] };
+          xyz green_primary
+		  = { m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2] };
           green_primary.print (stdout);
           printf ("Scanner primary blue: ");
-          xyz blue_primary = { m1.m_elements[2][0], m1.m_elements[2][1],
-                               m1.m_elements[2][2] };
+          xyz blue_primary
+		  = { m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2] };
           blue_primary.print (stdout);
           m1 = bradford_whitepoint_adaptation_matrix (spec2.whitepoint_xyz (),
                                                       d50_white)
                * m1;
           printf ("\nScanner primary red Bradford corrected to D50: ");
           xyz corrected_red_primary
-              = { m1.m_elements[0][0], m1.m_elements[0][1],
-                  m1.m_elements[0][2] };
+              = { m1.m_elements[0][0], m1.m_elements[0][1], m1.m_elements[0][2] };
           corrected_red_primary.print (stdout);
           printf ("Scanner primary green Bradford corrected to D50: ");
           xyz corrected_green_primary
-              = { m1.m_elements[1][0], m1.m_elements[1][1],
-                  m1.m_elements[1][2] };
+              = { m1.m_elements[1][0], m1.m_elements[1][1], m1.m_elements[1][2] };
           corrected_green_primary.print (stdout);
           printf ("Scanner primary blue Bradford corrected to D50: ");
           xyz corrected_blue_primary
-              = { m1.m_elements[2][0], m1.m_elements[2][1],
-                  m1.m_elements[2][2] };
+              = { m1.m_elements[2][0], m1.m_elements[2][1], m1.m_elements[2][2] };
           corrected_blue_primary.print (stdout);
           if (do_balance)
             printf ("\nThe following can be used in parameter file with "

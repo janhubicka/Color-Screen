@@ -96,13 +96,19 @@ public:
   get_screen_coord (int_point_t e, solver_parameters::point_color *color = NULL) const
   {
     point_t scr;
-    if (type == Dufay)
+    if (dufay_like_screen_p (type))
       {
         scr.x = e.x / 2.0;
         scr.y = e.y;
         if (!color)
           return scr;
-        *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::green;
+	if (type == Dufay)
+          *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::green;
+	else if (type == DioptichromeB)
+          *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::red;
+	else if (type == ImprovedDioptichromeB)
+          *color = (e.x & 1) ? solver_parameters::red : solver_parameters::green;
+	else abort ();
       }
     else
       {

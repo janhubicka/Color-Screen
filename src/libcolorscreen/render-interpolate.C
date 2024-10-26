@@ -35,7 +35,7 @@ struct analyzer_params
   {
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
         || (!mesh_trans_id && params != o.params)
-        || (params.type == Dufay) != (o.params.type == Dufay))
+        || (dufay_like_screen_p (params.type)) != (dufay_like_screen_p (o.params.type)))
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
@@ -56,9 +56,35 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
   analyze_dufay *ret = new analyze_dufay ();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height,
-                    xshift, yshift, p.mode, p.collection_threshold, progress))
-    return ret;
+  {
+    const screen *s = p.scr;
+    screen adapted;
+    if (p.params.type == DioptichromeB)
+      {
+	s = &adapted;
+        for (int y = 0; y < screen::size; y++)
+          for (int x = 0; x < screen::size; x++)
+	    {
+	      adapted.mult[y][x][0] = p.scr->mult[y][x][1];
+	      adapted.mult[y][x][1] = p.scr->mult[y][x][0];
+	      adapted.mult[y][x][2] = p.scr->mult[y][x][2];
+	    }
+      }
+    if (p.params.type == ImprovedDioptichromeB)
+      {
+	s = &adapted;
+        for (int y = 0; y < screen::size; y++)
+          for (int x = 0; x < screen::size; x++)
+	    {
+	      adapted.mult[y][x][0] = p.scr->mult[y][x][2];
+	      adapted.mult[y][x][1] = p.scr->mult[y][x][1];
+	      adapted.mult[y][x][2] = p.scr->mult[y][x][0];
+	    }
+      }
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
+		      xshift, yshift, p.mode, p.collection_threshold, progress))
+      return ret;
+  }
   delete ret;
   return NULL;
 }
@@ -222,20 +248,22 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
             : 0,
         m_scr_to_img.get_param (), &m_img, m_screen, this, &m_scr_to_img,
   };
-  if (m_scr_to_img.get_type () != Dufay)
+  if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
       m_paget = paget_analyzer_cache.get (p, xshift, yshift, width, height,
                                           progress);
       if (!m_paget)
         return false;
     }
-  else
+  else if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
       m_dufay = dufay_analyzer_cache.get (p, xshift, yshift, width, height,
                                           progress);
       if (!m_dufay)
         return false;
     }
+  else
+    return false;
   return !progress || !progress->cancelled ();
 }
 
@@ -244,12 +272,27 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 {
   rgbdata c;
 
-  if (m_scr_to_img.get_type () != Dufay)
+  if (paget_like_screen_p (m_scr_to_img.get_type ()))
     c = m_paget->bicubic_interpolate (
         { x, y }, m_scr_to_img.patch_proportions (&m_params));
   else
-    c = m_dufay->bicubic_interpolate (
-        { x, y }, m_scr_to_img.patch_proportions (&m_params));
+    {
+      rgbdata proportions = m_scr_to_img.patch_proportions (&m_params);
+      if (m_original_color)
+	;
+      else if (m_scr_to_img.get_type () == DioptichromeB)
+        std::swap (proportions.red, proportions.green);
+      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+        std::swap (proportions.red, proportions.blue);
+      c = m_dufay->bicubic_interpolate (
+          { x, y }, m_scr_to_img.patch_proportions (&m_params));
+      if (m_original_color)
+	;
+      else if (m_scr_to_img.get_type () == DioptichromeB)
+        std::swap (c.red, c.green);
+      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+        std::swap (c.red, c.blue);
+    }
   if (!m_original_color)
     c = compensate_saturation_loss_scr ({ x, y }, c);
   if (m_unadjusted)
@@ -376,7 +419,7 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                                      int ymax, progress_info *progress)
 {
   assert (!m_precise_rgb && !m_original_color);
-  if (m_scr_to_img.get_type () == Dufay)
+  if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
       if (progress)
         progress->set_task (task, m_dufay->get_height ());
@@ -399,6 +442,10 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                       continue;
                   }
                 rgbdata c = m_dufay->screen_tile_color (x, y);
+		if (m_scr_to_img.get_type () == DioptichromeB)
+		  std::swap (c.red, c.green);
+		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+		  std::swap (c.red, c.blue);
                 c = compensate_saturation_loss_scr ({ xs, ys }, c);
                 if (!analyze (xs, ys, c))
                   return false;
@@ -450,7 +497,7 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                                          int ymax, progress_info *progress)
 {
   assert (m_precise_rgb && !m_original_color);
-  if (m_scr_to_img.get_type () == Dufay)
+  if (dufay_like_screen_p (m_scr_to_img.get_type ()))
     {
       if (progress)
         progress->set_task (task, m_dufay->get_height ());

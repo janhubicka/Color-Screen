@@ -104,6 +104,10 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   //
   m_param.final_angle = final_angle;
   m_param.final_ratio = final_ratio;
+  if (m_param.type == ImprovedDioptichromeB)
+  {
+    m_param.final_angle = 90+45;
+  }
 
   double r = m_param.final_angle * M_PI / 180;
   matrix2x2<coord_t> fm (1, 0, cos (r) * m_param.final_ratio,
@@ -113,6 +117,8 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
      to be 23.77. We organize the grid making red lines horizontal, so rotate
      by additional 90 degrees to get image right.  */
   coord_t rotate = m_param.final_rotation;
+  if (!m_rotation_adjustment && m_param.type == ImprovedDioptichromeB)
+    m_rotation_adjustment = -45;
 
   /* Depending on angle of screen detected we need to either rotate left or
      right. This makes flipped scans to come out right.  */
