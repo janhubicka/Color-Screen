@@ -872,6 +872,14 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
     loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".eip"))
     loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".arw"))
+    loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".ARW"))
+    loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".arq"))
+    loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".ARQ"))
+    loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".csprj"))
     loader = std::make_unique <stitch_image_data_loader> (this, preload_all);
   if (!loader)
