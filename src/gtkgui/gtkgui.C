@@ -1249,7 +1249,7 @@ static void
 previewrender (GdkPixbuf ** pixbuf)
 {
   guint8 *pixels;
-  if (scan.stitch)
+  if (scan.stitch || current.type == Random)
     return;
   enum render_parameters::color_model_t cm = rparams.color_model;
   //if (optimize_colors)

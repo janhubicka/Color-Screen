@@ -203,7 +203,7 @@ render_to_scr::precompute_all (bool grayscale_needed, bool normalized_patches,
                                progress_info *progress)
 {
   return render::precompute_all (grayscale_needed, normalized_patches,
-                                 m_scr_to_img.patch_proportions (&m_params),
+                                 normalized_patches ? m_scr_to_img.patch_proportions (&m_params) : (rgbdata){1.0/3, 1.0/3, 1.0/3},
                                  progress);
 }
 bool

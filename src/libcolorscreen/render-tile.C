@@ -54,6 +54,11 @@ render_to_scr::render_tile (render_type_parameters rtparam,
   if (width <= 0 || height <= 0)
     return true;
 
+  if (param.type == Random
+      && rtparam.type != render_type_original
+      && rtparam.type != render_type_profiled_original)
+    rtparam.type = render_type_original;
+
   /* Avoid rendering outside of image area.  This saves some time but also ugly artifacts.  */
   if ((int)xoffset < 0)
     {

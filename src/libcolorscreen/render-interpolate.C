@@ -59,7 +59,9 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
   {
     const screen *s = p.scr;
     screen adapted;
-    if (p.params.type == DioptichromeB)
+    if (!p.scr)
+      ;
+    else if (p.params.type == DioptichromeB)
       {
 	s = &adapted;
         for (int y = 0; y < screen::size; y++)
@@ -70,7 +72,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
 	      adapted.mult[y][x][2] = p.scr->mult[y][x][2];
 	    }
       }
-    if (p.params.type == ImprovedDioptichromeB)
+    else if (p.params.type == ImprovedDioptichromeB)
       {
 	s = &adapted;
         for (int y = 0; y < screen::size; y++)

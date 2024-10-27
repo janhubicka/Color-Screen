@@ -1,5 +1,8 @@
 Changes in version 1.1
  - New features:
+   - Support for new processes:
+     - Dioptrichrome-B (no autodetection yet)
+     - Improved Dioptrichrome-B (no autodetection yet)
    - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically
      tested on MacOS to actually work as expected.
@@ -26,6 +29,7 @@ Changes in version 1.1
    - `colorscreen analyze-scanner-blur` can now be used to produce scanner blur
      tables
    - profiling now works on stitched projects.
+   - support for Sony RAW files
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation

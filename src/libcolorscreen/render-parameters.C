@@ -90,7 +90,6 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
       {
 	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : 0.66;
 	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : 0.5;
-	return {0.33,0.33,0.33};
         return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
     default:

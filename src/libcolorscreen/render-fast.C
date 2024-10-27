@@ -52,8 +52,8 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 	 G   G   G
 
 	 B   B   B  */
-      green = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
-      red = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
+      red = (pixel (0,0) + pixel (0,1) + pixel (1,0) + pixel (1,1)) * 0.25;
+      green = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
       blue = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
     }
   else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
