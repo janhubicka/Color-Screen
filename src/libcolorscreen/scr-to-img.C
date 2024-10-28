@@ -85,10 +85,8 @@ public:
     rotation *= M_PI / 180;
     double s = sin (rotation);
     double c = cos (rotation);
-    m_elements[0][0] = c;
-    m_elements[1][0] = -s;
-    m_elements[0][1] = s;
-    m_elements[1][1] = c;
+    m_elements[0][0] = c; m_elements[1][0] = -s;
+    m_elements[0][1] = s; m_elements[1][1] = c;
   }
 };
 
@@ -104,21 +102,26 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   //
   m_param.final_angle = final_angle;
   m_param.final_ratio = final_ratio;
+  /* On only scan I have horosontal cycle is 10.1592036279 pixels (along blue line)
+     and vertical cycle (slopy rad/green lines) are 8.15944528388.  */
   if (m_param.type == ImprovedDioptichromeB)
   {
-    m_param.final_angle = 90+45;
+    m_param.final_angle = 107.773559;
+    m_param.final_ratio = 0.803158;
   }
 
   double r = m_param.final_angle * M_PI / 180;
-  matrix2x2<coord_t> fm (1, 0, cos (r) * m_param.final_ratio,
-                         sin (r) * m_param.final_ratio);
+#if 0
+  matrix2x2<coord_t> fm (1, 0,
+			 cos (r) * m_param.final_ratio, sin (r) * m_param.final_ratio);
+#endif
+  matrix2x2<coord_t> fm (1, cos (r) * m_param.final_ratio,
+			 0, sin (r) * m_param.final_ratio);
 
   /* By Dufacyolor manual grid is rotated by 23 degrees.  In reality it seems
      to be 23.77. We organize the grid making red lines horizontal, so rotate
      by additional 90 degrees to get image right.  */
   coord_t rotate = m_param.final_rotation;
-  if (!m_rotation_adjustment && m_param.type == ImprovedDioptichromeB)
-    m_rotation_adjustment = -45;
 
   /* Depending on angle of screen detected we need to either rotate left or
      right. This makes flipped scans to come out right.  */
