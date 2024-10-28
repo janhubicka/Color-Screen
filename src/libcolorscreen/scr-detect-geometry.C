@@ -127,20 +127,31 @@ struct patch_info
    */
 
 bool
-try_guess_screen (FILE *report_file, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
+try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map, solver_parameters &sparam, int x, int y, bitmap_2d *visited, progress_info *progress)
 {
   const int max_size = 200;
   struct patch_info rbpatches[npatches][npatches*2];
   patch_entry entries[max_size];
+  const char *scrname = scr_names [(int)type];
+
+  scr_detect::color_class my_red = scr_detect::red;
+  scr_detect::color_class my_green = scr_detect::green;
+  scr_detect::color_class my_blue = scr_detect::blue;
+  const char *cnames[3] = {"red", "green", "blue"};
+
+  if (type == DioptichromeB)
+    std::swap (my_red, my_green);
+  else if (type == ImprovedDioptichromeB)
+    std::swap (my_red, my_blue);
 
   /* First try to find a green patch.  */
-  int size = find_patch (color_map, scr_detect::green, x, y, max_size, entries, visited, true);
+  int size = find_patch (color_map, my_green, x, y, max_size, entries, visited, true);
   if (size == 0 || size == max_size)
     return false;
   if (!patch_center (entries, size, &rbpatches[0][0].x, &rbpatches[0][0].y))
     return false;
   if (report_file && verbose)
-    fprintf (report_file, "Dufay: Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
+    fprintf (report_file, "%s: Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", scrname, x, y, size, rbpatches[0][0].x, rbpatches[0][0].y);
 
   bool patch_found = false;
 
@@ -151,10 +162,10 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
       for (y = entries[i].y + 1; y < color_map.height && !patch_found; y++)
 	{
 	  scr_detect::color_class t = color_map.get_class (x, y);
-	  if (t == scr_detect::blue)
+	  if (t == my_blue)
 	    {
 	      /* Do not mark as visited so we can revisit.  */
-	      int size = find_patch (color_map, scr_detect::blue, x, y, max_size, entries, visited, false);
+	      int size = find_patch (color_map, my_blue, x, y, max_size, entries, visited, false);
 	      patch_found = patch_center (entries, size, &rbpatches[0][1].x, &rbpatches[0][1].y);
 	    }
 	  else if (t != scr_detect::unknown)
@@ -165,7 +176,7 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   if (!patch_found)
     {
       if (report_file && verbose)
-	fprintf (report_file, "Dufay: Blue patch not found\n");
+	fprintf (report_file, "%s: %s patch not found\n", cnames [(int)my_blue],scrname);
       return false;
     }
 
@@ -174,72 +185,91 @@ try_guess_screen (FILE *report_file, color_class_map &color_map, solver_paramete
   coord_t patch_stepx = rbpatches[0][1].x - rbpatches[0][0].x;
   coord_t patch_stepy = rbpatches[0][1].y - rbpatches[0][0].y;
   if (report_file && verbose)
-    fprintf (report_file, "Dufay: found blue patch of size %i and center %f %f guessing patch distance %f %f\n", size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
+    fprintf (report_file, "%s: found %s patch of size %i and center %f %f guessing patch distance %f %f\n", scrname, cnames [(int)my_blue], size, rbpatches[0][0].x, rbpatches[0][0].y, patch_stepx, patch_stepy);
   for (int p = 2; p < npatches * 2; p++)
     {
       int nx = rbpatches[0][p - 1].x + patch_stepx;
       int ny = rbpatches[0][p - 1].y + patch_stepy;
-      size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, visited, false);
+      size = find_patch (color_map, (p & 1) ? my_blue : my_green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Dufay: Failed to guess patch 0, %i with steps %f %f\n", p, patch_stepx, patch_stepy);
+	    fprintf (report_file, "%s: Failed to guess patch 0, %i with steps %f %f\n", scrname, p, patch_stepx, patch_stepy);
 	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[0][p].x, &rbpatches[0][p].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Dufay: Center of patch 0, %i is not inside\n", p);
+	    fprintf (report_file, "%s: Center of patch 0, %i is not inside\n", scrname, p);
 	  return false;
 	}
       patch_stepx = (rbpatches[0][p].x - rbpatches[0][0].x) / p;
       patch_stepy = (rbpatches[0][p].y - rbpatches[0][0].y) / p;
     }
   if (report_file && verbose)
-   fprintf (report_file, "Dufay: Confirmed %i patches in alternating direction with distances %f %f\n", npatches, patch_stepx, patch_stepy);
+   fprintf (report_file, "%s: Confirmed %i patches in alternating direction with distances %f %f\n", scrname, npatches, patch_stepx, patch_stepy);
 
   /* Now once row is found, extend each entry to an orthogonal row.  */
   for (int r = 1; r < npatches; r++)
     {
       int rx = rbpatches[r - 1][0].x - patch_stepy;
       int ry = rbpatches[r - 1][0].y + patch_stepx;
-      int nx = rbpatches[r - 1][0].x - 2*patch_stepy;
-      int ny = rbpatches[r - 1][0].y + 2*patch_stepx;
+      coord_t vpatch_stepx;
+      coord_t vpatch_stepy;
+
+      if (type == ImprovedDioptichromeB)
+	{
+	  coord_t angle = 107.77 * M_PI / 180;
+	  coord_t s = sin (angle);
+	  coord_t c = cos (angle);
+	  matrix2x2<coord_t> rotate (c, -s, s, c);
+	  rotate.apply_to_vector (patch_stepx, patch_stepy, &vpatch_stepx, &vpatch_stepy);
+	  //vpatch_stepx *= 0.8;
+	  //vpatch_stepy *= 0.8;
+	}
+      else
+	{
+	  vpatch_stepx = - patch_stepy;
+	  vpatch_stepy = patch_stepx;
+	}
+
+      int nx = rbpatches[r - 1][0].x + 2*vpatch_stepx;
+      int ny = rbpatches[r - 1][0].y + 2*vpatch_stepy;
       int priority;
-      if (!confirm_strip (&color_map, rx, ry, scr_detect::red, 1, &priority, visited))
+      if (!confirm_strip (&color_map, rx, ry, my_red, 1, &priority, visited))
 	 {
 	  if (report_file && verbose)
-	    fprintf (report_file, "Dufay: Failed to confirm red strip on way to %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	    fprintf (report_file, "%s: Failed to confirm %s strip on way to %i,%i with steps %f %f (rotated %f %f)\n", scrname, cnames [(int)my_red], r, 0, patch_stepx, patch_stepy, vpatch_stepx, vpatch_stepy);
 	  return false;
 	 }
-      size = find_patch (color_map, scr_detect::green, nx, ny, max_size, entries, visited, false);
+      size = find_patch (color_map, my_green, nx, ny, max_size, entries, visited, false);
       if (size == 0 || size == max_size)
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Dufay: Failed to guess patch %i,%i with steps %f %f\n", r, 0, patch_stepx, patch_stepy);
+	    fprintf (report_file, "%s: Failed to guess patch %i,%i with steps %f %f (rotated %f %f)\n", scrname, r, 0, patch_stepx, patch_stepy, vpatch_stepx, vpatch_stepy);
 	  return false;
 	}
       if (!patch_center (entries, size, &rbpatches[r][0].x, &rbpatches[r][0].y))
 	{
 	  if (report_file && verbose)
-	    fprintf (report_file, "Dufay: Center of patch %i,%i is not inside\n", r, 0);
+	    fprintf (report_file, "%s: Center of patch %i,%i is not inside\n", scrname, r, 0);
 	  return false;
 	}
       for (int p = 1; p < npatches * 2; p++)
 	{
 	  int nx = rbpatches[r][p - 1].x + patch_stepx;
 	  int ny = rbpatches[r][p - 1].y + patch_stepy;
-	  size = find_patch (color_map, (p & 1) ? scr_detect::blue : scr_detect::green, nx, ny, max_size, entries, visited, false);
+	  size = find_patch (color_map, (p & 1) ? my_blue : my_green, nx, ny, max_size, entries, visited, false);
 	  if (size == 0 || size == max_size)
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Dufay: Failed to guess patch %i,%i with steps %f %f\n", r, p, patch_stepx, patch_stepy);
+		fprintf (report_file, "%s: Failed to guess patch %i,%i with steps %f %f\n", scrname, r, p, patch_stepx, patch_stepy);
 	      return false;
 	    }
 	  if (!patch_center (entries, size, &rbpatches[r][p].x, &rbpatches[r][p].y))
 	    {
 	      if (report_file && verbose)
-		fprintf (report_file, "Dufay: Center of patch %i,%i is not inside\n", r, p);
+		fprintf (report_file, "%s: Center of patch %i,%i is not inside\n", scrname, r, p);
 	      return false;
 	    }
 	}
@@ -293,10 +323,6 @@ try_guess_paget_screen (FILE *report_file, color_class_map &color_map, solver_pa
     fprintf (report_file, "Paget: Trying to start search at %i %i with initial green patch of size %i and center %f %f\n", x, y, size, gpatches[0][0].x, gpatches[0][0].y);
 
   bool patch_found = false;
-#if 0
-  bool verbose = 1;
-  report_file = stdout;
-#endif
 
   /* Find adjacent blue patch below the green one.  
      G
@@ -1007,12 +1033,21 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   double screen_xsize = sqrt (param.coordinate1.x * param.coordinate1.x + param.coordinate1.y * param.coordinate1.y);
   double screen_ysize = sqrt (param.coordinate2.x * param.coordinate2.x + param.coordinate2.y * param.coordinate2.y);
 
+  scr_detect::color_class my_red = scr_detect::red;
+  scr_detect::color_class my_green = scr_detect::green;
+  scr_detect::color_class my_blue = scr_detect::blue;
+
+  if (param.type == DioptichromeB)
+    std::swap (my_red, my_green);
+  else if (param.type == ImprovedDioptichromeB)
+    std::swap (my_red, my_blue);
+
   /* If screen is estimated too small or too large give up.  */
   if (screen_xsize < 2 || screen_ysize < 2 || screen_xsize > 100 || screen_ysize > 100)
     return NULL;
 
   /* Do not flip the image.  */
-  if (param.type == Dufay && param.coordinate1.y < 0)
+  if (dufay_like_screen_p (param.type) && param.coordinate1.y < 0)
     return NULL;
 
   scr_to_img scr_map;
@@ -1021,7 +1056,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   int max_patch_size = floor (screen_xsize * screen_ysize / 1.5);
   int min_patch_size = (int)(screen_xsize * screen_ysize / 8);
 
-  if (param.type != Dufay)
+  if (paget_like_screen_p (param.type))
     {
       /* Dufay has 4 square patches and one strip per screen tile, while Paget/Finlay has 8 squares.  */
       //max_patch_size /= 2;
@@ -1043,7 +1078,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
   if (height <= yshift)
     height = yshift + 1;
 #endif
-  int nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
+  int nexpected = (paget_like_screen_p (param.type) ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
   //printf ("Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
   /* Be sure that coordinates 0,0 are on screen.
      Normally, this should always be the case since screen discovery always
@@ -1054,7 +1089,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     fprintf (report_file, "Flood fill started with coordinates %f,%f and %f,%f\n", param.coordinate1.x, param.coordinate1.y, param.coordinate2.x, param.coordinate2.y);
   if (progress)
     progress->set_task ("Flood fill", nexpected);
-  if (param.type == Dufay)
+  if (dufay_like_screen_p (param.type))
     {
       xshift *= 2;
       width *= 2;
@@ -1121,7 +1156,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
         //printf ("visiting %i %i %f %f %f %f\n", e.scr_x, e.scr_y, e.img_x, e.img_y, param.coordinate1.x, param.coordinate1.y);
       if (progress)
         progress->inc_progress ();
-      if (param.type == Dufay)
+      if (dufay_like_screen_p (param.type))
 	{
 	  if (sparam)
 	    sparam->add_point ({e.img_x, e.img_y}, {e.scr_x / 2.0, (coord_t)e.scr_y}, e.scr_y ? solver_parameters::blue : solver_parameters::green);
@@ -1132,14 +1167,14 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 #define cstrip(x,y,t, priority) ((fast && confirm_strip (color_map, x, y, t, min_patch_size, &priority, visited)) \
 				 || (slow && confirm (render, param.coordinate1, param.coordinate2, x, y, t, color_map->width, color_map->height, max_distance, &ix, &iy, &priority, 1.0 / 3, 0.5, 0.5, true, false, dsparams->min_patch_contrast)))
 	  if (!map->known_p ({e.scr_x - 1, e.scr_y})
-	      && cpatch (e.img_x - param.coordinate1.x / 2, e.img_y - param.coordinate1.y / 2, ((e.scr_x - 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	      && cpatch (e.img_x - param.coordinate1.x / 2, e.img_y - param.coordinate1.y / 2, ((e.scr_x - 1) & 1) ? my_blue : my_green, priority))
 	    {
 	      map->safe_set_coord ({e.scr_x - 1, e.scr_y}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x - 1, e.scr_y, ix, iy}, priority);
 	      nfound++;
 	    }
 	  if (!map->known_p ({e.scr_x + 1, e.scr_y})
-	      && cpatch (e.img_x + param.coordinate1.x / 2, e.img_y + param.coordinate1.y / 2, ((e.scr_x + 1) & 1) ? scr_detect::blue : scr_detect::green, priority))
+	      && cpatch (e.img_x + param.coordinate1.x / 2, e.img_y + param.coordinate1.y / 2, ((e.scr_x + 1) & 1) ? my_blue : my_green, priority))
 	    {
 	      map->safe_set_coord ({e.scr_x + 1, e.scr_y}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x + 1, e.scr_y, ix, iy}, priority);
@@ -1147,7 +1182,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    }
 	  if (!map->known_p ({e.scr_x, e.scr_y - 1})
 	      && cstrip (e.img_x - param.coordinate2.x / 2, e.img_y - param.coordinate2.y / 2, scr_detect::red, priority)
-	      && cpatch (e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	      && cpatch (e.img_x - param.coordinate2.x, e.img_y - param.coordinate2.y, (e.scr_x & 1) ? my_blue : my_green, priority2))
 	    {
 	      map->safe_set_coord ({e.scr_x, e.scr_y - 1}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y - 1, ix, iy}, std::min (priority, priority2));
@@ -1155,7 +1190,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    }
 	  if (!map->known_p ({e.scr_x, e.scr_y + 1})
 	      && cstrip (e.img_x + param.coordinate2.x / 2, e.img_y + param.coordinate2.y / 2, scr_detect::red, priority)
-	      && cpatch (e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y, (e.scr_x & 1) ? scr_detect::blue : scr_detect::green, priority2))
+	      && cpatch (e.img_x + param.coordinate2.x, e.img_y + param.coordinate2.y, (e.scr_x & 1) ? my_blue : my_green, priority2))
 	    {
 	      map->safe_set_coord ({e.scr_x, e.scr_y + 1}, {ix, iy});
 	      queue.insert ((struct queue_entry){e.scr_x, e.scr_y + 1, ix, iy}, std::min (priority, priority2));
@@ -1216,14 +1251,14 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
     return NULL;
   screen_xsize = sqrt (param2.coordinate1.x * param2.coordinate1.x + param2.coordinate1.y * param2.coordinate1.y);
   screen_ysize = sqrt (param2.coordinate2.x * param2.coordinate2.x + param2.coordinate2.y * param2.coordinate2.y);
-  nexpected = (param.type != Dufay ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
+  nexpected = (paget_like_screen_p (param.type) ? 8 : 2) * img.width * img.height / (screen_xsize * screen_ysize);
 
   /* Check for large unanalyzed areas.  */
   scr_to_img map2;
   map2.set_parameters (param2, img);
   int xmin, ymin, xmax, ymax;
   map->get_known_range (&xmin, &ymin, &xmax, &ymax);
-  int snexpected = (param.type != Dufay ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
+  int snexpected = (paget_like_screen_p (param.type) ? 8 : 2) * (xmax - xmin) * (ymax - ymin) / (screen_xsize * screen_ysize);
   if (snexpected > 0 && nfound > 1000)
     {
 # if 0
@@ -1270,7 +1305,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx, coord_t gre
 	    if (img.x < xmin || img.x > xmax || img.y < ymin || img.y > ymax)
 	      continue;
 	    int xrmul = 2;
-	    int yrmul = param.type != Dufay ? 2 : 1;
+	    int yrmul = paget_like_screen_p (param.type) ? 2 : 1;
 	    bool found = last_seen < dsparams->max_unknown_screen_range * xrmul;
 	    for (int yy = std::max (y - dsparams->max_unknown_screen_range * yrmul, -map->yshift); yy < std::min (map->height - map->yshift, y + dsparams->max_unknown_screen_range * yrmul) && !found; yy++)
 	      for (int xx = std::max (x - dsparams->max_unknown_screen_range * xrmul, -map->xshift); xx < std::min (map->width - map->xshift, x + dsparams->max_unknown_screen_range * xrmul) && !found; xx++)
@@ -1442,6 +1477,8 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
   {
     bitmap_2d visited (img.width, img.height);
     bitmap_2d visited_paget (img.width, img.height);
+    bitmap_2d visited_dioptichromeB (img.width, img.height);
+    bitmap_2d visited_improved_dioptichromeB (img.width, img.height);
     std::unique_ptr <render_scr_detect> render = NULL;
     std::unique_ptr <color_class_map> cmap = NULL;
     const int search_xsteps = 6;
@@ -1553,9 +1590,19 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
 		  color_class_map *this_cmap;
 		  /* Try to guess both screen types.  If we find Paget/Finlay screen, preserve original type
 		     if it makes sense, otheriwse default to Paget.  */
-		  if (try_dufay && try_guess_screen (report_file, *render->get_color_class_map (), sparam, x, y, &visited, progress))
+		  if (try_dufay && try_guess_screen (report_file, Dufay, *render->get_color_class_map (), sparam, x, y, &visited, progress))
 		    {
 		      current_type = Dufay;
+		      this_cmap = render->get_color_class_map ();
+		    }
+		  else if (try_dufay && try_guess_screen (report_file, DioptichromeB, *render->get_color_class_map (), sparam, x, y, &visited_dioptichromeB, progress))
+		    {
+		      current_type = DioptichromeB;
+		      this_cmap = render->get_color_class_map ();
+		    }
+		  else if (try_dufay && try_guess_screen (report_file, ImprovedDioptichromeB, *render->get_color_class_map (), sparam, x, y, &visited_improved_dioptichromeB, progress))
+		    {
+		      current_type = ImprovedDioptichromeB;
 		      this_cmap = render->get_color_class_map ();
 		    }
 		  else if (try_paget_finlay && try_guess_paget_screen (report_file, cmap ? *cmap : *render->get_color_class_map (), sparam, x, y, &visited_paget, progress))
@@ -1584,6 +1631,9 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
 			  sparam.dump (report_file);
 			}
 		      visited.clear ();
+		      visited_paget.clear ();
+		      visited_dioptichromeB.clear ();
+		      visited_improved_dioptichromeB.clear ();
 		      param.type = current_type;
 		      simple_solver (&param, img, sparam, progress);
 		      smap = flood_fill (report_file, dsparams->slow_floodfill, dsparams->fast_floodfill, sparam.points[0].img.x, sparam.points[0].img.y, param, img, render.get (),
@@ -1596,6 +1646,9 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
 			      progress->set_progress (s);
 			    }
 			  visited.clear ();
+			  visited_paget.clear ();
+		          visited_dioptichromeB.clear ();
+		          visited_improved_dioptichromeB.clear ();
 			  x+= 10;
 			}
 		      else
@@ -1703,7 +1756,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
   if (progress)
     progress->set_task ("Checking screen consistency", 1);
   int errs;
-  if (type == Dufay)
+  if (dufay_like_screen_p (type))
     errs = smap->check_consistency (report_file, ret.param.coordinate1.x / 2, ret.param.coordinate1.y / 2, ret.param.coordinate2.x, ret.param.coordinate2.y,
 				    sqrt (ret.param.coordinate1.x * ret.param.coordinate1.x + ret.param.coordinate1.y * ret.param.coordinate1.y) / 2);
   else
@@ -1726,7 +1779,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
 	    if (!smap->known_p ({x, y}))
 	      {
 		int xrmul = 2;
-		int yrmul = type != Dufay ? 2 : 1;
+		int yrmul = paget_like_screen_p (type) ? 2 : 1;
 		bool found = last_seen < range * xrmul;
 		for (int yy = std::max (y - range * yrmul, -smap->yshift); yy < std::min (smap->height - smap->yshift, y + range * yrmul) && !found; yy++)
 		  for (int xx = std::max (x - range * xrmul, -smap->xshift); xx < std::min (smap->width - smap->xshift, x + range * xrmul) && !found; xx++)
@@ -1798,7 +1851,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam, solver_
       if (progress)
 	progress->set_task ("Computing known patches", 1);
       /* TODO: test that Dufay path can be replaced by generic one.  */
-      if (type == Dufay)
+      if (dufay_like_screen_p (type))
 	{
 	  ret.xshift = smap->xshift / 2;
 	  ret.yshift = smap->yshift;
