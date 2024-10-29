@@ -200,18 +200,21 @@ struct dufay_geometry
   }
 
   /* Convert screen coordinates to data entry, possibly with offset for interpolation.
-     For performance reason do both.  */
+     For performance reason do both.
+   
+     Use 0.499999999 so 0 remains as 0.  This is important for analysis to not get out of
+     range.  */
   static inline
   int_point_t red_scr_to_entry (point_t scr)
   {
-    return {nearest_int (scr.x * 2 - (coord_t)0.5), nearest_int (scr.y - (coord_t)0.5)};
+    return {nearest_int (scr.x * 2 - (coord_t)0.499999999), nearest_int (scr.y - (coord_t)0.499999999)};
   }
   static inline
   int_point_t red_scr_to_entry (point_t scr, point_t *off)
   {
     int xx, yy;
-    off->x = my_modf (scr.x * 2 - (coord_t)0.5, &xx);
-    off->y = my_modf (scr.y - (coord_t)0.5, &yy);
+    off->x = my_modf (scr.x * 2 - (coord_t)0.499999999, &xx);
+    off->y = my_modf (scr.y - (coord_t)0.499999999, &yy);
     return {xx, yy};
   }
   static inline
@@ -230,13 +233,13 @@ struct dufay_geometry
   static inline
   int_point_t blue_scr_to_entry (point_t scr)
   {
-    return {nearest_int (scr.x - (coord_t)0.5), nearest_int (scr.y)};
+    return {nearest_int (scr.x - (coord_t)0.499999999), nearest_int (scr.y)};
   }
   static inline
   int_point_t blue_scr_to_entry (point_t scr, point_t *off)
   {
     int xx, yy;
-    off->x = my_modf (scr.x - (coord_t)0.5, &xx);
+    off->x = my_modf (scr.x - (coord_t)0.499999999, &xx);
     off->y = my_modf (scr.y, &yy);
     return {xx, yy};
   }
