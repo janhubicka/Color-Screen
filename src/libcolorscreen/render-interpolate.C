@@ -162,6 +162,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
                                 coord_t ymax, progress_info *progress)
 {
   uint64_t screen_id = 0;
+  if (m_scr_to_img_param.type == Random)
+    return false;
   // printf ("Precomputing %f %f %f %f\n",xmin,ymin,xmax,ymax);
   /* When doing profiled matrix, we need to pre-scale the profile so black
      point corretion goes right. Without doing so, for exmaple black from red
