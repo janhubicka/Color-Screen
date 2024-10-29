@@ -1829,6 +1829,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
   {
     bitmap_2d visited (img.width, img.height);
     bitmap_2d visited_paget (img.width, img.height);
+    bitmap_2d visited_paget2 (img.width, img.height);
     bitmap_2d visited_dioptichromeB (img.width, img.height);
     bitmap_2d visited_improved_dioptichromeB (img.width, img.height);
     std::unique_ptr<render_scr_detect> render = NULL;
@@ -1999,7 +2000,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
                   else if (try_paget_finlay && cmap
                            && try_guess_paget_screen (
                                report_file, *render->get_color_class_map (),
-                               sparam, x, y, &visited_paget, progress))
+                               sparam, x, y, &visited_paget2, progress))
                     {
                       current_type = type == Finlay ? Finlay : Paget;
                       this_cmap = render->get_color_class_map ();
@@ -2020,9 +2021,6 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
                           sparam.dump (report_file);
                         }
                       visited.clear ();
-                      visited_paget.clear ();
-                      visited_dioptichromeB.clear ();
-                      visited_improved_dioptichromeB.clear ();
                       param.type = current_type;
                       simple_solver (&param, img, sparam, progress);
                       smap = flood_fill (
@@ -2041,9 +2039,6 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
                               progress->set_progress (s);
                             }
                           visited.clear ();
-                          visited_paget.clear ();
-                          visited_dioptichromeB.clear ();
-                          visited_improved_dioptichromeB.clear ();
                           x += 10;
                         }
                       else
