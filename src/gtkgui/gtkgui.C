@@ -1778,17 +1778,20 @@ cb_press (GtkImage * image, GdkEventButton * event, Data * data2)
       		    solver_parameters::point_color color;};
       enum solver_parameters::point_color rcolor = solver_parameters::green;
       int npoints;
-      struct solver_parameters::point_location *points = solver_parameters::get_point_locations (current.type, &npoints);
-      for (int i = 0; i < npoints; i++)
+      if (current.type != Random)
 	{
-	  coord_t qscreenx = pscreenx + points[i].x;
-	  coord_t qscreeny = pscreeny + points[i].y;
-	  if ((screenx - rscreenx) * (screenx - rscreenx) + (screeny - rscreeny) * (screeny - rscreeny)
-	      >(screenx - qscreenx) * (screenx - qscreenx) + (screeny - qscreeny) * (screeny - qscreeny))
+	  struct solver_parameters::point_location *points = solver_parameters::get_point_locations (current.type, &npoints);
+	  for (int i = 0; i < npoints; i++)
 	    {
-		rscreenx = qscreenx;
-		rscreeny = qscreeny;
-		rcolor = points[i].color;
+	      coord_t qscreenx = pscreenx + points[i].x;
+	      coord_t qscreeny = pscreeny + points[i].y;
+	      if ((screenx - rscreenx) * (screenx - rscreenx) + (screeny - rscreeny) * (screeny - rscreeny)
+		  >(screenx - qscreenx) * (screenx - qscreenx) + (screeny - qscreeny) * (screeny - qscreeny))
+		{
+		    rscreenx = qscreenx;
+		    rscreeny = qscreeny;
+		    rcolor = points[i].color;
+		}
 	    }
 	}
       if (event->button == 3)
