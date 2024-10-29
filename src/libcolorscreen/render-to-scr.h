@@ -99,11 +99,11 @@ public:
 	m_scr_to_img_param (param),
 	m_screen_table (NULL), m_saturation_loss_table (NULL)
   {
-    m_scr_to_img.set_parameters (param, img);
     m_final_width = -1;
     m_final_height = -1;
     m_final_xshift = INT_MIN;
     m_final_yshift = INT_MIN;
+    m_scr_to_img.set_parameters (param, img);
   }
   ~render_to_scr ();
   pure_attr inline luminosity_t get_img_pixel_scr (coord_t x, coord_t y) const;
@@ -210,13 +210,6 @@ public:
       {
         m_color = 1;
         m_profiled = profiled;
-        /* When doing profiled matrix, we need to pre-scale the profile so
-           black point corretion goes right. Without doing so, for exmaple
-           black from red pixels would be subtracted too agressively, since we
-           account for every pixel in image, not only red patch portion.  */
-        if (profiled)
-          profile_matrix = m_params.get_profile_matrix (
-              m_scr_to_img.patch_proportions (&m_params));
       }
   }
   void
@@ -228,7 +221,16 @@ public:
   bool
   precompute_all (progress_info *progress = NULL)
   {
-    return render_to_scr::precompute_all (!m_color, m_profiled, progress);
+    if (!render_to_scr::precompute_all (!m_color, m_profiled, progress))
+      return false;
+    /* When doing profiled matrix, we need to pre-scale the profile so
+       black point corretion goes right. Without doing so, for exmaple
+       black from red pixels would be subtracted too agressively, since we
+       account for every pixel in image, not only red patch portion.  */
+    if (m_color && m_profiled)
+      profile_matrix = m_params.get_profile_matrix (
+	  m_scr_to_img.patch_proportions (&m_params));
+    return true;
   }
   bool
   precompute_img_range (int, int, int, int, progress_info *progress = NULL)
