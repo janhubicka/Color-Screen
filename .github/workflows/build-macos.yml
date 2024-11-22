@@ -155,3 +155,16 @@ jobs:
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
       run: Color-Screen-package/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
+    - name: build package
+      run: |
+        cd InstallPackaging/macOS
+        jpackage --name Color-Screen-GUI-Demo \
+                 --input InstallSource \
+                 --main-jar color-screen-gui.jar \
+                 --module-path InstallSource/lib \
+                 --add-modules javafx.base,javafx.fxml,javafx.controls,javafx.graphics \
+                 --java-options '-Djava.library.path=$APPDIR/lib' \
+                 --license-file ../../LICENSE \
+                 --icon IconResources/Color-Screen-GUI-Demo.icns \
+                 --verbose
+
