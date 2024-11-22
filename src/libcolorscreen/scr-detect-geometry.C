@@ -13,6 +13,7 @@ namespace colorscreen
 extern void prune_render_scr_detect_caches ();
 namespace
 {
+//const bool verbose = true;
 const bool verbose = false;
 const int verbose_confirm = 0;
 struct patch_entry
@@ -234,8 +235,8 @@ try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map,
         {
           if (report_file && verbose)
             fprintf (report_file,
-                     "%s: Failed to guess patch 0, %i with steps %f %f\n",
-                     scrname, p, patch_stepx, patch_stepy);
+                     "%s: Failed to guess %s patch 0, %i with steps %f %f\n",
+                     scrname, cnames[(int)my_blue], p, patch_stepx, patch_stepy);
           return false;
         }
       if (!patch_center (entries, size, &rbpatches[0][p].x,
@@ -1807,6 +1808,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
    * reliable now.  */
   const bool try_dufay = true;
   const bool try_paget_finlay = true;
+  //report_file = stdout;
 
   detected_screen ret;
   render_parameters empty;
