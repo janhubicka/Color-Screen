@@ -190,7 +190,7 @@ tiff_writer::write_rows (progress_info *progress)
 bool
 tiff_writer::write_row ()
 {
-  assert (colorscreen_checking || get_n_rows () == 1);
+  assert (!colorscreen_checking || get_n_rows () == 1);
   return write_rows ();
 }
 tiff_writer::~tiff_writer()

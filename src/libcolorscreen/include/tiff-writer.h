@@ -103,37 +103,37 @@ public:
   uint16_t *
   row16bit (int n)
   {
-    assert (colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
+    assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
     return ((uint16_t *)outrow + stride * n);
   }
   uint16_t *
   row16bit ()
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (row16bit (0));
   }
   uint8_t *
   row8bit (int n)
   {
-    assert (colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
+    assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
     return ((uint8_t *)outrow + stride * n);
   }
   uint8_t *
   row8bit ()
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (row8bit (0));
   }
   float *
   row32bit_float (int n)
   {
-    assert (colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
+    assert (!colorscreen_checking || ((n >= 0) && (n <= get_n_rows ())));
     return ((float *)outrow + stride * n);
   }
   float *
   row32bit_float ()
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return row32bit_float (0);
   }
   void
@@ -171,7 +171,7 @@ public:
   void
   put_pixel (int x, int r, int g, int b)
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (put_pixel (x, 0, r, g, b));
   }
   void
@@ -197,7 +197,7 @@ public:
   void
   kill_pixel (int x)
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (kill_pixel (x, 0));
   }
   void
@@ -235,7 +235,7 @@ public:
   void
   put_hdr_pixel (int x, luminosity_t r, luminosity_t g, luminosity_t b)
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (put_hdr_pixel (x, 0, r, g, b));
   }
   void
@@ -261,7 +261,7 @@ public:
   void
   kill_hdr_pixel (int x)
   {
-    assert (colorscreen_checking || get_n_rows () == 1);
+    assert (!colorscreen_checking || get_n_rows () == 1);
     return (kill_hdr_pixel (x, 0));
   }
 
