@@ -15,6 +15,7 @@ namespace colorscreen
 const char * render_parameters::color_model_names [] = {
   "none",
   "scan",
+  "sRGB",
   "red",
   "green",
   "blue",
@@ -203,6 +204,14 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	  is_srgb = true;
 	}
 	break;
+      case render_parameters::color_model_srgb:
+	{
+	  dyes = matrix_by_dye_xyY (xyY(0.6400, 0.3300, 0.2126),
+				    xyY(0.3000, 0.6000, 0.7152),
+				    xyY(0.1500, 0.0600, 0.0722 ));
+	  dye_whitepoint = srgb_white;
+	  break;
+	}
       /* Color based on frequencies determined in Wall's Practical Color Photography
          as triggering best individual stimulus of an eye.  */
       case render_parameters::color_model_max_separation:

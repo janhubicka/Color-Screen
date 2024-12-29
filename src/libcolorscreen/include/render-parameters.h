@@ -145,6 +145,7 @@ struct render_parameters
   {
     color_model_none,
     color_model_scan,
+    color_model_srgb,
     color_model_red,
     color_model_green,
     color_model_blue,
