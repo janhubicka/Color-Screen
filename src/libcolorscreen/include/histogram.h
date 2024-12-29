@@ -89,10 +89,53 @@ public:
   {
     if (m_total != -1)
       abort ();
-    int sum = 0;
+    long sum = 0;
     for (auto n : m_entries)
       sum += n;
     m_total = sum;
+  }
+  void
+  find_min_max (luminosity_t skip_min, luminosity_t skip_max, int &mini, int &maxi) const
+  {
+    unsigned long sum1 = 0;
+    unsigned long threshold = (m_total * skip_min) + 0.5;
+    for (mini = 0; mini < (int)m_entries.size (); mini++)
+      {
+        if (sum1 + m_entries[mini] > threshold)
+          break;
+        sum1 += m_entries[mini];
+      }
+    unsigned long sum2 = 0;
+    threshold = (m_total * skip_max) + 0.5;
+    for (maxi = (int)m_entries.size () - 1; maxi >= 0; maxi--)
+      {
+        if (sum2 + m_entries[maxi] > threshold)
+          break;
+        sum2 += m_entries[maxi];
+      }
+    if (sum1 + sum2 >= (unsigned)m_total)
+      abort ();
+    if (mini > maxi)
+      abort ();
+  }
+
+  void
+  dump (FILE *out, luminosity_t skip_min = 0, luminosity_t skip_max = 0)
+  {
+    fprintf (out, "Histogram entries\n");
+    int mini, maxi;
+    find_min_max (skip_min, skip_max, mini, maxi);
+    long sum = 0;
+    for (int i = 0; i < (int)m_entries.size (); i++)
+      {
+	if (i == mini)
+	  fprintf (out, "First entry accounted\n");
+	sum += m_entries[i];
+        fprintf (out, "  entry %i count %li %2.2f%% cummulative %li %2.2f%% range [%f,%f)\n",i, m_entries[i], m_entries[i] * 100.0 / m_total, sum, sum * 100.0 / m_total, index_to_val (i),index_to_val (i+1));
+	if (i == maxi)
+	  fprintf (out, "Last entry accounted\n");
+
+      }
   }
 
   /* Find minimal value after cutting off total*skip elements.  */
@@ -103,8 +146,8 @@ public:
       abort ();
     if (!skip)
       return m_minval;
-    int threshold = (m_total * skip) + 0.5;
-    int sum = 0;
+    long threshold = (m_total * skip) + 0.5;
+    long sum = 0;
     // printf ("Threshold %i total %i\n", threshold, m_total);
     for (int i = 0; i < (int)m_entries.size (); i++)
       {
@@ -123,8 +166,8 @@ public:
       abort ();
     if (!skip)
       return m_maxval;
-    int threshold = (m_total * skip) + 0.5;
-    int sum = 0;
+    long threshold = (m_total * skip) + 0.5;
+    long sum = 0;
     for (int i = (int)m_entries.size () - 1; i >= 0; i--)
       {
         sum += m_entries[i];
@@ -141,32 +184,13 @@ public:
   {
     if (m_total == -1)
       abort ();
-    int wsum = 0;
+    double wsum = 0;
     int mini, maxi;
-    unsigned int sum1 = 0;
-    unsigned int threshold = (m_total * skip_min) + 0.5;
-    for (mini = 0; mini < (int)m_entries.size (); mini++)
-      {
-        if (sum1 + m_entries[mini] > threshold)
-          break;
-        sum1 += m_entries[mini];
-      }
-    unsigned int sum2 = 0;
-    threshold = (m_total * skip_max) + 0.5;
-    for (maxi = (int)m_entries.size () - 1; maxi >= 0; maxi--)
-      {
-        if (sum2 + m_entries[maxi] > threshold)
-          break;
-        sum2 += m_entries[maxi];
-      }
-    if (sum1 + sum2 >= (unsigned)m_total)
-      abort ();
-    if (mini > maxi)
-      abort ();
-    int sum = 0;
+    find_min_max (skip_min, skip_max, mini, maxi);
+    long sum = 0;
     for (int i = mini; i <= maxi; i++)
       {
-        wsum += m_entries[i] * i;
+        wsum += m_entries[i] * (double)i;
         sum += m_entries[i];
       }
     return index_to_val (wsum / ((luminosity_t)sum));
@@ -181,8 +205,8 @@ public:
 private:
   luminosity_t m_minval, m_maxval;
   luminosity_t m_inv;
-  std::vector<unsigned int> m_entries;
-  int m_total;
+  std::vector<unsigned long> m_entries;
+  long m_total;
 };
 
 class rgb_histogram
