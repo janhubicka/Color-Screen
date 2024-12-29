@@ -759,4 +759,245 @@ dump_patch_density (FILE *out, image_data &scan, scr_to_img_parameters &param,
     return false;
   return render.dump_patch_density (out);
 }
+
+static double
+get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL, xyz *maxs = NULL)
+{
+  xyz bfc1 = fc1, bfc2 = fc2;
+  if (mins)
+    {
+      if (fc1.x < mins->x)
+	mins->x = fc1.x;
+      if (fc1.y < mins->y)
+	mins->y = fc1.y;
+      if (fc1.z < mins->z)
+	mins->z = fc1.z;
+      if (fc2.x < mins->x)
+	mins->x = fc2.x;
+      if (fc2.y < mins->y)
+	mins->y = fc2.y;
+      if (fc2.z < mins->z)
+	mins->z = fc2.z;
+      if (fc1.x < maxs->x)
+	maxs->x = fc1.x;
+      if (fc1.y < maxs->y)
+	maxs->y = fc1.y;
+      if (fc1.z < maxs->z)
+	maxs->z = fc1.z;
+      if (fc2.x < maxs->x)
+	maxs->x = fc2.x;
+      if (fc2.y < maxs->y)
+	maxs->y = fc2.y;
+      if (fc2.z < maxs->z)
+	maxs->z = fc2.z;
+    }
+  /* DeltaE is meaningfully defined only in the range of xyz.  */
+  bool cl = false;
+  if (fc1.x < 0)
+    fc1.x = 0, cl = true;
+  if (fc1.x > 1)
+    fc1.x = 1, cl = true;
+  if (fc1.y < 0)
+    fc1.y = 0, cl = true;
+  if (fc1.y > 1)
+    fc1.y = 1, cl = true;
+  if (fc1.z < 0)
+    fc1.z = 0, cl = true;
+  if (fc1.z > 1)
+    fc1.z = 1, cl = true;
+  if (fc2.x < 0)
+    fc2.x = 0, cl = true;
+  if (fc2.x > 1)
+    fc2.x = 1, cl = true;
+  if (fc2.y < 0)
+    fc2.y = 0, cl = true;
+  if (fc2.y > 1)
+    fc2.y = 1, cl = true;
+  if (fc2.z < 0)
+    fc2.z = 0, cl = true;
+  if (fc2.z > 1)
+    fc2.z = 1, cl = true;
+  if (cl && cln)
+    {
+#if 0
+      printf ("Clamping\n");
+      bfc1.print (stdout);
+      fc1.print (stdout);
+      bfc2.print (stdout);
+      fc2.print (stdout);
+#endif
+      (*cln)++;
+    }
+  cie_lab cc1(fc1, srgb_white);
+  cie_lab cc2(fc2, srgb_white);
+  luminosity_t delta = deltaE2000(cc1, cc2);
+  if (!(delta >= 0))
+    abort ();
+  return delta;
+}
+
+bool
+compare_deltae (image_data &img, scr_to_img_parameters &param1, render_parameters &rparam1, scr_to_img_parameters &param2, render_parameters &rparam2, const char *cmpname, double *ret_avg, double *ret_max, progress_info *progress)
+{
+  rparam1.output_profile = render_parameters::output_profile_xyz;
+  rparam2.output_profile = render_parameters::output_profile_xyz;
+  rparam1.observer_whitepoint = srgb_white;
+  rparam2.observer_whitepoint = srgb_white;
+  render_interpolate render1 (param1, img, rparam1, 256);
+  render_interpolate render2 (param2, img, rparam2, 256);
+  if (!render1.precompute_all (progress)
+      || !render2.precompute_all (progress))
+    return false;
+  int border = 100;
+  xyz mins = {1,1,1};
+  xyz maxs = {0,0,0};
+  long n = 0;
+  long cln = 0;
+  xyz fc1, fc2;
+
+  render1.set_linear_hdr_color (1, 0, 0, &fc1.x, &fc1.y, &fc1.z);
+  render2.set_linear_hdr_color (1, 0, 0, &fc2.x, &fc2.y, &fc2.z);
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Red primary 1: ");
+  fc1.print (stdout);
+  printf ("Red primary 2: ");
+  fc2.print (stdout);
+  printf ("Red primary deltaE 2000: %f\n", get_deltae (fc1, fc2));
+
+  render1.set_linear_hdr_color (0, 1, 0, &fc1.x, &fc1.y, &fc1.z);
+  render2.set_linear_hdr_color (0, 1, 0, &fc2.x, &fc2.y, &fc2.z);
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Green primary 1: ");
+  fc1.print (stdout);
+  printf ("Green primary 2: ");
+  fc2.print (stdout);
+  printf ("Green primary deltaE 2000: %f\n", get_deltae (fc1, fc2));
+
+  render1.set_linear_hdr_color (0, 0, 1, &fc1.x, &fc1.y, &fc1.z);
+  render2.set_linear_hdr_color (0, 0, 1, &fc2.x, &fc2.y, &fc2.z);
+  if (progress)
+    progress->pause_stdout ();
+  printf ("Blue primary 1: ");
+  fc1.print (stdout);
+  printf ("Blue primary 2: ");
+  fc2.print (stdout);
+  printf ("Blue primary deltaE 2000: %f\n", get_deltae (fc1, fc2));
+  if (progress)
+    progress->resume_stdout ();
+
+  int step = 4;
+  if (progress)
+    progress->set_task ("comparing", (img.height - 2 * border) / step * 2);
+  histogram deltaE;
+  luminosity_t sum = 0;
+//#pragma omp parallel for default(none) shared(progress,img,render1, redner2,mins,maxs,sum) 
+  for (int y = border; y < img.height - border; y+=step)
+    {
+      if (!progress || !progress->cancel_requested ())
+	for (int x = border; x < img.width - border; x+=step)
+	  {
+	    rgbdata c1 = render1.sample_pixel_img (x, y);
+	    rgbdata c2 = render2.sample_pixel_img (x, y);
+	    render1.set_linear_hdr_color (c1.red, c1.green, c1.blue, &fc1.x, &fc1.y, &fc1.z);
+	    render2.set_linear_hdr_color (c2.red, c2.green, c2.blue, &fc2.x, &fc2.y, &fc2.z);
+	    double delta = get_deltae (fc1, fc2);
+	    deltaE.pre_account (delta);
+#if 0
+	    if (delta > 0.1)
+	      {
+		printf ("Delta %f\n",delta);
+		fc1.print (stdout);
+		fc2.print (stdout);
+	      }
+#endif
+	    //sum += delta;
+	    //maxd = std::max (maxd, delta);
+	    sum += delta;
+	  }
+      if (progress)
+	progress->inc_progress ();
+    }
+  deltaE.finalize_range (65535);
+
+  if (!cmpname)
+    {
+      for (int y = border; y < img.height - border; y+=step)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = border; x < img.width - border; x+=step)
+	      {
+		rgbdata c1 = render1.sample_pixel_img (x, y);
+		rgbdata c2 = render2.sample_pixel_img (x, y);
+		render1.set_linear_hdr_color (c1.red, c1.green, c1.blue, &fc1.x, &fc1.y, &fc1.z);
+		render2.set_linear_hdr_color (c2.red, c2.green, c2.blue, &fc2.x, &fc2.y, &fc2.z);
+		double delta = get_deltae (fc1, fc2, &cln, &mins, &maxs);
+		deltaE.account (delta);
+		n++;
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	}
+    }
+  else
+    {
+      tiff_writer_params par;
+      const char *error;
+      par.filename = cmpname;
+      par.width = (img.width - 2 * border) / step;
+      par.height = (img.height - 2 * border) / step;
+      par.depth = 32;
+      par.hdr = true;
+      tiff_writer tiff (par, &error);
+      if (error)
+	return false;
+      for (int y = border; y < img.height - border; y+=step)
+	{
+	  if (!progress || !progress->cancel_requested ())
+	    for (int x = border; x < img.width - border; x+=step)
+	      {
+		rgbdata c1 = render1.sample_pixel_img (x, y);
+		rgbdata c2 = render2.sample_pixel_img (x, y);
+		render1.set_linear_hdr_color (c1.red, c1.green, c1.blue, &fc1.x, &fc1.y, &fc1.z);
+		render2.set_linear_hdr_color (c2.red, c2.green, c2.blue, &fc2.x, &fc2.y, &fc2.z);
+		double delta = get_deltae (fc1, fc2, &cln, &mins, &maxs);
+		deltaE.account (delta);
+		n++;
+		tiff.put_hdr_pixel ((x - border) / step, fc1.x, fc1.y, fc1.z);
+	      }
+	  if (progress)
+	    progress->inc_progress ();
+	  if (!tiff.write_row ())
+	    return false;
+	}
+    }
+  deltaE.finalize ();
+  if (progress)
+    progress->pause_stdout ();
+  if (mins.x < 0)
+    fprintf (stderr, "Warning: minimal x is %f; clamping\n", mins.x);
+  if (mins.y < 0)
+    fprintf (stderr, "Warning: minimal y is %f; clamping\n", mins.y);
+  if (mins.z < 0)
+    fprintf (stderr, "Warning: minimal z is %f; clamping\n", mins.z);
+  if (maxs.x > 1)
+    fprintf (stderr, "Warning: maximal x is %f; clamping\n", maxs.x);
+  if (maxs.y > 1)
+    fprintf (stderr, "Warning: maximal y is %f; clamping\n", maxs.y);
+  if (maxs.z > 1)
+    fprintf (stderr, "Warning: maximal z is %f; clamping\n", maxs.z);
+  if (cln)
+    fprintf (stderr, "Clamped %li pixels out of %li (%f%%)\n", cln, n, cln * 100.0 / n);
+  printf ("Average %f\n", sum / n);
+  if (progress)
+    progress->resume_stdout ();
+
+  *ret_avg = deltaE.find_avg (0, 0.01);
+  *ret_max = deltaE.find_max (0.01);
+  //*ret_avg = sum / n;
+  //*ret_max = maxd;
+  return true;
+}
+
 }

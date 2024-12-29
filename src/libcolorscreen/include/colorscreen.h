@@ -136,5 +136,6 @@ DLL_PUBLIC bool optimize_color_model_colors (scr_to_img_parameters *param,
                                              std::vector<point_t> &points,
                                              std::vector<color_match> *report,
                                              progress_info *progress);
+DLL_PUBLIC bool compare_deltae (image_data &img, scr_to_img_parameters &param1, render_parameters &rparam1, scr_to_img_parameters &param2, render_parameters &rparam2, const char *cmpname, double *, double *, progress_info *progress = NULL);
 }
 #endif

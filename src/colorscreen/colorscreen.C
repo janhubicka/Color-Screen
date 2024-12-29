@@ -2188,6 +2188,76 @@ digital_laboratory (int argc, char **argv)
                   corrected_blue_primary.y, corrected_blue_primary.z);
         }
     }
+  if (!strcmp (argv[0], "compare-deltaE"))
+    {
+      if (argc != 4 && argc != 5)
+        printf ("Expected <scan1> <par1> <par2> [<cmpfname>]\n");
+      static const char *error;
+      image_data scan;
+      file_progress_info progress (stdout, verbose, verbose_tasks);
+      scr_to_img_parameters param1, param2;
+      render_parameters rparam1, rparam2;
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading scan %s\n", argv[1]);
+	  progress.resume_stdout ();
+	}
+      if (!scan.load (argv[1], false, &error, &progress))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+	  exit(1);
+	}
+      FILE *in = fopen (argv[2], "rt");
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", argv[2]);
+	  progress.resume_stdout ();
+	}
+      if (!in)
+	{
+	  progress.pause_stdout ();
+	  perror (argv[2]);
+	  return;
+	}
+      if (!load_csp (in, &param1, NULL, &rparam1, NULL, &error))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", argv[2], error);
+	  exit(1);
+	}
+      fclose (in);
+      in = fopen (argv[3], "rt");
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading color screen parameters: %s\n", argv[3]);
+	  progress.resume_stdout ();
+	}
+      if (!in)
+	{
+	  progress.pause_stdout ();
+	  perror (argv[3]);
+	  exit(1);
+	}
+      if (!load_csp (in, &param2, NULL, &rparam2, NULL, &error))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", argv[3], error);
+	  exit(1);
+	}
+      fclose (in);
+      double deltae_avg, deltae_max;
+      if (!compare_deltae (scan, param1, rparam1, param2, rparam2, argc == 4 ? NULL : argv[4], &deltae_avg, &deltae_max, &progress))
+        {
+	  fprintf (stderr, "Comparsion failed\n");
+	  exit (1);
+        }
+      progress.pause_stdout ();
+      printf ("Robust deltaE 2000 (ignoring 1%% of exceptional samples) avg %f, max %f\n", deltae_avg, deltae_max);
+    }
   else
     print_help ();
 }
