@@ -1023,8 +1023,8 @@ public:
 
     /* Starting from blur 0 seems to work better, since other parameters
        are then more relevant.  */
-    fixed_width = dufaycolor::red_width;
-    fixed_height = dufaycolor::green_height;
+    fixed_width = dufaycolor::red_strip_width;
+    fixed_height = dufaycolor::green_strip_width;
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
         start[emulsion_intensity_index + tileid] = 1 / 3.0;
@@ -1100,8 +1100,8 @@ public:
           }
         else
           {
-            start[dufay_strips_index + 0] = dufaycolor::red_width;
-            start[dufay_strips_index + 1] = dufaycolor::green_height;
+            start[dufay_strips_index + 0] = dufaycolor::red_strip_width;
+            start[dufay_strips_index + 1] = dufaycolor::green_strip_width;
           }
       }
 
