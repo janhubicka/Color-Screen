@@ -11,17 +11,25 @@ class dufaycolor
 {
 public:
   /* New measuremet from Gawain's photo.  */
+  static constexpr const coord_t red_width = 21.0;
+  static constexpr const coord_t green_blue_width = /*28.6*/49.9-red_width;  /* Measured on microscropic image as 49.3.  */
+  static constexpr const coord_t green_height = 22.7;
+  static constexpr const coord_t blue_height = 26.9;
+
+#if 0
   static constexpr const coord_t red_width = 0.3745;
   static constexpr const coord_t green_blue_width = 1 - red_width;
   static constexpr const coord_t green_height = 0.3058 / green_blue_width;
   static constexpr const coord_t blue_height = 1 - green_height;
+#endif
+
 #if 0
   /* Sizes in percent based on color cinematography screen.  */
 #if 1
   static constexpr const coord_t red_width = 21.0;
   static constexpr const coord_t green_blue_width = /*28.6*/49.9 - red_width;  /* Measured on microscropic image as 49.3.  */
-  static constexpr const coord_t blue_height = 22.7;
-  static constexpr const coord_t green_height = 26.9;
+  static constexpr const coord_t green_height = 22.7;
+  static constexpr const coord_t blue_height = 26.9;
 #else
   static constexpr const coord_t red_width = 33;
   static constexpr const coord_t green_blue_width = 100-red_width;  /* Measured on microscropic image as 49.3.  */
@@ -71,8 +79,8 @@ public:
      Imaging was performed with support of the Center for Microscopy and Image Analysis, University of Zurich  */
   static constexpr const coord_t red_width4 = 21.0;
   static constexpr const coord_t green_blue_width4 = /*28.6*/49.9-red_width4;  /* Measured on microscropic image as 49.3.  */
-  static constexpr const coord_t blue_height4 = 22.7;
-  static constexpr const coord_t green_height4 = 26.9;
+  static constexpr const coord_t green_height4 = 22.7;
+  static constexpr const coord_t blue_height4 = 26.9;
 
   /* Gawain's microscopic photo analyzed using render_scr_detect.  */
   static constexpr const coord_t red_width5 = 0.3745;
