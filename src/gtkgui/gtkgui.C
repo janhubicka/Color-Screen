@@ -1948,16 +1948,16 @@ handle_drag (int x, int y, int button)
       if (!freeze_x)
 	{
 	  current.coordinate1.x = (press_parameters.coordinate1.x * cos (angle)
-				  + press_parameters.coordinate1.y * sin (angle)) * scale;
+				  - press_parameters.coordinate1.y * sin (angle)) * scale;
 	  current.coordinate1.y = (press_parameters.coordinate1.x * sin (angle)
 				  + press_parameters.coordinate1.y * cos (angle)) * scale;
 	}
       if (!freeze_y)
 	{
-	  current.coordinate2.x = (press_parameters.coordinate2.x * cos (-angle)
-				  + press_parameters.coordinate2.y * sin (-angle)) * scale;
-	  current.coordinate2.y = (press_parameters.coordinate2.x * sin (-angle)
-				  + press_parameters.coordinate2.y * cos (-angle)) * scale;
+	  current.coordinate2.x = (press_parameters.coordinate2.x * cos (angle)
+				  - press_parameters.coordinate2.y * sin (angle)) * scale;
+	  current.coordinate2.y = (press_parameters.coordinate2.x * sin (angle)
+				  + press_parameters.coordinate2.y * cos (angle)) * scale;
 	}
       setvals ();
       display_scheduled = true;
