@@ -1817,7 +1817,7 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
   assert (dsparams->scanner_type != max_scanner_type);
 
   empty.gamma = dsparams->gamma;
-  assert (empty.gamma != 0);
+  assert (empty.gamma != 0 || img.to_linear[0].size ());
   ret.mesh_trans = NULL;
   ret.success = false;
   ret.known_patches = NULL;
