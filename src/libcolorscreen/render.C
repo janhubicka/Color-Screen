@@ -119,6 +119,9 @@ luminosity_t *
 get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
   bool use_table = !p.gamma && p.gamma_table.size ();
+  /* Use some sane data if table is missing.  */
+  if (!p.gamma && !use_table)
+    p.gamma = 1;
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
   luminosity_t mul = (luminosity_t)1 / p.maxval;
@@ -316,8 +319,8 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
       return ret;
     }
   par.scan_exposure = correction ? 1 : blue;
-  par.gamma_table = p.gamma_table[2];
   par.dark_point = correction ? 0 : dark.blue;
+  par.gamma_table = p.gamma_table[1];
   ret.btable = lookup_table_cache.get (par, progress);
   if (!ret.btable)
     {
@@ -433,6 +436,12 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p, progress_info *p
       par.maxval = p.gp.img->maxval;
       par.gamma = p.gp.gamma;
       par.invert = p.gp.invert;
+      /* Here we want to use table for infrared, but that is not present in ICC profile.
+         Use blue instead, since usually blue dye fades first and thus blue
+	 channel is most representative for IR in the scan.  
+	 ??? This does not work with the argyll profiles I made for Nikon.  */
+      //if (!p.gp.gamma)
+	//par.gamma_table = p.gp.img->to_linear[2];
       d.table = lookup_table_cache.get (par, progress);
       d.correction = p.gp.backlight;
       d.width = p.gp.img->width;

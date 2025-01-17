@@ -983,7 +983,7 @@ image_data::parse_icc_profile ()
           return false;
         }
       cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_DBL, hXYZ, TYPE_XYZ_DBL,
-		      				  INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE);
+		      				  INTENT_ABSOLUTE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC);
       if (!xform)
         {
           fprintf (stderr, "Failed to create profile transform\n");
