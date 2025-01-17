@@ -518,7 +518,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	    lookup_table_cache.release (m_rgb_lookup_table[2]);
 	}
       else
-        m_rgb_lookup_table[1] = m_rgb_lookup_table[2];
+        m_rgb_lookup_table[1] = m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
