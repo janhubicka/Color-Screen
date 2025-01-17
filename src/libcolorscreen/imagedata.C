@@ -968,12 +968,12 @@ image_data::parse_icc_profile ()
   double this_gamma = cmsDetectRGBProfileGamma (hInProfile, 0.001);
   if (this_gamma > 0)
     {
-      fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);
+      //fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);
       gamma = this_gamma;
     }
   else
     {
-      fprintf (stderr, "No gamma estimate found\n");
+      //fprintf (stderr, "No gamma estimate found\n");
       cmsContext ContextID = cmsGetProfileContextID(hInProfile);
       cmsHPROFILE hXYZ = cmsCreateXYZProfileTHR(ContextID);
       if (!hXYZ)
@@ -982,7 +982,7 @@ image_data::parse_icc_profile ()
 	  cmsCloseProfile (hInProfile);
           return false;
         }
-      cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
+      cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_DBL, hXYZ, TYPE_XYZ_DBL,
 		      				  INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE);
       if (!xform)
         {
@@ -992,20 +992,22 @@ image_data::parse_icc_profile ()
         }
       for (int channel = 0; channel < 3; channel++)
 	{
-	  std::vector<cmsUInt16Number[3]> rgb (maxval);
-	  for (int i = 0; i < maxval; i++) {
+	  std::vector<cmsFloat64Number[3]> rgb (maxval + 1);
+	  for (int i = 0; i <= maxval; i++) {
 	      rgb[i][0] = rgb[i][1] = rgb[i][2] = 0;       
-	      rgb[i][channel] = ((i * 65535 + maxval / 2) / maxval);
+	      rgb[i][channel] = (i+0.5) / (maxval + 1);
 	  }
-	  std::vector <cmsCIEXYZ> XYZ (maxval);
-	  cmsDoTransform(xform, rgb.data (), XYZ.data (), maxval);
+	  std::vector <cmsCIEXYZ> XYZ (maxval + 1);
+	  cmsDoTransform(xform, rgb.data (), XYZ.data (), maxval + 1);
 	  luminosity_t max = (luminosity_t)XYZ[0].Y;
-	  for (int i = 1; i < maxval; i++) 
+	  for (int i = 1; i <= maxval; i++) 
 	    if ((luminosity_t) XYZ[i].Y > max)
 	      max = (luminosity_t) XYZ[i].Y;
-	  to_linear[channel].reserve (maxval);
-	  for (int i = 0; i < maxval; i++) 
+	  to_linear[channel].reserve (maxval + 1);
+	  for (int i = 0; i <= maxval; i++) 
+	  {
 	    to_linear[channel].push_back (XYZ[i].Y / max);
+	  }
 	}
       gamma = 0;
     }
