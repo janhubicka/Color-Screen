@@ -876,6 +876,10 @@ image_data::init_loader (const char *name, bool preload_all, const char **error,
     loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".ARW"))
     loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".raf"))
+    loader = std::make_unique <raw_image_data_loader> (this);
+  else if (has_suffix (name, ".RAF"))
+    loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".arq"))
     loader = std::make_unique <raw_image_data_loader> (this);
   else if (has_suffix (name, ".ARQ"))
@@ -919,6 +923,20 @@ image_data::parse_icc_profile ()
       fprintf (stderr, "Failed to parse profile\n");
       return false;
     }
+  if (cmsGetColorSpace(hInProfile) != cmsSigRgbData)
+    {
+      fprintf (stderr, "Non-RGB profiles are not supported by ColorScreen!\n");
+      return false;
+    }
+
+  cmsProfileClassSignature cl = cmsGetDeviceClass(hInProfile);
+  if (cl != cmsSigInputClass && cl != cmsSigDisplayClass &&
+      cl != cmsSigOutputClass && cl != cmsSigColorSpaceClass)
+    {
+      fprintf (stderr, "Only input, output, display and color space ICC profiles are supported by ColorScreen!\n");
+      return false;
+    }
+
   cmsHTRANSFORM hTransform = cmsCreateTransform(hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT, INTENT_ABSOLUTE_COLORIMETRIC, 0);
   if (!hTransform)
     {
@@ -947,8 +965,51 @@ image_data::parse_icc_profile ()
 #endif
 
   cmsDeleteTransform (hTransform);
+  double this_gamma = cmsDetectRGBProfileGamma (hInProfile, 0.01);
+  if (this_gamma > 0)
+    {
+      fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);
+      gamma = this_gamma;
+    }
+  else
+    {
+      fprintf (stderr, "No gamma estimate found\n");
+      cmsContext ContextID = cmsGetProfileContextID(hInProfile);
+      cmsHPROFILE hXYZ = cmsCreateXYZProfileTHR(ContextID);
+      if (!hXYZ)
+        {
+          fprintf (stderr, "Failed to create XYZ Profile HR\n");
+	  cmsCloseProfile (hInProfile);
+          return false;
+        }
+      cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_16, hXYZ, TYPE_XYZ_DBL,
+		      				  INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE);
+      if (!xform)
+        {
+          fprintf (stderr, "Failed to create profile transform\n");
+	  cmsCloseProfile (hInProfile);
+          return false;
+        }
+      for (int channel = 0; channel < 3; channel++)
+	{
+	  std::vector<cmsUInt16Number[3]> rgb (maxval);
+	  for (int i = 0; i < maxval; i++) {
+	      rgb[i][0] = rgb[i][1] = rgb[i][2] = 0;       
+	      rgb[i][channel] = ((i * 65535 + maxval / 2) / maxval);
+	  }
+	  std::vector <cmsCIEXYZ> XYZ (maxval);
+	  cmsDoTransform(xform, rgb.data (), XYZ.data (), maxval);
+	  luminosity_t max = (luminosity_t)XYZ[0].Y;
+	  for (int i = 1; i < maxval; i++) 
+	    if ((luminosity_t) XYZ[i].Y > max)
+	      max = (luminosity_t) XYZ[i].Y;
+	  to_linear[channel].reserve (maxval);
+	  for (int i = 0; i < maxval; i++) 
+	    to_linear[channel].push_back (XYZ[i].Y / max);
+	}
+    }
   cmsCloseProfile (hInProfile);
-  return false;
+  return true;
 }
 
 bool
