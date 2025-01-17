@@ -510,8 +510,12 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
 	{
 	  par.gamma_table = m_img.to_linear[1];
 	  m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+	  if (m_rgb_lookup_table[1] == m_rgb_lookup_table[0])
+	    lookup_table_cache.release (m_rgb_lookup_table[1]);
 	  par.gamma_table = m_img.to_linear[2];
 	  m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
+	  if (m_rgb_lookup_table[2] == m_rgb_lookup_table[0])
+	    lookup_table_cache.release (m_rgb_lookup_table[2]);
 	}
       else
         m_rgb_lookup_table[1] = m_rgb_lookup_table[2];
@@ -610,9 +614,9 @@ render::~render ()
   if (m_rgb_lookup_table[0])
     {
       lookup_table_cache.release (m_rgb_lookup_table[0]);
-      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[1])
+      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[1] && m_rgb_lookup_table[1])
         lookup_table_cache.release (m_rgb_lookup_table[1]);
-      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[2])
+      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[2] && m_rgb_lookup_table[2])
         lookup_table_cache.release (m_rgb_lookup_table[2]);
     }
   if (m_sharpened_data)
@@ -624,20 +628,54 @@ render::~render ()
 }
 
 /* Compute lookup table converting image_data to range 0...1 with GAMMA.  */
-luminosity_t *
-render::get_lookup_table (luminosity_t gamma, int maxval)
+bool
+render::get_lookup_tables (luminosity_t **ret, luminosity_t gamma, const image_data *img, progress_info *progress)
 {
   lookup_table_params par;
   par.gamma = gamma;
-  par.maxval = maxval;
-  return lookup_table_cache.get (par, NULL);
+  par.maxval = img->maxval;
+  ret[0] = ret[1] = ret[2] = NULL;
+  if (!par.gamma)
+    par.gamma_table = img->to_linear[0];
+  ret[0] = lookup_table_cache.get (par, progress);
+  if (!ret[0])
+    return false;
+  if (par.gamma)
+    ret[1] = ret[2] = ret[0];
+  else
+    {
+      par.gamma_table = img->to_linear[1];
+      ret[1] = lookup_table_cache.get (par, progress);
+      if (!ret[1])
+        {
+	  release_lookup_tables (ret);
+	  return false;
+        }
+      if (ret[1] == ret[0])
+        lookup_table_cache.release (ret[1]);
+      par.gamma_table = img->to_linear[2];
+      ret[2] = lookup_table_cache.get (par, progress);
+      if (!ret[2])
+	{
+	  release_lookup_tables (ret);
+	  return false;
+	}
+      if (ret[2] == ret[0])
+        lookup_table_cache.release (ret[2]);
+    }
+  return true;
 }
 
 /* Release lookup table.  */
 void
-render::release_lookup_table (luminosity_t *table)
+render::release_lookup_tables (luminosity_t **table)
 {
-  lookup_table_cache.release (table);
+  lookup_table_cache.release (table[0]);
+  if (table[1] != table[0] && table[1])
+    lookup_table_cache.release (table[1]);
+  if (table[2] != table[0] && table[2])
+    lookup_table_cache.release (table[2]);
+  table[0] = table[1] = table[2] = NULL;
 }
 
 /* Compute graydata of downscaled image.  */

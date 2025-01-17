@@ -13,7 +13,8 @@ public:
   render_scr_detect (scr_detect_parameters &param, image_data &img, render_parameters &rparam, int dstmaxval)
     : render (img, rparam, dstmaxval), m_precomputed_rgbdata (NULL), m_color_class_map (NULL)
   {
-    m_scr_detect.set_parameters (param, rparam.gamma, m_img.maxval);
+    /* TODO: Move to precomputation and also check return value, pass progress.  */
+    m_scr_detect.set_parameters (param, rparam.gamma, &m_img);
   }
   ~render_scr_detect ();
   scr_detect::color_class classify_pixel (int x, int y)

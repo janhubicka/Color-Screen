@@ -68,8 +68,8 @@ public:
   pure_attr inline luminosity_t fast_get_img_pixel (int x, int y) const;
     
   static const int num_color_models = render_parameters::color_model_max;
-  static luminosity_t *get_lookup_table (luminosity_t gamma, int maxval);
-  static void release_lookup_table (luminosity_t *);
+  static bool get_lookup_tables (luminosity_t **ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
+  static void release_lookup_tables (luminosity_t **);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
   inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
   inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;

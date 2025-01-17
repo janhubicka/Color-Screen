@@ -965,7 +965,7 @@ image_data::parse_icc_profile ()
 #endif
 
   cmsDeleteTransform (hTransform);
-  double this_gamma = cmsDetectRGBProfileGamma (hInProfile, 0.01);
+  double this_gamma = cmsDetectRGBProfileGamma (hInProfile, 0.001);
   if (this_gamma > 0)
     {
       fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);

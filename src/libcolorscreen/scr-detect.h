@@ -1,17 +1,19 @@
 #ifndef SCR_DETECT_H
 #define SCR_DETECT_H
 #include "include/scr-detect-parameters.h"
+#include "include/imagedata.h"
+class progress_info;
 namespace colorscreen {
 
 class scr_detect
 {
 public:
   scr_detect ()
-  : lookup_table (NULL)
+  : lookup_table {NULL, NULL, NULL}
   {
   }
   ~scr_detect ();
-  void set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval);
+  bool set_parameters (scr_detect_parameters param, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
   enum color_class
   {
     red,
@@ -29,7 +31,7 @@ public:
   void adjust_color (int r, int g, int b,
 		     luminosity_t *rr, luminosity_t *gg, luminosity_t *bb) const
   {
-    m_color_adjust.apply_to_rgb (lookup_table[r], lookup_table[g], lookup_table[b], rr, gg, bb);
+    m_color_adjust.apply_to_rgb (lookup_table[0][r], lookup_table[1][g], lookup_table[2][b], rr, gg, bb);
   }
   inline pure_attr
   enum color_class classify_adjusted_color (luminosity_t r, luminosity_t g, luminosity_t b) const
@@ -60,7 +62,7 @@ public:
   scr_detect_parameters m_param;
 private:
   color_matrix m_color_adjust;
-  luminosity_t *lookup_table;
+  luminosity_t *lookup_table[3];
 };
 
 class color_class_map

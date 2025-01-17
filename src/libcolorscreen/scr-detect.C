@@ -3,11 +3,12 @@
 #include "render.h"
 namespace colorscreen
 {
-void
-scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int maxval)
+bool
+scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, const image_data *img, progress_info *progress)
 {
   m_param = param;
-  lookup_table = render::get_lookup_table (gamma, maxval);
+  if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
+    return false;
 #if 0
   rgbdata black = m_param.black.sgngamma (gamma);
   rgbdata red = m_param.red.sgngamma (gamma);
@@ -55,11 +56,12 @@ scr_detect::set_parameters (scr_detect_parameters param, luminosity_t gamma, int
   //m_color_adjust.print(stdout);
   //printf ("combined:\n");
   //(t*m_color_adjust).print(stdout);
+  return true;
 }
 
 scr_detect::~scr_detect ()
 {
-  if (lookup_table)
-    render::release_lookup_table (lookup_table);
+  if (lookup_table[0])
+    render::release_lookup_tables (lookup_table);
 }
 }

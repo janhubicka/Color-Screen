@@ -16,7 +16,7 @@ namespace {
 /* Helper for sharpening part of the scan.  */
 struct imgtile
 {
-  luminosity_t *lookup_table;
+  luminosity_t *lookup_table[3];
   int xstart, ystart;
   image_data *img;
 };
@@ -29,9 +29,9 @@ get_pixel (struct imgtile *sec, int x, int y, int, int)
   y += sec->ystart;
   if (x < 0 || y < 0 || x >= sec->img->width || y >= sec->img->height)
     return ret;
-  ret.red = sec->lookup_table [sec->img->rgbdata[y][x].r];
-  ret.green = sec->lookup_table [sec->img->rgbdata[y][x].g];
-  ret.blue = sec->lookup_table [sec->img->rgbdata[y][x].b];
+  ret.red = sec->lookup_table[0] [sec->img->rgbdata[y][x].r];
+  ret.green = sec->lookup_table[1] [sec->img->rgbdata[y][x].g];
+  ret.blue = sec->lookup_table[2] [sec->img->rgbdata[y][x].b];
   return ret;
 }
 
@@ -50,7 +50,9 @@ compare_priorities(struct entry &e1, struct entry &e2)
 }
 
 /* Given known portion of screen collect color samples and optimize to PARAM.
-   M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. */
+   M, XSHIFT, YSHIFT, KNOWN_PATCHES are results of screen analysis. 
+   
+   TODO: Add return value*/
 void
 optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data *img, mesh *m, int xshift, int yshift, bitmap_2d *known_patches, luminosity_t gamma, progress_info *progress, FILE *report)
 {
@@ -65,7 +67,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
   rgbdata reds[samples*2];
   rgbdata greens[samples];
   rgbdata blues[samples];
-  luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
+  luminosity_t *lookup_table[3];
+  if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
+    return;
 
   for (int y = -yshift, nf = 0, next =0, step = count / samples; y < (int)known_patches->height - yshift; y++)
     for (int x = -xshift; x < (int)known_patches->width - xshift; x++)
@@ -82,9 +86,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 		  || img->rgbdata[(int)iy][(int)ix].b))
 
 	    {
-	      greens[nng].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
-	      greens[nng].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
-	      greens[nng].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      greens[nng].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
+	      greens[nng].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
+	      greens[nng].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
 	      nng++;
 	    }
 	  if (type == Dufay)
@@ -98,9 +102,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 		  || img->rgbdata[(int)iy][(int)ix].g
 		  || img->rgbdata[(int)iy][(int)ix].b))
 	    {
-	      blues[nnb].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
-	      blues[nnb].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
-	      blues[nnb].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      blues[nnb].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
+	      blues[nnb].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
+	      blues[nnb].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
 	      nnb++;
 	    }
 	  p = m->apply ({(coord_t)(x), y + 0.5});
@@ -111,9 +115,9 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 		  || img->rgbdata[(int)iy][(int)ix].g
 		  || img->rgbdata[(int)iy][(int)ix].b))
 	    {
-	      reds[nnr].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
-	      reds[nnr].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
-	      reds[nnr].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      reds[nnr].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
+	      reds[nnr].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
+	      reds[nnr].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
 	      nnr++;
 	    }
 	  if (type == Dufay)
@@ -127,13 +131,13 @@ optimize_screen_colors (scr_detect_parameters *param, scr_type type, image_data 
 		  || img->rgbdata[(int)iy][(int)ix].g
 		  || img->rgbdata[(int)iy][(int)ix].b))
 	    {
-	      reds[nnr].red = lookup_table[img->rgbdata[(int)iy][(int)ix].r];
-	      reds[nnr].green = lookup_table[img->rgbdata[(int)iy][(int)ix].g];
-	      reds[nnr].blue = lookup_table[img->rgbdata[(int)iy][(int)ix].b];
+	      reds[nnr].red = lookup_table[0][img->rgbdata[(int)iy][(int)ix].r];
+	      reds[nnr].green = lookup_table[1][img->rgbdata[(int)iy][(int)ix].g];
+	      reds[nnr].blue = lookup_table[2][img->rgbdata[(int)iy][(int)ix].b];
 	      nnr++;
 	    }
 	}
-  render::release_lookup_table (lookup_table);
+  render::release_lookup_tables (lookup_table);
   if (nnr < 10 || nnb < 10 || nng < 10)
     {
       fprintf (stderr, "Failed to find enough samples\n");
@@ -152,8 +156,10 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
   mem_rgbdata *sharpened = (mem_rgbdata*) malloc ((width + clen) * (height + clen) * sizeof (mem_rgbdata));
   if (!sharpened)
     return false;
-  luminosity_t *lookup_table = render::get_lookup_table (gamma, img->maxval);
-  struct imgtile section = {lookup_table, x - clen / 2, y - clen / 2, img};
+  luminosity_t *lookup_table[3];
+  if (!render::get_lookup_tables (lookup_table, gamma, img, progress))
+    return false;
+  struct imgtile section = {{lookup_table[0], lookup_table[1], lookup_table[2]}, x - clen / 2, y - clen / 2, img};
   sharpen<rgbdata, mem_rgbdata, imgtile *, int, &get_pixel> (sharpened, &section, 0, width + clen, height + clen, sharpen_radius, sharpen_amount, progress);
   std::vector<entry> pixels;
   for (int yy = y ; yy < y + height; yy++)
@@ -165,7 +171,7 @@ optimize_screen_colors (scr_detect_parameters *param, image_data *img, luminosit
 	e.priority = 3 - (e.orig_color.red + e.orig_color.green + e.orig_color.blue);
 	pixels.push_back (e);
       }
-  render::release_lookup_table (lookup_table);
+  render::release_lookup_tables (lookup_table);
   free (sharpened);
 
   sort (pixels.begin (), pixels.end (), compare_priorities);
