@@ -94,13 +94,13 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
       if (p.hdr)
 	printf (", HDR");
       if (p.xdpi && p.xdpi == p.ydpi)
-	printf (", PPI %f", p.xdpi);
+	printf (", PPI %.2f", p.xdpi);
       else
 	{
 	  if (p.xdpi)
-	    printf (", horisontal PPI %f", p.xdpi);
+	    printf (", horisontal PPI %.2f", p.xdpi);
 	  if (p.ydpi)
-	    printf (", vertical PPI %f", p.ydpi);
+	    printf (", vertical PPI %.2f", p.ydpi);
 	}
       fflush (stdout);
       printf ("\n");
