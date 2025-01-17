@@ -25,6 +25,7 @@ public:
   /* Optional color scan.  */
   pixel **rgbdata;
   void *icc_profile;
+  std::vector<luminosity_t> to_linear[3];
 
   DLL_PUBLIC image_data ();
   DLL_PUBLIC_EXP ~image_data ();
