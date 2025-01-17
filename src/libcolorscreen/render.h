@@ -49,7 +49,7 @@ class render
 public:
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
   : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table (NULL), m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_backlight_correction_id (0), m_tone_curve ()
+    m_rgb_lookup_table {NULL, NULL, NULL}, m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_backlight_correction_id (0), m_tone_curve ()
   {
     if (m_params.invert)
       {
@@ -88,9 +88,9 @@ public:
   {
     if (colorscreen_checking)
       assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-    rgbdata d = {m_rgb_lookup_table [m_img.rgbdata[y][x].r],
-		 m_rgb_lookup_table [m_img.rgbdata[y][x].g],
-		 m_rgb_lookup_table [m_img.rgbdata[y][x].b]};
+    rgbdata d = {m_rgb_lookup_table [0][m_img.rgbdata[y][x].r],
+		 m_rgb_lookup_table [1][m_img.rgbdata[y][x].g],
+		 m_rgb_lookup_table [2][m_img.rgbdata[y][x].b]};
     return d;
   }
   pure_attr inline rgbdata
@@ -179,7 +179,7 @@ protected:
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
-  luminosity_t *m_rgb_lookup_table;
+  luminosity_t *m_rgb_lookup_table[3];
   /* Translates back to gamma 2.  */
   luminosity_t *m_out_lookup_table;
   /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
@@ -254,7 +254,7 @@ render::get_linearized_data_red (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].r];
+  return m_rgb_lookup_table [0][m_img.rgbdata[y][x].r];
   /* TODO do inversion and film curves if requested.  */
 }
 
@@ -263,7 +263,7 @@ render::get_linearized_data_green (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].g];
+  return m_rgb_lookup_table [1][m_img.rgbdata[y][x].g];
   /* TODO do inversion and film curves if requested.  */
 }
 pure_attr inline luminosity_t always_inline_attr
@@ -271,7 +271,7 @@ render::get_linearized_data_blue (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  return m_rgb_lookup_table [m_img.rgbdata[y][x].b];
+  return m_rgb_lookup_table [2][m_img.rgbdata[y][x].b];
   /* TODO do inversion and film curves if requested.  */
 }
 
@@ -282,7 +282,7 @@ render::get_data_red (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].r];
+  luminosity_t v = m_rgb_lookup_table [0][m_img.rgbdata[y][x].r];
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::red, true);
@@ -297,7 +297,7 @@ render::get_data_green (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].g];
+  luminosity_t v = m_rgb_lookup_table [1][m_img.rgbdata[y][x].g];
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::green, true);
@@ -312,7 +312,7 @@ render::get_data_blue (int x, int y) const
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < m_img.width && y >= 0 && y < m_img.height);
-  luminosity_t v = m_rgb_lookup_table [m_img.rgbdata[y][x].b];
+  luminosity_t v = m_rgb_lookup_table [2][m_img.rgbdata[y][x].b];
   if (m_backlight_correction)
     {
       v = m_backlight_correction->apply (v, x, y, backlight_correction_parameters::blue, true);

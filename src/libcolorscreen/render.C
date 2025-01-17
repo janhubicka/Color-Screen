@@ -80,8 +80,11 @@ struct lookup_table_params
   /* image_data are in range 0...img_maxval.  */
   int maxval;
   /* Input data are assumed to have gamma.  Inverse of gamma is applied to
-     get linear data.  */
+     get linear data.
+     if gamma is set to 0, then gamma_table is expected to be a vector
+     converting raw data to linear gamma  */
   luminosity_t gamma;
+  std::vector <luminosity_t> gamma_table;
   /* Dark point is subtracted from linear data and then the result is multiplied by scan_exposure.  */
   luminosity_t dark_point, scan_exposure;
   /* True if we should invert positive to negative.  */
@@ -101,6 +104,7 @@ struct lookup_table_params
   {
     return maxval == o.maxval
 	   && gamma == o.gamma
+	   && (gamma || gamma_table == o.gamma_table)
 	   && dark_point == o.dark_point
 	   && scan_exposure == o.scan_exposure
 	   && invert == o.invert
@@ -114,6 +118,7 @@ struct lookup_table_params
 luminosity_t *
 get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
+  bool use_table = !p.gamma && p.gamma_table.size ();
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
   luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001), (luminosity_t)100.0);
   luminosity_t mul = (luminosity_t)1 / p.maxval;
@@ -123,15 +128,24 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
   if (!p.invert)
     {
-      for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      if (!use_table)
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      else
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = (p.gamma_table[i] - dark_point) * scan_exposure;
+
     }
   else if (!p.film_characteristic_curve)
     {
       luminosity_t v = 1/apply_gamma ((0.5 * p.maxval / 256) * mul, gamma);
       scan_exposure *= 1/v;
-      for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = (1/apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      if (!use_table)
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = (1/apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      else
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = (1/p.gamma_table[i] - dark_point) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {
@@ -139,16 +153,24 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
       s.precompute ();
 
       // TODO: For stitching exposure should be really inside
-      for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = s.unapply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      if (!use_table)
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = s.unapply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      else
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = s.unapply (1 - p.gamma_table[i] - dark_point) * scan_exposure;
     }
   else
     {
       film_sensitivity s (p.film_characteristic_curve);
       s.precompute ();
 
-      for (int i = 0; i <= p.maxval; i++)
-	lookup_table[i] = s.apply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      if (!use_table)
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = s.apply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+      else
+	for (int i = 0; i <= p.maxval; i++)
+	  lookup_table[i] = s.apply (1 - p.gamma_table[i] - dark_point) * scan_exposure;
     }
   return lookup_table;
 }
@@ -203,6 +225,7 @@ struct graydata_params
   uint64_t image_id;
   const image_data *img;
   luminosity_t gamma;
+  std::vector<luminosity_t> gamma_table[3];
   /* Dark point for mixing. */
   rgbdata dark;
   /* Weights of individual channels.  */
@@ -217,6 +240,9 @@ struct graydata_params
   {
     return image_id == o.image_id
 	   && gamma == o.gamma
+	   && (gamma || (gamma_table[0] == o.gamma_table[0]
+			 && gamma_table[1] == o.gamma_table[1]
+			 && gamma_table[2] == o.gamma_table[2]))
 	   && invert == o.invert
 	   && dark == o.dark
 	   && red == o.red
@@ -471,17 +497,28 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
       lookup_table_params par;
       par.maxval = m_img.maxval;
       par.gamma = m_params.gamma;
+      if (!par.gamma)
+        par.gamma_table = m_img.to_linear[0];
       par.invert = m_params.invert;
-      m_rgb_lookup_table = lookup_table_cache.get (par, progress);
-      if (!m_rgb_lookup_table)
+      m_rgb_lookup_table[0] = lookup_table_cache.get (par, progress);
+      if (!m_rgb_lookup_table[0])
 	return false;
+      if (!par.gamma)
+	{
+	  par.gamma_table = m_img.to_linear[1];
+	  m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
+	  par.gamma_table = m_img.to_linear[2];
+	  m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
+	}
+      else
+        m_rgb_lookup_table[1] = m_rgb_lookup_table[2];
     }
   out_lookup_table_params out_par = {m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma};
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
 
   if (grayscale_needed)
     {
-      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction_id, m_params.ignore_infrared},
+      gray_and_sharpen_params p = {{m_img.id, &m_img, m_params.gamma, {m_img.to_linear[0], m_img.to_linear[1], m_img.to_linear[2]}, m_params.mix_dark, m_params.mix_red, m_params.mix_green, m_params.mix_blue, m_params.invert, m_backlight_correction, m_backlight_correction_id, m_params.ignore_infrared},
 				   {m_params.sharpen_radius, m_params.sharpen_amount}};
       m_sharpened_data_holder = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
@@ -496,8 +533,12 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
       /* See if we want to do some output adjustments in pro photo RGB space.
          These should closely follow what DNG reference recommends.  */
       bool do_pro_photo = m_params.output_tone_curve != tone_curve::tone_curve_linear;
+      //printf ("Prophoto %i\n", do_pro_photo);
       /* Matrix converting dyes to XYZ.  */
       color = m_params.get_rgb_to_xyz_matrix (&m_img, normalized_patches, patch_proportions, do_pro_photo ? d50_white : d65_white);
+
+      //printf ("To xyz\n");
+      //color.print (stdout);
 
       /* For subtractive processes we do post-processing in separate matrix after spectrum dyes to xyz are applied.  */
       if (m_params.color_model == render_parameters::color_model_kodachrome25)
@@ -554,6 +595,8 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata 
   else
     color = m_params.get_rgb_adjustment_matrix (normalized_patches, patch_proportions);
   m_color_matrix = color;
+      //printf ("Final\n");
+      //color.print (stdout);
   return true;
 }
 
@@ -561,8 +604,14 @@ render::~render ()
 {
   if (m_out_lookup_table)
     out_lookup_table_cache.release (m_out_lookup_table);
-  if (m_rgb_lookup_table)
-    lookup_table_cache.release (m_rgb_lookup_table);
+  if (m_rgb_lookup_table[0])
+    {
+      lookup_table_cache.release (m_rgb_lookup_table[0]);
+      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[1])
+        lookup_table_cache.release (m_rgb_lookup_table[1]);
+      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[2])
+        lookup_table_cache.release (m_rgb_lookup_table[2]);
+    }
   if (m_sharpened_data)
     gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
   if (m_backlight_correction)

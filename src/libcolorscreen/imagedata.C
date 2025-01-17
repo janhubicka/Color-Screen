@@ -1007,6 +1007,7 @@ image_data::parse_icc_profile ()
 	  for (int i = 0; i < maxval; i++) 
 	    to_linear[channel].push_back (XYZ[i].Y / max);
 	}
+      gamma = 0;
     }
   cmsCloseProfile (hInProfile);
   return true;
