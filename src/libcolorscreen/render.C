@@ -301,11 +301,13 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
   par.scan_exposure = correction ? 1 : red;
   par.dark_point = correction ? 0 : dark.red;
   par.invert = p.invert;
+  par.gamma_table = p.gamma_table[0];
   ret.rtable = lookup_table_cache.get (par, progress);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
   par.dark_point = correction ? 0 : dark.green;
+  par.gamma_table = p.gamma_table[1];
   ret.gtable = lookup_table_cache.get (par, progress);
   if (!ret.gtable)
     {
@@ -314,8 +316,9 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
       return ret;
     }
   par.scan_exposure = correction ? 1 : blue;
-  ret.btable = lookup_table_cache.get (par, progress);
+  par.gamma_table = p.gamma_table[2];
   par.dark_point = correction ? 0 : dark.blue;
+  ret.btable = lookup_table_cache.get (par, progress);
   if (!ret.btable)
     {
       lookup_table_cache.release (ret.rtable);
