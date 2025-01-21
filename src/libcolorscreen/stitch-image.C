@@ -628,7 +628,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	dsparams.gamma = img->gamma != -2 ? img->gamma : 0;
       if (dsparams.scanner_type == max_scanner_type)
 	dsparams.scanner_type = fixed_lens;
-      if (dsparams.gamma == 0)
+      if (dsparams.gamma == 0 && !img->to_linear[0].size ())
 	{
 	  fprintf (stderr, "Warning: unable to detect gamma and assuming 2.2\n");
 	  dsparams.gamma = 2.2;
