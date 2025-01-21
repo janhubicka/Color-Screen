@@ -15,7 +15,13 @@ namespace colorscreen
 namespace
 {
 
-/* Nonlinear optimizer for minizing deltaE.  */
+/* Nonlinear optimizer for minizing deltaE2000.
+   This essentially computes matrix profile to convert
+   n colors to targets (specified either in XYZ or RGB) as well
+   as possible.
+
+   If targets are specified in RGB they are assumed to be in process color space
+   while render is used to convert them to XYZ to evaulate deltaE.  */
 struct
 color_solver
 {
@@ -110,7 +116,7 @@ color_solver
 	color1 = targets[i];
 	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
       }
-    /* If there is no way to redner XYZ just minimize difference.  */
+    /* If there is no way to render XYZ just minimize difference.  */
     else if (!r)
       {
 	ret.apply_to_rgb (colors[i].red, colors[i].green, colors[i].blue, &color2.x, &color2.y, &color2.z);
@@ -273,18 +279,9 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
                     : dark_point_elts == 3 ? C (11) / scale2
                                            : 0,
                     0, 0, 0, 1);
-#if 0
-  /* If we have no way to produce XYZ data, then we can not minimize deltaE.  */
-  if (!targets && !r)
-    return ret;
-#endif
   color_solver solver;
   solver.dark_point_elts = dark_point_elts;
   solver.init_by_matrix (ret);
-  // printf ("Initial\n");
-  // ret.print (stdout);
-  // printf ("Initial\n");
-  // solver.matrix_by_vals (solver.start).print (stdout);
   solver.colors = colors;
   solver.targets = targets;
   solver.rgbtargets = rgbtargets;
@@ -327,6 +324,9 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
           else
             {
               rgbdata c = rgbtargets[i];
+	      /* Adjustments needs to be in normalized scale, but we compensated
+	         (which is used for the initial matrix profile).
+		 So compensate back.  */
               c.red = r->adjust_luminosity_ir (c.red / proportions.red);
               c.green = r->adjust_luminosity_ir (c.green / proportions.green);
               c.blue = r->adjust_luminosity_ir (c.blue / proportions.blue);
@@ -342,11 +342,6 @@ determine_color_matrix (rgbdata *colors, xyz *targets, rgbdata *rgbtargets,
                                        &color2.y, &color2.z);
             }
           luminosity_t d = deltaE2000 (color1, color2, white);
-#if 0
-			    printf ("Compare1 %i\n", i);
-			    targets[i].print (stdout);
-			    color2.print (stdout);
-#endif
           if (report)
             report->push_back ({ color2, color1, d });
           desum += d;
@@ -408,9 +403,9 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
 
   /* Second renderer is interpolated with original color collection with
      unadjusted mode.  */
-  render_parameters my_rparam2;
-  my_rparam2.original_render_from (my_rparam, true, true);
-  render_interpolate r2 (*param, *cimg, my_rparam2, 255);
+  //render_parameters my_rparam2;
+  //my_rparam2.original_render_from (my_rparam, true, true);
+  render_interpolate r2 (*param, *cimg, my_rparam, 255);
   r2.set_unadjusted ();
   r2.original_color (false);
 
@@ -441,8 +436,8 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
             target += r.sample_pixel_scr (x, y);
             color += r2.sample_pixel_scr (x, y);
           }
-      target *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
-      color *= (1 / (luminosity_t)(2 * (range + 1) * 2 * (range + 1)));
+      target *= (1 / (luminosity_t)((2 * range + 1) * (2 * range + 1)));
+      color *= (1 / (luminosity_t)((2 * range + 1) * (2 * range + 1)));
 
       /* We collect normalized patches with R but non-normalized with R2.
          Compensate.  */
