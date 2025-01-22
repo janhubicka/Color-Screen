@@ -122,7 +122,7 @@ private:
 
 
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 1.0}, primary_green {0.3000, 0.6000, 1.0}, primary_blue {0.1500, 0.0600, 1.0}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), own (false)
+: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 0.2126 }, primary_green {0.3000, 0.6000, 0.7152}, primary_blue {0.1500, 0.0600, 0.0722}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), own (false)
 { 
 }
 
@@ -627,6 +627,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.use_auto_wb = 0;
   RawProcessor.imgdata.params.use_camera_wb = 0;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
+  RawProcessor.imgdata.rawparams.max_raw_memory_mb = 10000;
   if (getenv ("CSHALFRAW"))
     RawProcessor.imgdata.params.half_size = 1;
   RawProcessor.imgdata.params.no_auto_bright = 1;
