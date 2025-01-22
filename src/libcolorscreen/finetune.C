@@ -924,7 +924,7 @@ public:
     else
       screen_index = -1;
 
-    if (dufay_like_screen_p (type))
+    if (!dufay_like_screen_p (type))
       optimize_dufay_strips = false;
     if (optimize_dufay_strips)
       {
