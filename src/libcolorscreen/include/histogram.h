@@ -29,10 +29,7 @@ public:
   {
     m_inv = nvals / (m_maxval - m_minval);
     if (!(m_inv > 0))
-      {
-        m_maxval = m_minval + 0.00001;
-        m_inv = nvals / (m_maxval - m_minval);
-      }
+      m_inv = 1;
     m_entries.resize (nvals, 0);
   }
 

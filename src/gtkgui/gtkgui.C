@@ -291,6 +291,7 @@ print_help()
 		   "ctrl+f - finetune screen blur in selection using BW channel; with shift using color channel\n"
 		   "ctrl+s - dufay strips, screen blur, emulsion blur and fog\n"
 		   "ctrl+w - set white balance so selection is neutral gray\n"
+		   "ctrl+d - set mix dark so color in selection\n"
 		   "ctrl+m - optimize mixing weights to balance selection to neutral gray\n"
 		   "ctrl+i - optimize mixing weights using infrared channel\n");
 	if (ui_mode == solver_editing)
@@ -744,6 +745,19 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  display_scheduled = true;
 	  preview_display_scheduled = true;
         }
+      if (k == 'd' && (event->state & GDK_CONTROL_MASK))
+        {
+	  int xmin = std::min (sel1x, sel2x);
+	  int ymin = std::min (sel1y, sel2y);
+	  int xmax = std::max (sel1x, sel2x);
+	  int ymax = std::max (sel1y, sel2y);
+	  printf ("Auto mix dark in selection %i %i %i %i\n",xmin,ymin,xmax,ymax);
+	  file_progress_info progress (stdout);
+	  rparams.auto_mix_dark (scan, current, xmin, ymin, xmax, ymax, &progress);
+	  setvals ();
+	  display_scheduled = true;
+	  preview_display_scheduled = true;
+        }
       if (k == 'a' && !(event->state & GDK_CONTROL_MASK))
 	autosolving = false;
       if (k == 'a' && (event->state & GDK_CONTROL_MASK))
@@ -999,7 +1013,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	display_scheduled = true;
       }
-      if (k == 'd' && current.type != Dufay)
+      if (k == 'd' && current.type != Dufay  && !(event->state & GDK_CONTROL_MASK))
       {
 	save_parameters ();
 	current.type = Dufay;
@@ -1101,7 +1115,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  scr_detect_display_type = k - '1';
 	  display_scheduled = true;
 	}
-      if (k == 'd')
+      if (k == 'd' && ! (event->state & GDK_CONTROL_MASK))
 	setcolor = 1;
       if (k == 'r')
 	setcolor = 2;

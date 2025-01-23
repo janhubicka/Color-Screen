@@ -850,6 +850,73 @@ render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &par
   return true;
 }
 
+bool
+render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
+{
+  render_parameters rparam = *this;
+  rparam.precise = true;
+  rgb_histogram hist;
+  if (ymin < 0)
+    ymin = 0;
+  if (xmin < 0)
+    xmin = 0;
+  if (xmax >= img.width)
+    xmax = img.width - 1;
+  if (ymax >= img.height)
+    ymax = img.height - 1;
+  if (ymax <= ymin || xmax <= xmin)
+    return false;
+  /* TODO: Impleent for stitched projects.  */
+  if (img.stitch)
+    return false;
+  {
+    if (progress)
+      progress->set_task ("collecting color", (ymax - ymin + 1) * 2);
+    render_parameters rparam = *this;
+    rparam.ignore_infrared = 0;
+    rparam.sharpen_radius = 0;
+    rparam.invert = false;
+    rparam.dark_point = 0;
+    render render (img, rparam, 256);
+    if (!render.precompute_all (false, false, {1/3.0, 1/3.0, 1/3.0}, progress))
+      return false;
+    for (int yy = 0; yy <= ymax - ymin; yy ++)
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int xx = 0; xx <= xmax - xmin; xx ++)
+	    {
+	      rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+	      hist.pre_account (c);
+	    }
+      }
+    hist.finalize_range (65536*256);
+    for (int yy = 0; yy <= ymax - ymin; yy ++)
+      {
+	if (!progress || !progress->cancel_requested ())
+	  for (int xx = 0; xx <= xmax - xmin; xx ++)
+	    {
+	      rgbdata c = render.get_unadjusted_rgb_pixel (xx + xmin, yy + ymin);
+	      hist.account (c);
+	    }
+      }
+    hist.finalize ();
+  }
+  if (progress && progress->cancel_requested ())
+    return false;
+  mix_dark = hist.find_avg (0.3, 0.3);
+  bool verbose = true;
+  if (verbose)
+    {
+      if (progress)
+	progress->pause_stdout ();
+      printf ("mix dark: ");
+      mix_dark.print (stdout);
+      if (progress)
+	progress->resume_stdout ();
+    }
+  return true;
+}
+
 /* Use IR to tune mixing weights to simulate IR channel from RGB to match actual IR channel.  */
 
 bool 
@@ -859,8 +926,18 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   xmax = std::min (img.width, xmax);
   ymin = std::max (0, ymin);
   ymax = std::min (img.height, ymax);
+  if (ymin < 0)
+    ymin = 0;
+  if (xmin < 0)
+    xmin = 0;
+  if (xmax >= img.width)
+    xmax = img.width - 1;
+  if (ymax >= img.height)
+    ymax = img.height - 1;
   if (!img.data || !img.rgbdata || xmax <= xmin || ymax <= ymin)
     return false;
+  xmax++;
+  ymax++;
   int nvariables = 4;
   long nequations = (((long)xmax - xmin) * ((long)ymax - ymin));
   int step = 1;
@@ -875,6 +952,9 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
   gsl_vector *w = gsl_vector_alloc (nequations);
   gsl_vector *c = gsl_vector_alloc (nvariables);
   gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
+  /* TODO: Impleent for stitched projects.  */
+  if (img.stitch)
+    return false;
 
   {
     if (progress)

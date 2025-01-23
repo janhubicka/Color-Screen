@@ -359,6 +359,10 @@ struct render_parameters
                                     scr_to_img_parameters &param, int xmin,
                                     int ymin, int xmax, int ymax,
                                     progress_info *progress);
+  DLL_PUBLIC bool auto_mix_dark (image_data &img,
+                                 scr_to_img_parameters &param, int xmin,
+                                 int ymin, int xmax, int ymax,
+                                 progress_info *progress);
   DLL_PUBLIC bool auto_mix_weights_using_ir (image_data &img,
                                              scr_to_img_parameters &param,
                                              int xmin, int ymin, int xmax,
