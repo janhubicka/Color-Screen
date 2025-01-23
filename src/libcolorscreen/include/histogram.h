@@ -27,9 +27,12 @@ public:
   inline void
   finalize_range (int nvals)
   {
-    if (m_minval == m_maxval)
-      m_maxval = m_minval + 0.00001;
     m_inv = nvals / (m_maxval - m_minval);
+    if (!(m_inv > 0))
+      {
+        m_maxval = m_minval + 0.00001;
+        m_inv = nvals / (m_maxval - m_minval);
+      }
     m_entries.resize (nvals, 0);
   }
 
@@ -59,6 +62,18 @@ public:
     return -1;
   }
 
+  /* Same but always return value in range.  */
+  pure_attr inline int
+  val_to_index_force (luminosity_t val) const
+  {
+    int entry = (val - m_minval) * m_inv;
+    if (entry < 0)
+      return 0;
+    if (entry >= (int)m_entries.size ())
+      return (int)m_entries.size ()-1;
+    return entry;
+  }
+
   /* turn in histogram to typical value.  */
   pure_attr inline luminosity_t 
   index_to_val (luminosity_t entry) const
@@ -68,11 +83,11 @@ public:
   }
 
   /* Account value to histogram. Return true if it fits in the range and was
-   * accounted.  */
+     accounted.  */
   inline bool
-  account (luminosity_t val)
+  account_if_in_range (luminosity_t val)
   {
-    if (m_total != -1)
+    if (colorscreen_checking && m_total != -1)
       abort ();
     int idx;
     if ((idx = val_to_index (val)) >= 0)
@@ -81,6 +96,14 @@ public:
         return true;
       }
     return false;
+  }
+  /* Account value to histogram.  */
+  inline void
+  account (luminosity_t val)
+  {
+    if (colorscreen_checking && m_total != -1)
+      abort ();
+    m_entries[val_to_index_force (val)]++;
   }
 
   /* Finalize data collection.  */
@@ -122,6 +145,14 @@ public:
   void
   dump (FILE *out, luminosity_t skip_min = 0, luminosity_t skip_max = 0)
   {
+    if (m_total == -1)
+      {
+	fprintf (out, "Histogram is not finalized\n");
+      }
+    if (m_total == 0)
+      {
+	fprintf (out, "Histogram is empty\n");
+      }
     fprintf (out, "Histogram entries\n");
     int mini, maxi;
     find_min_max (skip_min, skip_max, mini, maxi);
@@ -142,7 +173,7 @@ public:
   pure_attr luminosity_t
   find_min (luminosity_t skip) const
   {
-    if (m_total == -1)
+    if (m_total <= 0)
       abort ();
     if (!skip)
       return m_minval;
@@ -162,7 +193,7 @@ public:
   pure_attr luminosity_t
   find_max (luminosity_t skip) const
   {
-    if (m_total == -1)
+    if (m_total <= 0)
       abort ();
     if (!skip)
       return m_maxval;
@@ -182,7 +213,7 @@ public:
   pure_attr luminosity_t
   find_avg (luminosity_t skip_min = 0, luminosity_t skip_max = 0) const
   {
-    if (m_total == -1)
+    if (m_total <= 0)
       abort ();
     double wsum = 0;
     int mini, maxi;
@@ -247,6 +278,18 @@ public:
     m_histogram[0].account (val[0]);
     m_histogram[1].account (val[1]);
     m_histogram[2].account (val[2]);
+  }
+  inline bool
+  account_if_in_range (rgbdata val)
+  {
+    if (m_histogram[0].val_to_index (val[0]) < 0
+        || m_histogram[1].val_to_index (val[1]) < 0
+        || m_histogram[2].val_to_index (val[2]) < 0)
+      return false;
+    m_histogram[0].account_if_in_range (val[0]);
+    m_histogram[1].account_if_in_range (val[1]);
+    m_histogram[2].account_if_in_range (val[2]);
+    return true;
   }
   pure_attr rgbdata
   find_min (luminosity_t skip) const
