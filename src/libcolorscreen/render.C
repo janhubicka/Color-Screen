@@ -320,7 +320,7 @@ compute_gray_data_tables (struct graydata_params &p, bool correction, progress_i
     }
   par.scan_exposure = correction ? 1 : blue;
   par.dark_point = correction ? 0 : dark.blue;
-  par.gamma_table = p.gamma_table[1];
+  par.gamma_table = p.gamma_table[2];
   ret.btable = lookup_table_cache.get (par, progress);
   if (!ret.btable)
     {
