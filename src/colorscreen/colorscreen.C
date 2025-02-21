@@ -2188,7 +2188,7 @@ digital_laboratory (int argc, char **argv)
                   corrected_blue_primary.y, corrected_blue_primary.z);
         }
     }
-  if (!strcmp (argv[0], "compare-deltaE"))
+  else if (!strcmp (argv[0], "compare-deltaE"))
     {
       if (argc != 4 && argc != 5)
         printf ("Expected <scan1> <par1> <par2> [<cmpfname>]\n");
