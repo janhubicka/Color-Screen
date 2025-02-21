@@ -306,7 +306,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     c = m_paget->bicubic_interpolate (
         { x, y }, m_scr_to_img.patch_proportions (&m_params));
-  if (m_scr_to_img.get_type () == WarnerPowrie)
+  else if (m_scr_to_img.get_type () == WarnerPowrie)
     {
       c = m_strips->bicubic_interpolate (
           { x, y }, m_scr_to_img.patch_proportions (&m_params));

@@ -3,6 +3,7 @@ Changes in version 1.1
    - Support for new processes:
      - Dioptrichrome-B 
      - Improved Dioptrichrome-B
+     - Warner-Powrie
    - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically
      tested on MacOS to actually work as expected.
