@@ -22,7 +22,7 @@ rgbdata
 getdata_helper (rgbdata *r, int x, int y, int width, int height)
 {
   if (colorscreen_checking)
-  assert (x >= 0 && x < width && y >= 0 && y < height);
+    assert (x >= 0 && x < width && y >= 0 && y < height);
   return r[y * width + x];
 }
 
@@ -584,7 +584,7 @@ public:
         }
     if (fog_index >= 0)
       {
-	assert (colorscreen_checking || optimize_fog);
+	assert (!colorscreen_checking || optimize_fog);
         to_range (v[fog_index + 0], -1, 1);
         to_range (v[fog_index + 1], -1, 1);
         to_range (v[fog_index + 2], -1, 1);
@@ -1134,7 +1134,7 @@ public:
           }
       }
     else
-      assert (colorscreen_checking || fog_index == -1);
+      assert (!colorscreen_checking || fog_index == -1);
     if (mix_weights_index >= 0)
       {
 	start[mix_weights_index + 0] = 1;
@@ -1809,7 +1809,7 @@ public:
       return { 0, 0, 0 };
     if (fog_by_least_squares)
       return last_fog;
-    assert (colorscreen_checking || fog_index >= 0);
+    assert (!colorscreen_checking || fog_index >= 0);
     return { v[fog_index] * fog_range.red, v[fog_index + 1] * fog_range.green,
              v[fog_index + 2] * fog_range.blue };
   }
