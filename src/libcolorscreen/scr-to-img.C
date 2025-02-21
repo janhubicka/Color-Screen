@@ -105,10 +105,15 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
   /* On only scan I have horosontal cycle is 10.1592036279 pixels (along blue line)
      and vertical cycle (slopy rad/green lines) are 8.15944528388.  */
   if (m_param.type == ImprovedDioptichromeB)
-  {
-    m_param.final_angle = 107.773559;
-    m_param.final_ratio = 0.803158;
-  }
+    {
+      m_param.final_angle = 107.773559;
+      m_param.final_ratio = 0.803158;
+    }
+  if (m_param.type == WarnerPowrie)
+    {
+      m_param.final_angle = 90;
+      m_param.final_ratio = 1.0/3;
+    }
 
   double r = m_param.final_angle * M_PI / 180;
 #if 0
@@ -286,53 +291,53 @@ scr_to_img::set_parameters_for_early_correction (
   m_param.copy_from_cheap (param);
   
   /* If we have screen with strips, compute the irrelevant coordinate.  */
-  if (param.type == WarnerPowrie)
+  if (m_param.type == WarnerPowrie)
     {
-      m_param.coordinate2.x = -m_param.coordinate1.y * 0.3;
-      m_param.coordinate2.y = m_param.coordinate1.x * 0.3;
+      m_param.coordinate2.x = -m_param.coordinate1.y * (1/(coord_t)3);
+      m_param.coordinate2.y = m_param.coordinate1.x *(1/(coord_t)3);
     }
-  m_inverted_projection_distance = 1 / param.projection_distance;
+  m_inverted_projection_distance = 1 / m_param.projection_distance;
   m_nwarnings = 0;
   assert (!debug || (img.width && img.height));
 
   /* Initialize motor correction.  */
   m_motor_correction = NULL;
-  if (param.n_motor_corrections && !is_fixed_lens (param.scanner_type))
+  if (m_param.n_motor_corrections && !is_fixed_lens (m_param.scanner_type))
     {
-      int len = param.scanner_type == lens_move_horisontally
-                        || param.scanner_type
+      int len = m_param.scanner_type == lens_move_horisontally
+                        || m_param.scanner_type
                                == fixed_lens_sensor_move_horisontally
                     ? img.width
                     : img.height;
-      if (param.n_motor_corrections > 2 && 0)
+      if (m_param.n_motor_corrections > 2 && 0)
         {
-          spline<coord_t> spline (param.motor_correction_x,
-                                  param.motor_correction_y,
-                                  param.n_motor_corrections);
+          spline<coord_t> spline (m_param.motor_correction_x,
+                                  m_param.motor_correction_y,
+                                  m_param.n_motor_corrections);
           m_motor_correction = spline.precompute (0, len, len);
         }
       else
         m_motor_correction = new precomputed_function<coord_t> (
-            0, len, len, param.motor_correction_x, param.motor_correction_y,
-            param.n_motor_corrections);
+            0, len, len, m_param.motor_correction_x, m_param.motor_correction_y,
+            m_param.n_motor_corrections);
     }
 
   /* Next initialize lens correction.
      Lens center is specified in scan coordinates, so apply previous
      corrections.  */
   point_t center = apply_motor_correction (
-      { param.lens_correction.center.x * img.width,
-        param.lens_correction.center.y * img.height });
+      { m_param.lens_correction.center.x * img.width,
+        m_param.lens_correction.center.y * img.height });
   point_t c1 = apply_motor_correction ({ (coord_t)0, (coord_t)0 });
   point_t c2 = apply_motor_correction ({ (coord_t)img.width, (coord_t)0 });
   point_t c3 = apply_motor_correction ({ (coord_t)0, (coord_t)img.height });
   point_t c4
       = apply_motor_correction ({ (coord_t)img.width, (coord_t)img.height });
-  m_lens_correction.set_parameters (param.lens_correction);
+  m_lens_correction.set_parameters (m_param.lens_correction);
   if (m_param.scanner_type == lens_move_horisontally)
-    c1.x = c2.x = c3.x = c4.x = center.x = param.lens_correction.center.x;
+    c1.x = c2.x = c3.x = c4.x = center.x = m_param.lens_correction.center.x;
   if (m_param.scanner_type == lens_move_vertically)
-    c1.y = c2.y = c3.y = c4.y = center.y = param.lens_correction.center.y;
+    c1.y = c2.y = c3.y = c4.y = center.y = m_param.lens_correction.center.y;
   m_lens_correction.precompute (center, c1, c2, c3, c4);
   /* For non-noop conversion we need to also precompute inverse.  */
   m_early_correction_precomputed = m_lens_correction.is_noop ();

@@ -720,6 +720,12 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
     { 1, 0, solver_parameters::green },  { 0, 1, solver_parameters::green },
     { 0.5, 1, solver_parameters::red }, { 1, 1, solver_parameters::green },
   };
+  static struct point_location WarnerPowrie_points[] = {
+    /* Green.  */
+    { 0, 0, solver_parameters::green }, 
+    { 1.0/3, 0, solver_parameters::blue },
+    { 2.0/3, 1, solver_parameters::red }, 
+  };
 
   switch (type)
     {
@@ -737,6 +743,8 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
     case ImprovedDioptichromeB:
       *n = sizeof (ImprovedDioptichromeB_points) / sizeof (point_location);
       return ImprovedDioptichromeB_points;
+    case WarnerPowrie:
+      return WarnerPowrie_points;
     default:
       abort ();
     }
