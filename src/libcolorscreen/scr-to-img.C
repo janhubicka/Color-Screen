@@ -284,6 +284,13 @@ scr_to_img::set_parameters_for_early_correction (
   /* We do not need to copy motor corrections since we already constructed the
      function.  */
   m_param.copy_from_cheap (param);
+  
+  /* If we have screen with strips, compute the irrelevant coordinate.  */
+  if (param.type == WarnerPowrie)
+    {
+      m_param.coordinate2.x = -m_param.coordinate1.y * 0.3;
+      m_param.coordinate2.y = m_param.coordinate1.x * 0.3;
+    }
   m_inverted_projection_distance = 1 / param.projection_distance;
   m_nwarnings = 0;
   assert (!debug || (img.width && img.height));

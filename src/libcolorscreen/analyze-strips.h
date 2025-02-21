@@ -14,9 +14,7 @@ public:
   : analyze_base_worker (0, 0, 0, 0, 0, 0)
   {
   }
-  ~analyze_strips()
-  {
-  }
+  ~analyze_strips();
 private:
 };
 }
