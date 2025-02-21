@@ -41,7 +41,7 @@ template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data,
 flatten_attr void
 do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
 {
-  bool parallel = width * height > 1024 * 128 && parallel;
+  bool parallel = width * height > 1024 * 128 && maybe_parallel;
 #pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data, parallel) default(none) if (width * height > 1024 * 128 && parallel)
   {
     O *hblur = (O *)calloc (width * clen, sizeof (O));
