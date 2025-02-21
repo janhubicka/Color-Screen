@@ -1219,7 +1219,7 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
   coord_t c3 = size * (1 - (first_strip_width * (coord_t)0.5));
   for (int yy = 0; yy < size; yy++)
     {
-      int c[3] = {0,0,0};
+      luminosity_t c[3] = {0,0,0};
       if (yy < (int)c1 || yy > (int)c3)
 	c[first_strip_color] = 1;
       else if (yy == (int)c1)
@@ -1238,7 +1238,7 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
 	  c[second_strip_color] = 1 - v;
 	  c[third_strip_color] = v;
         }
-      else if (yy < c3)
+      else if (yy < (int)c3)
 	c[third_strip_color] = 1;
       else
 	{
@@ -1260,24 +1260,24 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
 void
 screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
 {
-  coord_t c1e = size * (first_strip_width * (coord_t)(0.3 * 0.5)) + 0.5;
-  coord_t c1s = size * (1 - first_strip_width * (coord_t)(0.3 * 0.5)) + 0.5;
+  coord_t c1e = size * (first_strip_width * (coord_t)(0.3)) + 0.5;
+  coord_t c1s = size * (1 - first_strip_width * (coord_t)(0.3)) + 0.5;
   /* Change from second to third.  */
-  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.3)) + 0.5;
-  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.7)) + 0.5;
+  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.2)) + 0.5;
+  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.8)) + 0.5;
   /* Change from third back to first.  */
   coord_t third_strip_width = 1 - first_strip_width - second_strip_width;
   coord_t c3s = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.8) + 0.5;
-  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.3) + 0.5;
+  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.2) + 0.5;
   for (int yy = 0; yy < size; yy++)
     {
       luminosity_t c[3] = {0,0,0};
       luminosity_t a[3] = {0,0,0};
       if (yy < (int)c1e || yy > (int)c1s)
 	c[first_strip_color] = 1;
-      else if (yy > (int)c2s && yy < c2e)
+      else if (yy > (int)c2s && yy < (int)c2e)
 	c[second_strip_color] = 1;
-      else if (yy > (int)c3s && yy < c3e)
+      else if (yy > (int)c3s && yy < (int)c3e)
 	c[third_strip_color] = 1;
       for (int i = 0; i < 3; i++)
         {
