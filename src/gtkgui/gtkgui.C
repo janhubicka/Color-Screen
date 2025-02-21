@@ -1936,6 +1936,8 @@ handle_drag (int x, int y, int button)
         }
       return;
     }
+  else if (ui_mode == color_profiling)
+    return;
   if (button == 1)
     {
       double xoffset = (x - xpress1) / scale_x;
