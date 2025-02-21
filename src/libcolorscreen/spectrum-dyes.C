@@ -3830,12 +3830,13 @@ set_dyes_to_autochrome2 (spectrum red, spectrum green, spectrum blue,
       print_transmitance_spectrum (f, o2_crystal);
       fclose (f);
     }
-#define choose(n,m,w) ((aged ? m : n) * w)
+#define choose(n,m,w) my_pow ((aged ? m : n), w)
+  const luminosity_t concentration = 3;
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
-      red[i] = (choose (erythrosine[i], o2_erythrosine[i], orange_erythrosine)* choose (rose[i], o2_rose[i], orange_rose) * choose (tartrazine[i], tartrazine[i], orange_tartrazine));
-      green[i] = (choose (patent[i], o2_patent[i], green_patent) * choose (tartrazine[i], tartrazine[i], green_tartrazine));
-      blue[i] = (choose (crystal[i], o2_crystal[i], violet_crystal) * choose (flexo[i], o2_flexo[i], violet_flexo));
+      red[i] = my_pow ((choose (erythrosine[i], o2_erythrosine[i], orange_erythrosine)* choose (rose[i], o2_rose[i], orange_rose) * choose (tartrazine[i], tartrazine[i], orange_tartrazine)), concentration);
+      green[i] = my_pow ((choose (patent[i], o2_patent[i], green_patent) * choose (tartrazine[i], tartrazine[i], green_tartrazine)), concentration);
+      blue[i] = my_pow ((choose (crystal[i], o2_crystal[i], violet_crystal) * choose (flexo[i], o2_flexo[i], violet_flexo)), concentration);
     }
 #undef choose
 }

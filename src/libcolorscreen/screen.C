@@ -175,7 +175,7 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
           abort ();
         }
       sum += red[yy];
-      assert (!colorscreen_checking || red[yy] >= 0 && red[yy] <= 1);
+      assert (!colorscreen_checking || (red[yy] >= 0 && red[yy] <= 1));
       assert (!colorscreen_checking || yy < size / 2
               || fabs (red[yy] - red[size - 1 - yy]) < 0.0000001);
     }
@@ -200,7 +200,7 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
           abort ();
         }
       sum += green[xx];
-      assert (!colorscreen_checking || green[xx] >= 0 && green[xx] <= 1);
+      assert (!colorscreen_checking || (green[xx] >= 0 && green[xx] <= 1));
       assert (!colorscreen_checking || xx < size / 2
               || fabs (green[xx] - green[size - 1 - xx]) < 0.0000001);
       // printf (" %f \n", green[xx]);
@@ -1209,6 +1209,93 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
     }
 }
 void
+screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
+{
+  /* Change from first to second.  */
+  coord_t c1 = size * (first_strip_width * (coord_t)0.5);
+  /* Change from second to third.  */
+  coord_t c2 = size * (first_strip_width * (coord_t)0.5 + second_strip_width);
+  /* Change from third back to first.  */
+  coord_t c3 = size * (1 - (first_strip_width * (coord_t)0.5));
+  for (int yy = 0; yy < size; yy++)
+    {
+      int c[3] = {0,0,0};
+      if (yy < (int)c1 || yy > (int)c3)
+	c[first_strip_color] = 1;
+      else if (yy == (int)c1)
+        {
+	  coord_t v = c1 - (int)c1;
+	  c[first_strip_color] = 1 - v;
+	  c[second_strip_color] = v;
+        }
+      else if (yy < (int)c2)
+        {
+	  c[second_strip_color] = 1;
+        }
+      else if (yy == (int)c2)
+        {
+	  coord_t v = c2 - (int)c2;
+	  c[second_strip_color] = 1 - v;
+	  c[third_strip_color] = v;
+        }
+      else if (yy < c3)
+	c[third_strip_color] = 1;
+      else
+	{
+	  coord_t v = c3 - (int)c3;
+	  c[third_strip_color] = 1 - v;
+	  c[first_strip_color] = v;
+	}
+      for (int xx = 0; xx < size; xx++)
+        {
+	  mult[xx][yy][0] = c[0];
+	  mult[xx][yy][1] = c[1];
+	  mult[xx][yy][2] = c[2];
+	  add[xx][yy][0] = 0;
+	  add[xx][yy][1] = 0;
+	  add[xx][yy][2] = 0;
+        }
+    }
+}
+void
+screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
+{
+  coord_t c1e = size * (first_strip_width * (coord_t)(0.3 * 0.5)) + 0.5;
+  coord_t c1s = size * (1 - first_strip_width * (coord_t)(0.3 * 0.5)) + 0.5;
+  /* Change from second to third.  */
+  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.3)) + 0.5;
+  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.7)) + 0.5;
+  /* Change from third back to first.  */
+  coord_t third_strip_width = 1 - first_strip_width - second_strip_width;
+  coord_t c3s = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.8) + 0.5;
+  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.3) + 0.5;
+  for (int yy = 0; yy < size; yy++)
+    {
+      int c[3] = {0,0,0};
+      int a[3] = {0,0,0};
+      if (yy < (int)c1e || yy > (int)c1s)
+	c[first_strip_color] = 1;
+      else if (yy > (int)c2s && yy < c2e)
+	c[second_strip_color] = 1;
+      else if (yy > (int)c3s && yy < c3e)
+	c[third_strip_color] = 1;
+      for (int i = 0; i < 3; i++)
+        {
+           a[i] = 0.25 + c[i] * 0.25;
+	   c[i] *= (coord_t)0.5;
+        }
+      for (int xx = 0; xx < size; xx++)
+        {
+	  mult[xx][yy][0] = c[0];
+	  mult[xx][yy][1] = c[1];
+	  mult[xx][yy][2] = c[2];
+	  add[xx][yy][0] = a[0];
+	  add[xx][yy][1] = a[1];
+	  add[xx][yy][2] = a[2];
+        }
+    }
+}
+void
 screen::initialize (enum scr_type type, coord_t red_strip_width,
                     coord_t green_strip_width)
 {
@@ -1238,6 +1325,9 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
         for (int x = 0; x < size; x++)
 	  std::swap (mult[y][x][0], mult[y][x][2]);
       break;
+    case WarnerPowrie:
+      strip (1.0/3, 1.0/3, 1, 2, 0);
+      break;
     default:
       abort ();
       break;
@@ -1266,6 +1356,8 @@ screen::initialize_preview (enum scr_type type)
 	      std::swap (add[y][x][0], add[y][x][2]);
 	    }
     }
+  if (type == WarnerPowrie)
+    preview_strip (1.0/3, 1.0/3, 1, 2, 0);
   else
     preview ();
 }

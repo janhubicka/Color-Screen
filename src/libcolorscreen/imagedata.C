@@ -841,12 +841,14 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
 	      *error = "images in stitch project must all have the same DPI";
 	      return false;
 	    }
+#if 1
 	  if (m_img->icc_profile_size != simg.img->icc_profile_size
 	      || memcmp (m_img->icc_profile, simg.img->icc_profile, m_img->icc_profile_size))
 	    {
 	      *error = "images in stitch project must all have the same color profile";
 	      return false;
 	    }
+#endif
 	}
       if (m_curr_img == m_max_img)
 	{

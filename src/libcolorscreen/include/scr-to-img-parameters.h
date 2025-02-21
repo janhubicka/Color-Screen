@@ -26,6 +26,7 @@ enum scr_type
   Dufay,
   DioptichromeB,
   ImprovedDioptichromeB,
+  WarnerPowrie,
   max_scr_type
 };
 

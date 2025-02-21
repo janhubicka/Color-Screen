@@ -14,7 +14,8 @@ const char * const scr_names[max_scr_type] =
   "Finlay",
   "Dufay",
   "Dioptichrome-B",
-  "ImprovedDioptichrome-B"
+  "ImprovedDioptichrome-B",
+  "Warner-Powrie"
 };
 
 const char * const scanner_type_names[max_scanner_type] =
