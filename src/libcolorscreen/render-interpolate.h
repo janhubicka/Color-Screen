@@ -7,6 +7,7 @@
 #include "screen.h"
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
+#include "analyze-strips.h"
 namespace colorscreen
 {
 typedef std::function <bool (coord_t, coord_t, rgbdata)> analyzer;
@@ -89,6 +90,7 @@ private:
   bool m_precise_rgb;
   analyze_dufay *m_dufay;
   analyze_paget *m_paget;
+  analyze_strips *m_strips;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
 };

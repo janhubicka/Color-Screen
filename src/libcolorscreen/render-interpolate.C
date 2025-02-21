@@ -35,6 +35,7 @@ struct analyzer_params
   {
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
         || (!mesh_trans_id && params != o.params)
+	|| (params.type == WarnerPowrie) != (o.params.type == WarnerPowrie)
         || (dufay_like_screen_p (params.type)) != (dufay_like_screen_p (o.params.type)))
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
@@ -102,12 +103,31 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
   delete ret;
   return NULL;
 }
+static analyze_strips *
+get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
+                        int width, int height, progress_info *progress)
+{
+  analyze_strips *ret = new analyze_strips ();
+  {
+    const screen *s = p.scr;
+    screen adapted;
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
+		      xshift, yshift, p.mode, p.collection_threshold, progress))
+      return ret;
+  }
+  delete ret;
+  return NULL;
+}
+
 static lru_tile_cache<analyzer_params, analyze_dufay, analyze_dufay *,
                       get_new_dufay_analysis, 1>
     dufay_analyzer_cache ("dufay analyzer");
 static lru_tile_cache<analyzer_params, analyze_paget, analyze_paget *,
                       get_new_paget_analysis, 1>
     paget_analyzer_cache ("Paget analyzer");
+static lru_tile_cache<analyzer_params, analyze_strips, analyze_strips *,
+                      get_new_strips_analysis, 1>
+    strips_analyzer_cache ("Strips analyzer");
 
 }
 
@@ -118,7 +138,7 @@ render_interpolate::render_interpolate (scr_to_img_parameters &param,
     : render_to_scr (param, img, rparam, dst_maxval), m_screen (NULL),
       m_screen_compensation (false), m_adjust_luminosity (false),
       m_original_color (false), m_unadjusted (false), m_profiled (false),
-      m_precise_rgb (false), m_dufay (NULL), m_paget (NULL)
+      m_precise_rgb (false), m_dufay (NULL), m_paget (NULL), m_strips (NULL)
 {
 }
 void
@@ -266,6 +286,13 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       if (!m_dufay)
         return false;
     }
+  else if (m_scr_to_img.get_type () == WarnerPowrie)
+    {
+      m_strips = strips_analyzer_cache.get (p, xshift, yshift, width, height,
+                                           progress);
+      if (!m_strips)
+        return false;
+    }
   else
     return false;
   return !progress || !progress->cancelled ();
@@ -279,6 +306,11 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     c = m_paget->bicubic_interpolate (
         { x, y }, m_scr_to_img.patch_proportions (&m_params));
+  if (m_scr_to_img.get_type () == WarnerPowrie)
+    {
+      c = m_strips->bicubic_interpolate (
+          { x, y }, m_scr_to_img.patch_proportions (&m_params));
+    }
   else
     {
       rgbdata proportions = m_scr_to_img.patch_proportions (&m_params);
@@ -394,6 +426,8 @@ render_interpolate::~render_interpolate ()
     dufay_analyzer_cache.release (m_dufay);
   if (m_paget)
     paget_analyzer_cache.release (m_paget);
+  if (m_strips)
+    strips_analyzer_cache.release (m_strips);
 }
 void
 render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
@@ -401,6 +435,7 @@ render_interpolated_increase_lru_cache_sizes_for_stitch_projects (int n)
   /* Triple size, since we have 3 modes.  */
   dufay_analyzer_cache.increase_capacity (3 * n);
   paget_analyzer_cache.increase_capacity (3 * n);
+  strips_analyzer_cache.increase_capacity (3 * n);
 }
 
 /* Compute RGB data of downscaled image.  */
@@ -450,6 +485,68 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
 		  std::swap (c.red, c.green);
 		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
 		  std::swap (c.red, c.blue);
+                c = compensate_saturation_loss_scr ({ xs, ys }, c);
+                if (!analyze (xs, ys, c))
+                  return false;
+              }
+          if (progress)
+            progress->inc_progress ();
+        }
+    }
+  else if (m_scr_to_img.get_type () == WarnerPowrie)
+    {
+      if (progress)
+        progress->set_task (task, m_strips->get_height ());
+      for (int y = 0; y < m_strips->get_height (); y++)
+        {
+          if (!progress || !progress->cancel_requested ())
+            for (int x = 0; x < m_strips->get_width (); x++)
+              {
+                coord_t xs = x - m_strips->get_xshift (),
+                        ys = y - m_strips->get_yshift ();
+                if (screen
+                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                  continue;
+                if (!screen)
+                  {
+                    point_t imgp = m_scr_to_img.to_img ({ xs, ys });
+                    if (!screen
+                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
+                            || imgp.y > ymax))
+                      continue;
+                  }
+                rgbdata c = m_strips->screen_tile_color (x, y);
+                c = compensate_saturation_loss_scr ({ xs, ys }, c);
+                if (!analyze (xs, ys, c))
+                  return false;
+              }
+          if (progress)
+            progress->inc_progress ();
+        }
+    }
+  else if (m_scr_to_img.get_type () == WarnerPowrie)
+    {
+      if (progress)
+        progress->set_task (task, m_strips->get_height ());
+      for (int y = 0; y < m_strips->get_height (); y++)
+        {
+          if (!progress || !progress->cancel_requested ())
+            for (int x = 0; x < m_strips->get_width (); x++)
+              {
+                coord_t xs = x - m_strips->get_xshift (),
+                        ys = y - m_strips->get_yshift ();
+                if (screen
+                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                  continue;
+                if (!screen)
+                  {
+                    point_t imgp = m_scr_to_img.to_img ({ xs, ys });
+                    if (!screen
+                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
+                            || imgp.y > ymax))
+                      continue;
+                  }
+                rgbdata c = m_strips->screen_tile_color (x, y);
                 c = compensate_saturation_loss_scr ({ xs, ys }, c);
                 if (!analyze (xs, ys, c))
                   return false;

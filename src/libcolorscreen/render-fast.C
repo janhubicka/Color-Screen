@@ -68,6 +68,16 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
       blue = (pixel (0, 0.5) + pixel (0.33, 0.5) + pixel (0.66, 0.5) + pixel (1, 0.5)) * 0.25;
       red = (pixel (0.5, 0) + pixel (0.5, 1)) * 0.5;
     }
+  else if (m_scr_to_img.get_type () == WarnerPowrie)
+    {
+      /* Warner Powrie screen is 
+	 G B R   */
+      green = pixel (0,0);
+      blue = pixel (1/(coord_t)3, 0);
+      red = pixel (2/(coord_t)3, 0);
+    }
+  else
+    __builtin_unreachable ();
 #undef getpixel
   return {red, green, blue};
 }
