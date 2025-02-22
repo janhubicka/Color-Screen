@@ -819,7 +819,7 @@ public:
     optimize_screen_ps_blur
         = (flags & finetune_screen_ps_blur) && !optimize_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
-    optimize_strips = (flags & finetune_strips) && (dufay_like_screen_p (type) || screen_with_vertical_strips_p (type));
+    optimize_strips = (flags & finetune_strips) && screen_with_varying_strips_p (type);
     /* For one tile the effect of fog can always be simulated by adjusting the
        colors of screen. If multiple tiles (and colors) are samples we can try
        to estimate it.  */
@@ -954,7 +954,7 @@ public:
     else
       screen_index = -1;
 
-    if (!dufay_like_screen_p (type) && !screen_with_vertical_strips_p (type))
+    if (!screen_with_varying_strips_p (type))
       optimize_strips = false;
     if (optimize_strips)
       {
@@ -2719,8 +2719,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
                 continue;
               }
             solver.init (fparams.flags, rparam.screen_blur_radius,
-                         rparam.dufay_red_strip_width,
-                         rparam.dufay_green_strip_width, results);
+                         rparam.red_strip_width,
+                         rparam.green_strip_width, results);
             if (progress && progress->cancel_requested ())
               continue;
             coord_t uncertainity = solver.solve (
@@ -2789,8 +2789,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             }
         }
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
-                        rparam.dufay_red_strip_width,
-                        rparam.dufay_green_strip_width, results);
+                        rparam.red_strip_width,
+                        rparam.green_strip_width, results);
       /* FIXME: For parallel solvnig this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (
@@ -3175,7 +3175,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   coord_t pixel_size = map.pixel_size (width, height);
   screen *scr = render_to_scr::get_screen (
       param.type, false, rparam.screen_blur_radius * pixel_size,
-      rparam.dufay_red_strip_width, rparam.dufay_green_strip_width);
+      rparam.red_strip_width, rparam.green_strip_width);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {

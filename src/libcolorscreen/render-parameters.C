@@ -76,22 +76,27 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
     /* Red strips.  */
     case Dufay:
       {
-	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : dufaycolor::red_strip_width;
-	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : dufaycolor::green_strip_width;
+	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : dufaycolor::red_strip_width;
+	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : dufaycolor::green_strip_width;
         return {red_strip_width, green_strip_width * (1 - red_strip_width), (1 - green_strip_width) *  (1 - red_strip_width)};
       }
     /* Green strips.  */
     case DioptichromeB:
       {
-	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : 0.5;
-	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : 0.3;
+	/* On scan of separate DiopticrhomeB screen (possibly early test sample) we get approx
+	   red_strip_width: 0.489965
+	   green_strip_width: 0.499510
+	   So it seems that both strips were 50%.  */
+
+	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.5;
+	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
         return {(1 - green_strip_width) * red_strip_width, green_strip_width, (1 - green_strip_width) *  (1 - red_strip_width)};
       }
     /* Blue strips.  */
     case ImprovedDioptichromeB:
       {
-	coord_t red_strip_width = rparam && rparam->dufay_red_strip_width ? rparam->dufay_red_strip_width : 0.66;
-	coord_t green_strip_width = rparam && rparam->dufay_green_strip_width ? rparam->dufay_green_strip_width : 0.5;
+	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.66;
+	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
         return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
     default:

@@ -105,10 +105,18 @@ struct render_parameters
   /* Threshold for collecting color information.  */
   luminosity_t collection_threshold;
 
-  /* Width of strips used to print Dufaycolor reseau (screen).
+  /* Width of strips used to print the screen.
      This is relative portion in range 0..1.
-     0 will give default values.  */
-  coord_t dufay_red_strip_width, dufay_green_strip_width;
+     0 will give default values.  
+     
+     It only has effect for Dufay type screens where
+     all values in range 0...1 are meaningful since the
+     two strips are printed in angel.
+
+     For screens with vertical strips this is only meaingful
+     if the sum of two is strictly less than 1, so there is 
+     space for the last strip.  */
+  coord_t red_strip_width, green_strip_width;
 
   /***** Scanner profile *****/
 
@@ -251,8 +259,8 @@ struct render_parameters
 
         /* Patch density parameters.  */
         film_gamma (1), precise (true), screen_blur_radius (0.5),
-        collection_threshold (0.2), dufay_red_strip_width (0),
-        dufay_green_strip_width (0),
+        collection_threshold (0.2), red_strip_width (0),
+        green_strip_width (0),
 
         /* Scanner profile.  */
         scanner_red (0, 0, 0), scanner_green (0, 0, 0), scanner_blue (0, 0, 0),
@@ -324,8 +332,8 @@ struct render_parameters
            && backlight_temperature == backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure
-           && dufay_red_strip_width == other.dufay_red_strip_width
-           && dufay_green_strip_width == other.dufay_green_strip_width
+           && red_strip_width == other.red_strip_width
+           && green_strip_width == other.green_strip_width
            && invert == other.invert
            && screen_blur_radius == other.screen_blur_radius
            && dye_balance == other.dye_balance && precise == other.precise

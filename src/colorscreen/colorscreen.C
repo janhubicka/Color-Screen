@@ -125,8 +125,8 @@ print_help ()
       fprintf (stderr, "    Supported args:\n");
       fprintf (stderr, "      --out=name.par            save parameters to a given file instead of overwritting original\n");
       fprintf (stderr, "      --out-tiff=name.tif       save resulting table also as tiff file\n");
-      fprintf (stderr, "      --strip-width=n           number of horisontal samples used to detect Dufay strip widths\n");
-      fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect Dufay strip widths\n");
+      fprintf (stderr, "      --strip-width=n           number of horisontal samples used to detec strip widths\n");
+      fprintf (stderr, "      --strip-height=n          number of vertical samples used to detect strip widths\n");
       fprintf (stderr, "      --reoptimize-strip-widths optimize strip widths also during blur detection\n");
       fprintf (stderr, "      --width=n                 width of the correction table\n");
       fprintf (stderr, "      --height=n                height of the correction table\n");
@@ -1101,8 +1101,8 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
     if (verbose)
       {
 	progress->pause_stdout ();
-	if (param.type == Dufay)
-	  printf ("Analyzing %ix%i areas to determine Dufay strip widths and "
+	if (screen_with_varying_strips_p (param.type))
+	  printf ("Analyzing %ix%i areas to determine strip widths and "
 		  "screen blur (overall %i solutions to be computed)\n",
 		  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
 	else
@@ -1111,7 +1111,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 		  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
 	progress->resume_stdout ();
       }
-    progress->set_task (param.type == Dufay ? "analyzing Dufay strip sizes and screen burs"
+    progress->set_task (screen_with_varying_strips_p (param.type) ? "analyzing Dufay strip sizes and screen burs"
 			      : "analyzing screen blurs",
 		       strip_xsteps * strip_ysteps);
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
@@ -1121,7 +1121,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
       for (int x = 0; x < strip_xsteps; x++)
 	{
 	  finetune_parameters fparam;
-	  fparam.flags = flags | (param.type == Dufay ? finetune_strips : 0);
+	  fparam.flags = flags | (screen_with_varying_strips_p (param.type) ? finetune_strips : 0);
 	  fparam.multitile = 1;
 	  prepass [y * strip_xsteps + x] = finetune (
 	      rparam, param, scan,
@@ -1158,7 +1158,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	  finetune_result &res = prepass[y * strip_xsteps + x];
 	  if (!res.success || res.uncertainity > uncertainity_threshold)
 	    continue;
-	  if (param.type == Dufay)
+	  if (screen_with_varying_strips_p (param.type))
 	    {
 	      red_hist.pre_account (res.red_strip_width);
 	      green_hist.pre_account (res.green_strip_width);
@@ -1172,7 +1172,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	fprintf (stderr, "Analysis failed\n");
 	return NULL;
       }
-    if (param.type == Dufay)
+    if (screen_with_varying_strips_p (param.type))
       {
 	red_hist.finalize_range (65536);
 	green_hist.finalize_range (65536);
@@ -1184,7 +1184,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	  finetune_result &res = prepass[y * strip_xsteps + x];
 	  if (!res.success || res.uncertainity > uncertainity_threshold)
 	    continue;
-	  if (param.type == Dufay)
+	  if (screen_with_varying_strips_p (param.type))
 	    {
 	      red_hist.account (res.red_strip_width);
 	      green_hist.account (res.green_strip_width);
@@ -1193,17 +1193,17 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	  nok++;
 	}
 
-    if (param.type == Dufay)
+    if (screen_with_varying_strips_p (param.type))
       {
 	red_hist.finalize ();
 	green_hist.finalize ();
       }
     blur_hist.finalize ();
-    if (param.type == Dufay)
+    if (screen_with_varying_strips_p (param.type))
       {
-	rparam.dufay_red_strip_width
+	rparam.red_strip_width
 	    = red_hist.find_avg (skipmin / 100, skipmax / 100);
-	rparam.dufay_green_strip_width
+	rparam.green_strip_width
 	    = green_hist.find_avg (skipmin / 100, skipmax / 100);
       }
     rparam.screen_blur_radius
@@ -1211,12 +1211,12 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
     if (verbose)
       {
 	progress->pause_stdout ();
-	if (param.type == Dufay)
+	if (screen_with_varying_strips_p (param.type))
 	  {
 	    printf ("Red strip width %.2f%%\n",
-		    rparam.dufay_red_strip_width * 100);
+		    rparam.red_strip_width * 100);
 	    printf ("Green strip width %.2f%%\n",
-		    rparam.dufay_green_strip_width * 100);
+		    rparam.green_strip_width * 100);
 	  }
 	printf ("Average screen blur %.2f pixels\n", rparam.screen_blur_radius);
 	progress->resume_stdout ();
@@ -2836,7 +2836,7 @@ finetune (int argc, char **argv)
             }
         }
     }
-  if ((flags & finetune_strips) && (dufay_like_screen_p (param.type) || screen_with_vertical_strips_p (param.type)))
+  if ((flags & finetune_strips) && screen_with_varying_strips_p (param.type))
     {
       printf ("Detected screen strip widths (red, green)\n");
       histogram histr;

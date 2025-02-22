@@ -908,8 +908,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
-	    rparams.dufay_red_strip_width = res.red_strip_width;
-	    rparams.dufay_green_strip_width = res.green_strip_width;
+	    rparams.red_strip_width = res.red_strip_width;
+	    rparams.green_strip_width = res.green_strip_width;
 	    rparams.mix_red = res.mix_weights.red;
 	    rparams.mix_green = res.mix_weights.green;
 	    rparams.mix_blue = res.mix_weights.blue;
@@ -943,8 +943,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
-	    rparams.dufay_red_strip_width = res.red_strip_width;
-	    rparams.dufay_green_strip_width = res.green_strip_width;
+	    rparams.red_strip_width = res.red_strip_width;
+	    rparams.green_strip_width = res.green_strip_width;
 	    rparams.mix_red = res.mix_weights.red;
 	    rparams.mix_green = res.mix_weights.green;
 	    rparams.mix_blue = res.mix_weights.blue;

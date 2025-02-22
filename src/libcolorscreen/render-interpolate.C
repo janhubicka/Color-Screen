@@ -192,8 +192,8 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
     {
       coord_t radius = m_params.screen_blur_radius * pixel_size ();
       m_screen = get_screen (m_scr_to_img.get_type (), false, radius,
-                             m_params.dufay_red_strip_width,
-                             m_params.dufay_green_strip_width, progress,
+                             m_params.red_strip_width,
+                             m_params.green_strip_width, progress,
                              &screen_id);
       if (!m_screen)
         return false;

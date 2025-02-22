@@ -55,6 +55,12 @@ screen_with_vertical_strips_p (enum scr_type t)
   return t == WarnerPowrie;
 }
 
+inline bool
+screen_with_varying_strips_p (enum scr_type t)
+{
+  return dufay_like_screen_p (t) || screen_with_vertical_strips_p (t);
+}
+
 DLL_PUBLIC extern const char *const scr_names[max_scr_type];
 pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
                                                 const render_parameters *);

@@ -99,8 +99,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
 	  || fprintf (f, "output_tone_curve: %s\n", tone_curve::tone_curve_names[(int)rparam->output_tone_curve]) < 0
-	  || fprintf (f, "dufay_red_strip_width: %f\n", rparam->dufay_red_strip_width) < 0
-	  || fprintf (f, "dufay_green_strip_width: %f\n", rparam->dufay_green_strip_width) < 0
+	  || fprintf (f, "red_strip_width: %f\n", rparam->red_strip_width) < 0
+	  || fprintf (f, "green_strip_width: %f\n", rparam->green_strip_width) < 0
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
@@ -614,17 +614,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (rparam)
 	    rparam->output_tone_curve = (tone_curve::tone_curves)j;
 	}
-      else if (!strcmp (buf, "dufay_red_strip_width"))
+      /* dufay_red_strip_width is for compatibility with old files.  */
+      else if (!strcmp (buf, "dufay_red_strip_width")
+	       || !strcmp (buf, "red_strip_width"))
 	{
-	  if (!read_luminosity (f, rparam_check (dufay_red_strip_width)))
+	  if (!read_luminosity (f, rparam_check (red_strip_width)))
 	    {
 	      *error = "error parsing red strip width";
 	      return false;
 	    }
 	}
-      else if (!strcmp (buf, "dufay_green_strip_width"))
+      /* dufay_green_strip_width is for compatibility with old files.  */
+      else if (!strcmp (buf, "dufay_green_strip_width")
+	       || !strcmp (buf, "green_strip_width"))
 	{
-	  if (!read_luminosity (f, rparam_check (dufay_green_strip_width)))
+	  if (!read_luminosity (f, rparam_check (green_strip_width)))
 	    {
 	      *error = "error parsing green strip width";
 	      return false;

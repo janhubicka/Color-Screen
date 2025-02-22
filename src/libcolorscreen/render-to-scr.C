@@ -6,14 +6,14 @@
 namespace colorscreen
 {
 screen_table::screen_table (scanner_blur_correction_parameters *param,
-                            scr_type type, luminosity_t dufay_red_strip_width,
-                            luminosity_t dufay_green_strip_height,
+                            scr_type type, luminosity_t red_strip_width,
+                            luminosity_t green_strip_width,
                             progress_info *progress)
     : m_id (lru_caches::get ()), m_width (param->get_width ()),
       m_height (param->get_height ()), m_screen_table (m_width * m_height)
 {
   screen s;
-  s.initialize (type, dufay_red_strip_width, dufay_green_strip_height);
+  s.initialize (type, red_strip_width, green_strip_width);
   if (progress)
     progress->set_task ("computing screen table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
@@ -83,15 +83,15 @@ struct screen_params
   enum scr_type t;
   bool preview;
   coord_t radius;
-  coord_t dufay_red_strip_width, dufay_green_strip_height;
+  coord_t red_strip_width, green_strip_width;
 
   bool
   operator== (screen_params &o)
   {
     return t == o.t && preview == o.preview && fabs (radius - o.radius) < 0.001
-           && (t != Dufay
-               || (dufay_red_strip_width == o.dufay_red_strip_width
-                   && dufay_green_strip_height == o.dufay_green_strip_height));
+           && (!screen_with_varying_strips_p (t)
+               || (red_strip_width == o.red_strip_width
+                   && green_strip_width == o.green_strip_width));
   }
 };
 
@@ -104,7 +104,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   if (p.preview)
     s->initialize_preview (p.t);
   else
-    s->initialize (p.t, p.dufay_red_strip_width, p.dufay_green_strip_height);
+    s->initialize (p.t, p.red_strip_width, p.green_strip_width);
   if (!p.radius)
     return s;
   screen *blurred = new screen;
@@ -122,13 +122,13 @@ struct screen_table_params
   scanner_blur_correction_parameters *param;
   uint64_t param_id;
   scr_type type;
-  luminosity_t red_strip_width, green_strip_height;
+  luminosity_t red_strip_width, green_strip_width;
   bool
   operator== (screen_table_params &o)
   {
     return type == o.type && param_id == o.param_id
            && red_strip_width == o.red_strip_width
-           && green_strip_height == o.green_strip_height;
+           && green_strip_width == o.green_strip_width;
   }
 };
 
@@ -136,7 +136,7 @@ screen_table *
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   screen_table *s = new screen_table (p.param, p.type, p.red_strip_width,
-                                      p.green_strip_height, progress);
+                                      p.green_strip_width, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -243,7 +243,7 @@ render_to_scr::compute_screen_table (progress_info *progress)
   screen_table_params p
       = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
-          m_params.dufay_red_strip_width, m_params.dufay_green_strip_width };
+          m_params.red_strip_width, m_params.green_strip_width };
   m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
   return m_screen_table != NULL;
 }
