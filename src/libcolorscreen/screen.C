@@ -1362,7 +1362,7 @@ screen::initialize_preview (enum scr_type type)
 	      std::swap (add[y][x][0], add[y][x][2]);
 	    }
     }
-  if (type == WarnerPowrie)
+  else if (type == WarnerPowrie)
     {
       //if (red_strip_width && green_strip_width)
         //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
