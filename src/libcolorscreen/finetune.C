@@ -301,7 +301,7 @@ public:
         return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
       }
     else
-      return { v[2 * tileid] * strips_range, 0 };
+      return { v[tileid] * strips_range, 0 };
   }
   void
   set_offset (coord_t *v, int tileid, point_t off)
@@ -318,7 +318,7 @@ public:
 	v[2 * tileid + 1] = off.y / range;
       }
     else
-	v[2 * tileid] = off.x / strips_range;
+	v[tileid] = off.x / strips_range;
   }
   point_t
   get_emulsion_offset (coord_t *v, int tileid)
@@ -338,7 +338,7 @@ public:
 		 v[emulsion_offset_index + 2 * tileid + 1] * range };
       }
     else
-      return { v[emulsion_offset_index + 2 * tileid] * (strips_range * 2), 0 };
+      return { v[emulsion_offset_index + tileid] * (strips_range * 2), 0 };
   }
   void
   set_emulsion_offset (coord_t *v, int tileid, point_t off)
@@ -361,7 +361,7 @@ public:
 	v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
       }
     else
-      v[emulsion_offset_index + 2 * tileid] = off.x / (2 * strips_range);
+      v[emulsion_offset_index + tileid] = off.x / (2 * strips_range);
   }
 
   point_t
@@ -2473,7 +2473,7 @@ public:
                 }
             }
         /* TODO: If we did not find the tile we could try some non-integer
-         * location.  */
+           location.  */
         if (!found)
           {
             if (verbose)
@@ -2487,6 +2487,7 @@ public:
           }
         ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + 0.5,
                                           fp.y + tiles[tileid].tymin + 0.5 };
+	printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, bx, by).x, get_pos (start, tileid, bx, by).y);
         ret.solver_point_screen_location = { (coord_t)fsx, (coord_t)fsy };
         ret.solver_point_color = solver_parameters::green;
       }
