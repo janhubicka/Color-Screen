@@ -154,7 +154,7 @@ private:
   int emulsion_blur_index;
   int sharpen_index;
   int screen_index;
-  int dufay_strips_index;
+  int strips_index;
   int mix_weights_index;
   /* Number of values needed.  */
   int n_values;
@@ -189,8 +189,8 @@ public:
 
   coord_t *start;
 
-  /* Screen blur and duffay red strip widht and green strip height. */
-  coord_t fixed_blur, fixed_width, fixed_height, fixed_emulsion_blur;
+  /* Screen blur and strip widths. */
+  coord_t fixed_blur, fixed_red_width, fixed_green_width, fixed_emulsion_blur;
 
   /* Range of position adjustment.  Dufay screen has squares about size of 0.5
      screen coordinates.  adjusting within -0.2 to 0.2 makes sure we do not
@@ -214,9 +214,9 @@ public:
   bool optimize_screen_mtf_blur;
   /* Try to optimize screen blur guessing lens point spread.  */
   bool optimize_screen_ps_blur;
-  /* Try to optimize dufay strip widths (otherwise fixed_width, fixed_height is
-   * used).  */
-  bool optimize_dufay_strips;
+  /* Try to optimize strip widths for dufay and strip screens
+     (otherwise fixed_width, fixed_height is used).  */
+  bool optimize_strips;
   /* Try to optimize dark point.  */
   bool optimize_fog;
   /* Try to otimize for blur caused by film emulsion.  For this screen blur
@@ -228,7 +228,7 @@ public:
      Probably useful only for debugging and better to be true.  */
   bool least_squares;
   /* Determine color using data collection same as used by
-     analyze_paget/analyze_dufay/analyze_strips.  */
+     analyze_base_worker.  */
   bool data_collection;
   /* Normalize colors for simulation to uniform intensity.  This is useful
      in RGB simulation to eliminate underlying silver image (which works as
@@ -445,16 +445,16 @@ public:
   coord_t
   get_red_strip_width (coord_t *v)
   {
-    if (!optimize_dufay_strips)
-      return fixed_width;
-    return v[dufay_strips_index];
+    if (!optimize_strips)
+      return fixed_red_width;
+    return v[strips_index];
   }
   coord_t
   get_green_strip_width (coord_t *v)
   {
-    if (!optimize_dufay_strips)
-      return fixed_height;
-    return v[dufay_strips_index + 1];
+    if (!optimize_strips)
+      return fixed_green_width;
+    return v[strips_index + 1];
   }
 
   void
@@ -546,7 +546,7 @@ public:
         printf ("Blue screen blur %f (pixel size %f, scaled %f)\n", b.blue,
                 pixel_size, b.blue * pixel_size);
       }
-    if (optimize_dufay_strips)
+    if (optimize_strips)
       {
         printf ("Red strip width: %f\n", get_red_strip_width (v));
         printf ("Green strip width: %f\n", get_green_strip_width (v));
@@ -660,11 +660,11 @@ public:
         to_range (v[screen_index + 2], 0, 1);
         to_range (v[screen_index + 3], 0, 1);
       }
-    if (optimize_dufay_strips)
+    if (optimize_strips)
       {
-        /* Dufaycolor red strip width and height.  */
-        to_range (v[dufay_strips_index + 0], 0.1, 0.5);
-        to_range (v[dufay_strips_index + 1], 0.3, 0.7);
+        /* strip widths.  */
+        to_range (v[strips_index + 0], 0.1, 0.5);
+        to_range (v[strips_index + 1], 0.3, 0.7);
       }
   }
   void
@@ -819,7 +819,7 @@ public:
     optimize_screen_ps_blur
         = (flags & finetune_screen_ps_blur) && !optimize_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
-    optimize_dufay_strips = (flags & finetune_dufay_strips) && dufay_like_screen_p (type);
+    optimize_strips = (flags & finetune_strips) && (dufay_like_screen_p (type) || screen_with_vertical_strips_p (type));
     /* For one tile the effect of fog can always be simulated by adjusting the
        colors of screen. If multiple tiles (and colors) are samples we can try
        to estimate it.  */
@@ -954,15 +954,15 @@ public:
     else
       screen_index = -1;
 
-    if (!dufay_like_screen_p (type))
-      optimize_dufay_strips = false;
-    if (optimize_dufay_strips)
+    if (!dufay_like_screen_p (type) && !screen_with_vertical_strips_p (type))
+      optimize_strips = false;
+    if (optimize_strips)
       {
-        dufay_strips_index = n_values;
+        strips_index = n_values;
         n_values += 2;
       }
     else
-      dufay_strips_index = -1;
+      strips_index = -1;
     start = (coord_t *)malloc (sizeof (*start) * n_values);
     if (colorscreen_checking)
       {
@@ -1053,8 +1053,16 @@ public:
 
     /* Starting from blur 0 seems to work better, since other parameters
        are then more relevant.  */
-    fixed_width = dufaycolor::red_strip_width;
-    fixed_height = dufaycolor::green_strip_width;
+    if (dufay_like_screen_p (type))
+      {
+	fixed_red_width = dufaycolor::red_strip_width;
+	fixed_green_width = dufaycolor::green_strip_width;
+      }
+    else
+      {
+	fixed_red_width = 1.0/3;
+	fixed_green_width = 1.0/3;
+      }
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
         start[emulsion_intensity_index + tileid] = 1 / 3.0;
@@ -1121,17 +1129,22 @@ public:
         start[screen_index + 2] = 0;
         start[screen_index + 3] = 0;
       }
-    if (optimize_dufay_strips)
+    if (optimize_strips)
       {
         if (flags & finetune_use_dufay_srip_widths)
           {
-            start[dufay_strips_index + 0] = red_strip_width;
-            start[dufay_strips_index + 1] = green_strip_height;
+            start[strips_index + 0] = red_strip_width;
+            start[strips_index + 1] = green_strip_height;
           }
-        else
+        else if (dufay_like_screen_p (type))
           {
-            start[dufay_strips_index + 0] = dufaycolor::red_strip_width;
-            start[dufay_strips_index + 1] = dufaycolor::green_strip_width;
+            start[strips_index + 0] = dufaycolor::red_strip_width;
+            start[strips_index + 1] = dufaycolor::green_strip_width;
+          }
+	else
+          {
+            start[strips_index + 0] = 1.0/3;
+            start[strips_index + 1] = 1.0/3;
           }
       }
 
@@ -2352,8 +2365,8 @@ public:
     /* TODO: Translate back to stitched project coordinates.  */
     ret.tile_pos = { (coord_t)(tiles[0].txmin + twidth / 2),
                      (coord_t)(tiles[0].tymin + theight / 2) };
-    ret.dufay_red_strip_width = get_red_strip_width (start);
-    ret.dufay_green_strip_width = get_green_strip_width (start);
+    ret.red_strip_width = get_red_strip_width (start);
+    ret.green_strip_width = get_green_strip_width (start);
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)

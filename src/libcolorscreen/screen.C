@@ -1260,15 +1260,16 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
 void
 screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
 {
-  coord_t c1e = size * (first_strip_width * (coord_t)(0.3)) + 0.5;
-  coord_t c1s = size * (1 - first_strip_width * (coord_t)(0.3)) + 0.5;
+  coord_t w = 0.6;
+  coord_t c1e = size * (first_strip_width * (w/2)) + (coord_t)0.5;
+  coord_t c1s = size * (1 - first_strip_width * (w/3)) + (coord_t)0.5;
   /* Change from second to third.  */
-  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.2)) + 0.5;
-  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * 0.8)) + 0.5;
+  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * ((coord_t)0.5-w))) + (coord_t)0.5;
+  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * ((coord_t)0.5+w))) + (coord_t)0.5;
   /* Change from third back to first.  */
   coord_t third_strip_width = 1 - first_strip_width - second_strip_width;
-  coord_t c3s = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.8) + 0.5;
-  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * 0.2) + 0.5;
+  coord_t c3s = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * ((coord_t)0.5+w)) + (coord_t)0.5;
+  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * ((coord_t)0.5-w)) + (coord_t)0.5;
   for (int yy = 0; yy < size; yy++)
     {
       luminosity_t c[3] = {0,0,0};
@@ -1363,9 +1364,9 @@ screen::initialize_preview (enum scr_type type)
     }
   if (type == WarnerPowrie)
     {
-      if (red_strip_width && green_strip_width)
-        preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
-      else
+      //if (red_strip_width && green_strip_width)
+        //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
+      //else
         preview_strip (1.0/3, 1.0/3, 1, 2, 0);
     }
   else

@@ -854,7 +854,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_dufay_strips | finetune_fog;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_strips | finetune_fog;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
@@ -897,7 +897,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	//fparam.multitile = 3;
 	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_dufay_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared | finetune_sharpening;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared | finetune_sharpening;
 	//fparam.range = 4;
 	fparam.range = 16;
 	fparam.ignore_outliers=0.001;
@@ -908,8 +908,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
-	    rparams.dufay_red_strip_width = res.dufay_red_strip_width;
-	    rparams.dufay_green_strip_width = res.dufay_green_strip_width;
+	    rparams.dufay_red_strip_width = res.red_strip_width;
+	    rparams.dufay_green_strip_width = res.green_strip_width;
 	    rparams.mix_red = res.mix_weights.red;
 	    rparams.mix_green = res.mix_weights.green;
 	    rparams.mix_blue = res.mix_weights.blue;
@@ -936,15 +936,15 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
+	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_strips | finetune_fog | finetune_no_normalize;
 	fparam.range = 4;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, tune_points, &tune_results, fparam, &progress);
 	if (res.success)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
-	    rparams.dufay_red_strip_width = res.dufay_red_strip_width;
-	    rparams.dufay_green_strip_width = res.dufay_green_strip_width;
+	    rparams.dufay_red_strip_width = res.red_strip_width;
+	    rparams.dufay_green_strip_width = res.green_strip_width;
 	    rparams.mix_red = res.mix_weights.red;
 	    rparams.mix_green = res.mix_weights.green;
 	    rparams.mix_blue = res.mix_weights.blue;
@@ -1508,7 +1508,15 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	  coord_t xi = current_solver.points[i].img.x;
 	  coord_t yi = current_solver.points[i].img.y;
 	  rgbdata color = current_solver.points[i].get_rgb ();
-	  point_t p = map.to_img (current_solver.points[i].scr);
+	  point_t scr_p = current_solver.points[i].scr;
+
+	  /* If we do only 1D solving, provide correct y coordinate to minimize distance.  */
+	  if (screen_with_vertical_strips_p (current.type))
+	    {
+	      point_t scr2 = map.to_scr (current_solver.points[i].img);
+	      scr_p.y = scr2.y;
+	    }
+	  point_t p = map.to_img (scr_p);
 
 	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, xi, yi, color.blue, color.green, color.red);
 	  draw_circle (surface, bigscale, xoffset, yoffset, pxsize, pysize, p.x, p.y, 3*color.blue/4, 3*color.green/4, 3*color.red/4);

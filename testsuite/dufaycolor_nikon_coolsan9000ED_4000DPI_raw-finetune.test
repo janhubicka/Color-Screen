@@ -15,15 +15,15 @@ pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par
 grep "^Screen blur robust min 0\\.6" out-${NAME}-finetune-blur.txt || exit 1
 oktest "finetune of party: position and blur"
 
-pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-dufay-strips >out-${NAME}-finetune-blur-strips.txt
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-strips >out-${NAME}-finetune-blur-strips.txt
 grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips.txt || exit 1
 oktest "finetune of party: position, blur and strips"
 
-pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-dufay-strips --no-data-collection >out-${NAME}-finetune-blur-strips-nocollect.txt
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-strips --no-data-collection >out-${NAME}-finetune-blur-strips-nocollect.txt
 grep "^Screen blur robust min 0\\.[67]" out-${NAME}-finetune-blur-strips-nocollect.txt || exit 1
 oktest "finetune of party: position, blur and strips with no data collection"
 
-pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-channel-blur --optimize-dufay-strips  >out-${NAME}-finetune-channel-blur-strips.txt
+pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-channel-blur --optimize-strips  >out-${NAME}-finetune-channel-blur-strips.txt
 grep "^Red screen blur robust min 0\\.[5-7]" out-${NAME}-finetune-channel-blur-strips.txt || exit 1
 grep "^Green screen blur robust min 0\\.[5-7]" out-${NAME}-finetune-channel-blur-strips.txt || exit 1
 grep "^Blue screen blur robust min 0\\.[5-7]" out-${NAME}-finetune-channel-blur-strips.txt || exit 1

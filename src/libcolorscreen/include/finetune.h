@@ -16,7 +16,7 @@ enum finetune_flags : uint64_t
   finetune_screen_channel_blurs = 1 << 2,
   finetune_screen_mtf_blur = 1 << 3,
   finetune_screen_ps_blur = 1 << 4,
-  finetune_dufay_strips = 1 << 5,
+  finetune_strips = 1 << 5,
   finetune_fog = 1 << 6,
   finetune_bw = 1 << 7,
   finetune_no_data_collection = 1 << 8,
@@ -64,8 +64,8 @@ struct finetune_result
   rgbdata screen_channel_blur_radius;
   luminosity_t screen_mtf_blur[4];
   coord_t emulsion_blur_radius;
-  coord_t dufay_red_strip_width;
-  coord_t dufay_green_strip_width;
+  coord_t red_strip_width;
+  coord_t green_strip_width;
   point_t screen_coord_adjust;
   point_t emulsion_coord_adjust;
   rgbdata color;
@@ -83,7 +83,7 @@ struct finetune_result
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
     screen_blur_radius (-1), screen_channel_blur_radius (-1, -1, -1), screen_mtf_blur {-1, -1, -1, -1},
-    emulsion_blur_radius (-1), dufay_red_strip_width (-1), dufay_green_strip_width (-1),
+    emulsion_blur_radius (-1), red_strip_width (-1), green_strip_width (-1),
     screen_coord_adjust {-1, -1}, emulsion_coord_adjust {-1, -1}, color (-1, -1, -1),
     screen_red (-1, -1, -1), screen_green (-1, -1, -1), screen_blue (-1, -1, -1),
     mix_weights (-1, -1, -1), mix_dark (-1, -1, -1), err (), solver_point_img_location {-1, -1},

@@ -248,8 +248,8 @@ print_help ()
       fprintf (stderr, "      --optimize-sharpening     enable finetuning of image sharpening\n");
       fprintf (stderr, "                                requres known screen blur, "
                "mixing weights in input file and monochrome chanel use\n");
-      fprintf (stderr, "      --optimize-dufay-strips   enable finetuning of "
-                       "dufay screen strip widths\n");
+      fprintf (stderr, "      --optimize-strips         enable finetuning of "
+                       "strip widths used to print dufay or screens with strips\n");
       fprintf (stderr, "      --use-monochrome-channel  analyse using "
                        "monochrome channel even when RGB is available\n");
       fprintf (stderr, "      --no-data-collection      do not determine "
@@ -269,7 +269,7 @@ print_help ()
                        "as tiff file\n");
       fprintf (stderr, "      --position-tiff=name      write finetuned "
                        "position as tiff file\n");
-      fprintf (stderr, "      --dufay-strips-tiff=name  write finetuned dufay "
+      fprintf (stderr, "      --strips-tiff=name        write finetuned dufay "
                        "strip parameters as tiff file\n");
       fprintf (stderr, "      --screen-color-tiff-base=name write screen colors as tiff files\n");
       fprintf (stderr, "      --orig-tiff-base=name     write analyzed tiles "
@@ -1121,7 +1121,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
       for (int x = 0; x < strip_xsteps; x++)
 	{
 	  finetune_parameters fparam;
-	  fparam.flags = flags | (param.type == Dufay ? finetune_dufay_strips : 0);
+	  fparam.flags = flags | (param.type == Dufay ? finetune_strips : 0);
 	  fparam.multitile = 1;
 	  prepass [y * strip_xsteps + x] = finetune (
 	      rparam, param, scan,
@@ -1160,8 +1160,8 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	    continue;
 	  if (param.type == Dufay)
 	    {
-	      red_hist.pre_account (res.dufay_red_strip_width);
-	      green_hist.pre_account (res.dufay_green_strip_width);
+	      red_hist.pre_account (res.red_strip_width);
+	      green_hist.pre_account (res.green_strip_width);
 	    }
 	  blur_hist.pre_account (res.screen_blur_radius);
 	  nok++;
@@ -1186,8 +1186,8 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	    continue;
 	  if (param.type == Dufay)
 	    {
-	      red_hist.account (res.dufay_red_strip_width);
-	      green_hist.account (res.dufay_green_strip_width);
+	      red_hist.account (res.red_strip_width);
+	      green_hist.account (res.green_strip_width);
 	    }
 	  blur_hist.account (res.screen_blur_radius);
 	  nok++;
@@ -1241,7 +1241,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
     for (int x = 0; x < xsteps * xsubsteps; x++)
       {
         finetune_parameters fparam;
-        fparam.flags = flags | (reoptimize_strip_widths ? finetune_dufay_strips : 0);
+        fparam.flags = flags | (reoptimize_strip_widths ? finetune_strips : 0);
         fparam.multitile = 1;
         mainpass[y * xsteps * xsubsteps + x] = finetune (
             rparam, param, scan,
@@ -2314,8 +2314,8 @@ finetune (int argc, char **argv)
         flags |= finetune_emulsion_blur;
       else if (!strcmp (argv[i], "--use-monochrome-channel"))
         flags |= finetune_bw;
-      else if (!strcmp (argv[i], "--optimize-dufay-strips"))
-        flags |= finetune_dufay_strips;
+      else if (!strcmp (argv[i], "--optimize-strips"))
+        flags |= finetune_strips;
       else if (!strcmp (argv[i], "--optimize-sharpening"))
         flags |= finetune_sharpening;
       else if (!strcmp (argv[i], "--no-normalize"))
@@ -2334,7 +2334,7 @@ finetune (int argc, char **argv)
       else if (const char *str = arg_with_param (argc, argv, &i, "blur-tiff"))
         screen_blur_tiff_name = str;
       else if (const char *str
-               = arg_with_param (argc, argv, &i, "dufay-strips-tiff"))
+               = arg_with_param (argc, argv, &i, "strips-tiff"))
         strip_width_tiff_name = str;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "position-tiff"))
@@ -2836,7 +2836,7 @@ finetune (int argc, char **argv)
             }
         }
     }
-  if ((flags & finetune_dufay_strips) && param.type == Dufay)
+  if ((flags & finetune_strips) && (dufay_like_screen_p (param.type) || screen_with_vertical_strips_p (param.type)))
     {
       printf ("Detected screen strip widths (red, green)\n");
       histogram histr;
@@ -2846,9 +2846,9 @@ finetune (int argc, char **argv)
           if (results[y * xsteps + x].success)
             {
               histr.pre_account (
-                  results[y * xsteps + x].dufay_red_strip_width);
+                  results[y * xsteps + x].red_strip_width);
               histg.pre_account (
-                  results[y * xsteps + x].dufay_green_strip_width);
+                  results[y * xsteps + x].green_strip_width);
             }
       histr.finalize_range (65536);
       histg.finalize_range (65536);
@@ -2856,8 +2856,8 @@ finetune (int argc, char **argv)
         for (int x = 0; x < xsteps; x++)
           if (results[y * xsteps + x].success)
             {
-              histr.account (results[y * xsteps + x].dufay_red_strip_width);
-              histg.account (results[y * xsteps + x].dufay_green_strip_width);
+              histr.account (results[y * xsteps + x].red_strip_width);
+              histg.account (results[y * xsteps + x].green_strip_width);
             }
       histr.finalize ();
       histg.finalize ();
@@ -2872,8 +2872,8 @@ finetune (int argc, char **argv)
           for (int x = 0; x < xsteps; x++)
             if (results[y * xsteps + x].success)
               printf ("  %.3f,%.3f",
-                      results[y * xsteps + x].dufay_red_strip_width,
-                      results[y * xsteps + x].dufay_green_strip_width);
+                      results[y * xsteps + x].red_strip_width,
+                      results[y * xsteps + x].green_strip_width);
             else
               printf ("  ------");
           printf ("\n");
@@ -2899,11 +2899,11 @@ finetune (int argc, char **argv)
               for (int x = 0; x < xsteps; x++)
                 if (results[y * xsteps + x].success)
                   {
-                    coord_t r = results[y * xsteps + x].dufay_red_strip_width;
-                    coord_t g = results[y * xsteps + x].dufay_green_strip_width
+                    coord_t r = results[y * xsteps + x].red_strip_width;
+                    coord_t g = results[y * xsteps + x].green_strip_width
                                 * (1 - r);
                     coord_t b
-                        = (1 - results[y * xsteps + x].dufay_green_strip_width)
+                        = (1 - results[y * xsteps + x].green_strip_width)
                           * (1 - r);
                     sharpness.put_pixel (x, r * 65535, g * 65535, b * 65535);
                   }
