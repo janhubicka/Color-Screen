@@ -13,7 +13,8 @@ enum solver_vars
   solve_free_rotation = 2,
   solve_screen_weights = 4,
   solve_image_weights = 8,
-  solve_limit_ransac_iterations = 16
+  solve_limit_ransac_iterations = 16,
+  solve_vertical_strips = 32
 };
 trans_4d_matrix get_matrix_5points (bool invert, scanner_type type,
                                     point_t zero, point_t x, point_t y,

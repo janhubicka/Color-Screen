@@ -109,7 +109,7 @@ scr_to_img::update_scr_to_final_parameters (coord_t final_ratio,
       m_param.final_angle = 107.773559;
       m_param.final_ratio = 0.803158;
     }
-  if (m_param.type == WarnerPowrie)
+  if (screen_with_vertical_strips_p (m_param.type))
     {
       m_param.final_angle = 90;
       m_param.final_ratio = 1.0/3;
@@ -291,7 +291,7 @@ scr_to_img::set_parameters_for_early_correction (
   m_param.copy_from_cheap (param);
   
   /* If we have screen with strips, compute the irrelevant coordinate.  */
-  if (m_param.type == WarnerPowrie)
+  if (screen_with_vertical_strips_p (m_param.type))
     {
       m_param.coordinate2.x = -m_param.coordinate1.y * (1/(coord_t)3);
       m_param.coordinate2.y = m_param.coordinate1.x *(1/(coord_t)3);

@@ -82,8 +82,21 @@ private:
    with specified degrees of freedoom.  */
 
 int
+equations_per_sample (int flags)
+{
+  if (flags & homography::solve_vertical_strips)
+    return 2;
+  return 1;
+}
+
+/* Return number of variables needed to produce homography solution
+   with specified degrees of freedoom.  */
+
+int
 equation_variables (int flags)
 {
+  if (flags & homography::solve_vertical_strips)
+    return 3;
   if (flags & homography::solve_rotation)
     return 8;
   if (flags & homography::solve_free_rotation)
@@ -101,62 +114,76 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
 {
   ts.perspective_transform (s.x, s.y, s.x, s.y);
   td.perspective_transform (d.x, d.y, d.x, d.y);
-  if (invert)
-    std::swap (s, d);
-  gsl_vector_set (v, n * 2, d.x);
-  gsl_vector_set (v, n * 2 + 1, d.y);
+  if (!(flags & homography::solve_vertical_strips))
+    {
+      if (invert)
+	std::swap (s, d);
+      gsl_vector_set (v, n * 2, d.x);
+      gsl_vector_set (v, n * 2 + 1, d.y);
 
-  gsl_matrix_set (A, n * 2, 0, s.x);
-  gsl_matrix_set (A, n * 2, 1, s.y);
-  gsl_matrix_set (A, n * 2, 2, 1);
-  gsl_matrix_set (A, n * 2, 3, 0);
-  gsl_matrix_set (A, n * 2, 4, 0);
-  gsl_matrix_set (A, n * 2, 5, 0);
-  if (flags & (homography::solve_rotation | homography::solve_free_rotation))
-    {
-      if ((flags & homography::solve_free_rotation)
-          || scanner_type != lens_move_horisontally)
-        {
-          gsl_matrix_set (A, n * 2, 6, -d.x * s.x);
-          gsl_matrix_set (A, n * 2, 7, -d.x * s.y);
-        }
-      else
-        {
-          gsl_matrix_set (A, n * 2, 6, 0);
-          gsl_matrix_set (A, n * 2, 7, 0);
-        }
-      if (flags & homography::solve_free_rotation)
-        {
-          gsl_matrix_set (A, n * 2, 8, 0);
-          gsl_matrix_set (A, n * 2, 9, 0);
-        }
-    }
+      gsl_matrix_set (A, n * 2, 0, s.x);
+      gsl_matrix_set (A, n * 2, 1, s.y);
+      gsl_matrix_set (A, n * 2, 2, 1);
+      gsl_matrix_set (A, n * 2, 3, 0);
+      gsl_matrix_set (A, n * 2, 4, 0);
+      gsl_matrix_set (A, n * 2, 5, 0);
+      if (flags & (homography::solve_rotation | homography::solve_free_rotation))
+	{
+	  if ((flags & homography::solve_free_rotation)
+	      || scanner_type != lens_move_horisontally)
+	    {
+	      gsl_matrix_set (A, n * 2, 6, -d.x * s.x);
+	      gsl_matrix_set (A, n * 2, 7, -d.x * s.y);
+	    }
+	  else
+	    {
+	      gsl_matrix_set (A, n * 2, 6, 0);
+	      gsl_matrix_set (A, n * 2, 7, 0);
+	    }
+	  if (flags & homography::solve_free_rotation)
+	    {
+	      gsl_matrix_set (A, n * 2, 8, 0);
+	      gsl_matrix_set (A, n * 2, 9, 0);
+	    }
+	}
 
-  gsl_matrix_set (A, n * 2 + 1, 0, 0);
-  gsl_matrix_set (A, n * 2 + 1, 1, 0);
-  gsl_matrix_set (A, n * 2 + 1, 2, 0);
-  gsl_matrix_set (A, n * 2 + 1, 3, s.x);
-  gsl_matrix_set (A, n * 2 + 1, 4, s.y);
-  gsl_matrix_set (A, n * 2 + 1, 5, 1);
-  if (flags & homography::solve_rotation)
-    {
-      if (scanner_type != lens_move_vertically)
-        {
-          gsl_matrix_set (A, n * 2 + 1, 6, -d.y * s.x);
-          gsl_matrix_set (A, n * 2 + 1, 7, -d.y * s.y);
-        }
-      else
-        {
-          gsl_matrix_set (A, n * 2 + 1, 6, 0);
-          gsl_matrix_set (A, n * 2 + 1, 7, 0);
-        }
+      gsl_matrix_set (A, n * 2 + 1, 0, 0);
+      gsl_matrix_set (A, n * 2 + 1, 1, 0);
+      gsl_matrix_set (A, n * 2 + 1, 2, 0);
+      gsl_matrix_set (A, n * 2 + 1, 3, s.x);
+      gsl_matrix_set (A, n * 2 + 1, 4, s.y);
+      gsl_matrix_set (A, n * 2 + 1, 5, 1);
+      if (flags & homography::solve_rotation)
+	{
+	  if (scanner_type != lens_move_vertically)
+	    {
+	      gsl_matrix_set (A, n * 2 + 1, 6, -d.y * s.x);
+	      gsl_matrix_set (A, n * 2 + 1, 7, -d.y * s.y);
+	    }
+	  else
+	    {
+	      gsl_matrix_set (A, n * 2 + 1, 6, 0);
+	      gsl_matrix_set (A, n * 2 + 1, 7, 0);
+	    }
+	}
+      else if (flags & homography::solve_free_rotation)
+	{
+	  gsl_matrix_set (A, n * 2 + 1, 6, 0);
+	  gsl_matrix_set (A, n * 2 + 1, 7, 0);
+	  gsl_matrix_set (A, n * 2 + 1, 8, -d.y * s.x);
+	  gsl_matrix_set (A, n * 2 + 1, 9, -d.y * s.y);
+	}
     }
-  else if (flags & homography::solve_free_rotation)
+  else
     {
-      gsl_matrix_set (A, n * 2 + 1, 6, 0);
-      gsl_matrix_set (A, n * 2 + 1, 7, 0);
-      gsl_matrix_set (A, n * 2 + 1, 8, -d.y * s.x);
-      gsl_matrix_set (A, n * 2 + 1, 9, -d.y * s.y);
+      /* Normally we compute error in screen coordinates, so the solver does not
+         increase size of screen to reduce square error.
+	 This is not possible when we do linear solution.  */
+      gsl_matrix_set (A, n, 0, d.x);
+      gsl_matrix_set (A, n, 1, d.y);
+      gsl_matrix_set (A, n, 2, 1);
+      gsl_vector_set (v, n, s.x);
+      assert (!colorscreen_checking || !invert);
     }
 }
 
@@ -173,48 +200,61 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
   trans_4d_matrix ret;
   if (inverse)
     std::swap (ts, td);
-  ret.m_elements[0][0] = gsl_vector_get (v, 0);
-  ret.m_elements[1][0] = gsl_vector_get (v, 1);
-  ret.m_elements[2][0] = gsl_vector_get (v, 2);
-  ret.m_elements[3][0] = 0;
-
-  ret.m_elements[0][1] = gsl_vector_get (v, 3);
-  ret.m_elements[1][1] = gsl_vector_get (v, 4);
-  ret.m_elements[2][1] = 0;
-  ret.m_elements[3][1] = gsl_vector_get (v, 5);
-
-  if ((flags & (homography::solve_rotation) && type != lens_move_horisontally)
-      || (flags & homography::solve_free_rotation))
+  if (!(flags & homography::solve_vertical_strips))
     {
-      ret.m_elements[0][2] = gsl_vector_get (v, 6);
-      ret.m_elements[1][2] = gsl_vector_get (v, 7);
+      ret.m_elements[0][0] = gsl_vector_get (v, 0);
+      ret.m_elements[1][0] = gsl_vector_get (v, 1);
+      ret.m_elements[2][0] = gsl_vector_get (v, 2);
+      ret.m_elements[3][0] = 0;
+
+      ret.m_elements[0][1] = gsl_vector_get (v, 3);
+      ret.m_elements[1][1] = gsl_vector_get (v, 4);
+      ret.m_elements[2][1] = 0;
+      ret.m_elements[3][1] = gsl_vector_get (v, 5);
+
+      if ((flags & (homography::solve_rotation) && type != lens_move_horisontally)
+	  || (flags & homography::solve_free_rotation))
+	{
+	  ret.m_elements[0][2] = gsl_vector_get (v, 6);
+	  ret.m_elements[1][2] = gsl_vector_get (v, 7);
+	}
+      else
+	{
+	  ret.m_elements[0][2] = 0;
+	  ret.m_elements[1][2] = 0;
+	}
+      ret.m_elements[2][2] = 1;
+      ret.m_elements[3][2] = 0;
+
+      if (flags & homography::solve_free_rotation)
+	{
+	  ret.m_elements[0][3] = gsl_vector_get (v, 8);
+	  ret.m_elements[1][3] = gsl_vector_get (v, 9);
+	}
+      else if ((flags & homography::solve_rotation)
+	       && type != lens_move_vertically)
+	{
+	  ret.m_elements[0][3] = gsl_vector_get (v, 6);
+	  ret.m_elements[1][3] = gsl_vector_get (v, 7);
+	}
+      else
+	{
+	  ret.m_elements[0][3] = 0;
+	  ret.m_elements[1][3] = 0;
+	}
+      ret.m_elements[2][3] = 0;
+      ret.m_elements[3][3] = 1;
     }
   else
     {
-      ret.m_elements[0][2] = 0;
-      ret.m_elements[1][2] = 0;
+      ret.m_elements[0][0] = gsl_vector_get (v, 0);
+      ret.m_elements[1][0] = gsl_vector_get (v, 1);
+      ret.m_elements[2][0] = gsl_vector_get (v, 2);
+      ret.m_elements[0][1] = -gsl_vector_get (v, 1);
+      ret.m_elements[1][1] = gsl_vector_get (v, 2);
+      ret.m_elements[2][1] = gsl_vector_get (v, 2);
+      ret.invert ();
     }
-  ret.m_elements[2][2] = 1;
-  ret.m_elements[3][2] = 0;
-
-  if (flags & homography::solve_free_rotation)
-    {
-      ret.m_elements[0][3] = gsl_vector_get (v, 8);
-      ret.m_elements[1][3] = gsl_vector_get (v, 9);
-    }
-  else if ((flags & homography::solve_rotation)
-           && type != lens_move_vertically)
-    {
-      ret.m_elements[0][3] = gsl_vector_get (v, 6);
-      ret.m_elements[1][3] = gsl_vector_get (v, 7);
-    }
-  else
-    {
-      ret.m_elements[0][3] = 0;
-      ret.m_elements[1][3] = 0;
-    }
-  ret.m_elements[2][3] = 0;
-  ret.m_elements[3][3] = 1;
   if (!keep_vector)
     gsl_vector_free (v);
   if (debug_output)
@@ -548,7 +588,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
 {
   int nvariables = equation_variables (flags);
   int n = points.size ();
-  int nequations = n * 2;
+  int nequations = n * equations_per_sample (flags);
   gsl_matrix *X, *cov;
   gsl_vector *y, *w = NULL, *c;
   normalize_points scrnorm (n), imgnorm (n);

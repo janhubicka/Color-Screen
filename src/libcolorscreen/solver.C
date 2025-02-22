@@ -55,7 +55,16 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   double chisq;
   bool do_ransac = !(flags
 		     & (homography::solve_image_weights
+			| homography::solve_vertical_strips
 			| homography::solve_screen_weights));
+  /* Disable ransac for now for vertical strips.
+     It is not implemented yet.  */
+  if (screen_with_vertical_strips_p (param->type))
+    {
+      flags &= homography::solve_rotation;
+      flags &= homography::solve_free_rotation;
+    }
+
   trans_4d_matrix h;
   if (do_ransac)
     h = homography::get_matrix_ransac (points, flags, param->scanner_type,
@@ -178,6 +187,13 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       param->tilt_x = asin (sx) * 180 / M_PI;
       printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
 #endif
+    }
+  /* If we are solving screen with strips only, always make cooridnate2 orthogonal.
+     We still need to determine perspective correction below.  */
+  if (screen_with_vertical_strips_p (param->type))
+    {
+      coordinate2_x = -coordinate1_y * (1/(coord_t)3);
+      coordinate2_y = coordinate1_x *(1/(coord_t)3);
     }
   if (debug_output && final_run)
     {

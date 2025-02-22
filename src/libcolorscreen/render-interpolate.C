@@ -35,8 +35,7 @@ struct analyzer_params
   {
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
         || (!mesh_trans_id && params != o.params)
-	|| (params.type == WarnerPowrie) != (o.params.type == WarnerPowrie)
-        || (dufay_like_screen_p (params.type)) != (dufay_like_screen_p (o.params.type)))
+	|| params.type == o.params.type)
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
@@ -108,13 +107,9 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
   analyze_strips *ret = new analyze_strips ();
-  {
-    const screen *s = p.scr;
-    screen adapted;
-    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
-		      xshift, yshift, p.mode, p.collection_threshold, progress))
-      return ret;
-  }
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height,
+		    xshift, yshift, p.mode, p.collection_threshold, progress))
+    return ret;
   delete ret;
   return NULL;
 }
@@ -286,7 +281,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       if (!m_dufay)
         return false;
     }
-  else if (m_scr_to_img.get_type () == WarnerPowrie)
+  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       m_strips = strips_analyzer_cache.get (p, xshift, yshift, width, height,
                                            progress);
@@ -306,7 +301,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     c = m_paget->bicubic_interpolate (
         { x, y }, m_scr_to_img.patch_proportions (&m_params));
-  else if (m_scr_to_img.get_type () == WarnerPowrie)
+  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       c = m_strips->bicubic_interpolate (
           { x, y }, m_scr_to_img.patch_proportions (&m_params));
@@ -493,7 +488,7 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
             progress->inc_progress ();
         }
     }
-  else if (m_scr_to_img.get_type () == WarnerPowrie)
+  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       if (progress)
         progress->set_task (task, m_strips->get_height ());
@@ -524,7 +519,7 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
             progress->inc_progress ();
         }
     }
-  else if (m_scr_to_img.get_type () == WarnerPowrie)
+  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       if (progress)
         progress->set_task (task, m_strips->get_height ());
