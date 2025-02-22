@@ -1326,7 +1326,12 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 	  std::swap (mult[y][x][0], mult[y][x][2]);
       break;
     case WarnerPowrie:
-      strip (1.0/3, 1.0/3, 1, 2, 0);
+      {
+	if (red_strip_width && green_strip_width)
+          strip (green_strip_width, 1-red_strip_width-green_strip_width, 1, 2, 0);
+	else
+          strip (1.0/3, 1.0/3, 1, 2, 0);
+      }
       break;
     default:
       abort ();
@@ -1357,7 +1362,12 @@ screen::initialize_preview (enum scr_type type)
 	    }
     }
   if (type == WarnerPowrie)
-    preview_strip (1.0/3, 1.0/3, 1, 2, 0);
+    {
+      if (red_strip_width && green_strip_width)
+        preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
+      else
+        preview_strip (1.0/3, 1.0/3, 1, 2, 0);
+    }
   else
     preview ();
 }

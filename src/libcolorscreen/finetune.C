@@ -228,7 +228,7 @@ public:
      Probably useful only for debugging and better to be true.  */
   bool least_squares;
   /* Determine color using data collection same as used by
-   * analyze_paget/analyze_dufay.  */
+     analyze_paget/analyze_dufay/analyze_strips.  */
   bool data_collection;
   /* Normalize colors for simulation to uniform intensity.  This is useful
      in RGB simulation to eliminate underlying silver image (which works as
@@ -301,9 +301,7 @@ public:
         return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
       }
     else
-      {
-        return { v[2 * tileid] * strips_range, 0 };
-      }
+      return { v[2 * tileid] * strips_range, 0 };
   }
   void
   set_offset (coord_t *v, int tileid, point_t off)
@@ -340,7 +338,7 @@ public:
 		 v[emulsion_offset_index + 2 * tileid + 1] * range };
       }
     else
-      return { v[emulsion_offset_index + 2 * tileid] * strips_range * 2, 0 };
+      return { v[emulsion_offset_index + 2 * tileid] * (strips_range * 2), 0 };
   }
   void
   set_emulsion_offset (coord_t *v, int tileid, point_t off)
