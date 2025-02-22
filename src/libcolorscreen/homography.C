@@ -85,8 +85,8 @@ int
 equations_per_sample (int flags)
 {
   if (flags & homography::solve_vertical_strips)
-    return 2;
-  return 1;
+    return 1;
+  return 2;
 }
 
 /* Return number of variables needed to produce homography solution
@@ -251,9 +251,20 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
       ret.m_elements[1][0] = gsl_vector_get (v, 1);
       ret.m_elements[2][0] = gsl_vector_get (v, 2);
       ret.m_elements[0][1] = -gsl_vector_get (v, 1);
-      ret.m_elements[1][1] = gsl_vector_get (v, 2);
-      ret.m_elements[2][1] = gsl_vector_get (v, 2);
-      ret.invert ();
+      ret.m_elements[1][1] = gsl_vector_get (v, 0);
+      ret.m_elements[2][1] = 0;
+      ret.m_elements[3][1] = gsl_vector_get (v, 2);
+      ret.m_elements[0][2] = 0;
+      ret.m_elements[1][2] = 0;
+      ret.m_elements[2][2] = 1;
+      ret.m_elements[3][2] = 0;
+      ret.m_elements[0][3] = 0;
+      ret.m_elements[1][3] = 0;
+      ret.m_elements[2][3] = 0;
+      ret.m_elements[3][3] = 1;
+      ret.print (stdout);
+      ret = ret.invert ();
+      ret.print (stdout);
     }
   if (!keep_vector)
     gsl_vector_free (v);
@@ -280,18 +291,29 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
 }
 
 static double
-screen_compute_chisq (std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography)
+screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography)
 {
   double chisq = 0;
-  for (auto point : points)
-    {
-      point_t t;
-      homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
-      coord_t dist = point.scr.dist_sq2_from (t);
-      if (dist > 10000)
-	dist = 10000;
-      chisq += dist;
-    }
+  if (!(flags & homography::solve_vertical_strips))
+    for (auto point : points)
+      {
+	point_t t;
+	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+	coord_t dist = point.scr.dist_sq2_from (t);
+	if (dist > 10000)
+	  dist = 10000;
+	chisq += dist;
+      }
+  else
+    for (auto point : points)
+      {
+	point_t t;
+	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+	coord_t dist = (point.img.x - t.x) * (point.img.x - t.x);
+	if (dist > 10000)
+	  dist = 10000;
+	chisq += dist;
+      }
   return chisq;
 }
 #if 0
@@ -327,7 +349,8 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
   unsigned int seed = 0;
   int niterations = 500;
   int nvariables = equation_variables (flags);
-  int nsamples = nvariables / 2;
+  int eq_per_sample = equations_per_sample (flags);
+  int nsamples = nvariables / eq_per_sample;
   trans_4d_matrix ret;
   int max_inliners = 0;
   double min_chisq = INT_MAX;
@@ -335,14 +358,15 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
   int iteration;
   coord_t dist = 1;
   int n = points.size ();
+  coord_t scr_dist = 0.1;
 
   /* Fix non-fixed lens the rotations are specified only by X or Y coordinates.
      We need enough variables in that system, so just double number of samples.
      ??? 5 values are enough  */
   if ((flags & homography::solve_rotation) && !is_fixed_lens (scanner_type))
     nsamples++;
-  gsl_matrix *A = gsl_matrix_alloc (nsamples * 2, nvariables);
-  gsl_vector *v = gsl_vector_alloc (nsamples * 2);
+  gsl_matrix *A = gsl_matrix_alloc (nsamples * eq_per_sample, nvariables);
+  gsl_vector *v = gsl_vector_alloc (nsamples * eq_per_sample);
   std::vector <solver_parameters::solver_point_t> tpoints_vec;
   /* Apply non-linear transformations.  */
   if (map)
@@ -367,11 +391,11 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
   gsl_matrix *i_cov = NULL;
   gsl_multifit_linear_workspace *i_work = NULL;
 
-  if (nsamples * 2 != nvariables)
+  if (nsamples * eq_per_sample != nvariables)
     {
       i_c = gsl_vector_alloc (nvariables);
       i_cov = gsl_matrix_alloc (nvariables, nvariables);
-      i_work = gsl_multifit_linear_alloc (nsamples * 2, nvariables);
+      i_work = gsl_multifit_linear_alloc (nsamples * eq_per_sample, nvariables);
     }
 
   for (iteration = 0; iteration < niterations; iteration++)
@@ -456,18 +480,35 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
       // cur.print (stdout);
       int ninliners = 0;
       double cur_chisq = 0, cur_inliner_chisq = 0;
-      for (int i = 0; i < n; i++)
-        {
-          point_t t;
-          cur.perspective_transform (tpoints[i].scr.x, tpoints[i].scr.y, t.x,
-                                     t.y);
-          cur_chisq += t.dist_sq2_from (tpoints[i].img);
-          if (t.almost_eq (tpoints[i].img, dist))
-            {
-              ninliners++;
-              cur_inliner_chisq += t.dist_sq2_from (tpoints[i].img);
-            }
-        }
+      if (!(flags & homography::solve_vertical_strips))
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t t;
+	      cur.perspective_transform (tpoints[i].scr.x, tpoints[i].scr.y, t.x,
+					 t.y);
+	      cur_chisq += t.dist_sq2_from (tpoints[i].img);
+	      if (t.almost_eq (tpoints[i].img, dist))
+		{
+		  ninliners++;
+		  cur_inliner_chisq += t.dist_sq2_from (tpoints[i].img);
+		}
+	    }
+	}
+      else
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t s;
+	      cur.inverse_perspective_transform (tpoints[i].img.x, tpoints[i].img.y, s.x, s.y);
+	      cur_chisq += (tpoints[i].scr.x - s.x) * (tpoints[i].scr.x - s.x);
+	      if (fabs (tpoints[i].scr.x - s.x) < scr_dist)
+		{
+		  ninliners++;
+		  cur_inliner_chisq += (tpoints[i].scr.x - s.x) * (tpoints[i].scr.x - s.x);
+		}
+	    }
+	}
       if (ninliners < nsamples)
         continue;
       if ((ninliners > max_inliners)
@@ -478,9 +519,8 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
           max_inliners = ninliners;
           min_chisq = cur_chisq;
           min_inliner_chisq = cur_inliner_chisq;
-          // cur.print (stdout);
-          // printf ("Iteration %i inliners %i out of %i, chisq %f\n",
-          // iteration, ninliners, n, min_chisq);
+          //cur.print (stdout);
+          //printf ("Iteration %i inliners %i out of %i, chisq %f\n", iteration, ninliners, n, min_chisq);
           if (ninliners == n)
             break;
           if (flags & solve_limit_ransac_iterations)
@@ -507,56 +547,107 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
   // iteration, max_inliners, n, min_chisq, min_inliner_chisq);
   if (max_inliners > nsamples)
     {
-      gsl_matrix *X = gsl_matrix_alloc (max_inliners * 2, nvariables);
-      gsl_vector *y = gsl_vector_alloc (max_inliners * 2);
+      gsl_matrix *X = gsl_matrix_alloc (max_inliners * eq_per_sample, nvariables);
+      gsl_vector *y = gsl_vector_alloc (max_inliners * eq_per_sample);
       gsl_vector *c = gsl_vector_alloc (nvariables);
       gsl_matrix *cov = gsl_matrix_alloc (nvariables, nvariables);
 
       trans_4d_matrix ts;
       trans_4d_matrix td;
       normalize_points scrnorm (max_inliners), imgnorm (max_inliners);
-      for (int i = 0; i < n; i++)
-        {
-          point_t scr = tpoints[i].scr;
-          point_t t;
-          ret.perspective_transform (scr.x, scr.y, t.x, t.y);
-          if (tpoints[i].img.almost_eq (t, dist))
-            {
-              scrnorm.account1 (scr, scanner_type);
-              imgnorm.account1 (tpoints[i].img, scanner_type);
-            }
-        }
+      if (!(flags & homography::solve_vertical_strips))
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t scr = tpoints[i].scr;
+	      point_t t;
+	      ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	      if (tpoints[i].img.almost_eq (t, dist))
+		{
+		  scrnorm.account1 (scr, scanner_type);
+		  imgnorm.account1 (tpoints[i].img, scanner_type);
+		}
+	    }
+	}
+      else
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t img = tpoints[i].img;
+	      point_t scr = tpoints[i].scr;
+	      point_t s;
+	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	      if (fabs (scr.x - s.x) < scr_dist)
+		{
+		  scrnorm.account1 (scr, scanner_type);
+		  imgnorm.account1 (tpoints[i].img, scanner_type);
+		}
+	    }
+	}
       scrnorm.finish1 ();
       imgnorm.finish1 ();
-      for (int i = 0; i < n; i++)
-        {
-          point_t scr = tpoints[i].scr;
-          point_t t;
-          ret.perspective_transform (scr.x, scr.y, t.x, t.y);
-          if (tpoints[i].img.almost_eq (t, dist))
-            {
-              scrnorm.account2 (scr);
-              imgnorm.account2 (tpoints[i].img);
-            }
-        }
+      if (!(flags & homography::solve_vertical_strips))
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t scr = tpoints[i].scr;
+	      point_t t;
+	      ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	      if (tpoints[i].img.almost_eq (t, dist))
+		{
+		  scrnorm.account2 (scr);
+		  imgnorm.account2 (tpoints[i].img);
+		}
+	    }
+	}
+      else
+	{
+	  for (int i = 0; i < n; i++)
+	    {
+	      point_t img = tpoints[i].img;
+	      point_t scr = tpoints[i].scr;
+	      point_t s;
+	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	      if (fabs (scr.x - s.x) < scr_dist)
+		{
+		  scrnorm.account2 (scr);
+		  imgnorm.account2 (tpoints[i].img);
+		}
+	    }
+	}
       ts = scrnorm.get_matrix ();
       td = imgnorm.get_matrix ();
 
       int p = 0;
-      for (int i = 0; i < n; i++)
-        {
-          point_t scr = tpoints[i].scr;
-          point_t t;
-          ret.perspective_transform (scr.x, scr.y, t.x, t.y);
-          if (tpoints[i].img.almost_eq (t, dist))
-            {
-              init_equation (X, y, p, false, flags, scanner_type, scr,
-                             tpoints[i].img, ts, td);
-              p++;
-            }
-        }
+      if (!(flags & homography::solve_vertical_strips))
+	for (int i = 0; i < n; i++)
+	  {
+	    point_t scr = tpoints[i].scr;
+	    point_t t;
+	    ret.perspective_transform (scr.x, scr.y, t.x, t.y);
+	    if (tpoints[i].img.almost_eq (t, dist))
+	      {
+		init_equation (X, y, p, false, flags, scanner_type, scr,
+			       tpoints[i].img, ts, td);
+		p++;
+	      }
+	  }
+      else
+	for (int i = 0; i < n; i++)
+	  {
+	    point_t img = tpoints[i].img;
+	    point_t scr = tpoints[i].scr;
+	    point_t s;
+	    ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
+	    if (fabs (scr.x - s.x) < scr_dist)
+	      {
+		init_equation (X, y, p, false, flags, scanner_type, scr,
+			       tpoints[i].img, ts, td);
+		p++;
+	      }
+	  }
       gsl_multifit_linear_workspace *work
-          = gsl_multifit_linear_alloc (n * 2, nvariables);
+          = gsl_multifit_linear_alloc (n * eq_per_sample, nvariables);
       gsl_multifit_linear (X, y, c, cov, &min_chisq, work);
       gsl_multifit_linear_free (work);
       gsl_matrix_free (X);
@@ -564,7 +655,7 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
       gsl_matrix_free (cov);
       ret = solution_to_matrix (c, flags, scanner_type, false, ts, td);
       /* Use screen so we do not get biass with lens correction.  */
-      min_chisq = screen_compute_chisq (tpoints, ret);
+      min_chisq = screen_compute_chisq (flags, tpoints, ret);
     }
   else if (final_run)
     printf ("Failed to find inliners for ransac\n");
@@ -588,7 +679,8 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
 {
   int nvariables = equation_variables (flags);
   int n = points.size ();
-  int nequations = n * equations_per_sample (flags);
+  int eq_per_sample = equations_per_sample (flags);
+  int nequations = n * eq_per_sample;
   gsl_matrix *X, *cov;
   gsl_vector *y, *w = NULL, *c;
   normalize_points scrnorm (n), imgnorm (n);
@@ -666,8 +758,8 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
               nequations = 0;
               for (int i = 0; i < n; i++)
                 if (weights[i] >= minscale)
-                  nequations += 2;
-              if (nequations >= 2 * 100)
+                  nequations += eq_per_sample;
+              if (nequations >= eq_per_sample * 100)
                 break;
               minscale *= (coord_t)(1.0 / 8);
             }
@@ -684,14 +776,14 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
           if (weights[i] >= minscale)
             {
               weights[i] *= normscale;
-              nequations += 2;
+              nequations += eq_per_sample;
               if (!weights[i])
                 abort ();
             }
           else
             weights[i] = 0;
         }
-      if (nequations * 2 < nvariables)
+      if (nequations * eq_per_sample < nvariables)
         abort ();
       w = gsl_vector_alloc (nequations);
     }
@@ -708,10 +800,14 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
       init_equation (X, y, eq, false, flags, scanner_type, tpoints[i].scr, tpoints[i].img,
                      ts, td);
 
-      if (w)
+      if (w && eq_per_sample == 2)
         {
           gsl_vector_set (w, eq * 2, weights[i]);
           gsl_vector_set (w, eq * 2 + 1, weights[i]);
+        }
+      else if (w && eq_per_sample == 1)
+        {
+          gsl_vector_set (w, eq, weights[i]);
         }
       eq++;
     }
@@ -735,7 +831,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   if (chisq_ret)
     {
       /* Use screen so we do not get biass with lens correction.  */
-      *chisq_ret = screen_compute_chisq (tpoints, ret);
+      *chisq_ret = screen_compute_chisq (flags, tpoints, ret);
     }
   return ret;
 }

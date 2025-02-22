@@ -53,17 +53,18 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   map.set_parameters (*param, img_data);
 
   double chisq;
-  bool do_ransac = !(flags
-		     & (homography::solve_image_weights
-			| homography::solve_vertical_strips
-			| homography::solve_screen_weights));
-  /* Disable ransac for now for vertical strips.
-     It is not implemented yet.  */
   if (screen_with_vertical_strips_p (param->type))
     {
+      /* FIXME: Disable disable rotation; it is not implemented (yet?).  */
       flags &= homography::solve_rotation;
       flags &= homography::solve_free_rotation;
+      flags |= homography::solve_vertical_strips;
     }
+  /* FIXME: ransac does yet support vertical strips.  */
+  bool do_ransac = !(flags
+		     & (homography::solve_image_weights
+			//| homography::solve_vertical_strips
+			| homography::solve_screen_weights));
 
   trans_4d_matrix h;
   if (do_ransac)
@@ -203,7 +204,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("New coordinate2 %f %f\n", param->coordinate2.x,
               param->coordinate2.y);
     }
-  if (final_run && ((debug || debug_output)))
+  if (final_run && ((debug || debug_output)) && !(flags & homography::solve_vertical_strips))
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
@@ -340,7 +341,9 @@ public:
       map.set_parameters (m_param, m_img_data);
     coord_t chi = -5;
     /* Do not use ransac here, since it is not smooth and will confuse solver.  */
-    homography::get_matrix (m_sparam.points, homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
+    homography::get_matrix (m_sparam.points, 
+	            /* FIXME: with vertical strips we support no rotation.  */
+		    screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
     if (!(chi >= 0 && chi < bad_val))
       {
         printf ("Bad chi %f\n", chi);
