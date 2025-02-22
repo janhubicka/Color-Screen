@@ -199,6 +199,7 @@ public:
   /* Paget range is smaller since there are more squares per screen period.
      Especially blue elements are small  */
   constexpr static const coord_t paget_range = 0.1;
+  constexpr static const coord_t strips_range = 0.1;
 
   coord_t pixel_size;
   scr_type type;
@@ -294,8 +295,15 @@ public:
   {
     if (!optimize_position)
       return tiles[tileid].fixed_offset;
-    coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
-    return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
+    if (!screen_with_vertical_strips_p (type))
+      {
+        coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+        return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
+      }
+    else
+      {
+        return { v[2 * tileid] * strips_range, 0 };
+      }
   }
   void
   set_offset (coord_t *v, int tileid, point_t off)
@@ -305,21 +313,34 @@ public:
         tiles[tileid].fixed_offset = off;
         return;
       }
-    coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
-    v[2 * tileid] = off.x / range;
-    v[2 * tileid + 1] = off.y / range;
+    if (!screen_with_vertical_strips_p (type))
+      {
+	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+	v[2 * tileid] = off.x / range;
+	v[2 * tileid + 1] = off.y / range;
+      }
+    else
+	v[2 * tileid] = off.x / strips_range;
   }
   point_t
   get_emulsion_offset (coord_t *v, int tileid)
   {
     if (!optimize_emulsion_offset)
       return tiles[tileid].fixed_emulsion_offset;
-    /* Reduce dufay range since the screen is not removable and can only be
-       adjusted by angle of scanner.  */
-    coord_t range = dufay_like_screen_p (type) ? dufay_range / 3 : paget_range;
-    range *= 2;
-    return { v[emulsion_offset_index + 2 * tileid] * range,
-             v[emulsion_offset_index + 2 * tileid + 1] * range };
+    if (!screen_with_vertical_strips_p (type))
+      {
+	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+	/* Reduce range if is not removable and can only be
+	   adjusted by angle of scanner.  */
+	if (integrated_screen_p (type))
+	  range /= 2;
+	else
+	  range *= 2;
+	return { v[emulsion_offset_index + 2 * tileid] * range,
+		 v[emulsion_offset_index + 2 * tileid + 1] * range };
+      }
+    else
+      return { v[emulsion_offset_index + 2 * tileid] * strips_range * 2, 0 };
   }
   void
   set_emulsion_offset (coord_t *v, int tileid, point_t off)
@@ -329,10 +350,20 @@ public:
         tiles[tileid].fixed_emulsion_offset = off;
         return;
       }
-    coord_t range = dufay_like_screen_p (type) ? dufay_range / 3 : paget_range;
-    range *= 2;
-    v[emulsion_offset_index + 2 * tileid] = off.x / range;
-    v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
+    if (!screen_with_vertical_strips_p (type))
+      {
+	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
+	/* Reduce range if is not removable and can only be
+	   adjusted by angle of scanner.  */
+	if (integrated_screen_p (type))
+	  range /= 2;
+	else
+	  range *= 2;
+	v[emulsion_offset_index + 2 * tileid] = off.x / range;
+	v[emulsion_offset_index + 2 * tileid + 1] = off.y / range;
+      }
+    else
+      v[emulsion_offset_index + 2 * tileid] = off.x / (2 * strips_range);
   }
 
   point_t
@@ -580,7 +611,8 @@ public:
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
           to_range (v[tileid * 2 + 0], -1, 1);
-          to_range (v[tileid * 2 + 1], -1, 1);
+	  if (!screen_with_vertical_strips_p (type))
+            to_range (v[tileid * 2 + 1], -1, 1);
         }
     if (fog_index >= 0)
       {
@@ -827,7 +859,7 @@ public:
     n_values = 0;
     /* 2 values for position.  */
     if (optimize_position)
-      n_values += 2 * n_tiles;
+      n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
 
     if (data_collection)
       least_squares = false;
@@ -889,7 +921,7 @@ public:
     if (optimize_emulsion_offset)
       {
         emulsion_offset_index = n_values;
-        n_values += 2 * n_tiles;
+        n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
       }
     else
       emulsion_offset_index = -1;

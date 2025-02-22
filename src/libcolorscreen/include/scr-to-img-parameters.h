@@ -42,6 +42,13 @@ dufay_like_screen_p (enum scr_type t)
   return t == Dufay || t == DioptichromeB || t == ImprovedDioptichromeB;
 }
 
+/* Return true if screen is integrated to the emulsoin and can not move.  */
+inline bool
+integrated_screen_p (enum scr_type t)
+{
+  return t == Dufay;
+}
+
 inline bool
 screen_with_vertical_strips_p (enum scr_type t)
 {
