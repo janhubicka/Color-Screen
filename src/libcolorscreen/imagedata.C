@@ -1,4 +1,5 @@
 #include <cstring>
+#include <array>
 #include <assert.h>
 #include <cstdlib>
 #include <cmath>
@@ -995,7 +996,7 @@ image_data::parse_icc_profile ()
         }
       for (int channel = 0; channel < 3; channel++)
 	{
-	  std::vector<cmsFloat64Number[3]> rgb (maxval + 1);
+	  std::vector<std::array<cmsFloat64Number,3>> rgb (maxval + 1);
 	  for (int i = 0; i <= maxval; i++) {
 	      rgb[i][0] = rgb[i][1] = rgb[i][2] = 0;       
 	      rgb[i][channel] = (i+0.5) / (maxval + 1);
