@@ -1131,7 +1131,7 @@ public:
       }
     if (optimize_strips)
       {
-        if (flags & finetune_use_dufay_srip_widths)
+        if (flags & finetune_use_srip_widths)
           {
             start[strips_index + 0] = red_strip_width;
             start[strips_index + 1] = green_strip_height;
