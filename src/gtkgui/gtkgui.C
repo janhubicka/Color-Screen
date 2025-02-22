@@ -22,6 +22,7 @@ using namespace colorscreen;
 
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
+static const bool tmphack = true;
 
 extern "C" {
 
@@ -782,7 +783,6 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	      display_scheduled = true;
 	    }
 	}
-      bool tmphack = true;
       if (k == 'f' && (event->state & GDK_MOD1_MASK))
       {
 	int x = (sel1x + sel2x)/2;
@@ -2016,7 +2016,17 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	  printf ("Finetuning %f %f\n",x,y);
 	  finetune_parameters fparam;
 	  fparam.multitile = scale_x > 1 ? 3 : 1;
-	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose;
+	  fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_use_srip_widths;
+	  if (tmphack)
+	    {
+	      fparam.simulated_file = "/tmp/bwsimulated.tif";
+	      fparam.orig_file = "/tmp/bworig.tif";
+	      fparam.diff_file = "/tmp/bwdiff.tif";
+	      fparam.screen_file = "/tmp/bwscr.tif";
+	      fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
+	      fparam.collected_file = "/tmp/colorscr-collected.tif";
+	      fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
+	    }
 	  file_progress_info progress (stdout);
 	  finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	  if (res.success)
