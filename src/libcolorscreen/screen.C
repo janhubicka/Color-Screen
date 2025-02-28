@@ -1326,12 +1326,21 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
         for (int x = 0; x < size; x++)
 	  std::swap (mult[y][x][0], mult[y][x][2]);
       break;
+    /* FIXME: In Warner Powrie screen it seems that green is not continous strip.  */
     case WarnerPowrie:
       {
 	if (red_strip_width && green_strip_width)
           strip (green_strip_width, 1-red_strip_width-green_strip_width, 1, 2, 0);
 	else
           strip (1.0/3, 1.0/3, 1, 2, 0);
+      }
+      break;
+    case Joly:
+      {
+	if (red_strip_width && green_strip_width)
+          strip (green_strip_width, red_strip_width-green_strip_width, 1, 0, 2);
+	else
+          strip (1.0/3, 1.0/3, 1, 0, 2);
       }
       break;
     default:
@@ -1368,6 +1377,13 @@ screen::initialize_preview (enum scr_type type)
         //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
       //else
         preview_strip (1.0/3, 1.0/3, 1, 2, 0);
+    }
+  else if (type == Joly)
+    {
+      //if (red_strip_width && green_strip_width)
+        //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
+      //else
+        preview_strip (1.0/3, 1.0/3, 1, 0, 2);
     }
   else
     preview ();

@@ -76,6 +76,14 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
       blue = pixel (1/(coord_t)3, 0);
       red = pixel (2/(coord_t)3, 0);
     }
+  else if (m_scr_to_img.get_type () == Joly)
+    {
+      /* Warner Powrie screen is 
+	 G R B   */
+      green = pixel (0,0);
+      red = pixel (1/(coord_t)3, 0);
+      blue = pixel (2/(coord_t)3, 0);
+    }
   else
     __builtin_unreachable ();
 #undef getpixel

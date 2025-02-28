@@ -19,7 +19,10 @@ struct strips_geometry
   static constexpr const int green_height_scale = 1;
   static constexpr const int blue_width_scale = 1;
   static constexpr const int blue_height_scale = 1;
-  static constexpr const bool check_range = false;
+  /* ??? we may pick previus screen cycle in X directly for example
+     when red pixel has offset 0.1.  It would be more effective to simply enlarge the
+     area.*/
+  static constexpr const bool check_range = true;
 
   /* Used to compute grid for interpolation between neighbouring values.
      Everything is orthogonal, so no translation necessary  */

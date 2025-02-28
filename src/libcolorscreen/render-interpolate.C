@@ -107,9 +107,26 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
   analyze_strips *ret = new analyze_strips ();
+  {
+    const screen *s = p.scr;
+    screen adapted;
+    if (!p.scr)
+      ;
+    else if (p.params.type == Joly)
+      {
+	s = &adapted;
+        for (int y = 0; y < screen::size; y++)
+          for (int x = 0; x < screen::size; x++)
+	    {
+	      adapted.mult[y][x][0] = p.scr->mult[y][x][2];
+	      adapted.mult[y][x][1] = p.scr->mult[y][x][1];
+	      adapted.mult[y][x][2] = p.scr->mult[y][x][0];
+	    }
+      }
   if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height,
 		    xshift, yshift, p.mode, p.collection_threshold, progress))
     return ret;
+  }
   delete ret;
   return NULL;
 }
@@ -511,6 +528,8 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                       continue;
                   }
                 rgbdata c = m_strips->screen_tile_color (x, y);
+		if (m_scr_to_img.get_type () == Joly)
+		  std::swap (c.blue, c.red);
                 c = compensate_saturation_loss_scr ({ xs, ys }, c);
                 if (!analyze (xs, ys, c))
                   return false;
@@ -617,6 +636,37 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                   }
                 rgbdata r, g, b;
                 m_dufay->screen_tile_rgb_color (r, g, b, x, y);
+                if (!analyze (xs, ys, r, g, b))
+                  return false;
+              }
+          if (progress)
+            progress->inc_progress ();
+        }
+    }
+  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
+    {
+      if (progress)
+        progress->set_task (task, m_strips->get_height ());
+      for (int y = 0; y < m_strips->get_height (); y++)
+        {
+          if (!progress || !progress->cancel_requested ())
+            for (int x = 0; x < m_strips->get_width (); x++)
+              {
+                coord_t xs = x - m_strips->get_xshift (),
+                        ys = y - m_strips->get_yshift ();
+                if (screen
+                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
+                  continue;
+                if (!screen)
+                  {
+                    point_t imgp = m_scr_to_img.to_img ({ xs, ys });
+                    if (!screen
+                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
+                            || imgp.y > ymax))
+                      continue;
+                  }
+                rgbdata r, g, b;
+                m_strips->screen_tile_rgb_color (r, g, b, x, y);
                 if (!analyze (xs, ys, r, g, b))
                   return false;
               }

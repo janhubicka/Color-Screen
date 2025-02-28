@@ -27,6 +27,7 @@ enum scr_type
   DioptichromeB,
   ImprovedDioptichromeB,
   WarnerPowrie,
+  Joly,
   max_scr_type
 };
 
@@ -52,7 +53,7 @@ integrated_screen_p (enum scr_type t)
 inline bool
 screen_with_vertical_strips_p (enum scr_type t)
 {
-  return t == WarnerPowrie;
+  return t == WarnerPowrie || t == Joly;
 }
 
 inline bool

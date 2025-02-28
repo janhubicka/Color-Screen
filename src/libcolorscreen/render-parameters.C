@@ -69,9 +69,16 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
     case Paget:
     case Thames:
     case Finlay:
-    case WarnerPowrie:
       /* TODO: Measure actual portions.  */
       return {1/3.0,1/3.0,1/3.0};
+    case WarnerPowrie:
+    case Joly:
+      /* TODO: Measure actual portions.  */
+      {
+	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 1/3.0;
+	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 1/3.0;
+        return {red_strip_width, green_strip_width, 1 - red_strip_width - green_strip_width};
+      }
 
     /* Red strips.  */
     case Dufay:
