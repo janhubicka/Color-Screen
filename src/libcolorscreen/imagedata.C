@@ -1013,6 +1013,7 @@ image_data::parse_icc_profile ()
 	    to_linear[channel].push_back (XYZ[i].Y / max);
 	  }
 	}
+      cmsCloseProfile(hXYZ);
       cmsDeleteTransform (xform);
       gamma = 0;
     }
