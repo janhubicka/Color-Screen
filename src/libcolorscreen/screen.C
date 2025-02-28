@@ -1260,16 +1260,17 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
 void
 screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
 {
-  coord_t w = 0.6;
+  coord_t w = 0.2;
+  coord_t h = 0.4;
   coord_t c1e = size * (first_strip_width * (w/2)) + (coord_t)0.5;
-  coord_t c1s = size * (1 - first_strip_width * (w/3)) + (coord_t)0.5;
+  coord_t c1s = size * (1 - first_strip_width * (w/2)) + (coord_t)0.5;
   /* Change from second to third.  */
-  coord_t c2s = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * ((coord_t)0.5-w))) + (coord_t)0.5;
-  coord_t c2e = size * (first_strip_width * (coord_t)0.5 + (second_strip_width * ((coord_t)0.5+w))) + (coord_t)0.5;
+  coord_t c2s = size * (0.5 * first_strip_width + (second_strip_width * ((coord_t)0.5-w/2))) + (coord_t)0.5;
+  coord_t c2e = size * (0.5 * first_strip_width + (second_strip_width * ((coord_t)0.5+w/2))) + (coord_t)0.5;
   /* Change from third back to first.  */
   coord_t third_strip_width = 1 - first_strip_width - second_strip_width;
-  coord_t c3s = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * ((coord_t)0.5+w)) + (coord_t)0.5;
-  coord_t c3e = size * (1 - (first_strip_width * (coord_t)0.5) - third_strip_width * ((coord_t)0.5-w)) + (coord_t)0.5;
+  coord_t c3s = size * (1 - 0.5 * first_strip_width - third_strip_width * ((coord_t)0.5+w/2)) + (coord_t)0.5;
+  coord_t c3e = size * (1 - 0.5 * first_strip_width - third_strip_width * ((coord_t)0.5-w/2)) + (coord_t)0.5;
   for (int yy = 0; yy < size; yy++)
     {
       luminosity_t c[3] = {0,0,0};
@@ -1280,19 +1281,34 @@ screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, in
 	c[second_strip_color] = 1;
       else if (yy > (int)c3s && yy < (int)c3e)
 	c[third_strip_color] = 1;
-      for (int i = 0; i < 3; i++)
-        {
-           a[i] = c[i] * (coord_t)0.5;
-	   c[i] = (c[i] + 1) * (coord_t)0.5;
-        }
+      if (c[0] || c[1] || c[2])
+	for (int i = 0; i < 3; i++)
+	  {
+	     a[i] = c[i] * (coord_t)0.5;
+	     c[i] = (c[i] + 1) * (coord_t)0.5;
+	  }
+      else
+	c[0] = c[1] = c[2] = 1;
       for (int xx = 0; xx < size; xx++)
         {
-	  mult[xx][yy][0] = c[0];
-	  mult[xx][yy][1] = c[1];
-	  mult[xx][yy][2] = c[2];
-	  add[xx][yy][0] = a[0];
-	  add[xx][yy][1] = a[1];
-	  add[xx][yy][2] = a[2];
+	  if (xx > size * (0.5-h/2) && xx < size * (0.5+h/2))
+	    {
+	      mult[xx][yy][0] = c[0];
+	      mult[xx][yy][1] = c[1];
+	      mult[xx][yy][2] = c[2];
+	      add[xx][yy][0] = a[0];
+	      add[xx][yy][1] = a[1];
+	      add[xx][yy][2] = a[2];
+	    }
+	  else
+	    {
+	      mult[xx][yy][0] = 1;
+	      mult[xx][yy][1] = 1;
+	      mult[xx][yy][2] = 1;
+	      add[xx][yy][0] = 0;
+	      add[xx][yy][1] = 0;
+	      add[xx][yy][2] = 0;
+	    }
         }
     }
 }
@@ -1338,7 +1354,7 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
     case Joly:
       {
 	if (red_strip_width && green_strip_width)
-          strip (green_strip_width, red_strip_width-green_strip_width, 1, 0, 2);
+          strip (green_strip_width, red_strip_width, 1, 0, 2);
 	else
           strip (1.0/3, 1.0/3, 1, 0, 2);
       }
@@ -1350,7 +1366,7 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 }
 /* Initialize to a given screen for preview window.  */
 void
-screen::initialize_preview (enum scr_type type)
+screen::initialize_preview (enum scr_type type, coord_t red_strip_width, coord_t green_strip_width)
 {
   if (type == Dufay || type == DioptichromeB || type == ImprovedDioptichromeB)
     {
@@ -1373,16 +1389,16 @@ screen::initialize_preview (enum scr_type type)
     }
   else if (type == WarnerPowrie)
     {
-      //if (red_strip_width && green_strip_width)
-        //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
-      //else
+      if (red_strip_width && green_strip_width)
+        preview_strip (green_strip_width, 1-red_strip_width-green_strip_width, 1, 2, 0);
+      else
         preview_strip (1.0/3, 1.0/3, 1, 2, 0);
     }
   else if (type == Joly)
     {
-      //if (red_strip_width && green_strip_width)
-        //preview_strip ( 1-red_strip_width-green_strip_width, 1, 2, 0);
-      //else
+      if (red_strip_width && green_strip_width)
+        preview_strip (green_strip_width, red_strip_width, 1, 0, 2);
+      else
         preview_strip (1.0/3, 1.0/3, 1, 0, 2);
     }
   else

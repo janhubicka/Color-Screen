@@ -102,7 +102,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   if (progress)
     progress->set_task ("initializing screen", 1);
   if (p.preview)
-    s->initialize_preview (p.t);
+    s->initialize_preview (p.t, p.red_strip_width, p.green_strip_width);
   else
     s->initialize (p.t, p.red_strip_width, p.green_strip_width);
   if (!p.radius)

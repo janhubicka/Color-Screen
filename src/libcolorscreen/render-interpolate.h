@@ -93,6 +93,8 @@ private:
   analyze_strips *m_strips;
   color_matrix m_saturation_matrix;
   color_matrix profile_matrix;
+  // Proportions after premutatoins we do to handle screen variants.
+  rgbdata m_interpolation_proportions;
 };
 bool analyze_patches (analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);
 bool analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img, render_parameters &rparam, scr_to_img_parameters &param, bool screen, int xmin, int ymin, int xmax, int ymax, progress_info *progress);

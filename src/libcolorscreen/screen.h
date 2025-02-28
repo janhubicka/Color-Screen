@@ -51,7 +51,7 @@ public:
   /* Initialize to a given screen.  */
   DLL_PUBLIC void initialize (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
   /* Initialize to a given screen for preview window.  */
-  void initialize_preview (enum scr_type type);
+  void initialize_preview (enum scr_type type, coord_t dufay_red_strip_width = 0, coord_t dufay_green_strip_width = 0);
   enum blur_type
   {
     /* Gaussian blur.  */

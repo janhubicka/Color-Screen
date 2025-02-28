@@ -307,6 +307,16 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
     }
   else
     return false;
+  m_interpolation_proportions = m_scr_to_img.patch_proportions (&m_params);
+  if (!m_original_color)
+    {
+      if (m_scr_to_img.get_type () == DioptichromeB)
+        std::swap (m_interpolation_proportions.red, m_interpolation_proportions.green);
+      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+        std::swap (m_interpolation_proportions.red, m_interpolation_proportions.blue);
+      else if (m_scr_to_img.get_type () == Joly)
+        std::swap (m_interpolation_proportions.red, m_interpolation_proportions.blue);
+    }
   return !progress || !progress->cancelled ();
 }
 
@@ -317,18 +327,20 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     c = m_paget->bicubic_interpolate (
-        { x, y }, m_scr_to_img.patch_proportions (&m_params));
+        { x, y }, m_interpolation_proportions);
   else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
     {
       c = m_strips->bicubic_interpolate (
-          { x, y }, m_scr_to_img.patch_proportions (&m_params));
-      if (m_scr_to_img.get_type () == Joly)
+          { x, y }, m_interpolation_proportions);
+      if (m_original_color)
+	;
+      else if (m_scr_to_img.get_type () == Joly)
         std::swap (c.red, c.blue);
     }
   else
     {
       c = m_dufay->bicubic_interpolate (
-          { x, y }, m_scr_to_img.patch_proportions (&m_params));
+          { x, y }, m_interpolation_proportions);
       if (m_original_color)
 	;
       else if (m_scr_to_img.get_type () == DioptichromeB)
@@ -533,37 +545,6 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
             progress->inc_progress ();
         }
     }
-  else if (screen_with_vertical_strips_p (m_scr_to_img.get_type ()))
-    {
-      if (progress)
-        progress->set_task (task, m_strips->get_height ());
-      for (int y = 0; y < m_strips->get_height (); y++)
-        {
-          if (!progress || !progress->cancel_requested ())
-            for (int x = 0; x < m_strips->get_width (); x++)
-              {
-                coord_t xs = x - m_strips->get_xshift (),
-                        ys = y - m_strips->get_yshift ();
-                if (screen
-                    && (xs < xmin || ys < ymin || xs > xmax || ys > ymax))
-                  continue;
-                if (!screen)
-                  {
-                    point_t imgp = m_scr_to_img.to_img ({ xs, ys });
-                    if (!screen
-                        && (imgp.x < xmin || imgp.y < ymin || imgp.x > xmax
-                            || imgp.y > ymax))
-                      continue;
-                  }
-                rgbdata c = m_strips->screen_tile_color (x, y);
-                c = compensate_saturation_loss_scr ({ xs, ys }, c);
-                if (!analyze (xs, ys, c))
-                  return false;
-              }
-          if (progress)
-            progress->inc_progress ();
-        }
-    }
   else
     {
       if (progress)
@@ -631,6 +612,10 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                   }
                 rgbdata r, g, b;
                 m_dufay->screen_tile_rgb_color (r, g, b, x, y);
+		if (m_scr_to_img.get_type () == DioptichromeB)
+		  std::swap (r, g);
+		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+		  std::swap (r, b);
                 if (!analyze (xs, ys, r, g, b))
                   return false;
               }
@@ -661,6 +646,8 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                       continue;
                   }
                 rgbdata r, g, b;
+		if (m_scr_to_img.get_type () == Joly)
+		  std::swap (b, r);
                 m_strips->screen_tile_rgb_color (r, g, b, x, y);
                 if (!analyze (xs, ys, r, g, b))
                   return false;

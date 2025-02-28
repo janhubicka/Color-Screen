@@ -47,13 +47,13 @@ struct strips_geometry
   static inline
   int_point_t red_scr_to_entry (point_t scr)
   {
-    return {nearest_int (scr.x - ((coord_t)2 / 3)), nearest_int (scr.y)};
+    return {nearest_int (scr.x - (2 / (coord_t)3)), nearest_int (scr.y)};
   }
   static inline
   int_point_t red_scr_to_entry (point_t scr, point_t *off)
   {
     int xx, yy;
-    off->x = my_modf (scr.x - ((coord_t)2 / 3), &xx);
+    off->x = my_modf (scr.x - (2 / (coord_t)3), &xx);
     off->y = my_modf (scr.y, &yy);
     return {xx, yy};
   }
@@ -73,13 +73,13 @@ struct strips_geometry
   static inline
   int_point_t blue_scr_to_entry (point_t scr)
   {
-    return {nearest_int (scr.x - ((coord_t)1 / 3)), nearest_int (scr.y)};
+    return {nearest_int (scr.x - (1 / (coord_t)3)), nearest_int (scr.y)};
   }
   static inline
   int_point_t blue_scr_to_entry (point_t scr, point_t *off)
   {
     int xx, yy;
-    off->x = my_modf (scr.x - ((coord_t)1 / 3), &xx);
+    off->x = my_modf (scr.x - (1 / (coord_t)3), &xx);
     off->y = my_modf (scr.y, &yy);
     return {xx, yy};
   }
@@ -89,17 +89,17 @@ struct strips_geometry
   static inline
   point_t red_entry_to_scr (int_point_t e)
   {
-    return {(coord_t)e.x, (coord_t)e.y};
+    return {(coord_t)e.x + 2 / (coord_t)3, (coord_t)e.y};
   }
   static inline
   point_t green_entry_to_scr (int_point_t e)
   {
-    return {(coord_t)e.x + (coord_t)1 / 3, (coord_t)e.y};
+    return {(coord_t)e.x, (coord_t)e.y};
   }
   static inline
   point_t blue_entry_to_scr (int_point_t e)
   {
-    return {e.x + (coord_t)2 / 3, (coord_t)e.y};
+    return {e.x + 1 / (coord_t)3, (coord_t)e.y};
   }
 };
 }

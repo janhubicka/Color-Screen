@@ -78,7 +78,7 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
     }
   else if (m_scr_to_img.get_type () == Joly)
     {
-      /* Warner Powrie screen is 
+      /* Joly screen is 
 	 G R B   */
       green = pixel (0,0);
       red = pixel (1/(coord_t)3, 0);
