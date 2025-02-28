@@ -123,9 +123,9 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
 	      adapted.mult[y][x][2] = p.scr->mult[y][x][0];
 	    }
       }
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height,
-		    xshift, yshift, p.mode, p.collection_threshold, progress))
-    return ret;
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
+		      xshift, yshift, p.mode, p.collection_threshold, progress))
+      return ret;
   }
   delete ret;
   return NULL;
@@ -322,16 +322,11 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     {
       c = m_strips->bicubic_interpolate (
           { x, y }, m_scr_to_img.patch_proportions (&m_params));
+      if (m_scr_to_img.get_type () == Joly)
+        std::swap (c.red, c.blue);
     }
   else
     {
-      rgbdata proportions = m_scr_to_img.patch_proportions (&m_params);
-      if (m_original_color)
-	;
-      else if (m_scr_to_img.get_type () == DioptichromeB)
-        std::swap (proportions.red, proportions.green);
-      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
-        std::swap (proportions.red, proportions.blue);
       c = m_dufay->bicubic_interpolate (
           { x, y }, m_scr_to_img.patch_proportions (&m_params));
       if (m_original_color)
