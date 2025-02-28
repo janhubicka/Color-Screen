@@ -606,12 +606,17 @@ public:
   {
     /* x and y adjustments.  */
     if (optimize_position)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-        {
-          to_range (v[tileid * 2 + 0], -1, 1);
-	  if (!screen_with_vertical_strips_p (type))
-            to_range (v[tileid * 2 + 1], -1, 1);
-        }
+      {
+	if (!screen_with_vertical_strips_p (type))
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    {
+	      to_range (v[tileid * 2 + 0], -1, 1);
+	      to_range (v[tileid * 2 + 1], -1, 1);
+	    }
+	else
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    to_range (v[tileid], -1, 1);
+      }
     if (fog_index >= 0)
       {
 	assert (!colorscreen_checking || optimize_fog);
@@ -639,11 +644,17 @@ public:
            first patch is dark.  */
         to_range (v[emulsion_intensity_index + i], 0, i < 3 ? 1 : 100);
     if (optimize_emulsion_offset)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-        {
-          to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
-          to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
-        }
+      {
+	if (!screen_with_vertical_strips_p (type))
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    {
+	      to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
+	      to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
+	    }
+	else
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    to_range (v[emulsion_offset_index + tileid], -1, 1);
+      }
     if (optimize_screen_blur)
       to_range (v[screen_index], 0, 1);
     if (optimize_screen_channel_blurs)
