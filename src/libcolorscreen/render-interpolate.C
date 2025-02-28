@@ -35,7 +35,7 @@ struct analyzer_params
   {
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
         || (!mesh_trans_id && params != o.params)
-	|| params.type == o.params.type)
+	|| params.type != o.params.type)
       return false;
     if (mode == analyze_base::color || mode == analyze_base::precise_rgb)
       {
