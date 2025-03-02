@@ -1276,7 +1276,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	    {
 	      finetune_result &res = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
 	      if (res.success)
-		uncertainity_hist.pre_account (res.uncertainity);
+		uncertainity_hist.account (res.uncertainity);
 	    }
         uncertainity_hist.finalize ();
         coord_t uncertainity_threshold = uncertainity_hist.find_max (skipmax / 100.0);
