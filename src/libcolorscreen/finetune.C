@@ -18,6 +18,7 @@ namespace colorscreen
 namespace
 {
 
+/* Callback used for sharpening.  */
 rgbdata
 getdata_helper (rgbdata *r, int x, int y, int width, int height)
 {
@@ -26,11 +27,13 @@ getdata_helper (rgbdata *r, int x, int y, int width, int height)
   return r[y * width + x];
 }
 
+/* Sign of angle used for mesh transform.  */
 static coord_t
 sign (point_t p1, point_t p2, point_t p3)
 {
   return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
+
 /* Compute a, b such that
    x1 + dx1 * a = x2 + dx2 * b
    y1 + dy1 * a = y2 + dy2 * b  */
@@ -44,6 +47,8 @@ intersect_vectors (coord_t x1, coord_t y1, coord_t dx1, coord_t dy1,
   m.apply_to_vector (x2 - x1, y2 - y1, a, b);
 }
 
+/* Force v to be in range between min and max.  */
+
 inline void
 to_range (coord_t &v, coord_t min, coord_t max)
 {
@@ -53,17 +58,21 @@ to_range (coord_t &v, coord_t min, coord_t max)
     v = max;
 }
 
-/* v is in range 0...1 expand it to minv...maxv.  */
+/* v is in range 0...1 expand it to minv...maxv.
+   Finetuning works well if values are generaly kept
+   in range 0...1.  */
+
 inline coord_t
 expand_range (coord_t v, coord_t minv, coord_t maxv)
 {
   return minv + v * (maxv - minv);
 }
+
 /* v is in range minv...maxv shrink it to 0...1.  */
 inline coord_t
 shrink_range (coord_t v, coord_t minv, coord_t maxv)
 {
-  return (v - minv) / (maxv - minv);
+  return (v - minv) * (1 / (maxv - minv));
 }
 
 /* Solver used to find parameters of simulated scan (position of the grid,
@@ -84,14 +93,17 @@ public:
     /* Tile positions */
     int txmin, tymin;
 
-    /* Tile colors */
+    /* Tile colors collected form the scan for faster access.
+       NULL for BW mode.  */
     rgbdata *color;
     /* Sharpened tile.  */
     rgbdata *sharpened_color;
-    /* Black and white tile.  */
+    /* Black and white tile.
+       NULL for color mode.  */
     luminosity_t *bw;
     /* Tile position  */
     point_t *pos;
+    /* If we do not finetune offsets, fix one. Usually 0,0.  */
     point_t fixed_offset, fixed_emulsion_offset;
     /* Screen merging emulsion and unblurred screen.  */
     screen *merged_scr;
@@ -117,6 +129,10 @@ public:
       delete merged_scr;
       delete[] simulated_screen;
     }
+
+    /* We copy finetune solver to keep best one.
+       This is kind of hack since clang on MacOS has problems with shared
+       pointers.  */
     void
     forget ()
     {
@@ -131,19 +147,25 @@ public:
 
   protected:
     friend finetune_solver;
+
+    /* Remember last settings, so we do not recompute screens uselessly.  */
     rgbdata last_emulsion_intensities;
     point_t last_emulsion_offset;
+    /* Simulation of screen.  */
     rgbdata *simulated_screen;
   };
   tile_data tiles[max_tiles];
 
 private:
+  /* Least squares solver for optimizing parameters that behaves linearly.  */
   gsl_multifit_linear_workspace *gsl_work;
   gsl_matrix *gsl_X;
   gsl_vector *gsl_y[3];
   gsl_vector *gsl_c;
   gsl_matrix *gsl_cov;
   bool least_squares_initialized;
+
+  /* we ignore some outliers to get more realistic result.  */
   int noutliers;
 
   /* Indexes into optimized values array to fetch individual parameters  */
@@ -162,6 +184,7 @@ private:
 
   rgbdata fog_range;
   luminosity_t maxgray;
+  luminosity_t mingray;
 
   rgbdata last_blur;
   luminosity_t last_mtf[4];
@@ -199,7 +222,10 @@ public:
   /* Paget range is smaller since there are more squares per screen period.
      Especially blue elements are small  */
   constexpr static const coord_t paget_range = 0.1;
-  constexpr static const coord_t strips_range = 0.1;
+  /* Screens with strips have strips with offset 1/3.
+     Shifting too far may make us to mix up the strips.
+     Be sure we do not move more than -1/6 to 1/6  */
+  constexpr static const coord_t strips_range = 1/6.0;
 
   coord_t pixel_size;
   scr_type type;
@@ -238,6 +264,8 @@ public:
   bool simulate_infrared;
   /* True if mixing weights should be optimized.  */
   bool optimize_mix_weights;
+  /* True if we are using simulated infrared as source of tiles's bw.  */
+  bool bw_is_simulated_infrared;
 
   /* True if emulsion patch intensities should be finetuned.
      Initialized in init call.  */
@@ -261,12 +289,15 @@ public:
     free (start);
   }
 
+  /* Return number of values to optimize non-linearly.  */
   int
   num_values ()
   {
     return n_values;
   }
   constexpr static const coord_t rgbscale = /*256*/ 1;
+
+  /* Epsilon used by nonlinear solver.  */
   coord_t
   epsilon ()
   {
@@ -274,35 +305,47 @@ public:
        1/65536 seems to be way too small epsilon.  */
     return /*0.00000001*/ 1.0 / 10000; /*65536*/
   }
+
+  /* Scale of original simplex.  */
   coord_t
   scale ()
   {
     return /*2 * rgbscale*/ 0.1;
   }
+
+  /* Should nonlinear solver output info?  */
   bool
   verbose ()
   {
     return false;
   }
+
+  /* How many samples we work with.
+     We ignore outliers and when sharpening also some border  */
   int
   sample_points ()
   {
     return (twidth - 2 * border) * (theight - 2 * border) * n_tiles - noutliers;
   }
 
+  /* Return correction to the scr-to-img map.  */
   point_t
   get_offset (coord_t *v, int tileid)
   {
     if (!optimize_position)
       return tiles[tileid].fixed_offset;
+    /* Screens with two-dimensional structure needs two offsets.  */
     if (!screen_with_vertical_strips_p (type))
       {
         coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
         return { v[2 * tileid] * range, v[2 * tileid + 1] * range };
       }
+    /* Screens with one-dimensional structure needs just one.  */
     else
       return { v[tileid] * strips_range, 0 };
   }
+
+  /* Set correction to the scr-to-img-map.  Should be inverse of get_offset.  */
   void
   set_offset (coord_t *v, int tileid, point_t off)
   {
@@ -318,8 +361,13 @@ public:
 	v[2 * tileid + 1] = off.y / range;
       }
     else
-	v[tileid] = off.x / strips_range;
+      v[tileid] = off.x / strips_range;
   }
+
+  /* We simulate displacement between the image layer and emulsion.
+     For processes with removable screens this may be substatial.
+     For processes with integrated screens far less, but may be still non-zero
+     if scanner pictures in angle.   */
   point_t
   get_emulsion_offset (coord_t *v, int tileid)
   {
@@ -329,7 +377,10 @@ public:
       {
 	coord_t range = dufay_like_screen_p (type) ? dufay_range : paget_range;
 	/* Reduce range if is not removable and can only be
-	   adjusted by angle of scanner.  */
+	   adjusted by angle of scanner.  On the other hand
+	   increase the range for non-removable screens since there is
+	   lesser change to make off-by-one error when we have color of the
+	   patch.  */
 	if (integrated_screen_p (type))
 	  range /= 2;
 	else
@@ -340,6 +391,7 @@ public:
     else
       return { v[emulsion_offset_index + tileid] * (strips_range * 2), 0 };
   }
+  /* Inverse of get_emulsion_offset.  */
   void
   set_emulsion_offset (coord_t *v, int tileid, point_t off)
   {
@@ -364,26 +416,21 @@ public:
       v[emulsion_offset_index + tileid] = off.x / (2 * strips_range);
   }
 
-  point_t
-  get_pos (coord_t *v, int tileid, int x, int y)
-  {
-    return tiles[tileid].pos[y * twidth + x] + get_offset (v, tileid);
-  }
-
-  bool
-  has_outliers ()
-  {
-    return noutliers;
-  }
-
+  /* Return current emulsion blur radius.  Value is in screen size.
+     This does not use pixel_blur since physical emulsion is not dependent
+     on scanner parameters.  */
   coord_t
   get_emulsion_blur_radius (coord_t *v)
   {
     if (!optimize_emulsion_blur)
       return fixed_emulsion_blur;
+    /* screen::max_blur_radius allows so large blurs that the resulting
+       process would be next to useless. Also the minimal blur is non-zero.  */
     return v[emulsion_blur_index] * (screen::max_blur_radius * 0.2 - 0.03)
            + 0.03;
   }
+
+  /* Inverse of get_emulsion_blur_radius.  */
   void
   set_emulsion_blur_radius (coord_t *v, coord_t blur)
   {
@@ -395,7 +442,10 @@ public:
   }
 
   /* Do pixel blurs in the range 0.3 ... screen::max_blur_radius / pixel_size.
-   */
+     Value is in pixels, not screen size.
+
+     Scans are always bit blurred at pixel level, so 0.3 should be resonable
+     minima.  */
   coord_t
   pixel_blur (coord_t v)
   {
@@ -407,6 +457,8 @@ public:
     return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
 
+
+  /* Return blue radius of screen. */
   coord_t
   get_blur_radius (coord_t *v)
   {
@@ -429,6 +481,9 @@ public:
       v[screen_index] = rev_pixel_blur (blur);
     return;
   }
+
+  /* Same as get_blur_radius but when optimizing blurs of individual
+     channels.  */
   rgbdata
   get_channel_blur_radius (coord_t *v)
   {
@@ -442,6 +497,7 @@ public:
     return { pixel_blur (v[screen_index]), pixel_blur (v[screen_index + 1]),
              pixel_blur (v[screen_index + 2]) };
   }
+
   coord_t
   get_red_strip_width (coord_t *v)
   {
@@ -455,6 +511,22 @@ public:
     if (!optimize_strips)
       return fixed_green_width;
     return v[strips_index + 1];
+  }
+  void
+  set_red_strip_width (coord_t *v, coord_t w)
+  {
+    if (!optimize_strips)
+      fixed_red_width = w;
+    else
+      v[strips_index] = w;
+  }
+  void
+  set_green_strip_width (coord_t *v, coord_t w)
+  {
+    if (!optimize_strips)
+      fixed_green_width = w;
+    else
+      v[strips_index + 1] = w;
   }
 
   void
@@ -496,9 +568,60 @@ public:
       mtf[0] = mtf[1] = mtf[2] = mtf[3] = -1;
   }
 
+  /* Get screen coordinates of a given pixel of a given tile.  */
+  point_t
+  get_pos (coord_t *v, int tileid, int x, int y)
+  {
+    return tiles[tileid].pos[y * twidth + x] + get_offset (v, tileid);
+  }
+
+  /* Return true if we consider outliers.  */
+  bool
+  has_outliers ()
+  {
+    return noutliers;
+  }
+
   void
   print_values (coord_t *v)
   {
+    printf ("Optimizing %i values:", num_values ());
+    if (optimize_position)
+      printf (" position");
+    if (optimize_screen_blur)
+      printf (" screen_blur");
+    if (optimize_screen_channel_blurs)
+      printf (" screen_channel_blur");
+    if (optimize_screen_mtf_blur)
+      printf (" screen_mtf_blur");
+    if (optimize_screen_ps_blur)
+      printf (" screen_ps_blur");
+    if (optimize_strips)
+      printf (" strips");
+    if (optimize_fog)
+      printf (" fog");
+    if (optimize_sharpening)
+      printf (" sharpening");
+    if (optimize_emulsion_blur)
+      printf (" emulsion_blur");
+    if (optimize_emulsion_intensities)
+      printf (" emulsion_intensities");
+    if (optimize_emulsion_offset)
+      printf (" emulsion_offset");
+    if (optimize_mix_weights)
+      printf (" mix_weights");
+    printf ("\n");
+    if (least_squares)
+      printf (" Estimating color using least squares %s\n", fog_by_least_squares ? "(includin fog)" : "");
+    if (data_collection)
+      printf (" Estimating color using data collection with threshold %f\n", collection_threshold);
+    if (normalize)
+      printf (" Normalizing colors to eliminate image layer\n");
+    if (simulate_infrared)
+      printf (" Simulating infrared scan to determine image layer\n");
+    if (bw_is_simulated_infrared)
+      printf (" Image layer is simulated from RGB scan\n");
+    printf ("\n");
     if (sharpen_index >= 0)
       printf ("sharpen radius %f and amount %f\n", get_sharpen_radius (v), get_sharpen_amount (v));
     for (int tileid = 0; tileid < n_tiles; tileid++)
@@ -583,7 +706,7 @@ public:
         for (int tileid = 0; tileid < n_tiles; tileid++)
           if (optimize_emulsion_intensities)
             {
-              printf ("Emulsion intensities ");
+              printf ("Emulsion intensities tile %i ", tileid);
               get_emulsion_intensities (v, tileid).print (stdout);
             }
         printf ("Mix weights ");
@@ -607,28 +730,51 @@ public:
     /* x and y adjustments.  */
     if (optimize_position)
       {
+	/* Two dimensional screens has two coordinates.  */
 	if (!screen_with_vertical_strips_p (type))
 	  for (int tileid = 0; tileid < n_tiles; tileid++)
 	    {
 	      to_range (v[tileid * 2 + 0], -1, 1);
 	      to_range (v[tileid * 2 + 1], -1, 1);
 	    }
+	/* One dimensional screens just one.  */
 	else
 	  for (int tileid = 0; tileid < n_tiles; tileid++)
 	    to_range (v[tileid], -1, 1);
       }
+    if (optimize_emulsion_offset)
+      {
+	/* Two dimensional screens has two coordinates.  */
+	if (!screen_with_vertical_strips_p (type))
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    {
+	      to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
+	      to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
+	    }
+	/* One dimensional screens just one.  */
+	else
+	  for (int tileid = 0; tileid < n_tiles; tileid++)
+	    to_range (v[emulsion_offset_index + tileid], -1, 1);
+      }
     if (fog_index >= 0)
       {
 	assert (!colorscreen_checking || optimize_fog);
-        to_range (v[fog_index + 0], -1, 1);
-        to_range (v[fog_index + 1], -1, 1);
-        to_range (v[fog_index + 2], -1, 1);
+        to_range (v[fog_index + 0], -0.1/fog_range.red, 1);
+        to_range (v[fog_index + 1], -0.1/fog_range.green, 1);
+        to_range (v[fog_index + 2], -0.1/fog_range.blue, 1);
       }
     if (tiles[0].bw && !least_squares && !data_collection)
       {
-        to_range (v[color_index + 0], 0, 2);
-        to_range (v[color_index + 1], 0, 2);
-        to_range (v[color_index + 2], 0, 2);
+	/* If infrared channel is simulated, negative values may be possible
+	   and it is kind of hard to constrain to reasonable bounds.
+	   Still allow values somewhat out of range to account for possible
+	   over-exposure or cropping  */
+	if (!bw_is_simulated_infrared)
+	  {
+	    to_range (v[color_index + 0], -0.1, 1.1);
+	    to_range (v[color_index + 1], -0.1, 1.1);
+	    to_range (v[color_index + 2], -0.1, 1.1);
+	  }
       }
     if (sharpen_index >= 0)
       {
@@ -643,18 +789,6 @@ public:
            Rest of values are relative to the first two and may be large if
            first patch is dark.  */
         to_range (v[emulsion_intensity_index + i], 0, i < 3 ? 1 : 100);
-    if (optimize_emulsion_offset)
-      {
-	if (!screen_with_vertical_strips_p (type))
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    {
-	      to_range (v[emulsion_offset_index + 2 * tileid + 0], -1, 1);
-	      to_range (v[emulsion_offset_index + 2 * tileid + 1], -1, 1);
-	    }
-	else
-	  for (int tileid = 0; tileid < n_tiles; tileid++)
-	    to_range (v[emulsion_offset_index + tileid], -1, 1);
-      }
     if (optimize_screen_blur)
       to_range (v[screen_index], 0, 1);
     if (optimize_screen_channel_blurs)
@@ -674,10 +808,42 @@ public:
     if (optimize_strips)
       {
         /* strip widths.  */
-        to_range (v[strips_index + 0], 0.1, 0.5);
-        to_range (v[strips_index + 1], 0.3, 0.7);
+	if (type == Dufay)
+	  {
+	    /* Dufay screen is
+	       RR
+	       BG
+
+	       Red strip width is more narrow in Dufay screens
+	       so overall coverage of colors is equal.  */
+	    to_range (v[strips_index + 0], 0.1, 0.6);
+	    /* Green strip width approx 0.5 in Dufay screens.  */
+	    to_range (v[strips_index + 1], 0.3, 0.7);
+	  }
+	/* Dioptichrome screens come in various combinations
+	   and strip widths.  */
+	else if (dufay_like_screen_p (type))
+	  {
+	    to_range (v[strips_index + 0], 0.1, 0.7);
+	    to_range (v[strips_index + 1], 0.1, 0.7);
+	  }
+	/* Widths of red, green and blue strip needs to sub to 1
+	   when we have screens with vertical strips.
+	   Constrain the to min width of 0.1.
+	 
+           TODO: Warner powrie screens seems to have 4 strips with
+ 	   green second tiny green strip between red and blue.  */
+	else if (screen_with_vertical_strips_p (type))
+	  {
+	    to_range (v[strips_index + 0], 0.1, 0.7);
+	    to_range (v[strips_index + 1], 0.1, 0.9 - v[strips_index + 0]);
+	  }
+	else
+	  abort ();
       }
   }
+
+  /* Free data used by least squares solver.  */
   void
   free_least_squares ()
   {
@@ -702,6 +868,8 @@ public:
         gsl_cov = NULL;
       }
   }
+
+  /* Allocate least square solver.  */
   void
   alloc_least_squares ()
   {
@@ -738,13 +906,25 @@ public:
     gsl_c = gsl_vector_alloc (matrixw);
     gsl_cov = gsl_matrix_alloc (matrixw, matrixw);
   }
+
+  /* Initialize least square.
+     Only those values which do not change during optimization are computed.
+     Rest is done later.
+   
+     In most settings we do not use least squares here and base everything on
+     data collection.  */
   void
   init_least_squares (coord_t *v)
   {
     last_fog = { 0, 0, 0 };
+
+    /* In color we solve 3 independent equaltions for red, green and blue channel.
+       Initialize RHS sides which are invariant.  */
     if (tiles[0].color && !simulate_infrared)
       {
         int e = 0;
+
+	/* RHS side of all equations should expect the tile's color.  */
         for (int tileid = 0; tileid < n_tiles; tileid++)
           for (int y = border; y < theight - border; y++)
             for (int x = border; x < twidth - border; x++)
@@ -767,8 +947,10 @@ public:
         if (e != (int)gsl_y[0]->size)
           abort ();
       }
+    /* In infrared simulation we set everything later.  */
     else if (tiles[0].color && simulate_infrared)
       ;
+    /* In BW mode there is only one equation to compute.  */
     else
       {
         int e = 0;
@@ -787,6 +969,9 @@ public:
     least_squares_initialized = true;
   }
 
+  /* Used to set up optimization of tile TILEID
+     with left corner (TXMIN, TYMIN) and screen-to-image map MAP.
+     if BW is true, ignore color data.  */
   bool
   init_tile (int tileid, int cur_txmin, int cur_tymin, bool bw,
              scr_to_img &map, render &render)
@@ -818,61 +1003,101 @@ public:
     return true;
   }
 
+  /* Init solver.   */
   void
   init (uint64_t flags, coord_t blur_radius, coord_t red_strip_width,
-        coord_t green_strip_height,
+        coord_t green_strip_height, bool sim_infrared,
         const std::vector<finetune_result> *results)
   {
+    bw_is_simulated_infrared = sim_infrared;
+
+    /* First decide on what to optimize.  */
     optimize_position = flags & finetune_position;
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
+    /* Mode guessing point spread; it is not very well tested yet.  */
     optimize_screen_ps_blur
         = (flags & finetune_screen_ps_blur) && !optimize_screen_mtf_blur;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_strips = (flags & finetune_strips) && screen_with_varying_strips_p (type);
+    /* Strips needs to be optimized only for some screens, like Dufay, Joly or Powrie.  */
+    if (!screen_with_varying_strips_p (type))
+      optimize_strips = false;
     /* For one tile the effect of fog can always be simulated by adjusting the
        colors of screen. If multiple tiles (and colors) are samples we can try
        to estimate it.  */
     optimize_fog = (flags & finetune_fog) && tiles[0].color /*&& n_tiles > 1*/;
+    /* Colors can be determined either by data collection, least squares
+       or using nonlinear solver.  Data collection is fastest, but only works
+       if threshold and blurs are meaningful.  Second two should be equivalent
+       with least sequares being faster and more robust (avoiding local minima).
+
+       We later use at most one of least squares and data collection.  Mode
+       that does not make sense is turned off.  */
     least_squares = !(flags & finetune_no_least_squares);
     data_collection = !(flags & finetune_no_data_collection);
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
     optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != NULL;
     optimize_mix_weights = false;
+    optimize_emulsion_offset = false;
+    /* TODO; We probably can sharpen and normalize.  */
+    normalize = !(flags & finetune_no_normalize) && !optimize_sharpening && tiles[0].color;
+    /* Normalization turns every color of every pixel to have sum of 1.
+       This simplifies the optimization since it effectively removes
+       the image layer and we can more easily esimate screen position and
+       blur.  However this removal is not precise since it can not account for
+       scan sharpness.  It is not useful to optimize emulsion blur.
+       */
+    if (tiles[0].color && normalize)
+      optimize_emulsion_blur = false;
+    /* In infrared simulation we try to estimate the image layer.
+       We want to be extra precise, so do not use data collection.
+       Emulsion blur so far really has only chance to work on areas of
+       solid saturated color.  */
     if (simulate_infrared)
       {
         data_collection = normalize = optimize_emulsion_blur = false;
 	if (least_squares)
 	  optimize_mix_weights = true;
       }
-    optimize_emulsion_offset = false;
-    /* TODO; We probably can sharpen and normalize.  */
-    normalize = !(flags & finetune_no_normalize) && !optimize_sharpening;
-    if (tiles[0].color && normalize)
-      optimize_emulsion_blur = false;
+    /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
         && (optimize_screen_blur || optimize_screen_channel_blurs
             || optimize_screen_mtf_blur))
       {
         optimize_emulsion_intensities = true;
-        optimize_emulsion_offset = /*(type != Dufay) && !results*/ true;
+        optimize_emulsion_offset = true;
         data_collection = false;
       }
     else
       optimize_emulsion_intensities = optimize_emulsion_offset = false;
+
+    /* To optimize emulsion blur we can either assume that screen blur
+       is already known and use it or try to simulate everything including
+       intensities.  */
+    if (optimize_emulsion_blur && !optimize_emulsion_intensities)
+      optimize_screen_blur = optimize_screen_channel_blurs
+	  = optimize_screen_mtf_blur = optimize_screen_ps_blur = false;
     /* When simulating infrared fog needs to be subtracted before applying mixing weights.
        This makes equations non-linear.  */
     fog_by_least_squares = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
 
-    n_values = 0;
-    /* 2 values for position.  */
-    if (optimize_position)
-      n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
-
+    /* Data collection is faster, so if available preffer it over least
+       squares.  */
     if (data_collection)
       least_squares = false;
 
+    /* Next determine values to optimize.  */
+
+    n_values = 0;
+    /* Position needs 1 or 2 values per tile depending on if screen
+       is 2d or 1d.  */
+    if (optimize_position)
+      n_values += (1 + !screen_with_vertical_strips_p (type)) * n_tiles;
+
+    /* When optimizing sharpening, be ready for borders of the tile to not be right.
+       Also allocate the memory buffer.  */
     if (optimize_sharpening)
       {
         sharpen_index = n_values;
@@ -880,8 +1105,14 @@ public:
 	n_values += 2;
         for (int i = 0; i < n_tiles; i++)
 	  tiles[i].sharpened_color = (rgbdata *)malloc (twidth * theight * sizeof (rgbdata));
+#if 0
+	/* Determine minmal meaningful sharpening radius.  */
 	for (min_nonone_clen = 0; fir_blur::convolve_matrix_length (min_nonone_clen) <= 1; min_nonone_clen += 0.00001)
 		;
+#endif
+	/* Smaller sharpen radius than 0.3 makes essentially no difference on the image,
+	   so we waste effort optimizing amount.  */
+	min_nonone_clen = 0.3;
       }
     else
       {
@@ -891,6 +1122,7 @@ public:
 	  tiles[i].sharpened_color = tiles[i].color;
       }
 
+    /* When not doing data collection or least squares, we need to optimize colors.  */
     if (!least_squares && !data_collection)
       {
         color_index = n_values;
@@ -904,6 +1136,8 @@ public:
     else
       color_index = -1;
 
+    /* Fog is RGB value.  We can not determine it in BW, since it can not
+       be separated from color.  */
     if (optimize_fog && !fog_by_least_squares)
       {
         fog_index = n_values;
@@ -912,6 +1146,7 @@ public:
     else
       fog_index = -1;
 
+    /* Mixing weights are 2 values. Last value is complement of the ohter two.  */
     if (optimize_mix_weights)
       {
         mix_weights_index = n_values;
@@ -920,6 +1155,10 @@ public:
     else
       mix_weights_index = -1;
 
+    /* Try to gues intensity of emulsion below each of primary colors.
+       Used when trying to determine emulsion blur.
+       This must be per-tile since every tile is assumed to have different
+       color (but uniform in each tile).  */
     if (optimize_emulsion_intensities)
       {
         emulsion_intensity_index = n_values;
@@ -937,25 +1176,28 @@ public:
     if (optimize_emulsion_blur)
       {
         emulsion_blur_index = n_values;
-        if (!optimize_emulsion_intensities)
-          optimize_screen_blur = optimize_screen_channel_blurs
-              = optimize_screen_mtf_blur = optimize_screen_ps_blur = false;
         n_values += 1;
       }
     else
       emulsion_blur_index = -1;
+
+    /* Screen index has one of three meanings depeding on how well
+       we want to estimate the blur.  */
     if (optimize_screen_mtf_blur || optimize_screen_ps_blur)
       {
         screen_index = n_values;
         n_values += 4;
         optimize_screen_blur = false;
         optimize_screen_channel_blurs = false;
+	assert (!optimize_screen_channel_blurs && !optimize_screen_blur);
+	assert (!optimize_screen_mtf_blur || !optimize_screen_ps_blur);
       }
     else if (optimize_screen_channel_blurs)
       {
         screen_index = n_values;
         optimize_screen_blur = false;
         n_values += 3;
+	assert (!optimize_screen_blur);
       }
     else if (optimize_screen_blur)
       {
@@ -965,8 +1207,6 @@ public:
     else
       screen_index = -1;
 
-    if (!screen_with_varying_strips_p (type))
-      optimize_strips = false;
     if (optimize_strips)
       {
         strips_index = n_values;
@@ -974,7 +1214,12 @@ public:
       }
     else
       strips_index = -1;
+
+
+    /* We know number of values to optimize; allocate them and get initial
+       values.  */
     start = (coord_t *)malloc (sizeof (*start) * n_values);
+    /* Poison values, so we know we initialized them all.  */
     if (colorscreen_checking)
       {
         for (int i = 0; i < n_values; i++)
@@ -983,6 +1228,7 @@ public:
           assert (start[i] == INT_MAX);
       }
 
+    /* Allocate also memory for all simulatoins.  */
     original_scr = std::shared_ptr<screen> (new screen);
     if (optimize_emulsion_blur)
       emulsion_scr = std::shared_ptr<screen> (new screen);
@@ -992,6 +1238,7 @@ public:
     for (int tileid = 0; tileid < n_tiles; tileid++)
       tiles[tileid].scr = new screen;
 
+    /* Set up cached values.   */
     last_blur = { -1, -1, -1 };
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
@@ -1004,6 +1251,9 @@ public:
     last_emulsion_blur = -1;
     last_width = -1;
     last_height = -1;
+
+    /* If we are not reulsing older results, offset should be 0
+       since we assume scr-to-img map to be meaningful.  */
     if (!results)
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
@@ -1018,17 +1268,19 @@ public:
                                (*results)[tileid].emulsion_coord_adjust);
         }
 
+    /* Always start from scratch with sharpening; otherwise the optimizer thens
+       to pick up very large values.  */
     if (sharpen_index >= 0)
       {
 	start[sharpen_index] = 0;
 	start[sharpen_index + 1] = 0;
       }
 
-    if (!least_squares && !data_collection)
+    /* Start with color being red, green and blue. */
+    if (color_index >= 0)
       {
         if (tiles[0].color)
           {
-#if 1
             start[color_index] = finetune_solver::rgbscale;
             start[color_index + 1] = 0;
             start[color_index + 2] = 0;
@@ -1040,19 +1292,6 @@ public:
             start[color_index + 6] = 0;
             start[color_index + 7] = 0;
             start[color_index + 8] = finetune_solver::rgbscale;
-#else
-            start[color_index] = 0;
-            start[color_index + 1] = 0;
-            start[color_index + 2] = 0;
-
-            start[color_index + 3] = 0;
-            start[color_index + 4] = 0;
-            start[color_index + 5] = 0;
-
-            start[color_index + 6] = 0;
-            start[color_index + 7] = 0;
-            start[color_index + 8] = 0;
-#endif
           }
         else
           {
@@ -1062,22 +1301,11 @@ public:
           }
       }
 
-    /* Starting from blur 0 seems to work better, since other parameters
-       are then more relevant.  */
-    if (dufay_like_screen_p (type))
-      {
-	fixed_red_width = dufaycolor::red_strip_width;
-	fixed_green_width = dufaycolor::green_strip_width;
-      }
-    else
-      {
-	fixed_red_width = 1.0/3;
-	fixed_green_width = 1.0/3;
-      }
     if (optimize_emulsion_intensities)
       for (int tileid = 0; tileid < 3 * n_tiles - 1; tileid++)
         start[emulsion_intensity_index + tileid] = 1 / 3.0;
-    /* Sane scanner lens blurs close to Nqyist frequency.  */
+    /* Starting from small blur seems to work better, since other parameters
+       are then more relevant.  Sane scanner lens blurs close to Nqyist frequency.  */
     if (optimize_emulsion_blur)
       {
         coord_t blur = 0.03;
@@ -1100,7 +1328,8 @@ public:
             abort ();
           }
       }
-    /* Avoid valgrind warnings on undefined values.  */
+    /* Avoid valgrind warnings on undefined values.  We will not really
+       use the value, but we will read it to set up last value tracking  */
     else
       set_emulsion_blur_radius (start, -1);
     if (optimize_screen_channel_blurs)
@@ -1140,32 +1369,67 @@ public:
         start[screen_index + 2] = 0;
         start[screen_index + 3] = 0;
       }
-    if (optimize_strips)
+    /* TODO: Maybe we want to use previous results and start from params by default.  */
+    if (flags & finetune_use_srip_widths)
       {
-        if (flags & finetune_use_srip_widths)
-          {
-            start[strips_index + 0] = red_strip_width;
-            start[strips_index + 1] = green_strip_height;
-          }
-        else if (dufay_like_screen_p (type))
-          {
-            start[strips_index + 0] = dufaycolor::red_strip_width;
-            start[strips_index + 1] = dufaycolor::green_strip_width;
-          }
-	else
-          {
-            start[strips_index + 0] = 1.0/3;
-            start[strips_index + 1] = 1.0/3;
-          }
+	set_red_strip_width (start, red_strip_width);
+	set_green_strip_width (start, green_strip_height);
+      }
+    /* Default Dufaycolor strip widths.  */
+    else if (type == Dufay)
+      {
+	set_red_strip_width (start, dufaycolor::red_strip_width);
+	set_green_strip_width (start, dufaycolor::green_strip_width);
+      }
+    /* Dioptichromes seems to be printed with strips of equal widhts.  */
+    else if (dufay_like_screen_p (type))
+      {
+	set_red_strip_width (start, 0.5);
+	set_green_strip_width (start, 0.5);
+      }
+    /* Joly and Warner-Powrie should be approx 1/3 each.  */
+    else
+      {
+	set_red_strip_width (start, 1.0/3);
+	set_green_strip_width (start, 1.0/3);
+      }
+    if (fog_index >= 0)
+      {
+	start[fog_index + 0] = 0;
+	start[fog_index + 1] = 0;
+	start[fog_index + 2] = 0;
+      }
+    if (mix_weights_index >= 0)
+      {
+	start[mix_weights_index + 0] = 1.0/3;
+	start[mix_weights_index + 1] = 1.0/3;
       }
 
-    maxgray = 0;
-    if (tiles[0].bw)
-      for (int tileid = 0; tileid < n_tiles; tileid++)
-        for (int y = 0; y < theight; y++)
-          for (int x = 0; x < twidth; x++)
-            maxgray = std::max (maxgray, bw_get_pixel (tileid, x, y));
+    /* Verify that everything is set up.  */
+    if (colorscreen_checking)
+      for (int i = 0; i < n_values; i++)
+        assert (start[i] != INT_MAX);
+
+    /* Once values are set up, be sure they are in range.  This should be NOOP most
+       of time unless we get mad input.  */
     constrain (start);
+
+    /* Maxgray is used to normalize equations for least squares to reduce numeric
+       errors.  */
+    maxgray = mingray = 0;
+    if (tiles[0].bw)
+      {
+	mingray = maxgray = bw_get_pixel (0, 0, 0);
+	for (int tileid = 0; tileid < n_tiles; tileid++)
+	  for (int y = 0; y < theight; y++)
+	    for (int x = 0; x < twidth; x++)
+	      {
+		maxgray = std::max (maxgray, bw_get_pixel (tileid, x, y));
+		mingray = std::min (mingray, bw_get_pixel (tileid, x, y));
+	      }
+      }
+
+    /* Fog should not be much greater than minimal vale in the tile.  */
     if (optimize_fog)
       {
         rgb_histogram hist;
@@ -1180,25 +1444,19 @@ public:
               hist.account (tiles[tileid].color[y * twidth + x]);
         hist.finalize ();
         fog_range = hist.find_min (0.1);
-        if (fog_index >= 0)
-          {
-            start[fog_index + 0] = 0;
-            start[fog_index + 1] = 0;
-            start[fog_index + 2] = 0;
-          }
+	if (!(fog_range.red > 0))
+	  fog_range.red = 4.0 / 65536;
+	if (!(fog_range.green > 0))
+	  fog_range.green = 4.0 / 65536;
+	if (!(fog_range.blue > 0))
+	  fog_range.blue = 4.0 / 65536;
       }
     else
       assert (!colorscreen_checking || fog_index == -1);
-    if (mix_weights_index >= 0)
-      {
-	start[mix_weights_index + 0] = 1;
-	start[mix_weights_index + 1] = 1;
-      }
-    if (colorscreen_checking)
-      for (int i = 0; i < n_values; i++)
-        assert (start[i] != INT_MAX);
 
-    if (tiles[0].color && normalize && !optimize_fog)
+    /* Normalize tile.  This depends on fog, so with fog optimization
+       we normalize later.  */
+    if (normalize && !optimize_fog)
       for (int tileid = 0; tileid < n_tiles; tileid++)
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
@@ -1224,6 +1482,8 @@ public:
           rgbdata[simulated_screen_width * simulated_screen_height];
   }
 
+  /* Invoke solver.  if REPORT is true, set progress report.
+     This may be disabled if we run in OpenMP parallel.  */
   coord_t
   solve (progress_info *progress, bool report)
   {
@@ -1245,6 +1505,7 @@ public:
     return uncertainity;
   }
 
+  /* Getpixel for simulaed screen.  */
   rgbdata
   get_simulated_screen_pixel (int tile, int x, int y)
   {
@@ -1260,12 +1521,13 @@ public:
     return false;
   }
 
+  /* Apply blur to SRC_SCR and compute DST_SCR.  */
   void
   apply_blur (coord_t *v, int tileid, screen *dst_scr, screen *src_scr,
               screen *weight_scr = NULL)
   {
     rgbdata blur = get_channel_blur_radius (v);
-    luminosity_t mtf[4];
+    luminosity_t mtf[4] = {-1, -1, -1, -1};
     if (optimize_screen_ps_blur)
       get_ps (mtf, v);
     else
@@ -1550,9 +1812,9 @@ public:
        also no excessively large values. Allow some overexposure.  */
     for (int c = 0; c < 3; c++)
       {
-        to_range (color_red[c], 0, 2);
-        to_range (color_green[c], 0, 2);
-        to_range (color_blue[c], 0, 2);
+        to_range (color_red[c], -0.01, 2);
+        to_range (color_green[c], -0.01, 2);
+        to_range (color_blue[c], -0.01, 2);
       }
 
     *ret_red = color_red;
@@ -1694,11 +1956,11 @@ public:
 	if (fog_by_least_squares)
 	  {
 	    last_fog.red = gsl_vector_get (gsl_c, 6);
-	    to_range (last_fog.red, /*-fog_range.red*/0, fog_range.red);
+	    to_range (last_fog.red, /*-fog_range.red*/-0.1, fog_range.red);
 	    last_fog.green = gsl_vector_get (gsl_c, 7);
-	    to_range (last_fog.green, /*-fog_range.green*/0, fog_range.green);
+	    to_range (last_fog.green, /*-fog_range.green*/-0.1, fog_range.green);
 	    last_fog.blue = gsl_vector_get (gsl_c, 8);
-	    to_range (last_fog.blue, /*-fog_range.blue*/0, fog_range.blue);
+	    to_range (last_fog.blue, /*-fog_range.blue*/-0.1, fog_range.blue);
 	  }
          return chisq;
       }
@@ -1744,7 +2006,7 @@ public:
 	    if (fog_by_least_squares)
 	      {
 		last_fog[ch] = gsl_vector_get (gsl_c, 3);
-		to_range (last_fog[ch], -fog_range[ch], fog_range[ch]);
+		to_range (last_fog[ch], -0.1, fog_range[ch]);
 	      }
 	  }
 	return sqsum;
@@ -1760,6 +2022,10 @@ public:
     luminosity_t threshold = collection_threshold;
     coord_t wr = 0, wg = 0, wb = 0;
 
+    /* This follows same algorithm as data collection in analyze_base.
+       We collect data only if screen has intensity greater then zero
+       in given channel.  We also make statistics on how much saturation
+       this process can loss and reverts that.  */
     for (int tileid = 0; tileid < n_tiles; tileid++)
       for (int y = border; y < theight - border; y++)
         for (int x = border; x < twidth - border; x++)
@@ -1789,7 +2055,7 @@ public:
                   color.blue += l * val;
                 }
             }
-    if (!wr || !wg || !wb)
+    if (!(wr > 0) || !(wg > 0) || !(wb > 0))
       return { -10, -10, -10 };
 
     red /= wr;
@@ -1798,8 +2064,7 @@ public:
     color.red /= wr;
     color.green /= wg;
     color.blue /= wb;
-    // sum /= n;
-    // sum.print (stdout);
+
     rgbdata cred = (rgbdata){ red.red, green.red, blue.red };
     rgbdata cgreen = (rgbdata){ red.green, green.green, blue.green };
     rgbdata cblue = (rgbdata){ red.blue, green.blue, blue.blue };
@@ -1807,17 +2072,18 @@ public:
                       cgreen.green, cblue.green, 0, cred.blue, cgreen.blue,
                       cblue.blue, 0, 0, 0, 0, 1);
     sat = sat.invert ();
-    // sat.apply_to_rgb (color.red / (2 * maxgray), color.green / (2 *
-    // maxgray), color.blue / (2 * maxgray), &color.red, &color.green,
-    // &color.blue);
     sat.apply_to_rgb (color.red, color.green, color.blue, &color.red,
                       &color.green, &color.blue);
-    if (color.red < 0)
-      color.red = 0;
-    if (color.green < 0)
-      color.green = 0;
-    if (color.blue < 0)
-      color.blue = 0;
+    /* If infrared channel is simulated, negative values may be possible
+       and it is kind of hard to constrain to reasonable bounds.
+       Still allow values somewhat out of range to account for possible
+       over-exposure or cropping  */
+    if (!bw_is_simulated_infrared)
+      {
+	to_range (color.red, -0.1, 1.1);
+	to_range (color.green, -0.1, 1.1);
+	to_range (color.blue, -0.1, 1.1);
+      }
     return color;
   }
 
@@ -1847,12 +2113,16 @@ public:
     rgbdata color = { gsl_vector_get (gsl_c, 0) * (2 * maxgray),
                       gsl_vector_get (gsl_c, 1) * (2 * maxgray),
                       gsl_vector_get (gsl_c, 2) * (2 * maxgray) };
-    if (color.red < 0)
-      color.red = 0;
-    if (color.green < 0)
-      color.green = 0;
-    if (color.blue < 0)
-      color.blue = 0;
+    /* If infrared channel is simulated, negative values may be possible
+       and it is kind of hard to constrain to reasonable bounds.
+       Still allow values somewhat out of range to account for possible
+       over-exposure or cropping  */
+    if (!bw_is_simulated_infrared)
+      {
+	to_range (color.red, -0.1, 1.1);
+	to_range (color.green, -0.1, 1.1);
+	to_range (color.blue, -0.1, 1.1);
+      }
     return color;
   }
 
@@ -1896,7 +2166,7 @@ public:
   get_sharpen_radius (coord_t *v)
   {
     if (sharpen_index >= 0)
-      return v[sharpen_index] + min_nonone_clen - 0.00001;
+      return expand_range (v[sharpen_index], min_nonone_clen, 10);
     return 0;
   }
   coord_t
@@ -1911,7 +2181,7 @@ public:
   get_mix_weights (coord_t *v)
   {
     if (mix_weights_index >= 0)
-      return {v[mix_weights_index], v[mix_weights_index + 1], 3 - v[mix_weights_index] - v[mix_weights_index + 1]};
+      return {v[mix_weights_index] * 1 / (coord_t)3, v[mix_weights_index + 1] * 1 / (coord_t)3, 1 - v[mix_weights_index] * 1 / (coord_t)3 - v[mix_weights_index + 1] * 1 / (coord_t)3};
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     color_matrix process_colors (red.red, red.green, red.blue, 0, green.red,
@@ -1926,7 +2196,7 @@ public:
       return ret;
 #endif
     luminosity_t sum = ret.red + ret.green + ret.blue;
-    return ret * (3 / sum);
+    return ret * (1.0 / sum);
   }
 
   rgbdata
@@ -2498,7 +2768,7 @@ public:
           }
         ret.solver_point_img_location = { fp.x + tiles[tileid].txmin + 0.5,
                                           fp.y + tiles[tileid].tymin + 0.5 };
-	printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, bx, by).x, get_pos (start, tileid, bx, by).y);
+	//printf ("New location %f %f %f %f  %f %f\n", fp.x + tiles[tileid].txmin + 0.5, fp.y + tiles[tileid].tymin + 0.5, bx + tiles[tileid].txmin + 0.5, by + tiles[tileid].tymin + 0.05, get_pos (start, tileid, bx, by).x, get_pos (start, tileid, bx, by).y);
         ret.solver_point_screen_location = { (coord_t)fsx, (coord_t)fsy };
         ret.solver_point_color = solver_parameters::green;
       }
@@ -2582,28 +2852,39 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   int sx = nearest_int (tp.x);
   int sy = nearest_int (tp.y);
 
-  coord_t test_range
+  coord_t test_xrange
       = fparams.range
             ? fparams.range
             : ((fparams.flags & finetune_no_normalize) || bw ? 1 : 2);
+  coord_t test_yrange = test_xrange;
+
+  /* If screen tile is far from rectangular, compensate.
+     Also screen with strips has too few elements, so
+     finetuning is not very stressed to pick reasonable solution.  */
+  if (screen_with_vertical_strips_p (param.type))
+    {
+      //test_yrange *= 6;
+      //test_xrange *= 2;
+      test_yrange *= 3;
+    }
   point_t p = mapp[0]->to_img ({ (coord_t)sx, (coord_t)sy });
   coord_t sxmin = p.x, sxmax = p.x, symin = p.y, symax = p.y;
-  p = mapp[0]->to_img ({ sx - test_range, sy - test_range });
+  p = mapp[0]->to_img ({ sx - test_xrange, sy - test_yrange });
   sxmin = std::min (sxmin, p.x);
   sxmax = std::max (sxmax, p.x);
   symin = std::min (symin, p.y);
   symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx + test_range, sy - test_range });
+  p = mapp[0]->to_img ({ sx + test_xrange, sy - test_yrange });
   sxmin = std::min (sxmin, p.x);
   sxmax = std::max (sxmax, p.x);
   symin = std::min (symin, p.y);
   symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx + test_range, sy + test_range });
+  p = mapp[0]->to_img ({ sx + test_xrange, sy + test_yrange });
   sxmin = std::min (sxmin, p.x);
   sxmax = std::max (sxmax, p.x);
   symin = std::min (symin, p.y);
   symax = std::max (symax, p.y);
-  p = mapp[0]->to_img ({ sx - test_range, sy + test_range });
+  p = mapp[0]->to_img ({ sx - test_xrange, sy + test_yrange });
   sxmin = std::min (sxmin, p.x);
   sxmax = std::max (sxmax, p.x);
   symin = std::min (symin, p.y);
@@ -2651,6 +2932,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   if (!(maxtiles & 1))
     maxtiles++;
 
+  bool bw_is_simulated_infrared = false;
+
   /* Multitile support only for 1 tile.  */
   if (n_tiles == 1
       /* Avoid openmp when we do not need it.  This seems also necessary to get
@@ -2671,6 +2954,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 	}
       //if (!render.precompute_img_range (bw /*grayscale*/, false /*normalized*/, rxmin, rymin, rxmax + 1, rymax + 1, !(fparams.flags & finetune_no_progress_report) ? progress : NULL))
 #endif
+      if (bw && (rparam2.ignore_infrared || !imgp[0]->data))
+	bw_is_simulated_infrared = true;
       if (!render.precompute_all (
               bw /*grayscale*/, false /*normalized*/,
               patch_proportions (param.type, &rparam2),
@@ -2701,7 +2986,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
     shared(fparams, maxtiles, rparam, pixel_size, best_uncertainity, verbose, \
                std::nothrow, imgp, twidth, theight, txmin, tymin, bw,         \
-               progress, mapp, render, failed, best_solver, results)
+               progress, mapp, render, failed, best_solver, results, bw_is_simulated_infrared)
       for (int ty = 0; ty < maxtiles; ty++)
         for (int tx = 0; tx < maxtiles; tx++)
           {
@@ -2732,7 +3017,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
               }
             solver.init (fparams.flags, rparam.screen_blur_radius,
                          rparam.red_strip_width,
-                         rparam.green_strip_width, results);
+                         rparam.green_strip_width, bw_is_simulated_infrared, results);
             if (progress && progress->cancel_requested ())
               continue;
             coord_t uncertainity = solver.solve (
@@ -2771,6 +3056,8 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
           int cur_tymin = std::min (std::max (y[tileid] - theight / 2, 0),
                                     imgp[tileid]->height - theight - 1)
                           & ~1;
+	  if (bw && (rparam2.ignore_infrared || !imgp[tileid]->data))
+	    bw_is_simulated_infrared = true;
           /* FIXME: We only use render_to_scr since we eventually want to know
              pixel size. For stitched projects this is wrong.  */
           render render (*imgp[tileid], rparam2, 256);
@@ -2802,7 +3089,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
         }
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
                         rparam.red_strip_width,
-                        rparam.green_strip_width, results);
+                        rparam.green_strip_width, bw_is_simulated_infrared, results);
       /* FIXME: For parallel solvnig this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (
