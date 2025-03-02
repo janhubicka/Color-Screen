@@ -1111,8 +1111,8 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 		  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
 	progress->resume_stdout ();
       }
-    progress->set_task (screen_with_varying_strips_p (param.type) ? "analyzing Dufay strip sizes and screen burs"
-			      : "analyzing screen blurs",
+    progress->set_task (screen_with_varying_strips_p (param.type) ? "analyzing screen strip sizes and blur"
+			      : "analyzing screen blur",
 		       strip_xsteps * strip_ysteps);
 #pragma omp parallel for default(none) collapse(2) schedule(dynamic)          \
       shared(strip_xsteps, strip_ysteps, rparam, scan, progress, param, prepass, \
