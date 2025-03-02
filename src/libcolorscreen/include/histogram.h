@@ -19,6 +19,8 @@ public:
   inline void
   pre_account (luminosity_t val)
   {
+    /* Check that pre_account is not done after finalizing.  */
+    assert (!colorscreen_checking || m_inv == 0);
     m_minval = std::min (m_minval, val);
     m_maxval = std::max (m_maxval, val);
   }
@@ -49,6 +51,7 @@ public:
   pure_attr inline int
   val_to_index (luminosity_t val) const
   {
+    assert (!colorscreen_checking || m_inv > 0);
     if (val >= m_minval && val <= m_maxval)
       {
         int entry = (val - m_minval) * m_inv;
@@ -63,6 +66,7 @@ public:
   pure_attr inline int
   val_to_index_force (luminosity_t val) const
   {
+    assert (!colorscreen_checking || m_inv > 0);
     int entry = (val - m_minval) * m_inv;
     if (entry < 0)
       return 0;
@@ -75,6 +79,7 @@ public:
   pure_attr inline luminosity_t 
   index_to_val (luminosity_t entry) const
   {
+    assert (!colorscreen_checking || m_inv > 0);
     return m_minval
            + (entry + 0.5) * ((m_maxval - m_minval) / m_entries.size ());
   }
