@@ -855,7 +855,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | finetune_strips | finetune_fog;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_blur | (current.type != Joly ? finetune_strips : 0) | finetune_fog;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
@@ -898,7 +898,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	//fparam.multitile = 3;
 	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
-	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | finetune_strips | finetune_fog | finetune_no_normalize | finetune_simulate_infrared /*| finetune_sharpening*/;
+	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | (current.type != Joly ? finetune_strips : 0) | finetune_fog | finetune_no_normalize | finetune_simulate_infrared /*| finetune_sharpening*/;
 	fparam.range = 4;
 	//fparam.range = 16;
 	fparam.ignore_outliers=0.001;
@@ -937,7 +937,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
 	fparam.multitile = 3;
-	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_strips | finetune_fog | finetune_no_normalize;
+	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | (current.type != Joly ? finetune_strips : 0) | finetune_fog | finetune_no_normalize;
 	fparam.range = 4;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, tune_points, &tune_results, fparam, &progress);
