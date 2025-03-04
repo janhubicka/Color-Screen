@@ -1,5 +1,5 @@
 screen_alignment_version: 1
-screen_type: Paget
+screen_type: Finlay
 scanner_type: fixed-lens
 screen_shift: 2364.517237 247.505956
 coordinate_x: 6.614767 -0.145462
@@ -23,7 +23,7 @@ green_strip_width: 0.000000
 collection_threshold: 0.300000
 screen_blur_radius: 0.700000
 collection_threshold: 0.300000
-color_model: sRGB
+color_model: Paget
 backlight_temperature: 5000.000000
 temperature: 5000.000000
 dye_balance: bradford
