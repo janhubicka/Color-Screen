@@ -23,6 +23,7 @@ using namespace colorscreen;
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
 static const bool tmphack = true;
+static const char *colorcmd = "montage -geometry 300x300+10+10 /tmp/colororig.tif /tmp/colorsimulated.tif /tmp/colordiff.tif /tmp/colordot-spread.tif /tmp/colorscr.tif /tmp/colorscr-blur.tif /tmp/colorscr-collected.tif /tmp/color.tif ; display /tmp/color.tif &";
 
 extern "C" {
 
@@ -862,6 +863,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
 	    display_scheduled = true;
+	    if (tmphack)
+	      system(colorcmd);
 	    setvals ();
 	  }
       }
@@ -917,6 +920,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    rparams.mix_dark = res.mix_dark;
 	    preview_display_scheduled = true;
 	    display_scheduled = true;
+	    if (tmphack)
+	      system(colorcmd);
 	    setvals ();
 	  }
       }
@@ -952,6 +957,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    rparams.mix_dark = res.mix_dark;
 	    preview_display_scheduled = true;
 	    display_scheduled = true;
+	    if (tmphack)
+	      system(colorcmd);
 	    setvals ();
 	  }
       }
