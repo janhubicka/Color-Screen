@@ -874,6 +874,59 @@ public:
   alloc_least_squares ()
   {
     int matrixw;
+
+    /* In color mode we produce 3 equations.  In easiest case
+
+       ss is simulated screen (in screen colors after blur)
+       red is screen's red color
+       green is screen's green color
+       blue is screen's blue color
+
+       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   = tile.red
+       ss.green * red.green + ss.green * green.green + ss.blue * blue.green = tile.green
+       ss.blue * red.blue   + ss.blue * green.blue   + ss.blue * blue.blue  = tile.blue
+
+       So there are 3 independent equations with 3 variables (red.*, green.*, blue.*) each.
+       Tile can be normalized or after fog applied.  If we apply fog, then we
+       need to compute RHS each time, otherwise RHS is invariant and computed
+       once.
+
+       If fog is optimized we do:
+
+       ss.red * red.red     + ss.green * green.red   + ss.blue * blue.red   + fog.red   = tile.red
+       ss.green * red.green + ss.green * green.green + ss.blue * blue.green + fog.green = tile.green
+       ss.blue * red.blue   + ss.blue * green.blue   + ss.blue * blue.blue  + fog.blue  = tile.blue
+
+       In this case there are 3 independent equations with 4 variables. We also add
+
+       fog.red   = 0;
+       fog.green = 0;
+       fog.blue  = 0;
+
+       Now if infrared is simulated we first we compute image layer intensity as:
+
+       c = tile.red * mix_weights.red + tile.green * mix_weights.green + tile.blue * mix_weights.blue
+
+       and use the following for blue channel:
+
+       red.blue = 1 - red.red - red.green
+       green.blue = 1 - green.red - green.green
+       blue.blue = 1 - blue.red - blue.green
+
+       Which means that there is only one one system:
+
+       ss.red * c * red.red + ss.green * c * green.red + ss.blue * c * blue.red   + 0 + 0 + 0  = tile.red - fog.red
+       0 + 0 + 0 ss.green * c * red.green + ss.green * c * green.green + ss.blue * c * blue.green   + 0 + 0 + 0  = tile.green - fog.green
+       ss.red * c * -red.red + ss.green * c * -green.red + ss.blue * c * -blue.red + ss.green * c * -red.green + ss.green * c * -green.green + ss.blue * c * -blue.green = tile.blue - fog.blue - red.blue - green.blue - blue.blue
+
+       This saves need for 3 variables in least squares at expense of having 1
+       extra variable in mix_weights (since we can not assume their sum to be 1)
+       and mixing system together.  Perhaps this is a bad idea.
+
+       So we have 6 variables and one system with 3 equations per sample.
+
+      */
+
     if (tiles[0].color)
       {
 	if (!simulate_infrared)
@@ -889,6 +942,7 @@ public:
 	      matrixw += 3;
 	  }
       }
+    /* In BW mode we guess intensity.  */
     else
       matrixw = 1;
     int matrixh = sample_points () + (fog_by_least_squares != 0);
@@ -1082,6 +1136,7 @@ public:
     /* When simulating infrared fog needs to be subtracted before applying mixing weights.
        This makes equations non-linear.  */
     fog_by_least_squares = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
+    //fog_by_least_squares = 0;
 
     /* Data collection is faster, so if available preffer it over least
        squares.  */
@@ -1146,11 +1201,17 @@ public:
     else
       fog_index = -1;
 
-    /* Mixing weights are 2 values. Last value is complement of the ohter two.  */
+    /* If we do not use least squares, mixing weights are 2 values.
+       Last value is complement of the ohter two since we optimize
+       screen colors freely.
+
+       If we use least squares then we need all 3 values since screen
+       colors are normalized to have sum of (1,1,1) so we save some
+       variables.  */
     if (optimize_mix_weights)
       {
         mix_weights_index = n_values;
-        n_values += 2;
+        n_values += 2 + (least_squares += 0);
       }
     else
       mix_weights_index = -1;
@@ -1403,6 +1464,8 @@ public:
       {
 	start[mix_weights_index + 0] = 1.0/3;
 	start[mix_weights_index + 1] = 1.0/3;
+	if (least_squares)
+	  start[mix_weights_index + 2] = 1.0/3;
       }
 
     /* Verify that everything is set up.  */
@@ -1835,6 +1898,9 @@ public:
     if (simulate_infrared)
       {
 	rgbdata mix_weights = get_mix_weights (v);
+
+	/* See below.  */
+	assert (!fog_by_least_squares);
 	for (int tileid = 0; tileid < n_tiles; tileid++)
 	  for (int y = border; y < theight - border; y++)
 	    for (int x = border; x < twidth - border; x++)
@@ -1874,6 +1940,28 @@ public:
                   gsl_vector_set (gsl_y[0], e, d.green);
 		  e++;
 
+		  /* red.blue = (1 - red.red + green.red)
+		     green.blue = (1 - red.red + green.red)
+		     blue.blue = (1 - red.red + green.red)
+
+		     So left hand side is
+
+                     (1 - red.red - green.red) * c.red + (1 - red.green - green.green) * c.green + (1 - red.blue - green.blue) * c.blue  */
+
+		  gsl_matrix_set (gsl_X, e, 0, -c.red); /* red.red */
+		  gsl_matrix_set (gsl_X, e, 1, -c.green); /* green.red */
+		  gsl_matrix_set (gsl_X, e, 2, -c.blue); /* blue.red */
+		  gsl_matrix_set (gsl_X, e, 3, -c.red); /* red.green */
+		  gsl_matrix_set (gsl_X, e, 4, -c.green); /* green.green */
+		  gsl_matrix_set (gsl_X, e, 5, -c.blue); /* blue.green  */
+		  if (fog_by_least_squares)
+		    {
+		      gsl_matrix_set (gsl_X, e, 6, 0);
+		      gsl_matrix_set (gsl_X, e, 7, 0);
+		      gsl_matrix_set (gsl_X, e, 8, 1);
+		    }
+                  gsl_vector_set (gsl_y[0], e, d.blue - c.red - c.green - c.blue);
+#if 0
 		  /* red.blue = (1 - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  */
 		  /* green.blue = (1 - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue  */
 		  /* blue.blue = (1 - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue  */
@@ -1891,6 +1979,7 @@ public:
 		      gsl_matrix_set (gsl_X, e, 8, 1);
 		    }
                   gsl_vector_set (gsl_y[0], e, d.blue - (c.red + c.green + c.blue)/mix_weights.blue);
+#endif
 		  e++;
 		}
 	if (fog_by_least_squares)
@@ -1935,23 +2024,33 @@ public:
 	/* Colors should be real reactions of scanner, so no negative values
 	   and also no excessively large values. Allow some overexposure.  */
 	(*red).red = gsl_vector_get (gsl_c, 0);
-	to_range ((*red).red, 0, 2);
+	to_range ((*red).red, -0.2, 2);
 	(*green).red = gsl_vector_get (gsl_c, 1);
-	to_range ((*green).red, 0, 2);
+	to_range ((*green).red, -0.2, 2);
 	(*blue).red = gsl_vector_get (gsl_c, 2);
-	to_range ((*blue).red, 0, 2);
+	to_range ((*blue).red, -0.2, 2);
+
 	(*red).green = gsl_vector_get (gsl_c, 3);
-	to_range ((*red).green, 0, 2);
+	to_range ((*red).green, -0.2, 2);
 	(*green).green = gsl_vector_get (gsl_c, 4);
-	to_range ((*green).green, 0, 2);
+	to_range ((*green).green, -0.2, 2);
 	(*blue).green = gsl_vector_get (gsl_c, 5);
-	to_range ((*blue).green, 0, 2);
+	to_range ((*blue).green, -0.2, 2);
+
+	(*red).blue = (1 - (*red).red - (*red).green);
+	to_range ((*red).blue, -0.2, 2);
+	(*green).blue = (1 - (*green).red - (*green).green);
+	to_range ((*green).blue, -0.2, 2);
+	(*blue).blue = (1 - (*blue).red - (*blue).green);
+	to_range ((*blue).blue, -0.2, 2);
+#if 0
 	(*red).blue = (1 - (*red).red * mix_weights.red - (*red).green * mix_weights.green) / mix_weights.blue;
 	to_range ((*red).blue, 0, 2);
 	(*green).blue = (1 - (*green).red * mix_weights.red - (*green).green * mix_weights.green) / mix_weights.blue;
 	to_range ((*green).blue, 0, 2);
 	(*blue).blue = (1 - (*blue).red * mix_weights.red - (*blue).green * mix_weights.green) / mix_weights.blue;
 	to_range ((*blue).blue, 0, 2);
+#endif
 
 	if (fog_by_least_squares)
 	  {
@@ -2181,7 +2280,12 @@ public:
   get_mix_weights (coord_t *v)
   {
     if (mix_weights_index >= 0)
-      return {v[mix_weights_index] * 1 / (coord_t)3, v[mix_weights_index + 1] * 1 / (coord_t)3, 1 - v[mix_weights_index] * 1 / (coord_t)3 - v[mix_weights_index + 1] * 1 / (coord_t)3};
+      {
+	if (!least_squares)
+	  return {v[mix_weights_index], v[mix_weights_index + 1], 1 - v[mix_weights_index] - v[mix_weights_index + 1]};
+	else
+	  return {v[mix_weights_index], v[mix_weights_index + 1], v[mix_weights_index + 2]};
+      }
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     color_matrix process_colors (red.red, red.green, red.blue, 0, green.red,
