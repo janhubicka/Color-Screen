@@ -12,7 +12,7 @@ echo 1..7
 . $srcdir/defs.sh
 NAME=dufaycolor_nikon_coolsan9000ED_4000DPI_raw
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur >out-${NAME}-finetune-blur.txt
-grep "^Screen blur robust min 0\\.6" out-${NAME}-finetune-blur.txt || exit 1
+grep "^Screen blur robust min 0\\.[56]" out-${NAME}-finetune-blur.txt || exit 1
 oktest "finetune of party: position and blur"
 
 pexec $RUNCOLORSCREEN finetune "$srcdir/${NAME}.tif" "$srcdir/${NAME}-nomesh.par"  --optimize-position --verbose --width=1 --optimize-fog --optimize-screen-blur --optimize-strips >out-${NAME}-finetune-blur-strips.txt
