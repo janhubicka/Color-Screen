@@ -605,6 +605,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
+#if 0
 	      lcc = backlight_correction_parameters::load_captureone_lcc (&mbuffer, false);
 	      if (!lcc)
 		{
@@ -613,6 +614,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  free (mbuffer.data);
 		  return false;
 		}
+#endif
 	      m_img->lcc = lcc;
 	      free (mbuffer.data);
 	      zip_fclose (zip_file);
@@ -647,6 +649,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       *error = libraw_strerror(ret);
       return false;
     }
+  if (RawProcessor.imgdata.idata.colors != 1 && RawProcessor.imgdata.idata.colors != 3)
+    {
+      *error = "number of colors in RAW file should be 3 (RGB) or 1 (achromatic)";
+      return false;
+    }
   if (progress)
     progress->set_task ("unpacking RAW data",1);
   if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
@@ -667,36 +674,42 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     }
   grayscale = false;
   m_img->gamma = 1;
-  rgb = true;
+  rgb = RawProcessor.imgdata.idata.colors == 3;
+  grayscale = RawProcessor.imgdata.idata.colors == 1;
   m_img->width = RawProcessor.imgdata.sizes.width;
   m_img->height = RawProcessor.imgdata.sizes.height;
   m_img->maxval = 65535;
-  color_matrix m(RawProcessor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[1][0], RawProcessor.imgdata.color.cam_xyz[2][0], 0,
-		 RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[2][1], 0,
-		 RawProcessor.imgdata.color.cam_xyz[0][2], RawProcessor.imgdata.color.cam_xyz[1][2], RawProcessor.imgdata.color.cam_xyz[2][2], 0,
-		 0, 0, 0, 1);
-  //m = m.invert ();
+
+  /* For acromatic back we need no camera matrix.  */
+  if (RawProcessor.imgdata.idata.colors == 3)
+    {
+      color_matrix m(RawProcessor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[1][0], RawProcessor.imgdata.color.cam_xyz[2][0], 0,
+		     RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[2][1], 0,
+		     RawProcessor.imgdata.color.cam_xyz[0][2], RawProcessor.imgdata.color.cam_xyz[1][2], RawProcessor.imgdata.color.cam_xyz[2][2], 0,
+		     0, 0, 0, 1);
+      //m = m.invert ();
 #if 0
-  const double b = 512;
-  color_matrix premult (b/RawProcessor.imgdata.color.cam_mul[0],0, 0, 0,
-			0, b/RawProcessor.imgdata.color.cam_mul[1], 0, 0,
-			0, 0, b/RawProcessor.imgdata.color.cam_mul[2], 0,
-			0, 0, 0, 1);
+      const double b = 512;
+      color_matrix premult (b/RawProcessor.imgdata.color.cam_mul[0],0, 0, 0,
+			    0, b/RawProcessor.imgdata.color.cam_mul[1], 0, 0,
+			    0, 0, b/RawProcessor.imgdata.color.cam_mul[2], 0,
+			    0, 0, 0, 1);
 #endif
-  color_matrix premult (1/RawProcessor.imgdata.color.pre_mul[0],0, 0, 0,
-			0, 1/RawProcessor.imgdata.color.pre_mul[1], 0, 0,
-			0, 0, 1/RawProcessor.imgdata.color.pre_mul[2], 0,
-			0, 0, 0, 1);
-  m = premult * m.invert ();
-  xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
-  //printf ("red %f %f\n",  m_img->primary_red.x, m_img->primary_red.y);
-  xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
-  //printf ("green %f %f\n",  m_img->primary_green.x, m_img->primary_green.y);
-  xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
-  //printf ("blue %f %f\n",  m_img->primary_blue.x, m_img->primary_blue.y);
-  //m_img->primary_red.Y /= RawProcessor.imgdata.color.pre_mul[0];
-  //m_img->primary_green.Y /= RawProcessor.imgdata.color.pre_mul[1];
-  //m_img->primary_blue.Y /= RawProcessor.imgdata.color.pre_mul[2];
+      color_matrix premult (1/RawProcessor.imgdata.color.pre_mul[0],0, 0, 0,
+			    0, 1/RawProcessor.imgdata.color.pre_mul[1], 0, 0,
+			    0, 0, 1/RawProcessor.imgdata.color.pre_mul[2], 0,
+			    0, 0, 0, 1);
+      m = premult * m.invert ();
+      xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
+      //printf ("red %f %f\n",  m_img->primary_red.x, m_img->primary_red.y);
+      xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
+      //printf ("green %f %f\n",  m_img->primary_green.x, m_img->primary_green.y);
+      xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
+      //printf ("blue %f %f\n",  m_img->primary_blue.x, m_img->primary_blue.y);
+      //m_img->primary_red.Y /= RawProcessor.imgdata.color.pre_mul[0];
+      //m_img->primary_green.Y /= RawProcessor.imgdata.color.pre_mul[1];
+      //m_img->primary_blue.Y /= RawProcessor.imgdata.color.pre_mul[2];
+    }
   if (buffer)
     free (buffer);
   return true;
@@ -705,29 +718,28 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 bool
 raw_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
+  if (m_img->rgbdata)
+    {
 #pragma omp parallel for default(none) shared(m_img,RawProcessor)
-  for (int y = 0; y < m_img->height; y++)
-    for (int x = 0; x < m_img->width; x++)
-      {
-	int i = y * m_img->width + x;
-	m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
-	m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
-	m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
-#if 0
-	if (!lcc)
+      for (int y = 0; y < m_img->height; y++)
+	for (int x = 0; x < m_img->width; x++)
 	  {
+	    int i = y * m_img->width + x;
 	    m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
 	    m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
 	    m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
 	  }
-	else
+    }
+  else
+    {
+#pragma omp parallel for default(none) shared(m_img,RawProcessor)
+      for (int y = 0; y < m_img->height; y++)
+	for (int x = 0; x < m_img->width; x++)
 	  {
-	    m_img->rgbdata[y][x].r = lcc->apply (RawProcessor.imgdata.image[i][0], m_img->width, m_img->height, x, y, backlight_correction::red);
-	    m_img->rgbdata[y][x].g = lcc->apply (RawProcessor.imgdata.image[i][1], m_img->width, m_img->height, x, y, backlight_correction::green);
-	    m_img->rgbdata[y][x].b = lcc->apply (RawProcessor.imgdata.image[i][2], m_img->width, m_img->height, x, y, backlight_correction::blue);
+	    int i = y * m_img->width + x;
+	    m_img->data[y][x] = RawProcessor.imgdata.image[i][0];
 	  }
-#endif
-      }
+    }
   *permille = 1000;
   RawProcessor.recycle ();
   return true;
