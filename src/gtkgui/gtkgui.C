@@ -24,6 +24,7 @@ using namespace colorscreen;
 #define PREVIEWSIZE 600
 static const bool tmphack = true;
 static const char *colorcmd = "montage -geometry 300x300+10+10 /tmp/colororig.tif /tmp/colorsimulated.tif /tmp/colordiff.tif /tmp/colordot-spread.tif /tmp/colorscr.tif /tmp/colorscr-blur.tif /tmp/colorscr-collected.tif /tmp/color.tif ; display /tmp/color.tif &";
+static const char *bwcmd = "montage -geometry 300x300+10+10 /tmp/bworig.tif /tmp/bwsimulated.tif /tmp/bwdiff.tif /tmp/bwdot-spread.tif /tmp/bwscr.tif /tmp/bwscr-blur.tif /tmp/bwscr-collected.tif /tmp/bw.tif ; display /tmp/bw.tif &";
 
 extern "C" {
 
@@ -797,7 +798,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.diff_file = "/tmp/bwdiff.tif";
 	    fparam.screen_file = "/tmp/bwscr.tif";
 	    fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
-	    fparam.collected_file = "/tmp/colorscr-collected.tif";
+	    fparam.collected_file = "/tmp/bwscr-collected.tif";
 	    fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
 	  }
 	fparam.multitile = 3;
@@ -809,6 +810,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
 	    display_scheduled = true;
+	    if (tmphack)
+	      system(bwcmd);
 	    setvals ();
 	  }
       }
@@ -825,7 +828,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.diff_file = "/tmp/bwdiff.tif";
 	    fparam.screen_file = "/tmp/bwscr.tif";
 	    fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
-	    fparam.collected_file = "/tmp/colorscr-collected.tif";
+	    fparam.collected_file = "/tmp/bwscr-collected.tif";
 	    fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
 	  }
 	fparam.multitile = 3;
@@ -837,6 +840,8 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  {
 	    rparams.screen_blur_radius = res.screen_blur_radius;
 	    display_scheduled = true;
+	    if (tmphack)
+	      system(bwcmd);
 	    setvals ();
 	  }
       }
@@ -853,6 +858,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    fparam.diff_file = "/tmp/colordiff.tif";
 	    fparam.screen_file = "/tmp/colorscr.tif";
 	    fparam.screen_blur_file = "/tmp/colorscr-blur.tif";
+	    fparam.collected_file = "/tmp/colorscr-collected.tif";
 	    fparam.dot_spread_file = "/tmp/colordot-spread.tif";
 	  }
 	fparam.multitile = 3;
@@ -902,9 +908,9 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	//fparam.multitile = 3;
 	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
 	fparam.flags |= finetune_position | finetune_verbose | finetune_screen_channel_blurs | (current.type != Joly ? finetune_strips : 0) | finetune_fog | finetune_no_normalize | finetune_simulate_infrared /*| finetune_sharpening*/;
-	fparam.range = 4;
-	//fparam.range = 16;
-	fparam.ignore_outliers=0.001;
+	//fparam.range = 4;
+	fparam.range = 8;
+	//fparam.ignore_outliers=0.001;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	tune_points.push_back ({(coord_t)x, (coord_t)y});
@@ -2031,7 +2037,7 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	      fparam.diff_file = "/tmp/bwdiff.tif";
 	      fparam.screen_file = "/tmp/bwscr.tif";
 	      fparam.screen_blur_file = "/tmp/bwscr-blur.tif";
-	      fparam.collected_file = "/tmp/colorscr-collected.tif";
+	      fparam.collected_file = "/tmp/bwscr-collected.tif";
 	      fparam.dot_spread_file = "/tmp/bwdot-spread.tif";
 	    }
 	  file_progress_info progress (stdout);
@@ -2040,6 +2046,8 @@ cb_release (GtkImage * image, GdkEventButton * event, Data * data2)
 	    {
 	      current_solver.add_point (res.solver_point_img_location, res.solver_point_screen_location, res.solver_point_color);
 	      display_scheduled = true;
+	      if (tmphack && 0)
+		system(bwcmd);
 	      maybe_solve ();
 	    }
           button1_pressed = false;
