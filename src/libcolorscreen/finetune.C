@@ -178,6 +178,7 @@ private:
   int screen_index;
   int strips_index;
   int mix_weights_index;
+  int mix_dark_index;
   /* Number of values needed.  */
   int n_values;
   int border;
@@ -264,6 +265,10 @@ public:
   bool simulate_infrared;
   /* True if mixing weights should be optimized.  */
   bool optimize_mix_weights;
+  /* True if mixing dark (in addition to fog) should be optimized.
+     This is more an experiment.  Theoretically fog should be good way
+     to avoid this  */
+  bool optimize_mix_dark;
   /* True if we are using simulated infrared as source of tiles's bw.  */
   bool bw_is_simulated_infrared;
 
@@ -585,7 +590,7 @@ public:
   void
   print_values (coord_t *v)
   {
-    printf ("Optimizing %i values:", num_values ());
+    printf ("\n\nOptimizing %i values:", num_values ());
     if (optimize_position)
       printf (" position");
     if (optimize_screen_blur)
@@ -610,6 +615,8 @@ public:
       printf (" emulsion_offset");
     if (optimize_mix_weights)
       printf (" mix_weights");
+    if (optimize_mix_dark)
+      printf (" mix_dark");
     printf ("\n");
     if (least_squares)
       printf (" Estimating color using least squares %s\n", fog_by_least_squares ? "(includin fog)" : "");
@@ -709,8 +716,15 @@ public:
               printf ("Emulsion intensities tile %i ", tileid);
               get_emulsion_intensities (v, tileid).print (stdout);
             }
-        printf ("Mix weights ");
-        get_mix_weights (v).print (stdout);
+	if (!normalize)
+	  {
+	    printf ("Mix weights ");
+	    get_mix_weights (v).print (stdout);
+	    if (optimize_mix_dark)
+	      {
+		printf ("Mix dark: %f\n", get_mix_dark (v));
+	      }
+	  }
       }
     if (tiles[0].bw)
       {
@@ -903,29 +917,32 @@ public:
        fog.green = 0;
        fog.blue  = 0;
 
-       Now if infrared is simulated we first we compute image layer intensity as:
+       Now if infrared is simulated we first we use non-linear solver to guess mix_weights and fog.
+       Image layer (simulated infrared) intensity is computed by:
 
        c = tile.red * mix_weights.red + tile.green * mix_weights.green + tile.blue * mix_weights.blue
 
-       and use the following for blue channel:
+       We know that screen colors should have all the same intensity when scalled by the formula above. So we have:
 
-       red.blue = 1 - red.red - red.green
-       green.blue = 1 - green.red - green.green
-       blue.blue = 1 - blue.red - blue.green
+       red.red   * mix_weights.red + red.green   * mix_weights.green + red.blue   * mix_weights.blue = cst
+       green.red * mix_weights.red + green.green * mix_weights.green + green.blue * mix_weights.blue = cst
+       blue.red  * mix_weights.red + blue.green  * mix_weights.green + blue.blue  * mix_weights.blue = cst
 
-       Which means that there is only one one system:
+       (We put cst=1.) Consequently:
 
-       ss.red * c * red.red + ss.green * c * green.red + ss.blue * c * blue.red   + 0 + 0 + 0  = tile.red - fog.red
-       0 + 0 + 0 ss.green * c * red.green + ss.green * c * green.green + ss.blue * c * blue.green   + 0 + 0 + 0  = tile.green - fog.green
-       ss.red * c * -red.red + ss.green * c * -green.red + ss.blue * c * -blue.red + ss.green * c * -red.green + ss.green * c * -green.green + ss.blue * c * -blue.green = tile.blue - fog.blue - red.blue - green.blue - blue.blue
+       red.blue = (cst - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  
+       green.blue = (cst - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue
+       blue.blue = (cst - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue
 
-       This saves need for 3 variables in least squares at expense of having 1
-       extra variable in mix_weights (since we can not assume their sum to be 1)
-       and mixing system together.  Perhaps this is a bad idea.
+       We want to optimize:
 
-       So we have 6 variables and one system with 3 equations per sample.
+       ss.red * c * red.red + ss.green * c * green.red + ss.blue * c * blue.red = tile.red - fog.red
+       ss.green * c * red.green + ss.green * c * green.green + ss.blue * c * blue.green = tile.green - fog.green
+       ss.blue * c * red.blue + ss.green * c * green.blue + ss.blue * c * blue.blue = tile.blue - fog.blue
 
-      */
+       There are 6 unknowns: red.red, red.green, green.red, green.green, blue.red and blue.green.
+       Variables red.blue/green.blue/blue.blue are substituted by the identity above.
+       We no longer can treat individual channels by independent equations.  */
 
     if (tiles[0].color)
       {
@@ -1094,6 +1111,7 @@ public:
     simulate_infrared = (flags & finetune_simulate_infrared) && tiles[0].color;
     optimize_sharpening = (flags & finetune_sharpening) && tiles[0].color != NULL;
     optimize_mix_weights = false;
+    optimize_mix_dark = false;
     optimize_emulsion_offset = false;
     /* TODO; We probably can sharpen and normalize.  */
     normalize = !(flags & finetune_no_normalize) && !optimize_sharpening && tiles[0].color;
@@ -1113,7 +1131,7 @@ public:
       {
         data_collection = normalize = optimize_emulsion_blur = false;
 	if (least_squares)
-	  optimize_mix_weights = true;
+	  optimize_mix_weights = optimize_mix_dark = true;
       }
     /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
@@ -1211,10 +1229,18 @@ public:
     if (optimize_mix_weights)
       {
         mix_weights_index = n_values;
-        n_values += 2 + (least_squares += 0);
+        n_values += 2 + (least_squares != 0);
       }
     else
       mix_weights_index = -1;
+
+    if (optimize_mix_dark)
+      {
+        mix_dark_index = n_values;
+        n_values ++;
+      }
+    else
+      mix_dark_index = -1;
 
     /* Try to gues intensity of emulsion below each of primary colors.
        Used when trying to determine emulsion blur.
@@ -1467,6 +1493,8 @@ public:
 	if (least_squares)
 	  start[mix_weights_index + 2] = 1.0/3;
       }
+    if (mix_dark_index >= 0)
+      start[mix_dark_index] = 0;
 
     /* Verify that everything is set up.  */
     if (colorscreen_checking)
@@ -1722,7 +1750,7 @@ public:
      compensating coordates stored in tole_pos.  */
   pure_attr inline rgbdata
   evaulate_pixel (coord_t *v, int tileid, rgbdata red, rgbdata green,
-                  rgbdata blue, int x, int y, point_t off, rgbdata mix_weights)
+                  rgbdata blue, int x, int y, point_t off, rgbdata mix_weights, luminosity_t mix_dark)
   {
     rgbdata m = get_simulated_screen_pixel (tileid, x, y);
     rgbdata c = ((red * m.red + green * m.green + blue * m.blue)
@@ -1732,7 +1760,7 @@ public:
         rgbdata p = get_pixel (v, tileid, x, y);
         luminosity_t intensity = p.red * mix_weights.red
                                  + p.green * mix_weights.green
-                                 + p.blue * mix_weights.blue;
+                                 + p.blue * mix_weights.blue - mix_dark;
         c *= intensity;
       }
     return c;
@@ -1898,6 +1926,8 @@ public:
     if (simulate_infrared)
       {
 	rgbdata mix_weights = get_mix_weights (v);
+	luminosity_t mix_dark = get_mix_dark (v);
+        luminosity_t sum = /*v[mix_weights_index + 3]*/1;
 
 	/* See below.  */
 	assert (!fog_by_least_squares);
@@ -1910,7 +1940,7 @@ public:
                   rgbdata d = fog_by_least_squares ? get_pixel_nofog (tileid, x, y) : get_pixel (v, tileid, x, y);
 		  /* ??? This is not right when fog is optimized by least squares.
 		     For this reason we use non-linear solver to optimize fog.  */
-		  c *= d.red * mix_weights.red + d.green * mix_weights.green + d.blue * mix_weights.blue;
+		  c *= d.red * mix_weights.red + d.green * mix_weights.green + d.blue * mix_weights.blue - mix_dark;
 		  gsl_matrix_set (gsl_X, e, 0, c.red); /* red.red */
 		  gsl_matrix_set (gsl_X, e, 1, c.green); /* green.red */
 		  gsl_matrix_set (gsl_X, e, 2, c.blue); /* blue.red */
@@ -1940,31 +1970,13 @@ public:
                   gsl_vector_set (gsl_y[0], e, d.green);
 		  e++;
 
-		  /* red.blue = (1 - red.red + green.red)
-		     green.blue = (1 - red.red + green.red)
-		     blue.blue = (1 - red.red + green.red)
+		  /* red.red * mix_weights.red + red.green + mix_weights.green + red.blue + mix_weigts.blue = sum
+		     gives:
+		     red.blue = (sum - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  
 
-		     So left hand side is
-
-                     (1 - red.red - green.red) * c.red + (1 - red.green - green.green) * c.green + (1 - red.blue - green.blue) * c.blue  */
-
-		  gsl_matrix_set (gsl_X, e, 0, -c.red); /* red.red */
-		  gsl_matrix_set (gsl_X, e, 1, -c.green); /* green.red */
-		  gsl_matrix_set (gsl_X, e, 2, -c.blue); /* blue.red */
-		  gsl_matrix_set (gsl_X, e, 3, -c.red); /* red.green */
-		  gsl_matrix_set (gsl_X, e, 4, -c.green); /* green.green */
-		  gsl_matrix_set (gsl_X, e, 5, -c.blue); /* blue.green  */
-		  if (fog_by_least_squares)
-		    {
-		      gsl_matrix_set (gsl_X, e, 6, 0);
-		      gsl_matrix_set (gsl_X, e, 7, 0);
-		      gsl_matrix_set (gsl_X, e, 8, 1);
-		    }
-                  gsl_vector_set (gsl_y[0], e, d.blue - c.red - c.green - c.blue);
-#if 0
-		  /* red.blue = (1 - red.red * mix_weights.red - red.green * mix_weights.green) / mix_weights.blue  */
-		  /* green.blue = (1 - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue  */
-		  /* blue.blue = (1 - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue  */
+		     Analogously:
+		     green.blue = (sum - green.red * mix_weights.red - green.green * mix_weights.green) / mix_weights.blue
+		     blue.blue = (sum - blue.red * mix_weights.red - blue.green * mix_weights.green) / mix_weights.blue  */
 		   
 		  gsl_matrix_set (gsl_X, e, 0, -c.red * (mix_weights.red/mix_weights.blue)); /* red.red */
 		  gsl_matrix_set (gsl_X, e, 1, -c.green * (mix_weights.red/mix_weights.blue)); /* green.red */
@@ -1978,8 +1990,7 @@ public:
 		      gsl_matrix_set (gsl_X, e, 7, 0);
 		      gsl_matrix_set (gsl_X, e, 8, 1);
 		    }
-                  gsl_vector_set (gsl_y[0], e, d.blue - (c.red + c.green + c.blue)/mix_weights.blue);
-#endif
+                  gsl_vector_set (gsl_y[0], e, d.blue - sum * (c.red + c.green + c.blue)/mix_weights.blue);
 		  e++;
 		}
 	if (fog_by_least_squares)
@@ -2024,33 +2035,25 @@ public:
 	/* Colors should be real reactions of scanner, so no negative values
 	   and also no excessively large values. Allow some overexposure.  */
 	(*red).red = gsl_vector_get (gsl_c, 0);
-	to_range ((*red).red, -0.2, 2);
+	//to_range ((*red).red, -0.2, 2);
 	(*green).red = gsl_vector_get (gsl_c, 1);
-	to_range ((*green).red, -0.2, 2);
+	//to_range ((*green).red, -0.2, 2);
 	(*blue).red = gsl_vector_get (gsl_c, 2);
-	to_range ((*blue).red, -0.2, 2);
+	//to_range ((*blue).red, -0.2, 2);
 
 	(*red).green = gsl_vector_get (gsl_c, 3);
-	to_range ((*red).green, -0.2, 2);
+	//to_range ((*red).green, -0.2, 2);
 	(*green).green = gsl_vector_get (gsl_c, 4);
-	to_range ((*green).green, -0.2, 2);
+	//to_range ((*green).green, -0.2, 2);
 	(*blue).green = gsl_vector_get (gsl_c, 5);
-	to_range ((*blue).green, -0.2, 2);
+	//to_range ((*blue).green, -0.2, 2);
 
-	(*red).blue = (1 - (*red).red - (*red).green);
-	to_range ((*red).blue, -0.2, 2);
-	(*green).blue = (1 - (*green).red - (*green).green);
-	to_range ((*green).blue, -0.2, 2);
-	(*blue).blue = (1 - (*blue).red - (*blue).green);
-	to_range ((*blue).blue, -0.2, 2);
-#if 0
-	(*red).blue = (1 - (*red).red * mix_weights.red - (*red).green * mix_weights.green) / mix_weights.blue;
-	to_range ((*red).blue, 0, 2);
-	(*green).blue = (1 - (*green).red * mix_weights.red - (*green).green * mix_weights.green) / mix_weights.blue;
-	to_range ((*green).blue, 0, 2);
-	(*blue).blue = (1 - (*blue).red * mix_weights.red - (*blue).green * mix_weights.green) / mix_weights.blue;
-	to_range ((*blue).blue, 0, 2);
-#endif
+	(*red).blue = (sum - (*red).red * mix_weights.red - (*red).green * mix_weights.green) / mix_weights.blue;
+	//to_range ((*red).blue, 0, 2);
+	(*green).blue = (sum - (*green).red * mix_weights.red - (*green).green * mix_weights.green) / mix_weights.blue;
+	//to_range ((*green).blue, 0, 2);
+	(*blue).blue = (sum - (*blue).red * mix_weights.red - (*blue).green * mix_weights.green) / mix_weights.blue;
+	//to_range ((*blue).blue, 0, 2);
 
 	if (fog_by_least_squares)
 	  {
@@ -2288,9 +2291,10 @@ public:
       }
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
-    color_matrix process_colors (red.red, red.green, red.blue, 0, green.red,
-                                 green.green, green.blue, 0, blue.red,
-                                 blue.green, blue.blue, 0, 0, 0, 0, 1);
+    color_matrix process_colors (red.red, red.green, red.blue, 0,
+				 green.red, green.green, green.blue, 0,
+				 blue.red, blue.green, blue.blue,
+				 0, 0, 0, 0, 1);
     rgbdata ret;
     process_colors.invert ().apply_to_rgb (1, 1, 1, &ret.red, &ret.green,
                                            &ret.blue);
@@ -2301,6 +2305,14 @@ public:
 #endif
     luminosity_t sum = ret.red + ret.green + ret.blue;
     return ret * (1.0 / sum);
+  }
+
+  luminosity_t
+  get_mix_dark (coord_t *v)
+  {
+    if (mix_dark_index >= 0)
+      return v[mix_dark_index];
+    return 0;
   }
 
   rgbdata
@@ -2355,8 +2367,12 @@ public:
     else
       color = bw_get_color (v);
     rgbdata mix_weights;
+    luminosity_t mix_dark = 0;
     if (simulate_infrared)
-      mix_weights = get_mix_weights (v);
+      {
+	mix_weights = get_mix_weights (v);
+	mix_dark = get_mix_dark (v);
+      }
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         point_t off = get_offset (v, tileid);
@@ -2367,7 +2383,7 @@ public:
                 if (!noutliers || !tiles[tileid].outliers->test_bit (x, y))
                   {
                     rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x,
-                                                y, off, mix_weights);
+                                                y, off, mix_weights, mix_dark);
                     rgbdata d = get_pixel (v, tileid, x, y);
 
                     /* Bayer pattern. */
@@ -2483,8 +2499,13 @@ public:
     rgbdata red, green, blue;
     get_colors (v, &red, &green, &blue);
     rgbdata mix_weights;
+    luminosity_t mix_dark;
+
     if (simulate_infrared)
-      mix_weights = get_mix_weights (v);
+      {
+	mix_weights = get_mix_weights (v);
+	mix_dark = get_mix_dark (v);
+      }
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         histogram hist;
@@ -2493,7 +2514,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights);
+                                          off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, x, y);
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
@@ -2504,7 +2525,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights);
+                                          off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, x, y);
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
@@ -2517,7 +2538,7 @@ public:
           for (int x = border; x < twidth - border; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights);
+                                          off, mix_weights, mix_dark);
               rgbdata d = get_pixel (v, tileid, x, y);
               coord_t err = fabs (c.red - d.red) + fabs (c.green - d.green)
                             + fabs (c.blue - d.blue);
@@ -2619,14 +2640,18 @@ public:
         luminosity_t rmax = 0, gmax = 0, bmax = 0;
         rgbdata red, green, blue;
         rgbdata mix_weights;
+	luminosity_t mix_dark;
         if (simulate_infrared)
-          mix_weights = get_mix_weights (v);
+	  {
+	    mix_weights = get_mix_weights (v);
+	    mix_dark = get_mix_dark (v);
+	  }
         get_colors (v, &red, &green, &blue);
         for (int y = 0; y < theight; y++)
           for (int x = 0; x < twidth; x++)
             {
               rgbdata c = evaulate_pixel (v, tileid, red, green, blue, x, y,
-                                          off, mix_weights);
+                                          off, mix_weights, mix_dark);
               rmax = std::max (c.red, rmax);
               gmax = std::max (c.green, gmax);
               bmax = std::max (c.blue, bmax);
@@ -2646,7 +2671,7 @@ public:
                   case 0:
                     {
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights);
+                                                  x, y, off, mix_weights, mix_dark);
                       rendered.put_pixel (x, c.red * 65535 / rmax,
                                           c.green * 65535 / gmax,
                                           c.blue * 65535 / bmax);
@@ -2663,7 +2688,7 @@ public:
                   case 2:
                     {
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
-                                                  x, y, off, mix_weights);
+                                                  x, y, off, mix_weights, mix_dark);
                       rgbdata d = get_pixel (v, tileid, x, y);
                       rendered.put_pixel (
                           x, (c.red - d.red) * 65535 / rmax + 65536 / 2,
