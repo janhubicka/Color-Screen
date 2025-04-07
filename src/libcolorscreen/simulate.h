@@ -1,6 +1,10 @@
 #ifndef SIMULATE_H
 #define SIMULATE_H
+#include "include/color.h"
 #include "include/scr-to-img.h"
+
+namespace colorscreen
+{
 
 struct simulate_emulsion_parameters
 {
@@ -13,7 +17,10 @@ struct simulate_emulsion_parameters
   coord_t blur_radius;
   coord_t blur_amount;
   simulate_emulsion_parameters ()
-    intensities ({0,0,0}), scr_to_img_params (), scale (1), blur_radius (0), blur_amount (0)
+    : intensities (0,0,0), scr_to_img_params (), scale (1), blur_radius (0), blur_amount (0)
   {
   }
 };
+}
+
+#endif
