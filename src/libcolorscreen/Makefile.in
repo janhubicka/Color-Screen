@@ -178,7 +178,8 @@ am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-finetune.lo libcolorscreen_la-homography.lo \
 	libcolorscreen_la-gsl-utils.lo \
 	libcolorscreen_la-scanner-blur-correction.lo \
-	libcolorscreen_la-simulate.lo
+	libcolorscreen_la-simulate.lo \
+	libcolorscreen_la-has_regular_screen.lo
 am__dirstamp = $(am__leading_dot)dirstamp
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_OBJECTS = render-extra/libcolorscreen_la-render-extra.lo
 libcolorscreen_la_OBJECTS = $(am_libcolorscreen_la_OBJECTS) \
@@ -221,6 +222,7 @@ am__depfiles_remade = ./$(DEPDIR)/libcolorscreen_la-analyze-base.Plo \
 	./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo \
 	./$(DEPDIR)/libcolorscreen_la-finetune.Plo \
 	./$(DEPDIR)/libcolorscreen_la-gsl-utils.Plo \
+	./$(DEPDIR)/libcolorscreen_la-has_regular_screen.Plo \
 	./$(DEPDIR)/libcolorscreen_la-homography.Plo \
 	./$(DEPDIR)/libcolorscreen_la-icc.Plo \
 	./$(DEPDIR)/libcolorscreen_la-imagedata.Plo \
@@ -450,7 +452,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 include_HEADERS = include/color.h include/colorscreen.h include/imagedata.h include/matrix.h include/scr-to-img.h  include/dllpublic.h include/scr-detect-parameters.h include/spectrum-to-xyz.h include/progress-info.h include/sensitivity.h include/precomputed-function.h include/mesh.h include/base.h include/tiff-writer.h include/stitch.h include/lens-correction.h include/tone-curve.h include/finetune.h include/histogram.h include/colorscreen-config.h include/dufaycolor.h  include/wratten.h include/screen-map.h  include/paget.h include/render-type-parameters.h include/render-parameters.h include/solver-parameters.h include/detect-regular-screen-parameters.h include/scr-to-img-parameters.h include/lens-warp-correction-parameters.h include/backlight-correction-parameters.h include/scanner-blur-correction-parameters.h include/strips.h
 lib_LTLIBRARIES = libcolorscreen.la
-libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interpolate.C screen.C scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C analyze-strips.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C matrix-profile.C scr-detect-colors.C finetune.C homography.C gsl-utils.C scanner-blur-correction.C simulate.C
+libcolorscreen_la_SOURCES = render.C render-to-scr.C render-fast.C render-interpolate.C screen.C scr-to-img.C imagedata.C loadsave.C render-tile.C scr-detect.C render-scr-detect.C spectrum-to-xyz.C patches.C progress-info.C render-to-file.C color.C sensitivity.C solver.C mesh.C scr-detect-geometry.C analyze-dufay.C analyze-paget.C analyze-strips.C screen-map.C analyze-base.C tiff-writer.C backlight-correction.C stitch-image.C stitch-project.C icc.C render-parameters.C mapalloc.C parse-captureone-lcc.C dufaycolor.C wratten.C spectrum.C spectrum-dyes.C spectrum-illuminants.C spectrum-responses.C tone-curve.C lens-warp-correction.C matrix-profile.C scr-detect-colors.C finetune.C homography.C gsl-utils.C scanner-blur-correction.C simulate.C has_regular_screen.C
 EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  render-diff.h render-tile.h sharpen.h gsl-utils.h loadsave.h mapalloc.h render-interpolate.h render-to-file.h spectrum-dyes.h icc.h nmsimplex.h render-superposeimg.h spectrum.h analyze-dufay.h analyze-paget.h analyze-strips.h analyze-base.h  bitmap.h render-fast.h spline.h screen.h render-scr-detect.h patches.h render-to-scr.h render.h solver.h scr-detect.h backlight-correction.h mem-luminosity.h homography.h simulate.h
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 # -no-undefined is needed in order to build DLL on Windows.
@@ -580,6 +582,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-finetune.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-gsl-utils.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-has_regular_screen.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-homography.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-icc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libcolorscreen_la-imagedata.Plo@am__quote@ # am--include-marker
@@ -988,6 +991,13 @@ libcolorscreen_la-simulate.lo: simulate.C
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-simulate.lo `test -f 'simulate.C' || echo '$(srcdir)/'`simulate.C
 
+libcolorscreen_la-has_regular_screen.lo: has_regular_screen.C
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT libcolorscreen_la-has_regular_screen.lo -MD -MP -MF $(DEPDIR)/libcolorscreen_la-has_regular_screen.Tpo -c -o libcolorscreen_la-has_regular_screen.lo `test -f 'has_regular_screen.C' || echo '$(srcdir)/'`has_regular_screen.C
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libcolorscreen_la-has_regular_screen.Tpo $(DEPDIR)/libcolorscreen_la-has_regular_screen.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='has_regular_screen.C' object='libcolorscreen_la-has_regular_screen.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -c -o libcolorscreen_la-has_regular_screen.lo `test -f 'has_regular_screen.C' || echo '$(srcdir)/'`has_regular_screen.C
+
 render-extra/libcolorscreen_la-render-extra.lo: render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libcolorscreen_la_CXXFLAGS) $(CXXFLAGS) -MT render-extra/libcolorscreen_la-render-extra.lo -MD -MP -MF render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Tpo -c -o render-extra/libcolorscreen_la-render-extra.lo `test -f 'render-extra/render-extra.C' || echo '$(srcdir)/'`render-extra/render-extra.C
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Tpo render-extra/$(DEPDIR)/libcolorscreen_la-render-extra.Plo
@@ -1175,6 +1185,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-finetune.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-gsl-utils.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-has_regular_screen.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-homography.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo
@@ -1270,6 +1281,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-dufaycolor.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-finetune.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-gsl-utils.Plo
+	-rm -f ./$(DEPDIR)/libcolorscreen_la-has_regular_screen.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-homography.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-icc.Plo
 	-rm -f ./$(DEPDIR)/libcolorscreen_la-imagedata.Plo

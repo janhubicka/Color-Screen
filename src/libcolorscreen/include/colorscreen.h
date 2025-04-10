@@ -1,6 +1,7 @@
 #ifndef COLORSCREEN_H
 #define COLORSCREEN_H
 #include <memory>
+#include <string>
 #include "render-parameters.h"
 #include "render-type-parameters.h"
 #include "solver-parameters.h"
@@ -68,6 +69,37 @@ struct color_match
   xyz target;
   luminosity_t deltaE;
 };
+
+struct has_regular_screen_params
+{
+  /* Minimum and maximum period of screen to look for.  */
+  coord_t min_period;
+  coord_t max_period;
+
+  /* Save individual tiles and fft?  */
+  bool save_tiles;
+  bool save_fft;
+  std::string tile_base;
+  std::string fft_base;
+
+  /* width and height.  */
+  int ntilesx;
+  int ntilesy;
+
+  /* Input gamma.  */
+  luminosity_t gamma;
+
+  coord_t threshold;
+  coord_t tiles_treshold;
+
+  bool verbose;
+
+  has_regular_screen_params ()
+  : min_period (2), max_period (30), save_tiles (false), save_fft (false), tile_base ("tile"), fft_base ("fft"), ntilesx (3), ntilesy (3), gamma (0), threshold (1.5), tiles_treshold (0.5), verbose (false)
+  {
+  }
+};
+DLL_PUBLIC bool has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress, const char **error);
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param,
                           scr_detect_parameters *dparam,
                           render_parameters *rparam,

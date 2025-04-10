@@ -30,6 +30,7 @@ static enum subhelp {
   help_finetune,
   help_lab,
   help_read_chemcad_spectra,
+  help_has_regular_screen
 } subhelp
     = help_basic;
 
@@ -3246,6 +3247,53 @@ stitch (int argc, char **argv)
 }
 
 int
+do_has_regular_screen (char argc, char **argv)
+{
+  char *filename = NULL;
+  subhelp = help_has_regular_screen;
+  for (int i = 0; i < argc; i++)
+    {
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (!filename)
+	filename = argv[i];
+      else
+	print_help ();
+    }
+  file_progress_info progress (stdout, verbose, verbose_tasks);
+  image_data scan;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", filename);
+      progress.resume_stdout ();
+    }
+  const char *error = NULL;
+  if (!scan.load (filename, false, &error, &progress))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", filename, error);
+      return 1;
+    }
+  has_regular_screen_params param;
+  param.save_tiles = true;
+  param.save_fft = true;
+  if (has_regular_screen (scan, param, &progress, &error))
+    {
+      progress.pause_stdout ();
+      printf ("regular screen detected\n");
+      return 1;
+    }
+  if (error)
+    {
+      progress.pause_stdout ();
+      printf ("detection failed: %s\n", error);
+      return -1;
+    }
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   binname = argv[0];
@@ -3284,6 +3332,8 @@ main (int argc, char **argv)
     digital_laboratory (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "read-chemcad-spectra"))
     read_chemcad (argc - 1, argv + 1);
+  else if (!strcmp (argv[0], "has-regular-screen"))
+    do_has_regular_screen (argc - 1, argv + 1);
   else
     print_help ();
   return ret;
