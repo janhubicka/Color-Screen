@@ -233,9 +233,10 @@ bool has_regular_screen (image_data &scan, const has_regular_screen_params &para
 	    vs2 += sum[t].vsum[i];
 	  for (int i = x + r; i < x + 2 * r; i++)
 	    vs3 += sum[t].vsum[i];
+	  luminosity_t ev = 2 * vs2 / (vs1 + vs3);
 	  if (params.verbose)
-	    printf ("%.2f  ", vs2 / std::max (vs1, vs3));
-	  if (vs2 / std::max (vs1, vs3) > params.threshold)
+	    printf ("%.2f  ", ev);
+	  if (ev > params.threshold)
 	    nok++;
         }
       if (params.verbose)

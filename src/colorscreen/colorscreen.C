@@ -3250,13 +3250,25 @@ int
 do_has_regular_screen (char argc, char **argv)
 {
   char *filename = NULL;
+  has_regular_screen_params param;
   subhelp = help_has_regular_screen;
   for (int i = 0; i < argc; i++)
     {
+      float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
       else if (!filename)
 	filename = argv[i];
+      else if (parse_float_param (argc, argv, &i, "threshold", flt, 1, 1000))
+	param.threshold = flt;
+      else if (parse_float_param (argc, argv, &i, "tile_threshold", flt, 1, 100))
+	param.threshold = flt / 100.0;
+      else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
+	param.gamma = flt;
+      else if (parse_int_param (argc, argv, &i, "xtiles", param.ntilesx, 1, 100000))
+	;
+      else if (parse_int_param (argc, argv, &i, "ytiles", param.ntilesy, 1, 100000))
+	;
       else
 	print_help ();
     }
@@ -3275,9 +3287,9 @@ do_has_regular_screen (char argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", filename, error);
       return 1;
     }
-  has_regular_screen_params param;
   param.save_tiles = true;
   param.save_fft = true;
+  param.verbose = verbose;
   if (has_regular_screen (scan, param, &progress, &error))
     {
       progress.pause_stdout ();
@@ -3333,7 +3345,7 @@ main (int argc, char **argv)
   else if (!strcmp (argv[0], "read-chemcad-spectra"))
     read_chemcad (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "has-regular-screen"))
-    do_has_regular_screen (argc - 1, argv + 1);
+    ret = do_has_regular_screen (argc - 1, argv + 1);
   else
     print_help ();
   return ret;
