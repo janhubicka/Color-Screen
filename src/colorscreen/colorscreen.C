@@ -35,8 +35,10 @@ static enum subhelp {
     = help_basic;
 
 static void
-print_help ()
+print_help (char *err = NULL)
 {
+  if (err)
+    fprintf (stderr, "Unknown parameter %s\n", err);
   fprintf (stderr, "%s [<args>] <command>\n", binname);
   fprintf (stderr, "Supported commands and arguments are:\n\n");
   fprintf (stderr, "  Supported common args:\n");
@@ -335,6 +337,23 @@ print_help ()
       fprintf (stderr,
                "    read spectrum in checad database format and output it in "
                "format that can be built into libcolorscreen\n");
+    }
+  if (subhelp == help_has_regular_screen || subhelp == help_basic)
+    {
+      fprintf (stderr,
+               "  has-regular-screen <in_filename>\n");
+      fprintf (stderr,
+               "    attempt to detect regular screen in scan\n");
+    }
+  if (subhelp == help_has_regular_screen)
+    {
+      fprintf (stderr, "      --save-tiles=base         save tiles analyzed to tiff\n");
+      fprintf (stderr, "      --save-fft=base           save FFT of tiles analyzed to tiff\n");
+      fprintf (stderr, "      --threshold=n             threshold needed to consier tile to have regular screen\n");
+      fprintf (stderr, "      --tile-threshold=n        percentage of tiles needed to agree on given period\n");
+      fprintf (stderr, "      --gamma=n                 gamma of input scan (2.2 is default)\n");
+      fprintf (stderr, "      --xtiles                  number of tiles to analyze in horisontal direction\n");
+      fprintf (stderr, "      --ytiles                  number of tiles to analyze in vertical direction\n");
     }
   if (subhelp == help_render || subhelp == help_autodetect
       || subhelp == help_stitch)
@@ -707,7 +726,7 @@ render_cmd (int argc, char **argv)
       else if (!rfparams.filename)
         rfparams.filename = argv[i];
       else
-        print_help ();
+        print_help (argv[i]);
     }
   if (!infname || !cspname || !rfparams.filename)
     print_help ();
@@ -881,7 +900,7 @@ autodetect (int argc, char **argv)
       else if (!outname)
         outname = argv[i];
       else
-        print_help ();
+        print_help (argv[i]);
     }
   if (!outname)
     print_help ();
@@ -1414,10 +1433,7 @@ analyze_scanner_blur (int argc, char **argv)
       else if (!cspname)
         cspname = argv[i];
       else
-        {
-          fprintf (stderr, "Extra argument: %s\n", argv[i]);
-          print_help ();
-        }
+        print_help (argv[i]);
     }
   if (!infname || !cspname)
     print_help ();
@@ -2359,7 +2375,7 @@ finetune (int argc, char **argv)
       else if (!cspname)
         cspname = argv[i];
       else
-        print_help ();
+        print_help (argv[i]);
     }
 
   if (!infname || !cspname || !flags)
@@ -3121,7 +3137,7 @@ stitch (int argc, char **argv)
       else if (!strncmp (argv[i], "--", 2))
         {
           fprintf (stderr, "Unknown parameter: %s\n", argv[i]);
-          print_help ();
+          print_help (argv[i]);
           return 1;
         }
       else
@@ -3259,6 +3275,16 @@ do_has_regular_screen (char argc, char **argv)
         ;
       else if (!filename)
 	filename = argv[i];
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-tiles"))
+        {
+	  param.save_tiles = true;
+	  param.tile_base = str;
+        }
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-fft"))
+        {
+	  param.save_fft = true;
+	  param.fft_base = str;
+        }
       else if (parse_float_param (argc, argv, &i, "threshold", flt, 1, 1000))
 	param.threshold = flt;
       else if (parse_float_param (argc, argv, &i, "tile-threshold", flt, 1, 100))
@@ -3270,7 +3296,7 @@ do_has_regular_screen (char argc, char **argv)
       else if (parse_int_param (argc, argv, &i, "ytiles", param.ntilesy, 1, 100000))
 	;
       else
-	print_help ();
+	print_help (argv[i]);
     }
   file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
@@ -3287,8 +3313,6 @@ do_has_regular_screen (char argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", filename, error);
       return 1;
     }
-  param.save_tiles = true;
-  param.save_fft = true;
   param.verbose = verbose;
   if (has_regular_screen (scan, param, &progress, &error))
     {

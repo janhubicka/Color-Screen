@@ -199,7 +199,10 @@ bool has_regular_screen (image_data &scan, const has_regular_screen_params &para
   std::vector <summary> sum (params.ntilesy * params.ntilesx);
 
   *error = NULL;
-  //rparams.gamma = scan.gamma;
+  if (params.gamma > 0)
+    rparams.gamma = params.gamma;
+  else if (scan.gamma > 0)
+    rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
   render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
   plan_2d = fftw_plan_dft_r2c_2d (tile_width, tile_height, tile.data (), fft_tile.data (), FFTW_ESTIMATE);
