@@ -167,4 +167,7 @@ jobs:
                  --license-file ../../LICENSE \
                  --icon IconResources/Color-Screen-GUI-Demo.icns \
                  --verbose
-
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-GUI-package
+        path: /Users/runner/work/Color-Screen/Color-Screen/Color-Screen-GUI/InstallPackaging/macOS/Color-Screen-GUI-Demo-1.0.dmg

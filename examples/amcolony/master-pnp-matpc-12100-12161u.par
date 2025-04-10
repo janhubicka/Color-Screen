@@ -23,7 +23,7 @@ green_strip_width: 0.000000
 collection_threshold: 0.300000
 screen_blur_radius: 0.800000
 collection_threshold: 0.300000
-color_model: Paget
+color_model: Miethe_Goerz_reconstructed_by_Wagner
 backlight_temperature: 5000.000000
 temperature: 5000.000000
 dye_balance: bradford

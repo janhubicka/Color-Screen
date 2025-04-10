@@ -3261,7 +3261,7 @@ do_has_regular_screen (char argc, char **argv)
 	filename = argv[i];
       else if (parse_float_param (argc, argv, &i, "threshold", flt, 1, 1000))
 	param.threshold = flt;
-      else if (parse_float_param (argc, argv, &i, "tile_threshold", flt, 1, 100))
+      else if (parse_float_param (argc, argv, &i, "tile-threshold", flt, 1, 100))
 	param.threshold = flt / 100.0;
       else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
 	param.gamma = flt;

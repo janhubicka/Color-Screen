@@ -95,7 +95,7 @@ struct has_regular_screen_params
   bool verbose;
 
   has_regular_screen_params ()
-  : min_period (2), max_period (30), save_tiles (false), save_fft (false), tile_base ("tile"), fft_base ("fft"), ntilesx (3), ntilesy (3), gamma (0), threshold (1.1), tiles_treshold (0.3), verbose (false)
+  : min_period (2), max_period (30), save_tiles (false), save_fft (false), tile_base ("tile"), fft_base ("fft"), ntilesx (10), ntilesy (10), gamma (0), threshold (1.1), tiles_treshold (1/100.0*3), verbose (false)
   {
   }
 };
