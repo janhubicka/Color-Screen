@@ -1,8 +1,15 @@
 #include <string>
+#include <unistd.h>
 #include <sys/time.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#ifdef WIN32
+#include <io.h>
+#define F_OK 0
+#define access _access
+#endif
+
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/dufaycolor.h"
 #include "../libcolorscreen/include/finetune.h"
@@ -354,6 +361,9 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --gamma=n                 gamma of input scan (2.2 is default)\n");
       fprintf (stderr, "      --xtiles                  number of tiles to analyze in horisontal direction\n");
       fprintf (stderr, "      --ytiles                  number of tiles to analyze in vertical direction\n");
+      fprintf (stderr, "      --report=filename         save report about analysis\n");
+      fprintf (stderr, "      --save-matches=filename   save filenames of files with regular pattern\n");
+      fprintf (stderr, "      --save-misses=filename    save filenames of files where no regular pattern is detected\n");
     }
   if (subhelp == help_render || subhelp == help_autodetect
       || subhelp == help_stitch)
@@ -3263,18 +3273,22 @@ stitch (int argc, char **argv)
 }
 
 int
-do_has_regular_screen (char argc, char **argv)
+do_has_regular_screen (int argc, char **argv)
 {
-  char *filename = NULL;
+  std::vector <char *> filenames;
+  const char *repname = NULL;
+  const char *save_matches = NULL;
+  const char *save_misses = NULL;
+  const char *save_errors = NULL;
+  FILE *matches = NULL, *misses = NULL, *errors = NULL;
   has_regular_screen_params param;
   subhelp = help_has_regular_screen;
+
   for (int i = 0; i < argc; i++)
     {
       float flt;
       if (parse_common_flags (argc, argv, &i))
         ;
-      else if (!filename)
-	filename = argv[i];
       else if (const char *str = arg_with_param (argc, argv, &i, "save-tiles"))
         {
 	  param.save_tiles = true;
@@ -3289,44 +3303,172 @@ do_has_regular_screen (char argc, char **argv)
 	param.threshold = flt;
       else if (parse_float_param (argc, argv, &i, "tile-threshold", flt, 1, 100))
 	param.threshold = flt / 100.0;
+      else if (parse_float_param (argc, argv, &i, "min-period", flt, 2, 128))
+	param.min_period = flt;
+      else if (parse_float_param (argc, argv, &i, "max-period", flt, 2, 128))
+	param.max_period = flt;
       else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
 	param.gamma = flt;
+      else if (const char *str = arg_with_param (argc, argv, &i, "report"))
+        repname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-matches"))
+        save_matches = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-misses"))
+        save_misses = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-errros"))
+        save_errors = str;
       else if (parse_int_param (argc, argv, &i, "xtiles", param.ntilesx, 1, 100000))
 	;
       else if (parse_int_param (argc, argv, &i, "ytiles", param.ntilesy, 1, 100000))
 	;
       else
-	print_help (argv[i]);
+	{
+	  if (access(argv[i], F_OK) == 0)
+	    filenames.push_back (argv[i]);
+	  else
+	    print_help (argv[i]);
+	}
     }
-  file_progress_info progress (stdout, verbose, verbose_tasks);
-  image_data scan;
+  if (!filenames.size ())
+    {
+      fprintf (stderr, "No filename given\n");
+      exit (-1);
+    }
+  if (repname)
+    {
+      param.report = fopen (repname, "wt");
+      if (!param.report)
+        {
+	  perror (repname);
+	  return -1;
+        }
+    }
+  if (save_matches)
+    {
+      matches = fopen (save_matches, "wt");
+      if (!matches)
+        {
+	  perror (save_matches);
+	  return -1;
+        }
+    }
+  if (save_misses)
+    {
+      misses = fopen (save_misses, "wt");
+      if (!misses)
+        {
+	  perror (save_misses);
+	  return -1;
+        }
+    }
+  if (save_errors)
+    {
+      errors = fopen (save_errors, "wt");
+      if (!errors)
+        {
+	  perror (save_errors);
+	  return -1;
+        }
+    }
   if (verbose)
     {
-      progress.pause_stdout ();
-      printf ("Loading scan %s\n", filename);
-      progress.resume_stdout ();
+      if (save_matches)
+        printf ("Saving filenames of scans with regular pattern to: %s\n", save_matches);
+      if (save_misses)
+        printf ("Saving filenames of scans with no regular to: %s\n", save_misses);
+      if (save_errors)
+        printf ("Saving filenames of scans where processing failed to: %s\n", save_errors);
+      if (repname)
+        printf ("Saving report to: %s\n", repname);
     }
-  const char *error = NULL;
-  if (!scan.load (filename, false, &error, &progress))
+  file_progress_info progress (stdout, verbose, verbose_tasks);
+  bool found = false;
+  bool error_found = false;
+  if (filenames.size () > 1)
+    progress.set_task ("analyzing files", filenames.size ());
+  for (unsigned int i = 0; i < filenames.size (); i++)
     {
-      progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", filename, error);
-      return 1;
+      image_data scan;
+      int stack;
+      if (filenames.size () > 1)
+	stack = progress.push ();
+      if (param.report)
+	fprintf (param.report, "Analyzing %s\n", filenames[i]);
+#if 0
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading scan %s\n", filenames [i]);
+	  progress.resume_stdout ();
+	}
+#endif
+      const char *error = NULL;
+      if (!scan.load (filenames[i], false, &error, &progress))
+	{
+	  if (errors)
+	    {
+	      fprintf (errors, "%s\n", filenames[i]);
+	      fflush (errors);
+	    }
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", filenames[i], error);
+	  progress.resume_stdout ();
+	  error_found = true;
+	  continue;
+	}
+      param.verbose = verbose;
+      has_regular_screen_ret ret = has_regular_screen (scan, param, &progress);
+      if (ret.found)
+	{
+	  if (matches)
+	    {
+	      fprintf (matches, "%s\n", filenames[i]);
+	      fflush (matches);
+	    }
+	  if (param.report)
+	    fprintf (param.report, "%s: regular pattern with period %.2f detected in %.2f%% of samples\n", filenames[i], ret.period, ret.perc);
+	  progress.pause_stdout ();
+	  printf ("%s: regular pattern with period %.2f detected in %.2f%% of samples\n", filenames[i], ret.period, ret.perc);
+	  progress.resume_stdout ();
+	  found = true;
+	}
+      else if (ret.error)
+	{
+	  if (errors)
+	    {
+	      fprintf (errors, "%s\n", filenames[i]);
+	      fflush (errors);
+	    }
+	  if (param.report)
+	    fprintf (param.report, "%s: detection failed (%s)\n", filenames[i], ret.error);
+	  progress.pause_stdout ();
+	  printf ("%s: detection failed (%s)\n", filenames[i], ret.error);
+	  progress.resume_stdout ();
+	  error_found = true;
+	}
+      else if (misses)
+	{
+	  if (misses)
+	    {
+	      fprintf (misses, "%s\n", filenames[i]);
+	      fflush (matches);
+	    }
+	}
+      if (filenames.size () > 1)
+	{
+	  progress.pop (stack);
+	  progress.inc_progress ();
+	}
     }
-  param.verbose = verbose;
-  if (has_regular_screen (scan, param, &progress, &error))
-    {
-      progress.pause_stdout ();
-      printf ("regular screen detected\n");
-      return 1;
-    }
-  if (error)
-    {
-      progress.pause_stdout ();
-      printf ("detection failed: %s\n", error);
-      return -1;
-    }
-  return 0;
+  if (param.report)
+    fclose (param.report);
+  if (misses)
+    fclose (misses);
+  if (errors)
+    fclose (errors);
+  if (matches)
+    fclose (matches);
+  return error_found ? -1 : found ? 1 : 0;
 }
 
 int

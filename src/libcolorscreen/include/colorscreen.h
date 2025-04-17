@@ -93,13 +93,21 @@ struct has_regular_screen_params
   coord_t tiles_treshold;
 
   bool verbose;
+  FILE *report;
 
   has_regular_screen_params ()
-  : min_period (2), max_period (30), save_tiles (false), save_fft (false), tile_base ("tile"), fft_base ("fft"), ntilesx (9), ntilesy (9), gamma (0), threshold (1.1), tiles_treshold (0.15), verbose (false)
+  : min_period (2.01), max_period (30), save_tiles (false), save_fft (false), tile_base ("tile"), fft_base ("fft"), ntilesx (9), ntilesy (9), gamma (0), threshold (1.1), tiles_treshold (0.15), verbose (false), report (NULL)
   {
   }
 };
-DLL_PUBLIC bool has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress, const char **error);
+struct has_regular_screen_ret
+{
+  bool found;
+  const char *error;
+  coord_t period;
+  coord_t perc;
+};
+DLL_PUBLIC struct has_regular_screen_ret has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress = NULL);
 DLL_PUBLIC bool save_csp (FILE *f, scr_to_img_parameters *param,
                           scr_detect_parameters *dparam,
                           render_parameters *rparam,

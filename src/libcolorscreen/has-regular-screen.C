@@ -9,14 +9,14 @@ namespace colorscreen
 {
 namespace
 {
-constexpr const int tile_width=128;
+constexpr const int tile_width=256;
 constexpr const int tile_height=tile_width;
 static constexpr const int fft_size = tile_width / 2 + 1;
 typedef std::array<double, tile_width * tile_height> tile_t;
 typedef std::array<fftw_complex, fft_size * tile_width> fft_2d;
 
 bool
-collect_tile (tile_t &tile, image_data &scan, const render &render, int x, int y, progress_info *progress)
+collect_tile (tile_t &tile, image_data &scan, const render &render, int x, int y)
 {
   x -= tile_width / 2;
   y -= tile_height / 2;
@@ -45,6 +45,7 @@ coord_t xperiod (int x)
   return tile_width / 2.0 / x;
 }
 
+/*
 coord_t yperiod (int y)
 {
   if (!y)
@@ -53,6 +54,7 @@ coord_t yperiod (int y)
     y -= tile_height;
   return tile_height / 2.0 / y;
 }
+*/
 
 
 
@@ -184,12 +186,18 @@ summarize (fft_2d &fft_tile, struct summary *sum)
 }
 
 }
-bool has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress, const char **error)
+has_regular_screen_ret
+has_regular_screen (image_data &scan, const has_regular_screen_params &params, progress_info *progress)
 {
+  has_regular_screen_ret ret;
+  ret.found = false;
+  ret.error = NULL;
+  ret.period = 0;
+  ret.perc = 0;
   if (scan.width < tile_width || scan.height < tile_height)
     {
-      *error = "input scan is too small";
-      return false;
+      ret.error = "input scan is too small";
+      return ret;
     }
 
   tile_t tile;
@@ -198,7 +206,6 @@ bool has_regular_screen (image_data &scan, const has_regular_screen_params &para
   render_parameters rparams;
   std::vector <summary> sum (params.ntilesy * params.ntilesx);
 
-  *error = NULL;
   if (params.gamma > 0)
     rparams.gamma = params.gamma;
   else if (scan.gamma > 0)
@@ -206,53 +213,63 @@ bool has_regular_screen (image_data &scan, const has_regular_screen_params &para
   render render (scan, rparams, 256);
   render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
   plan_2d = fftw_plan_dft_r2c_2d (tile_width, tile_height, tile.data (), fft_tile.data (), FFTW_ESTIMATE);
+  if (progress)
+    progress->set_task ("analyzing samples", params.ntilesy * params.ntilesx);
   for (int y = 0; y < params.ntilesy; y++)
     for (int x = 0; x < params.ntilesx; x++)
       {
-	collect_tile (tile, scan, render, scan.width * (x + 0.5) / params.ntilesx, scan.height * (y + 0.5) / params.ntilesy, progress);
+	collect_tile (tile, scan, render, scan.width * (x + 0.5) / params.ntilesx, scan.height * (y + 0.5) / params.ntilesy);
         fftw_execute (plan_2d);
-	if (params.save_tiles && !save_tile (tile, params.tile_base, x, y, error))
-	  return false;
-	if (params.save_fft && !save_fft_tile (fft_tile, params.fft_base, x, y, params.min_period, params.max_period, error))
-	  return false;
+	if (params.save_tiles && !save_tile (tile, params.tile_base, x, y, &ret.error))
+	  return ret;
+	if (params.save_fft && !save_fft_tile (fft_tile, params.fft_base, x, y, params.min_period, params.max_period, &ret.error))
+	  return ret;
 	summarize (fft_tile, &sum[y * params.ntilesx + x]);
+	if (progress)
+	  progress->inc_progress ();
       }
   int r = 3;
-  bool found = false;
-  for (int x = r; x < fft_size - 2 * r; x++)
+  if (progress)
+    progress->set_task ("summarizing results", 0);
+  for (int x = 2; x < fft_size - 2 * r; x++)
     {
       coord_t period = xperiod (x);
       int nok = 0;
       if (period < params.min_period || period > params.max_period)
 	continue;
-      if (params.verbose)
-	printf ("Period %.2f: ", period);
+      if (params.report)
+	fprintf (params.report, "Period %.2f: ", period);
       for (int t = 0; t < params.ntilesx * params.ntilesy;t++)
         {
 	  luminosity_t vs1 = 0,vs2 = 0,vs3 = 0;
 	  for (int i = x - r; i < x; i++)
-	    vs1 += sum[t].vsum[i];
+	    vs1 += sum[t].vsum[i < 1 ? 1 : i];
 	  for (int i = x; i < x + r; i++)
 	    vs2 += sum[t].vsum[i];
 	  for (int i = x + r; i < x + 2 * r; i++)
 	    vs3 += sum[t].vsum[i];
 	  luminosity_t ev = 2 * vs2 / (vs1 + vs3);
-	  if (params.verbose)
-	    printf ("%.2f  ", ev);
+	  if (params.report)
+	    fprintf (params.report, "%.2f  ", ev);
 	  if (ev > params.threshold)
 	    nok++;
         }
-      if (params.verbose)
-        printf ("ok: %i", nok);
+      if (params.report)
+        fprintf (params.report, "ok: %i", nok);
       if (nok > params.ntilesx * params.ntilesy * params.tiles_treshold)
 	{
-	  if (params.verbose)
-	    printf ("found regular screen");
-	  found = true;
+	  if (params.report)
+	    fprintf (params.report, "found regular pattern");
+	  ret.found = true;
+	  if (ret.perc < nok * 100.0 / (params.ntilesx * params.ntilesy))
+	    {
+	      ret.period =  period;
+	      ret.perc = nok * 100.0 / (params.ntilesx * params.ntilesy);
+	    }
 	}
-      if (params.verbose)
-        printf ("\n", nok);
+      if (params.report)
+        fprintf (params.report, "\n");
     }
-  return found;
+  return ret;
 }
 }
