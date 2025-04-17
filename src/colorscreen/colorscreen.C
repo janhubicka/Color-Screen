@@ -364,6 +364,9 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --report=filename         save report about analysis\n");
       fprintf (stderr, "      --save-matches=filename   save filenames of files with regular pattern\n");
       fprintf (stderr, "      --save-misses=filename    save filenames of files where no regular pattern is detected\n");
+      fprintf (stderr, "      --min-period=p            minimal period considered interesting\n");
+      fprintf (stderr, "      --max-period=p		maximal period considered interesting\n");
+      fprintf (stderr, "      --must-match		terminate on first scan not matching\n");
     }
   if (subhelp == help_render || subhelp == help_autodetect
       || subhelp == help_stitch)
@@ -3283,6 +3286,7 @@ do_has_regular_screen (int argc, char **argv)
   FILE *matches = NULL, *misses = NULL, *errors = NULL;
   has_regular_screen_params param;
   subhelp = help_has_regular_screen;
+  bool must_match = false;
 
   for (int i = 0; i < argc; i++)
     {
@@ -3307,6 +3311,8 @@ do_has_regular_screen (int argc, char **argv)
 	param.min_period = flt;
       else if (parse_float_param (argc, argv, &i, "max-period", flt, 2, 128))
 	param.max_period = flt;
+      else if (!strcmp (argv[i], "--must-match"))
+	must_match = true;
       else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
 	param.gamma = flt;
       else if (const char *str = arg_with_param (argc, argv, &i, "report"))
@@ -3445,13 +3451,23 @@ do_has_regular_screen (int argc, char **argv)
 	  printf ("%s: detection failed (%s)\n", filenames[i], ret.error);
 	  progress.resume_stdout ();
 	  error_found = true;
+	  if (must_match)
+	    break;
 	}
-      else if (misses)
+      else 
 	{
 	  if (misses)
 	    {
 	      fprintf (misses, "%s\n", filenames[i]);
 	      fflush (matches);
+	    }
+	  if (must_match)
+	    {
+	      progress.pause_stdout ();
+	      printf ("%s: not detected regular pattern\n", filenames[i]);
+	      progress.resume_stdout ();
+	      error_found = true;
+	      break;
 	    }
 	}
       if (filenames.size () > 1)
