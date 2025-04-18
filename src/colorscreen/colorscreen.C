@@ -3321,7 +3321,7 @@ do_has_regular_screen (int argc, char **argv)
         save_matches = str;
       else if (const char *str = arg_with_param (argc, argv, &i, "save-misses"))
         save_misses = str;
-      else if (const char *str = arg_with_param (argc, argv, &i, "save-errros"))
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-errors"))
         save_errors = str;
       else if (parse_int_param (argc, argv, &i, "xtiles", param.ntilesx, 1, 100000))
 	;
