@@ -83,7 +83,7 @@ private:
   bool own;
   bool m_preload_all;
 
-  bool parse_icc_profile();
+  bool parse_icc_profile(progress_info *);
 };
 }
 #endif

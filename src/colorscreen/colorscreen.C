@@ -3378,6 +3378,8 @@ do_has_regular_screen (int argc, char **argv)
     }
   if (verbose)
     {
+      if (filenames.size () > 1)
+        printf ("Analyzing %i images\n", filenames.size ());
       if (save_matches)
         printf ("Saving filenames of scans with regular pattern to: %s\n", save_matches);
       if (save_misses)
@@ -3400,14 +3402,6 @@ do_has_regular_screen (int argc, char **argv)
 	stack = progress.push ();
       if (param.report)
 	fprintf (param.report, "Analyzing %s\n", filenames[i]);
-#if 0
-      if (verbose)
-	{
-	  progress.pause_stdout ();
-	  printf ("Loading scan %s\n", filenames [i]);
-	  progress.resume_stdout ();
-	}
-#endif
       const char *error = NULL;
       if (!scan.load (filenames[i], false, &error, &progress))
 	{
@@ -3420,6 +3414,11 @@ do_has_regular_screen (int argc, char **argv)
 	  fprintf (stderr, "Can not load %s: %s\n", filenames[i], error);
 	  progress.resume_stdout ();
 	  error_found = true;
+	  if (filenames.size () > 1)
+	    {
+	      progress.pop (stack);
+	      progress.inc_progress ();
+	    }
 	  continue;
 	}
       param.verbose = verbose;
@@ -3452,7 +3451,14 @@ do_has_regular_screen (int argc, char **argv)
 	  progress.resume_stdout ();
 	  error_found = true;
 	  if (must_match)
-	    break;
+	    {
+	      if (filenames.size () > 1)
+		{
+		  progress.pop (stack);
+		  progress.inc_progress ();
+		}
+	      break;
+	    }
 	}
       else 
 	{
@@ -3467,6 +3473,11 @@ do_has_regular_screen (int argc, char **argv)
 	      printf ("%s: not detected regular pattern\n", filenames[i]);
 	      progress.resume_stdout ();
 	      error_found = true;
+	      if (filenames.size () > 1)
+		{
+		  progress.pop (stack);
+		  progress.inc_progress ();
+		}
 	      break;
 	    }
 	}

@@ -923,25 +923,33 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
-	parse_icc_profile ();
+	parse_icc_profile (progress);
     }
   return ret;
 }
 
 bool
-image_data::parse_icc_profile ()
+image_data::parse_icc_profile (progress_info *progress)
 {
   if (!icc_profile)
     return true;
   cmsHPROFILE hInProfile = cmsOpenProfileFromMem (icc_profile, icc_profile_size);
   if (!hInProfile)
     {
+      if (progress)
+	progress->pause_stdout ();
       fprintf (stderr, "Failed to parse profile\n");
+      if (progress)
+	progress->resume_stdout ();
       return false;
     }
   if (cmsGetColorSpace(hInProfile) != cmsSigRgbData)
     {
+      if (progress)
+	progress->pause_stdout ();
       fprintf (stderr, "Non-RGB profiles are not supported by ColorScreen!\n");
+      if (progress)
+	progress->resume_stdout ();
       return false;
     }
 
@@ -949,14 +957,22 @@ image_data::parse_icc_profile ()
   if (cl != cmsSigInputClass && cl != cmsSigDisplayClass &&
       cl != cmsSigOutputClass && cl != cmsSigColorSpaceClass)
     {
+      if (progress)
+	progress->pause_stdout ();
       fprintf (stderr, "Only input, output, display and color space ICC profiles are supported by ColorScreen!\n");
+      if (progress)
+	progress->resume_stdout ();
       return false;
     }
 
   cmsHTRANSFORM hTransform = cmsCreateTransform(hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT, INTENT_ABSOLUTE_COLORIMETRIC, 0);
   if (!hTransform)
     {
+      if (progress)
+	progress->pause_stdout ();
       fprintf (stderr, "Failed to do icc profile transform\n");
+      if (progress)
+	progress->resume_stdout ();
       return false;
     }
   float rgb_buffer[] = {0,0,0,
@@ -994,15 +1010,23 @@ image_data::parse_icc_profile ()
       cmsHPROFILE hXYZ = cmsCreateXYZProfileTHR(ContextID);
       if (!hXYZ)
         {
+	  if (progress)
+	    progress->pause_stdout ();
           fprintf (stderr, "Failed to create XYZ Profile HR\n");
 	  cmsCloseProfile (hInProfile);
+	  if (progress)
+	    progress->resume_stdout ();
           return false;
         }
       cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_DBL, hXYZ, TYPE_XYZ_DBL,
 		      				  INTENT_ABSOLUTE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC);
       if (!xform)
         {
+	  if (progress)
+	    progress->pause_stdout ();
           fprintf (stderr, "Failed to create profile transform\n");
+	  if (progress)
+	    progress->resume_stdout ();
 	  cmsCloseProfile (hInProfile);
           return false;
         }
