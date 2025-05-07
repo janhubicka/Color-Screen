@@ -129,4 +129,32 @@ analyze_dufay::compare_contrast (analyze_dufay &other, int xpos, int ypos, int *
   *y2 = imgp.y;
   return max_ratio;
 }
+
+bool
+analyze_dufay::dump_patch_density (FILE *out)
+{
+  fprintf (out, "Paget dimenstion: %i %i\n", m_width, m_height);
+  fprintf (out, "LeftDot %i %i\n", m_width , m_height);
+  for (int y = 0; y < m_height; y++)
+    {
+      for (int x = 0; x < m_width; x++)
+	fprintf (out, "  %f", green (x, y));
+      fprintf (out, "\n");
+    }
+  fprintf (out, "RightDot %i %i\n", m_width , m_height);
+  for (int y = 0; y < m_height; y++)
+    {
+      for (int x = 0; x < m_width; x++)
+	fprintf (out, "  %f", blue (x, y));
+      fprintf (out, "\n");
+    }
+  fprintf (out, "Strip %i %i\n", m_width * 2, m_height);
+  for (int y = 0; y < m_height; y++)
+    {
+      for (int x = 0; x < m_width * 2; x++)
+	fprintf (out, "  %f", red (x, y));
+      fprintf (out, "\n");
+    }
+  return true;
+}
 }

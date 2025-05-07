@@ -693,9 +693,11 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 bool
 render_interpolate::dump_patch_density (FILE *out)
 {
-  if (!m_strips)
+  if (m_dufay)
+    return m_dufay->dump_patch_density (out);
+  if (m_strips)
     return m_strips->dump_patch_density (out);
-  if (!m_paget)
+  if (m_paget)
     return m_paget->dump_patch_density (out);
 
   fprintf (stderr, "Unsuported screen format\n");
