@@ -693,12 +693,13 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
 bool
 render_interpolate::dump_patch_density (FILE *out)
 {
+  if (!m_strips)
+    return m_strips->dump_patch_density (out);
   if (!m_paget)
-    {
-      fprintf (stderr, "Unsuported screen format\n");
-      return false;
-    }
-  return m_paget->dump_patch_density (out);
+    return m_paget->dump_patch_density (out);
+
+  fprintf (stderr, "Unsuported screen format\n");
+  return false;
 }
 
 /* Cool ANALYZE with unadjusted luminosity of every screen tile in range

@@ -15,6 +15,8 @@ public:
   {
   }
   ~analyze_strips();
+  bool
+  dump_patch_density (FILE *out);
 private:
 };
 }
