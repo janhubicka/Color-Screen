@@ -35,8 +35,8 @@ screen::empty ()
 /* The screen is sqare.  In the center there is green circle
    of diameter DG, on corners there are red circles of diameter D
    RR is a blurring radius.  */
-#define D (85 * size) / 256
-#define DG (85 * size) / 256
+#define D (68 * size) / 256
+#define DG (68 * size) / 256
 
 void
 screen::thames ()
