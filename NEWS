@@ -5,6 +5,8 @@ Changes in version 1.1
      - Improved Dioptrichrome-B
      - Warner-Powrie
      - Joly
+   - New dye measurements
+     - Thames, Dioptichrome and Autochrome dyes by Mees and Pledge (1910)
    - Support for RAW files from achromatic camera backs
    - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically

@@ -91,49 +91,136 @@ screen::thames ()
       }
 }
 
-#define PD (54 * size) / 256
-#define PDG (54 * size) / 256
+
+/* X,y are coordinates of entry in screen array of dimensions
+   SIZE * SIZE.
+
+   CX, CY are coordinates of another point (in screen coordiantes, i.e. range
+   0..1).  Compute sum distance between them considering the periodicity.  */
+
+static inline int
+dist (int x, int y, coord_t cx, coord_t cy, int size)
+{
+  /* Work in 2 * size so we can represent x + 0.5 and y + 0.5 as integer.  */
+  unsigned dx = ((unsigned)(cx * 2 * size) - (unsigned)(x * 2 + 1)) & (2 * size - 1);
+  unsigned dy = ((unsigned)(cy * 2 * size) - (unsigned)(y * 2 + 1)) & (2 * size - 1);
+  if (dx > (unsigned)size)
+    dx = 2 * size - dx;
+  if (dy > (unsigned)size)
+    dy = 2 * size - dy;
+  return (dx + dy) / 2;
+}
+
+/* We render the following pattern (empty spaces are blue):
+ 
+     GGGGRRRRRRRRGGGG  
+     GGG  RRRRRR  GGG
+     GG    RRRR    GG
+     G      RR      G
+     R      GG      R
+     RR    GGGG    RR
+     RRR  GGGGGG  RRR
+     RRRRGGGGGGGGRRRR
+     RRR  GGGGGG  RRR
+     RR    GGGG    RR
+     R      GG      R
+     G      RR      G
+     GG    RRRR    GG
+     GGG  RRRRRR  GGG
+     GGGGRRRRRRRRGGGG
+
+  So here are 2 green dots with centers (0,0) and (0.5, 0.5)
+  and 2 red dots with centers (0,0.5) and (0.5,0)
+*/
+
+
+
 void
 screen::paget_finlay ()
 {
   int xx, yy;
+
+  /* Constant bellow specifies ratio of blue square diagonal to diagonal of red
+     and green squares.
+
+     Original paget announcement claims that blue squares are smaller
+     so each of primaries occupies the same space.  Since in one period we
+     have twice as many blue squares, to have all three colors of equal size,
+     the 4 blue squares must occupy 1/3 of the space. Rest is occupied
+     by red and green squares which have cut corners.  For this reason
+     we compute ratio of blue square diagonal to read or green square
+     diagonal and then render bigger ones.  
+
+     If all squares were of same size, with 45 degree rotation we get
+
+     RRRbbb
+     RRRbbb
+     RRRbbb
+     bbbGGG
+     bbbGGG
+     bbbGGG
+
+     Here all edges are 0.5.  We need to adjust blue square edge:
+
+     2*(x^2)=1/3 or x=1/sqrt(6) or x=0.40824829046 instead of 0.5.
+     
+     To achieve this we use
+
+     const coord_t red_green_diagonal = (1-0.40824829046) * size;
+   */
+
+  
+  /* Probably more realistic option based on Wall's History of color
+     photography:
+
+     The Paget Plate - This is believed was invention of C. Finlay
+     and consits of square elements, the blue being 0.063mm. with
+     0.085mm. for the red and green. It is stated by J. H. Pledge^20
+     to be roughly blue 8, red 7, green 7 there being two blue
+     elements in the unit.  
+     
+     20: Brit. J. Phot. 1913 60 Col. Phot. Supp 7, 31.*/
+  const coord_t red_green_diagonal = (0.085 / (0.063 + 0.085)) * size;
+  /* This is 0.57422*size
+    
+     To achive the ratio 8:7:7 mentioned above one wants to set
+     red_green_diagonal to be 1-sqrt(2/11) which is approximately
+
+     0.57361*size
+
+     so at least the numbers seems to match.  */
+  //const coord_t red_green_diagonal = 0.57361*size;
+
+  int r = 0, g =0, b = 0;
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {
-#define dist(x, y) fabs (xx + 0.5 - (x) * size) + fabs (yy + 0.5 - (y) * size)
-        float d11 = dist (0, 0);
-        float d21 = dist (1, 0);
-        float d22 = dist (1, 1);
-        float d23 = dist (0, 1);
-        float dc = dist (0.5, 0.5);
-        float dl = dist (0, 0.5);
-        float dr = dist (1, 0.5);
-        float dt = dist (0.5, 0);
-        float db = dist (0.5, 1);
-        float d1, d3;
-#undef dist
 
-        add[yy][xx][0] = 0;
-        add[yy][xx][1] = 0;
-        add[yy][xx][2] = 0;
+	/* Distance from center of the nearest green dot.
+	   Centers of squares (modulo period) are (0,0)  and (0.5,0.5) for
+	   green. */
+        int d1 = std::min (dist (xx, yy, 0, 0, size), dist (xx, yy, 0.5, 0.5, size));
 
-        d1 = fmin (d11, fmin (d21, fmin (d22, fmin (d23, dc))));
-        d3 = fmin (dl, fmin (dr, fmin (dt, db)));
-        if (d1 < ((size / 2) - PDG) && d1 < d3)
+	/* Distance from center of the nearest red dot.
+	   Centers of squares (modulo period) are (0,0.5)  and (0.5,0) for
+	   green. */
+        int d2 = std::min (dist (xx, yy, 0, 0.5, size), dist (xx, yy, 0.5, 0, size));
+
+        if (d1 < red_green_diagonal / 2 && d1 < d2)
           {
             /* Green.  */
             mult[yy][xx][0] = 0;
             mult[yy][xx][1] = 1;
             mult[yy][xx][2] = 0;
-            continue;
+	    g++;
           }
-        else if (d3 < ((size / 2) - PD))
+        else if (d2 < red_green_diagonal / 2)
           {
             /* Red.  */
             mult[yy][xx][0] = 1;
             mult[yy][xx][1] = 0;
             mult[yy][xx][2] = 0;
-            continue;
+	    r++;
           }
         else
           {
@@ -141,8 +228,19 @@ screen::paget_finlay ()
             mult[yy][xx][0] = 0;
             mult[yy][xx][1] = 0;
             mult[yy][xx][2] = 1;
+	    b++;
           }
+
+        add[yy][xx][0] = 0;
+        add[yy][xx][1] = 0;
+        add[yy][xx][2] = 0;
       }
+  if (0)
+    printf ("screen ratios: %f %f %f\n",
+	    r / (double)(size * size),
+	    g / (double)(size * size),
+	    b / (double)(size * size));
+
 }
 
 void

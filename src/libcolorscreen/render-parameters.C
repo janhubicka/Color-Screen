@@ -45,6 +45,9 @@ const char * render_parameters::color_model_names [] = {
   "cinecolor_koshofer",
   "autochrome_Casella_Tsukada",
   "kodachrome25",
+  "thames_Mees_Pledge",
+  "dioptichrome_Mees_Pledge",
+  "autochrome_Mees_Pledge",
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
@@ -379,6 +382,18 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	  color_matrix id;
 	  return id;
 	}
+      case render_parameters::color_model_thames_mees_pledge:
+	spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	spect->set_dyes (spectrum_dyes_to_xyz::thames_mees_pledge);
+	break;
+      case render_parameters::color_model_dioptichrome_mees_pledge:
+	spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	spect->set_dyes (spectrum_dyes_to_xyz::dioptichrome_mees_pledge);
+	break;
+      case render_parameters::color_model_autochrome_mees_pledge:
+	spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	spect->set_dyes (spectrum_dyes_to_xyz::autochrome_mees_pledge);
+	break;
       case render_parameters::color_model_max:
 	abort ();
     }

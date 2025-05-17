@@ -58,6 +58,9 @@ public:
     phase_one_sensitivity,
     nikon_d3_sensitivity,
     nikon_coolscan_9000ED_sensitivity,
+    thames_mees_pledge,
+    dioptichrome_mees_pledge,
+    autochrome_mees_pledge,
     debug_dyes,
     dyes_max
   };
@@ -84,6 +87,9 @@ public:
     "phase_one_sensitivity",
     "nikon_d3_sensitivity",
     "nikon_coolscan_9000ED_sensitivity",
+    "thames_Mees_Pledge",
+    "dioptichrome_Mees_Pledge",
+    "autochrome_Mees_Pledge",
     "debug",
   };
   enum illuminants {
