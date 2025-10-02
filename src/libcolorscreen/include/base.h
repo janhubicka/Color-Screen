@@ -126,7 +126,7 @@ struct point_t
   }
   inline int_point_t floor ();
   inline int_point_t nearest ();
-  inline point_t modf (int_point_t *ret = NULL);
+  inline point_t modf (int_point_t *ret = nullptr);
 };
 struct int_point_t
 {
