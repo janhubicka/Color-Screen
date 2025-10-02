@@ -13,6 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Update
+      run: sudo apt-get update
     - name: Install libtiff
       run: sudo apt-get install -y libtiff-dev
     - name: Install libjpeg-turbo
