@@ -54,6 +54,13 @@ public:
         avg_y += p.y;
       }
   }
+  /* Screens with vertical strips has only x coordinage.  */
+  void
+  account1_xonly (point_t p, enum scanner_type type)
+  {
+    if (is_fixed_lens (type))
+      avg_x += p.x;
+  }
   void
   finish1 ()
   {
@@ -65,6 +72,11 @@ public:
   {
     dist_sum += sqrt ((p.x - avg_x) * (p.x - avg_x)
                       + (p.y - avg_y) * (p.y - avg_y));
+  }
+  void
+  account2_xonly (point_t p)
+  {
+    dist_sum += fabs(p.x - avg_x);
   }
   trans_4d_matrix
   get_matrix ()
@@ -95,13 +107,11 @@ equations_per_sample (int flags)
 int
 equation_variables (int flags)
 {
-  if (flags & homography::solve_vertical_strips)
-    return 3;
   if (flags & homography::solve_rotation)
-    return 8;
+    return (flags & homography::solve_vertical_strips) ? 5 : 8;
   if (flags & homography::solve_free_rotation)
-    return 10;
-  return 6;
+    return (flags & homography::solve_vertical_strips) ? 5 : 10;
+  return (flags & homography::solve_vertical_strips) ? 3 : 6;
 }
 
 /* Produce two rows of homography equation converting
@@ -178,10 +188,32 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
     {
       /* Normally we compute error in screen coordinates, so the solver does not
          increase size of screen to reduce square error.
-	 This is not possible when we do linear solution.  */
+	 This is not possible when we do linear solution.
+
+	 We look for matrix 3x2 (missing row for s.y) as follows:
+
+         /s.x\   /v0 v1 v2 \ /d.x\
+         \  1/ = \v3 v4 v5 / |d.y|
+			     \1  /
+
+           s.x = v0*d.x + v1*d.y + v2             | equation (1)
+             1 = v3*d.x + v4*d.y + v5             | equation (2)
+	 multiply (1) by s.x
+           s.x = v3*d.x*s.x + v4*d.y*s.x + v5*s.x | equation (3)
+	 now (3)-(1)
+	     0 = v0*d.x + v1*d.y + v2 - v3*d.x*s.x - v4*d.y*s.x - v5*s.x 
+	 Fix v5=1 and reorder
+           s.x = v0*d.x + v1*d.y + v2 - v3*d.x*s.x - v4*d.y*s.x  */
+
       gsl_matrix_set (A, n, 0, d.x);
       gsl_matrix_set (A, n, 1, d.y);
       gsl_matrix_set (A, n, 2, 1);
+      if ((flags & homography::solve_rotation)
+	  || (flags & homography::solve_free_rotation))
+	{
+	  gsl_matrix_set (A, n, 3, -d.x * s.x);
+	  gsl_matrix_set (A, n, 4, -d.y * s.x);
+	}
       gsl_vector_set (v, n, s.x);
       assert (!colorscreen_checking || !invert);
     }
@@ -250,19 +282,43 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
       ret.m_elements[0][0] = gsl_vector_get (v, 0);
       ret.m_elements[1][0] = gsl_vector_get (v, 1);
       ret.m_elements[2][0] = gsl_vector_get (v, 2);
+      ret.m_elements[3][0] = 0;
+
       ret.m_elements[0][1] = -gsl_vector_get (v, 1);
       ret.m_elements[1][1] = gsl_vector_get (v, 0);
       ret.m_elements[2][1] = 0;
-      ret.m_elements[3][1] = gsl_vector_get (v, 2);
-      ret.m_elements[0][2] = 0;
-      ret.m_elements[1][2] = 0;
+      ret.m_elements[3][1] = 0;
+
+      if ((flags & homography::solve_free_rotation)
+	  || (flags & homography::solve_rotation))
+	{
+	  ret.m_elements[0][2] = gsl_vector_get (v, 3);
+	  ret.m_elements[1][2] = gsl_vector_get (v, 4);
+	}
+      else
+	{
+	  ret.m_elements[0][2] = 0;
+	  ret.m_elements[1][2] = 0;
+	}
       ret.m_elements[2][2] = 1;
       ret.m_elements[3][2] = 0;
-      ret.m_elements[0][3] = 0;
-      ret.m_elements[1][3] = 0;
+
+      if ((flags & homography::solve_free_rotation)
+	  || (flags & homography::solve_rotation))
+	{
+	  ret.m_elements[0][3] = gsl_vector_get (v, 3);
+	  ret.m_elements[1][3] = gsl_vector_get (v, 4);
+	}
+      else
+	{
+	  ret.m_elements[0][3] = 0;
+	  ret.m_elements[1][3] = 0;
+	}
       ret.m_elements[2][3] = 0;
       ret.m_elements[3][3] = 1;
+      fprintf (stdout, "Inverse homography\n");
       ret.print (stdout);
+      fprintf (stdout, "Homography\n");
       ret = ret.invert ();
       ret.print (stdout);
     }
@@ -316,21 +372,6 @@ screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t>
       }
   return chisq;
 }
-#if 0
-static double
-compute_chisq (solver_parameters::point_t *points, int n, trans_4d_matrix homography)
-{
-  double chisq = 0;
-  for (int i = 0; i < n; i++)
-    {
-      coord_t xi = points[i].img_x, yi = points[i].img_y, xs = points[i].screen_x, ys = points[i].screen_y;
-      coord_t xt, yt;
-      homography.perspective_transform (xs, ys, xt, yt);
-      chisq += (xt - xi) * (xt - xi) + (yt - yi) * (yt - yi);
-    }
-  return chisq;
-}
-#endif
 
 namespace homography
 {
@@ -429,20 +470,36 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
 
           /* Normalize input.  */
           normalize_points scrnorm (nsamples), imgnorm (nsamples);
-          for (int i = 0; i < nsamples; i++)
-            {
-              int p = sample[i];
-              scrnorm.account1 (tpoints[p].scr, scanner_type);
-              imgnorm.account1 (tpoints[p].img, scanner_type);
-            }
+	  if (flags & homography::solve_vertical_strips)
+	    for (int i = 0; i < nsamples; i++)
+	      {
+		int p = sample[i];
+		scrnorm.account1_xonly (tpoints[p].scr, scanner_type);
+		imgnorm.account1 (tpoints[p].img, scanner_type);
+	      }
+	  else
+	    for (int i = 0; i < nsamples; i++)
+	      {
+		int p = sample[i];
+		scrnorm.account1 (tpoints[p].scr, scanner_type);
+		imgnorm.account1 (tpoints[p].img, scanner_type);
+	      }
           scrnorm.finish1 ();
           imgnorm.finish1 ();
-          for (int i = 0; i < nsamples; i++)
-            {
-              int p = sample[i];
-              scrnorm.account2 (tpoints[p].scr);
-              imgnorm.account2 (tpoints[p].img);
-            }
+	  if (flags & homography::solve_vertical_strips)
+	    for (int i = 0; i < nsamples; i++)
+	      {
+		int p = sample[i];
+		scrnorm.account2_xonly (tpoints[p].scr);
+		imgnorm.account2 (tpoints[p].img);
+	      }
+	  else
+	    for (int i = 0; i < nsamples; i++)
+	      {
+		int p = sample[i];
+		scrnorm.account2 (tpoints[p].scr);
+		imgnorm.account2 (tpoints[p].img);
+	      }
 
           ts = scrnorm.get_matrix ();
           td = imgnorm.get_matrix ();
@@ -579,7 +636,7 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
 	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
 	      if (fabs (scr.x - s.x) < scr_dist)
 		{
-		  scrnorm.account1 (scr, scanner_type);
+		  scrnorm.account1_xonly (scr, scanner_type);
 		  imgnorm.account1 (tpoints[i].img, scanner_type);
 		}
 	    }
@@ -610,7 +667,7 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
 	      ret.inverse_perspective_transform (img.x, img.y, s.x, s.y);
 	      if (fabs (scr.x - s.x) < scr_dist)
 		{
-		  scrnorm.account2 (scr);
+		  scrnorm.account2_xonly (scr);
 		  imgnorm.account2 (tpoints[i].img);
 		}
 	    }

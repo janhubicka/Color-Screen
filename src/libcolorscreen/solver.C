@@ -56,8 +56,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (screen_with_vertical_strips_p (param->type))
     {
       /* FIXME: Disable disable rotation; it is not implemented (yet?).  */
-      flags &= homography::solve_rotation;
-      flags &= homography::solve_free_rotation;
+      //flags &= homography::solve_rotation;
+      //flags &= homography::solve_free_rotation;
       flags |= homography::solve_vertical_strips;
     }
   /* FIXME: ransac does yet support vertical strips.  */
@@ -85,7 +85,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   param->coordinate1 = map.inverse_early_correction ({ coordinate1_x, coordinate1_y }) - param->center;
   param->coordinate2 = map.inverse_early_correction ({ coordinate2_x, coordinate2_y }) - param->center;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the
-   * parameters?  */
+     parameters?  */
   if (flags & homography::solve_rotation)
     {
       coord_t tilt_x_min = -0.003, tilt_x_max = 0.003;
@@ -107,15 +107,28 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                 param->tilt_y = tilt_y_min + tystep * ty;
                 coord_t sq = 0;
                 map2.update_linear_parameters (*param);
-                for (int sy = -100; sy <= 100; sy += 100)
-                  for (int sx = -100; sx <= 100; sx += 100)
-                    {
-                      point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
-                      point_t p;
-                      h.perspective_transform (sx, sy, p.x, p.y);
-                      p = map.inverse_early_correction (p);
-                      sq += p.dist_sq2_from (t);
-                    }
+		if (flags & homography::solve_screen_weights) //(screen_with_vertical_strips_p (param->type))
+		  for (int iy = 100; iy <= 300; iy += 100)
+		    for (int ix = 100; ix <= 300; ix += 100)
+		      {
+			point_t img = { (coord_t)ix, (coord_t)iy };
+			point_t t = map2.to_scr (img);
+			point_t p;
+			img = map.apply_early_correction (img);
+			h.perspective_transform (img.x, img.y, p.x, p.y);
+			//p = map.inverse_early_correction (p);
+			sq += fabs (p.x-t.x);
+		      }
+		else
+		  for (int sy = -100; sy <= 100; sy += 100)
+		    for (int sx = -100; sx <= 100; sx += 100)
+		      {
+			point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
+			point_t p;
+			h.perspective_transform (sx, sy, p.x, p.y);
+			p = map.inverse_early_correction (p);
+			sq += p.dist_sq2_from (t);
+		      }
 
                 if (sq < minsq)
                   {
@@ -189,6 +202,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
 #endif
     }
+#if 0
   /* If we are solving screen with strips only, always make cooridnate2 orthogonal.
      We still need to determine perspective correction below.  */
   if (screen_with_vertical_strips_p (param->type))
@@ -196,6 +210,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       coordinate2_x = -coordinate1_y * (1/(coord_t)3);
       coordinate2_y = coordinate1_x *(1/(coord_t)3);
     }
+#endif
   if (debug_output && final_run)
     {
       printf ("New Translation %f %f\n", param->center.x, param->center.y);
