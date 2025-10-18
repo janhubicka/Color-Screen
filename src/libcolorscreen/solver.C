@@ -107,17 +107,18 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                 param->tilt_y = tilt_y_min + tystep * ty;
                 coord_t sq = 0;
                 map2.update_linear_parameters (*param);
-		if (flags & homography::solve_screen_weights) //(screen_with_vertical_strips_p (param->type))
-		  for (int iy = 100; iy <= 300; iy += 100)
-		    for (int ix = 100; ix <= 300; ix += 100)
+		if (flags & homography::solve_vertical_strips) //(screen_with_vertical_strips_p (param->type))
+		  for (int iy = 1000; iy <= 3000; iy += 1000)
+		    for (int ix = 1000; ix <= 3000; ix += 1000)
 		      {
 			point_t img = { (coord_t)ix, (coord_t)iy };
 			point_t t = map2.to_scr (img);
-			point_t p;
-			img = map.apply_early_correction (img);
-			h.perspective_transform (img.x, img.y, p.x, p.y);
+			point_t p = map.apply_early_correction (img);
+			//h.perspective_transform (p.x, p.y, p.x, p.y);
+			h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
 			//p = map.inverse_early_correction (p);
-			sq += fabs (p.x-t.x);
+			sq += p.dist_sq2_from (t);
+			//sq += fabs (p.x-t.x);
 		      }
 		else
 		  for (int sy = -100; sy <= 100; sy += 100)
@@ -135,8 +136,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                     minsq = sq;
                     best_tilt_x = param->tilt_x;
                     best_tilt_y = param->tilt_y;
-                    // printf ("Tilts %f %f %f %i\n", best_tilt_x, best_tilt_y,
-                    // minsq, i);
+                     //printf ("Tilts %f %f %f %i\n", best_tilt_x, best_tilt_y,  minsq, i);
                   }
               }
           param->tilt_x = best_tilt_x;
@@ -202,15 +202,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("slver sx: %f tilt x %f\n", sx, param->tilt_x);
 #endif
     }
-#if 0
-  /* If we are solving screen with strips only, always make cooridnate2 orthogonal.
-     We still need to determine perspective correction below.  */
-  if (screen_with_vertical_strips_p (param->type))
-    {
-      coordinate2_x = -coordinate1_y * (1/(coord_t)3);
-      coordinate2_y = coordinate1_x *(1/(coord_t)3);
-    }
-#endif
   if (debug_output && final_run)
     {
       printf ("New Translation %f %f\n", param->center.x, param->center.y);
@@ -219,35 +210,51 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("New coordinate2 %f %f\n", param->coordinate2.x,
               param->coordinate2.y);
     }
-  if (final_run && ((debug || debug_output)) && !(flags & homography::solve_vertical_strips))
+  if (final_run /*&& ((debug || debug_output)) && !(flags & homography::solve_vertical_strips)*/)
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
       // map2.m_matrix.print (stdout);
       bool found = false;
-      for (auto point : points)
-        {
-          point_t img = point.img;
-          point_t scr = point.scr;
-          point_t t = map2.to_img (scr);
-          point_t p;
-          h.perspective_transform (scr.x, scr.y, p.x, p.y);
-          p = map.inverse_early_correction (p);
-
+      if (!(flags & homography::solve_vertical_strips))
+	for (auto point : points)
+	  {
+	    point_t img = point.img;
+	    point_t scr = point.scr;
+	    point_t t = map2.to_img (scr);
+	    point_t p;
+	    h.perspective_transform (scr.x, scr.y, p.x, p.y);
+	    p = map.inverse_early_correction (p);
 #if 0
-	  map.to_img (px, py, &px, &py);
-	  if (debug_output)
-	    printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
-		px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
+	    map.to_img (px, py, &px, &py);
+	    if (debug_output)
+	      printf ("image: %g %g screen %g %g translated %g %g translated by solver %g %g dist %g\n", xi, yi, xs, ys, xt, yt,
+		  px, py, sqrt ((xt-xi)*(xt-xi)+(yt-yi)*(yt-yi)));
 #endif
-          if (!p.almost_eq (t, 1))
-            {
-              printf ("Solver model mismatch %f %f should be %f %f (ideally "
-                      "%f %f)\n",
-                      t.x, t.y, p.x, p.y, img.x, img.y);
-              found = true;
-            }
-        }
+	    if (!p.almost_eq (t, 1))
+	      {
+		printf ("Solver model mismatch %f %f should be %f %f (ideally "
+			"%f %f)\n",
+			t.x, t.y, p.x, p.y, img.x, img.y);
+		found = true;
+	      }
+	  }
+      else
+	for (auto point : points)
+	  {
+	    point_t img = point.img;
+	    point_t scr = point.scr;
+	    point_t t = map2.to_scr (img);
+	    point_t p = map.apply_early_correction (img);
+	    //h.perspective_transform (p.x, p.y, p.x, p.y);
+	    h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
+	    if (fabs (p.x - t.x) > 0.01)
+	      {
+		printf ("Solver model mismatch %f should be %f (ideally %f)\n",
+			t.x, p.x,  scr.x);
+		found = true;
+	      }
+	  }
       if (found)
         h.print (stdout);
     }

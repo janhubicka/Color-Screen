@@ -316,11 +316,11 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
 	}
       ret.m_elements[2][3] = 0;
       ret.m_elements[3][3] = 1;
-      fprintf (stdout, "Inverse homography\n");
-      ret.print (stdout);
-      fprintf (stdout, "Homography\n");
+      //fprintf (stdout, "Inverse homography\n");
+      //ret.print (stdout);
+      //fprintf (stdout, "Homography\n");
       ret = ret.invert ();
-      ret.print (stdout);
+      //ret.print (stdout);
     }
   if (!keep_vector)
     gsl_vector_free (v);
@@ -365,7 +365,7 @@ screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t>
       {
 	point_t t;
 	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
-	coord_t dist = (point.img.x - t.x) * (point.img.x - t.x);
+	coord_t dist = (point.scr.x - t.x) * (point.scr.x - t.x);
 	if (dist > 10000)
 	  dist = 10000;
 	chisq += dist;
