@@ -290,12 +290,6 @@ scr_to_img::set_parameters_for_early_correction (
      function.  */
   m_param.copy_from_cheap (param);
   
-  /* If we have screen with strips, compute the irrelevant coordinate.  */
-  if (screen_with_vertical_strips_p (m_param.type))
-    {
-      m_param.coordinate2.x = -m_param.coordinate1.y * (1/(coord_t)3);
-      m_param.coordinate2.y = m_param.coordinate1.x *(1/(coord_t)3);
-    }
   m_inverted_projection_distance = 1 / m_param.projection_distance;
   m_nwarnings = 0;
   assert (!debug || (img.width && img.height));

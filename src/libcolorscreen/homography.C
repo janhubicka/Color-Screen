@@ -188,7 +188,10 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
     {
       /* Normally we compute error in screen coordinates, so the solver does not
          increase size of screen to reduce square error.
-	 This is not possible when we do linear solution.
+	 This is not possible when we do linear solution, so compute inverse
+	 homography and invert it later.  Consequently we can not support free
+	 rotation since scanner homography is not invertible and we here
+	 compute inverse homography.
 
 	 We look for matrix 3x2 (missing row for s.y) as follows:
 
@@ -203,7 +206,8 @@ init_equation (gsl_matrix *A, gsl_vector *v, int n, bool invert, int flags,
 	 now (3)-(1)
 	     0 = v0*d.x + v1*d.y + v2 - v3*d.x*s.x - v4*d.y*s.x - v5*s.x 
 	 Fix v5=1 and reorder
-           s.x = v0*d.x + v1*d.y + v2 - v3*d.x*s.x - v4*d.y*s.x  */
+           s.x = v0*d.x + v1*d.y + v2 - v3*d.x*s.x - v4*d.y*s.x 
+	   */
 
       gsl_matrix_set (A, n, 0, d.x);
       gsl_matrix_set (A, n, 1, d.y);
@@ -284,8 +288,12 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
       ret.m_elements[2][0] = gsl_vector_get (v, 2);
       ret.m_elements[3][0] = 0;
 
-      ret.m_elements[0][1] = -gsl_vector_get (v, 1);
-      ret.m_elements[1][1] = gsl_vector_get (v, 0);
+      /* Make y coordiate orthogonal and 1/3th of length of x coordinate.
+         Length of this affect the size of "squares" used by interpolation
+	 algorithms.  Since there are 3 strips per period we want to have
+         y 1/3 of length. */
+      ret.m_elements[0][1] = -gsl_vector_get (v, 1) * 3;
+      ret.m_elements[1][1] = gsl_vector_get (v, 0) * 3;
       ret.m_elements[2][1] = 0;
       ret.m_elements[3][1] = 0;
 
@@ -329,8 +337,10 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
   td = td.invert ();
   ret = td * ret;
   ret = ret * ts;
+      //fprintf (stdout, "Normalized homography %i\n", flags & homography::solve_vertical_strips);
+      //ret.print (stdout);
 
-  /* Make things prettier. There is a redundancy between thrid and 4th row.  */
+  /* Make things prettier. There is a redundancy between thrid and 4th column.  */
   ret.m_elements[2][0] += ret.m_elements[3][0];
   ret.m_elements[3][0] = 0;
   ret.m_elements[3][1] += ret.m_elements[2][1];
@@ -342,6 +352,8 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
   for (int x = 0; x < 4; x++)
     for (int y = 0; y < 4; y++)
       ret.m_elements[x][y] /= ret.m_elements[3][3];
+  //fprintf (stdout, "Pretty homography\n");
+  //ret.print (stdout);
   return ret;
 }
 }
@@ -350,6 +362,7 @@ static double
 screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography)
 {
   double chisq = 0;
+  /* For vertical strips compute difference only in X direction.  */
   if (!(flags & homography::solve_vertical_strips))
     for (auto point : points)
       {
@@ -761,18 +774,32 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
 	  }
     }
   std::vector <solver_parameters::solver_point_t> &tpoints = map ? tpoints_vec : points;
-  for (int i = 0; i < n; i++)
-    {
-      scrnorm.account1 (tpoints[i].scr, scanner_type);
-      imgnorm.account1 (tpoints[i].img, scanner_type);
-    }
+  if (flags & homography::solve_vertical_strips)
+    for (int i = 0; i < n; i++)
+      {
+	scrnorm.account1_xonly (tpoints[i].scr, scanner_type);
+	imgnorm.account1 (tpoints[i].img, scanner_type);
+      }
+  else
+    for (int i = 0; i < n; i++)
+      {
+	scrnorm.account1 (tpoints[i].scr, scanner_type);
+	imgnorm.account1 (tpoints[i].img, scanner_type);
+      }
   scrnorm.finish1 ();
   imgnorm.finish1 ();
-  for (int i = 0; i < n; i++)
-    {
-      scrnorm.account2 (tpoints[i].scr);
-      imgnorm.account2 (tpoints[i].img);
-    }
+  if (flags & homography::solve_vertical_strips)
+    for (int i = 0; i < n; i++)
+      {
+	scrnorm.account2_xonly (tpoints[i].scr);
+	imgnorm.account2 (tpoints[i].img);
+      }
+  else
+    for (int i = 0; i < n; i++)
+      {
+	scrnorm.account2 (tpoints[i].scr);
+	imgnorm.account2 (tpoints[i].img);
+      }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
   coord_t xscale = 1;
@@ -883,13 +910,9 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   gsl_matrix_free (cov);
   trans_4d_matrix ret
       = solution_to_matrix (c, flags, scanner_type, false, ts, td);
-  /* We normalize equations and thus chisq is unnaturaly small.
-     To make get same range as in ransac we need to recompute.  */
+  /* Use screen so we do not get biass with lens correction.  */
   if (chisq_ret)
-    {
-      /* Use screen so we do not get biass with lens correction.  */
-      *chisq_ret = screen_compute_chisq (flags, tpoints, ret);
-    }
+    *chisq_ret = screen_compute_chisq (flags, tpoints, ret);
   return ret;
 }
 

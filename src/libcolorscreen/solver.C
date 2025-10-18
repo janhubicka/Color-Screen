@@ -54,16 +54,10 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 
   double chisq;
   if (screen_with_vertical_strips_p (param->type))
-    {
-      /* FIXME: Disable disable rotation; it is not implemented (yet?).  */
-      //flags &= homography::solve_rotation;
-      //flags &= homography::solve_free_rotation;
-      flags |= homography::solve_vertical_strips;
-    }
-  /* FIXME: ransac does yet support vertical strips.  */
+    flags |= homography::solve_vertical_strips;
+  printf ("Solving strips %i\n", screen_with_vertical_strips_p (param->type));
   bool do_ransac = !(flags
 		     & (homography::solve_image_weights
-			//| homography::solve_vertical_strips
 			| homography::solve_screen_weights));
 
   trans_4d_matrix h;
@@ -86,14 +80,14 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   param->coordinate2 = map.inverse_early_correction ({ coordinate2_x, coordinate2_y }) - param->center;
   /* TODO: Can we decompose matrix in the way scr_to_img expects the
      parameters?  */
+  coord_t minsq = INT_MAX;
+  coord_t best_tilt_x = 1, best_tilt_y = 1;
   if (flags & homography::solve_rotation)
     {
       coord_t tilt_x_min = -0.003, tilt_x_max = 0.003;
       int tilt_x_steps = 21;
       coord_t tilt_y_min = -0.003, tilt_y_max = 0.003;
       int tilt_y_steps = 21;
-      coord_t minsq = INT_MAX;
-      coord_t best_tilt_x = 1, best_tilt_y = 1;
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
       for (int i = 0; i < 10; i++)
@@ -107,20 +101,19 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                 param->tilt_y = tilt_y_min + tystep * ty;
                 coord_t sq = 0;
                 map2.update_linear_parameters (*param);
-		if (flags & homography::solve_vertical_strips) //(screen_with_vertical_strips_p (param->type))
-		  for (int iy = 1000; iy <= 3000; iy += 1000)
-		    for (int ix = 1000; ix <= 3000; ix += 1000)
+#if 0
+		if (flags & homography::solve_vertical_strips) 
+		  for (int iy = 100; iy <= 5000; iy += 100)
+		    for (int ix = 100; ix <= 5000; ix += 100)
 		      {
 			point_t img = { (coord_t)ix, (coord_t)iy };
 			point_t t = map2.to_scr (img);
 			point_t p = map.apply_early_correction (img);
-			//h.perspective_transform (p.x, p.y, p.x, p.y);
 			h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
-			//p = map.inverse_early_correction (p);
 			sq += p.dist_sq2_from (t);
-			//sq += fabs (p.x-t.x);
 		      }
 		else
+#endif
 		  for (int sy = -100; sy <= 100; sy += 100)
 		    for (int sx = -100; sx <= 100; sx += 100)
 		      {
@@ -148,7 +141,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
         }
       param->tilt_x = best_tilt_x;
       param->tilt_y = best_tilt_y;
-      // printf ("Tilts %f %f %f\n", best_tilt_x, best_tilt_y, minsq);
 #if 0
 	/* Compute RQ decomposition.  */
 	gsl_matrix *A = gsl_matrix_alloc (3, 3);
@@ -210,7 +202,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("New coordinate2 %f %f\n", param->coordinate2.x,
               param->coordinate2.y);
     }
-  if (final_run /*&& ((debug || debug_output)) && !(flags & homography::solve_vertical_strips)*/)
+  if (final_run && ((debug || debug_output)))
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
@@ -243,20 +235,24 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 	for (auto point : points)
 	  {
 	    point_t img = point.img;
-	    point_t scr = point.scr;
 	    point_t t = map2.to_scr (img);
 	    point_t p = map.apply_early_correction (img);
 	    //h.perspective_transform (p.x, p.y, p.x, p.y);
 	    h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
-	    if (fabs (p.x - t.x) > 0.01)
+	    if (!p.almost_eq (t, 0.03))
+	    //if (fabs (p.x - t.x) > 0.03)
 	      {
-		printf ("Solver model mismatch %f should be %f (ideally %f)\n",
-			t.x, p.x,  scr.x);
+		printf ("Solver model mismatch %f %f should be %f %f (ideally "
+			"first coord %f)\n",
+			t.x, t.y, p.x, p.y, point.scr.x);
 		found = true;
 	      }
 	  }
       if (found)
-        h.print (stdout);
+        {
+          h.print (stdout);
+          printf ("Tilts %f %f %f\n", best_tilt_x, best_tilt_y, minsq);
+        }
     }
   return chisq;
 }
@@ -364,8 +360,8 @@ public:
     coord_t chi = -5;
     /* Do not use ransac here, since it is not smooth and will confuse solver.  */
     homography::get_matrix (m_sparam.points, 
-	            /* FIXME: with vertical strips we support no rotation.  */
-		    screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
+		    (screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : 0)
+		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
     if (!(chi >= 0 && chi < bad_val))
       {
         printf ("Bad chi %f\n", chi);
@@ -398,8 +394,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (param->mesh_trans)
     abort ();
 
-  bool optimize_lens = sparam.optimize_lens && sparam.n_points () > 100;
-  bool optimize_rotation = (sparam.optimize_tilt && sparam.n_points () > 10);
+  bool optimize_lens = sparam.optimize_lens && sparam.n_points () > screen_with_vertical_strips_p (param->type) ? 200 : 100;
+  bool optimize_rotation = (sparam.optimize_tilt && sparam.n_points () > screen_with_vertical_strips_p (param->type) ? 20 : 10);
 
   if (optimize_lens)
     {
