@@ -143,12 +143,14 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
     {
       luminosity_t v = 1/apply_gamma ((0.5 * p.maxval / 256) * mul, gamma);
       scan_exposure *= 1/v;
+      /* i+3 is hack so scans of negatives with 0 do not get very large values.
+         We probably should add preflash parameter.  */
       if (!use_table)
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = (1/apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	  lookup_table[i] = (1/(apply_gamma ((i+3 + 0.5) * mul, gamma)) - dark_point) * scan_exposure;
       else
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = (1/p.gamma_table[i] - dark_point) * scan_exposure;
+	  lookup_table[i] = (1/(p.gamma_table[i]) - dark_point) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {

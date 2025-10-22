@@ -635,25 +635,52 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	    if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
 	        && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y)
 	      {
-		point_t p = map.to_img (current_solver.points[n].scr);
-		coord_t dist = p.dist_from (current_solver.points[n].img);
-		hist.pre_account (dist);
+		if (!screen_with_vertical_strips_p (current.type))
+		  {
+		    point_t p = map.to_img (current_solver.points[n].scr);
+		    coord_t dist = p.dist_from (current_solver.points[n].img);
+		    hist.pre_account (dist);
+		  }
+		else
+		  {
+		    point_t p = map.to_scr (current_solver.points[n].img);
+		    coord_t dist = fabs (p.x - current_solver.points[n].scr.x);
+		    hist.pre_account (dist);
+		  }
 	      }
 	  hist.finalize_range (65536);
 	  for (int n = 0; n < current_solver.n_points ();n++)
 	    if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
 	        && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y)
 	      {
-		point_t p = map.to_img (current_solver.points[n].scr);
-		coord_t dist = p.dist_from (current_solver.points[n].img);
-		hist.account (dist);
+		if (!screen_with_vertical_strips_p (current.type))
+		  {
+		    point_t p = map.to_img (current_solver.points[n].scr);
+		    coord_t dist = p.dist_from (current_solver.points[n].img);
+		    hist.account (dist);
+		  }
+		else
+		  {
+		    point_t p = map.to_scr (current_solver.points[n].img);
+		    coord_t dist = fabs (p.x - current_solver.points[n].scr.x);
+		    hist.account (dist);
+		  }
 	      }
 	  hist.finalize ();
 	  coord_t thresholt = hist.find_max (0.1);
 	  for (int n = 0; n < current_solver.n_points ();)
 	    {
-	      point_t p = map.to_img (current_solver.points[n].scr);
-	      coord_t dist = p.dist_from (current_solver.points[n].img);
+	      coord_t dist;
+	      if (!screen_with_vertical_strips_p (current.type))
+		{
+		  point_t p = map.to_img (current_solver.points[n].scr);
+		  dist = p.dist_from (current_solver.points[n].img);
+		}
+	      else
+		{
+		  point_t p = map.to_scr (current_solver.points[n].img);
+		  dist = fabs (p.x - current_solver.points[n].scr.x);
+		}
 	      if (current_solver.points[n].img.x > sel1x && current_solver.points[n].img.x < sel2x
 		  && current_solver.points[n].img.y > sel1y && current_solver.points[n].img.y < sel2y
 		  && dist > thresholt)

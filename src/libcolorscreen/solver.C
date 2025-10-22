@@ -101,28 +101,15 @@ solver (scr_to_img_parameters *param, image_data &img_data,
                 param->tilt_y = tilt_y_min + tystep * ty;
                 coord_t sq = 0;
                 map2.update_linear_parameters (*param);
-#if 0
-		if (flags & homography::solve_vertical_strips) 
-		  for (int iy = 100; iy <= 5000; iy += 100)
-		    for (int ix = 100; ix <= 5000; ix += 100)
-		      {
-			point_t img = { (coord_t)ix, (coord_t)iy };
-			point_t t = map2.to_scr (img);
-			point_t p = map.apply_early_correction (img);
-			h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
-			sq += p.dist_sq2_from (t);
-		      }
-		else
-#endif
-		  for (int sy = -100; sy <= 100; sy += 100)
-		    for (int sx = -100; sx <= 100; sx += 100)
-		      {
-			point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
-			point_t p;
-			h.perspective_transform (sx, sy, p.x, p.y);
-			p = map.inverse_early_correction (p);
-			sq += p.dist_sq2_from (t);
-		      }
+		for (int sy = -100; sy <= 100; sy += 100)
+		  for (int sx = -100; sx <= 100; sx += 100)
+		    {
+		      point_t t = map2.to_img ({ (coord_t)sx, (coord_t)sy });
+		      point_t p;
+		      h.perspective_transform (sx, sy, p.x, p.y);
+		      p = map.inverse_early_correction (p);
+		      sq += p.dist_sq2_from (t);
+		    }
 
                 if (sq < minsq)
                   {
@@ -202,12 +189,16 @@ solver (scr_to_img_parameters *param, image_data &img_data,
       printf ("New coordinate2 %f %f\n", param->coordinate2.x,
               param->coordinate2.y);
     }
+  /* This tests that we found corect rotations and homography matrix determined
+     corresponds to what is in the scr_to_img parameters.  */
   if (final_run && ((debug || debug_output)))
     {
       scr_to_img map2;
       map2.set_parameters (*param, img_data);
       // map2.m_matrix.print (stdout);
       bool found = false;
+      /* For vertical strips we need to compare screen coordinates only,
+         since solver points have no meaningful y coordinate.  */
       if (!(flags & homography::solve_vertical_strips))
 	for (auto point : points)
 	  {
@@ -237,10 +228,8 @@ solver (scr_to_img_parameters *param, image_data &img_data,
 	    point_t img = point.img;
 	    point_t t = map2.to_scr (img);
 	    point_t p = map.apply_early_correction (img);
-	    //h.perspective_transform (p.x, p.y, p.x, p.y);
 	    h.inverse_perspective_transform (p.x, p.y, p.x, p.y);
 	    if (!p.almost_eq (t, 0.03))
-	    //if (fabs (p.x - t.x) > 0.03)
 	      {
 		printf ("Solver model mismatch %f %f should be %f %f (ideally "
 			"first coord %f)\n",
@@ -388,14 +377,16 @@ coord_t
 solver (scr_to_img_parameters *param, image_data &img_data,
         solver_parameters &sparam, progress_info *progress)
 {
-  if (sparam.n_points () < 3)
+  /* 3 points may be enough for strips; we only solve homography on 1d.  */
+  if (sparam.n_points () < (screen_with_vertical_strips_p (param->type) ? 4 : 3))
     return 0;
 
   if (param->mesh_trans)
     abort ();
 
-  bool optimize_lens = sparam.optimize_lens && sparam.n_points () > screen_with_vertical_strips_p (param->type) ? 200 : 100;
-  bool optimize_rotation = (sparam.optimize_tilt && sparam.n_points () > screen_with_vertical_strips_p (param->type) ? 20 : 10);
+  /* Require more points for strips; we only can verify 1d info.  */
+  bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 200 : 100));
+  bool optimize_rotation = sparam.optimize_tilt && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 20 : 10));
 
   if (optimize_lens)
     {
