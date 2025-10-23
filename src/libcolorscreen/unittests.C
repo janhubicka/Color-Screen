@@ -279,7 +279,7 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
       &sparam, img, true, lens_correction, epsilon);
 }
 bool
-test_homography (bool lens_correction, coord_t epsilon)
+test_homography (bool lens_correction, bool joly, coord_t epsilon)
 {
   scr_to_img_parameters param;
   bool ok = true;
@@ -288,6 +288,8 @@ test_homography (bool lens_correction, coord_t epsilon)
   param.coordinate2 = { (coord_t)-1.4, (coord_t)5.2 };
   param.tilt_x = 0.0001;
   param.tilt_y = 0.00001;
+  if (joly)
+    param.type = Joly;
   if (lens_correction)
     {
       param.lens_correction.center = { 0.4, 0.6 };
@@ -482,15 +484,16 @@ test_screen_point_spread_blur ()
 int
 main ()
 {
-  printf ("1..7\n");
+  printf ("1..8\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
   report ("color tests", true);
   report ("screen blur tests", test_screen_blur ());
   report ("screen point spread blur tests", test_screen_point_spread_blur ());
-  report ("homography tests", test_homography (false, 0.000001));
-  report ("lens correction tests", test_homography (true, 0.15));
+  report ("homography tests", test_homography (false, false, 0.000001));
+  report ("lens correction tests", test_homography (true, false, 0.15));
+  report ("1d homography and lens correction tests", test_homography (true, true, 0.15));
   report ("screen discovery tests", test_discovery (1.8));
   return 0;
 }
