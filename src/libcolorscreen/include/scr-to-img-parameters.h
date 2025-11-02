@@ -28,6 +28,7 @@ enum scr_type
   ImprovedDioptichromeB,
   WarnerPowrie,
   Joly,
+  Omnicolore,
   max_scr_type
 };
 
@@ -40,7 +41,7 @@ paget_like_screen_p (enum scr_type t)
 inline bool
 dufay_like_screen_p (enum scr_type t)
 {
-  return t == Dufay || t == DioptichromeB || t == ImprovedDioptichromeB;
+  return t == Dufay || t == DioptichromeB || t == ImprovedDioptichromeB || t == Omnicolore;
 }
 
 /* Return true if screen is integrated to the emulsoin and can not move.  */

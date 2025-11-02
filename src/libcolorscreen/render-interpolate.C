@@ -72,7 +72,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
 	      adapted.mult[y][x][2] = p.scr->mult[y][x][2];
 	    }
       }
-    else if (p.params.type == ImprovedDioptichromeB)
+    else if (p.params.type == ImprovedDioptichromeB || p.params.type == Omnicolore)
       {
 	s = &adapted;
         for (int y = 0; y < screen::size; y++)
@@ -312,7 +312,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
     {
       if (m_scr_to_img.get_type () == DioptichromeB)
         std::swap (m_interpolation_proportions.red, m_interpolation_proportions.green);
-      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB || m_scr_to_img.get_type () == Omnicolore)
         std::swap (m_interpolation_proportions.red, m_interpolation_proportions.blue);
       else if (m_scr_to_img.get_type () == Joly)
         std::swap (m_interpolation_proportions.red, m_interpolation_proportions.blue);
@@ -345,7 +345,7 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
 	;
       else if (m_scr_to_img.get_type () == DioptichromeB)
         std::swap (c.red, c.green);
-      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+      else if (m_scr_to_img.get_type () == ImprovedDioptichromeB || m_scr_to_img.get_type () == Omnicolore)
         std::swap (c.red, c.blue);
     }
   if (!m_original_color)
@@ -502,7 +502,7 @@ render_interpolate::analyze_patches (analyzer analyze, const char *task,
                 rgbdata c = m_dufay->screen_tile_color (x, y);
 		if (m_scr_to_img.get_type () == DioptichromeB)
 		  std::swap (c.red, c.green);
-		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB || m_scr_to_img.get_type () == Omnicolore)
 		  std::swap (c.red, c.blue);
                 c = compensate_saturation_loss_scr ({ xs, ys }, c);
                 if (!analyze (xs, ys, c))
@@ -614,7 +614,7 @@ render_interpolate::analyze_rgb_patches (rgb_analyzer analyze,
                 m_dufay->screen_tile_rgb_color (r, g, b, x, y);
 		if (m_scr_to_img.get_type () == DioptichromeB)
 		  std::swap (r, g);
-		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB)
+		else if (m_scr_to_img.get_type () == ImprovedDioptichromeB || m_scr_to_img.get_type () == Omnicolore)
 		  std::swap (r, b);
                 if (!analyze (xs, ys, r, g, b))
                   return false;

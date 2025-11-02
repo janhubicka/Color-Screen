@@ -109,6 +109,13 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
 	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.5;
         return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
       }
+    /* Blue strips.  */
+    case Omnicolore:
+      {
+	coord_t red_strip_width = rparam && rparam->red_strip_width ? rparam->red_strip_width : 0.69;
+	coord_t green_strip_width = rparam && rparam->green_strip_width ? rparam->green_strip_width : 0.55;
+        return {red_strip_width * (1 - green_strip_width), green_strip_width * red_strip_width, 1 - red_strip_width};
+      }
     default:
       abort ();
     }

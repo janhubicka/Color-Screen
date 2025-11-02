@@ -115,6 +115,46 @@ struct lookup_table_params
   }
 };
 
+/* Simulate linear photographic negative.  Given luminosity (exposure time)
+   return luminosity of negative.  */
+static luminosity_t
+simulate_linear_negative (luminosity_t t)
+{
+  /* Denisty at full exposure. 1.6 is max denisty in Dufaycolor manual.
+     We simulate linear gamma negative process  where
+
+     log10(Dp) = maxd * log10(Ts)
+
+     Or
+
+     Dp = Ts^maxd
+
+     Ts is the transmitance is linearized value of the scan (of a negative)
+     and Dp is the optical density of the resulting positive.  We have
+
+     D = -log10 (T)
+     
+     Inverse is
+
+     T = 10^{-D}
+
+     To translate transminace to density. To get trasmitance of positive we want
+
+     Tp = 10^{-Ts^maxd} */
+
+  if (t < 0.3/65535)
+    return 1;
+
+  /* x coordinate of DH curve is logexp.  */
+  luminosity_t logexp = 1/(luminosity_t)65536 + std::log10(t);
+  /* Fully linear negative.  */
+  luminosity_t density = logexp;
+  /* Compute density.  */
+  //luminosity_t density = std::pow (10, logdensity);
+  /* Translate density to transmitance.  */
+  return std::pow (10, -density);
+}
+
 luminosity_t *
 get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 {
@@ -133,7 +173,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
     {
       if (!use_table)
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = (apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	  lookup_table[i] = (apply_gamma ((i + (luminosity_t)0.5) * mul, gamma) - dark_point) * scan_exposure;
       else
 	for (int i = 0; i <= p.maxval; i++)
 	  lookup_table[i] = (p.gamma_table[i] - dark_point) * scan_exposure;
@@ -141,16 +181,17 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
     }
   else if (!p.film_characteristic_curve)
     {
-      luminosity_t v = 1/apply_gamma ((0.5 * p.maxval / 256) * mul, gamma);
-      scan_exposure *= 1/v;
+      //luminosity_t v = simulate_linear_negative (apply_gamma (((luminosity_t)0.5 * p.maxval / 256) * mul, gamma));
+      //scan_exposure *= 1/v;
       /* i+3 is hack so scans of negatives with 0 do not get very large values.
          We probably should add preflash parameter.  */
       if (!use_table)
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = (1/(apply_gamma ((i+3 + 0.5) * mul, gamma)) - dark_point) * scan_exposure;
+	  lookup_table[i] = simulate_linear_negative ((apply_gamma ((i + (luminosity_t)0.5) * mul, gamma) - dark_point) * scan_exposure);
       else
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = (1/(p.gamma_table[i]) - dark_point) * scan_exposure;
+	  lookup_table[i] = simulate_linear_negative ((p.gamma_table[i] - dark_point) * scan_exposure);
+	  //lookup_table[i] = std::pow((luminosity_t)10, -(p.gamma_table[i]) - dark_point * maxd) * scan_exposure;
     }
   else if (p.restore_original_luminosity)
     {
@@ -160,7 +201,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
       // TODO: For stitching exposure should be really inside
       if (!use_table)
 	for (int i = 0; i <= p.maxval; i++)
-	  lookup_table[i] = s.unapply (1 - apply_gamma ((i + 0.5) * mul, gamma) - dark_point) * scan_exposure;
+	  lookup_table[i] = s.unapply (1 - apply_gamma ((i + (luminosity_t)0.5) * mul, gamma) - dark_point) * scan_exposure;
       else
 	for (int i = 0; i <= p.maxval; i++)
 	  lookup_table[i] = s.unapply (1 - p.gamma_table[i] - dark_point) * scan_exposure;

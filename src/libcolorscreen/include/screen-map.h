@@ -106,7 +106,7 @@ public:
           *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::green;
 	else if (type == DioptichromeB)
           *color = (e.x & 1) ? solver_parameters::blue : solver_parameters::red;
-	else if (type == ImprovedDioptichromeB)
+	else if (type == ImprovedDioptichromeB || type == Omnicolore)
           *color = (e.x & 1) ? solver_parameters::red : solver_parameters::green;
 	else abort ();
       }

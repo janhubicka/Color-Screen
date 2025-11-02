@@ -178,7 +178,7 @@ public:
       y *= m_exposure;
 
       /* Scale emulsion response and logarithmize.  */
-      y = log10 (y);
+      y = std::log10 (y);
 
       /* Adjust contrast.  */
       //y = (y - mid) * m_contrast + mid;

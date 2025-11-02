@@ -802,8 +802,13 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
       }
   trans_4d_matrix ts = scrnorm.get_matrix ();
   trans_4d_matrix td = imgnorm.get_matrix ();
-  coord_t xscale = 1;
-  coord_t yscale = 1;
+  coord_t xscale = 10;
+  coord_t yscale = 10;
+  const coord_t img_weight_pow = 2;
+  /* Do not scan screen weights according to scanner geometry:
+     screen coordinates are rotated.  */
+  const coord_t screen_weight_scale = 100;
+  const coord_t screen_weight_pow = 2;
   /* For moving lens, take into account that in one direction geometry changes
      a lot more than in the other.  */
   if (scanner_type == lens_move_horisontally)
@@ -816,7 +821,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   if (flags & solve_image_weights)
     for (int i = 0; i < n; i++)
       {
-        coord_t dist = tpoints[i].img.dist_sq2_from (wcenter, xscale, yscale);
+        coord_t dist = std::pow (tpoints[i].img.dist_sq2_from (wcenter, xscale, yscale), img_weight_pow);
         dist *= dist;
         double weight = 1 / (dist + 0.5);
         weights[i] = weight;
@@ -826,7 +831,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
   else if (flags & solve_screen_weights)
     for (int i = 0; i < n; i++)
       {
-        coord_t dist = tpoints[i].scr.dist_from (wcenter, xscale, yscale);
+        coord_t dist = std::pow (tpoints[i].scr.dist_from (wcenter, screen_weight_scale, screen_weight_scale), screen_weight_pow);
         double weight = 1 / (dist + 0.5);
         weights[i] = weight;
         normscale = std::max (normscale, weight);

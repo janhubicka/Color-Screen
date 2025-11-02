@@ -1434,6 +1434,7 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 	  std::swap (mult[y][x][0], mult[y][x][1]);
       break;
     case ImprovedDioptichromeB:
+    case Omnicolore:
       dufay (red_strip_width ? 1 - red_strip_width : 0.33, green_strip_width ? green_strip_width : 0.5);
       /* Strip is blue instead of red, so swap blue and red.  */
       for (int y = 0; y < size; y++)
@@ -1466,7 +1467,7 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 void
 screen::initialize_preview (enum scr_type type, coord_t red_strip_width, coord_t green_strip_width)
 {
-  if (type == Dufay || type == DioptichromeB || type == ImprovedDioptichromeB)
+  if (dufay_like_screen_p (type))
     {
       preview_dufay ();
       if (type == DioptichromeB)
@@ -1476,7 +1477,7 @@ screen::initialize_preview (enum scr_type type, coord_t red_strip_width, coord_t
 	      std::swap (mult[y][x][0], mult[y][x][1]);
 	      std::swap (add[y][x][0], add[y][x][1]);
 	    }
-      else if (type == ImprovedDioptichromeB)
+      else if (type == ImprovedDioptichromeB || type == Omnicolore)
 	/* Strip is blue instead of red, so swap blue and red.  */
 	for (int y = 0; y < size; y++)
 	  for (int x = 0; x < size; x++)

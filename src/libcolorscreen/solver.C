@@ -775,6 +775,7 @@ solver_parameters::get_point_locations (enum scr_type type, int *n)
       *n = sizeof (DioptichromeB_points) / sizeof (point_location);
       return DioptichromeB_points;
     case ImprovedDioptichromeB:
+    case Omnicolore:
       *n = sizeof (ImprovedDioptichromeB_points) / sizeof (point_location);
       return ImprovedDioptichromeB_points;
     case WarnerPowrie:

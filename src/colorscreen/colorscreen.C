@@ -2390,6 +2390,21 @@ finetune (int argc, char **argv)
       else
         print_help (argv[i]);
     }
+  if (!flags)
+    {
+      fprintf (stderr, "No --optimize flags set\n");
+      print_help ();
+    }
+  if (!infname)
+    {
+      fprintf (stderr, "Missing input file\n");
+      print_help ();
+    }
+  if (!cspname)
+    {
+      fprintf (stderr, "Missing parameter file\n");
+      print_help ();
+    }
 
   if (!infname || !cspname || !flags)
     print_help ();

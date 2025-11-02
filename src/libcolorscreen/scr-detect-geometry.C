@@ -117,10 +117,10 @@ struct patch_info
   coord_t x, y;
 };
 
-/* Try to guess Dufaycolor screen on coordinates X and Y.  Return true if
-   sucessful This function only detect grid of NPATCHESxNPATCHES*2 color
-   patches which is strong enough evidence that the scan seems to contain Dufay
-   color screen but this is not enough patches to accurately determine
+/* Try to guess Dufaycolor or Omnicolore screen on coordinates X and Y.  Return
+   true if sucessful This function only detect grid of NPATCHESxNPATCHES*2
+   color patches which is strong enough evidence that the scan seems to contain
+   Dufay color screen but this is not enough patches to accurately determine
    geometry.  Once approximate geometry is detected in next step flood_fill
    will find remaining patches.
 
@@ -138,7 +138,7 @@ struct patch_info
    RBRBRB
    GGGGGG
 
-   and ImprovedDioptichrome where red and blue is exchanged
+   and ImprovedDioptichrome or Omnicolore where red and blue is exchanged
 
    GRGRGR
    BBBBBB
@@ -169,7 +169,7 @@ try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map,
 
   if (type == DioptichromeB)
     std::swap (my_red, my_green);
-  else if (type == ImprovedDioptichromeB)
+  else if (type == ImprovedDioptichromeB || type == Omnicolore)
     std::swap (my_red, my_blue);
 
   /* First try to find a green patch.  */
@@ -1240,7 +1240,7 @@ flood_fill (FILE *report_file, bool slow, bool fast, coord_t greenx,
 
   if (param.type == DioptichromeB)
     std::swap (my_red, my_green);
-  else if (param.type == ImprovedDioptichromeB)
+  else if (param.type == ImprovedDioptichromeB || param.type == Omnicolore)
     std::swap (my_red, my_blue);
 
   /* If screen is estimated too small or too large give up.  */
@@ -1805,8 +1805,9 @@ detect_regular_screen_1 (image_data &img, scr_detect_parameters &dparam,
                          progress_info *progress, FILE *report_file)
 {
   /* Try both screen types; it is cheap to do so and seems to work quite
-   * reliable now.  */
+     reliable now.  */
   const bool try_dufay = true;
+  const bool try_omnicolore = true;
   const bool try_paget_finlay = true;
   //report_file = stdout;
 
@@ -1987,6 +1988,15 @@ we simply try both cmaps.  */
 									  &visited_improved_dioptichromeB, progress))
 						  {
 							  current_type = ImprovedDioptichromeB;
+							  this_cmap = render->get_color_class_map ();
+						  }
+						  else if (try_omnicolore
+								  && try_guess_screen (
+									  report_file, Omnicolore,
+									  *render->get_color_class_map (), sparam, x, y,
+									  &visited_improved_dioptichromeB, progress))
+						  {
+							  current_type = Omnicolore;
 							  this_cmap = render->get_color_class_map ();
 						  }
 						  else if (try_paget_finlay
