@@ -904,9 +904,9 @@ autodetect (int argc, char **argv)
         detect_color_model = true;
       else if (!strcmp (argv[i], "--no-auto-color-model"))
         detect_color_model = false;
-      else if (!strcmp (argv[i], "--auto-brightness"))
+      else if (!strcmp (argv[i], "--auto-levels"))
         detect_brightness = true;
-      else if (!strcmp (argv[i], "--no-auto-brightness"))
+      else if (!strcmp (argv[i], "--no-auto-levels"))
         detect_brightness = false;
       else if (!infname)
         infname = argv[i];
