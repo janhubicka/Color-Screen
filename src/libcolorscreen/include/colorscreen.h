@@ -30,10 +30,10 @@ struct render_to_file_params
   /* Specifies top left corner in coordinates.  */
   coord_t xstart, ystart;
   /* Size of single pixel.  If 0 default is computed using output mode and
-   * scale. */
+     scale. */
   coord_t xstep, ystep;
   /* Pixel size used to determine antialiasing factor.  It needs to be same in
-   * whole stitch project. */
+     whole stitch project. */
   coord_t pixel_size;
   /* Offset of a tile.  */
   int xoffset, yoffset;
