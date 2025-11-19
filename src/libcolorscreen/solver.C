@@ -55,7 +55,6 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   double chisq;
   if (screen_with_vertical_strips_p (param->type))
     flags |= homography::solve_vertical_strips;
-  printf ("Solving strips %i\n", screen_with_vertical_strips_p (param->type));
   bool do_ransac = !(flags
 		     & (homography::solve_image_weights
 			| homography::solve_screen_weights));
