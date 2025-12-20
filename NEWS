@@ -19,6 +19,8 @@ Changes in version 1.1
    - `colorscreen` now support `--threads=n` parameter to control parallelism.
    - `colorscreen --help` is now organized into main section and independent 
      helps for every command
+   - `colorscreen render` now support `--geometry` to specify whether output file
+     should follow screen or scan geometry
    - `--disable-16bit-float` configure option now dsables use of more memory
      effecient but slower 16bit floats for temporary data
    - `colorscreen render --detect-geometry` and `colorscreen stitch` now allows
