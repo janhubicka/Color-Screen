@@ -126,6 +126,12 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
 	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0)
 	return false;
+      if (rparam->scanner_mtf)
+	for (auto mtf_entry : *rparam->scanner_mtf)
+	  {
+	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]))
+	      return false;
+	  }
       if (rparam->backlight_correction)
 	{
 	  if (fprintf (f, "backlight_correction: yes\n") < 0)
@@ -351,6 +357,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   skipwhitespace (f);
   int gray_min = -1;
   int gray_max = -1;
+  bool first_scanner_mtf = true;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -1119,6 +1126,19 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		  param->mesh_trans = std::move (m);
 		}
 	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_point"))
+	{
+	  luminosity_t freq, contrast;
+	  if (first_scanner_mtf)
+	    rparam->scanner_mtf = std::make_shared<render_parameters::scanner_mtf_t> ();
+	  if (!read_luminosity (f, &freq)
+	      || !read_luminosity (f, &contrast))
+	    {
+	      *error = "error parsing scanner_mtf_point";
+	      return false;
+	    }
+	  rparam->scanner_mtf->push_back ({freq, contrast});
 	}
       else
 	{

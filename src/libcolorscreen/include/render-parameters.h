@@ -1,5 +1,6 @@
 #ifndef RENDER_PARAMETERS_H
 #define RENDER_PARAMETERS_H
+#include <array>
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
@@ -46,6 +47,10 @@ struct render_parameters
 
   /* Radius (in pixels) and amount for unsharp-mask filter.  */
   luminosity_t sharpen_radius, sharpen_amount;
+
+  /* MTF curve of scanner.  */
+  typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
+  std::shared_ptr <scanner_mtf_t> scanner_mtf;
 
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
