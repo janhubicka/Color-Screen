@@ -82,6 +82,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "\n");
       fprintf (stderr, "      --precise                 force precise "
                        "collection of patch density\n");
+      fprintf (stderr, "      --geometry=scan|screen    specify output file geometry");
       fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
       fprintf (stderr, "      --auto-color-model        automatically choose "
                        "color model for given screen type\n");
@@ -664,6 +665,14 @@ parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
   return true;
 }
 
+static enum render_to_file_params::output_geometry
+parse_geometry (const char *profile)
+{
+  static const char * const goemetries[]={"screen","scan","default"};
+  return parse_enum<enum render_to_file_params::output_geometry,
+                    goemetries,3> (profile, "Unkonwn geometry:%s\n");
+}
+
 static int
 render_cmd (int argc, char **argv)
 {
@@ -729,9 +738,14 @@ render_cmd (int argc, char **argv)
         detect_brightness = true;
       else if (!strcmp (argv[i], "--precise"))
         force_precise = true;
+      else if (!strcmp (argv[i], "--geometry"))
+        force_precise = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "dye-balance"))
         dye_balance = parse_dye_balance (str);
+      else if (const char *str
+               = arg_with_param (argc, argv, &i, "geometry"))
+        rfparams.geometry = parse_geometry (str);
       else if (!infname)
         infname = argv[i];
       else if (!cspname)
@@ -3394,7 +3408,7 @@ do_has_regular_screen (int argc, char **argv)
   if (verbose)
     {
       if (filenames.size () > 1)
-        printf ("Analyzing %i images\n", filenames.size ());
+        printf ("Analyzing %i images\n", (int)filenames.size ());
       if (save_matches)
         printf ("Saving filenames of scans with regular pattern to: %s\n", save_matches);
       if (save_misses)

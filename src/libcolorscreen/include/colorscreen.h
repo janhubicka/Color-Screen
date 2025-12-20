@@ -24,6 +24,19 @@ struct render_to_file_params
   int antialias;
   coord_t xdpi, ydpi;
 
+  enum output_geometry
+  {
+    /* Resulting file will use screen geometry (correct possible deformations
+       of the scan).  */
+    screen_geometry,
+    /* Resulting file will use scan geometry.  */
+    scan_geometry,
+    /* Default value.  Use scan geoemtry for scr based rendering modes and scan
+       for scr_detect.  */
+    default_geometry
+  } geometry;
+
+
   /* Width and height of the output file.  It will be computed if set to 0.  */
   int width, height;
   bool tile;
@@ -46,7 +59,7 @@ struct render_to_file_params
   render_to_file_params ()
       : filename (NULL), depth (16), verbose (false), hdr (false), dng (false),
         scale (1), icc_profile (NULL), icc_profile_len (0), antialias (0),
-        xdpi (0), ydpi (0), width (0), height (0), tile (0), xstart (0),
+        xdpi (0), ydpi (0), geometry (default_geometry), width (0), height (0), tile (0), xstart (0),
         ystart (0), xstep (0), ystep (0), pixel_size (0)
   {
   }

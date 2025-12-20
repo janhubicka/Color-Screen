@@ -146,7 +146,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
 		}
-	  else
+	  else if (p.geometry == render_to_file_params::screen_geometry)
 #pragma omp parallel for default(none) shared(p,render,y,out,map,final_xshift, final_yshift,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
@@ -154,6 +154,29 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  coord_t xx = x * p.xstep + p.xstart;
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
 		  rgbdata d = sample_data_final (render, map, xx, yy, final_xshift, final_yshift);
+		  if (!p.hdr)
+		    {
+		      int rr, gg, bb;
+		      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_pixel (x, row, rr, gg, bb);
+		    }
+		  else
+		    {
+		      luminosity_t rr, gg, bb;
+		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
+		}
+	  else
+#pragma omp parallel for default(none) shared(p,render,y,out,final_xshift, final_yshift,progress) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  rgbdata d = render.sample_pixel_img (xx - final_xshift, yy - final_yshift);
 		  if (!p.hdr)
 		    {
 		      int rr, gg, bb;
@@ -217,7 +240,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  if (x == p.width - 1 && progress)
 		    progress->inc_progress ();
 		}
-	  else
+	  else if (p.geometry == render_to_file_params::screen_geometry)
 #pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,map,final_xshift,final_yshift,progress) collapse (2)
 	    for (int row = 0; row < out.get_n_rows (); row++)
 	      for (int x = 0; x < p.width; x++)
@@ -228,6 +251,35 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  for (int ay = 0 ; ay < p.antialias; ay++)
 		    for (int ax = 0 ; ax < p.antialias; ax++)
 		      d += sample_data_final (render, map, xx + ax * asx, yy + ay * asy, final_xshift, final_yshift);
+		  d.red *= sc;
+		  d.green *= sc;
+		  d.blue *= sc;
+		  if (!p.hdr)
+		    {
+		      int rr, gg, bb;
+		      render.set_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_pixel (x, row, rr, gg, bb);
+		    }
+		  else
+		    {
+		      luminosity_t rr, gg, bb;
+		      render.set_hdr_color (d.red, d.green, d.blue, &rr, &gg, &bb);
+		      out.put_hdr_pixel (x, row, rr, gg, bb);
+		    }
+		  if (x == p.width - 1 && progress)
+		    progress->inc_progress ();
+		}
+         else
+#pragma omp parallel for default(none) shared(p,render,y,out,asx,asy,sc,final_xshift,final_yshift,progress) collapse (2)
+	    for (int row = 0; row < out.get_n_rows (); row++)
+	      for (int x = 0; x < p.width; x++)
+		{
+		  rgbdata d = {0, 0, 0};
+		  coord_t xx = x * p.xstep + p.xstart;
+		  coord_t yy = (y + row) * p.ystep + p.ystart;
+		  for (int ay = 0 ; ay < p.antialias; ay++)
+		    for (int ax = 0 ; ax < p.antialias; ax++)
+		      d += render.sample_pixel_img (xx + ax * asx - final_xshift, yy + ay * asy - final_yshift);
 		  d.red *= sc;
 		  d.green *= sc;
 		  d.blue *= sc;

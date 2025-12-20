@@ -1,5 +1,5 @@
 #ifndef ANALYZE_STRIPS_H
-#define ANALYZE_STRIPS__H
+#define ANALYZE_STRIPS_H
 #include "include/strips.h"
 #include "render-to-scr.h"
 #include "analyze-base.h"

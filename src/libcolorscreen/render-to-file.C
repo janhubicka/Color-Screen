@@ -25,7 +25,19 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
       scan = NULL;
     }
   const render_type_property &prop = render_type_properties [(int)rtparams->type];
-  if (/*prop.flags & (render_type_property::SCAN_RESOLUTION | render_type_property::SCREEN_RESOLUTION)*/ 1 /*TODO:scr geometry*/)
+
+  if (p->geometry == render_to_file_params::default_geometry)
+    {
+      if (prop.flags & render_type_property::NEEDS_SCR_TO_IMG)
+        p->geometry = render_to_file_params::screen_geometry;
+    }
+  /* Stitching always needs geometry correction.  */
+  if (stitch)
+    p->geometry = render_to_file_params::screen_geometry;
+  
+  /* Do we render using scr_to_img map?  */
+  if (/*prop.flags & (render_type_property::SCAN_RESOLUTION | render_type_property::SCREEN_RESOLUTION */
+      p->geometry == render_to_file_params::screen_geometry)
     {
       coord_t render_width, render_height;
       if (!stitch)
@@ -69,10 +81,8 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	{
 	  p->antialias = round (1 * p->xstep / p->pixel_size);
 	  /* TODO add flag for bosting up antialias.  */
-#if 0
-	  if (p->mode == predictive || p->mode == realistic)
+	  if (prop.flags & render_type_property::ANTIALIAS)
 	    p->antialias = round (4 * p->xstep / p->pixel_size);
-#endif
 	  if (!p->antialias)
 	    p->antialias = 1;
 	}
@@ -121,8 +131,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	}
       if (!p->antialias)
 	{
-	  /*TODO*/
-	  if (/*p->mode == detect_realistic || p->mode == detect_adjusted*/ 0)
+	  if (prop.flags & render_type_property::ANTIALIAS)
 	    p->antialias = round (4 * p->xstep);
 	  else
 	    p->antialias = round (1 * p->ystep);
