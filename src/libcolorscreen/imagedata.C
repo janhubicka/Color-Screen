@@ -626,17 +626,19 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.params.output_color = 0;
-  RawProcessor.imgdata.params.user_qual = 0;
+  RawProcessor.imgdata.params.user_qual = 0; /*Bicubic interpolation.  */
   RawProcessor.imgdata.params.use_auto_wb = 0;
   RawProcessor.imgdata.params.use_camera_wb = 0;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.rawparams.max_raw_memory_mb = 10000;
-  if (getenv ("CSHALFRAW"))
+  if (getenv ("CS_HALF_RAW"))
     RawProcessor.imgdata.params.half_size = 1;
   RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.fbdd_noiserd = 0;
   /* TODO figure out threshold.  */
   RawProcessor.imgdata.params.threshold = 0;
+  if (getenv ("CS_NO_DEMOSAIC"))
+    RawProcessor.imgdata.params.no_interpolation = 1;
   int ret;
   if (buffer)
     ret = RawProcessor.open_buffer (buffer, buffer_size);
