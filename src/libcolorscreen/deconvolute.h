@@ -1,12 +1,12 @@
 #ifndef DECONVOLUTE_H
 #define DECONVOLUTE_H
-#include <omp.h>
 #include "include/base.h"
 #include "include/color.h"
 #include "include/precomputed-function.h"
 #include "include/progress-info.h"
 #include <fftw3.h>
 #include <mutex>
+#include <omp.h>
 namespace colorscreen
 {
 extern std::mutex fftw_lock;
@@ -14,7 +14,8 @@ extern std::mutex fftw_lock;
 class deconvolution
 {
 public:
-  deconvolution (precomputed_function<luminosity_t> *mtf, int max_threads, bool sharpen = true);
+  deconvolution (precomputed_function<luminosity_t> *mtf, int max_threads,
+                 bool sharpen = true);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
@@ -60,7 +61,7 @@ private:
     std::vector<deconvolution_data_t> tile;
     bool initialized;
   };
-  std::vector <fftw_plans> m_plans;
+  std::vector<fftw_plans> m_plans;
 };
 
 /* Deconvolution worker. Sharpen DATA to OUT which both has dimensions
@@ -88,10 +89,10 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
         if (progress && progress->cancelled ())
-	  continue;
-	int id = parallel ? omp_get_thread_num (): 0;
-	d.init (id);
-	//printf ("%i %i\n",x,y);
+          continue;
+        int id = parallel ? omp_get_thread_num () : 0;
+        d.init (id);
+        // printf ("%i %i\n",x,y);
         for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
           for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
             {
@@ -102,14 +103,14 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
                   && y + yy - d.get_border_size () < height)
                 pixel = getdata (data, x + xx - d.get_border_size (),
                                  y + yy - d.get_border_size (), width, param);
-              d.put_pixel(id, xx, yy, pixel);
+              d.put_pixel (id, xx, yy, pixel);
             }
         d.process_tile (id);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
-	    if (y + yy < height && x + xx < width)
-	      out[(y + yy) * width + x + xx]
-		  = d.get_pixel (id, xx + d.get_border_size (), yy + d.get_border_size ());
+            if (y + yy < height && x + xx < width)
+              out[(y + yy) * width + x + xx] = d.get_pixel (
+                  id, xx + d.get_border_size (), yy + d.get_border_size ());
         if (progress)
           progress->inc_progress ();
       }

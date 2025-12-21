@@ -23,7 +23,7 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf,
   m_fft_size = m_tile_size / 2 + 1;
   m_blur_kernel = new fftw_complex[m_tile_size * m_fft_size];
   double scale = 1.0 / (m_tile_size * m_tile_size);
-  double rev_tile_size = 1 / m_tile_size;
+  double rev_tile_size = 1 / (double)m_tile_size;
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
@@ -35,6 +35,7 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf,
         // Result = Img * conj(Ker) / (|Ker|^2 + 1/SNR)
         if (sharpen)
           ker = conj (ker) / (std::norm (ker) + k_const);
+	  //ker = ((deconvolution_data_t)1)/ker;
         ker = ker * scale;
         m_blur_kernel[y * m_fft_size + x][0] = real (ker);
         m_blur_kernel[y * m_fft_size + x][1] = imag (ker);
