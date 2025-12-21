@@ -84,10 +84,18 @@ struct screen_params
   bool preview;
   coord_t radius;
   coord_t red_strip_width, green_strip_width;
+  std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf;
+  coord_t screen_mtf_scale;
 
   bool
   operator== (screen_params &o)
   {
+    if (screen_mtf || o.screen_mtf)
+      {
+	if (!screen_mtf || !o.screen_mtf || screen_mtf_scale != o.screen_mtf_scale
+	    || (*screen_mtf) != (*o.screen_mtf))
+	  return false;
+      }
     return t == o.t && preview == o.preview && fabs (radius - o.radius) < 0.001
            && (!screen_with_varying_strips_p (t)
                || (red_strip_width == o.red_strip_width
@@ -105,12 +113,29 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     s->initialize_preview (p.t, p.red_strip_width, p.green_strip_width);
   else
     s->initialize (p.t, p.red_strip_width, p.green_strip_width);
-  if (!p.radius)
+  if (!p.radius && !p.screen_mtf)
     return s;
   screen *blurred = new screen;
   if (progress)
     progress->set_task ("bluring screen", 1);
-  blurred->initialize_with_blur (*s, p.radius);
+  if (p.screen_mtf)
+    {
+      std::vector<luminosity_t> x(p.screen_mtf->size ());
+      std::vector<luminosity_t> y(p.screen_mtf->size ());
+      for (size_t i = 0; i < p.screen_mtf->size (); i++)
+      {
+	x[i] = (*p.screen_mtf)[i][0] * p.screen_mtf_scale;
+	y[i] = std::clamp ((*p.screen_mtf)[i][1] * (1 / (luminosity_t)100), (luminosity_t)0, (luminosity_t)1);
+	//printf ("%i %f %f\n",i,x[i],y[i]);
+      }
+      precomputed_function <luminosity_t> fn(0, x[p.screen_mtf->size ()-1], 1024, x.data (), y.data (), p.screen_mtf->size ());
+      precomputed_function<luminosity_t> *vv[3] = {&fn, &fn, &fn};
+      blurred->empty ();
+      blurred->initialize_with_2D_fft (*s, vv, { 1.0, 1.0, 1.0 });
+      blurred->save_tiff ("/tmp/scr.tif", false, 3);
+    }
+  else
+    blurred->initialize_with_blur (*s, p.radius);
   delete s;
   return blurred;
 }
@@ -223,10 +248,12 @@ render_to_scr::precompute_img_range (bool grayscale_needed,
 
 screen *
 render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius,
+			   std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf,
+			   coord_t screen_mtf_scale,
                            coord_t red_strip_width, coord_t green_strip_width,
                            progress_info *progress, uint64_t *id)
 {
-  screen_params p = { t, preview, radius, red_strip_width, green_strip_width };
+  screen_params p = { t, preview, radius, red_strip_width, green_strip_width, screen_mtf, screen_mtf_scale};
   return screen_cache.get (p, progress, id);
 }
 

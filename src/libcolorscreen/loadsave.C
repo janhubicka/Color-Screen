@@ -1132,6 +1132,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  luminosity_t freq, contrast;
 	  if (first_scanner_mtf)
 	    rparam->scanner_mtf = std::make_shared<render_parameters::scanner_mtf_t> ();
+	  first_scanner_mtf = false;
 	  if (!read_luminosity (f, &freq)
 	      || !read_luminosity (f, &contrast))
 	    {

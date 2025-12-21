@@ -172,6 +172,8 @@ public:
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w,
                                          coord_t h);
   static screen *get_screen (enum scr_type t, bool preview, coord_t radius,
+			     std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf,
+			     coord_t screen_mtf_scale,
                              coord_t dufay_red_strip_width,
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
