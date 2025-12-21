@@ -318,6 +318,13 @@ struct render_parameters
     for (unsigned int i = 0; i < tile_adjustments.size (); i++)
       if (tile_adjustments[i] != other.tile_adjustments[i])
         return false;
+    if (scanner_mtf || other.scanner_mtf)
+      {
+	if (!scanner_mtf || other.scanner_mtf)
+	  return false;
+	if (*scanner_mtf != *other.scanner_mtf)
+	  return false;
+      }
     return gamma == other.gamma && film_gamma == other.film_gamma
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma

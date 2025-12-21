@@ -90,7 +90,7 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
   return {red, green, blue};
 }
 
-/* Render preview for gtkgui. To be replaces by render_tile later.  */
+/* Render preview for gtkgui. To be replaced by render_tile later.  */
 bool
 render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride)
 {

@@ -2,17 +2,14 @@
 #include <memory>
 #include <array>
 #include <complex>
-#include <mutex>
 #include "include/tiff-writer.h"
 #include "include/dufaycolor.h"
 #include "screen.h"
 #include "gaussian-blur.h"
-#include "fftw3.h"
+#include "deconvolute.h"
 #include "spline.h"
 #include "icc.h"
 namespace {
-/* FFTW execute is thread safe. Everything else is not.  */
-std::mutex fftw_lock;
 }
 namespace colorscreen
 {
