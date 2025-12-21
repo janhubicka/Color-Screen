@@ -3414,6 +3414,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
+  const bool debugfiles = false;
+
+  if (debugfiles)
+    {
+      scr.save_tiff ("/tmp/scr.tif", false, 3);
+      collection_scr.save_tiff ("/tmp/collection-scr.tif", false, 3);
+    }
 
   /* If sharpening is not needed, we can avoid temporary buffer to store
      rendered screen.  */
@@ -3426,24 +3433,22 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       for (int y = ymin; y <= ymax; y++)
         for (int x = xmin; x <= xmax; x++)
           {
-#if 0
-	    point_t p;
-	    map.to_scr (x + 0.5, y + 0.5, &p.x, &p.y);
-	    rgbdata m = scr.interpolated_mult (p);
-	    rgbdata am = m;
-#else
             point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
             point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
             point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
             rgbdata am = { 0, 0, 0 };
             point_t pdx = (px - p) * (1.0 / 6.0);
             point_t pdy = (py - p) * (1.0 / 6.0);
+
+	    /* Render screen carefully with anti-aliasing, so we account loss
+	       caused by pixels along boundary.  */
             for (int yy = -2; yy <= 2; yy++)
               for (int xx = -2; xx <= 2; xx++)
                 am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
             am *= ((coord_t)1.0 / 25);
+	    /* Data collection does not antialias.  So just take pixel in the
+	       middle  */
             rgbdata m = collection_scr.noninterpolated_mult (p);
-#endif
             if (m.red > threshold)
               {
                 coord_t val = m.red - threshold;
@@ -3481,6 +3486,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
             rgbdata am = { 0, 0, 0 };
             point_t pdx = (px - p) * (1.0 / 6.0);
             point_t pdy = (py - p) * (1.0 / 6.0);
+
+	    /* Use anti-aliasing.  This should match the non-sharpening path above.  */
             for (int yy = -2; yy <= 2; yy++)
               for (int xx = -2; xx <= 2; xx++)
                 am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
@@ -3492,10 +3499,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       std::vector<rgbdata> rendered2 (xsize * ysize);
       /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
       sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
-          rendered2.data (), rendered.data (), ysize, xsize, ysize,
+          rendered2.data (), rendered.data (), xsize, ysize, ysize,
           sharpen_radius, sharpen_amount, NULL, false);
 
-      if (0)
+      if (debugfiles)
 	{
 	  tiff_writer_params p;
 	  p.filename = "/tmp/sharpened.tif";
@@ -3511,7 +3518,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 		  {
 		    rgbdata d
 			= rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
-		    if (x & 1)
+		    if (x == xmin - 1 || y == ymin - 1 || x == xmax + 1 || y == ymax + 1)
 		      d = {1,1,1};
 		    renderedt.put_pixel (x - xmin + ext, d.red * 65535, d.green * 65535,
 					 d.blue * 65535);
@@ -3522,6 +3529,22 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	  }
 	  {
 	    p.filename = "/tmp/unsharpened.tif";
+	    tiff_writer renderedt (p, &error);
+	    for (int y = ymin - ext; y <= ymax + ext; y++)
+	      {
+		for (int x = xmin - ext; x <= xmax + ext; x++)
+		  {
+		    rgbdata d
+			= rendered[(y - ymin + ext) * xsize + x - xmin + ext];
+		    renderedt.put_pixel (x - xmin + ext, d.red * 65535, d.green * 65535,
+					 d.blue * 65535);
+		  }
+		if (!renderedt.write_row ())
+		  return false;
+	      }
+	  }
+	  {
+	    p.filename = "/tmp/collection.tif";
 	    tiff_writer renderedu (p, &error);
 	    for (int y = ymin - ext; y <= ymax + ext; y++)
 	      {
