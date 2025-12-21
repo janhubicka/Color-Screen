@@ -129,7 +129,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       if (rparam->scanner_mtf)
 	for (auto mtf_entry : *rparam->scanner_mtf)
 	  {
-	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]))
+	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]) < 0)
 	      return false;
 	  }
       if (rparam->backlight_correction)
