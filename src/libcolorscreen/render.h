@@ -829,5 +829,21 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   free (weights);
   return !progress || !progress->cancelled ();
 }
+inline precomputed_function<luminosity_t>
+precompute_scanner_mtf (const render_parameters::scanner_mtf_t &scanner_mtf, coord_t scale = 1)
+{
+  std::vector<luminosity_t> x (scanner_mtf.size ());
+  std::vector<luminosity_t> y (scanner_mtf.size ());
+  for (size_t i = 0; i < scanner_mtf.size (); i++)
+    {
+      x[i] = scanner_mtf[i][0] * (luminosity_t)scale;
+      y[i] = std::clamp (scanner_mtf[i][1] * (1 / (luminosity_t)100),
+                         (luminosity_t)0, (luminosity_t)1);
+    }
+  return precomputed_function<luminosity_t> (
+      0, x[scanner_mtf.size () - 1], 1024, x.data (), y.data (),
+      scanner_mtf.size ());
+}
+
 }
 #endif

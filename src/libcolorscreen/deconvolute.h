@@ -14,7 +14,7 @@ extern std::mutex fftw_lock;
 class deconvolution
 {
 public:
-  deconvolution (precomputed_function<luminosity_t> *mtf, int max_threads,
+  deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr, int max_threads,
                  bool sharpen = true);
   typedef double deconvolution_data_t;
   ~deconvolution ();
@@ -73,11 +73,13 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolute (mem_O *out, T data, P param, int width, int height,
-             precomputed_function<luminosity_t> *mtf, progress_info *progress,
+             precomputed_function<luminosity_t> *mtf,
+	     luminosity_t snr,
+	     progress_info *progress,
              bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, nthreads);
+  deconvolution d (mtf, snr, nthreads);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -111,6 +113,95 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
             if (y + yy < height && x + xx < width)
               out[(y + yy) * width + x + xx] = d.get_pixel (
                   id, xx + d.get_border_size (), yy + d.get_border_size ());
+        if (progress)
+          progress->inc_progress ();
+      }
+  return true;
+}
+/* Deconvolution worker for rgbdata and related types (having red, green and blue fields)  */
+template <typename O, typename mem_O, typename T, typename P,
+          O (*getdata) (T data, int x, int y, int width, P param)>
+bool
+deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
+		 precomputed_function<luminosity_t> *mtf, luminosity_t snr, progress_info *progress,
+		 bool parallel = true)
+{
+  int nthreads = parallel ? omp_get_max_threads () : 1;
+  deconvolution d (mtf, snr, nthreads);
+
+  int xtiles
+      = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
+  int ytiles
+      = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
+  if (progress)
+    progress->set_task ("Deconvolution sharpening", xtiles * ytiles);
+  for (int y = 0; y < height; y += d.get_basic_tile_size ())
+    for (int x = 0; x < width; x += d.get_basic_tile_size ())
+      {
+        if (progress && progress->cancelled ())
+          continue;
+        int id = parallel ? omp_get_thread_num () : 0;
+        d.init (id);
+
+
+        // printf ("%i %i\n",x,y);
+        for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
+          for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
+            {
+	      deconvolution::deconvolution_data_t pixel = 0;
+              if (x + xx - d.get_border_size () >= 0
+                  && x + xx - d.get_border_size () < width
+                  && y + yy - d.get_border_size () >= 0
+                  && y + yy - d.get_border_size () < height)
+                pixel = getdata (data, x + xx - d.get_border_size (),
+                                 y + yy - d.get_border_size (), width, param).red;
+              d.put_pixel (id, xx, yy, pixel);
+            }
+        d.process_tile (id);
+        for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
+          for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
+            if (y + yy < height && x + xx < width)
+              out[(y + yy) * width + x + xx].red = d.get_pixel (
+                  id, xx + d.get_border_size (), yy + d.get_border_size ());
+
+        for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
+          for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
+            {
+	      deconvolution::deconvolution_data_t pixel = 0;
+              if (x + xx - d.get_border_size () >= 0
+                  && x + xx - d.get_border_size () < width
+                  && y + yy - d.get_border_size () >= 0
+                  && y + yy - d.get_border_size () < height)
+                pixel = getdata (data, x + xx - d.get_border_size (),
+                                 y + yy - d.get_border_size (), width, param).green;
+              d.put_pixel (id, xx, yy, pixel);
+            }
+        d.process_tile (id);
+        for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
+          for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
+            if (y + yy < height && x + xx < width)
+              out[(y + yy) * width + x + xx].green = d.get_pixel (
+                  id, xx + d.get_border_size (), yy + d.get_border_size ());
+
+        for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
+          for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
+            {
+	      deconvolution::deconvolution_data_t pixel = 0;
+              if (x + xx - d.get_border_size () >= 0
+                  && x + xx - d.get_border_size () < width
+                  && y + yy - d.get_border_size () >= 0
+                  && y + yy - d.get_border_size () < height)
+                pixel = getdata (data, x + xx - d.get_border_size (),
+                                 y + yy - d.get_border_size (), width, param).blue;
+              d.put_pixel (id, xx, yy, pixel);
+            }
+        d.process_tile (id);
+        for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
+          for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
+            if (y + yy < height && x + xx < width)
+              out[(y + yy) * width + x + xx].blue = d.get_pixel (
+                  id, xx + d.get_border_size (), yy + d.get_border_size ());
+
         if (progress)
           progress->inc_progress ();
       }

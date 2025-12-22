@@ -443,6 +443,7 @@ struct sharpen_params
   luminosity_t radius;
   luminosity_t amount;
   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
+  luminosity_t scanner_snr;
   bool
   operator== (sharpen_params &o)
   {
@@ -450,7 +451,7 @@ struct sharpen_params
       {
         if (!scanner_mtf || !o.scanner_mtf)
           return false;
-        return (*scanner_mtf == *o.scanner_mtf);
+        return (*scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr);
       }
     return ((!radius || !amount) && (!o.radius || !o.amount))
            || (radius == o.radius && amount == o.amount);
@@ -507,22 +508,6 @@ getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables t)
   return val;
 }
 
-precomputed_function<luminosity_t>
-get_scanner_mtf (struct gray_and_sharpen_params &p)
-{
-  std::vector<luminosity_t> x (p.sp.scanner_mtf->size ());
-  std::vector<luminosity_t> y (p.sp.scanner_mtf->size ());
-  for (size_t i = 0; i < p.sp.scanner_mtf->size (); i++)
-    {
-      x[i] = (*p.sp.scanner_mtf)[i][0];
-      y[i] = std::clamp ((*p.sp.scanner_mtf)[i][1] * (1 / (luminosity_t)100),
-                         (luminosity_t)0, (luminosity_t)1);
-    }
-  return precomputed_function<luminosity_t> (
-      0, x[p.sp.scanner_mtf->size () - 1], 1024, x.data (), y.data (),
-      p.sp.scanner_mtf->size ());
-}
-
 sharpened_data *
 get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                              progress_info *progress)
@@ -564,12 +549,12 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         {
           if (p.sp.scanner_mtf)
             {
-              precomputed_function<luminosity_t> mtf = get_scanner_mtf (p);
+              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
                                unsigned short **, getdata_params,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-                  &mtf, progress);
+                  &mtf, p.sp.scanner_snr, progress);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
@@ -579,10 +564,10 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         }
       else if (p.sp.scanner_mtf)
         {
-          precomputed_function<luminosity_t> mtf = get_scanner_mtf (p);
+          precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
           ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
-              out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, &mtf,
+              out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
               progress);
         }
       else
@@ -603,11 +588,11 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           t.correction = p.gp.backlight;
           if (p.sp.scanner_mtf)
             {
-              precomputed_function<luminosity_t> mtf = get_scanner_mtf (p);
+              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
                                const image_data *, gray_data_tables,
                                getdata_helper2> (
-                  out, p.gp.img, t, p.gp.img->width, p.gp.img->height, &mtf,
+                  out, p.gp.img, t, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
                   progress);
             }
           else
@@ -705,7 +690,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_backlight_correction_id,
                 m_params.ignore_infrared },
               { m_params.sharpen_radius, m_params.sharpen_amount,
-                m_params.scanner_mtf } };
+                m_params.scanner_mtf, m_params.scanner_snr } };
       m_sharpened_data_holder
           = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

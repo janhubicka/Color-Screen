@@ -1635,17 +1635,23 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 void
 screen::initialize_with_2D_fft (screen &scr,
                                 precomputed_function<luminosity_t> *mtf[3],
-                                rgbdata scale)
+                                rgbdata scale,
+				luminosity_t snr)
 {
   fft_2d fft;
   for (int c = 0; c < 3; c++)
     {
       if (!c || scale[c] != scale[c-1] || (mtf[c] != mtf[c - 1] && *mtf[c] != *mtf[c-1]))
 	{
-	  luminosity_t step = scale[c] /** (1 / screen::size)*/;
+	  luminosity_t step = scale[c] ;
+	      /** (1 / screen::size)
+		 FIXME: Should be here, but this is compensated in get_new_screen; check with finetune logic*/
+	  luminosity_t data_scale = 1.0 / (screen::size * screen::size);
+	  luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  for (int y = 0; y < fft_size; y++)
 	    for (int x = 0; x < fft_size; x++)
 	      {
+#if 0
 		luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
 		if (w < 0)
 		  w = 0;
@@ -1658,6 +1664,19 @@ screen::initialize_with_2D_fft (screen &scr,
 		    fft[(screen::size - y) * fft_size + x][0]
 			= w * (1.0 / (screen::size * screen::size));
 		    fft[(screen::size - y) * fft_size + x][1] = 0;
+		  }
+#endif
+	        std::complex ker (std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step), (luminosity_t)0, (luminosity_t)1), (luminosity_t)0);
+		// If SNR is set simulate bluring followed by sharpening
+		if (snr > 0)
+		  ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		ker = ker * data_scale;
+		fft[y * fft_size + x][0] = real (ker);
+		fft[y * fft_size + x][1] = imag (ker);
+		if (y)
+		  {
+		    fft[(screen::size - y) * fft_size + x][0] = real (ker);
+		    fft[(screen::size - y) * fft_size + x][1] = imag (ker);
 		  }
 	      }
 	}

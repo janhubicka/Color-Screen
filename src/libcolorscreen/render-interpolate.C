@@ -223,14 +223,14 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
           if (m_params.scanner_blur_correction)
             compute_saturation_loss_table (
                 m_screen, screen_id, m_params.collection_threshold,
-                m_params.sharpen_radius, m_params.sharpen_amount, progress);
+                m_params.sharpen_radius, m_params.sharpen_amount, m_params.scanner_mtf, m_params.scanner_snr, progress);
           else
             {
               rgbdata cred, cgreen, cblue;
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *m_screen, *m_screen,
                       m_params.collection_threshold, m_params.sharpen_radius,
-                      m_params.sharpen_amount, m_scr_to_img,
+                      m_params.sharpen_amount, m_params.scanner_mtf, m_params.scanner_snr, m_scr_to_img,
                       m_img.width / 2 - 100, m_img.height / 2 - 100,
                       m_img.width / 2 + 100, m_img.height / 2 + 100))
                 {

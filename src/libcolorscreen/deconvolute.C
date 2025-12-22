@@ -6,11 +6,10 @@ namespace colorscreen
 /* FFTW execute is thread safe. Everything else is not.  */
 std::mutex fftw_lock;
 
-deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf,
+deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr,
                               int max_threads, bool sharpen)
     : m_border_size (256), m_tile_size (4 * 256), m_blur_kernel (NULL)
 {
-  double snr = 1000;
   double k_const = 1.0f / snr;
 
   m_plans.resize (max_threads);
@@ -70,7 +69,6 @@ deconvolution::init (int thread_id)
 void
 deconvolution::process_tile (int thread_id)
 {
-  // std::vector<deconvolution_data_t> out(m_tile_size * m_tile_size);
   fftw_execute (m_plans[thread_id].plan_2d);
   fftw_complex *in = m_plans[thread_id].in;
   for (int i = 0; i < m_fft_size * m_tile_size; i++)

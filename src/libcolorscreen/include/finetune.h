@@ -104,6 +104,8 @@ DLL_PUBLIC bool finetune_area (solver_parameters *sparam,
 bool determine_color_loss (rgbdata *ret_red, rgbdata *ret_green,
                            rgbdata *ret_blue, screen &scr, screen &collection_scr,
                            luminosity_t threshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount,
+			   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
+			   luminosity_t scanner_snr,
 			   scr_to_img &map, int xmin, int ymin, int xmax, int ymax);
 DLL_PUBLIC void render_screen (image_data &img, scr_to_img_parameters &param,
                                render_parameters &rparam,

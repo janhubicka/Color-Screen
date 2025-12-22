@@ -13,6 +13,7 @@
 #include "nmsimplex.h"
 #include "bitmap.h"
 #include "icc.h"
+#include "deconvolute.h"
 namespace colorscreen
 {
 namespace
@@ -3409,12 +3410,15 @@ bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
                       luminosity_t threshold, luminosity_t sharpen_radius,
-                      luminosity_t sharpen_amount, scr_to_img &map, int xmin,
+                      luminosity_t sharpen_amount,
+		      std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
+		      luminosity_t scanner_snr,
+		      scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = false;
+  const bool debugfiles = true;
 
   if (debugfiles)
     {
@@ -3424,7 +3428,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 
   /* If sharpening is not needed, we can avoid temporary buffer to store
      rendered screen.  */
-  if (!sharpen_amount || !sharpen_radius)
+  if ((!sharpen_amount || !sharpen_radius) && !scanner_mtf)
     {
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
@@ -3471,7 +3475,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     }
   else
     {
-      int ext = fir_blur::convolve_matrix_length (sharpen_radius) / 2;
+      int ext = scanner_mtf ? 256 : fir_blur::convolve_matrix_length (sharpen_radius) / 2;
       int xsize = xmax - xmin + 2 * ext + 1;
       int ysize = ymax - ymin + 2 * ext + 1;
       std::vector<rgbdata> rendered (xsize * ysize);
@@ -3498,9 +3502,17 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
       /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
-      sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
-          rendered2.data (), rendered.data (), xsize, ysize, ysize,
-          sharpen_radius, sharpen_amount, NULL, false);
+      if (!scanner_mtf)
+	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
+	    sharpen_radius, sharpen_amount, NULL, false);
+      else
+	{
+	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf);
+	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
+	      &mtf,scanner_snr, NULL);
+	}
 
       if (debugfiles)
 	{
@@ -3520,8 +3532,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 			= rendered2[(y - ymin + ext) * xsize + x - xmin + ext];
 		    if (x == xmin - 1 || y == ymin - 1 || x == xmax + 1 || y == ymax + 1)
 		      d = {1,1,1};
-		    renderedt.put_pixel (x - xmin + ext, d.red * 65535, d.green * 65535,
-					 d.blue * 65535);
+		    renderedt.put_pixel (x - xmin + ext, std::clamp (d.red, (luminosity_t)0, (luminosity_t)1) * 65535, std::clamp (d.green, (luminosity_t)0, (luminosity_t)1) * 65535,
+					 std::clamp (d.blue, (luminosity_t)0, (luminosity_t)1) * 65535);
 		  }
 		if (!renderedt.write_row ())
 		  return false;
