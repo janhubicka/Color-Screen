@@ -3639,7 +3639,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   screen *scr = render_to_scr::get_screen (
       param.type, false, rparam.screen_blur_radius * pixel_size,
       rparam.scanner_mtf, pixel_size > 0 ? 1 / pixel_size : 0,
-      rparam.red_strip_width, rparam.green_strip_width);
+      rparam.scanner_snr, rparam.red_strip_width, rparam.green_strip_width);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {

@@ -38,7 +38,7 @@ public:
     coord_t radius = m_preview ? 0 : m_params.screen_blur_radius * psize;
     m_screen = get_screen (m_scr_to_img.get_type (), m_preview, radius,
                            m_preview ? NULL : m_params.scanner_mtf,
-                           psize > 0 ? 1 / psize : 1, m_params.red_strip_width,
+                           psize > 0 ? 1 / psize : 1, m_params.scanner_snr, m_params.red_strip_width,
                            m_params.green_strip_width, progress);
     return render_to_scr::precompute_all (!m_color, m_preview, progress);
   }
