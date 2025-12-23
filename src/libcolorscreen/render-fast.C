@@ -92,15 +92,17 @@ render_fast::sample_pixel (int x, int y, coord_t zx, coord_t zy)
 
 /* Render preview for gtkgui. To be replaced by render_tile later.  */
 bool
-render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride)
+render_preview (image_data &scan, scr_to_img_parameters &param, render_parameters &rparams, unsigned char *pixels, int width, int height, int rowstride, progress_info *progress)
 {
   render_fast render (param, scan, rparams, 255);
   render.compute_final_range ();
   int scr_xsize = render.get_final_width (), scr_ysize = render.get_final_height ();
-  if (!render.precompute_all (NULL))
+  if (!render.precompute_all (progress))
     return false;
   coord_t step = std::max (scr_xsize / (coord_t)width, scr_ysize / (coord_t)height);
-#pragma omp parallel for default(none) shared(render,pixels,step,width,height,rowstride)
+  if (progress)
+    progress->set_task ("Rendering preview", 1);
+#pragma omp parallel for default(none) shared(render,pixels,step,width,height,rowstride) collapse (2)
   for (int y = 0; y < height; y ++)
     for (int x = 0; x < width; x ++)
       {

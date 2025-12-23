@@ -159,7 +159,7 @@ DLL_PUBLIC bool dump_patch_density (FILE *out, image_data &scan,
 DLL_PUBLIC bool render_preview (image_data &scan, scr_to_img_parameters &param,
                                 render_parameters &rparams,
                                 unsigned char *pixels, int width, int height,
-                                int rowstride);
+                                int rowstride, progress_info *progress = NULL);
 DLL_PUBLIC rgbdata analyze_color_proportions (
     scr_detect_parameters param, render_parameters &rparam, image_data &img,
     scr_to_img_parameters *map_param, int xmin, int ymin, int xmax, int ymax,

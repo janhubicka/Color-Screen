@@ -11,49 +11,78 @@ namespace colorscreen
 {
 extern std::mutex fftw_lock;
 
+int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
+
 class deconvolution
 {
 public:
+  /* Set up deconvolution for given MTF. SNR specifies signal to noise ratio
+     for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr, int max_threads,
                  bool sharpen = true);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
-  void process_tile (int thread_id);
+  /* Size of tile processed without borders.  */
   int
   get_basic_tile_size () const
   {
     return m_tile_size - m_border_size * 2;
   }
+
+  /* Size of tile processed with borders.  */
   int
   get_tile_size_with_borders () const
   {
     return m_tile_size;
   }
+
+  /* Size of border.  */
   int
   get_border_size () const
   {
     return m_border_size;
   }
 
+  /* Allocate memory for tile for given thread.  */
   void init (int thread_id);
 
+  /* Put pixel to given thread  */
   void
   put_pixel (int threadid, int x, int y, deconvolution_data_t val)
   {
-    m_plans[threadid].tile[y * m_tile_size + x] = val;
+    m_plans[threadid].tile[y * m_mem_tile_size + x] = val;
   }
+
+  /* Apply sharpening/blurring to the kernel.  */
+  void process_tile (int thread_id);
+
+  /* Get pixel from given thread.  */
   deconvolution_data_t
   get_pixel (int threadid, int x, int y)
   {
-    return m_plans[threadid].tile[y * m_tile_size + x];
+    return m_plans[threadid].tile[y * m_mem_tile_size + x];
   }
 
+
 private:
+  /* Size of border that is not sharpened correctly  */
   int m_border_size;
+  /* Size of taping along edges.  */
+  int m_taper_size;
+  /* Size of tile being sharpened (including borders  */
   int m_tile_size;
+  /* Size of the FFT problem  */
   int m_fft_size;
+  /* Size of tile in memory (may be bigger if we do mirringing)  */
+  int m_mem_tile_size;
+  /* Kernel for bluring or sharpening.  */
   fftw_complex *m_blur_kernel;
+
+  /* Weights of edge tapering.  */
+  std::vector<deconvolution_data_t> m_weights;
+
+  /* Plans used for FFT calclation.  */
   struct fftw_plans
   {
     fftw_plan plan_2d_inv, plan_2d;
