@@ -3418,7 +3418,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = true;
+  const bool debugfiles = false;
 
   if (debugfiles)
     {
