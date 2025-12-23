@@ -26,8 +26,8 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosit
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
-        std::complex ker ((deconvolution_data_t)mtf->apply (
-                              sqrt (x * x + y * y) * rev_tile_size),
+        std::complex ker (std::clamp ((deconvolution_data_t)mtf->apply (
+				      sqrt (x * x + y * y) * rev_tile_size), (deconvolution_data_t)0, (deconvolution_data_t)1),
                           (deconvolution_data_t)0);
 
         // If sharpening, apply Wiener Filter

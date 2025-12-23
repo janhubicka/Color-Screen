@@ -128,14 +128,16 @@ get_new_screen (struct screen_params &p, progress_info *progress)
       std::vector<luminosity_t> x(p.screen_mtf->size ());
       std::vector<luminosity_t> y(p.screen_mtf->size ());
       assert (p.screen_mtf_scale > 0);
-      //printf ("scale %f\n", (double)p.screen_mtf_scale);
       for (size_t i = 0; i < p.screen_mtf->size (); i++)
       {
-	x[i] = (*p.screen_mtf)[i][0] * (screen::size/p.screen_mtf_scale);
+	/* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
+	   we should scale exactly by it.  */
+
+	x[i] = (*p.screen_mtf)[i][0] * (/*screen::size/*/p.screen_mtf_scale);
 	y[i] = std::clamp ((*p.screen_mtf)[i][1] * (1 / (luminosity_t)100), (luminosity_t)0, (luminosity_t)1);
 	//printf ("%i %f %f\n",i,x[i],y[i]);
       }
-      precomputed_function <luminosity_t> fn(0, x[p.screen_mtf->size ()-1], 1024, x.data (), y.data (), p.screen_mtf->size ());
+      precomputed_function <luminosity_t> fn(0, /*x[p.screen_mtf->size ()-1]*/ screen::size * sqrt(2), 1024, x.data (), y.data (), p.screen_mtf->size ());
       precomputed_function<luminosity_t> *vv[3] = {&fn, &fn, &fn};
       blurred->empty ();
       blurred->initialize_with_2D_fft (*s, vv, { 1.0, 1.0, 1.0 }, p.scanner_snr);
