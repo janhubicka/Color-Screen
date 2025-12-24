@@ -444,14 +444,15 @@ struct sharpen_params
   luminosity_t amount;
   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
   luminosity_t scanner_snr;
+  luminosity_t scanner_mtf_scale;
   bool
   operator== (sharpen_params &o)
   {
-    if (scanner_mtf || o.scanner_mtf)
+    if ((scanner_mtf && scanner_mtf_scale) || (o.scanner_mtf && o.scanner_mtf_scale))
       {
         if (!scanner_mtf || !o.scanner_mtf)
           return false;
-        return (*scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr);
+        return (scanner_mtf_scale == o.scanner_mtf_scale && *scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr);
       }
     return ((!radius || !amount) && (!o.radius || !o.amount))
            || (radius == o.radius && amount == o.amount);
@@ -547,9 +548,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         }
       if (d.correction)
         {
-          if (p.sp.scanner_mtf)
+          if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
             {
-              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
+              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
                                unsigned short **, getdata_params,
                                getdata_helper_correction> (
@@ -562,9 +563,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                 out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
                 p.sp.radius, p.sp.amount, progress);
         }
-      else if (p.sp.scanner_mtf)
+      else if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
         {
-          precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
+          precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
           ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
@@ -586,9 +587,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
       else
         {
           t.correction = p.gp.backlight;
-          if (p.sp.scanner_mtf)
+          if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
             {
-              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf);
+              precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
                                const image_data *, gray_data_tables,
                                getdata_helper2> (
@@ -690,7 +691,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_backlight_correction_id,
                 m_params.ignore_infrared },
               { m_params.sharpen_radius, m_params.sharpen_amount,
-                m_params.scanner_mtf, m_params.scanner_snr } };
+                m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale } };
       m_sharpened_data_holder
           = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

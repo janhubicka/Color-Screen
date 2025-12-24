@@ -837,16 +837,17 @@ precompute_scanner_mtf (const render_parameters::scanner_mtf_t &scanner_mtf, coo
   for (size_t i = 0; i < scanner_mtf.size (); i++)
     {
       x[i] = scanner_mtf[i][0] * (luminosity_t)scale;
-      y[i] = std::clamp (scanner_mtf[i][1] * (1 / (luminosity_t)100),
-                         (luminosity_t)0, (luminosity_t)1);
+      y[i] = //std::clamp (
+		      scanner_mtf[i][1] * (1 / (luminosity_t)100);
+                         //(luminosity_t)0, (luminosity_t)1);
     }
-  coord_t step = scanner_mtf[scanner_mtf.size () - 1][0] - scanner_mtf[scanner_mtf.size () - 2][0];
+  luminosity_t step = x[scanner_mtf.size () - 1] - x[scanner_mtf.size () - 2];
 
   /* Drop to 0 after end of MTF data.  */
   if (!(step > 0))
     step = 0.003;
-  x [scanner_mtf.size ()] = scanner_mtf[scanner_mtf.size () - 1][0] + step;
-  x [scanner_mtf.size () + 1] = scanner_mtf[scanner_mtf.size () - 1][0] + 2 * step;
+  x [scanner_mtf.size ()] = x[scanner_mtf.size () - 1] + step;
+  x [scanner_mtf.size () + 1] = x[scanner_mtf.size () - 1] + 2 * step;
   y [scanner_mtf.size ()] = 0;
   y [scanner_mtf.size () + 1] = 0;
   return precomputed_function<luminosity_t> (

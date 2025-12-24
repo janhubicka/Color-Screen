@@ -27,9 +27,9 @@
     <property name="page_size">10</property>
   </object>
   <object class="GtkAdjustment" id="adjustment1c">
-    <property name="upper">100000</property>
-    <property name="lower">1</property>
-    <property name="step_increment">0.1</property>
+    <property name="upper">10</property>
+    <property name="lower">0</property>
+    <property name="step_increment">0.0001</property>
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="adjustment2c">
@@ -602,7 +602,7 @@
                       <object class="GtkLabel" id="label1c">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">projection distance</property>
+                        <property name="label" translatable="yes">scanner MTF scale</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -611,7 +611,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="projection_distance">
+                      <object class="GtkSpinButton" id="scanner_mtf_scale">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>

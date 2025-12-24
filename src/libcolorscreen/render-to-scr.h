@@ -40,7 +40,7 @@ private:
 class saturation_loss_table
 {
 public:
-  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, progress_info *progress);
+  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, luminosity_t scanner_mtf_scale, progress_info *progress);
   color_matrix &get_saturation_loss (int x, int y)
   {
     return m_saturation_loss_table[y * m_width + x];
@@ -181,7 +181,7 @@ public:
                              uint64_t *id = NULL);
   static void release_screen (screen *scr);
   bool compute_screen_table (progress_info *progress);
-  bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, progress_info *progress = NULL);
+  bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, luminosity_t scanner_mtf_scale, progress_info *progress = NULL);
 
 protected:
   /* Transformation between screen and image coordinates.  */

@@ -55,6 +55,9 @@ struct render_parameters
   /* Signal to noise ratio of the scanner.  */
   luminosity_t scanner_snr;
 
+  /* Scale of scanner mtf. 0 disables deconvolution sharpening.  */
+  luminosity_t scanner_mtf_scale;
+
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
   struct tile_adjustment
@@ -263,7 +266,7 @@ struct render_parameters
         dark_point (0), scan_exposure (1), ignore_infrared (false),
         invert (false), mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
         mix_blue (1), sharpen_radius (0), sharpen_amount (0),
-	scanner_snr (2000),
+	scanner_snr (2000), scanner_mtf_scale (1),
 
         /* Tile adjustment.  */
         tile_adjustments_width (0), tile_adjustments_height (0),

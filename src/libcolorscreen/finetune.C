@@ -3412,13 +3412,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       luminosity_t threshold, luminosity_t sharpen_radius,
                       luminosity_t sharpen_amount,
 		      std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
-		      luminosity_t scanner_snr,
+		      luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
 		      scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = false;
+  const bool debugfiles = true;
 
   if (debugfiles)
     {
@@ -3428,7 +3428,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 
   /* If sharpening is not needed, we can avoid temporary buffer to store
      rendered screen.  */
-  if ((!sharpen_amount || !sharpen_radius) && !scanner_mtf)
+  if ((!sharpen_amount || !sharpen_radius) && (!scanner_mtf || !scanner_mtf_scale))
     {
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
@@ -3502,13 +3502,14 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
       /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
-      if (!scanner_mtf)
+      printf ("mtf scale %f\n", scanner_mtf_scale);
+      if (!scanner_mtf || ! scanner_mtf_scale)
 	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
 	    sharpen_radius, sharpen_amount, NULL, false);
       else
 	{
-	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf);
+	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
 	      &mtf,scanner_snr, NULL);
@@ -3638,7 +3639,8 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   coord_t pixel_size = map.pixel_size (width, height);
   screen *scr = render_to_scr::get_screen (
       param.type, false, rparam.screen_blur_radius * pixel_size,
-      rparam.scanner_mtf, pixel_size > 0 ? 1 / pixel_size : 0,
+      rparam.scanner_mtf,
+      (pixel_size > 0 ? 1 / pixel_size : 0) * rparam.scanner_mtf_scale,
       rparam.scanner_snr, rparam.red_strip_width, rparam.green_strip_width);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)

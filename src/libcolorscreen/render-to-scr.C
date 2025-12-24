@@ -34,7 +34,7 @@ saturation_loss_table::saturation_loss_table (
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
     luminosity_t sharpen_radius, luminosity_t sharpen_amount,
     std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
-    luminosity_t scanner_snr,
+    luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -46,7 +46,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius, scanner_mtf, scanner_snr)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius, scanner_mtf, scanner_snr, scanner_mtf_scale)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -60,7 +60,7 @@ saturation_loss_table::saturation_loss_table (
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
                 *collection_screen, collection_threshold, sharpen_radius, sharpen_amount,
-		scanner_mtf, scanner_snr, *map, xp - 100,
+		scanner_mtf, scanner_snr, scanner_mtf_scale, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
@@ -123,21 +123,11 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   screen *blurred = new screen;
   if (progress)
     progress->set_task ("bluring screen", 1);
-  if (p.screen_mtf)
+  if (p.screen_mtf && p.screen_mtf_scale)
     {
-      std::vector<luminosity_t> x(p.screen_mtf->size ());
-      std::vector<luminosity_t> y(p.screen_mtf->size ());
-      assert (p.screen_mtf_scale > 0);
-      for (size_t i = 0; i < p.screen_mtf->size (); i++)
-      {
-	/* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
-	   we should scale exactly by it.  */
-
-	x[i] = (*p.screen_mtf)[i][0] * (/*screen::size/*/p.screen_mtf_scale);
-	y[i] = std::clamp ((*p.screen_mtf)[i][1] * (1 / (luminosity_t)100), (luminosity_t)0, (luminosity_t)1);
-	//printf ("%i %f %f\n",i,x[i],y[i]);
-      }
-      precomputed_function <luminosity_t> fn(0, /*x[p.screen_mtf->size ()-1]*/ screen::size * sqrt(2), 1024, x.data (), y.data (), p.screen_mtf->size ());
+      /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
+	 we should scale exactly by it.  */
+      precomputed_function <luminosity_t> fn = precompute_scanner_mtf (*p.screen_mtf, p.screen_mtf_scale);
       precomputed_function<luminosity_t> *vv[3] = {&fn, &fn, &fn};
       blurred->empty ();
       blurred->initialize_with_2D_fft (*s, vv, { 1.0, 1.0, 1.0 }, p.scanner_snr);
@@ -193,6 +183,7 @@ struct saturation_loss_params
   luminosity_t collection_threshold, sharpen_radius, sharpen_amount;
   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
   luminosity_t scanner_snr;
+  luminosity_t scanner_mtf_scale;
   uint64_t mesh_id;
   scr_to_img_parameters scr_to_img_params;
   scr_to_img *map;
@@ -200,9 +191,10 @@ struct saturation_loss_params
   bool
   operator== (saturation_loss_params &o)
   {
-    if (scanner_mtf || o.scanner_mtf)
+    if ((scanner_mtf && scanner_mtf_scale) || (o.scanner_mtf && scanner_mtf_scale))
       {
-        if (!scanner_mtf || !o.scanner_mtf || *scanner_mtf != *o.scanner_mtf || scanner_snr != o.scanner_snr)
+        if (!scanner_mtf || !o.scanner_mtf || *scanner_mtf != *o.scanner_mtf
+       	    || scanner_snr != o.scanner_snr || scanner_mtf_scale != o.scanner_mtf_scale)
 	  return false;
       }
     return scr_table_id == o.scr_table_id
@@ -220,7 +212,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   saturation_loss_table *s = new saturation_loss_table (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, p.scanner_mtf, p.scanner_snr, progress);
+      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, p.scanner_mtf, p.scanner_snr, p.scanner_mtf_scale, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -299,6 +291,7 @@ render_to_scr::compute_saturation_loss_table (
     luminosity_t sharpen_amount,
     std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
     luminosity_t scanner_snr,
+    luminosity_t scanner_mtf_scale,
     progress_info *progress)
 {
   assert (!m_saturation_loss_table);
@@ -317,6 +310,7 @@ render_to_scr::compute_saturation_loss_table (
 	  sharpen_amount,
 	  scanner_mtf,
 	  scanner_snr,
+	  scanner_mtf_scale,
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,

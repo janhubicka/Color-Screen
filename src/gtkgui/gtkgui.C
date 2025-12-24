@@ -150,7 +150,7 @@ struct _Data
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
   GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *k1,
-	       	*tilt_x, *tilt_y, *projection_distance, *dark_point, *collection_threshold, *balance_black, *mix_red, *mix_green, *mix_blue,
+	       	*tilt_x, *tilt_y, *scanner_mtf_scale, *dark_point, *collection_threshold, *balance_black, *mix_red, *mix_green, *mix_blue,
 	       	*balance_red, *balance_green, *balance_blue;
 };
 Data data;
@@ -217,7 +217,7 @@ getvals (void)
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
   current.tilt_x = gtk_spin_button_get_value (data.tilt_x);
   current.tilt_y = gtk_spin_button_get_value (data.tilt_y);
-  current.projection_distance = gtk_spin_button_get_value (data.projection_distance);
+  rparams.scanner_mtf_scale = gtk_spin_button_get_value (data.scanner_mtf_scale);
   rparams.dark_point = gtk_spin_button_get_value (data.dark_point);
   rparams.collection_threshold = gtk_spin_button_get_value (data.collection_threshold);
   rparams.backlight_correction_black = gtk_spin_button_get_value (data.balance_black);
@@ -251,7 +251,7 @@ setvals (void)
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
   gtk_spin_button_set_value (data.tilt_x, current.tilt_x);
   gtk_spin_button_set_value (data.tilt_y, current.tilt_y);
-  gtk_spin_button_set_value (data.projection_distance, current.projection_distance);
+  gtk_spin_button_set_value (data.scanner_mtf_scale, rparams.scanner_mtf_scale);
   gtk_spin_button_set_value (data.dark_point, rparams.dark_point);
   gtk_spin_button_set_value (data.collection_threshold, rparams.collection_threshold);
   gtk_spin_button_set_value (data.balance_black, rparams.backlight_correction_black);
@@ -1265,7 +1265,7 @@ initgtk (int *argc, char **argv)
   data.k1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "k1"));
   data.tilt_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x"));
   data.tilt_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y"));
-  data.projection_distance = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "projection_distance"));
+  data.scanner_mtf_scale = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "scanner_mtf_scale"));
   data.dark_point = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "dark_point"));
   data.collection_threshold = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "collection_threshold"));
   data.balance_black = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "balance_black"));
@@ -1316,7 +1316,8 @@ previewrender (GdkPixbuf ** pixbuf)
 
   pixels = gdk_pixbuf_get_pixels (*pixbuf);
   int rowstride = gdk_pixbuf_get_rowstride (*pixbuf);
-  render_preview (scan, get_scr_to_img_parameters (), rparams, pixels, my_xsize, my_ysize, rowstride);
+  file_progress_info progress (stdout);
+  render_preview (scan, get_scr_to_img_parameters (), rparams, pixels, my_xsize, my_ysize, rowstride, &progress);
   cairo_surface_t *surface
     = cairo_image_surface_create_for_data (pixels,
 					   CAIRO_FORMAT_RGB24,
