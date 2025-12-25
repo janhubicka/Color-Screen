@@ -3418,7 +3418,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = true;
+  const bool debugfiles = false;
 
   if (debugfiles)
     {
@@ -3475,7 +3475,15 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     }
   else
     {
-      int ext = scanner_mtf ? 256 : fir_blur::convolve_matrix_length (sharpen_radius) / 2;
+      int ext;
+      if (scanner_mtf && scanner_mtf_scale)
+	{
+	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
+	  /* border taping needs 2 * the kernel size for deconvolutoin.  */
+	  ext = 2 * deconvolute_border_size (&mtf);
+	}
+      else
+	ext = fir_blur::convolve_matrix_length (sharpen_radius) / 2;
       int xsize = xmax - xmin + 2 * ext + 1;
       int ysize = ymax - ymin + 2 * ext + 1;
       std::vector<rgbdata> rendered (xsize * ysize);
@@ -3502,7 +3510,6 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
       /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
-      printf ("mtf scale %f\n", scanner_mtf_scale);
       if (!scanner_mtf || ! scanner_mtf_scale)
 	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
@@ -3512,7 +3519,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      &mtf,scanner_snr, NULL);
+	      &mtf,scanner_snr, NULL, false);
 	}
 
       if (debugfiles)

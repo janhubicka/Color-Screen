@@ -1213,6 +1213,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   sharpen_radius = rparam.sharpen_radius;
   scanner_mtf = rparam.scanner_mtf;
   scanner_snr = rparam.scanner_snr;
+  scanner_mtf_scale = rparam.scanner_mtf_scale;
 
   /* Copy setup of interpolated rendering algorithm.  */
   precise = rparam.precise;

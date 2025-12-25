@@ -224,7 +224,7 @@ public:
   }
 
 private:
-  const T epsilon = 0.001;
+  static const constexpr T epsilon = 0.001;
   T m_min_x, m_max_x, m_step, m_step_inv;
   int m_entries;
   struct entry
