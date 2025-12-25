@@ -116,6 +116,8 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
     progress->set_task ("Deconvolution sharpening", xtiles * ytiles);
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared (width, height,d,progress,out,param,parallel,data) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -127,7 +129,7 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
         for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
           for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
             {
-              O pixel;
+              O pixel = 0;
               if (x + xx - d.get_border_size () >= 0
                   && x + xx - d.get_border_size () < width
                   && y + yy - d.get_border_size () >= 0
@@ -164,6 +166,8 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
     progress->set_task ("Deconvolution sharpening", xtiles * ytiles);
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared (width, height,d,progress,out,param,parallel,data) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
