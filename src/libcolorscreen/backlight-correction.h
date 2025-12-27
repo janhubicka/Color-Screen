@@ -28,7 +28,7 @@ backlight_correction
 {
   struct entry
   {
-    //luminosity_t add[4];
+    luminosity_t sub[4];
     luminosity_t mult[4];
   };
 public:
@@ -54,6 +54,17 @@ public:
     luminosity_t mult = mult0 * (1 - ry) + mult1 * ry;
     if (mul)
       *mul = mult;
+    if (black_correction)
+      {
+	struct entry &e00 = m_weights[yy * m_width + xx];
+	struct entry &e10 = m_weights[yy * m_width + xx + (xx == m_width - 1 ? 0 : 1)];
+	luminosity_t sub0 = e00.sub[channel] * (1 - rx) + e10.sub[channel] * rx;;
+	struct entry &e01 = m_weights[yy * m_width + (yy == m_height - 1 ? 0 : m_width) + xx];
+	struct entry &e11 = m_weights[yy * m_width + (yy == m_height - 1 ? 0 : m_width) + xx + (xx == m_width - 1 ? 0 : 1)];
+	luminosity_t sub1 = e01.sub[channel] * (1 - rx) + e11.sub[channel] * rx;;
+	luminosity_t sub = sub0 * (1 - ry) + sub1 * ry;
+	val -= sub;
+      }
     //printf ("%f %f %f %i\n",val,m_black,mult, channel);
     return (val - m_black) * mult + m_black;
   }
@@ -62,6 +73,7 @@ public:
     return m_weights != NULL;
   }
   int id;
+  bool black_correction;
 private:
   backlight_correction_parameters &m_params;
   luminosity_t m_black;

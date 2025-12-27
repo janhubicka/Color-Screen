@@ -1092,21 +1092,57 @@ autodetect (int argc, char **argv)
 void
 analyze_backlight (int argc, char **argv)
 {
+  luminosity_t gamma = 1.0;
   const char *error = NULL;
   subhelp = help_analyze_backlight;
+  const char *blacks = NULL;
+  const char *white = NULL;
+  const char *out_file = NULL;
+  const char *tiff = NULL;
+  for (int i = 0; i < argc; i++)
+    {
+      float flt;
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (parse_float_param (argc, argv, &i, "gamma", flt, 0, 2))
+	gamma = flt;
+      else if (const char *str = arg_with_param (argc, argv, &i, "black"))
+        blacks = str;
+      else if (!white)
+	white = argv[i];
+      else if (!out_file)
+	out_file = argv[i];
+      else if (!tiff)
+	tiff = argv[i];
+      else
+        print_help (argv[i]);
+    }
 
-  if (argc < 2 || argc > 3)
-    print_help ();
+  if (!out_file)
+    print_help ("Output file not specified");
   file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
-  if (!scan.load (argv[0], false, &error, &progress))
+  if (!scan.load (white, false, &error, &progress))
     {
       progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
+      fprintf (stderr, "Can not load %s: %s\n", white, error);
       exit (1);
     }
-  std::unique_ptr <backlight_correction_parameters> cor (backlight_correction_parameters::analyze_scan (scan, 1.0));
-  FILE *out = fopen (argv[1], "wt");
+  std::unique_ptr<image_data> blacks_scan;
+  if (blacks)
+    {
+      blacks_scan = std::make_unique <image_data> ();
+      if (!blacks_scan->load (blacks, false, &error, &progress))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load black reference %s: %s\n", blacks, error);
+	  exit (1);
+	}
+    }
+  progress.set_task ("analyzing backlight", 1);
+  std::unique_ptr <backlight_correction_parameters> cor (backlight_correction_parameters::analyze_scan (scan, gamma, blacks_scan.get ()));
+  progress.set_task ("writting output", 1);
+  FILE *out = fopen (out_file, "wt");
   if (!out)
     {
       progress.pause_stdout ();
@@ -1115,13 +1151,13 @@ analyze_backlight (int argc, char **argv)
     }
   if (!cor->save (out))
     {
-      fprintf (stderr, "Can not write %s\n", argv[1]);
+      fprintf (stderr, "Can not write %s\n", out);
       exit (1);
     }
   fclose (out);
-  if (argc == 3)
+  if (tiff)
     {
-      error = cor->save_tiff (argv[2]);
+      error = cor->save_tiff (tiff);
       if (error)
         {
           fprintf (stderr, "Failed to save output file: %s\n", error);

@@ -11,7 +11,7 @@ class backlight_correction_parameters
 {
   struct entry
   {
-    // luminosity_t add[4];
+    luminosity_t sub[4];
     luminosity_t lum[4];
   };
 
@@ -30,7 +30,7 @@ public:
   DLL_PUBLIC static backlight_correction_parameters *
   load_captureone_lcc (FILE *f, bool verbose = false);
   DLL_PUBLIC static backlight_correction_parameters *
-  analyze_scan (image_data &scan, luminosity_t gamma = 1);
+  analyze_scan (image_data &scan, luminosity_t gamma = 1, image_data *black = NULL);
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC const char *save_tiff (const char *name);
   DLL_PUBLIC bool load (FILE *f, const char **);
@@ -41,16 +41,22 @@ public:
   {
     struct entry &e = m_luminosities[y * m_width + x];
     if (channel != all_channels)
-      {
-        // e.add[(int)channel] = add;
-        e.lum[(int)channel] = lum;
-      }
+      e.lum[(int)channel] = lum;
     else
       for (int i = 0; i < 4; i++)
-        {
-          // e.add[i] = add;
-          e.lum[i] = lum;
-        }
+        e.lum[i] = lum;
+  }
+
+  inline void
+  set_sub (int x, int y, luminosity_t sub,
+           enum channel channel = all_channels)
+  {
+    struct entry &e = m_luminosities[y * m_width + x];
+    if (channel != all_channels)
+      e.sub[(int)channel] = sub;
+    else
+      for (int i = 0; i < 4; i++)
+        e.sub[i] = sub;
   }
 
   /* Internal API.  */
@@ -60,6 +66,8 @@ public:
 
   /* Unique id of the image (used for caching).  */
   uint64_t id;
+
+  bool black_correction;
 
 private:
   int m_width, m_height;

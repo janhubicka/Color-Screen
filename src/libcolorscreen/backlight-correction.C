@@ -11,6 +11,7 @@ backlight_correction_parameters::alloc (int width, int height, bool enabled[4])
   m_luminosities = (entry *)calloc (width * height, sizeof (entry));
   m_width = width;
   m_height = height;
+  black_correction = false;
   for (int i = 0; i < 4; i++)
     m_channel_enabled[i] = enabled[i];
   return (m_luminosities != NULL);
@@ -50,9 +51,12 @@ backlight_correction_parameters::backlight_correction_parameters ()
 {
 }
 
+/* SCAN is white reference, while BLACK, if non-null is balck refernece.  */
+
 backlight_correction_parameters *
 backlight_correction_parameters::analyze_scan (image_data &scan,
-                                               luminosity_t gamma)
+                                               luminosity_t gamma,
+					       image_data *black)
 {
   const int width = 111;
   const int height = 84;
@@ -67,6 +71,58 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
   luminosity_t table[65536];
   for (int i = 0; i < scan.maxval; i++)
     table[i] = apply_gamma ((i + (luminosity_t)0.5) / scan.maxval, gamma);
+  if (black)
+    {
+      ret->black_correction = true;
+      for (int y = 0; y < height; y++)
+	for (int x = 0; x < width; x++)
+	  {
+	    int xstart = x * black->width / width;
+	    int ystart = y * black->height / height;
+	    int xsize = black->width / width;
+	    int ysize = black->height / height;
+	    std::vector<uint16_t> values[4];
+	    for (int i = 0; i < 4; i++)
+	      if (enabled[i])
+		values[i].reserve (xsize * ysize);
+	    for (int yy = ystart; yy < ystart + ysize; yy++)
+	      for (int xx = xstart; xx < xstart + xsize; xx++)
+		{
+		  if (black->data)
+		    values[ir].push_back (black->data[y][x]);
+		  if (black->rgbdata)
+		    {
+		      values[red].push_back (black->rgbdata[yy][xx].r);
+		      values[green].push_back (black->rgbdata[yy][xx].g);
+		      values[blue].push_back (black->rgbdata[yy][xx].b);
+		    }
+		}
+	    for (int i = 0; i < 4; i++)
+	      if (enabled[i])
+		{
+		  std::sort (values[i].begin (), values[i].end ());
+		  size_t len = xsize * (size_t)ysize;
+		  int n = 0;
+		  luminosity_t sum = 0;
+		  for (size_t j = len / 4; j < 3 * len / 4; j++)
+		    {
+		      sum += table[values[i][j]];
+		      n++;
+		    }
+		  sum /= n;
+		  ret->set_sub (x, y, sum, (channel)i);
+		}
+	      }
+    }
+  else
+    {
+      ret->black_correction = false;
+      for (int y = 0; y < height; y++)
+	for (int x = 0; x < width; x++)
+	  for (int i = 0; i < 4; i++)
+	    if (enabled[i])
+	      ret->set_sub (x, y, 0, (channel)i);
+    }
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {
@@ -103,6 +159,7 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
                   n++;
                 }
               sum /= n;
+	      sum -= ret->m_luminosities[y * ret->m_width + x].sub[i];
               ret->set_luminosity (x, y, sum, (channel)i);
             }
       }
@@ -149,6 +206,21 @@ backlight_correction_parameters::save (FILE *f)
             if (fprintf (f, " %f", m_luminosities[y * m_width + x].lum[i]) < 0)
               return false;
     }
+  if (black_correction)
+    {
+      if (fprintf (f, "\n  backlight_correction_blacks:") < 0)
+	return false;
+      for (int y = 0; y < m_height; y++)
+	{
+	  if (y)
+	    fprintf (f, "\n                             ");
+	  for (int x = 0; x < m_width; x++)
+	    for (int i = 0; i < 4; i++)
+	      if (m_channel_enabled[i])
+		if (fprintf (f, " %f", m_luminosities[y * m_width + x].sub[i]) < 0)
+		  return false;
+	}
+    }
   if (fprintf (f, "\n  backlight_correction_end\n") < 0)
     return false;
   return true;
@@ -168,7 +240,6 @@ backlight_correction_parameters::save_tiff (const char *filename)
     return error;
   for (int y = 0; y < m_height; y++)
     {
-      printf ("%i\n", y);
       for (int x = 0; x < m_width; x++)
         {
           out.put_hdr_pixel (x, m_luminosities[y * m_width + x].lum[0] * 0.5,
@@ -255,6 +326,7 @@ backlight_correction_parameters::load (FILE *f, const char **error)
       return false;
     }
   alloc (width, height, enabled);
+  black_correction = false;
   for (int y = 0; y < m_height; y++)
     {
       for (int x = 0; x < m_width; x++)
@@ -268,21 +340,27 @@ backlight_correction_parameters::load (FILE *f, const char **error)
                   return false;
                 }
               m_luminosities[y * m_width + x].lum[i] = sx;
-#if 0
-	      float sx, sy;
-	      if (!expect_keyword (f, "(")
-		  || fscanf (f, "%f", &sx) != 1
-		  || ! expect_keyword (f, ",")
-		  || fscanf (f, "%f", &sy) != 1
-		  || ! expect_keyword (f, ")"))
-		{
-		  *error = "failed to parse backlight correction data";
-		  return false;
-		}
-	      m_weights[y * m_width +x].add[i] = sx;
-	      m_weights[y * m_width +x].mult[i] = sy;
-#endif
+              m_luminosities[y * m_width + x].sub[i] = 0;
             }
+    }
+  if (expect_keyword (f, "backlight_correction_blacks:"))
+    {
+      black_correction = true;
+      for (int y = 0; y < m_height; y++)
+	{
+	  for (int x = 0; x < m_width; x++)
+	    for (int i = 0; i < 4; i++)
+	      if (m_channel_enabled[i])
+		{
+		  float sx;
+		  if (fscanf (f, "%f", &sx) != 1)
+		    {
+		      *error = "failed to parse backlight correction blackss";
+		      return false;
+		    }
+		  m_luminosities[y * m_width + x].sub[i] = sx;
+		}
+	}
     }
   if (!expect_keyword (f, "backlight_correction_end"))
     {
@@ -308,6 +386,7 @@ backlight_correction::backlight_correction (
 
   if (!m_weights)
     return;
+  black_correction = m_params.black_correction;
   luminosity_t sum[4] = { 0, 0, 0, 0 };
   for (int x = 0; x < m_width * m_height; x++)
     for (int i = 0; i < 4; i++)
@@ -329,6 +408,7 @@ backlight_correction::backlight_correction (
               = correct[i] / (m_params.m_luminosities[x].lum[i] - black);
         else
           m_weights[x].mult[i] = correct[i];
+	m_weights[x].sub[i] = m_params.m_luminosities[x].sub[i];
       }
 }
 }
