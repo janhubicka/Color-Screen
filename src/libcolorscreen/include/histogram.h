@@ -39,7 +39,8 @@ public:
   inline void
   set_range (luminosity_t minval, luminosity_t maxval, int nvals)
   {
-    if (m_minval != m_maxval)
+    if (m_minval != std::numeric_limits<luminosity_t>::max ()
+        || m_maxval != std::numeric_limits<luminosity_t>::min ())
       abort ();
     m_minval = minval;
     m_maxval = maxval;
@@ -122,8 +123,8 @@ public:
   void
   find_min_max (luminosity_t skip_min, luminosity_t skip_max, int &mini, int &maxi) const
   {
-    unsigned long sum1 = 0;
-    unsigned long threshold = (m_total * skip_min) + 0.5;
+    uint64_t sum1 = 0;
+    uint64_t threshold = (m_total * skip_min) + 0.5;
     for (mini = 0; mini < (int)m_entries.size (); mini++)
       {
         if (sum1 + m_entries[mini] > threshold)
@@ -138,7 +139,7 @@ public:
           break;
         sum2 += m_entries[maxi];
       }
-    if (sum1 + sum2 >= (unsigned)m_total)
+    if (sum1 + sum2 >= (unsigned long)m_total)
       abort ();
     if (mini > maxi)
       abort ();
