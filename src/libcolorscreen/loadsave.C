@@ -125,7 +125,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "scanner_red: %f %f %f\n", rparam->scanner_red.x, rparam->scanner_red.y, rparam->scanner_red.z) < 0
 	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
 	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0
-	  || fprintf (f, "scanner_snr: %f\n", rparam->scanner_snr) < 0)
+	  || fprintf (f, "scanner_snr: %f\n", rparam->scanner_snr) < 0
+	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->scanner_mtf_scale) < 0)
 	return false;
       if (rparam->scanner_mtf)
 	for (auto mtf_entry : *rparam->scanner_mtf)
@@ -721,6 +722,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, rparam_check (scanner_snr)))
 	    {
 	      *error = "error scanned_snr";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_scale"))
+	{
+	  if (!read_luminosity (f, rparam_check (scanner_mtf_scale)))
+	    {
+	      *error = "error scanned_mtf_scale";
 	      return false;
 	    }
 	}
