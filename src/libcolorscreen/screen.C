@@ -1648,7 +1648,7 @@ screen::initialize_with_2D_fft (screen &scr,
 		 FIXME: Should be here, but this is compensated in get_new_screen; check with finetune logic*/
 	  luminosity_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]), scale[c]);
+	  //printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]), scale[c]);
 	  for (int x = 0; x < fft_size; x++)
 	  {
 	    std::complex ker (std::clamp (mtf[c]->apply (x * step), (luminosity_t)0, (luminosity_t)1), (luminosity_t)0);
