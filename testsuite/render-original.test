@@ -1,0 +1,20 @@
+## -*- sh -*-
+## incomplete.test -- Test incomplete command handling
+
+# Common definitions
+if test -z "$srcdir"; then
+    srcdir=echo "$0" | sed 's,[^/]*$,,'
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+    test "${VERBOSE+set}" != set && VERBOSE=1
+fi
+echo 1..3
+. $srcdir/defs.sh
+NAME=dufaycolor_dt_captureone_export
+pexec $RUNCOLORSCREEN render --mode original --output-profile=original "$srcdir/${NAME}_tile1.jpg" "$srcdir/empty.par"  "out-render-${NAME}.tif" || exit 1
+echo 'ok 1 - rendering'
+#image is 8-bit; compare two 16bit images.
+pexec $RUNCOLORSCREEN render --mode original --output-profile=original "out-render-${NAME}.tif" "$srcdir/empty.par" "out2-render-${NAME}.tif"|| exit 1
+echo 'ok 2 - rendering 2'
+pexec $RUNCOLORSCREEN lab compare-images "out2-render-${NAME}.tif" "out-render-${NAME}.tif" || exit 1
+echo 'ok 3 - compare'

@@ -82,7 +82,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "\n");
       fprintf (stderr, "      --precise                 force precise "
                        "collection of patch density\n");
-      fprintf (stderr, "      --geometry=scan|screen    specify output file geometry");
+      fprintf (stderr, "      --geometry=scan|screen    specify output file geometry\n");
       fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
       fprintf (stderr, "      --auto-color-model        automatically choose "
                        "color model for given screen type\n");
@@ -1133,7 +1133,7 @@ analyze_backlight (int argc, char **argv)
     }
 
   if (!out_file)
-    print_help ("Output file not specified");
+    print_help ();
   file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
   if (!scan.load (white, false, &error, &progress, demosaic))
@@ -1166,7 +1166,7 @@ analyze_backlight (int argc, char **argv)
     }
   if (!cor->save (out))
     {
-      fprintf (stderr, "Can not write %s\n", out);
+      fprintf (stderr, "Can not write %s\n", out_file);
       exit (1);
     }
   fclose (out);
@@ -2352,6 +2352,97 @@ digital_laboratory (int argc, char **argv)
         }
       progress.pause_stdout ();
       printf ("Robust deltaE 2000 (ignoring 1%% of exceptional samples) avg %f, max %f\n", deltae_avg, deltae_max);
+    }
+  else if (!strcmp (argv[0], "compare-images"))
+    {
+      if (argc != 3)
+        {
+          printf ("Expected <image1> <image2> %i\n", argc);
+	  print_help ();
+        }
+      image_data scan,scan2;
+      static const char *error;
+      file_progress_info progress (stdout, verbose, verbose_tasks);
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading image %s\n", argv[1]);
+	  progress.resume_stdout ();
+	}
+      if (!scan.load (argv[1], false, &error, &progress))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", argv[1], error);
+	  exit(1);
+	}
+      if (verbose)
+	{
+	  progress.pause_stdout ();
+	  printf ("Loading image %s\n", argv[1]);
+	  progress.resume_stdout ();
+	}
+      if (!scan2.load (argv[2], false, &error, &progress))
+	{
+	  progress.pause_stdout ();
+	  fprintf (stderr, "Can not load %s: %s\n", argv[2], error);
+	  exit(1);
+	}
+      if (scan.width != scan2.width || scan.height != scan2.height)
+        {
+	  fprintf (stderr, "Image dimensions differs: %ix%i compared to %ix%i\n",
+		   scan.width, scan.height, scan2.width, scan2.height);
+	  exit (1);
+        }
+      progress.set_task ("comparing data", 1);
+      if (scan.data)
+        {
+	  float max_diff = 0;
+	  if (!scan2.data)
+	    {
+	      fprintf (stderr, "One image has BW/IR channel while other does not\n");
+	      exit (1);
+	    }
+	  for (int y = 0; y < scan.height; y++)
+	    for (int x = 0; x < scan.height; x++)
+	    {
+	      float diff = fabs (scan.data[y][x] / (float)scan.maxval -
+				 scan2.data[y][x] / (float)scan2.maxval);
+	      max_diff = std::max (max_diff, diff);
+	    }
+	  if (max_diff * 2 * 65536 > 1)
+	    {
+	      fprintf (stderr, "Images differs; max difference is %f\n", max_diff);
+	      exit (1);
+	    }
+        }
+      if (scan.rgbdata)
+        {
+	  float max_diff = 0;
+	  if (!scan2.rgbdata)
+	    {
+	      fprintf (stderr, "One image has RGB channel while other does not\n");
+	      exit (1);
+	    }
+	  for (int y = 0; y < scan.height; y++)
+	    for (int x = 0; x < scan.height; x++)
+	    {
+	      float diff = fabs (scan.rgbdata[y][x].r / (float)scan.maxval -
+				 scan2.rgbdata[y][x].r / (float)scan2.maxval);
+	      max_diff = std::max (max_diff, diff);
+	      diff = fabs (scan.rgbdata[y][x].g / (float)scan.maxval -
+			   scan2.rgbdata[y][x].g / (float)scan2.maxval);
+	      max_diff = std::max (max_diff, diff);
+	      diff = fabs (scan.rgbdata[y][x].b / (float)scan.maxval -
+			   scan2.rgbdata[y][x].b / (float)scan2.maxval);
+	      max_diff = std::max (max_diff, diff);
+	    }
+	  if (max_diff * 2 * 65536 >1)
+	    {
+	      fprintf (stderr, "Images differs; max difference is %f\n", max_diff);
+	      exit (1);
+	    }
+        }
+      exit (0);
     }
   else
     print_help ();

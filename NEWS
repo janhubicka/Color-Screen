@@ -34,9 +34,12 @@ Changes in version 1.1
    - finetune now support finetuning of point spread function
      and sharpening parameters
    - `colorscreen analyze-scanner-blur` can now be used to produce scanner blur
-     tables
+     correction tables
    - profiling now works on stitched projects.
    - support for Sony RAW files
+   - suport for demosaicing of converted monochromatic camera
+   - fixed bug in backlight correction of monochromatic scans
+   - gammut warnings
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation
