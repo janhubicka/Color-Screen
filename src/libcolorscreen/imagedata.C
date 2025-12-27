@@ -26,14 +26,18 @@ extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
 const char *image_data::demosaic_names[(int)demosaic_max]
-{
-  "default",
-  "linear",
-  "half",
-  "monochromatic",
-  "monochromatic_bayer_corrected",
-  "none"
-};
+    = { "default",
+        "linear",
+        "half",
+        "monochromatic",
+        "monochromatic_bayer_corrected",
+        "VNG",
+        "PPG",
+        "AHD",
+        "DCB",
+        "DHT",
+        "AAHD",
+        "none" };
 
 class image_data_loader
 {
@@ -686,7 +690,40 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.params.output_color = 0;
   RawProcessor.imgdata.params.highlight = 0;
-  RawProcessor.imgdata.params.user_qual = 0; /*Bicubic interpolation.  */
+  switch (demosaic)
+    {
+    case image_data::demosaic_linear:
+
+    /* The following use no demosaicing; any value is good.  */
+    case image_data::demosaic_half:
+    case image_data::demosaic_monochromatic:
+    case image_data::demosaic_monochromatic_bayer_corrected:
+    case image_data::demosaic_none: 
+      RawProcessor.imgdata.params.user_qual = 0;
+      break;
+    case image_data::demosaic_VNG:
+      RawProcessor.imgdata.params.user_qual = 1;
+      break;
+    case image_data::demosaic_PPG:
+      RawProcessor.imgdata.params.user_qual = 2;
+      break;
+    /* AHD seems to go well on demosaicing photo of Paget screen.  */
+    case image_data::demosaic_default:
+    case image_data::demosaic_AHD:
+      RawProcessor.imgdata.params.user_qual = 3;
+      break;
+    case image_data::demosaic_DCB:
+      RawProcessor.imgdata.params.user_qual = 4;
+      break;
+    case image_data::demosaic_DHT:
+      RawProcessor.imgdata.params.user_qual = 11;
+      break;
+    case image_data::demosaic_AAHD:
+      RawProcessor.imgdata.params.user_qual = 12;
+      break;
+    case image_data::demosaic_max:
+      abort ();
+    }
   RawProcessor.imgdata.params.use_auto_wb = 0;
   RawProcessor.imgdata.params.use_camera_wb = 0;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
@@ -871,10 +908,10 @@ raw_image_data_loader::load_part (int *permille, const char **error,
           {
             int i = y * m_img->width + x;
             m_img->data[y][x] = std::clamp (
-			        RawProcessor.imgdata.image[i][0] * rscale
-                                + RawProcessor.imgdata.image[i][1]
-                                + RawProcessor.imgdata.image[i][2] * bscale
-                                + (float)0.5, (float)0, (float)65535);
+                RawProcessor.imgdata.image[i][0] * rscale
+                    + RawProcessor.imgdata.image[i][1]
+                    + RawProcessor.imgdata.image[i][2] * bscale + (float)0.5,
+                (float)0, (float)65535);
           }
     }
   else if (m_img->rgbdata)

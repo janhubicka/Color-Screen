@@ -23,6 +23,12 @@ public:
     demosaic_half,
     demosaic_monochromatic,
     demosaic_monochromatic_bayer_corrected,
+    demosaic_VNG,
+    demosaic_PPG,
+    demosaic_AHD,
+    demosaic_DCB,
+    demosaic_DHT,
+    demosaic_AAHD,
     demosaic_none,
     demosaic_max
   };
