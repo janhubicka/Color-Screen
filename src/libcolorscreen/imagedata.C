@@ -1,19 +1,19 @@
-#include <cstring>
-#include <array>
-#include <assert.h>
-#include <cstdlib>
-#include <cmath>
-#include <tiffio.h>
-#include <turbojpeg.h>
-#include <zip.h>
-#include <lcms2.h>
+#include "backlight-correction.h"
+#include "include/histogram.h"
 #include "include/imagedata.h"
 #include "include/stitch.h"
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
-#include "backlight-correction.h"
 #include "mapalloc.h"
-#include "include/histogram.h"
+#include <array>
+#include <assert.h>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <lcms2.h>
+#include <tiffio.h>
+#include <turbojpeg.h>
+#include <zip.h>
 
 #define HAVE_LIBRAW
 
@@ -25,25 +25,43 @@ namespace colorscreen
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
+const char *image_data::demosaic_names[(int)demosaic_max]
+{
+  "default",
+  "linear",
+  "half",
+  "monochromatic",
+  "monochromatic_bayer_corrected",
+  "none"
+};
+
 class image_data_loader
 {
 public:
-  virtual bool init_loader (const char *name, const char **error, progress_info *progress) = 0;
-  virtual bool load_part (int *permille, const char **error, progress_info *progress) = 0;
-  virtual ~image_data_loader ()
-  { }
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *progress,
+                            image_data::demosaicing_t demosaic)
+      = 0;
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress)
+      = 0;
+  virtual ~image_data_loader () {}
   bool grayscale;
   bool rgb;
 };
 
-class jpg_image_data_loader: public image_data_loader
+class jpg_image_data_loader : public image_data_loader
 {
 public:
   jpg_image_data_loader (image_data *img)
-  : m_img (img), m_jpeg_buf (NULL), m_tj_instance (NULL), m_img_buf (NULL)
-  { }
-  virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error, progress_info *progress);
+      : m_img (img), m_jpeg_buf (NULL), m_tj_instance (NULL), m_img_buf (NULL)
+  {
+  }
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *,
+                            image_data::demosaicing_t demosaic);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
   virtual ~jpg_image_data_loader ()
   {
     if (m_jpeg_buf)
@@ -51,8 +69,9 @@ public:
     if (m_img_buf)
       MapAlloc::Free (m_img_buf);
     if (m_tj_instance)
-      tjDestroy(m_tj_instance);
+      tjDestroy (m_tj_instance);
   }
+
 private:
   image_data *m_img;
   unsigned char *m_jpeg_buf;
@@ -60,21 +79,26 @@ private:
   unsigned char *m_img_buf;
 };
 
-class tiff_image_data_loader: public image_data_loader
+class tiff_image_data_loader : public image_data_loader
 {
 public:
   tiff_image_data_loader (image_data *img)
-  : m_tif (NULL), m_img (img), m_buf (NULL)
-  { }
-  virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error, progress_info *progress);
+      : m_tif (NULL), m_img (img), m_buf (NULL)
+  {
+  }
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *,
+                            image_data::demosaicing_t demosaic);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
   virtual ~tiff_image_data_loader ()
   {
     if (m_tif)
       TIFFClose (m_tif);
     if (m_buf)
-      _TIFFfree(m_buf);
+      _TIFFfree (m_buf);
   }
+
 private:
   static const bool debug = false;
   TIFF *m_tif;
@@ -85,48 +109,59 @@ private:
   uint32_t m_row;
 };
 
-class raw_image_data_loader: public image_data_loader
+class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img)
-  : lcc(NULL),m_img (img)
-  { }
-  virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error, progress_info *progress);
+  raw_image_data_loader (image_data *img) : lcc (NULL), m_img (img) {}
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *, image_data::demosaicing_t);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
   virtual ~raw_image_data_loader ()
   {
     /*if (lcc)
       delete lcc;*/
   }
+
 private:
   backlight_correction_parameters *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
   bool monochromatic;
+  bool bayer_correction;
 };
 
-class stitch_image_data_loader: public image_data_loader
+class stitch_image_data_loader : public image_data_loader
 {
 public:
   stitch_image_data_loader (image_data *img, bool preload)
-  : m_img (img), m_preload_all (preload)
-  { }
-  virtual bool init_loader (const char *name, const char **error, progress_info *);
-  virtual bool load_part (int *permille, const char **error, progress_info *progress);
-  virtual ~stitch_image_data_loader ()
+      : m_img (img), m_preload_all (preload)
   {
   }
+  virtual bool init_loader (const char *name, const char **error,
+                            progress_info *,
+                            image_data::demosaicing_t demosaic);
+  virtual bool load_part (int *permille, const char **error,
+                          progress_info *progress);
+  virtual ~stitch_image_data_loader () {}
+
 private:
   image_data *m_img;
   bool m_preload_all;
   int m_curr_img;
   int m_max_img;
+  image_data::demosaicing_t m_demosaic;
 };
 
-
 image_data::image_data ()
-: data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0), maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi(0), ydpi(0), stitch (NULL), primary_red {0.6400, 0.3300, 0.2126 }, primary_green {0.3000, 0.6000, 0.7152}, primary_blue {0.1500, 0.0600, 0.0722}, whitepoint {0.312700492, 0.329000939, 1.0}, lcc (NULL), gamma (-2), own (false)
-{ 
+    : data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0),
+      maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi (0),
+      ydpi (0), stitch (NULL), primary_red{ 0.6400, 0.3300, 0.2126 },
+      primary_green{ 0.3000, 0.6000, 0.7152 },
+      primary_blue{ 0.1500, 0.0600, 0.0722 },
+      whitepoint{ 0.312700492, 0.329000939, 1.0 }, lcc (NULL), gamma (-2),
+      own (false)
+{
 }
 
 image_data::~image_data ()
@@ -179,42 +214,44 @@ image_data::allocate ()
       assert (!data);
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
-	return false;
-      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),"grayscale data");
-      if (!data [0])
-	{
-	  free (data);
-	  data = NULL;
-	  return false;
-	}
+        return false;
+      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),
+                                         "grayscale data");
+      if (!data[0])
+        {
+          free (data);
+          data = NULL;
+          return false;
+        }
       for (int i = 1; i < height; i++)
-	data[i] = data[0] + i * width;
+        data[i] = data[0] + i * width;
     }
   if (allocate_rgb ())
     {
       assert (!rgbdata);
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
-	{
-	  free (*data);
-	  if (data)
-	    free (data);
-	  data = NULL;
-	  return false;
-	}
-      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata), "RGB data");
-      if (!rgbdata [0])
-	{
-	  free (*data);
-	  if (data)
-	    free (data);
-	  data = NULL;
-	  free (rgbdata);
-	  rgbdata = NULL;
-	  return false;
-	}
+        {
+          free (*data);
+          if (data)
+            free (data);
+          data = NULL;
+          return false;
+        }
+      rgbdata[0] = (pixel *)MapAlloc::Alloc (
+          width * height * sizeof (**rgbdata), "RGB data");
+      if (!rgbdata[0])
+        {
+          free (*data);
+          if (data)
+            free (data);
+          data = NULL;
+          free (rgbdata);
+          rgbdata = NULL;
+          return false;
+        }
       for (int i = 1; i < height; i++)
-	rgbdata[i] = rgbdata[0] + i * width;
+        rgbdata[i] = rgbdata[0] + i * width;
     }
   own = true;
   return true;
@@ -222,18 +259,20 @@ image_data::allocate ()
 
 /* Silence warnings.
    They happen commonly while loading scans.  */
-static
-void warning_handler(const char* module, const char* fmt, va_list ap)
+static void
+warning_handler (const char *module, const char *fmt, va_list ap)
 {
 }
 
 bool
-tiff_image_data_loader::init_loader (const char *name, const char **error, progress_info *)
+tiff_image_data_loader::init_loader (const char *name, const char **error,
+                                     progress_info *,
+                                     image_data::demosaicing_t)
 {
   if (debug)
-    printf("TIFFopen\n");
+    printf ("TIFFopen\n");
   TIFFSetWarningHandler (warning_handler);
-  m_tif = TIFFOpen(name, "r");
+  m_tif = TIFFOpen (name, "r");
   if (!m_tif)
     {
       *error = "can not open file";
@@ -243,9 +282,9 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
   uint16_t photometric;
   float dpi;
   if (debug)
-    printf("checking width/height\n");
-  TIFFGetField(m_tif, TIFFTAG_IMAGEWIDTH, &w);
-  TIFFGetField(m_tif, TIFFTAG_IMAGELENGTH, &h);
+    printf ("checking width/height\n");
+  TIFFGetField (m_tif, TIFFTAG_IMAGEWIDTH, &w);
+  TIFFGetField (m_tif, TIFFTAG_IMAGELENGTH, &h);
   if (TIFFGetField (m_tif, TIFFTAG_XRESOLUTION, &dpi))
     m_img->xdpi = dpi;
   if (TIFFGetField (m_tif, TIFFTAG_YRESOLUTION, &dpi))
@@ -255,22 +294,22 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
   else if (!m_img->xdpi && m_img->ydpi)
     m_img->xdpi = m_img->ydpi;
   if (debug)
-    printf("checking bits per sample\n");
-  TIFFGetFieldDefaulted(m_tif, TIFFTAG_BITSPERSAMPLE, &m_bitspersample);
+    printf ("checking bits per sample\n");
+  TIFFGetFieldDefaulted (m_tif, TIFFTAG_BITSPERSAMPLE, &m_bitspersample);
   if (m_bitspersample != 8 && m_bitspersample != 16)
     {
       *error = "bit depth should be 8 or 16";
       return false;
     }
   if (debug)
-    printf("checking smaples per pixel\n");
-  TIFFGetFieldDefaulted(m_tif, TIFFTAG_SAMPLESPERPIXEL, &m_samples);
+    printf ("checking smaples per pixel\n");
+  TIFFGetFieldDefaulted (m_tif, TIFFTAG_SAMPLESPERPIXEL, &m_samples);
   void *iccprof;
   uint32_t size;
   if (TIFFGetField (m_tif, TIFFTAG_ICCPROFILE, &size, &iccprof))
     {
-      //m_img->icc_profile = iccprof;
-      //m_img->icc_profile_size = size;
+      // m_img->icc_profile = iccprof;
+      // m_img->icc_profile_size = size;
       m_img->icc_profile = malloc (size);
       memcpy (m_img->icc_profile, iccprof, size);
       m_img->icc_profile_size = size;
@@ -278,25 +317,27 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
   if (m_samples != 1 && m_samples != 3 && m_samples != 4)
     {
       if (debug)
-	printf("Samples:%i\n", m_samples);
-      *error = "only 1 sample per pixel (grayscale), 3 samples per pixel (RGB) or 4 samples per pixel (RGBa) are supported";
+        printf ("Samples:%i\n", m_samples);
+      *error = "only 1 sample per pixel (grayscale), 3 samples per pixel "
+               "(RGB) or 4 samples per pixel (RGBa) are supported";
       return false;
     }
-  if (TIFFGetField(m_tif, TIFFTAG_PHOTOMETRIC, &photometric))
+  if (TIFFGetField (m_tif, TIFFTAG_PHOTOMETRIC, &photometric))
     {
       if (photometric == PHOTOMETRIC_MINISBLACK && m_samples == 1)
-	;
-      else if (photometric == PHOTOMETRIC_RGB && (m_samples == 4 || m_samples == 3))
         ;
-      else 
-	{
-	  *error = "only RGB, RGBa or grayscale images are suppored";
-	  return false;
-	}
+      else if (photometric == PHOTOMETRIC_RGB
+               && (m_samples == 4 || m_samples == 3))
+        ;
+      else
+        {
+          *error = "only RGB, RGBa or grayscale images are suppored";
+          return false;
+        }
     }
   if (debug)
-    printf("Getting scanlinel\n");
-  m_buf = _TIFFmalloc(TIFFScanlineSize(m_tif));
+    printf ("Getting scanlinel\n");
+  m_buf = _TIFFmalloc (TIFFScanlineSize (m_tif));
   if (!m_buf)
     {
       *error = "out of memory allocating tiff scanline";
@@ -320,7 +361,8 @@ tiff_image_data_loader::init_loader (const char *name, const char **error, progr
 }
 
 bool
-tiff_image_data_loader::load_part (int *permille, const char **error, progress_info *)
+tiff_image_data_loader::load_part (int *permille, const char **error,
+                                   progress_info *)
 {
   if ((int)m_row < m_img->height)
     {
@@ -330,97 +372,99 @@ tiff_image_data_loader::load_part (int *permille, const char **error, progress_i
       image_data::pixel **rgbdata = m_img->rgbdata;
 
       if (debug)
-	printf("Decoding scanline %i\n", row);
-      if (!TIFFReadScanline(m_tif, m_buf, row))
-	{
-	  *error = "scanline decoding failed";
-	  return false;
-	}
+        printf ("Decoding scanline %i\n", row);
+      if (!TIFFReadScanline (m_tif, m_buf, row))
+        {
+          *error = "scanline decoding failed";
+          return false;
+        }
       if (m_bitspersample == 8 && m_samples == 1)
-	{
-	  uint8_t *buf2 = (uint8_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    data[row][x] = buf2[x];
-	}
+        {
+          uint8_t *buf2 = (uint8_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            data[row][x] = buf2[x];
+        }
       else if (m_bitspersample == 8 && m_samples == 3)
-	{
-	  uint8_t *buf2 = (uint8_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    {
-	      rgbdata[row][x].r = buf2[3 * x+0];
-	      rgbdata[row][x].g = buf2[3 * x+1];
-	      rgbdata[row][x].b = buf2[3 * x+2];
-	    }
-	}
+        {
+          uint8_t *buf2 = (uint8_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            {
+              rgbdata[row][x].r = buf2[3 * x + 0];
+              rgbdata[row][x].g = buf2[3 * x + 1];
+              rgbdata[row][x].b = buf2[3 * x + 2];
+            }
+        }
       else if (m_bitspersample == 8 && m_samples == 4)
-	{
-	  uint8_t *buf2 = (uint8_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    {
-	      rgbdata[row][x].r = buf2[4 * x+0];
-	      rgbdata[row][x].g = buf2[4 * x+1];
-	      rgbdata[row][x].b = buf2[4 * x+2];
-	      data[row][x] = buf2[4 * x+3];
-	    }
-	}
+        {
+          uint8_t *buf2 = (uint8_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            {
+              rgbdata[row][x].r = buf2[4 * x + 0];
+              rgbdata[row][x].g = buf2[4 * x + 1];
+              rgbdata[row][x].b = buf2[4 * x + 2];
+              data[row][x] = buf2[4 * x + 3];
+            }
+        }
       else if (m_bitspersample == 16 && m_samples == 1)
-	{
-	  uint16_t *buf2 = (uint16_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    data[row][x] = buf2[x];
-	}
+        {
+          uint16_t *buf2 = (uint16_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            data[row][x] = buf2[x];
+        }
       else if (m_bitspersample == 16 && m_samples == 3)
-	{
-	  uint16_t *buf2 = (uint16_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    {
-	      rgbdata[row][x].r = buf2[3 * x+0];
-	      rgbdata[row][x].g = buf2[3 * x+1];
-	      rgbdata[row][x].b = buf2[3 * x+2];
-	    }
-	}
+        {
+          uint16_t *buf2 = (uint16_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            {
+              rgbdata[row][x].r = buf2[3 * x + 0];
+              rgbdata[row][x].g = buf2[3 * x + 1];
+              rgbdata[row][x].b = buf2[3 * x + 2];
+            }
+        }
       else if (m_bitspersample == 16 && m_samples == 4)
-	{
-	  uint16_t *buf2 = (uint16_t *)m_buf;
-	  for (uint32_t x = 0; x < w; x++)
-	    {
-	      rgbdata[row][x].r = buf2[4*x+0];
-	      rgbdata[row][x].g = buf2[4*x+1];
-	      rgbdata[row][x].b = buf2[4*x+2];
-	      data[row][x] = buf2[4*x+3];
-	    }
-	}
+        {
+          uint16_t *buf2 = (uint16_t *)m_buf;
+          for (uint32_t x = 0; x < w; x++)
+            {
+              rgbdata[row][x].r = buf2[4 * x + 0];
+              rgbdata[row][x].g = buf2[4 * x + 1];
+              rgbdata[row][x].b = buf2[4 * x + 2];
+              data[row][x] = buf2[4 * x + 3];
+            }
+        }
       else
-	{
-	  /* We should have given up earlier.  */
-	  fprintf (stderr, "Wrong combinations of bitspersample %i and samples %i\n",
-		   m_bitspersample, m_samples);
-	  abort ();
-	}
+        {
+          /* We should have given up earlier.  */
+          fprintf (stderr,
+                   "Wrong combinations of bitspersample %i and samples %i\n",
+                   m_bitspersample, m_samples);
+          abort ();
+        }
       *permille = (999 * m_row + m_img->height / 2) / m_img->height;
       m_row++;
     }
   else
     {
       if (debug)
-	printf("done\n");
+        printf ("done\n");
       *permille = 1000;
     }
   return true;
 }
 
 bool
-jpg_image_data_loader::init_loader (const char *name, const char **error, progress_info *)
+jpg_image_data_loader::init_loader (const char *name, const char **error,
+                                    progress_info *, image_data::demosaicing_t)
 {
   FILE *jpegFile;
-  if ((jpegFile = fopen(name, "rb")) == NULL)
+  if ((jpegFile = fopen (name, "rb")) == NULL)
     {
       *error = "can not open file";
       return false;
     }
   size_t size;
-  if (fseek(jpegFile, 0, SEEK_END) < 0 || ((size = ftell(jpegFile)) < 0) ||
-      fseek(jpegFile, 0, SEEK_SET) < 0)
+  if (fseek (jpegFile, 0, SEEK_END) < 0 || ((size = ftell (jpegFile)) < 0)
+      || fseek (jpegFile, 0, SEEK_SET) < 0)
     {
       *error = "can not determine input file size";
       fclose (jpegFile);
@@ -433,19 +477,19 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
       return false;
     }
   unsigned long jpegSize = (unsigned long)size;
-  if ((m_jpeg_buf = (unsigned char *)tjAlloc(jpegSize)) == NULL)
+  if ((m_jpeg_buf = (unsigned char *)tjAlloc (jpegSize)) == NULL)
     {
       *error = "input file is empty";
       fclose (jpegFile);
       return false;
     }
-  if (fread(m_jpeg_buf, jpegSize, 1, jpegFile) < 1)
+  if (fread (m_jpeg_buf, jpegSize, 1, jpegFile) < 1)
     {
       *error = "can not read file";
       fclose (jpegFile);
       return false;
     }
-  fclose(jpegFile);  
+  fclose (jpegFile);
   m_tj_instance = tjInitDecompress ();
   if (!m_tj_instance)
     {
@@ -454,8 +498,9 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
     }
   int inSubsamp, inColorspace;
   /* TODO: use Exif to determine DPI.  */
-  if (tjDecompressHeader3(m_tj_instance, m_jpeg_buf, jpegSize, &m_img->width, &m_img->height,
-			  &inSubsamp, &inColorspace) < 0)
+  if (tjDecompressHeader3 (m_tj_instance, m_jpeg_buf, jpegSize, &m_img->width,
+                           &m_img->height, &inSubsamp, &inColorspace)
+      < 0)
     {
       *error = "can not read header";
       return false;
@@ -468,22 +513,27 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
     }
   rgb = inColorspace == 1;
   int pixelFormat = rgb ? TJPF_RGB : TJPF_GRAY;
-  //m_img_buf = (unsigned char *)tjAlloc(m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat]);
-  m_img_buf = (unsigned char *)MapAlloc::Alloc (m_img->width * (size_t) m_img->height * tjPixelSize[pixelFormat], "Decompressed jpeg image");
+  // m_img_buf = (unsigned char *)tjAlloc(m_img->width * (size_t) m_img->height
+  // * tjPixelSize[pixelFormat]);
+  m_img_buf = (unsigned char *)MapAlloc::Alloc (
+      m_img->width * (size_t)m_img->height * tjPixelSize[pixelFormat],
+      "Decompressed jpeg image");
   if (!m_img_buf)
     {
       *error = "can not allocate decompressed image buffer";
       return false;
     }
-  if (tjDecompress2(m_tj_instance, m_jpeg_buf, jpegSize, m_img_buf, m_img->width, 0, m_img->height,
-		    pixelFormat, TJFLAG_ACCURATEDCT) < 0)
+  if (tjDecompress2 (m_tj_instance, m_jpeg_buf, jpegSize, m_img_buf,
+                     m_img->width, 0, m_img->height, pixelFormat,
+                     TJFLAG_ACCURATEDCT)
+      < 0)
     {
       *error = "jpeg decompression failed";
       return false;
     }
   free (m_jpeg_buf);
   m_jpeg_buf = NULL;
-  tjDestroy(m_tj_instance);
+  tjDestroy (m_tj_instance);
   m_tj_instance = NULL;
   grayscale = !rgb;
   m_img->maxval = 255;
@@ -491,7 +541,8 @@ jpg_image_data_loader::init_loader (const char *name, const char **error, progre
 }
 
 bool
-jpg_image_data_loader::load_part (int *permille, const char **error, progress_info *)
+jpg_image_data_loader::load_part (int *permille, const char **error,
+                                  progress_info *)
 {
   int width = m_img->width;
   int height = m_img->height;
@@ -501,15 +552,15 @@ jpg_image_data_loader::load_part (int *permille, const char **error, progress_in
   if (!rgb)
     for (int y = 0; y < height; y++)
       for (int x = 0; x < width; x++)
-	data[y][x] = m_img_buf[y * width + x];
+        data[y][x] = m_img_buf[y * width + x];
   else
     for (int y = 0; y < height; y++)
       for (int x = 0; x < width; x++)
-	{
-	  rgbdata[y][x].r = m_img_buf[y * width *3 + x * 3 + 0];
-	  rgbdata[y][x].g = m_img_buf[y * width *3 + x * 3 + 1];
-	  rgbdata[y][x].b = m_img_buf[y * width *3 + x * 3 + 2];
-	}
+        {
+          rgbdata[y][x].r = m_img_buf[y * width * 3 + x * 3 + 0];
+          rgbdata[y][x].g = m_img_buf[y * width * 3 + x * 3 + 1];
+          rgbdata[y][x].b = m_img_buf[y * width * 3 + x * 3 + 2];
+        }
   *permille = 1000;
   return true;
 }
@@ -524,7 +575,9 @@ has_suffix (const char *name, const char *suffix)
 }
 
 bool
-raw_image_data_loader::init_loader (const char *name, const char **error, progress_info *progress)
+raw_image_data_loader::init_loader (const char *name, const char **error,
+                                    progress_info *progress,
+                                    image_data::demosaicing_t demosaic)
 {
   size_t buffer_size;
   void *buffer = NULL;
@@ -535,78 +588,81 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       zip_file_t *zip_file = NULL;
       zip = zip_open (name, ZIP_RDONLY, &errcode);
       if (!zip)
-	{
-	  *error = "can not open eip zip archive";
-	  return false;
-	}
+        {
+          *error = "can not open eip zip archive";
+          return false;
+        }
       name = "0.iiq";
       zip_file = zip_fopen (zip, name, 0);
       if (!zip_file)
         {
-	  name = "0.IIQ";
+          name = "0.IIQ";
           zip_file = zip_fopen (zip, name, 0);
         }
       if (!zip_file)
-	{
-	  *error = "can not find 0.iiq in the eip zip archive";
-	  return false;
-	}
+        {
+          *error = "can not find 0.iiq in the eip zip archive";
+          return false;
+        }
       zip_stat_t stat;
       if (zip_stat (zip, name, 0, &stat))
         {
-	  *error = "can not determine length of 0.iiq in the eip zip archive";
-	  return false;
+          *error = "can not determine length of 0.iiq in the eip zip archive";
+          return false;
         }
       buffer_size = stat.size;
       buffer = malloc (buffer_size);
       if (!buffer)
         {
-	  *error = "can not allocate buffer to decompress RAW file";
-	  return false;
+          *error = "can not allocate buffer to decompress RAW file";
+          return false;
         }
       if (buffer_size != (size_t)zip_fread (zip_file, buffer, buffer_size))
-	{
-	  *error = "can not decompress the RAW file";
-	  free (buffer);
-	  return false;
-	}
+        {
+          *error = "can not decompress the RAW file";
+          free (buffer);
+          return false;
+        }
       zip_fclose (zip_file);
       int nentries = zip_get_num_entries (zip, 0);
       for (int i = 0; i < nentries; i++)
-	{
-	  const char *name = zip_get_name (zip, i, 0);
-	  int len = strlen (name);
-	  if (name[len-4]=='.' && name[len-3]=='l' && name[len-2]=='c' && name[len-1]=='c')
-	    {
-	      if (zip_stat (zip, name, 0, &stat))
-		{
-		  *error = "can not determine length of LLC file in the eip zip archive";
-		  free (buffer);
-		  return false;
-		}
-	      zip_file = zip_fopen (zip, name, 0);
-	      if (!zip_file)
-		{
-		  *error = "can not find LLC file in the eip zip archive";
-		  return false;
-		}
-	      memory_buffer mbuffer = {NULL, 0, 0};
-	      mbuffer.len = stat.size;
-	      mbuffer.data = malloc (mbuffer.len);
-	      if (!mbuffer.data)
-		{
-		  *error = "can not allocate buffer to decompress LCC file";
-		  free (buffer);
-		  free (mbuffer.data);
-		  return false;
-		}
-	      if ((size_t)mbuffer.len != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
-		{
-		  *error = "can not allocate buffer to decompress LCC file";
-		  free (buffer);
-		  free (mbuffer.data);
-		  return false;
-		}
+        {
+          const char *name = zip_get_name (zip, i, 0);
+          int len = strlen (name);
+          if (name[len - 4] == '.' && name[len - 3] == 'l'
+              && name[len - 2] == 'c' && name[len - 1] == 'c')
+            {
+              if (zip_stat (zip, name, 0, &stat))
+                {
+                  *error = "can not determine length of LLC file in the eip "
+                           "zip archive";
+                  free (buffer);
+                  return false;
+                }
+              zip_file = zip_fopen (zip, name, 0);
+              if (!zip_file)
+                {
+                  *error = "can not find LLC file in the eip zip archive";
+                  return false;
+                }
+              memory_buffer mbuffer = { NULL, 0, 0 };
+              mbuffer.len = stat.size;
+              mbuffer.data = malloc (mbuffer.len);
+              if (!mbuffer.data)
+                {
+                  *error = "can not allocate buffer to decompress LCC file";
+                  free (buffer);
+                  free (mbuffer.data);
+                  return false;
+                }
+              if ((size_t)mbuffer.len
+                  != (size_t)zip_fread (zip_file, mbuffer.data, mbuffer.len))
+                {
+                  *error = "can not allocate buffer to decompress LCC file";
+                  free (buffer);
+                  free (mbuffer.data);
+                  return false;
+                }
 #if 0
 	      lcc = backlight_correction_parameters::load_captureone_lcc (&mbuffer, false);
 	      if (!lcc)
@@ -617,15 +673,16 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 		  return false;
 		}
 #endif
-	      m_img->lcc = lcc;
-	      free (mbuffer.data);
-	      zip_fclose (zip_file);
-	      break;
-	    }
-	}
+              m_img->lcc = lcc;
+              free (mbuffer.data);
+              zip_fclose (zip_file);
+              break;
+            }
+        }
       zip_close (zip);
     }
-  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
+  RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1]
+      = RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.params.output_color = 0;
   RawProcessor.imgdata.params.highlight = 0;
@@ -634,49 +691,55 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.use_camera_wb = 0;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.rawparams.max_raw_memory_mb = 10000;
-  if (getenv ("CS_HALF_RAW"))
+  if (demosaic == image_data::demosaic_half)
     RawProcessor.imgdata.params.half_size = 1;
   RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.fbdd_noiserd = 0;
 
-  monochromatic = getenv ("CS_MONOCHROMATIC");
+  monochromatic
+      = (demosaic == image_data::demosaic_monochromatic
+         || demosaic == image_data::demosaic_monochromatic_bayer_corrected);
+  bayer_correction
+      = demosaic == image_data::demosaic_monochromatic_bayer_corrected;
   /* TODO figure out threshold.  */
   RawProcessor.imgdata.params.threshold = 0;
-  if (getenv ("CS_NO_DEMOSAIC") || monochromatic)
+  if (demosaic == image_data::demosaic_none || monochromatic)
     RawProcessor.imgdata.params.no_interpolation = 1;
   int ret;
   if (buffer)
     ret = RawProcessor.open_buffer (buffer, buffer_size);
   else
-    ret = RawProcessor.open_file(name);
+    ret = RawProcessor.open_file (name);
   if (ret != LIBRAW_SUCCESS)
     {
       if (buffer)
-	free (buffer);
-      *error = libraw_strerror(ret);
+        free (buffer);
+      *error = libraw_strerror (ret);
       return false;
     }
-  if (RawProcessor.imgdata.idata.colors != 1 && RawProcessor.imgdata.idata.colors != 3)
+  if (RawProcessor.imgdata.idata.colors != 1
+      && RawProcessor.imgdata.idata.colors != 3)
     {
-      *error = "number of colors in RAW file should be 3 (RGB) or 1 (achromatic)";
-      return false;
-    }
-  if (progress)
-    progress->set_task ("unpacking RAW data",1);
-  if ((ret = RawProcessor.unpack()) != LIBRAW_SUCCESS)
-    {
-      if (buffer)
-	free (buffer);
-      *error = libraw_strerror(ret);
+      *error
+          = "number of colors in RAW file should be 3 (RGB) or 1 (achromatic)";
       return false;
     }
   if (progress)
-    progress->set_task ("demosaicing",1);
-  if ((ret = RawProcessor.dcraw_process()) != LIBRAW_SUCCESS)
+    progress->set_task ("unpacking RAW data", 1);
+  if ((ret = RawProcessor.unpack ()) != LIBRAW_SUCCESS)
     {
       if (buffer)
-	free (buffer);
-      *error = libraw_strerror(ret);
+        free (buffer);
+      *error = libraw_strerror (ret);
+      return false;
+    }
+  if (progress)
+    progress->set_task ("demosaicing", 1);
+  if ((ret = RawProcessor.dcraw_process ()) != LIBRAW_SUCCESS)
+    {
+      if (buffer)
+        free (buffer);
+      *error = libraw_strerror (ret);
       return false;
     }
   grayscale = false;
@@ -696,15 +759,21 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
       /* some RAW files has empty camera matrix.  */
       for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
-	  if (RawProcessor.imgdata.color.cam_xyz[i][j])
-	    nonzero = true;
+          if (RawProcessor.imgdata.color.cam_xyz[i][j])
+            nonzero = true;
       if (nonzero)
-	{
-	  color_matrix m(RawProcessor.imgdata.color.cam_xyz[0][0], RawProcessor.imgdata.color.cam_xyz[1][0], RawProcessor.imgdata.color.cam_xyz[2][0], 0,
-			 RawProcessor.imgdata.color.cam_xyz[0][1], RawProcessor.imgdata.color.cam_xyz[1][1], RawProcessor.imgdata.color.cam_xyz[2][1], 0,
-			 RawProcessor.imgdata.color.cam_xyz[0][2], RawProcessor.imgdata.color.cam_xyz[1][2], RawProcessor.imgdata.color.cam_xyz[2][2], 0,
-			 0, 0, 0, 1);
-	  //m = m.invert ();
+        {
+          color_matrix m (RawProcessor.imgdata.color.cam_xyz[0][0],
+                          RawProcessor.imgdata.color.cam_xyz[1][0],
+                          RawProcessor.imgdata.color.cam_xyz[2][0], 0,
+                          RawProcessor.imgdata.color.cam_xyz[0][1],
+                          RawProcessor.imgdata.color.cam_xyz[1][1],
+                          RawProcessor.imgdata.color.cam_xyz[2][1], 0,
+                          RawProcessor.imgdata.color.cam_xyz[0][2],
+                          RawProcessor.imgdata.color.cam_xyz[1][2],
+                          RawProcessor.imgdata.color.cam_xyz[2][2], 0, 0, 0, 0,
+                          1);
+          // m = m.invert ();
 #if 0
 	  const double b = 512;
 	  color_matrix premult (b/RawProcessor.imgdata.color.cam_mul[0],0, 0, 0,
@@ -712,21 +781,30 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 				0, 0, b/RawProcessor.imgdata.color.cam_mul[2], 0,
 				0, 0, 0, 1);
 #endif
-	  color_matrix premult (1/RawProcessor.imgdata.color.pre_mul[0],0, 0, 0,
-				0, 1/RawProcessor.imgdata.color.pre_mul[1], 0, 0,
-				0, 0, 1/RawProcessor.imgdata.color.pre_mul[2], 0,
-				0, 0, 0, 1);
-	  m = premult * m.invert ();
-	  xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0], m.m_elements[2][0], &m_img->primary_red.x, &m_img->primary_red.y, &m_img->primary_red.Y);
-	  //printf ("red %f %f\n",  m_img->primary_red.x, m_img->primary_red.y);
-	  xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1], m.m_elements[2][1], &m_img->primary_green.x, &m_img->primary_green.y, &m_img->primary_green.Y);
-	  //printf ("green %f %f\n",  m_img->primary_green.x, m_img->primary_green.y);
-	  xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2], m.m_elements[2][2], &m_img->primary_blue.x, &m_img->primary_blue.y, &m_img->primary_blue.Y);
-	  //printf ("blue %f %f\n",  m_img->primary_blue.x, m_img->primary_blue.y);
-	  //m_img->primary_red.Y /= RawProcessor.imgdata.color.pre_mul[0];
-	  //m_img->primary_green.Y /= RawProcessor.imgdata.color.pre_mul[1];
-	  //m_img->primary_blue.Y /= RawProcessor.imgdata.color.pre_mul[2];
-	}
+          color_matrix premult (
+              1 / RawProcessor.imgdata.color.pre_mul[0], 0, 0, 0, 0,
+              1 / RawProcessor.imgdata.color.pre_mul[1], 0, 0, 0, 0,
+              1 / RawProcessor.imgdata.color.pre_mul[2], 0, 0, 0, 0, 1);
+          m = premult * m.invert ();
+          xyz_to_xyY (m.m_elements[0][0], m.m_elements[1][0],
+                      m.m_elements[2][0], &m_img->primary_red.x,
+                      &m_img->primary_red.y, &m_img->primary_red.Y);
+          // printf ("red %f %f\n",  m_img->primary_red.x,
+          // m_img->primary_red.y);
+          xyz_to_xyY (m.m_elements[0][1], m.m_elements[1][1],
+                      m.m_elements[2][1], &m_img->primary_green.x,
+                      &m_img->primary_green.y, &m_img->primary_green.Y);
+          // printf ("green %f %f\n",  m_img->primary_green.x,
+          // m_img->primary_green.y);
+          xyz_to_xyY (m.m_elements[0][2], m.m_elements[1][2],
+                      m.m_elements[2][2], &m_img->primary_blue.x,
+                      &m_img->primary_blue.y, &m_img->primary_blue.Y);
+          // printf ("blue %f %f\n",  m_img->primary_blue.x,
+          // m_img->primary_blue.y); m_img->primary_red.Y /=
+          // RawProcessor.imgdata.color.pre_mul[0]; m_img->primary_green.Y /=
+          // RawProcessor.imgdata.color.pre_mul[1]; m_img->primary_blue.Y /=
+          // RawProcessor.imgdata.color.pre_mul[2];
+        }
     }
   if (buffer)
     free (buffer);
@@ -734,7 +812,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 }
 
 bool
-raw_image_data_loader::load_part (int *permille, const char **error, progress_info *)
+raw_image_data_loader::load_part (int *permille, const char **error,
+                                  progress_info *)
 {
   histogram rhistogram, bhistogram;
   const luminosity_t range = 0.2;
@@ -742,76 +821,83 @@ raw_image_data_loader::load_part (int *permille, const char **error, progress_in
   /* Supress mosaic pattern.  We only want to find good scaling factor.  */
   if (monochromatic)
     {
-      rhistogram.set_range (1 - range, 1 + range, 65535 * 4);
-      bhistogram.set_range (1 - range, 1 + range, 65535 * 4);
-      for (int y = 0; y < m_img->height; y++)
-	for (int x = 0; x < m_img->width - 1; x++)
-	  {
-	    int i = y * m_img->width + x;
-	    int g = RawProcessor.imgdata.image[i][1];
+      float bscale = 1, rscale = 1;
 
-	    if (g > 256 && g < 65535-256)
-	      {
-		assert (!RawProcessor.imgdata.image[i][0]
-			&& !RawProcessor.imgdata.image[i][2]);
-		int r = RawProcessor.imgdata.image[i+1][0];
-		if (r > 256 && r < 65535-256)
-		  {
-		    luminosity_t ratio = g / (luminosity_t)r;
-		    if (ratio > 1 - range && ratio < 1 + range)
-		      rhistogram.account (ratio);
-		  }
-		int b = RawProcessor.imgdata.image[i+1][2];
-		if (b > 256 && b < 65535-256)
-		  {
-		    luminosity_t ratio = g / (luminosity_t)b;
-		    if (ratio > 1 - range && ratio < 1 + range)
-		      bhistogram.account (ratio);
-		  }
-	      }
-	  }
-      rhistogram.finalize ();
-      bhistogram.finalize ();
-      if (rhistogram.num_samples () < 1024
-	  || bhistogram.num_samples () < 1024)
+      if (bayer_correction)
         {
-	  *error = "not enough samples to remove mosaic";
-	  return false;
+          rhistogram.set_range (1 - range, 1 + range, 65535 * 4);
+          bhistogram.set_range (1 - range, 1 + range, 65535 * 4);
+          for (int y = 0; y < m_img->height; y++)
+            for (int x = 0; x < m_img->width - 1; x++)
+              {
+                int i = y * m_img->width + x;
+                int g = RawProcessor.imgdata.image[i][1];
+
+                if (g > 256 && g < 65535 - 256)
+                  {
+                    assert (!RawProcessor.imgdata.image[i][0]
+                            && !RawProcessor.imgdata.image[i][2]);
+                    int r = RawProcessor.imgdata.image[i + 1][0];
+                    if (r > 256 && r < 65535 - 256)
+                      {
+                        luminosity_t ratio = g / (luminosity_t)r;
+                        if (ratio > 1 - range && ratio < 1 + range)
+                          rhistogram.account (ratio);
+                      }
+                    int b = RawProcessor.imgdata.image[i + 1][2];
+                    if (b > 256 && b < 65535 - 256)
+                      {
+                        luminosity_t ratio = g / (luminosity_t)b;
+                        if (ratio > 1 - range && ratio < 1 + range)
+                          bhistogram.account (ratio);
+                      }
+                  }
+              }
+          rhistogram.finalize ();
+          bhistogram.finalize ();
+          if (rhistogram.num_samples () < 1024
+              || bhistogram.num_samples () < 1024)
+            {
+              *error = "not enough samples to remove mosaic";
+              return false;
+            }
+          bscale = bhistogram.find_avg (0.2, 0.2);
+          rscale = rhistogram.find_avg (0.2, 0.2);
         }
-      float bscale = bhistogram.find_avg (0.2, 0.2);
-      float rscale = rhistogram.find_avg (0.2, 0.2);
-#pragma omp parallel for default(none) shared(m_img,RawProcessor,bscale,rscale)
+#pragma omp parallel for default(none)                                        \
+    shared(m_img, RawProcessor, bscale, rscale)
       for (int y = 0; y < m_img->height; y++)
-	for (int x = 0; x < m_img->width; x++)
-	  {
-	    int i = y * m_img->width + x;
-	    m_img->data[y][x] = RawProcessor.imgdata.image[i][0] * rscale
-				+ RawProcessor.imgdata.image[i][1]
-				+ RawProcessor.imgdata.image[i][2] * bscale
-				+ 0.5;
-	  }
+        for (int x = 0; x < m_img->width; x++)
+          {
+            int i = y * m_img->width + x;
+            m_img->data[y][x] = std::clamp (
+			        RawProcessor.imgdata.image[i][0] * rscale
+                                + RawProcessor.imgdata.image[i][1]
+                                + RawProcessor.imgdata.image[i][2] * bscale
+                                + (float)0.5, (float)0, (float)65535);
+          }
     }
   else if (m_img->rgbdata)
     {
-#pragma omp parallel for default(none) shared(m_img,RawProcessor)
+#pragma omp parallel for default(none) shared(m_img, RawProcessor)
       for (int y = 0; y < m_img->height; y++)
-	for (int x = 0; x < m_img->width; x++)
-	  {
-	    int i = y * m_img->width + x;
-	    m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
-	    m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
-	    m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
-	  }
+        for (int x = 0; x < m_img->width; x++)
+          {
+            int i = y * m_img->width + x;
+            m_img->rgbdata[y][x].r = RawProcessor.imgdata.image[i][0];
+            m_img->rgbdata[y][x].g = RawProcessor.imgdata.image[i][1];
+            m_img->rgbdata[y][x].b = RawProcessor.imgdata.image[i][2];
+          }
     }
   else
     {
-#pragma omp parallel for default(none) shared(m_img,RawProcessor)
+#pragma omp parallel for default(none) shared(m_img, RawProcessor)
       for (int y = 0; y < m_img->height; y++)
-	for (int x = 0; x < m_img->width; x++)
-	  {
-	    int i = y * m_img->width + x;
-	    m_img->data[y][x] = RawProcessor.imgdata.image[i][0];
-	  }
+        for (int x = 0; x < m_img->width; x++)
+          {
+            int i = y * m_img->width + x;
+            m_img->data[y][x] = RawProcessor.imgdata.image[i][0];
+          }
     }
   *permille = 1000;
   RawProcessor.recycle ();
@@ -819,10 +905,13 @@ raw_image_data_loader::load_part (int *permille, const char **error, progress_in
 }
 
 bool
-stitch_image_data_loader::init_loader (const char *name, const char **error, progress_info *progress)
+stitch_image_data_loader::init_loader (const char *name, const char **error,
+                                       progress_info *progress,
+                                       image_data::demosaicing_t demosaic)
 {
+  m_demosaic = demosaic;
   if (progress)
-    progress->set_task ("opening stich project",1);
+    progress->set_task ("opening stich project", 1);
   FILE *f = fopen (name, "rt");
   if (!f)
     {
@@ -830,7 +919,7 @@ stitch_image_data_loader::init_loader (const char *name, const char **error, pro
       return false;
     }
   if (progress)
-    progress->set_task ("loading stich project",1);
+    progress->set_task ("loading stich project", 1);
   m_img->stitch = new stitch_project ();
   m_img->stitch->set_path_by_filename (name);
   if (!m_img->stitch->load (f, error))
@@ -841,6 +930,7 @@ stitch_image_data_loader::init_loader (const char *name, const char **error, pro
       return false;
     }
   fclose (f);
+  /* TODO: pass demosaic  */
   if (!m_img->stitch->initialize ())
     {
       *error = "Can not initialize stitch project";
@@ -854,18 +944,23 @@ stitch_image_data_loader::init_loader (const char *name, const char **error, pro
   if (m_preload_all)
     {
       m_img->stitch->keep_all_images ();
-      increase_lru_cache_sizes_for_stitch_projects (m_img->stitch->params.width * m_img->stitch->params.height);
+      increase_lru_cache_sizes_for_stitch_projects (
+          m_img->stitch->params.width * m_img->stitch->params.height);
     }
   m_img->width = xmax - m_img->xmin;
   m_img->height = ymax - m_img->ymin;
   m_curr_img = 0;
-  m_max_img = m_preload_all ? m_img->stitch->params.width * m_img->stitch->params.height - 1 : 0;
-  
+  m_max_img
+      = m_preload_all
+            ? m_img->stitch->params.width * m_img->stitch->params.height - 1
+            : 0;
+
   return true;
 }
 
 bool
-stitch_image_data_loader::load_part (int *permille, const char **error, progress_info *progress)
+stitch_image_data_loader::load_part (int *permille, const char **error,
+                                     progress_info *progress)
 {
   int y = m_curr_img / m_img->stitch->params.width;
   int x = m_curr_img % m_img->stitch->params.width;
@@ -873,121 +968,131 @@ stitch_image_data_loader::load_part (int *permille, const char **error, progress
   if (!simg.img)
     {
       if (progress)
-	progress->push();
+        progress->push ();
       if (progress)
-	progress->set_task ("loading image header",1);
+        progress->set_task ("loading image header", 1);
       if (!simg.init_loader (error, progress))
-	return false;
+        return false;
       if (progress)
-	progress->pop();
+        progress->pop ();
       *permille = 1000 * m_curr_img / (m_max_img + 1);
       if (!simg.img->allocate ())
-	{
-	  *error = "out of memory";
-	  simg.img = NULL;
-	  return false;
-	}
+        {
+          *error = "out of memory";
+          simg.img = NULL;
+          return false;
+        }
       return true;
     }
   int permille2;
   if (progress)
-    progress->push();
+    progress->push ();
   if (!simg.load_part (&permille2, error, progress))
     {
       simg.img = NULL;
       return false;
     }
   if (progress)
-    progress->pop();
-  *permille = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
+    progress->pop ();
+  *permille
+      = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
   if (permille2 == 1000)
     {
       if (!x && !y)
-	{
-	  m_img->maxval = simg.img->maxval;
-	  m_img->icc_profile_size = simg.img->icc_profile_size;
-	  if (simg.img->icc_profile)
-	    {
-	      m_img->icc_profile = malloc (simg.img->icc_profile_size);
-	      m_img->icc_profile_size = simg.img->icc_profile_size;
-	      memcpy (m_img->icc_profile, simg.img->icc_profile, m_img->icc_profile_size);
-	    }
-	  m_img->xdpi = simg.img->xdpi;
-	  m_img->ydpi =simg .img->ydpi;
-	}
+        {
+          m_img->maxval = simg.img->maxval;
+          m_img->icc_profile_size = simg.img->icc_profile_size;
+          if (simg.img->icc_profile)
+            {
+              m_img->icc_profile = malloc (simg.img->icc_profile_size);
+              m_img->icc_profile_size = simg.img->icc_profile_size;
+              memcpy (m_img->icc_profile, simg.img->icc_profile,
+                      m_img->icc_profile_size);
+            }
+          m_img->xdpi = simg.img->xdpi;
+          m_img->ydpi = simg.img->ydpi;
+        }
       else
-	{
-	  if (m_img->maxval != simg.img->maxval)
-	    {
-	      *error = "images in stitch project must all have the same bit depth";
-	      return false;
-	    }
-	  if (m_img->xdpi != simg.img->xdpi || m_img->ydpi != simg.img->ydpi)
-	    {
-	      *error = "images in stitch project must all have the same DPI";
-	      return false;
-	    }
+        {
+          if (m_img->maxval != simg.img->maxval)
+            {
+              *error = "images in stitch project must all have the same bit "
+                       "depth";
+              return false;
+            }
+          if (m_img->xdpi != simg.img->xdpi || m_img->ydpi != simg.img->ydpi)
+            {
+              *error = "images in stitch project must all have the same DPI";
+              return false;
+            }
 #if 1
-	  if (m_img->icc_profile_size != simg.img->icc_profile_size
-	      || memcmp (m_img->icc_profile, simg.img->icc_profile, m_img->icc_profile_size))
-	    {
-	      *error = "images in stitch project must all have the same color profile";
-	      return false;
-	    }
+          if (m_img->icc_profile_size != simg.img->icc_profile_size
+              || memcmp (m_img->icc_profile, simg.img->icc_profile,
+                         m_img->icc_profile_size))
+            {
+              *error = "images in stitch project must all have the same color "
+                       "profile";
+              return false;
+            }
 #endif
-	}
+        }
       if (m_curr_img == m_max_img)
-	{
-	  *permille = 1000;
-	  return true;
-	}
+        {
+          *permille = 1000;
+          return true;
+        }
       else
-	m_curr_img++;
+        m_curr_img++;
       return true;
     }
   return true;
 }
 
 bool
-image_data::init_loader (const char *name, bool preload_all, const char **error, progress_info *progress)
+image_data::init_loader (const char *name, bool preload_all,
+                         const char **error, progress_info *progress,
+                         demosaicing_t demosaic)
 {
   assert (!loader);
   m_preload_all = preload_all;
   if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
-    loader = std::make_unique <tiff_image_data_loader> (this);
+    loader = std::make_unique<tiff_image_data_loader> (this);
   else if (has_suffix (name, ".jpg") || has_suffix (name, ".jpeg"))
-    loader = std::make_unique <jpg_image_data_loader> (this);
-  else if (has_suffix (name, ".raw") || has_suffix (name, ".dng") || has_suffix (name, "iiq") || has_suffix (name, "NEF") || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<jpg_image_data_loader> (this);
+  else if (has_suffix (name, ".raw") || has_suffix (name, ".dng")
+           || has_suffix (name, "iiq") || has_suffix (name, "NEF")
+           || has_suffix (name, "cr2") || has_suffix (name, "CR2"))
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".eip"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".arw"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".ARW"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".raf"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".RAF"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".arq"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".ARQ"))
-    loader = std::make_unique <raw_image_data_loader> (this);
+    loader = std::make_unique<raw_image_data_loader> (this);
   else if (has_suffix (name, ".csprj"))
-    loader = std::make_unique <stitch_image_data_loader> (this, preload_all);
+    loader = std::make_unique<stitch_image_data_loader> (this, preload_all);
   if (!loader)
     {
       *error = "Unknown file extension";
       return false;
     }
-  bool ret = loader->init_loader (name, error, progress);
+  bool ret = loader->init_loader (name, error, progress, demosaic);
   if (!ret)
     loader = NULL;
   return ret;
 }
 
 bool
-image_data::load_part (int *permille, const char **error, progress_info *progress)
+image_data::load_part (int *permille, const char **error,
+                       progress_info *progress)
 {
   assert (loader);
   bool ret = loader->load_part (permille, error, progress);
@@ -996,7 +1101,7 @@ image_data::load_part (int *permille, const char **error, progress_info *progres
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
-	parse_icc_profile (progress);
+        parse_icc_profile (progress);
     }
   return ret;
 }
@@ -1006,60 +1111,64 @@ image_data::parse_icc_profile (progress_info *progress)
 {
   if (!icc_profile)
     return true;
-  cmsHPROFILE hInProfile = cmsOpenProfileFromMem (icc_profile, icc_profile_size);
+  cmsHPROFILE hInProfile
+      = cmsOpenProfileFromMem (icc_profile, icc_profile_size);
   if (!hInProfile)
     {
       if (progress)
-	progress->pause_stdout ();
+        progress->pause_stdout ();
       fprintf (stderr, "Failed to parse profile\n");
       if (progress)
-	progress->resume_stdout ();
+        progress->resume_stdout ();
       return false;
     }
-  if (cmsGetColorSpace(hInProfile) != cmsSigRgbData)
+  if (cmsGetColorSpace (hInProfile) != cmsSigRgbData)
     {
       if (progress)
-	progress->pause_stdout ();
+        progress->pause_stdout ();
       fprintf (stderr, "Non-RGB profiles are not supported by ColorScreen!\n");
       if (progress)
-	progress->resume_stdout ();
+        progress->resume_stdout ();
       return false;
     }
 
-  cmsProfileClassSignature cl = cmsGetDeviceClass(hInProfile);
-  if (cl != cmsSigInputClass && cl != cmsSigDisplayClass &&
-      cl != cmsSigOutputClass && cl != cmsSigColorSpaceClass)
+  cmsProfileClassSignature cl = cmsGetDeviceClass (hInProfile);
+  if (cl != cmsSigInputClass && cl != cmsSigDisplayClass
+      && cl != cmsSigOutputClass && cl != cmsSigColorSpaceClass)
     {
       if (progress)
-	progress->pause_stdout ();
-      fprintf (stderr, "Only input, output, display and color space ICC profiles are supported by ColorScreen!\n");
+        progress->pause_stdout ();
+      fprintf (stderr, "Only input, output, display and color space ICC "
+                       "profiles are supported by ColorScreen!\n");
       if (progress)
-	progress->resume_stdout ();
+        progress->resume_stdout ();
       return false;
     }
 
-  cmsHTRANSFORM hTransform = cmsCreateTransform(hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT, INTENT_ABSOLUTE_COLORIMETRIC, 0);
+  cmsHTRANSFORM hTransform
+      = cmsCreateTransform (hInProfile, TYPE_RGB_FLT, NULL, TYPE_XYZ_FLT,
+                            INTENT_ABSOLUTE_COLORIMETRIC, 0);
   if (!hTransform)
     {
       if (progress)
-	progress->pause_stdout ();
+        progress->pause_stdout ();
       fprintf (stderr, "Failed to do icc profile transform\n");
       if (progress)
-	progress->resume_stdout ();
+        progress->resume_stdout ();
       return false;
     }
-  float rgb_buffer[] = {0,0,0,
-			1,0,0,
-			0,1,0,
-			0,0,1};
-  float xyz_buffer[4*3];
+  float rgb_buffer[] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+  float xyz_buffer[4 * 3];
   cmsDoTransform (hTransform, rgb_buffer, xyz_buffer, 4);
-  xyz_to_xyY (xyz_buffer[3]-xyz_buffer[0], xyz_buffer[4]-xyz_buffer[1], xyz_buffer[5]-xyz_buffer[2],
-	      &primary_red.x, &primary_red.y, &primary_red.Y);
-  xyz_to_xyY (xyz_buffer[6]-xyz_buffer[0], xyz_buffer[7]-xyz_buffer[1], xyz_buffer[8]-xyz_buffer[2],
-	      &primary_green.x, &primary_green.y, &primary_green.Y);
-  xyz_to_xyY (xyz_buffer[9]-xyz_buffer[0], xyz_buffer[10]-xyz_buffer[1], xyz_buffer[11]-xyz_buffer[2],
-	      &primary_blue.x, &primary_blue.y, &primary_blue.Y);
+  xyz_to_xyY (xyz_buffer[3] - xyz_buffer[0], xyz_buffer[4] - xyz_buffer[1],
+              xyz_buffer[5] - xyz_buffer[2], &primary_red.x, &primary_red.y,
+              &primary_red.Y);
+  xyz_to_xyY (xyz_buffer[6] - xyz_buffer[0], xyz_buffer[7] - xyz_buffer[1],
+              xyz_buffer[8] - xyz_buffer[2], &primary_green.x,
+              &primary_green.y, &primary_green.Y);
+  xyz_to_xyY (xyz_buffer[9] - xyz_buffer[0], xyz_buffer[10] - xyz_buffer[1],
+              xyz_buffer[11] - xyz_buffer[2], &primary_blue.x, &primary_blue.y,
+              &primary_blue.Y);
 #if 0
   xyz r = xyY_to_xyz (primary_red.x, primary_red.y, primary_red.Y);
   printf ("%f %f %f   %f %f %f\n", primary_red.x, primary_red.y, primary_red.Y, r.x, r.y, r.z);
@@ -1073,56 +1182,59 @@ image_data::parse_icc_profile (progress_info *progress)
   double this_gamma = cmsDetectRGBProfileGamma (hInProfile, 0.001);
   if (this_gamma > 0)
     {
-      //fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);
+      // fprintf (stderr, "Gamma of ICC file %f\n", this_gamma);
       gamma = this_gamma;
     }
   else
     {
-      //fprintf (stderr, "No gamma estimate found\n");
-      cmsContext ContextID = cmsGetProfileContextID(hInProfile);
-      cmsHPROFILE hXYZ = cmsCreateXYZProfileTHR(ContextID);
+      // fprintf (stderr, "No gamma estimate found\n");
+      cmsContext ContextID = cmsGetProfileContextID (hInProfile);
+      cmsHPROFILE hXYZ = cmsCreateXYZProfileTHR (ContextID);
       if (!hXYZ)
         {
-	  if (progress)
-	    progress->pause_stdout ();
+          if (progress)
+            progress->pause_stdout ();
           fprintf (stderr, "Failed to create XYZ Profile HR\n");
-	  cmsCloseProfile (hInProfile);
-	  if (progress)
-	    progress->resume_stdout ();
+          cmsCloseProfile (hInProfile);
+          if (progress)
+            progress->resume_stdout ();
           return false;
         }
-      cmsHTRANSFORM xform = cmsCreateTransformTHR(ContextID, hInProfile, TYPE_RGB_DBL, hXYZ, TYPE_XYZ_DBL,
-		      				  INTENT_ABSOLUTE_COLORIMETRIC, cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC);
+      cmsHTRANSFORM xform = cmsCreateTransformTHR (
+          ContextID, hInProfile, TYPE_RGB_DBL, hXYZ, TYPE_XYZ_DBL,
+          INTENT_ABSOLUTE_COLORIMETRIC,
+          cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC);
       if (!xform)
         {
-	  if (progress)
-	    progress->pause_stdout ();
+          if (progress)
+            progress->pause_stdout ();
           fprintf (stderr, "Failed to create profile transform\n");
-	  if (progress)
-	    progress->resume_stdout ();
-	  cmsCloseProfile (hInProfile);
+          if (progress)
+            progress->resume_stdout ();
+          cmsCloseProfile (hInProfile);
           return false;
         }
       for (int channel = 0; channel < 3; channel++)
-	{
-	  std::vector<std::array<cmsFloat64Number,3>> rgb (maxval + 1);
-	  for (int i = 0; i <= maxval; i++) {
-	      rgb[i][0] = rgb[i][1] = rgb[i][2] = 0;       
-	      rgb[i][channel] = (i+0.5) / (maxval + 1);
-	  }
-	  std::vector <cmsCIEXYZ> XYZ (maxval + 1);
-	  cmsDoTransform(xform, rgb.data (), XYZ.data (), maxval + 1);
-	  luminosity_t max = (luminosity_t)XYZ[0].Y;
-	  for (int i = 1; i <= maxval; i++) 
-	    if ((luminosity_t) XYZ[i].Y > max)
-	      max = (luminosity_t) XYZ[i].Y;
-	  to_linear[channel].reserve (maxval + 1);
-	  for (int i = 0; i <= maxval; i++) 
-	  {
-	    to_linear[channel].push_back (XYZ[i].Y / max);
-	  }
-	}
-      cmsCloseProfile(hXYZ);
+        {
+          std::vector<std::array<cmsFloat64Number, 3>> rgb (maxval + 1);
+          for (int i = 0; i <= maxval; i++)
+            {
+              rgb[i][0] = rgb[i][1] = rgb[i][2] = 0;
+              rgb[i][channel] = (i + 0.5) / (maxval + 1);
+            }
+          std::vector<cmsCIEXYZ> XYZ (maxval + 1);
+          cmsDoTransform (xform, rgb.data (), XYZ.data (), maxval + 1);
+          luminosity_t max = (luminosity_t)XYZ[0].Y;
+          for (int i = 1; i <= maxval; i++)
+            if ((luminosity_t)XYZ[i].Y > max)
+              max = (luminosity_t)XYZ[i].Y;
+          to_linear[channel].reserve (maxval + 1);
+          for (int i = 0; i <= maxval; i++)
+            {
+              to_linear[channel].push_back (XYZ[i].Y / max);
+            }
+        }
+      cmsCloseProfile (hXYZ);
       cmsDeleteTransform (xform);
       gamma = 0;
     }
@@ -1131,16 +1243,17 @@ image_data::parse_icc_profile (progress_info *progress)
 }
 
 bool
-image_data::load (const char *name, bool preload_all, const char **error, progress_info *progress)
+image_data::load (const char *name, bool preload_all, const char **error,
+                  progress_info *progress, demosaicing_t demosaic)
 {
   int permille;
   if (progress)
-    progress->set_task ("loading image header",1);
-  if (!init_loader (name, preload_all, error, progress))
+    progress->set_task ("loading image header", 1);
+  if (!init_loader (name, preload_all, error, progress, demosaic))
     return false;
 
   if (progress)
-    progress->set_task ("allocating memory",1);
+    progress->set_task ("allocating memory", 1);
   if (!allocate ())
     {
       *error = "out of memory allocating image";
@@ -1149,18 +1262,18 @@ image_data::load (const char *name, bool preload_all, const char **error, progre
     }
 
   if (progress)
-    progress->set_task ("loading",1000);
+    progress->set_task ("loading", 1000);
   while (load_part (&permille, error, progress))
     {
       if (permille == 1000)
-	return true;
+        return true;
       if (progress)
-	progress->set_progress (permille);
+        progress->set_progress (permille);
       if (progress && progress->cancel_requested ())
-	{
-	  *error = "cancelled";
-	  return false;
-	}
+        {
+          *error = "cancelled";
+          return false;
+        }
     }
   return false;
 }
@@ -1191,7 +1304,8 @@ image_data::has_grayscale_or_ir ()
 }
 
 void
-image_data::set_dimensions (int w, int h, bool allocate_rgb, bool allocate_grayscale)
+image_data::set_dimensions (int w, int h, bool allocate_rgb,
+                            bool allocate_grayscale)
 {
   width = w;
   height = h;
@@ -1200,42 +1314,44 @@ image_data::set_dimensions (int w, int h, bool allocate_rgb, bool allocate_grays
       assert (!data);
       data = (gray **)malloc (sizeof (*data) * height);
       if (!data)
-	return;
-      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),"grayscale data");
-      if (!data [0])
-	{
-	  free (data);
-	  data = NULL;
-	  return;
-	}
+        return;
+      data[0] = (gray *)MapAlloc::Alloc (width * height * sizeof (**data),
+                                         "grayscale data");
+      if (!data[0])
+        {
+          free (data);
+          data = NULL;
+          return;
+        }
       for (int i = 1; i < height; i++)
-	data[i] = data[0] + i * width;
+        data[i] = data[0] + i * width;
     }
   if (allocate_rgb)
     {
       assert (!rgbdata);
       rgbdata = (pixel **)malloc (sizeof (*rgbdata) * height);
       if (!rgbdata)
-	{
-	  free (*data);
-	  if (data)
-	    free (data);
-	  data = NULL;
-	  return;
-	}
-      rgbdata[0] = (pixel *)MapAlloc::Alloc (width * height * sizeof (**rgbdata), "RGB data");
-      if (!rgbdata [0])
-	{
-	  free (*data);
-	  if (data)
-	    free (data);
-	  data = NULL;
-	  free (rgbdata);
-	  rgbdata = NULL;
-	  return;
-	}
+        {
+          free (*data);
+          if (data)
+            free (data);
+          data = NULL;
+          return;
+        }
+      rgbdata[0] = (pixel *)MapAlloc::Alloc (
+          width * height * sizeof (**rgbdata), "RGB data");
+      if (!rgbdata[0])
+        {
+          free (*data);
+          if (data)
+            free (data);
+          data = NULL;
+          free (rgbdata);
+          rgbdata = NULL;
+          return;
+        }
       for (int i = 1; i < height; i++)
-	rgbdata[i] = rgbdata[0] + i * width;
+        rgbdata[i] = rgbdata[0] + i * width;
     }
   own = true;
   maxval = 65535;
@@ -1257,7 +1373,7 @@ image_data::save_tiff (const char *filename, progress_info *progress)
   tp.ydpi = ydpi;
   if (progress)
     progress->set_task ("Opening tiff file", 1);
-  tiff_writer out(tp, &error);
+  tiff_writer out (tp, &error);
   if (error)
     return false;
   if (progress)
@@ -1265,11 +1381,11 @@ image_data::save_tiff (const char *filename, progress_info *progress)
   for (int y = 0; y < height; y++)
     {
       for (int x = 0; x < height; x++)
-	out.put_pixel (x, rgbdata[y][x].r, rgbdata[y][x].g, rgbdata[y][x].b);
+        out.put_pixel (x, rgbdata[y][x].r, rgbdata[y][x].g, rgbdata[y][x].b);
       if (!out.write_rows (progress))
-	return false;
+        return false;
       if (progress && progress->cancel_requested ())
-	return false;
+        return false;
       if (progress)
         progress->inc_progress ();
     }

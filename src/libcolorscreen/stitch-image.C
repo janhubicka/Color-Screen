@@ -18,7 +18,7 @@ uint64_t stitch_image::current_time;
 int stitch_image::nloaded;
 
 stitch_image::stitch_image ()
-: filename (""), img (), mesh_trans (), xshift (0), yshift (0),
+: filename (""), img (), mesh_trans (), demosaic (image_data::demosaic_default), xshift (0), yshift (0),
   width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
   final_height (0), screen_detected_patches (), known_pixels (),
   stitch_info (NULL), analyzed (false), refcount (0)

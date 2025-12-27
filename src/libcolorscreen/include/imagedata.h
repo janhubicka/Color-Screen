@@ -15,6 +15,20 @@ class stitch_project;
 class image_data
 {
 public:
+  /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
+  enum demosaicing_t
+  {
+    demosaic_default,
+    demosaic_linear,
+    demosaic_half,
+    demosaic_monochromatic,
+    demosaic_monochromatic_bayer_corrected,
+    demosaic_none,
+    demosaic_max
+  };
+  demosaicing_t demosaic;
+  DLL_PUBLIC static const char *demosaic_names[(int)demosaic_max];
+
   typedef unsigned short gray;
   struct pixel
   {
@@ -45,7 +59,7 @@ public:
   /* Initialize loader for NAME.  Return true on success.
      If false is returned ERROR is initialized to error
      message.  */
-  DLL_PUBLIC bool init_loader (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
+  DLL_PUBLIC bool init_loader (const char *name, bool preload_all, const char **error, progress_info *progress = NULL, demosaicing_t demosaic = demosaic_default);
   /* True if grayscale allocation is needed
      (used after init_loader and before load_part).  */
   DLL_PUBLIC bool allocate_grayscale ();
@@ -60,7 +74,7 @@ public:
   /* Allocate memory.  */
   DLL_PUBLIC bool allocate ();
   /* Load image data from file with auto-detection.  */
-  DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL);
+  DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error, progress_info *progress = NULL, demosaicing_t demosaic = demosaic_default);
   /* set dimensions of the image.  This can be used to produce image_data without loading it.  */
   DLL_PUBLIC void set_dimensions (int w, int h,
 				  bool allocate_rgb = false, bool allocate_grayscale = false);

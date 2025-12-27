@@ -486,6 +486,16 @@ parse_color_model (const char *model)
       model, "Unkonwn color model:%s\n");
 }
 
+/* Parse demosaicing algorithm.  */
+static enum image_data::demosaicing_t
+parse_demosaic (const char *model)
+{
+  return parse_enum<enum image_data::demosaicing_t,
+                    image_data::demosaic_names,
+                    (int)image_data::demosaic_max> (
+      model, "Unkonwn demosaicing algorithm:%s\n");
+}
+
 static enum scanner_type
 parse_scanner_type (const char *model)
 {
@@ -759,40 +769,6 @@ render_cmd (int argc, char **argv)
     print_help ();
   file_progress_info progress (stdout, verbose, verbose_tasks);
 
-  /* Load scan data.  */
-  image_data scan;
-  if (verbose)
-    {
-      progress.pause_stdout ();
-      printf ("Loading scan %s\n", infname);
-      progress.resume_stdout ();
-    }
-  if (!scan.load (infname, false, &error, &progress))
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Can not load %s: %s\n", infname, error);
-      return 1;
-    }
-  if (scan_dpi)
-    scan.set_dpi (scan_dpi, scan_dpi);
-
-  if (verbose)
-    {
-      progress.pause_stdout ();
-      printf ("Scan resolution %ix%i", scan.width, scan.height);
-      if (scan.xdpi && scan.xdpi == scan.ydpi)
-        printf (", PPI %f", scan.xdpi);
-      else
-        {
-          if (scan.xdpi)
-            printf (", horisontal PPI %f", scan.xdpi);
-          if (scan.ydpi)
-            printf (", vertical PPI %f", scan.ydpi);
-        }
-      printf ("\n");
-      progress.resume_stdout ();
-    }
-
   /* Load color screen and rendering parameters.  */
   scr_to_img_parameters param;
   render_parameters rparam;
@@ -820,6 +796,40 @@ render_cmd (int argc, char **argv)
   if (force_precise)
     rparam.precise = true;
 
+
+  /* Load scan data.  */
+  image_data scan;
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Loading scan %s\n", infname);
+      progress.resume_stdout ();
+    }
+  if (!scan.load (infname, false, &error, &progress, rparam.demosaic))
+    {
+      progress.pause_stdout ();
+      fprintf (stderr, "Can not load %s: %s\n", infname, error);
+      return 1;
+    }
+  if (scan_dpi)
+    scan.set_dpi (scan_dpi, scan_dpi);
+
+  if (verbose)
+    {
+      progress.pause_stdout ();
+      printf ("Scan resolution %ix%i", scan.width, scan.height);
+      if (scan.xdpi && scan.xdpi == scan.ydpi)
+        printf (", PPI %f", scan.xdpi);
+      else
+        {
+          if (scan.xdpi)
+            printf (", horisontal PPI %f", scan.xdpi);
+          if (scan.ydpi)
+            printf (", vertical PPI %f", scan.ydpi);
+        }
+      printf ("\n");
+      progress.resume_stdout ();
+    }
   if (detect_geometry && scan.rgbdata)
     {
       if (verbose)
@@ -1099,6 +1109,7 @@ analyze_backlight (int argc, char **argv)
   const char *white = NULL;
   const char *out_file = NULL;
   const char *tiff = NULL;
+  image_data::demosaicing_t demosaic = image_data::demosaic_default;
   for (int i = 0; i < argc; i++)
     {
       float flt;
@@ -1108,6 +1119,9 @@ analyze_backlight (int argc, char **argv)
 	gamma = flt;
       else if (const char *str = arg_with_param (argc, argv, &i, "black"))
         blacks = str;
+      else if (const char *str
+               = arg_with_param (argc, argv, &i, "demosaic"))
+        demosaic = parse_demosaic (str);
       else if (!white)
 	white = argv[i];
       else if (!out_file)
@@ -1122,7 +1136,7 @@ analyze_backlight (int argc, char **argv)
     print_help ("Output file not specified");
   file_progress_info progress (stdout, verbose, verbose_tasks);
   image_data scan;
-  if (!scan.load (white, false, &error, &progress))
+  if (!scan.load (white, false, &error, &progress, demosaic))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Can not load %s: %s\n", white, error);
@@ -1132,7 +1146,8 @@ analyze_backlight (int argc, char **argv)
   if (blacks)
     {
       blacks_scan = std::make_unique <image_data> ();
-      if (!blacks_scan->load (blacks, false, &error, &progress))
+      /* Black references usually does not have enough data to determine scaling weights.  */
+      if (!blacks_scan->load (blacks, false, &error, &progress, demosaic == image_data::demosaic_monochromatic_bayer_corrected ? image_data::demosaic_monochromatic : demosaic))
 	{
 	  progress.pause_stdout ();
 	  fprintf (stderr, "Can not load black reference %s: %s\n", blacks, error);

@@ -91,7 +91,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   if (rparam)
     {
-      if (fprintf (f, "gamma: %f\n", rparam->gamma) < 0
+      if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic]) < 0
+	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
@@ -624,6 +625,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (rparam)
 	    rparam->output_tone_curve = (tone_curve::tone_curves)j;
+	}
+      else if (!strcmp (buf, "demosaic"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < (int)image_data::demosaic_max; j++)
+	    if (!strcmp (buf2, image_data::demosaic_names[j]))
+	      break;
+	  if (j == image_data::demosaic_max)
+	    {
+	      *error = "unknown demosaicing algorihtm";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->demosaic = (image_data::demosaicing_t)j;
 	}
       /* dufay_red_strip_width is for compatibility with old files.  */
       else if (!strcmp (buf, "dufay_red_strip_width")

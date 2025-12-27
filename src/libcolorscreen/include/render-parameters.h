@@ -9,6 +9,7 @@
 #include "scr-to-img-parameters.h"
 #include "backlight-correction-parameters.h"
 #include "scanner-blur-correction-parameters.h"
+#include "imagedata.h"
 namespace colorscreen
 {
 class render_type_parameters;
@@ -17,6 +18,9 @@ class stitch_project;
 /* Parameters of rendering algorithms.  */
 struct render_parameters
 {
+  /* Demosaicing algorithm.  Not actually used for rendering, only passed
+     to image_data::load.  */
+  image_data::demosaicing_t demosaic;
   /***** Scan linearization parmaeters  *****/
 
   /* Gamma of the scan (1.0 for linear scans 2.2 for sGray).
@@ -262,7 +266,9 @@ struct render_parameters
   bool restore_original_luminosity;
 
   render_parameters ()
-      : /* Scan linearization.  */
+      : 
+	demosaic (image_data::demosaic_default),
+	/* Scan linearization.  */
         gamma (2.2), backlight_correction (NULL),
         backlight_correction_black (0), scanner_blur_correction (NULL),
         dark_point (0), scan_exposure (1), ignore_infrared (false),
@@ -334,7 +340,8 @@ struct render_parameters
 	if (*scanner_mtf != *other.scanner_mtf)
 	  return false;
       }
-    return gamma == other.gamma && film_gamma == other.film_gamma
+    return demosaic == other.demosaic
+	   && gamma == other.gamma && film_gamma == other.film_gamma
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
            && sharpen_radius == other.sharpen_radius

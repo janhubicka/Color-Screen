@@ -187,7 +187,7 @@ openimage (const char *name)
   bool ret;
   {
     file_progress_info p (stdout, true);
-    ret = scan.load (name, true, &error, &p);
+    ret = scan.load (name, true, &error, &p, rparams.demosaic);
   }
   if (!ret)
     {
@@ -2205,7 +2205,7 @@ main (int argc, char **argv)
 	       argv[0]);
       exit (1);
     }
-  openimage (argv[1]);
+
   if (argc == 3)
     paroname = argv[2];
   else
@@ -2234,9 +2234,9 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load parameters: %s\n", error);
       exit (1);
     }
+  rparams.gammut_warning = true;
   //if (!in && scan.gamma != -2)
     //rparams.gamma = scan.gamma;
-
   current_mesh = current.mesh_trans;
   if (in)
     fclose (in);
@@ -2248,6 +2248,9 @@ main (int argc, char **argv)
         exit (1);
     }
   save_parameters ();
+    
+  openimage (argv[1]);
+
   //current.mesh_trans = solver_mesh (&current, scan, current_solver);
 #if 0
     new mesh (0, 0, 1, 1, 2, 2);

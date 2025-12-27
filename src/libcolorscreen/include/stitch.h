@@ -108,6 +108,7 @@ public:
   std::string known_screen_filename;
   std::unique_ptr<image_data> img;
   std::shared_ptr<mesh> mesh_trans;
+  image_data::demosaicing_t demosaic;
   scr_to_img_parameters param;
   /* scr_to_img map holding mesh_trans.  */
   scr_to_img scr_to_img_map;
