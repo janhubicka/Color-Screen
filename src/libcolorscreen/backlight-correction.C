@@ -89,7 +89,7 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
 	      for (int xx = xstart; xx < xstart + xsize; xx++)
 		{
 		  if (black->data)
-		    values[ir].push_back (black->data[y][x]);
+		    values[ir].push_back (black->data[yy][xx]);
 		  if (black->rgbdata)
 		    {
 		      values[red].push_back (black->rgbdata[yy][xx].r);
@@ -107,10 +107,12 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
 		  for (size_t j = len / 4; j < 3 * len / 4; j++)
 		    {
 		      sum += table[values[i][j]];
+		      //printf ("%i:%i %f\n",(int)j,values[i][j], table[values[i][j]]);
 		      n++;
 		    }
 		  sum /= n;
 		  ret->set_sub (x, y, sum, (channel)i);
+		  //printf ("%i %f\n", n, sum);
 		}
 	      }
     }
@@ -138,7 +140,7 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
           for (int xx = xstart; xx < xstart + xsize; xx++)
             {
               if (scan.data)
-                values[ir].push_back (scan.data[y][x]);
+                values[ir].push_back (scan.data[yy][xx]);
               if (scan.rgbdata)
                 {
                   values[red].push_back (scan.rgbdata[yy][xx].r);
