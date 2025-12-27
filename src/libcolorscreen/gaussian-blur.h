@@ -42,8 +42,10 @@ public:
 	      sum += cmatrix_p [i];
 	    }
 
+	  luminosity_t inv = 1 / sum;
+
 	  for (i = 0; i < clen; i++)
-	    cmatrix_p [i] /= sum;
+	    cmatrix_p [i] *= inv;
 	}
       return clen;
     }
