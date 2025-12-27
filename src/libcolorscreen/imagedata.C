@@ -13,6 +13,7 @@
 #include "lru-cache.h"
 #include "backlight-correction.h"
 #include "mapalloc.h"
+#include "include/histogram.h"
 
 #define HAVE_LIBRAW
 
@@ -101,6 +102,7 @@ private:
   backlight_correction_parameters *lcc;
   image_data *m_img;
   LibRaw RawProcessor;
+  bool monochromatic;
 };
 
 class stitch_image_data_loader: public image_data_loader
@@ -626,6 +628,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
   RawProcessor.imgdata.params.gamm[0] = RawProcessor.imgdata.params.gamm[1] = RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.params.output_color = 0;
+  RawProcessor.imgdata.params.highlight = 0;
   RawProcessor.imgdata.params.user_qual = 0; /*Bicubic interpolation.  */
   RawProcessor.imgdata.params.use_auto_wb = 0;
   RawProcessor.imgdata.params.use_camera_wb = 0;
@@ -635,9 +638,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     RawProcessor.imgdata.params.half_size = 1;
   RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.fbdd_noiserd = 0;
+
+  monochromatic = getenv ("CS_MONOCHROMATIC");
   /* TODO figure out threshold.  */
   RawProcessor.imgdata.params.threshold = 0;
-  if (getenv ("CS_NO_DEMOSAIC"))
+  if (getenv ("CS_NO_DEMOSAIC") || monochromatic)
     RawProcessor.imgdata.params.no_interpolation = 1;
   int ret;
   if (buffer)
@@ -676,8 +681,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
     }
   grayscale = false;
   m_img->gamma = 1;
-  rgb = RawProcessor.imgdata.idata.colors == 3;
-  grayscale = RawProcessor.imgdata.idata.colors == 1;
+  if (monochromatic && RawProcessor.imgdata.idata.colors != 3)
+    monochromatic = false;
+  rgb = RawProcessor.imgdata.idata.colors == 3 && !monochromatic;
+  grayscale = RawProcessor.imgdata.idata.colors == 1 || monochromatic;
   m_img->width = RawProcessor.imgdata.sizes.width;
   m_img->height = RawProcessor.imgdata.sizes.height;
   m_img->maxval = 65535;
@@ -729,7 +736,62 @@ raw_image_data_loader::init_loader (const char *name, const char **error, progre
 bool
 raw_image_data_loader::load_part (int *permille, const char **error, progress_info *)
 {
-  if (m_img->rgbdata)
+  histogram rhistogram, bhistogram;
+  const luminosity_t range = 0.2;
+
+  /* Supress mosaic pattern.  We only want to find good scaling factor.  */
+  if (monochromatic)
+    {
+      rhistogram.set_range (1 - range, 1 + range, 65535 * 4);
+      bhistogram.set_range (1 - range, 1 + range, 65535 * 4);
+      for (int y = 0; y < m_img->height; y++)
+	for (int x = 0; x < m_img->width - 1; x++)
+	  {
+	    int i = y * m_img->width + x;
+	    int g = RawProcessor.imgdata.image[i][1];
+
+	    if (g > 256 && g < 65535-256)
+	      {
+		assert (!RawProcessor.imgdata.image[i][0]
+			&& !RawProcessor.imgdata.image[i][2]);
+		int r = RawProcessor.imgdata.image[i+1][0];
+		if (r > 256 && r < 65535-256)
+		  {
+		    luminosity_t ratio = g / (luminosity_t)r;
+		    if (ratio > 1 - range && ratio < 1 + range)
+		      rhistogram.account (ratio);
+		  }
+		int b = RawProcessor.imgdata.image[i+1][2];
+		if (b > 256 && b < 65535-256)
+		  {
+		    luminosity_t ratio = g / (luminosity_t)b;
+		    if (ratio > 1 - range && ratio < 1 + range)
+		      bhistogram.account (ratio);
+		  }
+	      }
+	  }
+      rhistogram.finalize ();
+      bhistogram.finalize ();
+      if (rhistogram.num_samples () < 1024
+	  || bhistogram.num_samples () < 1024)
+        {
+	  *error = "not enough samples to remove mosaic";
+	  return false;
+        }
+      float bscale = bhistogram.find_avg (0.2, 0.2);
+      float rscale = rhistogram.find_avg (0.2, 0.2);
+#pragma omp parallel for default(none) shared(m_img,RawProcessor,bscale,rscale)
+      for (int y = 0; y < m_img->height; y++)
+	for (int x = 0; x < m_img->width; x++)
+	  {
+	    int i = y * m_img->width + x;
+	    m_img->data[y][x] = RawProcessor.imgdata.image[i][0] * rscale
+				+ RawProcessor.imgdata.image[i][1]
+				+ RawProcessor.imgdata.image[i][2] * bscale
+				+ 0.5;
+	  }
+    }
+  else if (m_img->rgbdata)
     {
 #pragma omp parallel for default(none) shared(m_img,RawProcessor)
       for (int y = 0; y < m_img->height; y++)
