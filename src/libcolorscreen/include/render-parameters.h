@@ -251,6 +251,8 @@ struct render_parameters
   /* Output gamma.  -1 means sRGB transfer curve.  */
   luminosity_t output_gamma;
 
+  bool gammut_warning;
+
   /***** Experimental (unfinished) stuff *****/
 
   hd_curve *film_characteristics_curve;
@@ -294,7 +296,7 @@ struct render_parameters
         target_film_gamma (1),
 
         /* Output profile  */
-        output_profile (output_profile_sRGB), output_gamma (-1),
+        output_profile (output_profile_sRGB), output_gamma (-1), gammut_warning (false),
         film_characteristics_curve (&film_sensitivity::linear_sensitivity),
         output_curve (NULL), restore_original_luminosity (true)
   {
@@ -339,6 +341,7 @@ struct render_parameters
            && sharpen_amount == other.sharpen_amount
 	   && scanner_snr == other.scanner_snr
            && presaturation == other.presaturation
+	   && gammut_warning == other.gammut_warning
            && saturation == other.saturation && brightness == other.brightness
            && collection_threshold == other.collection_threshold
            && mix_dark == other.mix_dark && mix_red == other.mix_red

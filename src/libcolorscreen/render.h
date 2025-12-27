@@ -416,11 +416,14 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
 {
   set_linear_hdr_color (r, g, b, &r, &g, &b);
   // Show gammut warnings
-  //if ( r < 0 || r > 1 || g < 0 || g >1 || b < 0 || b > 1)
-	  //r = g = b = 0.5;
-  r = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, r));
-  g = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, g));
-  b = std::min ((luminosity_t)1.0, std::max ((luminosity_t)0.0, b));
+  if (m_params.gammut_warning && (r < 0 || r > 1 || g < 0 || g >1 || b < 0 || b > 1))
+    r = g = b = 0.5;
+  else
+    {
+      r = std::clamp (r, (luminosity_t)0.0, (luminosity_t)1.0);
+      g = std::clamp (g, (luminosity_t)0.0, (luminosity_t)1.0);
+      b = std::clamp (b, (luminosity_t)0.0, (luminosity_t)1.0);
+    }
   *rr = m_out_lookup_table [(int)(r * (luminosity_t)65535.5)];
   *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
   *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
