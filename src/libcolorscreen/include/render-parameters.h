@@ -269,7 +269,7 @@ struct render_parameters
       : 
 	demosaic (image_data::demosaic_default),
 	/* Scan linearization.  */
-        gamma (2.2), backlight_correction (NULL),
+        gamma (-1), backlight_correction (NULL),
         backlight_correction_black (0), scanner_blur_correction (NULL),
         dark_point (0), scan_exposure (1), ignore_infrared (false),
         invert (false), mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
