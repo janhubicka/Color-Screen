@@ -1,16 +1,14 @@
-#include <math.h>
-#include <memory>
+#include "deconvolute.h"
+#include "gaussian-blur.h"
+#include "icc.h"
+#include "include/dufaycolor.h"
+#include "include/tiff-writer.h"
+#include "screen.h"
+#include "spline.h"
 #include <array>
 #include <complex>
-#include "include/tiff-writer.h"
-#include "include/dufaycolor.h"
-#include "screen.h"
-#include "gaussian-blur.h"
-#include "deconvolute.h"
-#include "spline.h"
-#include "icc.h"
-namespace {
-}
+#include <math.h>
+#include <memory>
 namespace colorscreen
 {
 /* Produce empty screen.  */
@@ -88,7 +86,6 @@ screen::thames ()
       }
 }
 
-
 /* X,y are coordinates of entry in screen array of dimensions
    SIZE * SIZE.
 
@@ -99,8 +96,10 @@ static inline int
 dist (int x, int y, coord_t cx, coord_t cy, int size)
 {
   /* Work in 2 * size so we can represent x + 0.5 and y + 0.5 as integer.  */
-  unsigned dx = ((unsigned)(cx * 2 * size) - (unsigned)(x * 2 + 1)) & (2 * size - 1);
-  unsigned dy = ((unsigned)(cy * 2 * size) - (unsigned)(y * 2 + 1)) & (2 * size - 1);
+  unsigned dx
+      = ((unsigned)(cx * 2 * size) - (unsigned)(x * 2 + 1)) & (2 * size - 1);
+  unsigned dy
+      = ((unsigned)(cy * 2 * size) - (unsigned)(y * 2 + 1)) & (2 * size - 1);
   if (dx > (unsigned)size)
     dx = 2 * size - dx;
   if (dy > (unsigned)size)
@@ -109,8 +108,8 @@ dist (int x, int y, coord_t cx, coord_t cy, int size)
 }
 
 /* We render the following pattern (empty spaces are blue):
- 
-     GGGGRRRRRRRRGGGG  
+
+     GGGGRRRRRRRRGGGG
      GGG  RRRRRR  GGG
      GG    RRRR    GG
      G      RR      G
@@ -130,8 +129,6 @@ dist (int x, int y, coord_t cx, coord_t cy, int size)
   and 2 red dots with centers (0,0.5) and (0.5,0)
 */
 
-
-
 void
 screen::paget_finlay ()
 {
@@ -146,7 +143,7 @@ screen::paget_finlay ()
      the 4 blue squares must occupy 1/3 of the space. Rest is occupied
      by red and green squares which have cut corners.  For this reason
      we compute ratio of blue square diagonal to read or green square
-     diagonal and then render bigger ones.  
+     diagonal and then render bigger ones.
 
      If all squares were of same size, with 45 degree rotation we get
 
@@ -160,13 +157,12 @@ screen::paget_finlay ()
      Here all edges are 0.5.  We need to adjust blue square edge:
 
      2*(x^2)=1/3 or x=1/sqrt(6) or x=0.40824829046 instead of 0.5.
-     
+
      To achieve this we use
 
      const coord_t red_green_diagonal = (1-0.40824829046) * size;
    */
 
-  
   /* Probably more realistic option based on Wall's History of color
      photography:
 
@@ -174,34 +170,36 @@ screen::paget_finlay ()
      and consits of square elements, the blue being 0.063mm. with
      0.085mm. for the red and green. It is stated by J. H. Pledge^20
      to be roughly blue 8, red 7, green 7 there being two blue
-     elements in the unit.  
-     
+     elements in the unit.
+
      20: Brit. J. Phot. 1913 60 Col. Phot. Supp 7, 31.*/
   const coord_t red_green_diagonal = (0.085 / (0.063 + 0.085)) * size;
   /* This is 0.57422*size
-    
+
      To achive the ratio 8:7:7 mentioned above one wants to set
      red_green_diagonal to be 1-sqrt(2/11) which is approximately
 
      0.57361*size
 
      so at least the numbers seems to match.  */
-  //const coord_t red_green_diagonal = 0.57361*size;
+  // const coord_t red_green_diagonal = 0.57361*size;
 
-  int r = 0, g =0, b = 0;
+  int r = 0, g = 0, b = 0;
   for (yy = 0; yy < size; yy++)
     for (xx = 0; xx < size; xx++)
       {
 
-	/* Distance from center of the nearest green dot.
-	   Centers of squares (modulo period) are (0,0)  and (0.5,0.5) for
-	   green. */
-        int d1 = std::min (dist (xx, yy, 0, 0, size), dist (xx, yy, 0.5, 0.5, size));
+        /* Distance from center of the nearest green dot.
+           Centers of squares (modulo period) are (0,0)  and (0.5,0.5) for
+           green. */
+        int d1 = std::min (dist (xx, yy, 0, 0, size),
+                           dist (xx, yy, 0.5, 0.5, size));
 
-	/* Distance from center of the nearest red dot.
-	   Centers of squares (modulo period) are (0,0.5)  and (0.5,0) for
-	   green. */
-        int d2 = std::min (dist (xx, yy, 0, 0.5, size), dist (xx, yy, 0.5, 0, size));
+        /* Distance from center of the nearest red dot.
+           Centers of squares (modulo period) are (0,0.5)  and (0.5,0) for
+           green. */
+        int d2 = std::min (dist (xx, yy, 0, 0.5, size),
+                           dist (xx, yy, 0.5, 0, size));
 
         if (d1 < red_green_diagonal / 2 && d1 < d2)
           {
@@ -209,7 +207,7 @@ screen::paget_finlay ()
             mult[yy][xx][0] = 0;
             mult[yy][xx][1] = 1;
             mult[yy][xx][2] = 0;
-	    g++;
+            g++;
           }
         else if (d2 < red_green_diagonal / 2)
           {
@@ -217,7 +215,7 @@ screen::paget_finlay ()
             mult[yy][xx][0] = 1;
             mult[yy][xx][1] = 0;
             mult[yy][xx][2] = 0;
-	    r++;
+            r++;
           }
         else
           {
@@ -225,7 +223,7 @@ screen::paget_finlay ()
             mult[yy][xx][0] = 0;
             mult[yy][xx][1] = 0;
             mult[yy][xx][2] = 1;
-	    b++;
+            b++;
           }
 
         add[yy][xx][0] = 0;
@@ -233,11 +231,8 @@ screen::paget_finlay ()
         add[yy][xx][2] = 0;
       }
   if (0)
-    printf ("screen ratios: %f %f %f\n",
-	    r / (double)(size * size),
-	    g / (double)(size * size),
-	    b / (double)(size * size));
-
+    printf ("screen ratios: %f %f %f\n", r / (double)(size * size),
+            g / (double)(size * size), b / (double)(size * size));
 }
 
 void
@@ -274,8 +269,9 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
       assert (!colorscreen_checking || yy < size / 2
               || fabs (red[yy] - red[size - 1 - yy]) < 0.0000001);
     }
-   //printf ("scr: %f %f %f\n", red_strip_width, sum / size, strip_width);
-  assert (!colorscreen_checking || fabs (sum / size - red_strip_width) < 0.00001);
+  // printf ("scr: %f %f %f\n", red_strip_width, sum / size, strip_width);
+  assert (!colorscreen_checking
+          || fabs (sum / size - red_strip_width) < 0.00001);
   luminosity_t green[size];
   sum = 0;
   for (int xx = 0; xx < size; xx++)
@@ -302,7 +298,8 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
     }
   // printf ("%f %f %i %i %i\n",red_strip_width, green_strip_width,strip_width,
   // strip_height, size);
-  assert (!colorscreen_checking || fabs (sum / size - green_strip_width) < 0.00001);
+  assert (!colorscreen_checking
+          || fabs (sum / size - green_strip_width) < 0.00001);
   luminosity_t rsum = 0, gsum = 0, bsum = 0;
   for (int yy = 0; yy < size; yy++)
     for (int xx = 0; xx < size; xx++)
@@ -318,16 +315,18 @@ screen::dufay (coord_t red_strip_width, coord_t green_strip_width)
         bsum += mult[yy][xx][2];
       }
   // printf ("%f %f %f\n",rsum, rsum / (size * size), red_strip_width);
-  assert (!colorscreen_checking || fabs (rsum / (size * size) - red_strip_width) < 0.00001);
+  assert (!colorscreen_checking
+          || fabs (rsum / (size * size) - red_strip_width) < 0.00001);
   // printf ("%f %f %f\n",gsum, gsum / (size * size), (1-red_strip_width) *
   // green_strip_width);
   assert (!colorscreen_checking
-      || fabs (gsum / (size * size) - (1 - red_strip_width) * green_strip_width)
-         < 0.00001);
+          || fabs (gsum / (size * size)
+                   - (1 - red_strip_width) * green_strip_width)
+                 < 0.00001);
   assert (!colorscreen_checking
-	  || fabs (bsum / (size * size)
-		   - (1 - red_strip_width) * (1 - green_strip_width))
-          < 0.00001);
+          || fabs (bsum / (size * size)
+                   - (1 - red_strip_width) * (1 - green_strip_width))
+                 < 0.00001);
 }
 
 /* This computes the grid displayed by UI.  */
@@ -517,7 +516,7 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
   luminosity_t *cmatrix;
   int clen = fir_blur::gen_convolve_matrix (blur_radius * size, &cmatrix);
   luminosity_t hblur[size][size]; //= (luminosity_t *)malloc (size * size *
-                                  //sizeof (luminosity_t));
+                                  // sizeof (luminosity_t));
   /* Finetuning solver keeps recomputing screens with different blurs.
      Specialize internal loops.  */
   for (int channel = cmin; channel <= cmax; channel++)
@@ -1060,46 +1059,54 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
   fftw_lock.unlock ();
 }
 
-template<typename T>
+template <typename T>
 static void
-compute_point_spread (T *data, precomputed_function<luminosity_t> &point_spread, luminosity_t scale)
+compute_point_spread (T *data,
+                      precomputed_function<luminosity_t> &point_spread,
+                      luminosity_t scale)
 {
   luminosity_t sum = 0;
   int range = point_spread.get_max ();
   for (int y = 0; y <= screen::size / 2; y++)
     for (int x = 0; x <= screen::size / 2; x++)
       {
-	luminosity_t w = 0;
+        luminosity_t w = 0;
 
-	for (int yy = -range * screen::size; yy <= (1 + range) * screen::size; yy += screen::size)
-	  for (int xx = -range * screen::size; xx <= (1 + range) * screen::size; xx += screen::size)
-	    {
-	      luminosity_t dist = my_sqrt ((luminosity_t)((x - xx) * (x - xx) + (y - yy) * (y - yy))) * (scale * (1 / (luminosity_t)screen::size));
-	      w += point_spread.apply (dist);
-	    }
+        for (int yy = -range * screen::size; yy <= (1 + range) * screen::size;
+             yy += screen::size)
+          for (int xx = -range * screen::size;
+               xx <= (1 + range) * screen::size; xx += screen::size)
+            {
+              luminosity_t dist
+                  = my_sqrt ((luminosity_t)((x - xx) * (x - xx)
+                                            + (y - yy) * (y - yy)))
+                    * (scale * (1 / (luminosity_t)screen::size));
+              w += point_spread.apply (dist);
+            }
         if (w < 0)
           w = 0;
         data[y * screen::size + x] = w;
-	sum += w;
-	if (x)
-	  {
-	    data[y * screen::size + (screen::size - x)] = w;
-	    sum += w;
-	  }
-	if (y)
-	  {
-	    data[(screen::size - y) * screen::size + x] = w;
-	    sum += w;
-	    if (x)
-	      {
-		data[(screen::size - y) * screen::size + (screen::size - x)] = w;
-		sum += w;
-	      }
-	  }
+        sum += w;
+        if (x)
+          {
+            data[y * screen::size + (screen::size - x)] = w;
+            sum += w;
+          }
+        if (y)
+          {
+            data[(screen::size - y) * screen::size + x] = w;
+            sum += w;
+            if (x)
+              {
+                data[(screen::size - y) * screen::size + (screen::size - x)]
+                    = w;
+                sum += w;
+              }
+          }
       }
   luminosity_t nrm = 1.0 / (screen::size * screen::size);
-  //luminosity_t nrm = 1;
-  //luminosity_t nrm = screen::size * screen::size;
+  // luminosity_t nrm = 1;
+  // luminosity_t nrm = screen::size * screen::size;
   if (!sum)
     {
       sum = nrm;
@@ -1108,7 +1115,7 @@ compute_point_spread (T *data, precomputed_function<luminosity_t> &point_spread,
   else
     {
       for (int x = 0; x < screen::size * screen::size; x++)
-	data[x] *= (nrm / sum);
+        data[x] *= (nrm / sum);
     }
   if (0)
     {
@@ -1117,33 +1124,36 @@ compute_point_spread (T *data, precomputed_function<luminosity_t> &point_spread,
       p.filename = "/tmp/ps.tif";
       p.width = screen::size * tiles;
       p.height = screen::size * tiles;
-      //p.icc_profile = buffer;
-      //p.icc_profile_len = len;
+      // p.icc_profile = buffer;
+      // p.icc_profile_len = len;
       p.depth = 16;
       const char *error;
       tiff_writer out (p, &error);
-      //free (buffer);
+      // free (buffer);
       if (error)
-	return;
-      //printf ("%f\n", sum);
+        return;
+      // printf ("%f\n", sum);
       T max = 0;
       for (int x = 0; x < screen::size * screen::size; x++)
-	max = std::max (max, data[x]);
+        max = std::max (max, data[x]);
       for (int y = 0; y < screen::size * tiles; y++)
-	{
-	  for (int x = 0; x < screen::size * tiles; x++)
-	    {
-	      int i = (data[(y % screen::size) * screen::size + (x % screen::size)] * 65535 / max);
-	      out.put_pixel (x, i, i, i);
-	    }
-	  if (!out.write_row ())
-	    return;
-	}
+        {
+          for (int x = 0; x < screen::size * tiles; x++)
+            {
+              int i = (data[(y % screen::size) * screen::size
+                            + (x % screen::size)]
+                       * 65535 / max);
+              out.put_pixel (x, i, i, i);
+            }
+          if (!out.write_row ())
+            return;
+        }
     }
 }
 
 static void
-point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spread,
+point_spread_fft (fft_2d &weights,
+                  precomputed_function<luminosity_t> &point_spread,
                   luminosity_t scale)
 {
   double data[screen::size * screen::size];
@@ -1161,7 +1171,6 @@ point_spread_fft (fft_2d &weights, precomputed_function<luminosity_t> &point_spr
   fftw_destroy_plan (plan_2d);
   fftw_lock.unlock ();
 }
-
 
 /* Compute average error between the two implementations.  */
 bool
@@ -1182,18 +1191,18 @@ screen::almost_equal_p (const screen &scr, luminosity_t *delta_ret,
 /* Compare sums of individual channels.  */
 bool
 screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
-			    luminosity_t maxdelta) const
+                            luminosity_t maxdelta) const
 {
   rgbdata sum1, sum2, delta;
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       {
-	sum1[0] += scr.mult[y][x][0];
-	sum1[1] += scr.mult[y][x][1];
-	sum1[2] += scr.mult[y][x][2];
-	sum2[0] += mult[y][x][0];
-	sum2[1] += mult[y][x][1];
-	sum2[2] += mult[y][x][2];
+        sum1[0] += scr.mult[y][x][0];
+        sum1[1] += scr.mult[y][x][1];
+        sum1[2] += scr.mult[y][x][2];
+        sum2[0] += mult[y][x][0];
+        sum2[1] += mult[y][x][1];
+        sum2[2] += mult[y][x][2];
       }
   delta = sum1 - sum2;
   if (delta_ret)
@@ -1206,18 +1215,23 @@ screen::sum_almost_equal_p (const screen &scr, rgbdata *delta_ret,
    1d fft version.  */
 
 static void
-initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr, luminosity_t radius, int clen, int cmin, int cmax)
+initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr,
+                                     luminosity_t radius, int clen, int cmin,
+                                     int cmax)
 {
   int nvals = (clen + 1) / 2;
-  //printf ("nvals %i\n", nvals);
-  std::unique_ptr <luminosity_t[]> vals (new luminosity_t[nvals + 2]);
+  // printf ("nvals %i\n", nvals);
+  std::unique_ptr<luminosity_t[]> vals (new luminosity_t[nvals + 2]);
   radius *= screen::size;
   if (nvals == 1)
     vals[0] = 1;
-  else for (int i = 0; i < nvals; i++)
-    vals[i]=fir_blur::gaussian_func_1d (i, radius);
+  else
+    for (int i = 0; i < nvals; i++)
+      vals[i] = fir_blur::gaussian_func_1d (i, radius);
   vals[nvals] = vals[nvals + 1] = 0;
-  precomputed_function<luminosity_t> point_spread (0, (nvals + 2 - 1) * (1 / (luminosity_t)screen::size), vals.get (), nvals + 2);
+  precomputed_function<luminosity_t> point_spread (
+      0, (nvals + 2 - 1) * (1 / (luminosity_t)screen::size), vals.get (),
+      nvals + 2);
 #if 0
   for (int i = 0; i < nvals; i++)
   {
@@ -1229,7 +1243,6 @@ initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr, luminosity_
   point_spread_fft (mtf, point_spread, 1);
   initialize_with_2D_fft_fast (dst, scr, mtf, cmin, cmax);
 }
-
 
 void
 screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
@@ -1272,15 +1285,16 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
         do_fft = true;
       else if (alg == blur_auto)
         {
-	  // technically it is more precise to do 2d fft, but it is slower
-	  // and practically seems to make little difference.  
-	  if (clen > screen::size / 2 && 0)
-	    do_fft2d = true;
-	  else
+          // technically it is more precise to do 2d fft, but it is slower
+          // and practically seems to make little difference.
+          if (clen > screen::size / 2 && 0)
+            do_fft2d = true;
+          else
             do_fft = (blur_radius[c] >= max_blur_radius) || clen > 15;
-	}
+        }
       if (do_fft2d)
-	 initialize_with_gaussian_blur_fft2d (*this, scr, blur_radius[c], clen, c, all ? 2 : c);
+        initialize_with_gaussian_blur_fft2d (*this, scr, blur_radius[c], clen,
+                                             c, all ? 2 : c);
       else if (!do_fft)
         initialize_with_gaussian_blur (scr, blur_radius[c], c, all ? 2 : c);
 #if 0
@@ -1304,7 +1318,9 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
     }
 }
 void
-screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
+screen::strip (coord_t first_strip_width, coord_t second_strip_width,
+               int first_strip_color, int second_strip_color,
+               int third_strip_color)
 {
   /* Change from first to second.  */
   coord_t c1 = size * (first_strip_width * (coord_t)0.5);
@@ -1314,96 +1330,110 @@ screen::strip (coord_t first_strip_width, coord_t second_strip_width, int first_
   coord_t c3 = size * (1 - (first_strip_width * (coord_t)0.5));
   for (int yy = 0; yy < size; yy++)
     {
-      luminosity_t c[3] = {0,0,0};
+      luminosity_t c[3] = { 0, 0, 0 };
       if (yy < (int)c1 || yy > (int)c3)
-	c[first_strip_color] = 1;
+        c[first_strip_color] = 1;
       else if (yy == (int)c1)
         {
-	  coord_t v = c1 - (int)c1;
-	  c[first_strip_color] = 1 - v;
-	  c[second_strip_color] = v;
+          coord_t v = c1 - (int)c1;
+          c[first_strip_color] = 1 - v;
+          c[second_strip_color] = v;
         }
       else if (yy < (int)c2)
         {
-	  c[second_strip_color] = 1;
+          c[second_strip_color] = 1;
         }
       else if (yy == (int)c2)
         {
-	  coord_t v = c2 - (int)c2;
-	  c[second_strip_color] = 1 - v;
-	  c[third_strip_color] = v;
+          coord_t v = c2 - (int)c2;
+          c[second_strip_color] = 1 - v;
+          c[third_strip_color] = v;
         }
       else if (yy < (int)c3)
-	c[third_strip_color] = 1;
+        c[third_strip_color] = 1;
       else
-	{
-	  coord_t v = c3 - (int)c3;
-	  c[third_strip_color] = 1 - v;
-	  c[first_strip_color] = v;
-	}
+        {
+          coord_t v = c3 - (int)c3;
+          c[third_strip_color] = 1 - v;
+          c[first_strip_color] = v;
+        }
       for (int xx = 0; xx < size; xx++)
         {
-	  mult[xx][yy][0] = c[0];
-	  mult[xx][yy][1] = c[1];
-	  mult[xx][yy][2] = c[2];
-	  add[xx][yy][0] = 0;
-	  add[xx][yy][1] = 0;
-	  add[xx][yy][2] = 0;
+          mult[xx][yy][0] = c[0];
+          mult[xx][yy][1] = c[1];
+          mult[xx][yy][2] = c[2];
+          add[xx][yy][0] = 0;
+          add[xx][yy][1] = 0;
+          add[xx][yy][2] = 0;
         }
     }
 }
 void
-screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width, int first_strip_color, int second_strip_color, int third_strip_color)
+screen::preview_strip (coord_t first_strip_width, coord_t second_strip_width,
+                       int first_strip_color, int second_strip_color,
+                       int third_strip_color)
 {
   coord_t w = 0.2;
   coord_t h = 0.4;
-  coord_t c1e = size * (first_strip_width * (w/2)) + (coord_t)0.5;
-  coord_t c1s = size * (1 - first_strip_width * (w/2)) + (coord_t)0.5;
+  coord_t c1e = size * (first_strip_width * (w / 2)) + (coord_t)0.5;
+  coord_t c1s = size * (1 - first_strip_width * (w / 2)) + (coord_t)0.5;
   /* Change from second to third.  */
-  coord_t c2s = size * (0.5 * first_strip_width + (second_strip_width * ((coord_t)0.5-w/2))) + (coord_t)0.5;
-  coord_t c2e = size * (0.5 * first_strip_width + (second_strip_width * ((coord_t)0.5+w/2))) + (coord_t)0.5;
+  coord_t c2s = size
+                    * (0.5 * first_strip_width
+                       + (second_strip_width * ((coord_t)0.5 - w / 2)))
+                + (coord_t)0.5;
+  coord_t c2e = size
+                    * (0.5 * first_strip_width
+                       + (second_strip_width * ((coord_t)0.5 + w / 2)))
+                + (coord_t)0.5;
   /* Change from third back to first.  */
   coord_t third_strip_width = 1 - first_strip_width - second_strip_width;
-  coord_t c3s = size * (1 - 0.5 * first_strip_width - third_strip_width * ((coord_t)0.5+w/2)) + (coord_t)0.5;
-  coord_t c3e = size * (1 - 0.5 * first_strip_width - third_strip_width * ((coord_t)0.5-w/2)) + (coord_t)0.5;
+  coord_t c3s = size
+                    * (1 - 0.5 * first_strip_width
+                       - third_strip_width * ((coord_t)0.5 + w / 2))
+                + (coord_t)0.5;
+  coord_t c3e = size
+                    * (1 - 0.5 * first_strip_width
+                       - third_strip_width * ((coord_t)0.5 - w / 2))
+                + (coord_t)0.5;
   for (int yy = 0; yy < size; yy++)
     {
-      luminosity_t c[3] = {0,0,0};
-      luminosity_t a[3] = {0,0,0};
+      luminosity_t c[3] = { 0, 0, 0 };
+      luminosity_t a[3] = { 0, 0, 0 };
       if (yy < (int)c1e || yy > (int)c1s)
-	c[first_strip_color] = 1;
+        c[first_strip_color] = 1;
       else if (yy > (int)c2s && yy < (int)c2e)
-	c[second_strip_color] = 1;
+        c[second_strip_color] = 1;
       else if (yy > (int)c3s && yy < (int)c3e)
-	c[third_strip_color] = 1;
+        c[third_strip_color] = 1;
       if (c[0] || c[1] || c[2])
-	for (int i = 0; i < 3; i++)
-	  {
-	     a[i] = c[i] * (coord_t)0.5;
-	     c[i] = (c[i] + 1) * (coord_t)0.5;
-	  }
+        for (int i = 0; i < 3; i++)
+          {
+            a[i] = c[i] * (coord_t)0.5;
+            c[i] = (c[i] + 1) * (coord_t)0.5;
+          }
       else
-	c[0] = c[1] = c[2] = 1;
+        c[0] = c[1] = c[2] = 1;
       for (int xx = 0; xx < size; xx++)
         {
-	  if (xx > size * (0.5-h/2) && xx < size * (0.5+h/2))
-	    {
-	      mult[xx][yy][0] = c[0];
-	      mult[xx][yy][1] = c[1];
-	      mult[xx][yy][2] = c[2];
-	      add[xx][yy][0] = a[0];
-	      add[xx][yy][1] = a[1];
-	      add[xx][yy][2] = a[2];
-	    }
-	  else
-	    {
-	      mult[xx][yy][0] = 1;
-	      mult[xx][yy][1] = 1;
-	      mult[xx][yy][2] = 1;
-	      add[xx][yy][0] = 0;
-	      add[xx][yy][1] = 0;
-	      add[xx][yy][2] = 0;
-	    }
+          if (xx > size * (0.5 - h / 2) && xx < size * (0.5 + h / 2))
+            {
+              mult[xx][yy][0] = c[0];
+              mult[xx][yy][1] = c[1];
+              mult[xx][yy][2] = c[2];
+              add[xx][yy][0] = a[0];
+              add[xx][yy][1] = a[1];
+              add[xx][yy][2] = a[2];
+            }
+          else
+            {
+              mult[xx][yy][0] = 1;
+              mult[xx][yy][1] = 1;
+              mult[xx][yy][2] = 1;
+              add[xx][yy][0] = 0;
+              add[xx][yy][1] = 0;
+              add[xx][yy][2] = 0;
+            }
         }
     }
 }
@@ -1424,35 +1454,39 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
       thames ();
       break;
     case DioptichromeB:
-      dufay (green_strip_width ? green_strip_width : 0.33, red_strip_width ? red_strip_width : 0.5);
+      dufay (green_strip_width ? green_strip_width : 0.33,
+             red_strip_width ? red_strip_width : 0.5);
       /* Strip is green instead of red, so swap red and green.  */
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
-	  std::swap (mult[y][x][0], mult[y][x][1]);
+          std::swap (mult[y][x][0], mult[y][x][1]);
       break;
     case ImprovedDioptichromeB:
     case Omnicolore:
-      dufay (red_strip_width ? 1 - red_strip_width : 0.33, green_strip_width ? green_strip_width : 0.5);
+      dufay (red_strip_width ? 1 - red_strip_width : 0.33,
+             green_strip_width ? green_strip_width : 0.5);
       /* Strip is blue instead of red, so swap blue and red.  */
       for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
-	  std::swap (mult[y][x][0], mult[y][x][2]);
+          std::swap (mult[y][x][0], mult[y][x][2]);
       break;
-    /* FIXME: In Warner Powrie screen it seems that green is not continous strip.  */
+    /* FIXME: In Warner Powrie screen it seems that green is not continous
+     * strip.  */
     case WarnerPowrie:
       {
-	if (red_strip_width && green_strip_width)
-          strip (green_strip_width, 1-red_strip_width-green_strip_width, 1, 2, 0);
-	else
-          strip (1.0/3, 1.0/3, 1, 2, 0);
+        if (red_strip_width && green_strip_width)
+          strip (green_strip_width, 1 - red_strip_width - green_strip_width, 1,
+                 2, 0);
+        else
+          strip (1.0 / 3, 1.0 / 3, 1, 2, 0);
       }
       break;
     case Joly:
       {
-	if (red_strip_width && green_strip_width)
+        if (red_strip_width && green_strip_width)
           strip (green_strip_width, red_strip_width, 1, 0, 2);
-	else
-          strip (1.0/3, 1.0/3, 1, 0, 2);
+        else
+          strip (1.0 / 3, 1.0 / 3, 1, 0, 2);
       }
       break;
     default:
@@ -1462,7 +1496,8 @@ screen::initialize (enum scr_type type, coord_t red_strip_width,
 }
 /* Initialize to a given screen for preview window.  */
 void
-screen::initialize_preview (enum scr_type type, coord_t red_strip_width, coord_t green_strip_width)
+screen::initialize_preview (enum scr_type type, coord_t red_strip_width,
+                            coord_t green_strip_width)
 {
   if (dufay_like_screen_p (type))
     {
@@ -1470,32 +1505,33 @@ screen::initialize_preview (enum scr_type type, coord_t red_strip_width, coord_t
       if (type == DioptichromeB)
         for (int y = 0; y < size; y++)
           for (int x = 0; x < size; x++)
-	    {
-	      std::swap (mult[y][x][0], mult[y][x][1]);
-	      std::swap (add[y][x][0], add[y][x][1]);
-	    }
+            {
+              std::swap (mult[y][x][0], mult[y][x][1]);
+              std::swap (add[y][x][0], add[y][x][1]);
+            }
       else if (type == ImprovedDioptichromeB || type == Omnicolore)
-	/* Strip is blue instead of red, so swap blue and red.  */
-	for (int y = 0; y < size; y++)
-	  for (int x = 0; x < size; x++)
-	    {
-	      std::swap (mult[y][x][0], mult[y][x][2]);
-	      std::swap (add[y][x][0], add[y][x][2]);
-	    }
+        /* Strip is blue instead of red, so swap blue and red.  */
+        for (int y = 0; y < size; y++)
+          for (int x = 0; x < size; x++)
+            {
+              std::swap (mult[y][x][0], mult[y][x][2]);
+              std::swap (add[y][x][0], add[y][x][2]);
+            }
     }
   else if (type == WarnerPowrie)
     {
       if (red_strip_width && green_strip_width)
-        preview_strip (green_strip_width, 1-red_strip_width-green_strip_width, 1, 2, 0);
+        preview_strip (green_strip_width,
+                       1 - red_strip_width - green_strip_width, 1, 2, 0);
       else
-        preview_strip (1.0/3, 1.0/3, 1, 2, 0);
+        preview_strip (1.0 / 3, 1.0 / 3, 1, 2, 0);
     }
   else if (type == Joly)
     {
       if (red_strip_width && green_strip_width)
         preview_strip (green_strip_width, red_strip_width, 1, 0, 2);
       else
-        preview_strip (1.0/3, 1.0/3, 1, 0, 2);
+        preview_strip (1.0 / 3, 1.0 / 3, 1, 0, 2);
     }
   else
     preview ();
@@ -1586,7 +1622,7 @@ mtf_by_4_vals (luminosity_t mtf[4])
 static precomputed_function<luminosity_t> *
 point_spread_by_4_vals (luminosity_t mtf[4])
 {
-  //luminosity_t mtf[4]={0.1,0.2,0.3,0.4};
+  // luminosity_t mtf[4]={0.1,0.2,0.3,0.4};
   luminosity_t y[] = { 0, 0, 0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25, 0, 0, 0 };
   luminosity_t x[]
       = { -(mtf[3] + 0.02), -(mtf[3] + 0.01), -mtf[3], -mtf[2],
@@ -1597,13 +1633,14 @@ point_spread_by_4_vals (luminosity_t mtf[4])
   spline<luminosity_t> p (x, y, 13);
   return p.precompute (0, mtf[3] + 1, 1024);
 #endif
-  return new precomputed_function<luminosity_t> (0, mtf[3] + 1, 1024, x, y, 13);
+  return new precomputed_function<luminosity_t> (0, mtf[3] + 1, 1024, x, y,
+                                                 13);
 }
 
 void
 screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 {
-  std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
+  std::unique_ptr<precomputed_function<luminosity_t>> mtfc (
       mtf_by_4_vals (mtf));
   luminosity_t step = 1.0;
   coord_t dpi = 4500;
@@ -1635,60 +1672,52 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 void
 screen::initialize_with_2D_fft (screen &scr,
                                 precomputed_function<luminosity_t> *mtf[3],
-                                rgbdata scale,
-				luminosity_t snr)
+                                rgbdata scale, luminosity_t snr)
 {
   fft_2d fft;
   for (int c = 0; c < 3; c++)
     {
-      if (!c || scale[c] != scale[c-1] || (mtf[c] != mtf[c - 1] && *mtf[c] != *mtf[c-1]))
-	{
-	  luminosity_t step = scale[c] ;
-	      /** (1 / screen::size)
-		 FIXME: Should be here, but this is compensated in get_new_screen; check with finetune logic*/
-	  luminosity_t data_scale = 1.0 / (screen::size * screen::size);
-	  luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  //printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]), scale[c]);
-	  for (int x = 0; x < fft_size; x++)
-	  {
-	    std::complex ker (std::clamp (mtf[c]->apply (x * step), (luminosity_t)0, (luminosity_t)1), (luminosity_t)0);
-	    // If SNR is set simulate bluring followed by sharpening
-	    if (snr > 0)
-	      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-	    //printf ("scr %i %f %f\n", x, mtf[c]->apply (x * step), ker);
-	  }
-	  for (int y = 0; y < fft_size; y++)
-	    for (int x = 0; x < fft_size; x++)
-	      {
-#if 0
-		luminosity_t w = mtf[c]->apply (sqrt (x * x + y * y) * step);
-		if (w < 0)
-		  w = 0;
-		if (w > 1)
-		  w = 1;
-		fft[y * fft_size + x][0] = w * (1.0 / (screen::size * screen::size));
-		fft[y * fft_size + x][1] = 0;
-		if (y)
-		  {
-		    fft[(screen::size - y) * fft_size + x][0]
-			= w * (1.0 / (screen::size * screen::size));
-		    fft[(screen::size - y) * fft_size + x][1] = 0;
-		  }
-#endif
-	        std::complex ker (std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step), (luminosity_t)0, (luminosity_t)1), (luminosity_t)0);
-		// If SNR is set simulate bluring followed by sharpening
-		if (snr > 0)
-		  ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-		ker = ker * data_scale;
-		fft[y * fft_size + x][0] = real (ker);
-		fft[y * fft_size + x][1] = imag (ker);
-		if (y)
-		  {
-		    fft[(screen::size - y) * fft_size + x][0] = real (ker);
-		    fft[(screen::size - y) * fft_size + x][1] = imag (ker);
-		  }
-	      }
-	}
+      if (!c || scale[c] != scale[c - 1]
+          || (mtf[c] != mtf[c - 1] && *mtf[c] != *mtf[c - 1]))
+        {
+          luminosity_t step = scale[c];
+          /** (1 / screen::size)
+             FIXME: Should be here, but this is compensated in get_new_screen;
+             check with finetune logic*/
+          luminosity_t data_scale = 1.0 / (screen::size * screen::size);
+          luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
+          // printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]),
+          // scale[c]);
+          for (int x = 0; x < fft_size; x++)
+            {
+              std::complex ker (std::clamp (mtf[c]->apply (x * step),
+                                            (luminosity_t)0, (luminosity_t)1),
+                                (luminosity_t)0);
+              // If SNR is set simulate bluring followed by sharpening
+              if (snr > 0)
+                ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+              // printf ("scr %i %f %f\n", x, mtf[c]->apply (x * step), ker);
+            }
+          for (int y = 0; y < fft_size; y++)
+            for (int x = 0; x < fft_size; x++)
+              {
+                std::complex ker (
+                    std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step),
+                                (luminosity_t)0, (luminosity_t)1),
+                    (luminosity_t)0);
+                // If SNR is set simulate bluring followed by sharpening
+                if (snr > 0)
+                  ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+                ker = ker * data_scale;
+                fft[y * fft_size + x][0] = real (ker);
+                fft[y * fft_size + x][1] = imag (ker);
+                if (y)
+                  {
+                    fft[(screen::size - y) * fft_size + x][0] = real (ker);
+                    fft[(screen::size - y) * fft_size + x][1] = imag (ker);
+                  }
+              }
+        }
       initialize_with_2D_fft_fast (*this, scr, fft, c, c);
     }
 }
@@ -1794,7 +1823,7 @@ void
 screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
                               enum blur_alg alg)
 {
-  std::unique_ptr<precomputed_function<luminosity_t> > mtfc (
+  std::unique_ptr<precomputed_function<luminosity_t>> mtfc (
       point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]
       = { mtfc.get (), mtfc.get (), mtfc.get () };
@@ -1802,9 +1831,9 @@ screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
 }
 void
 screen::initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4],
-					   enum blur_alg alg)
+                                           enum blur_alg alg)
 {
-  std::unique_ptr<precomputed_function<luminosity_t> > point_spreadc (
+  std::unique_ptr<precomputed_function<luminosity_t>> point_spreadc (
       point_spread_by_4_vals (ps));
   precomputed_function<luminosity_t> *vv[3]
       = { point_spreadc.get (), point_spreadc.get (), point_spreadc.get () };
