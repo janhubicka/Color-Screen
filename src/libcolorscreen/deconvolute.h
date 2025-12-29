@@ -11,8 +11,6 @@ namespace colorscreen
 {
 extern std::mutex fftw_lock;
 
-int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
-
 class deconvolution
 {
 public:
@@ -253,5 +251,10 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
       }
   return true;
 }
+
+void mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf, double scale, int size, double *psf);
+int get_psf_radius (double *psf, int size);
+int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
+
 }
 #endif

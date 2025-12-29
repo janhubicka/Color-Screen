@@ -1686,6 +1686,46 @@ screen::initialize_with_2D_fft (screen &scr,
              check with finetune logic*/
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
+
+
+	  /* First determine PSF size and see if it is greater then a period of
+	     screen.  */
+	  const int psf_size = 4096;
+#if 0
+	  const int fft_1d_size = psf_size / 2 + 1;
+	  std::vector <fftw_complex> mtf_kernel (fft_1d_size);
+	  std::vector <double> psf (psf_size);
+	  fftw_lock.lock ();
+	  fftw_plan plan
+	      = fftw_plan_dft_c2r_1d (psf_size, mtf_kernel.data (), psf.data (), FFTW_ESTIMATE);
+	  fftw_lock.unlock ();
+
+	  double this_step = step * ((double) screen::size / psf_size);
+	  for (int x = 0; x < fft_1d_size; x++)
+	    {
+	      mtf_kernel[x][0] = 
+			std::clamp (mtf[c]->apply (x * this_step),
+				    (luminosity_t)0, (luminosity_t)1),
+	      mtf_kernel[x][1] = 0;
+	      //printf ("mtf %i %f\n", x, mtf_kernel[x][0]);
+	    }
+	  if (mtf_kernel [fft_1d_size - 1][0])
+	    printf ("Screen mtf size is too large\n");
+
+	  fftw_execute (plan);
+	  fftw_lock.lock ();
+	  fftw_destroy_plan (plan);
+	  fftw_lock.unlock ();
+#endif
+
+	  std::vector <double> psf (psf_size * psf_size);
+	  mtf_to_2d_psf (mtf[c], step * ((double) screen::size), psf_size, psf.data ());
+	  int this_psf_size = get_psf_radius (psf.data (), psf_size);
+
+	  printf ("this_psf_size: %i\n", this_psf_size);
+
+
+#if 0
           // printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]),
           // scale[c]);
           for (int x = 0; x < fft_size; x++)
@@ -1698,25 +1738,118 @@ screen::initialize_with_2D_fft (screen &scr,
                 ker = ker * (conj (ker) / (std::norm (ker) + k_const));
               // printf ("scr %i %f %f\n", x, mtf[c]->apply (x * step), ker);
             }
-          for (int y = 0; y < fft_size; y++)
-            for (int x = 0; x < fft_size; x++)
-              {
-                std::complex ker (
-                    std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step),
-                                (luminosity_t)0, (luminosity_t)1),
-                    (luminosity_t)0);
-                // If SNR is set simulate bluring followed by sharpening
-                if (snr > 0)
-                  ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-                ker = ker * data_scale;
-                fft[y * fft_size + x][0] = real (ker);
-                fft[y * fft_size + x][1] = imag (ker);
-                if (y)
-                  {
-                    fft[(screen::size - y) * fft_size + x][0] = real (ker);
-                    fft[(screen::size - y) * fft_size + x][1] = imag (ker);
-                  }
-              }
+#endif
+
+	  /* Small PSF size: use fast path of producing its FFT directly.  */
+	  if (this_psf_size < screen::size / 2)
+	    {
+	      for (int y = 0; y < fft_size; y++)
+		for (int x = 0; x < fft_size; x++)
+		  {
+		    std::complex ker (
+			std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step),
+				    (luminosity_t)0, (luminosity_t)1),
+			(luminosity_t)0);
+		    // If SNR is set simulate bluring followed by sharpening
+		    if (snr > 0)
+		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		    ker = ker * data_scale;
+		    fft[y * fft_size + x][0] = real (ker);
+		    fft[y * fft_size + x][1] = imag (ker);
+		    if (y)
+		      {
+			fft[(screen::size - y) * fft_size + x][0] = real (ker);
+			fft[(screen::size - y) * fft_size + x][1] = imag (ker);
+		      }
+		  }
+	    }
+	  /* Large PSF: Compute its periodic form and do FFT.  */
+	  else
+	    {
+	      std::vector <double> wrapped_psf (screen::size * screen::size, 0.0);
+
+	      for (int y = 0; y < this_psf_size; y++)
+	        for (int x = 0; x <  this_psf_size; x++)
+		  {
+		    double dist = sqrt (x*x + y*y);
+		    if (dist > this_psf_size)
+		      continue;
+		    int idx;
+		    dist = my_modf (dist, &idx);
+		    //double val = (psf[idx] * (1 - dist) + psf[idx + 1] * dist) /** (1 / (double)fft_size)*/;
+		    //double val = (psf2[idx] * (1 - dist) + psf2[idx + 1] * dist) /** (1 / (double)fft_size)*/;
+		    double val = psf[y * psf_size + x];
+		    int xx = x & (screen::size - 1);
+		    int yy = y & (screen::size - 1);
+		    int nxx = (-x) & (screen::size - 1);
+		    wrapped_psf [yy * screen::size + xx] += val;
+		    if (xx)
+		      wrapped_psf [yy * screen::size + nxx] += val;
+		    if (yy)
+		      {
+			int nyy = (-y) & (screen::size - 1);
+			wrapped_psf [nyy * screen::size + xx] += val;
+			if (xx)
+			  wrapped_psf [nyy * screen::size + nxx] += val;
+		      }
+		  }
+	      double sum = 0;
+	      for (int x = 0; x < screen::size * screen::size; x++)
+		  sum += wrapped_psf [x];
+	      printf ("Sum %f\n", sum);
+	      double sum_inv = 1 / sum;
+	      if (snr == 0)
+		sum_inv /= screen::size * screen::size;
+	      for (int x = 0; x < screen::size * screen::size; x++)
+		wrapped_psf [x] *= sum_inv;
+	      if (0)
+		{
+		  tiff_writer_params p;
+		  int tiles = 3;
+		  p.filename = "/tmp/wrapped-ps.tif";
+		  p.width = screen::size * tiles;
+		  p.height = screen::size * tiles;
+		  p.depth = 16;
+		  const char *error;
+		  tiff_writer out (p, &error);
+		  if (error)
+		    return;
+		  double max = 0;
+		  for (int x = 0; x < screen::size * screen::size; x++)
+		    max = std::max (max, wrapped_psf[x]);
+		  for (int y = 0; y < screen::size * tiles; y++)
+		    {
+		      for (int x = 0; x < screen::size * tiles; x++)
+			{
+			  int i = (wrapped_psf[(y % screen::size) * screen::size
+						+ (x % screen::size)]
+				   * 65535 / max);
+			  out.put_pixel (x, i, i, i);
+			}
+		      if (!out.write_row ())
+			return;
+		    }
+		}
+	      fftw_lock.lock ();
+	      fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, wrapped_psf.data (), fft,
+							FFTW_ESTIMATE);
+	      fftw_lock.unlock ();
+	      fftw_execute (plan_2d);
+	      fftw_lock.lock ();
+	      fftw_destroy_plan (plan_2d);
+	      fftw_lock.unlock ();
+	      if (snr > 0)
+		{
+		  printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
+		  for (int x = 0; x < fft_size * screen::size; x++)
+		    {
+		      std::complex ker (fft[x][0], fft[x][1]);
+		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		      fft[x][0] = real (ker) * (1.0 / (screen::size * screen::size));
+		      fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));
+		    }
+		}
+	    }
         }
       initialize_with_2D_fft_fast (*this, scr, fft, c, c);
     }

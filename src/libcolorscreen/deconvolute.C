@@ -10,12 +10,78 @@ static const int max_border_size = 523;
 /* FFTW execute is thread safe. Everything else is not.  */
 std::mutex fftw_lock;
 
+/* Turn MTF to PSF scaled by SCALE.
+   PSF is an array of SIZE.  */
+void
+mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf,
+	       double scale,
+	       int size,
+	       double *psf)
+{
+  int fft_size = size / 2 + 1;
+  double step = scale / size;
+  std::vector<fftw_complex> mtf_kernel (size * fft_size);
+  for (int y = 0; y < fft_size; y++)
+    for (int x = 0; x < fft_size; x++)
+      {
+	std::complex ker (
+	    std::clamp (mtf->apply (sqrt (x * x + y * y) * step),
+			(luminosity_t)0, (luminosity_t)1),
+	    (luminosity_t)0);
+	mtf_kernel[y * fft_size + x][0] = real (ker);
+	mtf_kernel[y * fft_size + x][1] = imag (ker);
+	if (y)
+	  {
+	    mtf_kernel[(size - y) * fft_size + x][0] = real (ker);
+	    mtf_kernel[(size - y) * fft_size + x][1] = imag (ker);
+	  }
+      }
+#if 0
+  if (mtf_kernel [fft_size - 1][0])
+    {
+      printf ("MTF size is too large (max size %i, value at max %f, scale %f)\n", fft_size - 1, mtf_kernel [fft_size -1 ][0], scale);
+      abort ();
+    }
+#endif
+  fftw_lock.lock ();
+  fftw_plan plan
+      = fftw_plan_dft_c2r_2d (size, size, mtf_kernel.data (), psf, FFTW_ESTIMATE);
+  fftw_lock.unlock ();
+  fftw_execute (plan);
+  fftw_lock.lock ();
+  fftw_destroy_plan (plan);
+  fftw_lock.unlock ();
+}
+
+/* Determine PSF kernel radius.  */
+int
+get_psf_radius (double *psf, int size)
+{
+  double peak = 0;
+  for (int i = 0; i < size; i++)
+    {
+      //printf ("%i %f\n", i, psf[i]);
+      if (psf[i] > peak)
+	peak = psf[i];
+    }
+  int this_psf_radius = 0;
+  /* Center of the PSF kernel is at 0  */
+  for (int i = 1; i < size / 2 - 1; i++)
+    if (psf[i] > peak * 0.0001f)
+      this_psf_radius = i;
+  if (this_psf_radius == size / 2 - 2)
+    printf ("Psf size is too large; last ratio %f\n", psf[size / 2 - 1] / peak);
+  return this_psf_radius;
+}
+
+
 /* Determine border to be added to tiles when doing deconvolution.
    This corresponds to the PSF kernel size.  */
 int
 deconvolute_border_size (precomputed_function<luminosity_t> *mtf)
 {
   const int psf_size = max_border_size * 2;
+#if 0
   const int fft_size = psf_size / 2 + 1;
   fftw_complex mtf_kernel[fft_size];
   double psf[psf_size];
@@ -50,8 +116,12 @@ deconvolute_border_size (precomputed_function<luminosity_t> *mtf)
   fftw_lock.lock ();
   fftw_destroy_plan (plan);
   fftw_lock.unlock ();
-  //printf ("Radius %i\n", rr);
   return rr;
+  //printf ("Radius %i\n", rr);
+#endif
+  std::vector <double> psf (psf_size * psf_size);
+  mtf_to_2d_psf (mtf, 1, psf_size, psf.data ());
+  return get_psf_radius (psf.data (), psf_size);
 }
 
 deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr,
