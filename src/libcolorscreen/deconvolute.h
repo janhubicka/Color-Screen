@@ -16,10 +16,16 @@ int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
 class deconvolution
 {
 public:
+  enum mode
+  {
+    blur,
+    sharpen,
+    richardson_lucy_sharpen
+  };
   /* Set up deconvolution for given MTF. SNR specifies signal to noise ratio
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr, int max_threads,
-                 bool sharpen = true);
+                 enum mode = sharpen /*richardson_lucy_sharpen*/, int iterations = 50);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
@@ -51,7 +57,7 @@ public:
   void
   put_pixel (int threadid, int x, int y, deconvolution_data_t val)
   {
-    m_plans[threadid].tile[y * m_mem_tile_size + x] = val;
+    m_data[threadid].tile[y * m_mem_tile_size + x] = val;
   }
 
   /* Apply sharpening/blurring to the kernel.  */
@@ -61,7 +67,7 @@ public:
   deconvolution_data_t
   get_pixel (int threadid, int x, int y)
   {
-    return m_plans[threadid].tile[y * m_mem_tile_size + x];
+    return m_data[threadid].tile[y * m_mem_tile_size + x];
   }
 
 
@@ -79,18 +85,25 @@ private:
   /* Kernel for bluring or sharpening.  */
   fftw_complex *m_blur_kernel;
 
+  bool m_richardson_lucy;
+  deconvolution_data_t m_snr;
+  int m_iterations;
+
   /* Weights of edge tapering.  */
   std::vector<deconvolution_data_t> m_weights;
 
+  fftw_plan m_plan_2d_inv, m_plan_2d;
+  bool m_plans_exists;
+
   /* Plans used for FFT calclation.  */
-  struct fftw_plans
+  struct tile_data
   {
-    fftw_plan plan_2d_inv, plan_2d;
     fftw_complex *in;
     std::vector<deconvolution_data_t> tile;
+    std::vector<deconvolution_data_t> ratios;
     bool initialized;
   };
-  std::vector<fftw_plans> m_plans;
+  std::vector<tile_data> m_data;
 };
 
 /* Deconvolution worker. Sharpen DATA to OUT which both has dimensions
