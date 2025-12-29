@@ -33,8 +33,11 @@ struct render_to_file_params
     scan_geometry,
     /* Default value.  Use scan geoemtry for scr based rendering modes and scan
        for scr_detect.  */
-    default_geometry
+    default_geometry,
+    max_geometry,
   } geometry;
+
+  static const DLL_PUBLIC char * const geometry_names[(int)max_geometry];
 
 
   /* Width and height of the output file.  It will be computed if set to 0.  */

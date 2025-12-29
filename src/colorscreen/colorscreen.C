@@ -678,9 +678,10 @@ parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
 static enum render_to_file_params::output_geometry
 parse_geometry (const char *profile)
 {
-  static const char * const goemetries[]={"screen","scan","default"};
   return parse_enum<enum render_to_file_params::output_geometry,
-                    goemetries,3> (profile, "Unkonwn geometry:%s\n");
+                    render_to_file_params::geometry_names,
+		    render_to_file_params::max_geometry>
+		    (profile, "Unkonwn geometry:%s\n");
 }
 
 static int
@@ -747,8 +748,6 @@ render_cmd (int argc, char **argv)
       else if (!strcmp (argv[i], "--auto-levels"))
         detect_brightness = true;
       else if (!strcmp (argv[i], "--precise"))
-        force_precise = true;
-      else if (!strcmp (argv[i], "--geometry"))
         force_precise = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "dye-balance"))
