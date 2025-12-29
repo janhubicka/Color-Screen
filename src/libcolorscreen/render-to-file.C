@@ -84,12 +84,13 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	}
       if (!p->antialias)
 	{
-	  p->antialias = round (1 * p->xstep / p->pixel_size);
-	  /* TODO add flag for bosting up antialias.  */
 	  if (prop.flags & render_type_property::ANTIALIAS)
 	    p->antialias = round (4 * p->xstep / p->pixel_size);
-	  if (!p->antialias)
-	    p->antialias = 1;
+	  else
+	    p->antialias = round (1 * p->xstep / p->pixel_size);
+	  /* Antialias should be odd, so middle of tile is sampled.  */
+	  if (!(p->antialias & 1))
+	    p->antialias++;
 	}
       if (!p->width)
 	{
@@ -109,7 +110,7 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	  imgp.y = (imgp.y - z.y) / scan->ydpi;
 	  coord_t len = my_sqrt (imgp.x * imgp.x + imgp.y * imgp.y);
 	  //fprintf (stderr, "%f %f %f %f %f\n", scan.xdpi, len, p->xstep, xx, yy);
-	  /* This is approximate for defomated screens, so take average of X and Y resolution.  */
+	  /* This is approximate for deformated screens, so take average of X and Y resolution.  */
 	  if (len && !p->xdpi)
 	    {
 	      coord_t xdpi = 1 / len;
@@ -140,8 +141,9 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	    p->antialias = round (4 * p->xstep);
 	  else
 	    p->antialias = round (1 * p->ystep);
-	  if (!p->antialias)
-	    p->antialias = 1;
+	  /* Antialias should be odd, so middle of tile is sampled.  */
+	  if (!(p->antialias & 1))
+	    p->antialias++;
 	}
       if (!p->xdpi)
 	p->xdpi = scan->xdpi / p->xstep;

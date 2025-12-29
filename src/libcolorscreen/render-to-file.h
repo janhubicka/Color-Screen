@@ -92,9 +92,11 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
     {
       if (progress)
         progress->pause_stdout ();
-      printf ("Rendering %s in resolution %ix%i, bit-depth %i, geometry %s and antialias %i", p.filename, p.width,
+      printf ("Rendering %s in resolution %ix%i, bit-depth:%i, %s geometry", p.filename, p.width,
 	      p.height, p.depth,
-	      render_to_file_params::geometry_names [(int)p.geometry], p.antialias);
+	      render_to_file_params::geometry_names [(int)p.geometry]);
+      if (p.antialias)
+	printf (", antialias %ix%i", p.antialias,p.antialias);
       if (p.hdr)
 	printf (", HDR");
       if (p.xdpi && p.xdpi == p.ydpi)
@@ -223,8 +225,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		      for (int ay = 0 ; ay < p.antialias; ay++)
 			for (int ax = 0 ; ax < p.antialias; ax++)
 			  {
-			    scr = p.common_map->final_to_scr ({finalp.x + ax * asx, finalp.y + ay * asy}) - (point_t){p.xpos, p.ypos};
-			    d += sample_data_scr (render, map, scr.x + ax * asx, scr.y + ay * asy);
+			    scr = p.common_map->final_to_scr ({finalp.x + (ax + 0.5) * asx, finalp.y + (ay + 0.5) * asy}) - (point_t){p.xpos, p.ypos};
+			    d += sample_data_scr (render, map, scr.x /*+ ax * asx*/, scr.y /*+ ay * asy*/);
 			  }
 		      d.red *= sc;
 		      d.green *= sc;
@@ -255,7 +257,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
 		  for (int ay = 0 ; ay < p.antialias; ay++)
 		    for (int ax = 0 ; ax < p.antialias; ax++)
-		      d += sample_data_final (render, map, xx + ax * asx, yy + ay * asy, final_xshift, final_yshift);
+		      d += sample_data_final (render, map, xx + (ax + 0.5) * asx, yy + (ay + 0.5) * asy, final_xshift, final_yshift);
 		  d.red *= sc;
 		  d.green *= sc;
 		  d.blue *= sc;
@@ -284,7 +286,7 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
 		  for (int ay = 0 ; ay < p.antialias; ay++)
 		    for (int ax = 0 ; ax < p.antialias; ax++)
-		      d += render.sample_pixel_img (xx + ax * asx - final_xshift, yy + ay * asy - final_yshift);
+		      d += render.sample_pixel_img (xx + (ax + 0.5) * asx - final_xshift, yy + (ay + 0.5) * asy - final_yshift);
 		  d.red *= sc;
 		  d.green *= sc;
 		  d.blue *= sc;

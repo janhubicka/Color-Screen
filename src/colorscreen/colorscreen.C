@@ -83,6 +83,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --precise                 force precise "
                        "collection of patch density\n");
       fprintf (stderr, "      --geometry=scan|screen    specify output file geometry\n");
+      fprintf (stderr, "      --antialias=N             specify aliasing using NxN grid\n");
       fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
       fprintf (stderr, "      --auto-color-model        automatically choose "
                        "color model for given screen type\n");
@@ -736,7 +737,7 @@ render_cmd (int argc, char **argv)
                || parse_float_param (argc, argv, &i, "scale", scale, 0.0000001,
                                      100)
                || parse_float_param (argc, argv, &i, "output-gamma",
-                                     output_gamma, 0.000001, 100))
+                                     output_gamma, -1, 100))
         ;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "color-model"))
@@ -755,6 +756,9 @@ render_cmd (int argc, char **argv)
       else if (const char *str
                = arg_with_param (argc, argv, &i, "geometry"))
         rfparams.geometry = parse_geometry (str);
+      else if (parse_int_param (argc, argv, &i, "antialias",
+	       rfparams.antialias, 1, 1024))
+        ;
       else if (!infname)
         infname = argv[i];
       else if (!cspname)

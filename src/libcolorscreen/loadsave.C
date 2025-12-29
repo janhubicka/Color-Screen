@@ -729,7 +729,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_xyz (f, rparam_check (scanner_blue)))
 	    {
-	      *error = "error scanned_blue";
+	      *error = "error parsing scanned_blue";
 	      return false;
 	    }
 	}
@@ -737,7 +737,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_luminosity (f, rparam_check (scanner_snr)))
 	    {
-	      *error = "error scanned_snr";
+	      *error = "error parsing scanned_snr";
 	      return false;
 	    }
 	}
@@ -745,7 +745,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  if (!read_luminosity (f, rparam_check (scanner_mtf_scale)))
 	    {
-	      *error = "error scanned_mtf_scale";
+	      *error = "error parsing scanner_mtf_scale";
 	      return false;
 	    }
 	}

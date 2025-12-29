@@ -4,6 +4,7 @@
   <!-- interface-naming-policy toplevel-contextual -->
   <object class="GtkAdjustment" id="adjustment1">
     <property name="upper">100000</property>
+    <property name="lower">-1</property>
     <property name="step_increment">0.000100000000000003</property>
     <property name="page_increment">10</property>
   </object>
@@ -123,8 +124,8 @@
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="adjustment7">
-    <property name="upper">10000</property>
-    <property name="lower">-10000</property>
+    <property name="upper">1000000</property>
+    <property name="lower">0</property>
     <property name="step_increment">0.0001</property>
     <property name="page_increment">0.0001</property>
   </object>
@@ -955,7 +956,7 @@
                       <object class="GtkLabel" id="label6">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">lens k1</property>
+                        <property name="label" translatable="yes">scanner SNR</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -964,7 +965,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="k1">
+                      <object class="GtkSpinButton" id="scanner_snr">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>

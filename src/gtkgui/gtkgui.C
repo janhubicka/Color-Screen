@@ -149,7 +149,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *k1,
+  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *scanner_snr,
 	       	*tilt_x, *tilt_y, *scanner_mtf_scale, *dark_point, *collection_threshold, *balance_black, *mix_red, *mix_green, *mix_blue,
 	       	*balance_red, *balance_green, *balance_blue;
 };
@@ -198,7 +198,7 @@ openimage (const char *name)
   current.lens_center.x = scan.width * 0.5;
   current.lens_center.y = scan.height * 0.5;
 #endif
-  rparams.gamma = scan.gamma != -2 ? scan.gamma : 2.2;
+  rparams.gamma = scan.gamma != -2 ? scan.gamma : -1;
 }
 
 /* Get values displayed in the UI.  */
@@ -227,7 +227,7 @@ getvals (void)
   rparams.white_balance.red = gtk_spin_button_get_value (data.balance_red);
   rparams.white_balance.green = gtk_spin_button_get_value (data.balance_green);
   rparams.white_balance.blue = gtk_spin_button_get_value (data.balance_blue);
-  current.lens_correction.kr[1] = gtk_spin_button_get_value (data.k1);
+  rparams.scanner_snr = gtk_spin_button_get_value (data.scanner_snr);
   if (rparams != old || current != old2)
     {
       maybe_solve ();
@@ -261,7 +261,7 @@ setvals (void)
   gtk_spin_button_set_value (data.balance_red, rparams.white_balance.red);
   gtk_spin_button_set_value (data.balance_green, rparams.white_balance.green);
   gtk_spin_button_set_value (data.balance_blue, rparams.white_balance.blue);
-  gtk_spin_button_set_value (data.k1, current.lens_correction.kr[1]);
+  gtk_spin_button_set_value (data.scanner_snr, rparams.scanner_snr);
   initialized = 1;
 }
 
@@ -1268,7 +1268,7 @@ initgtk (int *argc, char **argv)
   data.sharpen_amount = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "sharpen_amount"));
   data.y2 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "y2"));
   data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
-  data.k1 = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "k1"));
+  data.scanner_snr = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "scanner_snr"));
   data.tilt_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x"));
   data.tilt_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y"));
   data.scanner_mtf_scale = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "scanner_mtf_scale"));
