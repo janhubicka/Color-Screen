@@ -116,10 +116,12 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
              precomputed_function<luminosity_t> *mtf,
 	     luminosity_t snr,
 	     progress_info *progress,
-             bool parallel = true)
+             bool parallel = true,
+	     enum deconvolution::mode mode = deconvolution::sharpen /*richardson_lucy_sharpen*/,
+	     int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, snr, nthreads);
+  deconvolution d (mtf, snr, nthreads, mode, iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -166,10 +168,12 @@ template <typename O, typename mem_O, typename T, typename P,
 bool
 deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
 		 precomputed_function<luminosity_t> *mtf, luminosity_t snr, progress_info *progress,
-		 bool parallel = true)
+		 bool parallel = true,
+		 enum deconvolution::mode mode = deconvolution::sharpen /*richardson_lucy_sharpen*/,
+		 int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, snr, nthreads);
+  deconvolution d (mtf, snr, nthreads, mode, iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();

@@ -447,6 +447,7 @@ struct sharpen_params
   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
   luminosity_t scanner_snr;
   luminosity_t scanner_mtf_scale;
+  int richardson_lucy_iterations;
   bool
   operator== (sharpen_params &o)
   {
@@ -454,7 +455,8 @@ struct sharpen_params
       {
         if (!scanner_mtf || !o.scanner_mtf)
           return false;
-        return (scanner_mtf_scale == o.scanner_mtf_scale && *scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr);
+        return (scanner_mtf_scale == o.scanner_mtf_scale && *scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr
+		&& richardson_lucy_iterations == o.richardson_lucy_iterations);
       }
     return ((!radius || !amount) && (!o.radius || !o.amount))
            || (radius == o.radius && amount == o.amount);
@@ -557,7 +559,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                unsigned short **, getdata_params,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-                  &mtf, p.sp.scanner_snr, progress);
+                  &mtf, p.sp.scanner_snr, progress, true,
+		  p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+		  p.sp.richardson_lucy_iterations);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
@@ -571,7 +575,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
-              progress);
+              progress, true,
+	      p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+	      p.sp.richardson_lucy_iterations);
         }
       else
         ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
@@ -596,7 +602,9 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                const image_data *, gray_data_tables,
                                getdata_helper2> (
                   out, p.gp.img, t, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
-                  progress);
+                  progress, true,
+		  p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+		  p.sp.richardson_lucy_iterations);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, const image_data *,
@@ -693,7 +701,8 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_backlight_correction_id,
                 m_params.ignore_infrared },
               { m_params.sharpen_radius, m_params.sharpen_amount,
-                m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale } };
+                m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale,
+	        m_params.richardson_lucy_iterations } };
       m_sharpened_data_holder
           = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

@@ -1722,7 +1722,7 @@ screen::initialize_with_2D_fft (screen &scr,
 	  mtf_to_2d_psf (mtf[c], step * ((double) screen::size), psf_size, psf.data ());
 	  int this_psf_size = get_psf_radius (psf.data (), psf_size);
 
-	  printf ("this_psf_size: %i\n", this_psf_size);
+	  //printf ("this_psf_size: %i\n", this_psf_size);
 
 
 #if 0
@@ -1796,7 +1796,6 @@ screen::initialize_with_2D_fft (screen &scr,
 	      double sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		  sum += wrapped_psf [x];
-	      printf ("Sum %f\n", sum);
 	      double sum_inv = 1 / sum;
 	      if (snr == 0)
 		sum_inv /= screen::size * screen::size;
@@ -1840,7 +1839,7 @@ screen::initialize_with_2D_fft (screen &scr,
 	      fftw_lock.unlock ();
 	      if (snr > 0)
 		{
-		  printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
+		  //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
 		  for (int x = 0; x < fft_size * screen::size; x++)
 		    {
 		      std::complex ker (fft[x][0], fft[x][1]);

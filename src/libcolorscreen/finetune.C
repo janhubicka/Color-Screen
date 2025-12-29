@@ -3413,12 +3413,13 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       luminosity_t sharpen_amount,
 		      std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
 		      luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
+		      int richardson_lucy_iterations,
 		      scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = true;
+  const bool debugfiles = false;
 
   if (debugfiles)
     {
@@ -3519,7 +3520,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      &mtf,scanner_snr, NULL, false);
+	      &mtf,scanner_snr, NULL, false,
+	      richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+	      richardson_lucy_iterations);
 	}
 
       if (debugfiles)

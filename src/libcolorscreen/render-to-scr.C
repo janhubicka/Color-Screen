@@ -35,6 +35,7 @@ saturation_loss_table::saturation_loss_table (
     luminosity_t sharpen_radius, luminosity_t sharpen_amount,
     std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
     luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
+    int richardson_lucy_iterations,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -46,7 +47,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius, scanner_mtf, scanner_snr, scanner_mtf_scale)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius, scanner_mtf, scanner_snr, scanner_mtf_scale, richardson_lucy_iterations)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -60,7 +61,7 @@ saturation_loss_table::saturation_loss_table (
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
                 *collection_screen, collection_threshold, sharpen_radius, sharpen_amount,
-		scanner_mtf, scanner_snr, scanner_mtf_scale, *map, xp - 100,
+		scanner_mtf, scanner_snr, scanner_mtf_scale, richardson_lucy_iterations, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
@@ -184,6 +185,7 @@ struct saturation_loss_params
   std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
   luminosity_t scanner_snr;
   luminosity_t scanner_mtf_scale;
+  int richardson_lucy_iterations;
   uint64_t mesh_id;
   scr_to_img_parameters scr_to_img_params;
   scr_to_img *map;
@@ -194,6 +196,7 @@ struct saturation_loss_params
     if ((scanner_mtf && scanner_mtf_scale) || (o.scanner_mtf && scanner_mtf_scale))
       {
         if (!scanner_mtf || !o.scanner_mtf || *scanner_mtf != *o.scanner_mtf
+	    || richardson_lucy_iterations != o.richardson_lucy_iterations
        	    || scanner_snr != o.scanner_snr || scanner_mtf_scale != o.scanner_mtf_scale)
 	  return false;
       }
@@ -212,7 +215,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   saturation_loss_table *s = new saturation_loss_table (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, p.scanner_mtf, p.scanner_snr, p.scanner_mtf_scale, progress);
+      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, p.scanner_mtf, p.scanner_snr, p.scanner_mtf_scale, p.richardson_lucy_iterations, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -292,6 +295,7 @@ render_to_scr::compute_saturation_loss_table (
     std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
     luminosity_t scanner_snr,
     luminosity_t scanner_mtf_scale,
+    int richardson_lucy_iterations,
     progress_info *progress)
 {
   assert (!m_saturation_loss_table);
@@ -311,6 +315,7 @@ render_to_scr::compute_saturation_loss_table (
 	  scanner_mtf,
 	  scanner_snr,
 	  scanner_mtf_scale,
+	  richardson_lucy_iterations,
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,
