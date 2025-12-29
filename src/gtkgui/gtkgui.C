@@ -312,7 +312,7 @@ print_help()
 		   "o   - (simulated) infrared/color switch       i   - invert negative             u U - undo / redo\n"
 	           "m M - color models                            b B - light temperature      ctrl b B - backlight temperature\n"
 		   "q Q - control age                             v V - tone curve                    I - ignore/use infrared\n"
-		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments\n");
+		   "G   - optimize tile adjustments          ctrl G   - reset tile adjustments        w - toggle gammut warning\n");
 }
 
 /* Render image into the main window.  */
@@ -436,6 +436,12 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       printf ("Screen editing mode\n");
       display_scheduled = true;
       preview_display_scheduled = true;
+    }
+  if (k == 'w')
+    {
+      display_scheduled = true;
+      rparams.gammut_warning = !rparams.gammut_warning;
+      printf ("Gammut warning %s\n", rparams.gammut_warning ? "enabled" : "disabled");
     }
   if (k == 'W')
     {
@@ -2234,7 +2240,6 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load parameters: %s\n", error);
       exit (1);
     }
-  rparams.gammut_warning = true;
   //if (!in && scan.gamma != -2)
     //rparams.gamma = scan.gamma;
   current_mesh = current.mesh_trans;
