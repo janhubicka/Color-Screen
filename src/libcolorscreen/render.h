@@ -71,6 +71,7 @@ public:
   static bool get_lookup_tables (luminosity_t **ret, luminosity_t gamma, const image_data *img, progress_info *progress = NULL);
   static void release_lookup_tables (luminosity_t **);
   inline void set_color (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
+  inline void set_color_precise (luminosity_t, luminosity_t, luminosity_t, int *, int *, int *) const;
   inline void set_linear_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
   inline void set_hdr_color (luminosity_t, luminosity_t, luminosity_t, luminosity_t *, luminosity_t *, luminosity_t *) const;
   pure_attr inline luminosity_t get_data (int x, int y) const;
@@ -405,12 +406,19 @@ render::set_hdr_color (luminosity_t r, luminosity_t g, luminosity_t b, luminosit
 {
   luminosity_t r1, g1, b1;
   render::set_linear_hdr_color (r, g, b, &r1, &g1, &b1);
+  if (m_params.target_film_gamma != 1)
+    {
+      r1 = apply_gamma (r1, m_params.target_film_gamma);
+      g1 = apply_gamma (g1, m_params.target_film_gamma);
+      b1 = apply_gamma (b1, m_params.target_film_gamma);
+    }
   *rr = invert_gamma (r1, m_params.output_gamma);
   *gg = invert_gamma (g1, m_params.output_gamma);
   *bb = invert_gamma (b1, m_params.output_gamma);
 }
 
-/* Compute color in the final gamma 2.2 and range 0...m_dst_maxval.  */
+/* Compute color in the final gamma and range 0...m_dst_maxval.
+   Fast version that is not always precise for dark colors and gamma > 1.5  */
 inline void
 render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
 {
@@ -436,6 +444,26 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
   *gg = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
   v = my_modf (b * out_lookup_table_size, &idx);
   *bb = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
+}
+
+/* Compute color in the final gamma and range 0...m_dst_maxval.
+   Slow version.  */
+inline void
+render::set_color_precise (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int *gg, int *bb) const
+{
+  if (m_params.gamma == 1)
+    {
+      set_color (r, g, b, rr, gg, bb);
+      return;
+    }
+  luminosity_t fr, fg, fb;
+  set_hdr_color (r, g, b, &fr, &fg, &fb);
+  fr = std::clamp (fr, (luminosity_t)0.0, (luminosity_t)1.0);
+  fg = std::clamp (fg, (luminosity_t)0.0, (luminosity_t)1.0);
+  fb = std::clamp (fb, (luminosity_t)0.0, (luminosity_t)1.0);
+  *rr = fr * m_maxval + 0.5;
+  *gg = fg * m_maxval + 0.5;
+  *bb = fb * m_maxval + 0.5;
 }
 
 #if 0

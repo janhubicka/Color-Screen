@@ -531,7 +531,19 @@ test_render_linearity ()
 			 &r, &g, &b);
 	  if (i > mins[gamma_idx] && (r != i || g != i || b != i))
 	    {
-	      printf ("Render is non-linear at gamma %f linear: %i becomes %i %i %i\n",
+	      printf ("Render is non-linear at gamma %f linear: %i becomes %i %i %i (with table)\n",
+		      gamma, i, r, g, b);
+	      ok = false;
+	    }
+	  luminosity_t hr,hg,hb;
+	  ren.set_hdr_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
+			     &hr, &hg, &hb);
+	  int rr = hr * 65535 + 0.5;
+	  gg = hg * 65535 + 0.5;
+	  int bb = hb * 65535 + 0.5;
+	  if (rr != i || gg != i || bb != i)
+	    {
+	      printf ("Render is non-linear at gamma %f linear: %i becomes %i %i %i (with hdr)\n",
 		      gamma, i, r, g, b);
 	      ok = false;
 	    }
