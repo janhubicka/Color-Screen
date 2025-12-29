@@ -275,7 +275,7 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
   int maxval = p.maxval;
   luminosity_t mul = 1 / (luminosity_t)(render::out_lookup_table_size - 1);
 
-  for (int i = 0; i < render::out_lookup_table_size; i++)
+  for (int i = 0; i < (int)render::out_lookup_table_size; i++)
     lookup_table[i]
         = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
           * maxval + (luminosity_t) 0.5;
