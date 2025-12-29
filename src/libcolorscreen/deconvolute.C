@@ -44,7 +44,7 @@ deconvolute_border_size (precomputed_function<luminosity_t> *mtf)
   int rr = 0;
   /* Center of the PSF kernel is at 0  */
   for (int i = 1; i < psf_size / 2 - 1; i++)
-    if (psf[i /*+ psf_size / 2*/] > peak * 0.001f)
+    if (psf[i] > peak * 0.001f)
       rr = i;
 
   fftw_lock.lock ();
@@ -158,7 +158,6 @@ deconvolution::process_tile (int thread_id)
 	    sum += get_pixel (thread_id, x + m_tile_size - m_taper_size, y);
 	}
       sum /= m_tile_size * m_taper_size * 2 + (m_tile_size - 2 * m_taper_size) * m_taper_size * 2;
-#if 1
       /* Taper top edge  */
       for (int y = 0; y < m_taper_size; y++)
 	{
@@ -190,22 +189,6 @@ deconvolution::process_tile (int thread_id)
 	  for (int x = m_tile_size - d; x < m_tile_size; x++)
 	    put_pixel (thread_id, x, y, sum + (get_pixel (thread_id, x, y) - sum) * m_weights[m_tile_size - 1 - x]);
 	}
-#endif
-#if 0
-      for (int y = 0; y < m_tile_size; ++y) {
-	    for (int x = 0; x < m_tile_size; ++x) {
-		// Calculate distance to nearest edge
-		int dx = std::min(x, (m_tile_size - 1) - x);
-		int dy = std::min(y, (m_tile_size - 1) - y);
-		int dist = std::min(dx, dy);
-
-		if (dist < m_taper_size) {
-		    float weight = m_weights[dist];
-		    put_pixel (thread_id, x, y, sum + (get_pixel (thread_id, x, y) - sum) * weight);
-		}
-	    }
-	}
-#endif
     }
   if (mirror)
     {
@@ -218,7 +201,6 @@ deconvolution::process_tile (int thread_id)
 	    put_pixel (thread_id, m_mem_tile_size - 1 - x, m_mem_tile_size - 1 - y, p);
           }
     }
-#if 1
 
   fftw_execute (m_plans[thread_id].plan_2d);
   fftw_complex *in = m_plans[thread_id].in;
@@ -230,7 +212,6 @@ deconvolution::process_tile (int thread_id)
       in[i][1] = imag (v * w);
     }
   fftw_execute (m_plans[thread_id].plan_2d_inv);
-#endif
 }
 
 deconvolution::~deconvolution ()
