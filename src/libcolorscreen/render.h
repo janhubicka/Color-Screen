@@ -143,7 +143,7 @@ public:
     return 128 * 1024;
   }
 
-
+  static constexpr const size_t out_lookup_table_size = 65536 * 16;
 protected:
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
@@ -424,9 +424,18 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
       g = std::clamp (g, (luminosity_t)0.0, (luminosity_t)1.0);
       b = std::clamp (b, (luminosity_t)0.0, (luminosity_t)1.0);
     }
-  *rr = m_out_lookup_table [(int)(r * (luminosity_t)65535.5)];
-  *gg = m_out_lookup_table [(int)(g * (luminosity_t)65535.5)];
-  *bb = m_out_lookup_table [(int)(b * (luminosity_t)65535.5)];
+#if 0
+  *rr = m_out_lookup_table [(int)(r * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
+  *gg = m_out_lookup_table [(int)(g * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
+  *bb = m_out_lookup_table [(int)(b * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
+#endif
+  int idx;
+  luminosity_t v = my_modf (r * (out_lookup_table_size - 1), &idx);
+  *rr = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
+  v = my_modf (g * out_lookup_table_size, &idx);
+  *gg = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
+  v = my_modf (b * out_lookup_table_size, &idx);
+  *bb = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
 }
 
 #if 0

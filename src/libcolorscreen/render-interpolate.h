@@ -53,9 +53,14 @@ public:
     return precompute (-xshift, -yshift, -xshift + width, -yshift + height, progress);
   }
   pure_attr rgbdata sample_pixel_scr (coord_t x, coord_t y) const;
-  pure_attr inline rgbdata sample_pixel_img (int x, int y) const
+  pure_attr inline rgbdata sample_pixel_img (coord_t x, coord_t y) const
   {
     point_t p = m_scr_to_img.to_scr ({(coord_t)x, (coord_t)y});
+    return sample_pixel_scr (p.x, p.y);
+  }
+  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const
+  {
+    point_t p = m_scr_to_img.to_scr ({x+(coord_t)0.5, y+(coord_t)0.5});
     return sample_pixel_scr (p.x, p.y);
   }
   void original_color (bool profiled)

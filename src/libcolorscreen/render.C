@@ -172,9 +172,10 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
   if (!p.gamma && !use_table)
     p.gamma = 1;
   luminosity_t *lookup_table = new luminosity_t[p.maxval + 1];
-  luminosity_t gamma = std::min (std::max (p.gamma, (luminosity_t)0.0001),
-                                 (luminosity_t)100.0);
-  luminosity_t mul = (luminosity_t)1 / p.maxval;
+  luminosity_t gamma = p.gamma;
+  if (gamma != -1)
+    gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
+  luminosity_t mul = 1 / (luminosity_t)(p.maxval);
 
   luminosity_t dark_point = p.dark_point;
   luminosity_t scan_exposure = p.scan_exposure;
@@ -183,8 +184,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
     {
       if (!use_table)
         for (int i = 0; i <= p.maxval; i++)
-          lookup_table[i] = (apply_gamma ((i + (luminosity_t)0.5) * mul, gamma)
-                             - dark_point)
+          lookup_table[i] = (apply_gamma (i * mul, gamma) - dark_point)
                             * scan_exposure;
       else
         for (int i = 0; i <= p.maxval; i++)
@@ -200,7 +200,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
       if (!use_table)
         for (int i = 0; i <= p.maxval; i++)
           lookup_table[i] = simulate_linear_negative (
-              (apply_gamma ((i + (luminosity_t)0.5) * mul, gamma) - dark_point)
+              (apply_gamma (i * mul, gamma) - dark_point)
               * scan_exposure);
       else
         for (int i = 0; i <= p.maxval; i++)
@@ -267,17 +267,19 @@ struct out_lookup_table_params
 luminosity_t *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
-  luminosity_t *lookup_table = new luminosity_t[65536];
+  luminosity_t *lookup_table = new luminosity_t[render::out_lookup_table_size + 1];
   luminosity_t gamma = p.output_gamma;
+  if (gamma != -1)
+    gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
   luminosity_t target_film_gamma = p.target_film_gamma;
   int maxval = p.maxval;
+  luminosity_t mul = 1 / (luminosity_t)(render::out_lookup_table_size - 1);
 
-  for (int i = 0; i < 65536; i++)
+  for (int i = 0; i < render::out_lookup_table_size; i++)
     lookup_table[i]
-        = invert_gamma (
-              apply_gamma ((i + (luminosity_t)0.5) / 65535, target_film_gamma),
-              gamma)
-          * maxval;
+        = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
+          * maxval + (luminosity_t) 0.5;
+  lookup_table[render::out_lookup_table_size] = lookup_table[render::out_lookup_table_size - 1];
 
   return lookup_table;
 }

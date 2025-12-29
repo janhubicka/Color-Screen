@@ -73,11 +73,11 @@ public:
     point_t p = m_scr_to_img.to_img ({ x, y });
     return sample_pixel_img (p.x, p.y, x, y);
   }
+  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
 
 private:
   pure_attr inline rgbdata
   sample_pixel_img (coord_t x, coord_t y, coord_t scr_x, coord_t scr_y) const;
-  pure_attr inline rgbdata fast_sample_pixel_img (int x, int y) const;
   screen *m_screen;
   bool m_color;
   bool m_preview;

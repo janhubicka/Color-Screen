@@ -245,12 +245,33 @@ public:
   {
     rgbdata ret;
     if (!m_color)
-      ret.red = ret.green = ret.blue = get_img_pixel (x, y);
+      ret.red = ret.green = ret.blue = fast_get_img_pixel (x, y);
     else if (!m_profiled)
-      get_img_rgb_pixel (x, y, &ret.red, &ret.green, &ret.blue);
+      ret = get_rgb_pixel (x, y);
     else
       {
-        get_unadjusted_img_rgb_pixel (x, y, &ret.red, &ret.green, &ret.blue);
+        ret = get_unadjusted_rgb_pixel (x, y);
+        profile_matrix.apply_to_rgb (ret.red, ret.green, ret.blue, &ret.red,
+                                     &ret.green, &ret.blue);
+        ret.red = adjust_luminosity_ir (ret.red);
+        ret.green = adjust_luminosity_ir (ret.green);
+        ret.blue = adjust_luminosity_ir (ret.blue);
+      }
+    return ret;
+  }
+  pure_attr inline rgbdata
+  fast_sample_pixel_img (int x, int y) const
+  {
+    rgbdata ret;
+    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+      return ret;
+    if (!m_color)
+      ret.red = ret.green = ret.blue = get_data (x, y);
+    else if (!m_profiled)
+      ret = get_rgb_pixel (x, y);
+    else
+      {
+        ret = get_unadjusted_rgb_pixel (x, y);
         profile_matrix.apply_to_rgb (ret.red, ret.green, ret.blue, &ret.red,
                                      &ret.green, &ret.blue);
         ret.red = adjust_luminosity_ir (ret.red);

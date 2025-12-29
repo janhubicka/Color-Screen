@@ -24,9 +24,16 @@ public:
     point_t p = m_scr_to_img.to_img ({(coord_t)x, (coord_t)y});
     return sample_pixel (x, y, p.x, p.y);
   }
-  rgbdata sample_pixel_img (int x, int y)
+  rgbdata sample_pixel_img (coord_t x, coord_t y)
   {
-    point_t p = m_scr_to_img.to_scr ({(coord_t)x, (coord_t)y});
+    point_t p = m_scr_to_img.to_scr ({x, y});
+    /* We can not call directly sample_pixel; 
+       img coordinates it expects should be representing the center of screen coordinates.  */
+    return sample_pixel_scr (p.x, p.y);
+  }
+  rgbdata fast_sample_pixel_img (int x, int y)
+  {
+    point_t p = m_scr_to_img.to_scr ({x+(coord_t)0.5, y+(coord_t)0.5});
     /* We can not call directly sample_pixel; 
        img coordinates it expects should be representing the center of screen coordinates.  */
     return sample_pixel_scr (p.x, p.y);

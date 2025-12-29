@@ -92,8 +92,9 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
     {
       if (progress)
         progress->pause_stdout ();
-      printf ("Rendering %s in resolution %ix%i and depth %i", p.filename, p.width,
-	      p.height, p.depth);
+      printf ("Rendering %s in resolution %ix%i, bit-depth %i, geometry %s and antialias %i", p.filename, p.width,
+	      p.height, p.depth,
+	      render_to_file_params::geometry_names [(int)p.geometry], p.antialias);
       if (p.hdr)
 	printf (", HDR");
       if (p.xdpi && p.xdpi == p.ydpi)
@@ -179,7 +180,8 @@ produce_file (render_to_file_params &p, scr_to_img_parameters &param, image_data
 		{
 		  coord_t xx = x * p.xstep + p.xstart;
 		  coord_t yy = (y + row) * p.ystep + p.ystart;
-		  rgbdata d = render.sample_pixel_img (xx - final_xshift, yy - final_yshift);
+		  //rgbdata d = render.sample_pixel_img (xx - final_xshift + 0.5, yy - final_yshift + 0.5);
+		  rgbdata d = render.fast_sample_pixel_img (xx - final_xshift, yy - final_yshift);
 		  if (!p.hdr)
 		    {
 		      int rr, gg, bb;

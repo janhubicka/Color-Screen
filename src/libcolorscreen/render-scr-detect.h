@@ -287,6 +287,11 @@ public:
   {
     return get_adjusted_pixel (xx, yy);
   }
+  pure_attr inline rgbdata
+  fast_sample_pixel_img (int xx, int yy) const
+  {
+    return fast_get_adjusted_pixel (xx, yy);
+  }
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
@@ -319,6 +324,11 @@ public:
   {
     return get_normalized_pixel_img (xx, yy);
   }
+  pure_attr inline rgbdata
+  fast_sample_pixel_img (int xx, int yy) const
+  {
+    return fast_get_normalized_pixel (xx, yy);
+  }
   bool precompute_all (progress_info *progress)
   {
     return render_scr_detect::precompute_all (true, false, progress);
@@ -343,6 +353,11 @@ public:
   sample_pixel_img (coord_t xx, coord_t yy) const
   {
     return get_screen_color (xx, yy);
+  }
+  pure_attr inline rgbdata
+  fast_sample_pixel_img (int xx, int yy) const
+  {
+    return fast_get_screen_pixel (xx, yy);
   }
   bool precompute_all (progress_info *progress)
   {

@@ -11,6 +11,7 @@
 #include "include/matrix.h"
 #include "include/mesh.h"
 #include "screen.h"
+#include "render.h"
 using namespace colorscreen;
 namespace
 {
@@ -479,16 +480,76 @@ test_screen_point_spread_blur ()
 	  }
   return true;
 }
+
+int
+test_render_linearity ()
+{
+  render_parameters rparam;
+  image_data img;
+  img.set_dimensions (65536, 1, true, false);
+  for (int i = 0; i < 65535; i++)
+    {
+      img.rgbdata[0][i].r=i;
+      img.rgbdata[0][i].g=i;
+      img.rgbdata[0][i].b=i;
+    }
+  bool ok = true;
+  luminosity_t gammas[] = {-1, 1, 1.8, 2.2, 2.8};
+
+  /* sRGB and linear gamma should be handled perfectly.
+     Gammas about 1.5 are steep enough so initial segment has too large
+     gradient for out_lookup_table_size, so only check larger values.  */
+  int mins[] = {0, 0, 40, 220, 1000};
+  for (unsigned gamma_idx = 0; gamma_idx < sizeof (gammas) / sizeof (luminosity_t); gamma_idx ++)
+    {
+      luminosity_t gamma = gammas[gamma_idx];
+      rparam.gamma = gamma;
+      rparam.output_gamma = gamma;
+      rparam.output_profile = render_parameters::output_profile_original;
+      render ren (img, rparam, 65535);
+      ren.precompute_all (true, false, {1, 1, 1}, NULL);
+      for (int i = 0; i < 65535; i++)
+	{
+	  int r, g, b;
+	  luminosity_t linear = apply_gamma (i / (luminosity_t)65535, gamma);
+
+	  /* Gamma should be invertible.  */
+	  int gg = (int)(invert_gamma (linear, gamma) * 65535 + 0.5);
+	  if (gg != i)
+	    {
+	      printf ("Gamma is non-invertible at gamma %f: %i becomes %i\n", gamma, i, gg);
+	      ok = false;
+	    }
+	  /* Check that linearization works as expected.  */
+	  if (fabs (linear - ren.get_data_red (i, 0)) > 1.0/655350)
+	    {
+	      printf ("Bad linearization of %i: %f should be %f\n", i, linear, ren.get_data_red (i, 0));
+	      ok = false;
+	    }
+	  /* Now out_lookup_table is applied.  */
+	  ren.set_color (ren.get_data_red (i,0), ren.get_data_green (i,0), ren.get_data_blue (i,0),
+			 &r, &g, &b);
+	  if (i > mins[gamma_idx] && (r != i || g != i || b != i))
+	    {
+	      printf ("Render is non-linear at gamma %f linear: %i becomes %i %i %i\n",
+		      gamma, i, r, g, b);
+	      ok = false;
+	    }
+	}
+    }
+  return ok;
+}
 }
 
 int
 main ()
 {
-  printf ("1..8\n");
+  printf ("1..9\n");
   test_matrix ();
   report ("matrix tests", true);
   test_color ();
   report ("color tests", true);
+  report ("render lineary tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
   report ("screen point spread blur tests", test_screen_point_spread_blur ());
   report ("homography tests", test_homography (false, false, 0.000001));

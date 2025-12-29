@@ -487,7 +487,7 @@ render_interpolate::get_color_data (rgbdata *data, coord_t x, coord_t y,
                                     int width, int height, coord_t pixelsize,
                                     progress_info *progress)
 {
-  downscale<render_interpolate, rgbdata, &render_interpolate::sample_pixel_img,
+  downscale<render_interpolate, rgbdata, &render_interpolate::fast_sample_pixel_img,
             &account_rgb_pixel> (data, x, y, width, height, pixelsize,
                                  progress);
 }
