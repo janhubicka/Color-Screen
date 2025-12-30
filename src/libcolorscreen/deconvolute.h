@@ -23,7 +23,7 @@ public:
   /* Set up deconvolution for given MTF. SNR specifies signal to noise ratio
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr, int max_threads,
-                 enum mode = sharpen /*richardson_lucy_sharpen*/, int iterations = 50);
+                 enum mode = sharpen, int iterations = 50);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
@@ -117,7 +117,7 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
 	     luminosity_t snr,
 	     progress_info *progress,
              bool parallel = true,
-	     enum deconvolution::mode mode = deconvolution::sharpen /*richardson_lucy_sharpen*/,
+	     enum deconvolution::mode mode = deconvolution::sharpen,
 	     int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
@@ -128,7 +128,12 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
   int ytiles
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
-    progress->set_task ("Deconvolution sharpening", xtiles * ytiles);
+    {
+      if (mode == deconvolution::sharpen)
+        progress->set_task ("Deconvolution sharpening (Weiner filter)", xtiles * ytiles);
+      else
+        progress->set_task ("Deconvolution sharpening (Richardson-Lucy)", xtiles * ytiles);
+    }
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared (width, height,d,progress,out,param,parallel,data) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
@@ -169,7 +174,7 @@ bool
 deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
 		 precomputed_function<luminosity_t> *mtf, luminosity_t snr, progress_info *progress,
 		 bool parallel = true,
-		 enum deconvolution::mode mode = deconvolution::sharpen /*richardson_lucy_sharpen*/,
+		 enum deconvolution::mode mode = deconvolution::sharpen,
 		 int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
@@ -180,7 +185,14 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
   int ytiles
       = (height + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
   if (progress)
-    progress->set_task ("Deconvolution sharpening", xtiles * ytiles);
+    {
+      if (mode == deconvolution::blur)
+        progress->set_task ("Deconvolution blurring", xtiles * ytiles);
+      if (mode == deconvolution::sharpen)
+        progress->set_task ("Deconvolution sharpening (Weiner filter)", xtiles * ytiles);
+      else
+        progress->set_task ("Deconvolution sharpening (Richardson-Lucy)", xtiles * ytiles);
+    }
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared (width, height,d,progress,out,param,parallel,data) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())

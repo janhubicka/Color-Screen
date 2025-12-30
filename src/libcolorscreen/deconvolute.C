@@ -172,7 +172,7 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosit
           ker = conj (ker) / (std::norm (ker) + k_const);
 	  //ker = ((deconvolution_data_t)1)/ker;
 	if (mode != richardson_lucy_sharpen)
-        ker = ker * scale;
+          ker = ker * scale;
         m_blur_kernel[y * m_fft_size + x][0] = real (ker);
         m_blur_kernel[y * m_fft_size + x][1] = imag (ker);
         if (y)
@@ -327,6 +327,7 @@ deconvolution::process_tile (int thread_id)
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
 
 	  deconvolution_data_t epsilon = 1e-12 /*1e-7 for float*/;
+	  printf ("sigma :%f\n",sigma);
 
 	  /* RATIOS is now blurred ESTIMATE; compute ratios  */
 	  if (sigma != 1)

@@ -1214,7 +1214,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   scanner_mtf = rparam.scanner_mtf;
   scanner_snr = rparam.scanner_snr;
   scanner_mtf_scale = rparam.scanner_mtf_scale;
-  richardson_lucy_iterations == rparam.richardson_lucy_iterations;
+  richardson_lucy_iterations = rparam.richardson_lucy_iterations;
   gammut_warning = rparam.gammut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */

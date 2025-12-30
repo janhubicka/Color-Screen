@@ -352,6 +352,7 @@ struct render_parameters
            && sharpen_amount == other.sharpen_amount
 	   && scanner_snr == other.scanner_snr
 	   && scanner_mtf_scale == other.scanner_mtf_scale
+	   && richardson_lucy_iterations == other.richardson_lucy_iterations
            && presaturation == other.presaturation
 	   && gammut_warning == other.gammut_warning
            && saturation == other.saturation && brightness == other.brightness
@@ -367,7 +368,7 @@ struct render_parameters
            && scanner_red == other.scanner_red
            && scanner_green == other.scanner_green
            && scanner_blue == other.scanner_blue && age == other.age
-           && backlight_temperature == backlight_temperature
+           && backlight_temperature == other.backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure
            && red_strip_width == other.red_strip_width
