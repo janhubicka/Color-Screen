@@ -3409,11 +3409,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
-                      luminosity_t threshold, luminosity_t sharpen_radius,
-                      luminosity_t sharpen_amount,
-		      std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
-		      luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
-		      int richardson_lucy_iterations,
+                      luminosity_t threshold, 
+		      const sharpen_parameters &sharpen_param,
 		      scr_to_img &map, int xmin,
                       int ymin, int xmax, int ymax)
 {
@@ -3427,9 +3424,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       collection_scr.save_tiff ("/tmp/collection-scr.tif", false, 3);
     }
 
+  sharpen_parameters::sharpen_mode sharpen_mode = sharpen_param.get_mode ();
   /* If sharpening is not needed, we can avoid temporary buffer to store
      rendered screen.  */
-  if ((!sharpen_amount || !sharpen_radius) && (!scanner_mtf || !scanner_mtf_scale))
+  if (sharpen_mode == sharpen_parameters::none)
     {
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
@@ -3477,14 +3475,14 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   else
     {
       int ext;
-      if (scanner_mtf && scanner_mtf_scale)
+      if (sharpen_param.deconvolution_p ())
 	{
-	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
+	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*sharpen_param.scanner_mtf, sharpen_param.scanner_mtf_scale);
 	  /* border taping needs 2 * the kernel size for deconvolutoin.  */
 	  ext = 2 * deconvolute_border_size (&mtf);
 	}
       else
-	ext = fir_blur::convolve_matrix_length (sharpen_radius) / 2;
+	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
       int xsize = xmax - xmin + 2 * ext + 1;
       int ysize = ymax - ymin + 2 * ext + 1;
       std::vector<rgbdata> rendered (xsize * ysize);
@@ -3511,18 +3509,19 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
       /* FIXME: parallelism is disabled because sometimes we are called form parallel block.  */
-      if (!scanner_mtf || ! scanner_mtf_scale)
+      if (!sharpen_param.deconvolution_p ())
 	sharpen<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	    rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	    sharpen_radius, sharpen_amount, NULL, false);
+	    sharpen_param.usm_radius, sharpen_param.usm_amount, NULL, false);
       else
 	{
-	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*scanner_mtf, scanner_mtf_scale);
+	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*sharpen_param.scanner_mtf, sharpen_param.scanner_mtf_scale);
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      &mtf,scanner_snr, NULL, false,
-	      richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
-	      richardson_lucy_iterations);
+	      &mtf,sharpen_param.scanner_snr, NULL, false,
+	      sharpen_mode == sharpen_parameters::richardson_lucy_deconvolution
+	      ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+	      sharpen_param.richardson_lucy_iterations);
 	}
 
       if (debugfiles)
@@ -3647,11 +3646,14 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   img.set_dimensions (width, height, true, false);
   map.set_parameters (param, img);
   coord_t pixel_size = map.pixel_size (width, height);
+  sharpen_parameters sharpen = rparam.sharpen;
+  sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
+  sharpen.scanner_mtf_scale *= (pixel_size > 0 ? 1 / pixel_size : 0);
   screen *scr = render_to_scr::get_screen (
-      param.type, false, rparam.screen_blur_radius * pixel_size,
-      rparam.scanner_mtf,
-      (pixel_size > 0 ? 1 / pixel_size : 0) * rparam.scanner_mtf_scale,
-      rparam.scanner_snr, rparam.red_strip_width, rparam.green_strip_width);
+      param.type, false,
+      false,
+      sharpen,
+      rparam.red_strip_width, rparam.green_strip_width);
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {

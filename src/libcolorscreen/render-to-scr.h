@@ -40,7 +40,7 @@ private:
 class saturation_loss_table
 {
 public:
-  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, luminosity_t scanner_mtf_scale, int richardson_lucy_iterations, progress_info *progress);
+  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, const sharpen_parameters &sharpen, progress_info *progress);
   color_matrix &get_saturation_loss (int x, int y)
   {
     return m_saturation_loss_table[y * m_width + x];
@@ -171,17 +171,16 @@ public:
                                               coord_t s);
   inline luminosity_t sample_scr_square (coord_t xc, coord_t yc, coord_t w,
                                          coord_t h);
-  static screen *get_screen (enum scr_type t, bool preview, coord_t radius,
-			     std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf,
-			     coord_t screen_mtf_scale,
-			     luminosity_t scanner_snr,
+  static screen *get_screen (enum scr_type t, bool preview,
+			     bool anticipate_sharpening,
+   			     const sharpen_parameters &sharpen,
                              coord_t dufay_red_strip_width,
                              coord_t dufay_green_strip_height,
                              progress_info *progress = NULL,
                              uint64_t *id = NULL);
   static void release_screen (screen *scr);
   bool compute_screen_table (progress_info *progress);
-  bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, luminosity_t sharpen_radius, luminosity_t sharpen_amount, std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf, luminosity_t scanner_snr, luminosity_t scanner_mtf_scale, int richardson_lucy_iterations, progress_info *progress = NULL);
+  bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, const sharpen_parameters &sharpen, progress_info *progress = NULL);
 
 protected:
   /* Transformation between screen and image coordinates.  */

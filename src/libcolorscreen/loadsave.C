@@ -96,9 +96,19 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
-	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen_radius) < 0
-	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen_amount) < 0
-	  || fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
+	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen.usm_radius) < 0
+	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
+	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
+	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
+	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0)
+	return false;
+      if (rparam->sharpen.scanner_mtf)
+	for (auto mtf_entry : *rparam->sharpen.scanner_mtf)
+	  {
+	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]) < 0)
+	      return false;
+	  }
+      if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
 	  || fprintf (f, "output_tone_curve: %s\n", tone_curve::tone_curve_names[(int)rparam->output_tone_curve]) < 0
@@ -125,17 +135,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "profiled_blue: %f %f %f\n", rparam->profiled_blue.red, rparam->profiled_blue.green, rparam->profiled_blue.blue) < 0
 	  || fprintf (f, "scanner_red: %f %f %f\n", rparam->scanner_red.x, rparam->scanner_red.y, rparam->scanner_red.z) < 0
 	  || fprintf (f, "scanner_green: %f %f %f\n", rparam->scanner_green.x, rparam->scanner_green.y, rparam->scanner_green.z) < 0
-	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0
-	  || fprintf (f, "scanner_snr: %f\n", rparam->scanner_snr) < 0
-	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->scanner_mtf_scale) < 0
-	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->richardson_lucy_iterations) < 0)
+	  || fprintf (f, "scanner_blue: %f %f %f\n", rparam->scanner_blue.x, rparam->scanner_blue.y, rparam->scanner_blue.z) < 0)
 	return false;
-      if (rparam->scanner_mtf)
-	for (auto mtf_entry : *rparam->scanner_mtf)
-	  {
-	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]) < 0)
-	      return false;
-	  }
       if (rparam->backlight_correction)
 	{
 	  if (fprintf (f, "backlight_correction: yes\n") < 0)
@@ -584,7 +585,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "sharpen_radius"))
 	{
-	  if (!read_luminosity (f, rparam_check (sharpen_radius)))
+	  if (!read_luminosity (f, rparam_check (sharpen.usm_radius)))
 	    {
 	      *error = "error parsing sharpen_radius";
 	      return false;
@@ -592,7 +593,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "sharpen_amount"))
 	{
-	  if (!read_luminosity (f, rparam_check (sharpen_amount)))
+	  if (!read_luminosity (f, rparam_check (sharpen.usm_amount)))
 	    {
 	      *error = "error parsing sharpen_amount";
 	      return false;
@@ -746,7 +747,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_snr"))
 	{
-	  if (!read_luminosity (f, rparam_check (scanner_snr)))
+	  if (!read_luminosity (f, rparam_check (sharpen.scanner_snr)))
 	    {
 	      *error = "error parsing scanned_snr";
 	      return false;
@@ -754,7 +755,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_scale"))
 	{
-	  if (!read_luminosity (f, rparam_check (scanner_mtf_scale)))
+	  if (!read_luminosity (f, rparam_check (sharpen.scanner_mtf_scale)))
 	    {
 	      *error = "error parsing scanner_mtf_scale";
 	      return false;
@@ -762,7 +763,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "richardson_lucy_iterations"))
 	{
-	  if (!read_int (f, rparam_check (richardson_lucy_iterations)))
+	  if (!read_int (f, rparam_check (sharpen.richardson_lucy_iterations)))
 	    {
 	      *error = "error parsing richardson_lucy_iterations";
 	      return false;
@@ -1184,7 +1185,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  luminosity_t freq, contrast;
 	  if (first_scanner_mtf)
-	    rparam->scanner_mtf = std::make_shared<render_parameters::scanner_mtf_t> ();
+	    rparam->sharpen.scanner_mtf = std::make_shared<sharpen_parameters::scanner_mtf_t> ();
 	  first_scanner_mtf = false;
 	  if (!read_luminosity (f, &freq)
 	      || !read_luminosity (f, &contrast))
@@ -1192,7 +1193,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing scanner_mtf_point";
 	      return false;
 	    }
-	  rparam->scanner_mtf->push_back ({freq, contrast});
+	  rparam->sharpen.scanner_mtf->push_back ({freq, contrast});
 	}
       else
 	{

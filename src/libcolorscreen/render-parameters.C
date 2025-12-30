@@ -901,7 +901,7 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
     ymax = img.height - 1;
   if (ymax <= ymin || xmax <= xmin)
     return false;
-  /* TODO: Impleent for stitched projects.  */
+  /* TODO: Implement for stitched projects.  */
   if (img.stitch)
     return false;
   {
@@ -909,7 +909,9 @@ render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param,
       progress->set_task ("collecting color", (ymax - ymin + 1) * 2);
     render_parameters rparam = *this;
     rparam.ignore_infrared = 0;
-    rparam.sharpen_radius = 0;
+    /* Disable sharpening.  */
+    sharpen_parameters dummy;
+    rparam.sharpen = dummy;
     rparam.invert = false;
     rparam.dark_point = 0;
     render render (img, rparam, 256);
@@ -996,7 +998,9 @@ render_parameters::auto_mix_weights_using_ir (image_data &img, scr_to_img_parame
       progress->set_task ("collecting color and IR data", ysteps);
     render_parameters rparam = *this;
     rparam.ignore_infrared = 0;
-    rparam.sharpen_radius = 0;
+    /* Disable sharpening.  */
+    sharpen_parameters dummy;
+    rparam.sharpen = dummy;
     rparam.invert = false;
     render render (img, rparam, 256);
     if (!render.precompute_all (true, false, {1/3.0, 1/3.0, 1/3.0}, progress))
@@ -1209,12 +1213,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
       mix_green = rparam.mix_green;
       mix_blue = rparam.mix_blue;
     }
-  sharpen_amount = rparam.sharpen_amount;
-  sharpen_radius = rparam.sharpen_radius;
-  scanner_mtf = rparam.scanner_mtf;
-  scanner_snr = rparam.scanner_snr;
-  scanner_mtf_scale = rparam.scanner_mtf_scale;
-  richardson_lucy_iterations = rparam.richardson_lucy_iterations;
+  sharpen = rparam.sharpen;
   gammut_warning = rparam.gammut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */

@@ -440,33 +440,11 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y,
   return val;
 }
 
-struct sharpen_params
-{
-  luminosity_t radius;
-  luminosity_t amount;
-  std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
-  luminosity_t scanner_snr;
-  luminosity_t scanner_mtf_scale;
-  int richardson_lucy_iterations;
-  bool
-  operator== (sharpen_params &o)
-  {
-    if ((scanner_mtf && scanner_mtf_scale) || (o.scanner_mtf && o.scanner_mtf_scale))
-      {
-        if (!scanner_mtf || !o.scanner_mtf)
-          return false;
-        return (scanner_mtf_scale == o.scanner_mtf_scale && *scanner_mtf == *o.scanner_mtf && scanner_snr == o.scanner_snr
-		&& richardson_lucy_iterations == o.richardson_lucy_iterations);
-      }
-    return ((!radius || !amount) && (!o.radius || !o.amount))
-           || (radius == o.radius && amount == o.amount);
-  }
-};
 
 struct gray_and_sharpen_params
 {
   graydata_params gp;
-  sharpen_params sp;
+  sharpen_parameters sp;
   bool
   operator== (gray_and_sharpen_params &o)
   {
@@ -552,7 +530,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         }
       if (d.correction)
         {
-          if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
+          if (p.sp.deconvolution_p ())
             {
               precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
@@ -560,30 +538,32 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
                   &mtf, p.sp.scanner_snr, progress, true,
-		  p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+		  p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
+		  ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
 		  p.sp.richardson_lucy_iterations);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
                          getdata_params, getdata_helper_correction> (
                 out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-                p.sp.radius, p.sp.amount, progress);
+                p.sp.usm_radius, p.sp.usm_amount, progress);
         }
-      else if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
+      else if (p.sp.deconvolution_p ())
         {
           precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
           ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
               progress, true,
-	      p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+	      p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
+	      ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
 	      p.sp.richardson_lucy_iterations);
         }
       else
         ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
                      getdata_params, getdata_helper_no_correction> (
             out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-            p.sp.radius, p.sp.amount, progress);
+            p.sp.usm_radius, p.sp.usm_amount, progress);
       lookup_table_cache.release (d.table);
     }
   else
@@ -595,7 +575,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
       else
         {
           t.correction = p.gp.backlight;
-          if (p.sp.scanner_mtf && p.sp.scanner_mtf_scale)
+          if (p.sp.deconvolution_p ())
             {
               precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*p.sp.scanner_mtf, p.sp.scanner_mtf_scale);
               ok = deconvolute<luminosity_t, mem_luminosity_t,
@@ -603,14 +583,15 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                getdata_helper2> (
                   out, p.gp.img, t, p.gp.img->width, p.gp.img->height, &mtf, p.sp.scanner_snr,
                   progress, true,
-		  p.sp.richardson_lucy_iterations ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
+		  p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
+		  ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
 		  p.sp.richardson_lucy_iterations);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, const image_data *,
                          gray_data_tables, getdata_helper2> (
                 out, p.gp.img, t, p.gp.img->width, p.gp.img->height,
-                p.sp.radius, p.sp.amount, progress);
+                p.sp.usm_radius, p.sp.usm_amount, progress);
           free_gray_data_tables (t);
         }
     }
@@ -699,10 +680,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_params.invert,
                 m_backlight_correction,
                 m_backlight_correction_id,
-                m_params.ignore_infrared },
-              { m_params.sharpen_radius, m_params.sharpen_amount,
-                m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale,
-	        m_params.richardson_lucy_iterations } };
+                m_params.ignore_infrared }, m_params.sharpen };
       m_sharpened_data_holder
           = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)

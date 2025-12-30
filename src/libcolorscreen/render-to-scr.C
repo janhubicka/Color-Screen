@@ -32,10 +32,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 saturation_loss_table::saturation_loss_table (
     screen_table *screen_table, screen *collection_screen, int img_width,
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
-    luminosity_t sharpen_radius, luminosity_t sharpen_amount,
-    std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
-    luminosity_t scanner_snr, luminosity_t scanner_mtf_scale,
-    int richardson_lucy_iterations,
+    const sharpen_parameters &sharpen,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -47,7 +44,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map, sharpen_amount, sharpen_radius, scanner_mtf, scanner_snr, scanner_mtf_scale, richardson_lucy_iterations)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -60,8 +57,7 @@ saturation_loss_table::saturation_loss_table (
         rgbdata cred, cgreen, cblue;
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
-                *collection_screen, collection_threshold, sharpen_radius, sharpen_amount,
-		scanner_mtf, scanner_snr, scanner_mtf_scale, richardson_lucy_iterations, *map, xp - 100,
+                *collection_screen, collection_threshold, sharpen, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
@@ -86,23 +82,16 @@ struct screen_params
 {
   enum scr_type t;
   bool preview;
-  coord_t radius;
   coord_t red_strip_width, green_strip_width;
-  std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf;
-  luminosity_t scanner_snr;
-  coord_t screen_mtf_scale;
+  bool anticipate_sharpening;
+  sharpen_parameters sharpen;
 
   bool
   operator== (screen_params &o)
   {
-    if (screen_mtf || o.screen_mtf)
-      {
-	if (!screen_mtf || !o.screen_mtf || screen_mtf_scale != o.screen_mtf_scale
-	    || scanner_snr != o.scanner_snr
-	    || (*screen_mtf) != (*o.screen_mtf))
-	  return false;
-      }
-    return t == o.t && preview == o.preview && fabs (radius - o.radius) < 0.001
+    return t == o.t && preview == o.preview 
+	   && anticipate_sharpening == o.anticipate_sharpening
+	   && sharpen == o.sharpen
            && (!screen_with_varying_strips_p (t)
                || (red_strip_width == o.red_strip_width
                    && green_strip_width == o.green_strip_width));
@@ -119,23 +108,23 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     s->initialize_preview (p.t, p.red_strip_width, p.green_strip_width);
   else
     s->initialize (p.t, p.red_strip_width, p.green_strip_width);
-  if (!p.radius && !p.screen_mtf)
+  if (p.sharpen.get_mode () == sharpen_parameters::none && !p.sharpen.usm_radius)
     return s;
   screen *blurred = new screen;
   if (progress)
     progress->set_task ("bluring screen", 1);
-  if (p.screen_mtf && p.screen_mtf_scale)
+  if (p.sharpen.deconvolution_p ())
     {
       /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
 	 we should scale exactly by it.  */
-      precomputed_function <luminosity_t> fn = precompute_scanner_mtf (*p.screen_mtf, p.screen_mtf_scale / screen::size);
+      precomputed_function <luminosity_t> fn = precompute_scanner_mtf (*p.sharpen.scanner_mtf, p.sharpen.scanner_mtf_scale / screen::size);
       precomputed_function<luminosity_t> *vv[3] = {&fn, &fn, &fn};
       blurred->empty ();
-      blurred->initialize_with_2D_fft (*s, vv, { 1.0/screen::size, 1.0/screen::size, 1.0/screen::size }, p.scanner_snr);
+      blurred->initialize_with_2D_fft (*s, vv, { 1.0/screen::size, 1.0/screen::size, 1.0/screen::size }, p.anticipate_sharpening ? p.sharpen.scanner_snr : 0);
       blurred->save_tiff ("/tmp/scr.tif", false, 3);
     }
   else
-    blurred->initialize_with_blur (*s, p.radius);
+    blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
   delete s;
   return blurred;
 }
@@ -181,11 +170,8 @@ struct saturation_loss_params
   screen *collection_screen;
   uint64_t collection_screen_id;
   int img_width, img_height;
-  luminosity_t collection_threshold, sharpen_radius, sharpen_amount;
-  std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf;
-  luminosity_t scanner_snr;
-  luminosity_t scanner_mtf_scale;
-  int richardson_lucy_iterations;
+  luminosity_t collection_threshold;
+  sharpen_parameters sharpen;
   uint64_t mesh_id;
   scr_to_img_parameters scr_to_img_params;
   scr_to_img *map;
@@ -193,17 +179,9 @@ struct saturation_loss_params
   bool
   operator== (saturation_loss_params &o)
   {
-    if ((scanner_mtf && scanner_mtf_scale) || (o.scanner_mtf && scanner_mtf_scale))
-      {
-        if (!scanner_mtf || !o.scanner_mtf || *scanner_mtf != *o.scanner_mtf
-	    || richardson_lucy_iterations != o.richardson_lucy_iterations
-       	    || scanner_snr != o.scanner_snr || scanner_mtf_scale != o.scanner_mtf_scale)
-	  return false;
-      }
     return scr_table_id == o.scr_table_id
            && collection_threshold == o.collection_threshold
-           && sharpen_radius == o.sharpen_radius
-           && sharpen_amount == o.sharpen_amount
+           && sharpen == o.sharpen
            && img_width == o.img_width && img_height == o.img_height
            && mesh_id == o.mesh_id
            && (mesh_id || scr_to_img_params == o.scr_to_img_params);
@@ -215,7 +193,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   saturation_loss_table *s = new saturation_loss_table (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen_radius, p.sharpen_amount, p.scanner_mtf, p.scanner_snr, p.scanner_mtf_scale, p.richardson_lucy_iterations, progress);
+      p.collection_threshold, p.sharpen, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -257,15 +235,19 @@ render_to_scr::precompute_img_range (bool grayscale_needed,
   return precompute_all (grayscale_needed, normalized_patches, progress);
 }
 
+/* Compute screen of type T possibly in PREVIEW.
+   Blur it according to SHARPEN parameters and if ANTICIPATE_SHARPENING
+   is true, sharpen it back (so we get an estimate of what happens after
+   sharpening step of scan).  */
+
 screen *
-render_to_scr::get_screen (enum scr_type t, bool preview, coord_t radius,
-			   std::shared_ptr <render_parameters::scanner_mtf_t> screen_mtf,
-			   coord_t screen_mtf_scale,
-			   luminosity_t scanner_snr,
+render_to_scr::get_screen (enum scr_type t, bool preview, 
+			   bool anticipate_sharpening,
+			   const sharpen_parameters &sharpen,
                            coord_t red_strip_width, coord_t green_strip_width,
                            progress_info *progress, uint64_t *id)
 {
-  screen_params p = { t, preview, radius, red_strip_width, green_strip_width, screen_mtf, scanner_snr, screen_mtf_scale};
+  screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
   return screen_cache.get (p, progress, id);
 }
 
@@ -290,12 +272,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
 bool
 render_to_scr::compute_saturation_loss_table (
     screen *collection_screen, uint64_t collection_screen_uid,
-    luminosity_t collection_threshold, luminosity_t sharpen_radius,
-    luminosity_t sharpen_amount,
-    std::shared_ptr<render_parameters::scanner_mtf_t> scanner_mtf,
-    luminosity_t scanner_snr,
-    luminosity_t scanner_mtf_scale,
-    int richardson_lucy_iterations,
+    luminosity_t collection_threshold,
+    const sharpen_parameters &sharpen,
     progress_info *progress)
 {
   assert (!m_saturation_loss_table);
@@ -310,12 +288,7 @@ render_to_scr::compute_saturation_loss_table (
           m_img.width,
           m_img.height,
           collection_threshold,
-	  sharpen_radius,
-	  sharpen_amount,
-	  scanner_mtf,
-	  scanner_snr,
-	  scanner_mtf_scale,
-	  richardson_lucy_iterations,
+	  sharpen,
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,

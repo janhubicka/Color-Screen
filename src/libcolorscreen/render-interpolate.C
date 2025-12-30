@@ -211,11 +211,13 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
   if (m_screen_compensation || m_params.precise || m_precise_rgb)
     {
       coord_t psize = pixel_size ();
-      coord_t radius = m_params.screen_blur_radius * psize;
-      m_screen = get_screen (m_scr_to_img.get_type (), false, radius,
-                             m_params.scanner_mtf,
-			     (psize > 0 ? 1 / psize : 1) * m_params.scanner_mtf_scale,
-			     m_params.scanner_snr, 
+      sharpen_parameters sharpen = m_params.sharpen;
+      sharpen.usm_radius = m_params.screen_blur_radius * psize;
+      sharpen.scanner_mtf_scale *= (psize > 0 ? 1 / psize : 1);
+
+      m_screen = get_screen (m_scr_to_img.get_type (), false,
+			     sharpen.deconvolution_p (),
+			     sharpen,
                              m_params.red_strip_width,
                              m_params.green_strip_width, progress, &screen_id);
       if (!m_screen)
@@ -225,21 +227,21 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
           if (m_params.scanner_blur_correction)
             compute_saturation_loss_table (
                 m_screen, screen_id, m_params.collection_threshold,
-                m_params.sharpen_radius, m_params.sharpen_amount, m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale, m_params.richardson_lucy_iterations, progress);
+                m_params.sharpen, progress);
           else
             {
               rgbdata cred, cgreen, cblue;
-	      screen *scr = get_screen (m_scr_to_img.get_type (), false, radius,
-                             m_params.scanner_mtf, 
-			     (psize > 0 ? 1 / psize : 1) * m_params.scanner_mtf_scale,
-			     0,
+	      sharpen_parameters sharpen = m_params.sharpen;
+	      sharpen.usm_radius = m_params.screen_blur_radius * psize;
+	      sharpen.scanner_mtf_scale *= (psize > 0 ? 1 / psize : 1);
+	      screen *scr = get_screen (m_scr_to_img.get_type (), false,
+			     false,
+			     sharpen,
                              m_params.red_strip_width,
                              m_params.green_strip_width, progress, &screen_id);
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
-                      m_params.collection_threshold, m_params.sharpen_radius,
-                      m_params.sharpen_amount, m_params.scanner_mtf, m_params.scanner_snr, m_params.scanner_mtf_scale, 
-		      m_params.richardson_lucy_iterations,
+                      m_params.collection_threshold, m_params.sharpen,
 		      m_scr_to_img,
                       m_img.width / 2 - 100, m_img.height / 2 - 100,
                       m_img.width / 2 + 100, m_img.height / 2 + 100))

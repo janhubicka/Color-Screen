@@ -211,13 +211,13 @@ getvals (void)
   rparams.gamma = gtk_spin_button_get_value (data.gamma);
   rparams.saturation = gtk_spin_button_get_value (data.saturation);
   rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
-  rparams.sharpen_radius = gtk_spin_button_get_value (data.sharpen_radius);
-  rparams.sharpen_amount = gtk_spin_button_get_value (data.sharpen_amount);
+  rparams.sharpen.usm_radius = gtk_spin_button_get_value (data.sharpen_radius);
+  rparams.sharpen.usm_amount = gtk_spin_button_get_value (data.sharpen_amount);
   rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
   current.tilt_x = gtk_spin_button_get_value (data.tilt_x);
   current.tilt_y = gtk_spin_button_get_value (data.tilt_y);
-  rparams.scanner_mtf_scale = gtk_spin_button_get_value (data.scanner_mtf_scale);
+  rparams.sharpen.scanner_mtf_scale = gtk_spin_button_get_value (data.scanner_mtf_scale);
   rparams.dark_point = gtk_spin_button_get_value (data.dark_point);
   rparams.collection_threshold = gtk_spin_button_get_value (data.collection_threshold);
   rparams.backlight_correction_black = gtk_spin_button_get_value (data.balance_black);
@@ -227,9 +227,9 @@ getvals (void)
   rparams.white_balance.red = gtk_spin_button_get_value (data.balance_red);
   rparams.white_balance.green = gtk_spin_button_get_value (data.balance_green);
   rparams.white_balance.blue = gtk_spin_button_get_value (data.balance_blue);
-  rparams.scanner_snr = gtk_spin_button_get_value (data.scanner_snr);
-  rparams.richardson_lucy_iterations = gtk_spin_button_get_value (data.RL_iterations);
-  printf ("Iterations %i\n", rparams.richardson_lucy_iterations);
+  rparams.sharpen.scanner_snr = gtk_spin_button_get_value (data.scanner_snr);
+  rparams.sharpen.richardson_lucy_iterations = gtk_spin_button_get_value (data.RL_iterations);
+
   if (rparams != old || current != old2)
     {
       maybe_solve ();
@@ -247,13 +247,13 @@ setvals (void)
   gtk_spin_button_set_value (data.gamma, rparams.gamma);
   gtk_spin_button_set_value (data.saturation, rparams.saturation);
   gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
-  gtk_spin_button_set_value (data.sharpen_radius, rparams.sharpen_radius);
-  gtk_spin_button_set_value (data.sharpen_amount, rparams.sharpen_amount);
+  gtk_spin_button_set_value (data.sharpen_radius, rparams.sharpen.usm_radius);
+  gtk_spin_button_set_value (data.sharpen_amount, rparams.sharpen.usm_amount);
   gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
   gtk_spin_button_set_value (data.tilt_x, current.tilt_x);
   gtk_spin_button_set_value (data.tilt_y, current.tilt_y);
-  gtk_spin_button_set_value (data.scanner_mtf_scale, rparams.scanner_mtf_scale);
+  gtk_spin_button_set_value (data.scanner_mtf_scale, rparams.sharpen.scanner_mtf_scale);
   gtk_spin_button_set_value (data.dark_point, rparams.dark_point);
   gtk_spin_button_set_value (data.collection_threshold, rparams.collection_threshold);
   gtk_spin_button_set_value (data.balance_black, rparams.backlight_correction_black);
@@ -263,8 +263,8 @@ setvals (void)
   gtk_spin_button_set_value (data.balance_red, rparams.white_balance.red);
   gtk_spin_button_set_value (data.balance_green, rparams.white_balance.green);
   gtk_spin_button_set_value (data.balance_blue, rparams.white_balance.blue);
-  gtk_spin_button_set_value (data.scanner_snr, rparams.scanner_snr);
-  gtk_spin_button_set_value (data.RL_iterations, rparams.richardson_lucy_iterations);
+  gtk_spin_button_set_value (data.scanner_snr, rparams.sharpen.scanner_snr);
+  gtk_spin_button_set_value (data.RL_iterations, rparams.sharpen.richardson_lucy_iterations);
   initialized = 1;
 }
 

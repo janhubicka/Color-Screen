@@ -327,7 +327,7 @@ deconvolution::process_tile (int thread_id)
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
 
 	  deconvolution_data_t epsilon = 1e-12 /*1e-7 for float*/;
-	  printf ("sigma :%f\n",sigma);
+	  //printf ("sigma :%f\n",sigma);
 
 	  /* RATIOS is now blurred ESTIMATE; compute ratios  */
 	  if (sigma != 1)

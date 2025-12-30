@@ -712,11 +712,11 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	return false;
       m_prj->pixel_size = r.pixel_size ();
     }
+  sharpen_parameters sharpen = my_rparam.sharpen;
+  sharpen.usm_radius = m_prj->pixel_size * my_rparam.screen_blur_radius;
+  sharpen.scanner_mtf_scale *= (m_prj->pixel_size > 0 ? 1 / m_prj->pixel_size : 1);
   m_prj->my_screen = render_to_scr::get_screen (param.type, false,
-						m_prj->pixel_size * my_rparam.screen_blur_radius,
-						my_rparam.scanner_mtf,
-					       	(m_prj->pixel_size > 0 ? 1 / m_prj->pixel_size : 1) * my_rparam.scanner_mtf_scale,
-						my_rparam.scanner_snr,
+						true, sharpen,
 					       	0, 0, progress);
   scr_to_img_map.set_parameters (param, *img, m_prj->rotation_adjustment);
   m_prj->rotation_adjustment = scr_to_img_map.get_rotation_adjustment ();

@@ -870,7 +870,7 @@ render::downscale (T *data, coord_t x, coord_t y, int width, int height, coord_t
   return !progress || !progress->cancelled ();
 }
 inline precomputed_function<luminosity_t>
-precompute_scanner_mtf (const render_parameters::scanner_mtf_t &scanner_mtf, coord_t scale = 1)
+precompute_scanner_mtf (const sharpen_parameters::scanner_mtf_t &scanner_mtf, coord_t scale = 1)
 {
   std::vector<luminosity_t> x (scanner_mtf.size () + 2);
   std::vector<luminosity_t> y (scanner_mtf.size () + 2);

@@ -15,6 +15,91 @@ namespace colorscreen
 class render_type_parameters;
 class render_type_property;
 class stitch_project;
+
+/* Parameters of sharpening.  */
+struct sharpen_parameters
+{
+  enum sharpen_mode
+  {
+    none,
+    unsharp_mask,
+    weiner_deconvolution,
+    richardson_lucy_deconvolution,
+  };
+  /* Radius (in pixels) and amount for unsharp-mask filter.  */
+  luminosity_t usm_radius, usm_amount;
+
+  /* MTF curve of scanner.  */
+  typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
+  std::shared_ptr <scanner_mtf_t> scanner_mtf;
+
+  /* Signal to noise ratio of the scanner.  */
+  luminosity_t scanner_snr;
+
+  /* Scale of scanner mtf. 0 disables deconvolution sharpening.  */
+  luminosity_t scanner_mtf_scale;
+
+  /* Number of iterations of Richardson-Lucy deconvolution sharpening.
+     If 0, much faster Weiner filter will be used.  */
+  int richardson_lucy_iterations;
+
+  enum sharpen_mode get_mode () const
+  {
+    if (scanner_mtf && scanner_mtf_scale)
+      return richardson_lucy_iterations ? richardson_lucy_deconvolution : weiner_deconvolution;
+    return usm_radius && usm_amount ? unsharp_mask : none;
+  };
+  bool deconvolution_p () const
+  {
+    enum sharpen_mode mode = get_mode ();
+    return mode == weiner_deconvolution || mode == richardson_lucy_deconvolution;
+  }
+
+  /* Return true if THIS and O will produce same image.
+     Used for caching.
+     
+     Allow small differences in scale since screen may change during editing.  */
+  bool
+  operator== (const sharpen_parameters &o) const
+  {
+    enum sharpen_mode mode = get_mode ();
+    if (o.get_mode () != mode)
+      return false;
+    switch (o.get_mode ())
+      {
+      case none:
+	return true;
+      case unsharp_mask:
+	return fabs (usm_radius - o.usm_radius) < 0.001
+	       && usm_amount == o.usm_amount;
+      case weiner_deconvolution:
+      case richardson_lucy_deconvolution:
+        return scanner_mtf == o.scanner_mtf
+	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
+	       && scanner_snr == o.scanner_snr;
+      }
+    abort ();
+  }
+  /* Return true if THIS and O have same data.  */
+  bool equal_p (const sharpen_parameters &o) const
+  {
+    if (scanner_mtf
+	&& (!o.scanner_mtf
+	    || *scanner_mtf != *o.scanner_mtf))
+      return false;
+    return usm_radius == o.usm_radius
+           && usm_amount == o.usm_amount
+	   && (scanner_mtf != NULL) == (o.scanner_mtf != NULL)
+	   && scanner_snr == o.scanner_snr
+	   && scanner_mtf_scale == o.scanner_mtf_scale
+	   && richardson_lucy_iterations == o.richardson_lucy_iterations;
+  }
+  sharpen_parameters ()
+  : usm_radius (0), usm_amount (0), scanner_snr (2000), scanner_mtf_scale (1),
+    richardson_lucy_iterations (0)
+  { }
+};
+
 /* Parameters of rendering algorithms.  */
 struct render_parameters
 {
@@ -49,22 +134,7 @@ struct render_parameters
      mix_red,green and blue are relative weights.  */
   luminosity_t mix_red, mix_green, mix_blue;
 
-  /* Radius (in pixels) and amount for unsharp-mask filter.  */
-  luminosity_t sharpen_radius, sharpen_amount;
-
-  /* MTF curve of scanner.  */
-  typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
-  std::shared_ptr <scanner_mtf_t> scanner_mtf;
-
-  /* Signal to noise ratio of the scanner.  */
-  luminosity_t scanner_snr;
-
-  /* Scale of scanner mtf. 0 disables deconvolution sharpening.  */
-  luminosity_t scanner_mtf_scale;
-
-  /* Number of iterations of Richardson-Lucy deconvolution sharpening.
-     If 0, much faster Weiner filter will be used.  */
-  int richardson_lucy_iterations;
+  sharpen_parameters sharpen;
 
   /***** Tile Adjustment (used to adjust parameters of individual tiles) *****/
 
@@ -277,8 +347,7 @@ struct render_parameters
         backlight_correction_black (0), scanner_blur_correction (NULL),
         dark_point (0), scan_exposure (1), ignore_infrared (false),
         invert (false), mix_dark (0, 0, 0), mix_red (0.3), mix_green (0.1),
-        mix_blue (1), sharpen_radius (0), sharpen_amount (0),
-	scanner_snr (2000), scanner_mtf_scale (1), richardson_lucy_iterations (0),
+        mix_blue (1),  sharpen (),
 
         /* Tile adjustment.  */
         tile_adjustments_width (0), tile_adjustments_height (0),
@@ -337,22 +406,11 @@ struct render_parameters
     for (unsigned int i = 0; i < tile_adjustments.size (); i++)
       if (tile_adjustments[i] != other.tile_adjustments[i])
         return false;
-    if (scanner_mtf || other.scanner_mtf)
-      {
-	if (!scanner_mtf || other.scanner_mtf)
-	  return false;
-	if (*scanner_mtf != *other.scanner_mtf)
-	  return false;
-      }
     return demosaic == other.demosaic
 	   && gamma == other.gamma && film_gamma == other.film_gamma
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
-           && sharpen_radius == other.sharpen_radius
-           && sharpen_amount == other.sharpen_amount
-	   && scanner_snr == other.scanner_snr
-	   && scanner_mtf_scale == other.scanner_mtf_scale
-	   && richardson_lucy_iterations == other.richardson_lucy_iterations
+	   && sharpen.equal_p (other.sharpen)
            && presaturation == other.presaturation
 	   && gammut_warning == other.gammut_warning
            && saturation == other.saturation && brightness == other.brightness
