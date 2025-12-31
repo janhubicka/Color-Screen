@@ -4,12 +4,11 @@
 #include "include/color.h"
 #include "include/precomputed-function.h"
 #include "include/progress-info.h"
-#include <fftw3.h>
+#include "mtf.h"
 #include <mutex>
 #include <omp.h>
 namespace colorscreen
 {
-extern std::mutex fftw_lock;
 
 class deconvolution
 {
@@ -20,9 +19,11 @@ public:
     sharpen,
     richardson_lucy_sharpen
   };
-  /* Set up deconvolution for given MTF. SNR specifies signal to noise ratio
+  /* Set up deconvolution for given MTF and MTF_SCALE.
+     SNR specifies signal to noise ratio
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
-  deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr, int max_threads,
+  deconvolution (mtf *mtf, luminosity_t mtf_scale,
+		 luminosity_t snr, int max_threads,
                  enum mode = sharpen, int iterations = 50);
   typedef double deconvolution_data_t;
   ~deconvolution ();
@@ -113,7 +114,8 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolute (mem_O *out, T data, P param, int width, int height,
-             precomputed_function<luminosity_t> *mtf,
+
+             mtf *mtf, luminosity_t mtf_scale,
 	     luminosity_t snr,
 	     progress_info *progress,
              bool parallel = true,
@@ -121,7 +123,7 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
 	     int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, snr, nthreads, mode, iterations);
+  deconvolution d (mtf, mtf_scale, snr, nthreads, mode, iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -172,13 +174,13 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
-		 precomputed_function<luminosity_t> *mtf, luminosity_t snr, progress_info *progress,
+		 mtf *mtf, luminosity_t mtf_scale, luminosity_t snr, progress_info *progress,
 		 bool parallel = true,
 		 enum deconvolution::mode mode = deconvolution::sharpen,
 		 int iterations = 50)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, snr, nthreads, mode, iterations);
+  deconvolution d (mtf, mtf_scale, snr, nthreads, mode, iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -268,9 +270,9 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
   return true;
 }
 
-void mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf, double scale, int size, double *psf);
-int get_psf_radius (double *psf, int size);
-int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
+//void mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf, double scale, int size, double *psf);
+//int get_psf_radius (double *psf, int size);
+//int deconvolute_border_size (precomputed_function<luminosity_t> *mtf);
 
 }
 #endif

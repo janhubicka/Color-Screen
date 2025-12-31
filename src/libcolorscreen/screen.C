@@ -1671,86 +1671,31 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 
 void
 screen::initialize_with_2D_fft (screen &scr,
-                                precomputed_function<luminosity_t> *mtf[3],
+                                mtf *mtf[3],
                                 rgbdata scale, luminosity_t snr)
 {
   fft_2d fft;
   for (int c = 0; c < 3; c++)
     {
       if (!c || scale[c] != scale[c - 1]
-          || (mtf[c] != mtf[c - 1] && *mtf[c] != *mtf[c - 1]))
+          || (mtf[c] != mtf[c - 1] && mtf[c] != mtf[c - 1]))
         {
           luminosity_t step = scale[c];
-          /** (1 / screen::size)
-             FIXME: Should be here, but this is compensated in get_new_screen;
-             check with finetune logic*/
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-
-
-	  /* First determine PSF size and see if it is greater then a period of
-	     screen.  */
-	  const int psf_size = 4096;
-#if 0
-	  const int fft_1d_size = psf_size / 2 + 1;
-	  std::vector <fftw_complex> mtf_kernel (fft_1d_size);
-	  std::vector <double> psf (psf_size);
-	  fftw_lock.lock ();
-	  fftw_plan plan
-	      = fftw_plan_dft_c2r_1d (psf_size, mtf_kernel.data (), psf.data (), FFTW_ESTIMATE);
-	  fftw_lock.unlock ();
-
-	  double this_step = step * ((double) screen::size / psf_size);
-	  for (int x = 0; x < fft_1d_size; x++)
-	    {
-	      mtf_kernel[x][0] = 
-			std::clamp (mtf[c]->apply (x * this_step),
-				    (luminosity_t)0, (luminosity_t)1),
-	      mtf_kernel[x][1] = 0;
-	      //printf ("mtf %i %f\n", x, mtf_kernel[x][0]);
-	    }
-	  if (mtf_kernel [fft_1d_size - 1][0])
-	    printf ("Screen mtf size is too large\n");
-
-	  fftw_execute (plan);
-	  fftw_lock.lock ();
-	  fftw_destroy_plan (plan);
-	  fftw_lock.unlock ();
-#endif
-
-	  std::vector <double> psf (psf_size * psf_size);
-	  mtf_to_2d_psf (mtf[c], step * ((double) screen::size), psf_size, psf.data ());
-	  int this_psf_size = get_psf_radius (psf.data (), psf_size);
-
-	  //printf ("this_psf_size: %i\n", this_psf_size);
-
-
-#if 0
-          // printf ("kernel size %f %f\n", deconvolute_border_size (mtf[c]),
-          // scale[c]);
-          for (int x = 0; x < fft_size; x++)
-            {
-              std::complex ker (std::clamp (mtf[c]->apply (x * step),
-                                            (luminosity_t)0, (luminosity_t)1),
-                                (luminosity_t)0);
-              // If SNR is set simulate bluring followed by sharpening
-              if (snr > 0)
-                ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-              // printf ("scr %i %f %f\n", x, mtf[c]->apply (x * step), ker);
-            }
-#endif
-
+	  int this_psf_size = mtf[c]->psf_size (scale[c] * screen::size);
+	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
-	  if (this_psf_size < screen::size / 2)
+	  if (this_psf_size < screen::size)
 	    {
 	      for (int y = 0; y < fft_size; y++)
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp (mtf[c]->apply (sqrt (x * x + y * y) * step),
+			std::clamp (mtf[c]->get_mtf (x, y, step),
 				    (luminosity_t)0, (luminosity_t)1),
 			(luminosity_t)0);
-		    // If SNR is set simulate bluring followed by sharpening
+		    /* If SNR is set simulate bluring followed by sharpening.  */
 		    if (snr > 0)
 		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
 		    ker = ker * data_scale;
@@ -1771,25 +1716,18 @@ screen::initialize_with_2D_fft (screen &scr,
 	      for (int y = 0; y < this_psf_size; y++)
 	        for (int x = 0; x <  this_psf_size; x++)
 		  {
-		    double dist = sqrt (x*x + y*y);
-		    if (dist > this_psf_size)
-		      continue;
-		    int idx;
-		    dist = my_modf (dist, &idx);
-		    //double val = (psf[idx] * (1 - dist) + psf[idx + 1] * dist) /** (1 / (double)fft_size)*/;
-		    //double val = (psf2[idx] * (1 - dist) + psf2[idx + 1] * dist) /** (1 / (double)fft_size)*/;
-		    double val = psf[y * psf_size + x];
+		    double val = mtf[c]->get_psf (x, y, (step * screen::size));
 		    int xx = x & (screen::size - 1);
 		    int yy = y & (screen::size - 1);
 		    int nxx = (-x) & (screen::size - 1);
 		    wrapped_psf [yy * screen::size + xx] += val;
-		    if (xx)
+		    if (x)
 		      wrapped_psf [yy * screen::size + nxx] += val;
-		    if (yy)
+		    if (y)
 		      {
 			int nyy = (-y) & (screen::size - 1);
 			wrapped_psf [nyy * screen::size + xx] += val;
-			if (xx)
+			if (x)
 			  wrapped_psf [nyy * screen::size + nxx] += val;
 		      }
 		  }
@@ -1928,10 +1866,14 @@ screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
     }
   else
     {
+      abort ();
+#if 0
       static precomputed_function<luminosity_t> v (0, 0.5, size, data,
                                                    data_size);
       precomputed_function<luminosity_t> *vv[3] = { &v, &v, &v };
+      /* TODO: Implement correctly.   */
       initialize_with_2D_fft (scr, vv, blur_radius * 0.5 * (0.75 / 0.61));
+#endif
     }
 }
 
@@ -1955,11 +1897,15 @@ void
 screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
                               enum blur_alg alg)
 {
+#if 0
   std::unique_ptr<precomputed_function<luminosity_t>> mtfc (
       point_spread_by_4_vals (mtf));
   precomputed_function<luminosity_t> *vv[3]
       = { mtfc.get (), mtfc.get (), mtfc.get () };
   initialize_with_2D_fft (scr, vv, { 1.0, 1.0, 1.0 });
+#endif
+  /* TODO: Implement correctly.  */
+  abort ();
 }
 void
 screen::initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4],

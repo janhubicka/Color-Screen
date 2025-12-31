@@ -3477,9 +3477,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*sharpen_param.scanner_mtf, sharpen_param.scanner_mtf_scale);
-	  /* border taping needs 2 * the kernel size for deconvolutoin.  */
-	  ext = 2 * deconvolute_border_size (&mtf);
+	  if (!sharpen_param.scanner_mtf->precompute ())
+	    return false;
+	  ext = sharpen_param.scanner_mtf->psf_size ( sharpen_param.scanner_mtf_scale);
 	}
       else
 	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;
@@ -3515,10 +3515,10 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	    sharpen_param.usm_radius, sharpen_param.usm_amount, NULL, false);
       else
 	{
-	  precomputed_function<luminosity_t> mtf = precompute_scanner_mtf (*sharpen_param.scanner_mtf, sharpen_param.scanner_mtf_scale);
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      &mtf,sharpen_param.scanner_snr, NULL, false,
+	      sharpen_param.scanner_mtf.get (), sharpen_param.scanner_mtf_scale,
+	      sharpen_param.scanner_snr, NULL, false,
 	      sharpen_mode == sharpen_parameters::richardson_lucy_deconvolution
 	      ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
 	      sharpen_param.richardson_lucy_iterations);
@@ -3648,7 +3648,7 @@ render_screen (image_data &img, scr_to_img_parameters &param,
   coord_t pixel_size = map.pixel_size (width, height);
   sharpen_parameters sharpen = rparam.sharpen;
   sharpen.usm_radius = rparam.screen_blur_radius * pixel_size;
-  sharpen.scanner_mtf_scale *= (pixel_size > 0 ? 1 / pixel_size : 0);
+  sharpen.scanner_mtf_scale *= pixel_size;
   screen *scr = render_to_scr::get_screen (
       param.type, false,
       false,

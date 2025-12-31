@@ -10,6 +10,7 @@ static const int max_border_size = 523;
 /* FFTW execute is thread safe. Everything else is not.  */
 std::mutex fftw_lock;
 
+#if 0
 /* Turn MTF to PSF scaled by SCALE.
    PSF is an array of SIZE.  */
 void
@@ -52,29 +53,10 @@ mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf,
   fftw_destroy_plan (plan);
   fftw_lock.unlock ();
 }
-
-/* Determine PSF kernel radius.  */
-int
-get_psf_radius (double *psf, int size)
-{
-  double peak = 0;
-  for (int i = 0; i < size; i++)
-    {
-      //printf ("%i %f\n", i, psf[i]);
-      if (psf[i] > peak)
-	peak = psf[i];
-    }
-  int this_psf_radius = 0;
-  /* Center of the PSF kernel is at 0  */
-  for (int i = 1; i < size / 2 - 1; i++)
-    if (psf[i] > peak * 0.0001f)
-      this_psf_radius = i;
-  if (this_psf_radius == size / 2 - 2)
-    printf ("Psf size is too large; last ratio %f\n", psf[size / 2 - 1] / peak);
-  return this_psf_radius;
-}
+#endif
 
 
+#if 0
 /* Determine border to be added to tiles when doing deconvolution.
    This corresponds to the PSF kernel size.  */
 int
@@ -123,8 +105,9 @@ deconvolute_border_size (precomputed_function<luminosity_t> *mtf)
   mtf_to_2d_psf (mtf, 1, psf_size, psf.data ());
   return get_psf_radius (psf.data (), psf_size);
 }
+#endif
 
-deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosity_t snr,
+deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale, luminosity_t snr,
                               int max_threads, enum mode mode, int iterations)
     : m_border_size (0),
       m_taper_size (0),
@@ -135,8 +118,11 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosit
       m_iterations (iterations),
       m_plans_exists (false)
 {
+  mtf->precompute ();
   deconvolution_data_t k_const = 1.0f / snr;
-  m_border_size = deconvolute_border_size (mtf);
+  m_border_size = mtf->psf_radius (mtf_scale);
+  //printf ("Border size %i scale %f\n", mtf->psf_size (mtf_scale), mtf_scale);
+    //deconvolute_border_size (mtf);
   if (taper_edges)
     {
       m_taper_size = m_border_size;
@@ -158,12 +144,12 @@ deconvolution::deconvolution (precomputed_function<luminosity_t> *mtf, luminosit
   m_fft_size = m_mem_tile_size / 2 + 1;
   m_blur_kernel = new fftw_complex[m_mem_tile_size * m_fft_size];
   deconvolution_data_t scale = 1.0 / (m_mem_tile_size * m_mem_tile_size);
-  deconvolution_data_t rev_tile_size = 1 / (deconvolution_data_t)m_mem_tile_size;
+  deconvolution_data_t rev_tile_size = mtf_scale / (deconvolution_data_t)m_mem_tile_size;
   for (int y = 0; y < m_fft_size; y++)
     for (int x = 0; x < m_fft_size; x++)
       {
-        std::complex ker (std::clamp ((deconvolution_data_t)mtf->apply (
-				      sqrt (x * x + y * y) * rev_tile_size), (deconvolution_data_t)0, (deconvolution_data_t)1),
+        std::complex ker (std::clamp ((deconvolution_data_t)mtf->get_mtf (x, y, rev_tile_size),
+				      (deconvolution_data_t)0, (deconvolution_data_t)1),
                           (deconvolution_data_t)0);
 
         // If sharpening, apply Wiener Filter

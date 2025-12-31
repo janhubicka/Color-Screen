@@ -2,6 +2,7 @@
 #define SCREEN_H
 #include "include/color.h"
 #include "include/scr-to-img.h"
+#include "mtf.h"
 namespace colorscreen {
 template<typename T> class precomputed_function;
 /* Representation of the screen wich can then be superposed to the image
@@ -86,7 +87,7 @@ public:
   DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   DLL_PUBLIC void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
   DLL_PUBLIC void initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4], enum blur_alg alg = blur_auto);
-  DLL_PUBLIC void initialize_with_2D_fft (screen &scr, precomputed_function<luminosity_t> *mft[3], rgbdata scale, luminosity_t snr = 0);
+  DLL_PUBLIC void initialize_with_2D_fft (screen &scr, mtf *mft[3], rgbdata scale, luminosity_t snr = 0);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);

@@ -2,6 +2,7 @@
 #include "include/colorscreen.h"
 #include "include/mesh.h"
 #include "loadsave.h"
+#include "mtf.h"
 #define HEADER "screen_alignment_version: 1"
 namespace colorscreen
 {
@@ -103,9 +104,11 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0)
 	return false;
       if (rparam->sharpen.scanner_mtf)
-	for (auto mtf_entry : *rparam->sharpen.scanner_mtf)
+        for (size_t i = 0; i < rparam->sharpen.scanner_mtf->size (); i++)
 	  {
-	    if (fprintf (f, "scanner_mtf_point: %f %f\n", mtf_entry[0], mtf_entry[1]) < 0)
+	    if (fprintf (f, "scanner_mtf_point: %f %f\n",
+		rparam->sharpen.scanner_mtf->get_freq(i),
+		rparam->sharpen.scanner_mtf->get_contrast(i)) < 0)
 	      return false;
 	  }
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
@@ -1185,7 +1188,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  luminosity_t freq, contrast;
 	  if (first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf = std::make_shared<sharpen_parameters::scanner_mtf_t> ();
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf> ();
 	  first_scanner_mtf = false;
 	  if (!read_luminosity (f, &freq)
 	      || !read_luminosity (f, &contrast))
@@ -1193,7 +1196,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing scanner_mtf_point";
 	      return false;
 	    }
-	  rparam->sharpen.scanner_mtf->push_back ({freq, contrast});
+	  rparam->sharpen.scanner_mtf->add_value (freq, contrast);
 	}
       else
 	{

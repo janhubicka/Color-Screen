@@ -15,6 +15,7 @@ namespace colorscreen
 class render_type_parameters;
 class render_type_property;
 class stitch_project;
+class mtf;
 
 /* Parameters of sharpening.  */
 struct sharpen_parameters
@@ -30,8 +31,8 @@ struct sharpen_parameters
   luminosity_t usm_radius, usm_amount;
 
   /* MTF curve of scanner.  */
-  typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
-  std::shared_ptr <scanner_mtf_t> scanner_mtf;
+  //typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
+  std::shared_ptr <mtf> scanner_mtf;
 
   /* Signal to noise ratio of the scanner.  */
   luminosity_t scanner_snr;
@@ -83,13 +84,9 @@ struct sharpen_parameters
   /* Return true if THIS and O have same data.  */
   bool equal_p (const sharpen_parameters &o) const
   {
-    if (scanner_mtf
-	&& (!o.scanner_mtf
-	    || *scanner_mtf != *o.scanner_mtf))
-      return false;
     return usm_radius == o.usm_radius
            && usm_amount == o.usm_amount
-	   && (scanner_mtf != NULL) == (o.scanner_mtf != NULL)
+	   && scanner_mtf == o.scanner_mtf
 	   && scanner_snr == o.scanner_snr
 	   && scanner_mtf_scale == o.scanner_mtf_scale
 	   && richardson_lucy_iterations == o.richardson_lucy_iterations;

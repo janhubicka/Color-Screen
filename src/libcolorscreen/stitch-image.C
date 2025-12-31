@@ -714,7 +714,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
     }
   sharpen_parameters sharpen = my_rparam.sharpen;
   sharpen.usm_radius = m_prj->pixel_size * my_rparam.screen_blur_radius;
-  sharpen.scanner_mtf_scale *= (m_prj->pixel_size > 0 ? 1 / m_prj->pixel_size : 1);
+  sharpen.scanner_mtf_scale *= m_prj->pixel_size;
   m_prj->my_screen = render_to_scr::get_screen (param.type, false,
 						true, sharpen,
 					       	0, 0, progress);
