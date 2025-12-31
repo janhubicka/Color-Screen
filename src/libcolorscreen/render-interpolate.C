@@ -235,7 +235,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
 	      sharpen.usm_radius = m_params.screen_blur_radius * psize;
 	      sharpen.scanner_mtf_scale *= psize;
 	      screen *scr = get_screen (m_scr_to_img.get_type (), false,
-			     false,
+			     true,
 			     sharpen,
                              m_params.red_strip_width,
                              m_params.green_strip_width, progress, &screen_id);

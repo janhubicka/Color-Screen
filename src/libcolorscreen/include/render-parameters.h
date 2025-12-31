@@ -77,7 +77,8 @@ struct sharpen_parameters
       case richardson_lucy_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
-	       && scanner_snr == o.scanner_snr;
+	       && scanner_snr == o.scanner_snr
+	       && richardson_lucy_iterations == o.richardson_lucy_iterations;
       }
     abort ();
   }

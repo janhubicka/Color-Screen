@@ -117,9 +117,11 @@ get_new_screen (struct screen_params &p, progress_info *progress)
     {
       /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
 	 we should scale exactly by it.  */
-      mtf *vv[3] = {p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get ()};
+      //mtf *vv[3] = {p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get (), p.sharpen.scanner_mtf.get ()};
+      sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
       blurred->empty ();
-      blurred->initialize_with_2D_fft (*s, vv, { p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale }, p.anticipate_sharpening ? p.sharpen.scanner_snr : 0);
+      blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
+      //blurred->initialize_with_2D_fft (*s, vv, { p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale }, p.anticipate_sharpening ? p.sharpen.scanner_snr : 0);
       blurred->save_tiff ("/tmp/scr.tif", false, 3);
     }
   else

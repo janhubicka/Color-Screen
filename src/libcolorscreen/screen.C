@@ -5,6 +5,7 @@
 #include "include/tiff-writer.h"
 #include "screen.h"
 #include "spline.h"
+#include "include/render-parameters.h"
 #include <array>
 #include <complex>
 #include <math.h>
@@ -1015,6 +1016,18 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
 }
 
 static void
+scale_by_weights (fft_2d in, const fft_2d weights)
+{
+  for (int i = 0; i < fft_size * screen::size; i++)
+    {
+      std::complex w (weights[i][0], weights[i][1]);
+      std::complex v (in[i][0], in[i][1]);
+      in[i][0] = real (v * w);
+      in[i][1] = imag (v * w);
+    }
+}
+
+static void
 initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
                              const fft_2d weights, int cmin, int cmax)
 {
@@ -1033,25 +1046,107 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
         for (int x = 0; x < screen::size; x++)
           out[y * screen::size + x] = scr.mult[y][x][c];
       fftw_execute (plan_2d);
-      for (int i = 0; i < fft_size * screen::size; i++)
-        {
-          std::complex w (weights[i][0], weights[i][1]);
-          std::complex v (in[i][0], in[i][1]);
-          in[i][0] = real (v * w);
-          in[i][1] = imag (v * w);
-        }
+      scale_by_weights (in, weights);
       fftw_execute (plan_2d_inv);
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
-          {
-            out_scr.mult[y][x][c] = out
-                [y * screen::size
-                 + x] /** ((luminosity_t)1 / (screen::size * screen::size))*/;
-            if (out_scr.mult[y][x][c] < 0)
-              out_scr.mult[y][x][c] = 0;
-            if (out_scr.mult[y][x][c] > 1)
-              out_scr.mult[y][x][c] = 1;
-          }
+	  out_scr.mult[y][x][c]
+	     = std::clamp (out [y * screen::size + x], 0.0, 1.0);
+    }
+  fftw_lock.lock ();
+  fftw_destroy_plan (plan_2d);
+  fftw_destroy_plan (plan_2d_inv);
+  fftw_lock.unlock ();
+}
+
+static void
+initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
+				 const fft_2d weights, int cmin, int cmax,
+				 int iterations, double sigma)
+{
+  fftw_plan plan_2d_inv, plan_2d;
+  fft_2d in;
+  double estimate[screen::size * screen::size];
+  double observed[screen::size * screen::size];
+  double ratios[screen::size * screen::size];
+  fftw_lock.lock ();
+  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, observed,
+                                      FFTW_ESTIMATE);
+  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, observed, in,
+                                  FFTW_ESTIMATE);
+  fftw_lock.unlock ();
+  for (int c = cmin; c <= cmax; c++)
+    {
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+          observed[y * screen::size + x] = scr.mult[y][x][c];
+
+      /* First blur the screen.  */
+      fftw_execute_dft_r2c (plan_2d, observed, in);
+      scale_by_weights (in, weights);
+      fftw_execute_dft_c2r (plan_2d_inv, in, observed);
+
+      /* Now start sharpening back.  */
+      memcpy (estimate, observed, sizeof (estimate));
+
+      /* TODO: one FFT can be saved first iteration.  */
+      for (int i = 0; i < iterations; i++)
+	{
+	  /* Step A: Re-blur the current estimate.  */
+	  fftw_execute_dft_r2c (plan_2d, estimate, in);
+	  scale_by_weights (in, weights);
+	  fftw_execute_dft_c2r (plan_2d_inv, in, ratios);
+
+	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
+	  double epsilon = 1e-12 /*1e-7 for float*/;
+	  double scale = 1;
+	  if (sigma != 1)
+	    for (int i = 0; i < screen::size * screen::size; i++)
+	      {
+		double reblurred = ratios[i] * scale;
+		double diff = observed[i] - reblurred;
+		if (reblurred > epsilon && std::abs (diff) > 2 * sigma)
+		  ratios[i] = 1.0 + (reblurred * diff) / (reblurred * reblurred + sigma * sigma);
+		else
+		  ratios[i] = 1.0;
+	      }
+	  else
+	    for (int i = 0; i < screen::size * screen::size; i++)
+	      {
+		double reblurred = ratios[i] * scale;
+		if (reblurred > epsilon)
+		  ratios[i] = observed[i] / reblurred;
+		else
+		  ratios[i] = 1.0;
+	      }
+
+	  /* Step C: Update estimate
+	     FFT(ratio) -> multiply by FFT(PSF_flipped) -> IFFT
+	     estimate = estimate * result_of_Step_C  */
+
+	  /* Do FFT of ratio */
+          fftw_execute_dft_r2c (plan_2d, ratios, in);
+	  /* Scale by complex conjugate of blur kernel  */
+	  for (int i = 0; i < fft_size * screen::size; i++)
+	    {
+	      std::complex w (weights[i][0], -weights[i][1]);
+	      std::complex v (in[i][0], in[i][1]);
+	      in[i][0] = real (v * w);
+	      in[i][1] = imag (v * w);
+	    }
+	  /* Now initialize ratios  */
+	  fftw_execute_dft_c2r (plan_2d_inv, in, ratios);
+
+	  /* estimate = estimate * result_of_Step_C  */
+	  for (int i = 0; i < screen::size * screen::size; i++)
+	    estimate[i] *= ratios[i] * scale;
+	}
+
+
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+	  out_scr.mult[y][x][c]
+	     = std::clamp (estimate [y * screen::size + x], 0.0, 1.0);
     }
   fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
@@ -1670,21 +1765,26 @@ screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
 }
 
 void
-screen::initialize_with_2D_fft (screen &scr,
-                                mtf *mtf[3],
-                                rgbdata scale, luminosity_t snr)
+screen::initialize_with_sharpen_parameters (screen &scr,
+					    sharpen_parameters *sharpen[3],
+					    bool anticipate_sharpening)
 {
   fft_2d fft;
+  bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
   for (int c = 0; c < 3; c++)
     {
-      if (!c || scale[c] != scale[c - 1]
-          || (mtf[c] != mtf[c - 1] && mtf[c] != mtf[c - 1]))
+      sharpen_parameters::sharpen_mode mode = sharpen[c]->get_mode ();
+      if (!anticipate_sharpening)
+	mode = sharpen_parameters::none;
+      if (!c || !(*sharpen[c] == *sharpen[c - 1]))
         {
-          luminosity_t step = scale[c];
+          luminosity_t step = sharpen[c]->scanner_mtf_scale;
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
+	  luminosity_t snr = sharpen[c]->scanner_snr;
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  int this_psf_size = mtf[c]->psf_size (scale[c] * screen::size);
+	  int this_psf_size = sharpen[c]->scanner_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
+
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
 	  if (this_psf_size < screen::size)
 	    {
@@ -1692,11 +1792,10 @@ screen::initialize_with_2D_fft (screen &scr,
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp (mtf[c]->get_mtf (x, y, step),
+			std::clamp (sharpen[c]->scanner_mtf->get_mtf (x, y, step),
 				    (luminosity_t)0, (luminosity_t)1),
 			(luminosity_t)0);
-		    /* If SNR is set simulate bluring followed by sharpening.  */
-		    if (snr > 0)
+		    if (mode == sharpen_parameters::weiner_deconvolution)
 		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
 		    ker = ker * data_scale;
 		    fft[y * fft_size + x][0] = real (ker);
@@ -1716,7 +1815,7 @@ screen::initialize_with_2D_fft (screen &scr,
 	      for (int y = 0; y < this_psf_size; y++)
 	        for (int x = 0; x <  this_psf_size; x++)
 		  {
-		    double val = mtf[c]->get_psf (x, y, (step * screen::size));
+		    double val = sharpen[c]->scanner_mtf->get_psf (x, y, (step * screen::size));
 		    int xx = x & (screen::size - 1);
 		    int yy = y & (screen::size - 1);
 		    int nxx = (-x) & (screen::size - 1);
@@ -1775,20 +1874,23 @@ screen::initialize_with_2D_fft (screen &scr,
 	      fftw_lock.lock ();
 	      fftw_destroy_plan (plan_2d);
 	      fftw_lock.unlock ();
-	      if (snr > 0)
+	      //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
+	      for (int x = 0; x < fft_size * screen::size; x++)
 		{
-		  //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
-		  for (int x = 0; x < fft_size * screen::size; x++)
-		    {
-		      std::complex ker (fft[x][0], fft[x][1]);
-		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
-		      fft[x][0] = real (ker) * (1.0 / (screen::size * screen::size));
-		      fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));
-		    }
+		  std::complex ker (fft[x][0], fft[x][1]);
+		  if (mode == sharpen_parameters::weiner_deconvolution)
+		    ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		  fft[x][0] = real (ker) * (1.0 / (screen::size * screen::size));
+		  fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));
 		}
 	    }
         }
-      initialize_with_2D_fft_fast (*this, scr, fft, c, c);
+      if (mode != sharpen_parameters::richardson_lucy_deconvolution)
+        initialize_with_2D_fft_fast (*this, scr, fft, c, all ? 2 : c);
+      else
+        initialize_with_richardson_lucy (*this, scr, fft, c, all ? 2 : c, sharpen[c]->richardson_lucy_iterations, 0);
+      if (all)
+	break;
     }
 }
 void

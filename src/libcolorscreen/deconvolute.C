@@ -3,109 +3,13 @@
 namespace colorscreen
 {
 
+/* Mirror duplicates the tile to get better periodicity. Seems unnecessary.  */
 static const bool mirror = false;
+/* Avoid sharp edges along end of the tile.  */
 static const bool taper_edges = true;
-static const int max_border_size = 523;
 
 /* FFTW execute is thread safe. Everything else is not.  */
 std::mutex fftw_lock;
-
-#if 0
-/* Turn MTF to PSF scaled by SCALE.
-   PSF is an array of SIZE.  */
-void
-mtf_to_2d_psf (precomputed_function<luminosity_t> *mtf,
-	       double scale,
-	       int size,
-	       double *psf)
-{
-  int fft_size = size / 2 + 1;
-  double step = scale / size;
-  std::vector<fftw_complex> mtf_kernel (size * fft_size);
-  for (int y = 0; y < fft_size; y++)
-    for (int x = 0; x < fft_size; x++)
-      {
-	std::complex ker (
-	    std::clamp (mtf->apply (sqrt (x * x + y * y) * step),
-			(luminosity_t)0, (luminosity_t)1),
-	    (luminosity_t)0);
-	mtf_kernel[y * fft_size + x][0] = real (ker);
-	mtf_kernel[y * fft_size + x][1] = imag (ker);
-	if (y)
-	  {
-	    mtf_kernel[(size - y) * fft_size + x][0] = real (ker);
-	    mtf_kernel[(size - y) * fft_size + x][1] = imag (ker);
-	  }
-      }
-#if 0
-  if (mtf_kernel [fft_size - 1][0])
-    {
-      printf ("MTF size is too large (max size %i, value at max %f, scale %f)\n", fft_size - 1, mtf_kernel [fft_size -1 ][0], scale);
-      abort ();
-    }
-#endif
-  fftw_lock.lock ();
-  fftw_plan plan
-      = fftw_plan_dft_c2r_2d (size, size, mtf_kernel.data (), psf, FFTW_ESTIMATE);
-  fftw_lock.unlock ();
-  fftw_execute (plan);
-  fftw_lock.lock ();
-  fftw_destroy_plan (plan);
-  fftw_lock.unlock ();
-}
-#endif
-
-
-#if 0
-/* Determine border to be added to tiles when doing deconvolution.
-   This corresponds to the PSF kernel size.  */
-int
-deconvolute_border_size (precomputed_function<luminosity_t> *mtf)
-{
-  const int psf_size = max_border_size * 2;
-#if 0
-  const int fft_size = psf_size / 2 + 1;
-  fftw_complex mtf_kernel[fft_size];
-  double psf[psf_size];
-
-  fftw_lock.lock ();
-  fftw_plan plan
-      = fftw_plan_dft_c2r_1d (psf_size, mtf_kernel, psf, FFTW_ESTIMATE);
-  fftw_lock.unlock ();
-
-  for (int x = 0; x < fft_size; x++)
-    {
-      mtf_kernel[x][0] = mtf->apply (x * (1.0 / psf_size));
-      mtf_kernel[x][1] = 0;
-      //printf ("mtf %i %f\n", x, mtf_kernel[x][0]);
-    }
-
-  fftw_execute (plan);
-
-  double peak = 0;
-  for (int i = 0; i < psf_size; i++)
-    {
-      //printf ("%i %f\n", i, psf[i]);
-      if (psf[i] > peak)
-        peak = psf[i];
-    }
-  int rr = 0;
-  /* Center of the PSF kernel is at 0  */
-  for (int i = 1; i < psf_size / 2 - 1; i++)
-    if (psf[i] > peak * 0.001f)
-      rr = i;
-
-  fftw_lock.lock ();
-  fftw_destroy_plan (plan);
-  fftw_lock.unlock ();
-  return rr;
-  //printf ("Radius %i\n", rr);
-#endif
-  std::vector <double> psf (psf_size * psf_size);
-  mtf_to_2d_psf (mtf, 1, psf_size, psf.data ());
-  return get_psf_radius (psf.data (), psf_size);
-}
-#endif
 
 deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale, luminosity_t snr,
                               int max_threads, enum mode mode, int iterations)
@@ -157,8 +61,8 @@ deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale, luminosity_t snr
         if (mode == sharpen)
           ker = conj (ker) / (std::norm (ker) + k_const);
 	  //ker = ((deconvolution_data_t)1)/ker;
-	if (mode != richardson_lucy_sharpen)
-          ker = ker * scale;
+	//if (mode != richardson_lucy_sharpen)
+        ker = ker * scale;
         m_blur_kernel[y * m_fft_size + x][0] = real (ker);
         m_blur_kernel[y * m_fft_size + x][1] = imag (ker);
         if (y)
@@ -291,8 +195,7 @@ deconvolution::process_tile (int thread_id)
       std::vector<deconvolution_data_t> observed = m_data[thread_id].tile;
       std::vector<deconvolution_data_t> &estimate = m_data[thread_id].tile;
       std::vector<deconvolution_data_t> &ratios = m_data[thread_id].ratios;
-      /* TODO: We can pre-scale blur_kernel just as we do for normal bluring.  */
-      deconvolution_data_t scale = 1.0 / (m_mem_tile_size * m_mem_tile_size);
+      deconvolution_data_t scale = 1;
       fftw_complex *in = m_data[thread_id].in;
       deconvolution_data_t sigma = m_snr ? 1.0f / m_snr : 1;
       for (int iteration = 0; iteration < m_iterations; iteration++)
