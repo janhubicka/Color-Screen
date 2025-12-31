@@ -536,11 +536,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                unsigned short **, getdata_params,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-		  p.sp.scanner_mtf.get (), p.sp.scanner_mtf_scale,
-		  p.sp.scanner_snr, progress, true,
-		  p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
-		  ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
-		  p.sp.richardson_lucy_iterations);
+		  p.sp, progress, true);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
@@ -553,11 +549,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
-	      p.sp.scanner_mtf.get (), p.sp.scanner_mtf_scale, p.sp.scanner_snr,
-              progress, true,
-	      p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
-	      ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
-	      p.sp.richardson_lucy_iterations);
+	      p.sp, progress, true);
         }
       else
         ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
@@ -581,11 +573,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
                                const image_data *, gray_data_tables,
                                getdata_helper2> (
                   out, p.gp.img, t, p.gp.img->width, p.gp.img->height,
-	          p.sp.scanner_mtf.get (), p.sp.scanner_mtf_scale, p.sp.scanner_snr,
-                  progress, true,
-		  p.sp.get_mode () == sharpen_parameters::richardson_lucy_deconvolution
-		  ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
-		  p.sp.richardson_lucy_iterations);
+		  p.sp, progress, true);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, const image_data *,

@@ -1027,6 +1027,8 @@ scale_by_weights (fft_2d in, const fft_2d weights)
     }
 }
 
+/* Apply 2D FFT to SCR, scale by WEIGHTS and write to OUT_SCR.  */
+
 static void
 initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
                              const fft_2d weights, int cmin, int cmax)
@@ -1051,13 +1053,18 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
 	  out_scr.mult[y][x][c]
-	     = std::clamp (out [y * screen::size + x], 0.0, 1.0);
+	     //= std::clamp (out [y * screen::size + x], 0.0, 1.0);
+	     = out [y * screen::size + x];
     }
   fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
   fftw_destroy_plan (plan_2d_inv);
   fftw_lock.unlock ();
 }
+
+
+/* Apply Richardson-Lucy deconvolution shaprening on SCR and write it to
+   out_scr.  */
 
 static void
 initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
@@ -1146,7 +1153,8 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
 	  out_scr.mult[y][x][c]
-	     = std::clamp (estimate [y * screen::size + x], 0.0, 1.0);
+	     //= std::clamp (estimate [y * screen::size + x], 0.0, 1.0);
+	     = estimate [y * screen::size + x];
     }
   fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
@@ -1783,6 +1791,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  int this_psf_size = sharpen[c]->scanner_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
+	  sharpen[c]->scanner_mtf->precompute ();
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 
 	  /* Small PSF size: use fast path of producing its FFT directly.  */

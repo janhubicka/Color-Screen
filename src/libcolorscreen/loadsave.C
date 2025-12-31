@@ -97,11 +97,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
+	  || fprintf (f, "sharpen: %s\n", sharpen_parameters::sharpen_mode_names [(int)rparam->sharpen.mode]) < 0
 	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen.usm_radius) < 0
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
 	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
 	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
-	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0)
+	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0
+	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
 	return false;
       if (rparam->sharpen.scanner_mtf)
         for (size_t i = 0; i < rparam->sharpen.scanner_mtf->size (); i++)
@@ -772,6 +774,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      else if (!strcmp (buf, "richardson_lucy_sigma"))
+	{
+	  if (!read_luminosity (f, rparam_check (sharpen.richardson_lucy_sigma)))
+	    {
+	      *error = "error parsing richardson_lucy_sigma";
+	      return false;
+	    }
+	}
       /* Handle typo which was present in old save implementation.  */
       else if (!strcmp (buf, "scren_blur_radius") || !strcmp (buf, "screen_blur_radius"))
 	{
@@ -847,6 +857,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		}
 	      rparam->get_tile_adjustment (x, y).dark_point = val;
 	    }
+	}
+      else if (!strcmp (buf, "sharpen"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < sharpen_parameters::sharpen_mode_max; j++)
+	    if (!strcmp (buf2, sharpen_parameters::sharpen_mode_names[j]))
+	      break;
+	  if (j == sharpen_parameters::sharpen_mode_max)
+	    {
+	      *error = "unknown sharpening algorithm";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->sharpen.mode = (enum sharpen_parameters::sharpen_mode) j;
 	}
       else if (!strcmp (buf, "color_model"))
 	{

@@ -26,12 +26,17 @@ struct sharpen_parameters
     unsharp_mask,
     weiner_deconvolution,
     richardson_lucy_deconvolution,
+    sharpen_mode_max
   };
+  DLL_PUBLIC static const char *sharpen_mode_names[(int)sharpen_mode_max];
+
+  /* Sharpening mode.  */
+  enum sharpen_mode mode;
+
   /* Radius (in pixels) and amount for unsharp-mask filter.  */
   luminosity_t usm_radius, usm_amount;
 
   /* MTF curve of scanner.  */
-  //typedef std::vector <std::array<luminosity_t, 2>> scanner_mtf_t;
   std::shared_ptr <mtf> scanner_mtf;
 
   /* Signal to noise ratio of the scanner.  */
@@ -44,11 +49,25 @@ struct sharpen_parameters
      If 0, much faster Weiner filter will be used.  */
   int richardson_lucy_iterations;
 
+  /* Dampening parameter sigma.  */
+  luminosity_t richardson_lucy_sigma;
+
   enum sharpen_mode get_mode () const
   {
-    if (scanner_mtf && scanner_mtf_scale)
-      return richardson_lucy_iterations ? richardson_lucy_deconvolution : weiner_deconvolution;
-    return usm_radius && usm_amount ? unsharp_mask : none;
+    switch (mode)
+    {
+      case none:
+	return none;
+      case unsharp_mask:
+	return usm_radius > 0 && usm_amount > 0 ? unsharp_mask : none;
+      case weiner_deconvolution:
+        return scanner_mtf && scanner_mtf_scale > 0 ? weiner_deconvolution : none;
+      case richardson_lucy_deconvolution:
+        return scanner_mtf && scanner_mtf_scale > 0 && richardson_lucy_iterations
+	       ? richardson_lucy_deconvolution : none;
+      default:
+	abort ();
+    }
   };
   bool deconvolution_p () const
   {
@@ -74,27 +93,34 @@ struct sharpen_parameters
 	return fabs (usm_radius - o.usm_radius) < 0.001
 	       && usm_amount == o.usm_amount;
       case weiner_deconvolution:
+	return scanner_mtf == o.scanner_mtf
+	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
+	       && scanner_snr == o.scanner_snr;
       case richardson_lucy_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
-	       && scanner_snr == o.scanner_snr
-	       && richardson_lucy_iterations == o.richardson_lucy_iterations;
+	       && richardson_lucy_iterations == o.richardson_lucy_iterations
+	       && richardson_lucy_sigma == o.richardson_lucy_sigma;
+      default:
+	abort ();
       }
     abort ();
   }
   /* Return true if THIS and O have same data.  */
   bool equal_p (const sharpen_parameters &o) const
   {
-    return usm_radius == o.usm_radius
+    return mode == o.mode
+	   && usm_radius == o.usm_radius
            && usm_amount == o.usm_amount
 	   && scanner_mtf == o.scanner_mtf
 	   && scanner_snr == o.scanner_snr
 	   && scanner_mtf_scale == o.scanner_mtf_scale
-	   && richardson_lucy_iterations == o.richardson_lucy_iterations;
+	   && richardson_lucy_iterations == o.richardson_lucy_iterations
+	   && richardson_lucy_sigma == o.richardson_lucy_sigma;
   }
   sharpen_parameters ()
-  : usm_radius (0), usm_amount (0), scanner_snr (2000), scanner_mtf_scale (1),
-    richardson_lucy_iterations (0)
+  : mode (none), usm_radius (0), usm_amount (0), scanner_snr (2000), scanner_mtf_scale (1),
+    richardson_lucy_iterations (0), richardson_lucy_sigma (0)
   { }
 };
 

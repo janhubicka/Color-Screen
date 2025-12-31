@@ -3416,7 +3416,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 {
   rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   coord_t wr = 0, wg = 0, wb = 0;
-  const bool debugfiles = false;
+  const bool debugfiles = true;
 
   if (debugfiles)
     {
@@ -3517,11 +3517,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	{
 	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-	      sharpen_param.scanner_mtf.get (), sharpen_param.scanner_mtf_scale,
-	      sharpen_param.scanner_snr, NULL, false,
-	      sharpen_mode == sharpen_parameters::richardson_lucy_deconvolution
-	      ? deconvolution::richardson_lucy_sharpen : deconvolution::sharpen,
-	      sharpen_param.richardson_lucy_iterations);
+	      sharpen_param, NULL, false);
 	}
 
       if (debugfiles)

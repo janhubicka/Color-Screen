@@ -61,6 +61,12 @@ const char * render_parameters::output_profile_names [] = {
   "XYZ",
   "original"
 };
+const char * sharpen_parameters::sharpen_mode_names [] = {
+  "none",
+  "unsharp-mask",
+  "Weiner-deconvolution",
+  "Richarson-Lucy-deconvolution"
+};
 
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue

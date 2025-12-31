@@ -4,6 +4,7 @@
 #include "include/color.h"
 #include "include/precomputed-function.h"
 #include "include/progress-info.h"
+#include "include/render-parameters.h"
 #include "mtf.h"
 #include <mutex>
 #include <omp.h>
@@ -114,16 +115,15 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolute (mem_O *out, T data, P param, int width, int height,
-
-             mtf *mtf, luminosity_t mtf_scale,
-	     luminosity_t snr,
+	     const sharpen_parameters &sharpen,
 	     progress_info *progress,
-             bool parallel = true,
-	     enum deconvolution::mode mode = deconvolution::sharpen,
-	     int iterations = 50)
+             bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, mtf_scale, snr, nthreads, mode, iterations);
+  deconvolution::mode mode = deconvolution::sharpen;
+  deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
+		   sharpen.scanner_snr, nthreads, mode,
+		   sharpen.richardson_lucy_iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -174,13 +174,15 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
-		 mtf *mtf, luminosity_t mtf_scale, luminosity_t snr, progress_info *progress,
-		 bool parallel = true,
-		 enum deconvolution::mode mode = deconvolution::sharpen,
-		 int iterations = 50)
+		 const sharpen_parameters &sharpen,
+		 progress_info *progress,
+		 bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution d (mtf, mtf_scale, snr, nthreads, mode, iterations);
+  deconvolution::mode mode = deconvolution::sharpen;
+  deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
+		   sharpen.scanner_snr, nthreads, mode,
+		   sharpen.richardson_lucy_iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
