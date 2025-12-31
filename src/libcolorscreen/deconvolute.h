@@ -120,7 +120,8 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
              bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode = deconvolution::sharpen;
+  deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
+	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
   deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, nthreads, mode,
 		   sharpen.richardson_lucy_iterations);
@@ -179,7 +180,8 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
 		 bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode = deconvolution::sharpen;
+  deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
+	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
   deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, nthreads, mode,
 		   sharpen.richardson_lucy_iterations);
