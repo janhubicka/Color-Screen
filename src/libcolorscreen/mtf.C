@@ -112,7 +112,7 @@ mtf::precompute (progress_info *progress)
 
   int radius = get_psf_radius (psf_data.data (), psf_size);
   m_psf_radius = radius * subscale;
-  printf ("psf radius %i %f\n", radius, m_psf_radius);
+  //printf ("psf radius %i %f\n", radius, m_psf_radius);
 
   /* Compute LSF. Circular LSF is PSF.  */
   /* Make sure PSF also trails by 0.  */

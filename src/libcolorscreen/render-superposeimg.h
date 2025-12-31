@@ -40,6 +40,7 @@ public:
 	sharpen = m_params.sharpen;
 	coord_t psize = pixel_size ();
 	sharpen.usm_radius = m_params.screen_blur_radius * psize;
+	sharpen.scanner_mtf_scale *= psize;
       }
     m_screen = get_screen (m_scr_to_img.get_type (), m_preview, 
 			   !m_color && !m_preview,
