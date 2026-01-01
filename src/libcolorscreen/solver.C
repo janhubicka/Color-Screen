@@ -342,7 +342,7 @@ public:
     scr_to_img map;
     /* We may save some inversions if points are relatively few.  */
     if (m_sparam.n_points () * 2 < lens_warp_correction::size)
-      map.set_parameters_for_early_correction (m_param, m_img_data);
+      map.set_parameters_for_early_correction (m_param, m_img_data.width, m_img_data.height);
     else
       map.set_parameters (m_param, m_img_data);
     coord_t chi = -5;

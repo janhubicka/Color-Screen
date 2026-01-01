@@ -94,6 +94,8 @@ public:
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   void preview_strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
+  DLL_PUBLIC void clamp ();
+  DLL_PUBLIC rgbdata patch_proportions ();
   static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
   void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
 private:

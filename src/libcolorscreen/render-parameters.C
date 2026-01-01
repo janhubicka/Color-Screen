@@ -77,6 +77,12 @@ rgbdata patch_proportions (enum scr_type t, const render_parameters *rparam)
     {
     case Paget:
     case Thames:
+     /* The Paget Plate - This is believed was invention of C. Finlay
+	and consits of square elements, the blue being 0.063mm. with
+	0.085mm. for the red and green. It is stated by J. H. Pledge^20
+	to be roughly blue 8, red 7, green 7 there being two blue
+	elements in the unit.  */
+      return {7/22.0,7/22.0,8/22.0};
     case Finlay:
       /* TODO: Measure actual portions.  */
       return {1/3.0,1/3.0,1/3.0};

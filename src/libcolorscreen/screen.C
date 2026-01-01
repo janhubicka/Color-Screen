@@ -1003,10 +1003,12 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
                 = out[y * screen::size + x]
                   * ((luminosity_t)1 / (screen::size * screen::size));
             // printf ("%f\n", out[y * screen::size + x]);
+#if 0
             if (out_scr.mult[y][x][c] < 0)
               out_scr.mult[y][x][c] = 0;
             if (out_scr.mult[y][x][c] > 1)
               out_scr.mult[y][x][c] = 1;
+#endif
           }
     }
   fftw_lock.lock ();
@@ -1779,6 +1781,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 {
   fft_2d fft;
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
+  //printf ("Initial patch proportions:");
+  //scr.patch_proportions ().print (stdout);
+  //printf ("\n");
   for (int c = 0; c < 3; c++)
     {
       sharpen_parameters::sharpen_mode mode = sharpen[c]->get_mode ();
@@ -1901,6 +1906,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       if (all)
 	break;
     }
+  //printf ("Modified patch proportions:");
+  //scr.patch_proportions ().print (stdout);
+  //printf ("\n");
 }
 void
 screen::initialize_with_point_spread (
@@ -2027,5 +2035,31 @@ screen::initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4],
   precomputed_function<luminosity_t> *vv[3]
       = { point_spreadc.get (), point_spreadc.get (), point_spreadc.get () };
   screen::initialize_with_point_spread (scr, vv, { 1.0, 1.0, 1.0 });
+}
+void
+screen::clamp ()
+{
+  for (int yy = 0; yy < size; yy++)
+    for (int xx = 0; xx < size; xx++)
+      {
+        mult[yy][xx][0] = std::clamp (mult[yy][xx][0], (luminosity_t)0, (luminosity_t)1);
+        mult[yy][xx][1] = std::clamp (mult[yy][xx][1], (luminosity_t)0, (luminosity_t)1);
+        mult[yy][xx][2] = std::clamp (mult[yy][xx][2], (luminosity_t)0, (luminosity_t)1);
+      }
+}
+rgbdata
+screen::patch_proportions ()
+{
+  rgbdata sum = {0, 0, 0};
+  for (int yy = 0; yy < size; yy++)
+    for (int xx = 0; xx < size; xx++)
+      {
+        sum.red += mult[yy][xx][0]; 
+        sum.green += mult[yy][xx][1]; 
+        sum.blue += mult[yy][xx][2];
+      }
+  luminosity_t s = sum.red + sum.green + sum.blue;
+  sum /= s;
+  return sum;
 }
 }

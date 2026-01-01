@@ -10,6 +10,7 @@
 #include "mesh.h"
 #include "lens-correction.h"
 #include "scr-to-img-parameters.h"
+#include "imagedata.h"
 namespace colorscreen
 {
 typedef matrix4x4<coord_t> trans_4d_matrix;
@@ -23,10 +24,10 @@ class scr_to_img
 {
 public:
   DLL_PUBLIC void set_parameters (const scr_to_img_parameters &param,
-                                  const image_data &img,
+				  int widht, int height,
                                   coord_t rotation_adjustment = 0);
   void set_parameters_for_early_correction (const scr_to_img_parameters &param,
-                                            const image_data &img);
+                                            int widht, int height);
   void update_linear_parameters (scr_to_img_parameters &param);
   void update_scr_to_final_parameters (coord_t final_ratio,
                                        coord_t final_angle);
@@ -203,6 +204,13 @@ public:
   {
     coord_t bx = img_width / 2, by = img_height / 2;
     return to_scr ({ bx + 0, by + 0 }).dist_from (to_scr ({ bx + 1, by + 0 }));
+  }
+  inline void
+  set_parameters (const scr_to_img_parameters &param,
+		  const image_data &img,
+		  coord_t rotation_adjustment = 0)
+  {
+    set_parameters (param, img.width, img.height, rotation_adjustment);
   }
   void dump (FILE *f);
 

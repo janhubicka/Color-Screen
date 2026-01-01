@@ -26,6 +26,10 @@ struct mem_luminosity_t
 {
   uint16_t x;
 
+  constexpr mem_luminosity_t ()
+  : x (0)
+  { }
+
   /* Testsuite reproduces undefined shift, but it is multiplied by 0.  */
   __attribute__((no_sanitize("undefined")))
   always_inline_attr inline
@@ -72,6 +76,8 @@ struct mem_rgbdata
   mem_luminosity_t red, green, blue;
   mem_rgbdata(rgbdata c)
   : red ((mem_luminosity_t)c.red), green ((mem_luminosity_t)c.green), blue ((mem_luminosity_t)c.blue)
+  { }
+  constexpr mem_rgbdata()
   { }
 };
 inline rgbdata::rgbdata (mem_rgbdata color)

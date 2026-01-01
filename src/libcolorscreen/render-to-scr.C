@@ -128,6 +128,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
   delete s;
+  blurred->clamp ();
   return blurred;
 }
 static lru_cache<screen_params, screen, screen *, get_new_screen, 4>

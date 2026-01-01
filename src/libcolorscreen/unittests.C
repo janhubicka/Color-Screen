@@ -12,6 +12,8 @@
 #include "include/mesh.h"
 #include "screen.h"
 #include "render.h"
+#include "simulate.h"
+
 using namespace colorscreen;
 namespace
 {
