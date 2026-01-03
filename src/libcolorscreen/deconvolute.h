@@ -24,7 +24,7 @@ public:
      SNR specifies signal to noise ratio
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
-		 luminosity_t snr, int max_threads,
+		 luminosity_t snr, luminosity_t sigma, int max_threads,
                  enum mode = sharpen, int iterations = 50);
   typedef double deconvolution_data_t;
   ~deconvolution ();
@@ -87,6 +87,7 @@ private:
 
   bool m_richardson_lucy;
   deconvolution_data_t m_snr;
+  deconvolution_data_t m_sigma;
   int m_iterations;
 
   /* Weights of edge tapering.  */
@@ -123,7 +124,7 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
   deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
 	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
   deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
-		   sharpen.scanner_snr, nthreads, mode,
+		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads, mode,
 		   sharpen.richardson_lucy_iterations);
 
   int xtiles
@@ -150,14 +151,21 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
         for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
           for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
             {
-              O pixel = 0;
-              if (x + xx - d.get_border_size () >= 0
-                  && x + xx - d.get_border_size () < width
-                  && y + yy - d.get_border_size () >= 0
-                  && y + yy - d.get_border_size () < height)
-                pixel = getdata (data, x + xx - d.get_border_size (),
-                                 y + yy - d.get_border_size (), width, param);
-              d.put_pixel (id, xx, yy, pixel);
+	      int px = x + xx - d.get_border_size ();
+	      int py = y + yy - d.get_border_size ();
+
+	      /* Do mirroring to avoid sharp edge at the border of image  */
+	      if (px < 0)
+		px = -px;
+	      if (py < 0)
+		py = -py;
+	      if (px >= width)
+		px = width - (px - width) - 1;
+	      if (py >= height)
+		px = height - (px - height) - 1;
+	      px = std::clamp (px, 0, width - 1);
+	      py = std::clamp (py, 0, height - 1);
+              d.put_pixel (id, xx, yy, getdata (data, px, py, width, param));
             }
         d.process_tile (id);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
@@ -183,7 +191,7 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
   deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
 	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
   deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
-		   sharpen.scanner_snr, nthreads, mode,
+		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations);
 
   int xtiles
@@ -207,66 +215,53 @@ deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
         if (progress && progress->cancelled ())
           continue;
         int id = parallel ? omp_get_thread_num () : 0;
-        d.init (id);
+        d.init (3 * id);
+        d.init (3 * id + 1);
+        d.init (3 * id + 2);
 
 
         // printf ("%i %i\n",x,y);
         for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
           for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
             {
-	      deconvolution::deconvolution_data_t pixel = 0;
-              if (x + xx - d.get_border_size () >= 0
-                  && x + xx - d.get_border_size () < width
-                  && y + yy - d.get_border_size () >= 0
-                  && y + yy - d.get_border_size () < height)
-                pixel = getdata (data, x + xx - d.get_border_size (),
-                                 y + yy - d.get_border_size (), width, param).red;
-              d.put_pixel (id, xx, yy, pixel);
+	      O pixel = {0, 0, 0};
+	      int px = x + xx - d.get_border_size ();
+	      int py = y + yy - d.get_border_size ();
+
+	      /* Do mirroring to avoid sharp edge at the border of image  */
+	      if (px < 0)
+		px = -px;
+	      if (py < 0)
+		py = -py;
+	      if (px >= width)
+		px = width - (px - width) - 1;
+	      if (py >= height)
+		px = height - (px - height) - 1;
+	      px = std::clamp (px, 0, width - 1);
+	      py = std::clamp (py, 0, height - 1);
+              pixel = getdata (data, px, py, width, param);
+              d.put_pixel (3 * id, xx, yy, pixel.red);
+              d.put_pixel (3 * id + 1, xx, yy, pixel.green);
+              d.put_pixel (3 * id + 2, xx, yy, pixel.blue);
             }
-        d.process_tile (id);
+        d.process_tile (3 * id);
+        d.process_tile (3 * id + 1);
+        d.process_tile (3 * id + 2);
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
             if (y + yy < height && x + xx < width)
               out[(y + yy) * width + x + xx].red = d.get_pixel (
-                  id, xx + d.get_border_size (), yy + d.get_border_size ());
-
-        for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
-          for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
-            {
-	      deconvolution::deconvolution_data_t pixel = 0;
-              if (x + xx - d.get_border_size () >= 0
-                  && x + xx - d.get_border_size () < width
-                  && y + yy - d.get_border_size () >= 0
-                  && y + yy - d.get_border_size () < height)
-                pixel = getdata (data, x + xx - d.get_border_size (),
-                                 y + yy - d.get_border_size (), width, param).green;
-              d.put_pixel (id, xx, yy, pixel);
-            }
-        d.process_tile (id);
+                  3 * id, xx + d.get_border_size (), yy + d.get_border_size ());
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
             if (y + yy < height && x + xx < width)
               out[(y + yy) * width + x + xx].green = d.get_pixel (
-                  id, xx + d.get_border_size (), yy + d.get_border_size ());
-
-        for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
-          for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
-            {
-	      deconvolution::deconvolution_data_t pixel = 0;
-              if (x + xx - d.get_border_size () >= 0
-                  && x + xx - d.get_border_size () < width
-                  && y + yy - d.get_border_size () >= 0
-                  && y + yy - d.get_border_size () < height)
-                pixel = getdata (data, x + xx - d.get_border_size (),
-                                 y + yy - d.get_border_size (), width, param).blue;
-              d.put_pixel (id, xx, yy, pixel);
-            }
-        d.process_tile (id);
+                  3 * id + 1, xx + d.get_border_size (), yy + d.get_border_size ());
         for (int yy = 0; yy < d.get_basic_tile_size (); yy++)
           for (int xx = 0; xx < d.get_basic_tile_size (); xx++)
             if (y + yy < height && x + xx < width)
               out[(y + yy) * width + x + xx].blue = d.get_pixel (
-                  id, xx + d.get_border_size (), yy + d.get_border_size ());
+                  3 * id + 2, xx + d.get_border_size (), yy + d.get_border_size ());
 
         if (progress)
           progress->inc_progress ();

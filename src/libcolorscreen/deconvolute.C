@@ -12,13 +12,15 @@ static const bool taper_edges = true;
 std::mutex fftw_lock;
 
 deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale, luminosity_t snr,
-                              int max_threads, enum mode mode, int iterations)
+			      luminosity_t sigma, int max_threads, enum mode mode,
+			      int iterations)
     : m_border_size (0),
       m_taper_size (0),
       m_tile_size (1),
       m_mem_tile_size (1),
       m_blur_kernel (NULL),
       m_snr (snr),
+      m_sigma (sigma),
       m_iterations (iterations),
       m_plans_exists (false)
 {
@@ -197,7 +199,7 @@ deconvolution::process_tile (int thread_id)
       std::vector<deconvolution_data_t> &ratios = m_data[thread_id].ratios;
       deconvolution_data_t scale = 1;
       fftw_complex *in = m_data[thread_id].in;
-      deconvolution_data_t sigma = m_snr ? 1.0f / m_snr : 1;
+      deconvolution_data_t sigma = m_sigma;
       for (int iteration = 0; iteration < m_iterations; iteration++)
         {
 	  /* Step A: Re-blur the current estimate.  */
@@ -219,7 +221,7 @@ deconvolution::process_tile (int thread_id)
 	  //printf ("sigma :%f\n",sigma);
 
 	  /* RATIOS is now blurred ESTIMATE; compute ratios  */
-	  if (sigma != 1)
+	  if (sigma > 0)
 	    for (int i = 0; i < m_mem_tile_size * m_mem_tile_size; i++)
 	      {
 		deconvolution_data_t reblurred = ratios[i] * scale;
