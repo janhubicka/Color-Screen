@@ -2,6 +2,7 @@
 #include "render-to-scr.h"
 #include "screen.h"
 #include "lru-cache.h"
+#include "finetune-int.h"
 #include "include/finetune.h"
 namespace colorscreen
 {
@@ -57,7 +58,10 @@ saturation_loss_table::saturation_loss_table (
         rgbdata cred, cgreen, cblue;
         if (determine_color_loss (
                 &cred, &cgreen, &cblue, screen_table->get_screen (x, y),
-                *collection_screen, collection_threshold, sharpen, *map, xp - 100,
+		/* TODO: No support for adaptive sharpening/bluring of simulated
+		   screens yet.  */
+                *collection_screen, NULL,
+	       	collection_threshold, sharpen, *map, xp - 100,
                 yp - 100, xp + 100, yp + 100))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, 0, //
@@ -128,7 +132,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
   delete s;
-  blurred->clamp ();
+  //blurred->clamp ();
   return blurred;
 }
 static lru_cache<screen_params, screen, screen *, get_new_screen, 4>

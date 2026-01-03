@@ -6,8 +6,8 @@
 #include "include/dufaycolor.h"
 #include "nmsimplex.h"
 #include "include/stitch.h"
-#include "include/finetune.h"
 #include "render-interpolate.h"
+#include "finetune-int.h"
 namespace colorscreen
 {
 namespace
@@ -17,6 +17,7 @@ struct analyzer_params
 {
   uint64_t img_id;
   uint64_t graydata_id;
+  uint64_t simulated_screen_id;
   uint64_t screen_id;
   luminosity_t gamma;
   // int width, height, xshift, yshift;
@@ -29,11 +30,13 @@ struct analyzer_params
   const screen *scr;
   render_to_scr *render;
   scr_to_img *scr_to_img_map;
+  simulated_screen *simulated_screen_ptr;
 
   bool
   operator== (analyzer_params &o)
   {
     if (mode != o.mode || mesh_trans_id != o.mesh_trans_id
+	|| simulated_screen_id != o.simulated_screen_id
         || (!mesh_trans_id && params != o.params)
         || params.type != o.params.type)
       return false;
@@ -84,7 +87,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int xshift, int yshift,
               adapted.mult[y][x][2] = p.scr->mult[y][x][0];
             }
       }
-    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr, width, height,
                       xshift, yshift, p.mode, p.collection_threshold,
                       progress))
       return ret;
@@ -98,7 +101,7 @@ get_new_paget_analysis (struct analyzer_params &p, int xshift, int yshift,
                         int width, int height, progress_info *progress)
 {
   analyze_paget *ret = new analyze_paget ();
-  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, width, height,
+  if (ret->analyze (p.render, p.img, p.scr_to_img_map, p.scr, p.simulated_screen_ptr, width, height,
                     xshift, yshift, p.mode, p.collection_threshold, progress))
     return ret;
   delete ret;
@@ -125,7 +128,7 @@ get_new_strips_analysis (struct analyzer_params &p, int xshift, int yshift,
               adapted.mult[y][x][2] = p.scr->mult[y][x][0];
             }
       }
-    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, width, height,
+    if (ret->analyze (p.render, p.img, p.scr_to_img_map, s, p.simulated_screen_ptr, width, height,
                       xshift, yshift, p.mode, p.collection_threshold,
                       progress))
       return ret;
@@ -244,6 +247,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
                              m_params.green_strip_width, progress, &screen_id);
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
+		      m_simulated_screen,
                       m_params.collection_threshold, m_params.sharpen,
 		      m_scr_to_img,
                       m_img.width / 2 - 100, m_img.height / 2 - 100,
@@ -295,6 +299,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
   struct analyzer_params p{
     m_img.id,
     m_gray_data_id,
+    m_simulated_screen_id,
     screen_id,
     m_params.gamma,
     m_original_color
@@ -311,6 +316,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
     m_screen,
     this,
     &m_scr_to_img,
+    m_simulated_screen
   };
   if (paget_like_screen_p (m_scr_to_img.get_type ()))
     {
@@ -405,26 +411,20 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
       coord_t lum = get_img_pixel (p.x, p.y);
       rgbdata s;
       if (!m_simulated_screen)
-	{
-	  int ix = (uint64_t)nearest_int ((x)*screen::size)
-		   & (unsigned)(screen::size - 1);
-	  int iy = (uint64_t)nearest_int ((y)*screen::size)
-		   & (unsigned)(screen::size - 1);
-
-	  s.red = m_screen->mult[iy][ix][0];
-	  s.green = m_screen->mult[iy][ix][1];
-	  s.blue = m_screen->mult[iy][ix][2];
-	}
+        m_screen->interpolated_mult ({x, y});
       else
 	s = get_simulated_screen_pixel (p.x, p.y);
 
+#if 0
       c.red = std::max (c.red, (luminosity_t)0);
       c.green = std::max (c.green, (luminosity_t)0);
       c.blue = std::max (c.blue, (luminosity_t)0);
+#endif
 
       luminosity_t llum = c.red * s.red + c.green * s.green + c.blue * s.blue;
       luminosity_t correction = llum ? lum / llum : lum * 100;
 
+#if 0
       luminosity_t redmin = lum - (1 - s.red);
       luminosity_t redmax = lum + (1 - s.red);
       if (c.red * correction < redmin)
@@ -445,8 +445,8 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
         correction = bluemin / c.blue;
       else if (c.blue * correction > bluemax)
         correction = bluemax / c.blue;
-      correction = std::max (std::min (correction, (luminosity_t)5.0),
-                             (luminosity_t)0.0);
+      correction = std::clamp (correction, (luminosity_t)0.0, (luminosity_t)5.0);
+#endif
 
       return c * correction;
     }

@@ -35,16 +35,6 @@ struct get_pixel_data
 inline rgbdata
 get_pixel (get_pixel_data *p, int x, int y, int, int)
 {
-#if 0
-  const int steps = 5;
-  rgbdata d = { 0, 0, 0 };
-  for (int xx = 0; xx < steps; xx++)
-    for (int yy = 0; yy < steps; yy++)
-      d += p->scr->interpolated_mult (
-          p->map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
-                           y + (yy + 1) / (coord_t)(steps + 1) }));
-  return d * 1 / (coord_t)(steps * steps);
-#endif
   return antialias_screen (*p->scr, p->map, x, y);
 }
 
@@ -79,12 +69,9 @@ render_simulated_screen (simulated_screen &img,
                       get_pixel> (img.data (), &pd, 0, p.width, p.height,
                                   p.sharpen, progress, true);
     }
-  for (size_t x = 0; x < p.width * (size_t)p.height; x++)
-  {
-      img[x].red = std::clamp ((luminosity_t)img[x].red, (luminosity_t)0, (luminosity_t)1);
-      img[x].green = std::clamp ((luminosity_t)img[x].green, (luminosity_t)0, (luminosity_t)1);
-      img[x].blue = std::clamp ((luminosity_t)img[x].blue, (luminosity_t)0, (luminosity_t)1);
-  }
+  //for (size_t y = 0; y < (size_t)p.height; y++)
+    //for (size_t x = 0; x < (size_t)p.width; x++)
+      //img.put_pixel (x, y, img.get_pixel (x, y).clamp (0, 1));
 
   if (1)
     {
@@ -103,10 +90,8 @@ render_simulated_screen (simulated_screen &img,
         {
           for (int x = 0; x < width; x++)
             {
-              rgbdata m = img[y * p.width + x];
-              renderedu.put_pixel (x, std::clamp ((int)(m.red * 65535), 0, 65535),
-				   std::clamp ((int)(m.green * 65535), 0, 65535),
-                                   std::clamp ((int)(m.blue * 65535), 0, 65535));
+              rgbdata m = (img.get_pixel (x, y) * (luminosity_t)65535).clamp (0, 65535);
+              renderedu.put_pixel (x, m.red, m.green, m.blue);
             }
           if (!renderedu.write_row ())
             {
@@ -122,7 +107,7 @@ render_simulated_screen (simulated_screen &img,
 simulated_screen *
 get_new_simulated_screen (simulated_screen_params &p, progress_info *progress)
 {
-  simulated_screen *img = new simulated_screen (p.width * p.height);
+  simulated_screen *img = new simulated_screen (p.width, p.height);
   render_simulated_screen (*img, p, progress);
   return img;
 }

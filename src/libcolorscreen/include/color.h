@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "base.h"
 #include "matrix.h"
+#include "dllpublic.h"
 
 namespace colorscreen
 {
@@ -198,28 +199,8 @@ struct xyz {
     m.apply_to_rgb (r, g, b, &x, &y, &z);
     return xyz (x, y, z);
   }
-  void
-  print_sRGB (FILE *f, bool verbose)
-  {
-    luminosity_t r, g, b;
-    to_srgb (&r,&g,&b);
-    r *= 255;
-    g *= 255;
-    b *= 255;
-    if (verbose)
-      fprintf (f, "sRGB r:%f g:%f b:%f " , r, g, b);
-    r = std::min ((luminosity_t)255, std::max ((luminosity_t)0, r));
-    g = std::min ((luminosity_t)255, std::max ((luminosity_t)0, g));
-    b = std::min ((luminosity_t)255, std::max ((luminosity_t)0, b));
-    fprintf (f, "#%02x%02x%02x", (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
-  }
-  void
-  print (FILE *f)
-  {
-    fprintf (f, "x:%f y:%f z:%f ", x, y, z);
-    print_sRGB (f, true);
-    fprintf (f, "\n");
-  }
+  DLL_PUBLIC void print_sRGB (FILE *f, bool verbose);
+  DLL_PUBLIC void print (FILE *f);
   bool almost_equal_p (xyz other, luminosity_t epsilon = 0.001)
   {
     return (fabs (x - other.x) < epsilon 
@@ -432,11 +413,11 @@ struct rgbdata
     }
   }
   inline rgbdata
-  cut ()
+  clamp (luminosity_t min = 0, luminosity_t max = 1)
   {
-    return {std::min (std::max (red, (luminosity_t)0), (luminosity_t) 1),
-	    std::min (std::max (green, (luminosity_t)0), (luminosity_t) 1),
-	    std::min (std::max (blue, (luminosity_t)0), (luminosity_t) 1)};
+    return {std::clamp (red, min, max),
+	    std::clamp (green, min, max),
+	    std::clamp (blue, min, max)};
   }
   inline rgbdata
   gamma (luminosity_t g)
@@ -465,15 +446,7 @@ struct rgbdata
     rgbdata ret = {red * coef, green * coef, blue * coef};
     return ret;
   }
-  void
-  print (FILE *f)
-  {
-    luminosity_t r,g,b;
-    r = std::max (std::min (red * 255, (luminosity_t)255), (luminosity_t)0);
-    g = std::max (std::min (green * 255, (luminosity_t)255), (luminosity_t)0);
-    b = std::max (std::min (blue * 255, (luminosity_t)255), (luminosity_t)0);
-    fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5));
-  }
+  DLL_PUBLIC void print (FILE *f);
   bool almost_equal_p (rgbdata other, luminosity_t epsilon = 0.001)
   {
     return (fabs (red - other.red) < epsilon 

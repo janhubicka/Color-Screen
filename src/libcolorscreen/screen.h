@@ -41,7 +41,7 @@ public:
   }
   /* Return multiplicative factor of point p with bilinear interpolation.  */
   inline pure_attr rgbdata
-  noninterpolated_mult (point_t p)
+  noninterpolated_mult (point_t p) const
   {
     int ix = (uint64_t) nearest_int ((p.x) * size) & (unsigned)(size - 1);
     int iy = (uint64_t) nearest_int ((p.y) * size) & (unsigned)(size - 1);

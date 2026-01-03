@@ -5,6 +5,7 @@ template <typename GEOMETRY>
 bool
 analyze_base_worker<GEOMETRY>::analyze_precise (
     scr_to_img *scr_to_img, render_to_scr *render, const screen *screen,
+    const simulated_screen *simulated_screen,
     luminosity_t collection_threshold, luminosity_t *w_red,
     luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
     int maxy, progress_info *progress)
@@ -13,7 +14,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
   int size2 = (openmp_min_size + m_width - 1) / m_width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
-            w_red, w_green, minx, miny, maxx,                                 \
+            w_red, w_green, minx, miny, maxx, simulated_screen,               \
             maxy) default(none) if (maxy - miny > size || m_height > size2)
   {
 #pragma omp for
@@ -33,11 +34,12 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                 continue;
 
               luminosity_t l = render->get_unadjusted_data (x, y);
-              int ix = (uint64_t)nearest_int (scr.x * screen::size)
-                       & (unsigned)(screen::size - 1);
-              int iy = (uint64_t)nearest_int (scr.y * screen::size)
-                       & (unsigned)(screen::size - 1);
-              if (screen->mult[iy][ix][0] > collection_threshold)
+	      rgbdata screen_color;
+	      if (!simulated_screen)
+		screen_color = screen->noninterpolated_mult (scr);
+	      else
+		screen_color = simulated_screen->get_pixel (x, y);
+              if (screen_color.red > collection_threshold)
                 {
                   data_entry e = GEOMETRY::red_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -51,7 +53,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                                 && e.y < m_height
                                              * GEOMETRY::red_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][0] - collection_threshold);
+                          = (screen_color.red - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::red_width_scale + e.x;
                       luminosity_t &c = m_red[idx];
@@ -63,7 +65,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                       w += val;
                     }
                 }
-              if (screen->mult[iy][ix][1] > collection_threshold)
+              if (screen_color.green > collection_threshold)
                 {
                   data_entry e = GEOMETRY::green_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -78,7 +80,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                                 && e.y < m_height
                                              * GEOMETRY::green_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][1] - collection_threshold);
+                          = (screen_color.green - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::green_width_scale + e.x;
                       luminosity_t vall = val * l;
@@ -90,7 +92,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                       w += val;
                     }
                 }
-              if (screen->mult[iy][ix][2] > collection_threshold)
+              if (screen_color.blue > collection_threshold)
                 {
                   data_entry e = GEOMETRY::blue_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -105,7 +107,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise (
                                 && e.y < m_height
                                              * GEOMETRY::blue_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][2] - collection_threshold);
+                          = (screen_color.blue - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::blue_width_scale + e.x;
                       luminosity_t vall = val * l;
@@ -199,6 +201,7 @@ template <typename GEOMETRY>
 bool
 analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
     scr_to_img *scr_to_img, render_to_scr *render, const screen *screen,
+    const simulated_screen *simulated_screen,
     luminosity_t collection_threshold, luminosity_t *w_red,
     luminosity_t *w_green, luminosity_t *w_blue, int minx, int miny, int maxx,
     int maxy, progress_info *progress)
@@ -207,7 +210,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
   int size2 = (openmp_min_size + m_width - 1) / m_width;
 #pragma omp parallel shared(                                                  \
         progress, render, scr_to_img, screen, collection_threshold, w_blue,   \
-            w_red, w_green, minx, miny, maxx,                                 \
+            w_red, w_green, minx, miny, maxx, simulated_screen,               \
             maxy) default(none) if (maxy - miny > size || m_height > size2)
   {
 #pragma omp for
@@ -224,11 +227,12 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                 continue;
 
               rgbdata l = render->get_unadjusted_rgb_pixel (x, y);
-              int ix = (uint64_t)nearest_int (scr.x * screen::size)
-                       & (unsigned)(screen::size - 1);
-              int iy = (uint64_t)nearest_int (scr.y * screen::size)
-                       & (unsigned)(screen::size - 1);
-              if (screen->mult[iy][ix][0] > collection_threshold)
+	      rgbdata screen_color;
+	      if (!simulated_screen)
+		screen_color = screen->noninterpolated_mult (scr);
+	      else
+		screen_color = simulated_screen->get_pixel (x, y);
+              if (screen_color.red > collection_threshold)
                 {
                   data_entry e = GEOMETRY::red_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -242,7 +246,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                                 && e.y < m_height
                                              * GEOMETRY::red_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][0] - collection_threshold);
+                          = (screen_color.red - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::red_width_scale + e.x;
                       rgbdata vall = l * val;
@@ -258,7 +262,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                       w += val;
                     }
                 }
-              if (screen->mult[iy][ix][1] > collection_threshold)
+              if (screen_color.green > collection_threshold)
                 {
                   data_entry e = GEOMETRY::green_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -273,7 +277,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                                 && e.y < m_height
                                              * GEOMETRY::green_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][1] - collection_threshold);
+                          = (screen_color.green - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::green_width_scale + e.x;
                       rgbdata vall = l * val;
@@ -289,7 +293,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                       w += val;
                     }
                 }
-              if (screen->mult[iy][ix][2] > collection_threshold)
+              if (screen_color.blue > collection_threshold)
                 {
                   data_entry e = GEOMETRY::blue_scr_to_entry (scr);
                   if (!GEOMETRY::check_range
@@ -304,7 +308,7 @@ analyze_base_worker<GEOMETRY>::analyze_precise_rgb (
                                 && e.y < m_height
                                              * GEOMETRY::blue_height_scale);
                       luminosity_t val
-                          = (screen->mult[iy][ix][2] - collection_threshold);
+                          = (screen_color.blue - collection_threshold);
                       int idx
                           = e.y * m_width * GEOMETRY::blue_width_scale + e.x;
                       rgbdata vall = l * val;
@@ -742,7 +746,8 @@ template <typename GEOMETRY>
 bool
 analyze_base_worker<GEOMETRY>::analyze (
     render_to_scr *render, const image_data *img, scr_to_img *scr_to_img,
-    const screen *screen, int width, int height, int xshift, int yshift,
+    const screen *screen, const simulated_screen *simulated_scr,
+    int width, int height, int xshift, int yshift,
     mode mode, luminosity_t collection_threshold, progress_info *progress)
 {
   assert (!m_red);
@@ -853,11 +858,12 @@ analyze_base_worker<GEOMETRY>::analyze (
         }
 
       if (mode == precise)
-        ok = analyze_precise (scr_to_img, render, screen, collection_threshold,
+        ok = analyze_precise (scr_to_img, render, screen, simulated_scr,
+			      collection_threshold,
                               w_red, w_green, w_blue, minx, miny, maxx, maxy,
                               progress);
       else if (mode == precise_rgb)
-        ok = analyze_precise_rgb (scr_to_img, render, screen,
+        ok = analyze_precise_rgb (scr_to_img, render, screen, simulated_scr,
                                   collection_threshold, w_red, w_green, w_blue,
                                   minx, miny, maxx, maxy, progress);
       else

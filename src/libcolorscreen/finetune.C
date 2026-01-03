@@ -3409,6 +3409,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       screen &scr, screen &collection_scr,
+		      simulated_screen *simulated_screen,
                       luminosity_t threshold, 
 		      const sharpen_parameters &sharpen_param,
 		      scr_to_img &map, int xmin,
@@ -3425,9 +3426,40 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
     }
 
   sharpen_parameters::sharpen_mode sharpen_mode = sharpen_param.get_mode ();
+  if (simulated_screen)
+    {
+#pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
+#pragma omp parallel for default(none) collapse(2)                            \
+    shared(ymin, ymax, xmin, xmax, threshold, simulated_screen)       \
+    reduction(+ : wr, wg, wb, red, green, blue)
+      for (int y = ymin; y <= ymax; y++)
+        for (int x = xmin; x <= xmax; x++)
+          {
+	    /* Collection and screen colors are the same.  */
+            rgbdata m = simulated_screen->get_pixel (y, x);
+            if (m.red > threshold)
+              {
+                coord_t val = m.red - threshold;
+                wr += val;
+                red += m * val;
+              }
+            if (m.green > threshold)
+              {
+                coord_t val = m.green - threshold;
+                wg += val;
+                green += m * val;
+              }
+            if (m.blue > threshold)
+              {
+                coord_t val = m.blue - threshold;
+                wb += val;
+                blue += m * val;
+              }
+          }
+    }
   /* If sharpening is not needed, we can avoid temporary buffer to store
      rendered screen.  */
-  if (sharpen_mode == sharpen_parameters::none)
+  else if (sharpen_mode == sharpen_parameters::none)
     {
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \

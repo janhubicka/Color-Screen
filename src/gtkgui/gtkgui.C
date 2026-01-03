@@ -1541,11 +1541,11 @@ bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf)
 	      xyz c = color_optimizer_match[i].target;
 	      m.apply_to_rgb (c.x, c.y, c.z, &c.x, &c.y, &c.z);
 	      c.to_srgb (&c1.red, &c1.green, &c1.blue);
-	      c1 = c1.cut ();
+	      c1 = c1.clamp ();
 	      c = color_optimizer_match[i].profiled;
 	      m.apply_to_rgb (c.x, c.y, c.z, &c.x, &c.y, &c.z);
 	      c.to_srgb (&c2.red, &c2.green, &c2.blue);
-	      c2 = c2.cut ();
+	      c2 = c2.clamp ();
 	      char buf[256];
 	      sprintf (buf, "%.1fΔE2k", color_optimizer_match[i].deltaE);
 	      draw_text (surface, bigscale, xoffset, yoffset, buf, p.x + 27 / bigscale, p.y + 2 / bigscale, 0, 0, 0, 1);

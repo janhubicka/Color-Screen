@@ -381,50 +381,13 @@ render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
 pure_attr inline rgbdata
 render_to_scr::get_simulated_screen_pixel_fast (int xp, int yp) const
 {
-  return (*m_simulated_screen) [yp * m_img.width + xp];
+  return m_simulated_screen->get_pixel (yp, xp);
 }
 
 pure_attr inline pure_attr rgbdata
 render_to_scr::get_simulated_screen_pixel (coord_t xp, coord_t yp) const
 {
-  rgbdata val;
-
-  /* Center of pixel [0,0] is [0.5,0.5].  */
-  xp -= (coord_t)0.5;
-  yp -= (coord_t)0.5;
-  //int sx = xp, sy = yp;
-  //luminosity_t rx = xp - sx, ry = yp - sy;
-  int sx, sy;
-  coord_t rx = my_modf (xp, &sx);
-  coord_t ry = my_modf (yp, &sy);
-
-  if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
-    {
-      //return render_to_scr::get_simulated_screen_pixel_fast (sx, sy);
-#if 1
-      vec_luminosity_t v1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).red, get_simulated_screen_pixel_fast (sx, sy-1).red, get_simulated_screen_pixel_fast (sx+1, sy-1).red, get_simulated_screen_pixel_fast (sx+2, sy-1).red};
-      vec_luminosity_t v2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).red, get_simulated_screen_pixel_fast (sx, sy-0).red, get_simulated_screen_pixel_fast (sx+1, sy-0).red, get_simulated_screen_pixel_fast (sx+2, sy-0).red};
-      vec_luminosity_t v3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).red, get_simulated_screen_pixel_fast (sx, sy+1).red, get_simulated_screen_pixel_fast (sx+1, sy+1).red, get_simulated_screen_pixel_fast (sx+2, sy+1).red};
-      vec_luminosity_t v4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).red, get_simulated_screen_pixel_fast (sx, sy+2).red, get_simulated_screen_pixel_fast (sx+1, sy+2).red, get_simulated_screen_pixel_fast (sx+2, sy+2).red};
-      vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
-      val.red = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
-
-      vec_luminosity_t gv1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).green, get_simulated_screen_pixel_fast (sx, sy-1).green, get_simulated_screen_pixel_fast (sx+1, sy-1).green, get_simulated_screen_pixel_fast (sx+2, sy-1).green};
-      vec_luminosity_t gv2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).green, get_simulated_screen_pixel_fast (sx, sy-0).green, get_simulated_screen_pixel_fast (sx+1, sy-0).green, get_simulated_screen_pixel_fast (sx+2, sy-0).green};
-      vec_luminosity_t gv3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).green, get_simulated_screen_pixel_fast (sx, sy+1).green, get_simulated_screen_pixel_fast (sx+1, sy+1).green, get_simulated_screen_pixel_fast (sx+2, sy+1).green};
-      vec_luminosity_t gv4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).green, get_simulated_screen_pixel_fast (sx, sy+2).green, get_simulated_screen_pixel_fast (sx+1, sy+2).green, get_simulated_screen_pixel_fast (sx+2, sy+2).green};
-      v = vec_cubic_interpolate (gv1, gv2, gv3, gv4, ry);
-      val.green = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
-
-      vec_luminosity_t bv1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).blue, get_simulated_screen_pixel_fast (sx, sy-1).blue, get_simulated_screen_pixel_fast (sx+1, sy-1).blue, get_simulated_screen_pixel_fast (sx+2, sy-1).blue};
-      vec_luminosity_t bv2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).blue, get_simulated_screen_pixel_fast (sx, sy-0).blue, get_simulated_screen_pixel_fast (sx+1, sy-0).blue, get_simulated_screen_pixel_fast (sx+2, sy-0).blue};
-      vec_luminosity_t bv3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).blue, get_simulated_screen_pixel_fast (sx, sy+1).blue, get_simulated_screen_pixel_fast (sx+1, sy+1).blue, get_simulated_screen_pixel_fast (sx+2, sy+1).blue};
-      vec_luminosity_t bv4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).blue, get_simulated_screen_pixel_fast (sx, sy+2).blue, get_simulated_screen_pixel_fast (sx+1, sy+2).blue, get_simulated_screen_pixel_fast (sx+2, sy+2).blue};
-      v = vec_cubic_interpolate (bv1, bv2, bv3, bv4, ry);
-      val.blue = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
-#endif
-    }
-  return val;
+  return m_simulated_screen->get_interpolated_pixel (xp, yp);
 }
 
 /* Determine image pixel X,Y in screen filter SCR using MAP.

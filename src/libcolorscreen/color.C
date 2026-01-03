@@ -4,6 +4,30 @@
 #include "include/spectrum-to-xyz.h"
 namespace colorscreen
 {
+void
+rgbdata::print (FILE *f)
+{
+  rgbdata c = (*this * (luminosity_t)255).clamp (0, 255);
+  fprintf (f, "red:%f green:%f blue:%f #%02x%02x%02x\n", red, green, blue, (int)(c.red + 0.5), (int)(c.green + 0.5), (int)(c.blue + 0.5));
+}
+void xyz::print_sRGB (FILE *f, bool verbose)
+{
+  rgbdata c;
+  to_srgb (&c.red,&c.green,&c.blue);
+  c = c * (luminosity_t)255;
+  if (verbose)
+    fprintf (f, "sRGB r:%f g:%f b:%f " , c.red, c.green, c.blue);
+  c = c.clamp (0, 255);
+  fprintf (f, "#%02x%02x%02x", (int)(c.red + 0.5), (int)(c.green + 0.5), (int)(c.blue + 0.5));
+}
+void
+xyz::print (FILE *f)
+{
+  fprintf (f, "x:%f y:%f z:%f ", x, y, z);
+  print_sRGB (f, true);
+  fprintf (f, "\n");
+}
+
 color_matrix
 matrix_by_dye_xy (luminosity_t rx, luminosity_t ry,
 		  luminosity_t gx, luminosity_t gy,
