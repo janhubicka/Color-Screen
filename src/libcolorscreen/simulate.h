@@ -8,12 +8,13 @@
 
 namespace colorscreen
 {
-typedef mem_rgbdata simulated_screen_pixel;
-typedef std::vector <mem_rgbdata> simulated_screen;
+//typedef mem_rgbdata simulated_screen_pixel;
+typedef rgbdata simulated_screen_pixel;
+typedef std::vector <simulated_screen_pixel> simulated_screen;
 simulated_screen *
-get_simulated_screen (scr_to_img_parameters &param,
-		      screen *scr, int screen_id,
-		      sharpen_parameters sharpen,
+get_simulated_screen (const scr_to_img_parameters &param,
+		      const screen *scr, uint64_t screen_id,
+		      const sharpen_parameters sharpen,
 		      int width, int height, progress_info *progress,
 		      uint64_t *id);
 void release_simulated_screen (simulated_screen *s);
