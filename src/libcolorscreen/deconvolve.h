@@ -115,10 +115,10 @@ private:
 template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
-deconvolute (mem_O *out, T data, P param, int width, int height,
-	     const sharpen_parameters &sharpen,
-	     progress_info *progress,
-             bool parallel = true)
+deconvolve (mem_O *out, T data, P param, int width, int height,
+	    const sharpen_parameters &sharpen,
+	    progress_info *progress,
+            bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
   deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
@@ -182,10 +182,10 @@ deconvolute (mem_O *out, T data, P param, int width, int height,
 template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
-deconvolute_rgb (mem_O *out, T data, P param, int width, int height,
-		 const sharpen_parameters &sharpen,
-		 progress_info *progress,
-		 bool parallel = true)
+deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
+		const sharpen_parameters &sharpen,
+		progress_info *progress,
+		bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
   deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution

@@ -1,4 +1,4 @@
-#include "deconvolute.h"
+#include "deconvolve.h"
 #include "gaussian-blur.h"
 #include "include/colorscreen.h"
 #include "include/sensitivity.h"
@@ -532,7 +532,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         {
           if (p.sp.deconvolution_p ())
             {
-              ok = deconvolute<luminosity_t, mem_luminosity_t,
+              ok = deconvolve<luminosity_t, mem_luminosity_t,
                                unsigned short **, getdata_params,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
@@ -546,7 +546,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
         }
       else if (p.sp.deconvolution_p ())
         {
-          ok = deconvolute<luminosity_t, mem_luminosity_t, unsigned short **,
+          ok = deconvolve<luminosity_t, mem_luminosity_t, unsigned short **,
                            getdata_params, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
 	      p.sp, progress, true);
@@ -569,7 +569,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           t.correction = p.gp.backlight;
           if (p.sp.deconvolution_p ())
             {
-              ok = deconvolute<luminosity_t, mem_luminosity_t,
+              ok = deconvolve<luminosity_t, mem_luminosity_t,
                                const image_data *, gray_data_tables,
                                getdata_helper2> (
                   out, p.gp.img, t, p.gp.img->width, p.gp.img->height,

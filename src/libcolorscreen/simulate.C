@@ -1,4 +1,4 @@
-#include "deconvolute.h"
+#include "deconvolve.h"
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "render-to-scr.h"
@@ -65,9 +65,9 @@ render_simulated_screen (simulated_screen &img,
                         p.sharpen.usm_amount, progress, true);
   else
     {
-      deconvolute_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
-                      get_pixel> (img.data (), &pd, 0, p.width, p.height,
-                                  p.sharpen, progress, true);
+      deconvolve_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
+                    get_pixel> (img.data (), &pd, 0, p.width, p.height,
+                                p.sharpen, progress, true);
     }
   //for (size_t y = 0; y < (size_t)p.height; y++)
     //for (size_t x = 0; x < (size_t)p.width; x++)

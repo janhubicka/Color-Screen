@@ -1,4 +1,4 @@
-#include "deconvolute.h"
+#include "deconvolve.h"
 #include "gaussian-blur.h"
 #include "icc.h"
 #include "include/dufaycolor.h"

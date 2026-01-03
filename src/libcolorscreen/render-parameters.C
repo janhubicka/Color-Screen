@@ -64,7 +64,7 @@ const char * render_parameters::output_profile_names [] = {
 const char * sharpen_parameters::sharpen_mode_names [] = {
   "none",
   "unsharp-mask",
-  "Weiner-deconvolution",
+  "Wiener-deconvolution",
   "Richardson-Lucy-deconvolution"
 };
 const char * render_parameters::collection_quality_names [] = {

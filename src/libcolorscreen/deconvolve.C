@@ -1,4 +1,4 @@
-#include "deconvolute.h"
+#include "deconvolve.h"
 #include <complex>
 namespace colorscreen
 {

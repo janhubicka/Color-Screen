@@ -13,7 +13,7 @@
 #include "nmsimplex.h"
 #include "bitmap.h"
 #include "icc.h"
-#include "deconvolute.h"
+#include "deconvolve.h"
 namespace colorscreen
 {
 namespace
@@ -3523,7 +3523,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	    sharpen_param.usm_radius, sharpen_param.usm_amount, NULL, false);
       else
 	{
-	  deconvolute_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
+	  deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 	      rendered2.data (), rendered.data (), xsize, ysize, ysize,
 	      sharpen_param, NULL, false);
 	}
