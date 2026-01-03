@@ -168,12 +168,13 @@ get_psf_radius (double *psf, int size)
 
 }
 
-/* Compute PSF as 2D FFT of circular MTF.  */
+/* Compute PSF as 2D FFT of circular MTF.
+   MAX_RADIUS is an estimate of radius.  SUBSCALE is a size of
+   pixel we compute at (smaller pixel means more precise PSF)  */
 void
-mtf::compute_psf ()
+mtf::compute_psf (int max_radius, luminosity_t subscale)
 {
-  const luminosity_t subscale = 1 / 32.0;
-  const int psf_size = 4096;
+  int psf_size = ceil (max_radius / subscale) * 2 + 1;
   int fft_size = psf_size / 2 + 1;
   const double psf_step = 1 / (psf_size * subscale);
   std::vector<fftw_complex> mtf_kernel (psf_size * fft_size);
@@ -325,6 +326,7 @@ mtf::precompute (progress_info *progress)
           m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
           m_mtf.init_by_y_values (contrasts.data (), size () + 2);
         }
+      compute_psf ();
 
     }
   /* Use gaussian blur + sensor model with a given sigma.  */
@@ -336,6 +338,15 @@ mtf::precompute (progress_info *progress)
       contrasts[254] = contrasts[255] = 0;
       m_mtf.set_range (0, 0.5 + (1 / 253));
       m_mtf.init_by_y_values (contrasts.data (), 256);
+      int radius;
+      for (radius = 0; calculate_system_lsf (radius, m_sigma) > /*0.0001*/0.000001; radius++)
+	;
+      radius++;
+      if (radius < 3)
+        radius = 3;
+      printf ("Estimated radius for sigma %f: %i\n", m_sigma, radius);
+      compute_psf (radius);
+      printf ("Final radius: %i\n", psf_radius (1));
 
 #if 0
       const luminosity_t subscale = 1 / 32.0;
@@ -352,7 +363,6 @@ mtf::precompute (progress_info *progress)
       m_lsf.init_by_y_values (contrasts.data (), 256);
 #endif
     }
-  compute_psf ();
   //print_lsf (stdout);
 
   m_lock.unlock ();

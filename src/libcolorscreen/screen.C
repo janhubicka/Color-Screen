@@ -1782,9 +1782,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 {
   fft_2d fft;
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
-  //printf ("Initial patch proportions:");
-  //scr.patch_proportions ().print (stdout);
-  //printf ("\n");
+  printf ("Initial patch proportions:");
+  scr.patch_proportions ().print (stdout);
+  printf ("\n");
   for (int c = 0; c < 3; c++)
     {
       sharpen_parameters::sharpen_mode mode = sharpen[c]->get_mode ();
@@ -1907,9 +1907,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       if (all)
 	break;
     }
-  //printf ("Modified patch proportions:");
-  //scr.patch_proportions ().print (stdout);
-  //printf ("\n");
+  printf ("Modified patch proportions:");
+  scr.patch_proportions ().print (stdout);
+  printf ("\n");
 }
 void
 screen::initialize_with_point_spread (

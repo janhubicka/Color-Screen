@@ -112,7 +112,7 @@ private:
   luminosity_t m_psf_radius;
   bool m_precomputed;
   std::mutex m_lock;
-  void compute_psf ();
+  void compute_psf (int max_radius = 128, luminosity_t subsample = 1 / 32.0);
 };
 }
 #endif

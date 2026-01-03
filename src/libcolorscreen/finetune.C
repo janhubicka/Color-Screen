@@ -176,6 +176,7 @@ private:
   int emulsion_offset_index;
   int emulsion_blur_index;
   int sharpen_index;
+  int mtf_sigma_index;
   int screen_index;
   int strips_index;
   int mix_weights_index;
@@ -214,6 +215,9 @@ public:
 
   coord_t *start;
 
+  /* Scanner mtf if known.  */
+  mtf *fixed_scanner_mtf;
+
   /* Screen blur and strip widths. */
   coord_t fixed_blur, fixed_red_width, fixed_green_width, fixed_emulsion_blur;
 
@@ -234,7 +238,9 @@ public:
 
   /* Try to adjust position of center of the patches (+- range)  */
   bool optimize_position;
-  /* Try to optimize screen blur attribute (othervise fixed_blur is used.  */
+  /* Try to optimize screen blur attribute (othervise fixed_mtf is used, if any).  */
+  bool optimize_scanner_mtf_sigma;
+  /* Try to optimize screen blur attribute (othervise fixed_blur is used).  */
   bool optimize_screen_blur;
   /* Try to optimize screen blur independently in each channel.  */
   bool optimize_screen_channel_blurs;
@@ -463,6 +469,14 @@ public:
     return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
 
+  /* Return blue radius of screen. */
+  coord_t
+  get_scanner_mtf_sigma (coord_t *v)
+  {
+    if (!optimize_scanner_mtf_sigma)
+      return -1;
+    return v[mtf_sigma_index];
+  }
 
   /* Return blue radius of screen. */
   coord_t
@@ -594,6 +608,8 @@ public:
     printf ("\n\nOptimizing %i values:", num_values ());
     if (optimize_position)
       printf (" position");
+    if (optimize_scanner_mtf_sigma)
+      printf (" mtf_sigma");
     if (optimize_screen_blur)
       printf (" screen_blur");
     if (optimize_screen_channel_blurs)
@@ -667,6 +683,8 @@ public:
       printf ("Screen blur %f (pixel size %f, scaled %f)\n",
               get_blur_radius (v), pixel_size,
               get_blur_radius (v) * pixel_size);
+    if (optimize_scanner_mtf_sigma)
+      printf ("Scanner mtf sigma %f\n", get_scanner_mtf_sigma (v));
     if (optimize_screen_channel_blurs)
       {
         rgbdata b = get_channel_blur_radius (v);
@@ -806,6 +824,8 @@ public:
         to_range (v[emulsion_intensity_index + i], 0, i < 3 ? 1 : 100);
     if (optimize_screen_blur)
       to_range (v[screen_index], 0, 1);
+    if (optimize_scanner_mtf_sigma)
+      to_range (v[mtf_sigma_index], 0, 5);
     if (optimize_screen_channel_blurs)
       {
         /* Screen blur radius.  */
@@ -1086,6 +1106,7 @@ public:
     /* First decide on what to optimize.  */
     optimize_position = flags & finetune_position;
     optimize_screen_blur = flags & finetune_screen_blur;
+    optimize_scanner_mtf_sigma = flags & finetune_scanner_mtf_sigma;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
     /* Mode guessing point spread; it is not very well tested yet.  */
@@ -1137,7 +1158,7 @@ public:
     /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
         && (optimize_screen_blur || optimize_screen_channel_blurs
-            || optimize_screen_mtf_blur))
+            || optimize_screen_mtf_blur || optimize_scanner_mtf_sigma))
       {
         optimize_emulsion_intensities = true;
         optimize_emulsion_offset = true;
@@ -1150,7 +1171,7 @@ public:
        is already known and use it or try to simulate everything including
        intensities.  */
     if (optimize_emulsion_blur && !optimize_emulsion_intensities)
-      optimize_screen_blur = optimize_screen_channel_blurs
+      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma
 	  = optimize_screen_mtf_blur = optimize_screen_ps_blur = false;
     /* When simulating infrared fog needs to be subtracted before applying mixing weights.
        This makes equations non-linear.  */
@@ -1276,6 +1297,7 @@ public:
         screen_index = n_values;
         n_values += 4;
         optimize_screen_blur = false;
+        optimize_scanner_mtf_sigma = false;
         optimize_screen_channel_blurs = false;
 	assert (!optimize_screen_channel_blurs && !optimize_screen_blur);
 	assert (!optimize_screen_mtf_blur || !optimize_screen_ps_blur);
@@ -1294,6 +1316,12 @@ public:
       }
     else
       screen_index = -1;
+
+    if (optimize_scanner_mtf_sigma)
+      {
+        mtf_sigma_index = n_values;
+        n_values ++;
+      }
 
     if (optimize_strips)
       {
@@ -1457,6 +1485,10 @@ public:
         start[screen_index + 2] = 0;
         start[screen_index + 3] = 0;
       }
+    if (optimize_scanner_mtf_sigma)
+      {
+	start[mtf_sigma_index] = 0;
+      }
     /* TODO: Maybe we want to use previous results and start from params by default.  */
     if (flags & finetune_use_srip_widths)
       {
@@ -1619,11 +1651,11 @@ public:
               screen *weight_scr = NULL)
   {
     rgbdata blur = get_channel_blur_radius (v);
-    luminosity_t mtf[4] = {-1, -1, -1, -1};
+    luminosity_t mtf_data[4] = {-1, -1, -1, -1};
     if (optimize_screen_ps_blur)
-      get_ps (mtf, v);
+      get_ps (mtf_data, v);
     else
-      get_mtf (mtf, v);
+      get_mtf (mtf_data, v);
 
     if (weight_scr)
       {
@@ -1663,10 +1695,19 @@ public:
         src_scr = tiles[tileid].merged_scr;
       }
 
-    if (optimize_screen_ps_blur)
-      dst_scr->initialize_with_blur_point_spread (*src_scr, mtf);
+    if (optimize_scanner_mtf_sigma)
+      {
+	sharpen_parameters sp;
+	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
+	sp.scanner_mtf = std::make_shared<mtf> ();
+	sp.scanner_mtf->set_sigma (get_scanner_mtf_sigma (v));
+	sp.scanner_mtf_scale = pixel_size;
+	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
+      }
+    else if (optimize_screen_ps_blur)
+      dst_scr->initialize_with_blur_point_spread (*src_scr, mtf_data);
     else if (optimize_screen_mtf_blur)
-      dst_scr->initialize_with_blur (*src_scr, mtf);
+      dst_scr->initialize_with_blur (*src_scr, mtf_data);
     else
       dst_scr->initialize_with_blur (*src_scr, blur * pixel_size);
   }
@@ -2778,6 +2819,7 @@ public:
                      (coord_t)(tiles[0].tymin + theight / 2) };
     ret.red_strip_width = get_red_strip_width (start);
     ret.green_strip_width = get_green_strip_width (start);
+    ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start);
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)
@@ -3629,7 +3671,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   *ret_green = (rgbdata){ red.green, green.green, blue.green };
   *ret_blue = (rgbdata){ red.blue, green.blue, blue.blue };
 #endif
-#if 0
+#if 1
   printf ("Color loss info\n");
   ret_red->print (stdout);
   ret_green->print (stdout);
