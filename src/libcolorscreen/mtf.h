@@ -17,7 +17,7 @@ public:
 
   /* Reutrn 1d MTF value.  */
   inline luminosity_t
-  get_mtf (luminosity_t val)
+  get_mtf (luminosity_t val) const
   {
     return m_mtf.apply (val);
   }
@@ -25,26 +25,32 @@ public:
 
   /* Return 2d MTF value.  */
   inline luminosity_t
-  get_mtf (luminosity_t x, luminosity_t y, luminosity_t scale = 1)
+  get_mtf (luminosity_t x, luminosity_t y, luminosity_t scale = 1) const
   {
     return m_mtf.apply (my_sqrt (x * x + y * y) * scale);
+  }
+
+  inline luminosity_t
+  get_psf (luminosity_t x, luminosity_t scale = 1) const
+  {
+    return m_psf.apply (fabs (x) * (1 / scale));
   }
 
   /* Return PSF (point spread function) value.
      This is 2D function created as rotation of LSF which is
      determined at precomputation time.  */
   inline luminosity_t
-  get_psf (luminosity_t x, luminosity_t y, luminosity_t scale = 1)
+  get_psf (luminosity_t x, luminosity_t y, luminosity_t scale = 1) const
   {
-    return m_lsf.apply (my_sqrt (x * x + y * y) * (1 / scale));
+    return m_psf.apply (my_sqrt (x * x + y * y) * (1 / scale));
   }
   inline int
-  psf_radius (luminosity_t scale)
+  psf_radius (luminosity_t scale) const
   {
     return ceil (m_psf_radius * scale);
   }
   inline int
-  psf_size (luminosity_t scale)
+  psf_size (luminosity_t scale) const
   {
     return psf_radius (scale) * 2 - 1;
   }
@@ -59,17 +65,17 @@ public:
   }
 
   size_t
-  size ()
+  size () const
   {
     return m_data.size ();
   }
   luminosity_t
-  get_freq (int i)
+  get_freq (int i) const
   {
     return m_data[i].freq;
   }
   luminosity_t
-  get_contrast (int i)
+  get_contrast (int i) const
   {
     return m_data[i].contrast;
   }
@@ -77,14 +83,21 @@ public:
   mtf ()
   : m_precomputed (0)
   { }
+
+  void
+  print_psf (FILE *);
+
+  void
+  print_mtf (FILE *);
 private:
   struct entry {luminosity_t freq, contrast;};
   std::vector <entry> m_data;
   precomputed_function<luminosity_t> m_mtf;
-  precomputed_function<luminosity_t> m_lsf;
+  precomputed_function<luminosity_t> m_psf;
   luminosity_t m_psf_radius;
   bool m_precomputed;
   std::mutex m_lock;
+  void compute_psf ();
 };
 }
 #endif
