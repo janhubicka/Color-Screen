@@ -3436,19 +3436,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       for (int y = ymin; y <= ymax; y++)
         for (int x = xmin; x <= xmax; x++)
           {
-            point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
-            point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
-            point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
-            rgbdata am = { 0, 0, 0 };
-            point_t pdx = (px - p) * (1.0 / 6.0);
-            point_t pdy = (py - p) * (1.0 / 6.0);
-
-	    /* Render screen carefully with anti-aliasing, so we account loss
-	       caused by pixels along boundary.  */
-            for (int yy = -2; yy <= 2; yy++)
-              for (int xx = -2; xx <= 2; xx++)
-                am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
-            am *= ((coord_t)1.0 / 25);
+	    point_t p;
+            rgbdata am = antialias_screen (scr, map, x, y, &p);
 	    /* Data collection does not antialias.  So just take pixel in the
 	       middle  */
             rgbdata m = collection_scr.noninterpolated_mult (p);
@@ -3490,21 +3479,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       /* Render screen.  */
       for (int y = ymin - ext; y <= ymax + ext; y++)
         for (int x = xmin - ext; x <= xmax + ext; x++)
-          {
-            point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
-            point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
-            point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
-            rgbdata am = { 0, 0, 0 };
-            point_t pdx = (px - p) * (1.0 / 6.0);
-            point_t pdy = (py - p) * (1.0 / 6.0);
-
-	    /* Use anti-aliasing.  This should match the non-sharpening path above.  */
-            for (int yy = -2; yy <= 2; yy++)
-              for (int xx = -2; xx <= 2; xx++)
-                am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
-            rendered[(y - ymin + ext) * xsize + x - xmin + ext]
-                = am * ((coord_t)1.0 / 25);
-          }
+	  rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+	      = antialias_screen (scr, map, x, y);
 
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
