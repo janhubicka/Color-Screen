@@ -300,12 +300,36 @@ render_to_scr::compute_saturation_loss_table (
   return m_saturation_loss_table != NULL;
 }
 
+void
+render_to_scr::simulate_screen (progress_info *progress)
+{
+  if (m_simulated_screen)
+    return;
+  uint64_t screen_id;
+  coord_t psize = pixel_size ();
+  sharpen_parameters sharpen = m_params.sharpen;
+  sharpen.usm_radius = m_params.screen_blur_radius * psize;
+  sharpen.scanner_mtf_scale *= psize;
+  screen *scr = get_screen (m_scr_to_img.get_type (), false,
+	       false,
+	       sharpen,
+	       m_params.red_strip_width,
+	       m_params.green_strip_width, progress, &screen_id);
+  m_simulated_screen =
+    get_simulated_screen (m_scr_to_img.get_param (), scr, screen_id, m_params.sharpen,
+			  m_img.width, m_img.height, progress,
+			  &m_simulated_screen_id);
+  release_screen (scr);
+}
+
 render_to_scr::~render_to_scr ()
 {
   if (m_screen_table)
     screen_table_cache.release (m_screen_table);
   if (m_saturation_loss_table)
     saturation_loss_table_cache.release (m_saturation_loss_table);
+  if (m_simulated_screen)
+    release_simulated_screen (m_simulated_screen);
 }
 
 void
