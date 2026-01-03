@@ -81,8 +81,22 @@ public:
   }
 
   mtf ()
-  : m_precomputed (0)
+  : m_sigma (0),
+    m_precomputed (0)
   { }
+
+  void
+  set_sigma (luminosity_t sigma)
+  {
+    assert (!m_precomputed);
+    m_sigma = sigma;
+  }
+
+  luminosity_t
+  get_sigma ()
+  {
+    return m_sigma;
+  }
 
   void
   print_psf (FILE *);
@@ -90,6 +104,7 @@ public:
   void
   print_mtf (FILE *);
 private:
+  luminosity_t m_sigma;
   struct entry {luminosity_t freq, contrast;};
   std::vector <entry> m_data;
   precomputed_function<luminosity_t> m_mtf;

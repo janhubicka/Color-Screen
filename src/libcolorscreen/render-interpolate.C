@@ -429,29 +429,27 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
       luminosity_t llum = c.red * s.red + c.green * s.green + c.blue * s.blue;
       luminosity_t correction = llum ? lum / llum : lum * 100;
 
-#if 0
-      luminosity_t redmin = lum - (1 - s.red);
-      luminosity_t redmax = lum + (1 - s.red);
+      luminosity_t redmin = lum - (1 - std::min (s.red, (luminosity_t)1));
+      luminosity_t redmax = lum + (1 - std::min (s.red, (luminosity_t)1));
       if (c.red * correction < redmin)
         correction = redmin / c.red;
       else if (c.red * correction > redmax)
         correction = redmax / c.red;
 
-      luminosity_t greenmin = lum - (1 - s.green);
-      luminosity_t greenmax = lum + (1 - s.green);
+      luminosity_t greenmin = lum - (1 - std::min (s.green, (luminosity_t)1));
+      luminosity_t greenmax = lum + (1 - std::min (s.green, (luminosity_t)1));
       if (c.green * correction < greenmin)
         correction = greenmin / c.green;
       else if (c.green * correction > greenmax)
         correction = greenmax / c.green;
 
-      luminosity_t bluemin = lum - (1 - s.blue);
-      luminosity_t bluemax = lum + (1 - s.blue);
+      luminosity_t bluemin = lum - (1 - std::min (s.blue, (luminosity_t)1));
+      luminosity_t bluemax = lum + (1 - std::min (s.blue, (luminosity_t)1));
       if (c.blue * correction < bluemin)
         correction = bluemin / c.blue;
       else if (c.blue * correction > bluemax)
         correction = bluemax / c.blue;
       correction = std::clamp (correction, (luminosity_t)0.0, (luminosity_t)5.0);
-#endif
 
       return c * correction;
     }

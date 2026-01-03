@@ -106,13 +106,20 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
 	return false;
       if (rparam->sharpen.scanner_mtf)
-        for (size_t i = 0; i < rparam->sharpen.scanner_mtf->size (); i++)
-	  {
-	    if (fprintf (f, "scanner_mtf_point: %f %f\n",
-		rparam->sharpen.scanner_mtf->get_freq(i),
-		rparam->sharpen.scanner_mtf->get_contrast(i)) < 0)
+	{
+	  if (rparam->sharpen.scanner_mtf->size ())
+	    for (size_t i = 0; i < rparam->sharpen.scanner_mtf->size (); i++)
+	      {
+		if (fprintf (f, "scanner_mtf_point: %f %f\n",
+		    rparam->sharpen.scanner_mtf->get_freq(i),
+		    rparam->sharpen.scanner_mtf->get_contrast(i)) < 0)
+		  return false;
+	      }
+	  else
+	    if (fprintf (f, "scanner_mtf_sigma: %f\n",
+		  rparam->sharpen.scanner_mtf->get_sigma ()) < 0)
 	      return false;
-	  }
+	}
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
 	  || fprintf (f, "saturation: %f\n", rparam->saturation) < 0
 	  || fprintf (f, "brightness: %f\n", rparam->brightness) < 0
@@ -131,7 +138,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
-	  || fprintf (f, "collection-quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality]) < 0
+	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
 	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
@@ -1233,7 +1240,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
       else if (!strcmp (buf, "scanner_mtf_point"))
 	{
 	  luminosity_t freq, contrast;
-	  if (first_scanner_mtf)
+	  if (rparam && first_scanner_mtf)
 	    rparam->sharpen.scanner_mtf = std::make_shared<mtf> ();
 	  first_scanner_mtf = false;
 	  if (!read_luminosity (f, &freq)
@@ -1242,7 +1249,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      *error = "error parsing scanner_mtf_point";
 	      return false;
 	    }
-	  rparam->sharpen.scanner_mtf->add_value (freq, contrast);
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->add_value (freq, contrast);
+	}
+      else if (!strcmp (buf, "scanner_mtf_sigma"))
+	{
+	  luminosity_t sigma;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf> ();
+	  if (!read_luminosity (f, &sigma))
+	    {
+	      *error = "error parsing scanner_mtf_sigma";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->set_sigma (sigma);
 	}
       else
 	{

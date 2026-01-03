@@ -218,7 +218,7 @@ mtf::compute_psf ()
   m_psf.init_by_y_values (psf_data.data (), radius + 2);
   psf_data[radius] = d1;
   psf_data[radius + 1] = d2;
-  if (1)
+  if (0)
     {
       tiff_writer_params pp;
       int width = psf_size;
@@ -272,10 +272,20 @@ mtf::precompute (progress_info *progress)
     }
   m_precomputed = true;
 
-  luminosity_t sigma = determine_sigma (*this, progress);
+  /* Determine sigma of data.  Used only for mtf measurements with
+     too few data points.  */
+  if (size ())
+    {
+      m_sigma = determine_sigma (*this, progress);
+      if (progress)
+        progress->pause_stdout ();
+      printf ("Optimized lens MTF sigma: %f\n", m_sigma);
+      if (progress)
+        progress->resume_stdout ();
+    }
 
-  /* Use actual MTF data.  */
-  if (1)
+  /* If there seeems enough data point, use actual MTF data.  */
+  if (size () > 3)
     {
       bool monotone = true;
       for (size_t i = 1; i < size () && monotone; i++)
@@ -317,12 +327,12 @@ mtf::precompute (progress_info *progress)
         }
 
     }
-  /* Fit data into sensor + lens model and use it instead.  */
+  /* Use gaussian blur + sensor model with a given sigma.  */
   else
     {
       std::vector<luminosity_t> contrasts (256);
       for (int i = 0; i < 254; i++)
-        contrasts[i] = system_mtf (i * (0.5 / 253), sigma);
+        contrasts[i] = system_mtf (i * (0.5 / 253), m_sigma);
       contrasts[254] = contrasts[255] = 0;
       m_mtf.set_range (0, 0.5 + (1 / 253));
       m_mtf.init_by_y_values (contrasts.data (), 256);
