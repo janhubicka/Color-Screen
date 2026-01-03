@@ -5,6 +5,7 @@
 #include "include/render-parameters.h"
 #include "render.h"
 #include "screen.h"
+#include "simulate.h"
 
 namespace colorscreen
 {
@@ -97,7 +98,8 @@ public:
                  render_parameters &rparam, int dstmaxval)
       : render (img, rparam, dstmaxval),
 	m_scr_to_img_param (param),
-	m_screen_table (NULL), m_saturation_loss_table (NULL)
+	m_screen_table (NULL), m_saturation_loss_table (NULL),
+ 	m_simulated_screen (NULL), m_simulated_screen_id (0)
   {
     m_final_width = -1;
     m_final_height = -1;
@@ -122,6 +124,7 @@ public:
                                         bool normalized_patches, coord_t,
                                         coord_t, coord_t, coord_t,
                                         progress_info *progress);
+  void simulate_screen (progress_info *);
   void
   compute_final_range ()
   {
@@ -181,6 +184,11 @@ public:
   static void release_screen (screen *scr);
   bool compute_screen_table (progress_info *progress);
   bool compute_saturation_loss_table (screen *collection_screen, uint64_t collection_screen_uid, luminosity_t collection_treshold, const sharpen_parameters &sharpen, progress_info *progress = NULL);
+/* Determine grayscale value at a given position in the image.
+   Use bicubic interpolation.  */
+
+  pure_attr inline rgbdata get_simulated_screen_pixel (coord_t xp, coord_t yp) const;
+  pure_attr inline rgbdata get_simulated_screen_pixel_fast (int xp, int yp) const;
 
 protected:
   /* Transformation between screen and image coordinates.  */
@@ -189,6 +197,8 @@ protected:
   screen_table *m_screen_table;
   saturation_loss_table *m_saturation_loss_table;
   uint64_t m_screen_table_uid;
+  simulated_screen *m_simulated_screen;
+  uint64_t m_simulated_screen_id;
 
 private:
   int m_final_xshift, m_final_yshift;
@@ -366,6 +376,76 @@ render_to_scr::get_unadjusted_rgb_pixel_scr (coord_t x, coord_t y) const
   render::get_unadjusted_img_rgb_pixel (p.x, p.y, &ret.red, &ret.green,
                                         &ret.blue);
   return ret;
+}
+
+pure_attr inline rgbdata
+render_to_scr::get_simulated_screen_pixel_fast (int xp, int yp) const
+{
+  return (*m_simulated_screen) [yp * m_img.width + xp];
+}
+
+pure_attr inline pure_attr rgbdata
+render_to_scr::get_simulated_screen_pixel (coord_t xp, coord_t yp) const
+{
+  rgbdata val;
+
+  /* Center of pixel [0,0] is [0.5,0.5].  */
+  xp -= (coord_t)0.5;
+  yp -= (coord_t)0.5;
+  //int sx = xp, sy = yp;
+  //luminosity_t rx = xp - sx, ry = yp - sy;
+  int sx, sy;
+  coord_t rx = my_modf (xp, &sx);
+  coord_t ry = my_modf (yp, &sy);
+
+  if (sx >= 1 && sx < m_img.width - 2 && sy >= 1 && sy < m_img.height - 2)
+    {
+      //return render_to_scr::get_simulated_screen_pixel_fast (sx, sy);
+#if 1
+      vec_luminosity_t v1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).red, get_simulated_screen_pixel_fast (sx, sy-1).red, get_simulated_screen_pixel_fast (sx+1, sy-1).red, get_simulated_screen_pixel_fast (sx+2, sy-1).red};
+      vec_luminosity_t v2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).red, get_simulated_screen_pixel_fast (sx, sy-0).red, get_simulated_screen_pixel_fast (sx+1, sy-0).red, get_simulated_screen_pixel_fast (sx+2, sy-0).red};
+      vec_luminosity_t v3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).red, get_simulated_screen_pixel_fast (sx, sy+1).red, get_simulated_screen_pixel_fast (sx+1, sy+1).red, get_simulated_screen_pixel_fast (sx+2, sy+1).red};
+      vec_luminosity_t v4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).red, get_simulated_screen_pixel_fast (sx, sy+2).red, get_simulated_screen_pixel_fast (sx+1, sy+2).red, get_simulated_screen_pixel_fast (sx+2, sy+2).red};
+      vec_luminosity_t v = vec_cubic_interpolate (v1, v2, v3, v4, ry);
+      val.red = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
+
+      vec_luminosity_t gv1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).green, get_simulated_screen_pixel_fast (sx, sy-1).green, get_simulated_screen_pixel_fast (sx+1, sy-1).green, get_simulated_screen_pixel_fast (sx+2, sy-1).green};
+      vec_luminosity_t gv2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).green, get_simulated_screen_pixel_fast (sx, sy-0).green, get_simulated_screen_pixel_fast (sx+1, sy-0).green, get_simulated_screen_pixel_fast (sx+2, sy-0).green};
+      vec_luminosity_t gv3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).green, get_simulated_screen_pixel_fast (sx, sy+1).green, get_simulated_screen_pixel_fast (sx+1, sy+1).green, get_simulated_screen_pixel_fast (sx+2, sy+1).green};
+      vec_luminosity_t gv4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).green, get_simulated_screen_pixel_fast (sx, sy+2).green, get_simulated_screen_pixel_fast (sx+1, sy+2).green, get_simulated_screen_pixel_fast (sx+2, sy+2).green};
+      v = vec_cubic_interpolate (gv1, gv2, gv3, gv4, ry);
+      val.green = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
+
+      vec_luminosity_t bv1 = {get_simulated_screen_pixel_fast (sx-1, sy-1).blue, get_simulated_screen_pixel_fast (sx, sy-1).blue, get_simulated_screen_pixel_fast (sx+1, sy-1).blue, get_simulated_screen_pixel_fast (sx+2, sy-1).blue};
+      vec_luminosity_t bv2 = {get_simulated_screen_pixel_fast (sx-1, sy-0).blue, get_simulated_screen_pixel_fast (sx, sy-0).blue, get_simulated_screen_pixel_fast (sx+1, sy-0).blue, get_simulated_screen_pixel_fast (sx+2, sy-0).blue};
+      vec_luminosity_t bv3 = {get_simulated_screen_pixel_fast (sx-1, sy+1).blue, get_simulated_screen_pixel_fast (sx, sy+1).blue, get_simulated_screen_pixel_fast (sx+1, sy+1).blue, get_simulated_screen_pixel_fast (sx+2, sy+1).blue};
+      vec_luminosity_t bv4 = {get_simulated_screen_pixel_fast (sx-1, sy+2).blue, get_simulated_screen_pixel_fast (sx, sy+2).blue, get_simulated_screen_pixel_fast (sx+1, sy+2).blue, get_simulated_screen_pixel_fast (sx+2, sy+2).blue};
+      v = vec_cubic_interpolate (bv1, bv2, bv3, bv4, ry);
+      val.blue = cubic_interpolate (v[0], v[1], v[2], v[3], rx);
+#endif
+    }
+  return val;
+}
+
+/* Determine image pixel X,Y in screen filter SCR using MAP.
+   Do antialiasing.  */
+inline rgbdata
+antialias_screen (const screen &scr, const scr_to_img &map,
+		  int x, int y, point_t *retp = NULL)
+{
+  point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+  point_t px = map.to_scr ({ x + (coord_t)1.5, y + (coord_t)0.5 });
+  point_t py = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)1.5 });
+  rgbdata am = { 0, 0, 0 };
+  point_t pdx = (px - p) * (1.0 / 6.0);
+  point_t pdy = (py - p) * (1.0 / 6.0);
+  if (retp)
+    *retp = p;
+
+  for (int yy = -2; yy <= 2; yy++)
+    for (int xx = -2; xx <= 2; xx++)
+      am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
+  return am * ((coord_t)1.0 / 25);
 }
 
 struct scr_detect_parameters;
