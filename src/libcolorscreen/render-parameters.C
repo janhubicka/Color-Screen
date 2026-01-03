@@ -65,7 +65,7 @@ const char * sharpen_parameters::sharpen_mode_names [] = {
   "none",
   "unsharp-mask",
   "Weiner-deconvolution",
-  "Richarson-Lucy-deconvolution"
+  "Richardson-Lucy-deconvolution"
 };
 
 
