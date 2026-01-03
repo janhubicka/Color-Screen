@@ -1086,9 +1086,11 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
   fftw_lock.unlock ();
   for (int c = cmin; c <= cmax; c++)
     {
+      const double contrast = 0.8;
+      /* Be sure that observed has no zeros by reducing contrast.  */
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
-          observed[y * screen::size + x] = scr.mult[y][x][c];
+          observed[y * screen::size + x] = 0.5 + (scr.mult[y][x][c] - 0.5) * contrast;
 
       /* First blur the screen.  */
       fftw_execute_dft_r2c (plan_2d, observed, in);
@@ -1109,7 +1111,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
 	  double epsilon = 1e-12 /*1e-7 for float*/;
 	  double scale = 1;
-	  if (sigma != 1)
+	  if (sigma > 0)
 	    for (int i = 0; i < screen::size * screen::size; i++)
 	      {
 		double reblurred = ratios[i] * scale;
@@ -1155,8 +1157,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
 	  out_scr.mult[y][x][c]
-	     //= std::clamp (estimate [y * screen::size + x], 0.0, 1.0);
-	     = estimate [y * screen::size + x];
+	     = 0.5 + (estimate [y * screen::size + x] - 0.5) * (1 / contrast);
     }
   fftw_lock.lock ();
   fftw_destroy_plan (plan_2d);
@@ -1657,7 +1658,7 @@ screen::initialize_dot ()
 }
 
 bool
-screen::save_tiff (const char *filename, bool normalize, int tiles)
+screen::save_tiff (const char *filename, bool normalize, int tiles) const
 {
   tiff_writer_params p;
   rgbdata max = { 0, 0, 0 };
@@ -1902,7 +1903,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       if (mode != sharpen_parameters::richardson_lucy_deconvolution)
         initialize_with_2D_fft_fast (*this, scr, fft, c, all ? 2 : c);
       else
-        initialize_with_richardson_lucy (*this, scr, fft, c, all ? 2 : c, sharpen[c]->richardson_lucy_iterations, 0);
+        initialize_with_richardson_lucy (*this, scr, fft, c, all ? 2 : c, sharpen[c]->richardson_lucy_iterations, sharpen[c]->richardson_lucy_sigma);
       if (all)
 	break;
     }
@@ -2048,7 +2049,7 @@ screen::clamp ()
       }
 }
 rgbdata
-screen::patch_proportions ()
+screen::patch_proportions () const
 {
   rgbdata sum = {0, 0, 0};
   for (int yy = 0; yy < size; yy++)

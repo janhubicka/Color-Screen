@@ -22,7 +22,7 @@ public:
 
   /* Return multiplicative factor of point p with bilinear interpolation.  */
   __attribute__ ((always_inline)) inline pure_attr rgbdata
-  interpolated_mult (point_t p)
+  interpolated_mult (point_t p) const
   {
     int sx, sy;
     coord_t rx = my_modf (p.x * size, &sx);
@@ -93,9 +93,9 @@ public:
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
   void preview_strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
-  DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3);
+  DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3) const;
   DLL_PUBLIC void clamp ();
-  DLL_PUBLIC rgbdata patch_proportions ();
+  DLL_PUBLIC rgbdata patch_proportions () const;
   static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
   void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
 private:

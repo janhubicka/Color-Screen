@@ -1,12 +1,12 @@
-#include "simulate.h"
-#include "render-to-scr.h"
-#include "lru-cache.h"
-#include "sharpen.h"
 #include "deconvolute.h"
+#include "include/tiff-writer.h"
+#include "lru-cache.h"
+#include "render-to-scr.h"
+#include "sharpen.h"
+#include "simulate.h"
 
 namespace colorscreen
 {
-
 
 namespace
 {
@@ -17,35 +17,35 @@ struct simulated_screen_params
   int width, height;
   scr_to_img_parameters params;
   sharpen_parameters sharpen;
-  screen *scr;
+  const screen *scr;
   bool
   operator== (simulated_screen_params &o)
   {
-    return screen_id == o.screen_id
-	   && mesh_trans_id == o.mesh_trans_id
-	   && (mesh_trans_id || params == o.params)
-	   && sharpen == o.sharpen;
+    return screen_id == o.screen_id && mesh_trans_id == o.mesh_trans_id
+           && (mesh_trans_id || params == o.params) && sharpen == o.sharpen;
   };
 };
 
-
 struct get_pixel_data
 {
-  screen *scr;
+  const screen *scr;
   scr_to_img &map;
 };
 
 inline rgbdata
 get_pixel (get_pixel_data *p, int x, int y, int, int)
 {
+#if 0
   const int steps = 5;
-  rgbdata d = {0, 0, 0};
+  rgbdata d = { 0, 0, 0 };
   for (int xx = 0; xx < steps; xx++)
     for (int yy = 0; yy < steps; yy++)
       d += p->scr->interpolated_mult (
-	p->map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
-			y + (yy + 1) / (coord_t)(steps + 1) }));
+          p->map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
+                           y + (yy + 1) / (coord_t)(steps + 1) }));
   return d * 1 / (coord_t)(steps * steps);
+#endif
+  return antialias_screen (*p->scr, p->map, x, y);
 }
 
 /* Render screen to IMG.  This is used for unit-testing of the screen
@@ -53,47 +53,68 @@ get_pixel (get_pixel_data *p, int x, int y, int, int)
 
 void
 render_simulated_screen (simulated_screen &img,
-			 const simulated_screen_params &p,
-			 progress_info *progress)
+                         const simulated_screen_params &p,
+                         progress_info *progress)
 {
   scr_to_img map;
   map.set_parameters (p.params, p.width, p.height);
-  struct get_pixel_data pd = {p.scr, map};
+  struct get_pixel_data pd = { p.scr, map };
   int stack = 0;
+  //printf ("Simulating %f\n", p.sharpen.scanner_mtf_scale);
   if (progress)
-    progress->set_task ("simulating scan of the screen filter",1);
+    progress->set_task ("simulating scan of the screen filter", 1);
   if (progress)
     stack = progress->push ();
 
-#if 0
-  //coord_t pixel_size = map.pixel_size (width, height);
-  /* TODO handle screen blur radius.  */
-  //sharpen.usm_radius = .screen_blur_radius * pixel_size;
-  //sharpen.scanner_mtf_scale *= pixel_size;
-  for (int y = 0; y < p.height; y++)
-    for (int x = 0; x < p.width; x++)
-      {
-        const int steps = 5;
-        rgbdata d = { 0, 0, 0 };
-        for (int xx = 0; xx < steps; xx++)
-          for (int yy = 0; yy < steps; yy++)
-            d += p.scr->interpolated_mult (
-                map.to_scr ({ x + (xx + 1) / (coord_t)(steps + 1),
-                              y + (yy + 1) / (coord_t)(steps + 1) }));
-        d *= 1 / (coord_t)(steps * steps);
-        img[y * p.width + x] = d;
-      }
-#endif
-      if (!p.sharpen.deconvolution_p ())
-	sharpen<rgbdata, simulated_screen_pixel, get_pixel_data *, int, get_pixel> (
-	    img.data (), &pd, p.width, p.height, p.height,
-	    p.sharpen.get_mode () == sharpen_parameters::none ? 0 : p.sharpen.usm_radius, p.sharpen.usm_amount, progress, true);
-      else
-	{
-	  deconvolute_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int, get_pixel> (
-	      img.data (), &pd, p.width, p.height, p.height,
-	      p.sharpen, progress, true);
-	}
+  if (!p.sharpen.deconvolution_p ())
+    sharpen<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
+            get_pixel> (img.data (), &pd, 0, p.width, p.height,
+                        p.sharpen.get_mode () == sharpen_parameters::none
+                            ? 0
+                            : p.sharpen.usm_radius,
+                        p.sharpen.usm_amount, progress, true);
+  else
+    {
+      deconvolute_rgb<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
+                      get_pixel> (img.data (), &pd, 0, p.width, p.height,
+                                  p.sharpen, progress, true);
+    }
+  for (size_t x = 0; x < p.width * (size_t)p.height; x++)
+  {
+      img[x].red = std::clamp ((luminosity_t)img[x].red, (luminosity_t)0, (luminosity_t)1);
+      img[x].green = std::clamp ((luminosity_t)img[x].green, (luminosity_t)0, (luminosity_t)1);
+      img[x].blue = std::clamp ((luminosity_t)img[x].blue, (luminosity_t)0, (luminosity_t)1);
+  }
+
+  if (1)
+    {
+      p.scr->save_tiff ("/tmp/simulation-scr.tif", false, 3);
+      tiff_writer_params pp;
+      int width = std::min (1024, p.width);
+      int height = std::min (1024, p.height);
+      //printf ("Saving %i %i\n", width, height);
+      pp.width = width;
+      pp.height = height;
+      pp.depth = 16;
+      const char *error;
+      pp.filename = "/tmp/simulation.tif";
+      tiff_writer renderedu (pp, &error);
+      for (int y = 0; y < height; y++)
+        {
+          for (int x = 0; x < width; x++)
+            {
+              rgbdata m = img[y * p.width + x];
+              renderedu.put_pixel (x, std::clamp ((int)(m.red * 65535), 0, 65535),
+				   std::clamp ((int)(m.green * 65535), 0, 65535),
+                                   std::clamp ((int)(m.blue * 65535), 0, 65535));
+            }
+          if (!renderedu.write_row ())
+            {
+              printf ("Write error line %i\n", y);
+              break;
+            }
+        }
+    }
   if (progress)
     progress->pop (stack);
 }
@@ -113,14 +134,16 @@ static lru_cache<simulated_screen_params, simulated_screen, simulated_screen *,
 }
 
 simulated_screen *
-get_simulated_screen (scr_to_img_parameters &param,
-		      screen *scr, uint64_t screen_id,
-		      sharpen_parameters sharpen,
-		      int width, int height, progress_info *progress,
-		      uint64_t *id)
+get_simulated_screen (const scr_to_img_parameters &param, const screen *scr,
+                      uint64_t screen_id, const sharpen_parameters sharpen,
+                      int width, int height, progress_info *progress,
+                      uint64_t *id)
 {
-  simulated_screen_params p = {screen_id, param.mesh_trans ? param.mesh_trans->id : 0,
-			       width, height, param, sharpen, scr};
+  simulated_screen_params p
+      = { screen_id, param.mesh_trans ? param.mesh_trans->id : 0,
+          width,     height,
+          param,     sharpen,
+          scr };
   return simulated_screen_cache.get (p, progress, id);
 }
 void

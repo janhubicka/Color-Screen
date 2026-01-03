@@ -215,6 +215,9 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       sharpen.usm_radius = m_params.screen_blur_radius * psize;
       sharpen.scanner_mtf_scale *= psize;
 
+      if (sharpen.get_mode () != sharpen_parameters::none)
+	simulate_screen (progress);
+
       m_screen = get_screen (m_scr_to_img.get_type (), false,
 			     sharpen.deconvolution_p (),
 			     sharpen,
@@ -398,38 +401,46 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
     c = adjust_rgb (c);
   if (m_screen_compensation)
     {
-      coord_t lum = get_img_pixel_scr (x, y);
-      int ix = (uint64_t)nearest_int ((x)*screen::size)
-               & (unsigned)(screen::size - 1);
-      int iy = (uint64_t)nearest_int ((y)*screen::size)
-               & (unsigned)(screen::size - 1);
-      luminosity_t sr = m_screen->mult[iy][ix][0];
-      luminosity_t sg = m_screen->mult[iy][ix][1];
-      luminosity_t sb = m_screen->mult[iy][ix][2];
+      point_t p = m_scr_to_img.to_img ({ x, y });
+      coord_t lum = get_img_pixel (p.x, p.y);
+      rgbdata s;
+      if (!m_simulated_screen)
+	{
+	  int ix = (uint64_t)nearest_int ((x)*screen::size)
+		   & (unsigned)(screen::size - 1);
+	  int iy = (uint64_t)nearest_int ((y)*screen::size)
+		   & (unsigned)(screen::size - 1);
+
+	  s.red = m_screen->mult[iy][ix][0];
+	  s.green = m_screen->mult[iy][ix][1];
+	  s.blue = m_screen->mult[iy][ix][2];
+	}
+      else
+	s = get_simulated_screen_pixel (p.x, p.y);
 
       c.red = std::max (c.red, (luminosity_t)0);
       c.green = std::max (c.green, (luminosity_t)0);
       c.blue = std::max (c.blue, (luminosity_t)0);
 
-      luminosity_t llum = c.red * sr + c.green * sg + c.blue * sb;
+      luminosity_t llum = c.red * s.red + c.green * s.green + c.blue * s.blue;
       luminosity_t correction = llum ? lum / llum : lum * 100;
 
-      luminosity_t redmin = lum - (1 - sr);
-      luminosity_t redmax = lum + (1 - sr);
+      luminosity_t redmin = lum - (1 - s.red);
+      luminosity_t redmax = lum + (1 - s.red);
       if (c.red * correction < redmin)
         correction = redmin / c.red;
       else if (c.red * correction > redmax)
         correction = redmax / c.red;
 
-      luminosity_t greenmin = lum - (1 - sg);
-      luminosity_t greenmax = lum + (1 - sg);
+      luminosity_t greenmin = lum - (1 - s.green);
+      luminosity_t greenmax = lum + (1 - s.green);
       if (c.green * correction < greenmin)
         correction = greenmin / c.green;
       else if (c.green * correction > greenmax)
         correction = greenmax / c.green;
 
-      luminosity_t bluemin = lum - (1 - sb);
-      luminosity_t bluemax = lum + (1 - sb);
+      luminosity_t bluemin = lum - (1 - s.blue);
+      luminosity_t bluemax = lum + (1 - s.blue);
       if (c.blue * correction < bluemin)
         correction = bluemin / c.blue;
       else if (c.blue * correction > bluemax)
