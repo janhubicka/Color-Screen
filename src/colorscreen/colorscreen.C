@@ -80,8 +80,6 @@ print_help (char *err = NULL)
       for (int j = 0; j < render_parameters::output_profile_max; j++)
         fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
       fprintf (stderr, "\n");
-      fprintf (stderr, "      --precise                 force precise "
-                       "collection of patch density\n");
       fprintf (stderr, "      --geometry=scan|screen    specify output file geometry\n");
       fprintf (stderr, "      --antialias=N             specify aliasing using NxN grid\n");
       fprintf (stderr, "      --detect-geometry         automatically detect screen\n");
@@ -700,7 +698,6 @@ render_cmd (int argc, char **argv)
   struct solver_parameters solver_param;
   render_to_file_params rfparams;
   render_type_parameters rtparam;
-  bool force_precise = false;
   bool detect_geometry = false;
   bool detect_color_model = false;
   bool detect_brightness = false;
@@ -748,8 +745,6 @@ render_cmd (int argc, char **argv)
         detect_color_model = true;
       else if (!strcmp (argv[i], "--auto-levels"))
         detect_brightness = true;
-      else if (!strcmp (argv[i], "--precise"))
-        force_precise = true;
       else if (const char *str
                = arg_with_param (argc, argv, &i, "dye-balance"))
         dye_balance = parse_dye_balance (str);
@@ -796,8 +791,6 @@ render_cmd (int argc, char **argv)
       return 1;
     }
   fclose (in);
-  if (force_precise)
-    rparam.precise = true;
 
 
   /* Load scan data.  */

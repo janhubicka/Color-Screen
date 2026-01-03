@@ -67,6 +67,11 @@ const char * sharpen_parameters::sharpen_mode_names [] = {
   "Weiner-deconvolution",
   "Richardson-Lucy-deconvolution"
 };
+const char * render_parameters::collection_quality_names [] = {
+  "fast",
+  "simple-screen",
+  "simulated-screen"
+};
 
 
 /* patch_portions describes how much percent of screen is occupied by red, green and blue
@@ -698,7 +703,7 @@ bool
 render_parameters::auto_dark_brightness (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress, luminosity_t dark_cut, luminosity_t light_cut)
 {
   render_parameters rparam = *this;
-  rparam.precise = true;
+  rparam.collection_quality = render_parameters::simple_screen_collection;
   {
     /* Produce histogram.  */
     rgb_histogram hist;
@@ -824,7 +829,7 @@ bool
 render_parameters::auto_mix_weights (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
   render_parameters rparam = *this;
-  rparam.precise = true;
+  rparam.collection_quality = render_parameters::simple_screen_collection;
   rgb_histogram hist_red, hist_green, hist_blue;
   if (!analyze_rgb_patches ([&] (coord_t x, coord_t y, rgbdata r, rgbdata g, rgbdata b)
 			    {
@@ -901,7 +906,7 @@ bool
 render_parameters::auto_mix_dark (image_data &img, scr_to_img_parameters &param, int xmin, int ymin, int xmax, int ymax, progress_info *progress)
 {
   render_parameters rparam = *this;
-  rparam.precise = true;
+  rparam.collection_quality = render_parameters::simple_screen_collection;
   rgb_histogram hist;
   if (ymin < 0)
     ymin = 0;
@@ -1229,7 +1234,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   gammut_warning = rparam.gammut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */
-  precise = rparam.precise;
+  collection_quality = rparam.collection_quality;
   collection_threshold = rparam.collection_threshold;
   screen_blur_radius = rparam.screen_blur_radius;
 }

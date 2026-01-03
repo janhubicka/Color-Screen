@@ -211,19 +211,22 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
                                   !m_original_color || m_profiled, xmin, ymin,
                                   xmax, ymax, progress))
     return false;
-  if (m_screen_compensation || m_params.precise || m_precise_rgb)
+  if (m_screen_compensation
+      || m_params.collection_quality != render_parameters::fast_collection
+      || m_precise_rgb)
     {
       coord_t psize = pixel_size ();
       sharpen_parameters sharpen = m_params.sharpen;
       sharpen.usm_radius = m_params.screen_blur_radius * psize;
       sharpen.scanner_mtf_scale *= psize;
 
-      if (sharpen.get_mode () != sharpen_parameters::none)
-	simulate_screen (progress);
+      if (sharpen.get_mode () != sharpen_parameters::none
+          && m_params.collection_quality
+                 == render_parameters::simulated_screen_collection)
+        simulate_screen (progress);
 
       m_screen = get_screen (m_scr_to_img.get_type (), false,
-			     sharpen.deconvolution_p (),
-			     sharpen,
+                             sharpen.deconvolution_p (), sharpen,
                              m_params.red_strip_width,
                              m_params.green_strip_width, progress, &screen_id);
       if (!m_screen)
@@ -231,27 +234,25 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
       if (!m_original_color && !m_precise_rgb)
         {
           if (m_params.scanner_blur_correction)
-            compute_saturation_loss_table (
-                m_screen, screen_id, m_params.collection_threshold,
-                m_params.sharpen, progress);
+            compute_saturation_loss_table (m_screen, screen_id,
+                                           m_params.collection_threshold,
+                                           m_params.sharpen, progress);
           else
             {
               rgbdata cred, cgreen, cblue;
-	      sharpen_parameters sharpen = m_params.sharpen;
-	      sharpen.usm_radius = m_params.screen_blur_radius * psize;
-	      sharpen.scanner_mtf_scale *= psize;
-	      screen *scr = get_screen (m_scr_to_img.get_type (), false,
-			     false,
-			     sharpen,
-                             m_params.red_strip_width,
-                             m_params.green_strip_width, progress, &screen_id);
+              sharpen_parameters sharpen = m_params.sharpen;
+              sharpen.usm_radius = m_params.screen_blur_radius * psize;
+              sharpen.scanner_mtf_scale *= psize;
+              screen *scr = get_screen (m_scr_to_img.get_type (), false, false,
+                                        sharpen, m_params.red_strip_width,
+                                        m_params.green_strip_width, progress,
+                                        &screen_id);
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
-		      m_simulated_screen,
-                      m_params.collection_threshold, m_params.sharpen,
-		      m_scr_to_img,
-                      m_img.width / 2 - 100, m_img.height / 2 - 100,
-                      m_img.width / 2 + 100, m_img.height / 2 + 100))
+                      m_simulated_screen, m_params.collection_threshold,
+                      m_params.sharpen, m_scr_to_img, m_img.width / 2 - 100,
+                      m_img.height / 2 - 100, m_img.width / 2 + 100,
+                      m_img.height / 2 + 100))
                 {
                   color_matrix sat (cred.red, cgreen.red, cblue.red,
                                     0, //
@@ -262,7 +263,7 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
                                     0, 0, 0, 1);
                   m_saturation_matrix = sat.invert ();
                 }
-	      release_screen (scr);
+              release_screen (scr);
             }
         }
     }
@@ -305,8 +306,10 @@ render_interpolate::precompute (coord_t xmin, coord_t ymin, coord_t xmax,
     m_original_color
         ? analyze_base::/*color*/ precise_rgb
         : (m_precise_rgb ? analyze_base::precise_rgb
-                         : (!m_params.precise ? analyze_base::fast
-                                              : analyze_base::precise)),
+                         : (m_params.collection_quality
+                                    == render_parameters::fast_collection
+                                ? analyze_base::fast
+                                : analyze_base::precise)),
     m_params.collection_threshold,
     m_scr_to_img.get_param ().mesh_trans
         ? m_scr_to_img.get_param ().mesh_trans->id
@@ -411,10 +414,12 @@ render_interpolate::sample_pixel_scr (coord_t x, coord_t y) const
       coord_t lum = get_img_pixel (p.x, p.y);
       rgbdata s;
       if (!m_simulated_screen)
-        m_screen->interpolated_mult ({x, y});
+        s = m_screen->interpolated_mult ({x, y});
       else
 	s = get_simulated_screen_pixel (p.x, p.y);
 
+      /* This is clamping logic trying to avoid too colorful artifacts
+         alongs the edges.  */
 #if 0
       c.red = std::max (c.red, (luminosity_t)0);
       c.green = std::max (c.green, (luminosity_t)0);

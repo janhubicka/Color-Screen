@@ -131,7 +131,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
-	  || fprintf (f, "precise: %s\n", bool_names [(int)rparam->precise]) < 0
+	  || fprintf (f, "collection-quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality]) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
 	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
@@ -952,13 +952,34 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      /* Compatibility with old files.  */
       else if (!strcmp (buf, "precise"))
 	{
-	  if (!parse_bool (f, rparam_check (precise)))
+	  bool b;
+	  if (!parse_bool (f, &b))
 	    {
 	      *error = "error parsing precise";
 	      return false;
 	    }
+	  if (rparam)
+	    {
+	      rparam->collection_quality = b ? render_parameters::simple_screen_collection : render_parameters::fast_collection;
+	    }
+	}
+      else if (!strcmp (buf, "collection_quality"))
+	{
+	  get_keyword (f, buf2);
+	  int j;
+	  for (j = 0; j < render_parameters::max_collection_quality; j++)
+	    if (!strcmp (buf2, render_parameters::collection_quality_names[j]))
+	      break;
+	  if (j == render_parameters::max_collection_quality)
+	    {
+	      *error = "unknown collection quality";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->collection_quality = (enum render_parameters::collection_quality_t) j;
 	}
       else if (!strcmp (buf, "scr_detect_red"))
 	{

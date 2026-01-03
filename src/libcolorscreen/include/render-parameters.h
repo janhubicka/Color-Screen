@@ -211,8 +211,18 @@ struct render_parameters
   /* Gamma curve of the film (to be replaced by HD curve eventually)  */
   luminosity_t film_gamma;
   /* The following is used by interpolated rendering only.  */
-  /* If true use precise data collection.  */
-  bool precise;
+
+  /* Quality used when collection data for demosaicing.  */
+  enum collection_quality_t
+  {
+    fast_collection,
+    simple_screen_collection,
+    simulated_screen_collection,
+    max_collection_quality
+  };
+  collection_quality_t collection_quality;
+  DLL_PUBLIC static const char *collection_quality_names[(int)max_collection_quality];
+
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
   /* Threshold for collecting color information.  */
@@ -378,7 +388,7 @@ struct render_parameters
         tile_adjustments (),
 
         /* Patch density parameters.  */
-        film_gamma (1), precise (true), screen_blur_radius (0.5),
+        film_gamma (1), collection_quality (simple_screen_collection), screen_blur_radius (0.5),
         collection_threshold (0.2), red_strip_width (0),
         green_strip_width (0),
 
@@ -457,7 +467,7 @@ struct render_parameters
            && green_strip_width == other.green_strip_width
            && invert == other.invert
            && screen_blur_radius == other.screen_blur_radius
-           && dye_balance == other.dye_balance && precise == other.precise
+           && dye_balance == other.dye_balance && collection_quality == other.collection_quality
            && film_characteristics_curve == other.film_characteristics_curve
            && restore_original_luminosity == other.restore_original_luminosity
            && output_curve == other.output_curve

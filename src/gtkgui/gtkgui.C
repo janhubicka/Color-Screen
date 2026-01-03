@@ -612,12 +612,22 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	}
       if (k == 's' && !(event->state & GDK_CONTROL_MASK))
 	{
-	  rparams.precise = false;
+	  rparams.collection_quality = render_parameters::fast_collection;
+	  printf ("Fast data collection\n");
 	  display_scheduled = true;
 	}
       if (k == 'S')
 	{
-	  rparams.precise = true;
+	  if (rparams.collection_quality == render_parameters::fast_collection)
+	    {
+	      rparams.collection_quality = render_parameters::simple_screen_collection;
+	      printf ("Simple screen data collection\n");
+	    }
+	  else
+	    {
+	      rparams.collection_quality = render_parameters::simulated_screen_collection;
+	      printf ("Simulated screen data collection\n");
+	    }
 	  display_scheduled = true;
 	}
       if (k == 'l' && !(event->state & GDK_CONTROL_MASK))

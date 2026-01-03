@@ -692,7 +692,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   gray_max = img->maxval;
   render_parameters my_rparam;
   my_rparam.gamma = m_prj->rparam.gamma;
-  my_rparam.precise = true;
+  my_rparam.collection_quality = render_parameters::simple_screen_collection;
   my_rparam.screen_blur_radius = 0.5;
   my_rparam.mix_red = 0;
   my_rparam.mix_green = 0;
