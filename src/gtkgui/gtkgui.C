@@ -149,7 +149,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *scanner_snr, *RL_iterations,
+  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *scanner_snr, *RL_iterations, *sigma,
 	       	*tilt_x, *tilt_y, *scanner_mtf_scale, *dark_point, *collection_threshold, *balance_black, *mix_red, *mix_green, *mix_blue,
 	       	*balance_red, *balance_green, *balance_blue;
 };
@@ -229,6 +229,7 @@ getvals (void)
   rparams.white_balance.blue = gtk_spin_button_get_value (data.balance_blue);
   rparams.sharpen.scanner_snr = gtk_spin_button_get_value (data.scanner_snr);
   rparams.sharpen.richardson_lucy_iterations = gtk_spin_button_get_value (data.RL_iterations);
+  rparams.sharpen.richardson_lucy_sigma = gtk_spin_button_get_value (data.sigma);
 
   if (rparams != old || current != old2)
     {
@@ -265,6 +266,7 @@ setvals (void)
   gtk_spin_button_set_value (data.balance_blue, rparams.white_balance.blue);
   gtk_spin_button_set_value (data.scanner_snr, rparams.sharpen.scanner_snr);
   gtk_spin_button_set_value (data.RL_iterations, rparams.sharpen.richardson_lucy_iterations);
+  gtk_spin_button_set_value (data.sigma, rparams.sharpen.richardson_lucy_sigma);
   initialized = 1;
 }
 
@@ -365,6 +367,23 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
   if (k == 'i' && !(event->state & GDK_CONTROL_MASK))
     {
       rparams.invert = !rparams.invert;
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'J')
+    {
+      rparams.sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
+      printf ("Richardson-Lucy Deconvolution\n");
+      display_scheduled = true;
+      preview_display_scheduled = true;
+    }
+  if (k == 'j')
+    {
+      if ((int)rparams.sharpen.mode >= (int)sharpen_parameters::richardson_lucy_deconvolution - 1)
+	rparams.sharpen.mode = sharpen_parameters::none;
+      else
+	rparams.sharpen.mode = (sharpen_parameters::sharpen_mode)((int)rparams.sharpen.mode + 1);
+      printf ("Sharpen algorithm: %s\n", sharpen_parameters::sharpen_mode_names [(int)rparams.sharpen.mode]);
       display_scheduled = true;
       preview_display_scheduled = true;
     }
@@ -1273,6 +1292,7 @@ initgtk (int *argc, char **argv)
   data.brightness = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "brightness"));
   data.scanner_snr = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "scanner_snr"));
   data.RL_iterations = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "RL_iterations"));
+  data.sigma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "sigma"));
   data.tilt_x = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_x"));
   data.tilt_y = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "tilt_y"));
   data.scanner_mtf_scale = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "scanner_mtf_scale"));
