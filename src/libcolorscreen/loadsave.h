@@ -7,5 +7,6 @@ namespace colorscreen
 bool expect_keyword (FILE *f, const char *);
 bool parse_bool (FILE *f, bool *val);
 bool read_scalar (FILE *f, coord_t *);
+void get_keyword (FILE *f, char *buf);
 }
 #endif

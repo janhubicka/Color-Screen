@@ -345,7 +345,9 @@ backlight_correction_parameters::load (FILE *f, const char **error)
               m_luminosities[y * m_width + x].sub[i] = 0;
             }
     }
-  if (expect_keyword (f, "backlight_correction_blacks:"))
+  char buf[256];
+  get_keyword (f, buf);
+  if (!strcmp (buf, "backlight_correction_blacks"))
     {
       black_correction = true;
       for (int y = 0; y < m_height; y++)
@@ -363,8 +365,9 @@ backlight_correction_parameters::load (FILE *f, const char **error)
 		  m_luminosities[y * m_width + x].sub[i] = sx;
 		}
 	}
+      get_keyword (f, buf);
     }
-  if (!expect_keyword (f, "backlight_correction_end"))
+  if (strcmp (buf, "backlight_correction_end"))
     {
       *error = "expected backlight_correction_end";
       return false;

@@ -208,9 +208,9 @@ skipwhitespace (FILE *f)
   while (!feof (f))
     {
       int c = getc (f);
-      if (c == EOF || c == '\n')
+      if (c == EOF)
 	return true;
-      if (c != '\r' && !isspace (c))
+      if (c != '\n' && c != '\r' && !isspace (c))
 	{
 	  ungetc (c, f);
 	  return true;
@@ -219,7 +219,7 @@ skipwhitespace (FILE *f)
   return true;
 }
 
-static void
+void
 get_keyword (FILE *f, char *buf)
 {
   int l;
@@ -349,7 +349,7 @@ expect_keyword (FILE *f, const char *keyword)
       if (feof (f))
 	{
 	  for (int j = 0; j < i; j++)
-	    ungetc (keyword[i], f);
+	    ungetc (keyword[j], f);
 	  return false;
 	}
       char c = getc (f);
@@ -364,7 +364,7 @@ expect_keyword (FILE *f, const char *keyword)
       if (c != keyword[i])
         {
 	  for (int j = 0; j < i; j++)
-	    ungetc (keyword[i], f);
+	    ungetc (keyword[j], f);
 	  ungetc (c, f);
 	  return false;
         }
