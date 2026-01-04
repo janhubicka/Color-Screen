@@ -190,6 +190,7 @@ private:
   luminosity_t mingray;
 
   rgbdata last_blur;
+  luminosity_t last_scanner_mtf_sigma;
   luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
@@ -1356,6 +1357,7 @@ public:
 
     /* Set up cached values.   */
     last_blur = { -1, -1, -1 };
+    last_scanner_mtf_sigma = -1;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         tiles[tileid].last_emulsion_intensities = { -1, -1, -1 };
@@ -1702,6 +1704,7 @@ public:
 	sp.scanner_mtf = std::make_shared<mtf> ();
 	sp.scanner_mtf->set_sigma (get_scanner_mtf_sigma (v));
 	sp.scanner_mtf_scale = pixel_size;
+	sp.mode = sharpen_parameters::none;
 	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
       }
     else if (optimize_screen_ps_blur)
@@ -1717,6 +1720,7 @@ public:
   {
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
+    luminosity_t scanner_mtf_sigma = get_scanner_mtf_sigma (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
     luminosity_t mtf[4];
@@ -1747,6 +1751,7 @@ public:
         tiles[t].last_emulsion_offset = { -10, -10 };
 
     if (blur != last_blur
+	|| scanner_mtf_sigma != last_scanner_mtf_sigma
         || ((optimize_screen_mtf_blur || optimize_screen_ps_blur)
             && mtf_differs (mtf, last_mtf))
         || tiles[tileid].last_emulsion_intensities != intensities
@@ -1759,6 +1764,7 @@ public:
                     optimize_emulsion_intensities ? emulsion_scr.get ()
                                                   : NULL);
         last_blur = blur;
+	last_scanner_mtf_sigma = scanner_mtf_sigma;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
         memcpy (last_mtf, mtf, sizeof (last_mtf));
@@ -1770,9 +1776,11 @@ public:
   evaulate_screen_pixel (int tileid, int x, int y, point_t off)
   {
     point_t p = tiles[tileid].pos[y * twidth + x] + off;
-    if (0)
+    /* When using scanner mtf, the screen is already blurred to
+       estimate sensor mtf as well.  No need for antialiasing
+       then.  */
+    if (optimize_scanner_mtf_sigma)
       {
-        /* Interpolation here is necessary to ensure smoothness.  */
         return tiles[tileid].scr->interpolated_mult (p);
       }
     int dx = x == twidth - 1 ? -1 : 1;
@@ -3262,7 +3270,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.init (fparams.flags, rparam.screen_blur_radius,
                         rparam.red_strip_width,
                         rparam.green_strip_width, bw_is_simulated_infrared, results);
-      /* FIXME: For parallel solvnig this will yield race condition  */
+      /* FIXME: For parallel solving this will yield race condition  */
       gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
       best_uncertainity = best_solver.solve (
           progress, !(fparams.flags & finetune_no_progress_report));
@@ -3573,6 +3581,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       if (debugfiles)
 	{
 	  tiff_writer_params p;
+	  void *buffer;
+	  size_t len = create_linear_srgb_profile (&buffer);
+	  p.icc_profile = buffer;
 	  p.filename = "/tmp/sharpened.tif";
 	  p.width = xsize;
 	  p.height = ysize;
@@ -3628,6 +3639,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 		  return false;
 	      }
 	  }
+	  free (buffer);
 	}
 
       /* Collect data  */
