@@ -128,7 +128,6 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "green_strip_width: %f\n", rparam->green_strip_width) < 0
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
-	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_names [rparam->color_model]) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
