@@ -144,7 +144,7 @@ determine_sigma (const mtf &mtf, progress_info *progress)
 
 /* Determine PSF kernel radius.  */
 static int
-get_psf_radius (double *psf, int size)
+get_psf_radius (double *psf, int size, bool *ok = NULL)
 {
   double peak = 0;
   for (int i = 0; i < size; i++)
@@ -161,8 +161,16 @@ get_psf_radius (double *psf, int size)
 
   /* This may be solved by iteratively reducing subsampling.  */
   if (this_psf_radius >= size / 2 - 2)
-    printf ("Psf size is too large; last ratio %f\n",
-            psf[size / 2 - 1] / peak);
+    {
+      if (ok)
+	*ok = false;
+#if 0
+      printf ("Psf size is too large; last ratio %f\n",
+	      psf[size / 2 - 1] / peak);
+#endif
+    }
+  else if (ok)
+    *ok = true;
   return this_psf_radius;
 }
 
@@ -175,87 +183,104 @@ void
 mtf::compute_psf (int max_radius, luminosity_t subscale)
 {
   int psf_size = ceil (max_radius / subscale) * 2 + 1;
-  int fft_size = psf_size / 2 + 1;
-  const double psf_step = 1 / (psf_size * subscale);
-  std::vector<fftw_complex> mtf_kernel (psf_size * fft_size);
-  for (int y = 0; y < fft_size; y++)
-    for (int x = 0; x < fft_size; x++)
-      {
-	std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-				      (luminosity_t)0, (luminosity_t)1),
-			  (luminosity_t)0);
-	mtf_kernel[y * fft_size + x][0] = real (ker);
-	mtf_kernel[y * fft_size + x][1] = imag (ker);
-	if (y)
-	  {
-	    mtf_kernel[(psf_size - y) * fft_size + x][0] = real (ker);
-	    mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
-	  }
-      }
-  std::vector<double> psf_data (psf_size * psf_size);
-  fftw_lock.lock ();
-  fftw_plan plan
-      = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
-			      psf_data.data (), FFTW_ESTIMATE);
-  fftw_lock.unlock ();
-  fftw_execute (plan);
-  fftw_lock.lock ();
-  fftw_destroy_plan (plan);
-  fftw_lock.unlock ();
+  int iterations = 0;
 
-  /* Determine PSF radius.  */
-
-  int radius = get_psf_radius (psf_data.data (), psf_size);
-  m_psf_radius = radius * subscale;
-  // printf ("psf radius %i %f\n", radius, m_psf_radius);
-
-  /* Compute LSF. Circular LSF is PSF.  */
-  /* Make sure PSF also trails by 0.  */
-  luminosity_t d1 = psf_data[radius];
-  luminosity_t d2 = psf_data[radius + 1];
-  psf_data[radius] = 0;
-  psf_data[radius + 1] = 0;
-  m_psf.set_range (0, (radius + 2) * subscale);
-  m_psf.init_by_y_values (psf_data.data (), radius + 2);
-  psf_data[radius] = d1;
-  psf_data[radius + 1] = d2;
-  if (0)
+  while (true)
     {
-      tiff_writer_params pp;
-      int width = psf_size;
-      int height = psf_size;
-      pp.width = width;
-      pp.height = height;
-      pp.depth = 16;
-      const char *error;
-      pp.filename = "/tmp/psf-big.tif";
-      tiff_writer renderedu (pp, &error);
-      luminosity_t err = 0, m =0;
-      for (int y = 0; y < psf_size / 2; y++)
-	for (int x = 0; x < psf_size / 2; x++)
+      int fft_size = psf_size / 2 + 1;
+      const double psf_step = 1 / (psf_size * subscale);
+      std::vector<fftw_complex> mtf_kernel (psf_size * fft_size);
+      for (int y = 0; y < fft_size; y++)
+	for (int x = 0; x < fft_size; x++)
 	  {
-	    luminosity_t val = get_psf (x, y, 1/subscale);
-	    luminosity_t diff = fabs (val - psf_data[y * psf_size + x]);
-	    if (val > m)
-	      m = val;
-	    if (diff > err)
-	      err = diff;
-	    psf_data[y * psf_size + x] = val;
+	    std::complex ker (std::clamp (get_mtf (x, y, psf_step),
+					  (luminosity_t)0, (luminosity_t)1),
+			      (luminosity_t)0);
+	    mtf_kernel[y * fft_size + x][0] = real (ker);
+	    mtf_kernel[y * fft_size + x][1] = imag (ker);
+	    if (y)
+	      {
+		mtf_kernel[(psf_size - y) * fft_size + x][0] = real (ker);
+		mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
+	      }
 	  }
-      for (int y = 0; y < height; y++)
-        {
-          for (int x = 0; x < width; x++)
-            {
-	      int v = std::clamp ((int)(invert_gamma (psf_data [y * psf_size + x]/m, -1) * (65535) + 0.5), 0, 65535);
-              renderedu.put_pixel (x, v, v, v);
-            }
-          if (!renderedu.write_row ())
-            {
-              printf ("Write error line %i\n", y);
-              break;
-            }
-        }
-      printf ("Max %f, err %f normalized %f\n", m, err, err/m);
+      std::vector<double> psf_data (psf_size * psf_size);
+      fftw_lock.lock ();
+      fftw_plan plan
+	  = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
+				  psf_data.data (), FFTW_ESTIMATE);
+      fftw_lock.unlock ();
+      fftw_execute (plan);
+      fftw_lock.lock ();
+      fftw_destroy_plan (plan);
+      fftw_lock.unlock ();
+
+      /* Determine PSF radius.  */
+
+      bool ok;
+      int radius = get_psf_radius (psf_data.data (), psf_size, &ok);
+      /* If FFT size was to small for the PSF, increase it and restart.  */
+      if (!ok && iterations < 10)
+	{
+	  if (psf_size < 4096)
+	    psf_size *= 2;
+	  else
+	    subscale /= 2;
+	  iterations++;
+	  continue;
+	}
+      m_psf_radius = radius * subscale;
+      // printf ("psf radius %i %f\n", radius, m_psf_radius);
+
+      /* Compute LSF. Circular LSF is PSF.  */
+      /* Make sure PSF also trails by 0.  */
+      luminosity_t d1 = psf_data[radius];
+      luminosity_t d2 = psf_data[radius + 1];
+      psf_data[radius] = 0;
+      psf_data[radius + 1] = 0;
+      m_psf.set_range (0, (radius + 2) * subscale);
+      m_psf.init_by_y_values (psf_data.data (), radius + 2);
+      psf_data[radius] = d1;
+      psf_data[radius + 1] = d2;
+      if (0)
+	{
+	  tiff_writer_params pp;
+	  int width = psf_size;
+	  int height = psf_size;
+	  pp.width = width;
+	  pp.height = height;
+	  pp.depth = 16;
+	  const char *error;
+	  pp.filename = "/tmp/psf-big.tif";
+	  tiff_writer renderedu (pp, &error);
+	  luminosity_t err = 0, m =0;
+	  for (int y = 0; y < psf_size / 2; y++)
+	    for (int x = 0; x < psf_size / 2; x++)
+	      {
+		luminosity_t val = get_psf (x, y, 1/subscale);
+		luminosity_t diff = fabs (val - psf_data[y * psf_size + x]);
+		if (val > m)
+		  m = val;
+		if (diff > err)
+		  err = diff;
+		psf_data[y * psf_size + x] = val;
+	      }
+	  for (int y = 0; y < height; y++)
+	    {
+	      for (int x = 0; x < width; x++)
+		{
+		  int v = std::clamp ((int)(invert_gamma (psf_data [y * psf_size + x]/m, -1) * (65535) + 0.5), 0, 65535);
+		  renderedu.put_pixel (x, v, v, v);
+		}
+	      if (!renderedu.write_row ())
+		{
+		  printf ("Write error line %i\n", y);
+		  break;
+		}
+	    }
+	  printf ("Max %f, err %f normalized %f\n", m, err, err/m);
+	}
+      return;
     }
 }
 
@@ -339,14 +364,20 @@ mtf::precompute (progress_info *progress)
       m_mtf.set_range (0, 0.5 + (1 / 253));
       m_mtf.init_by_y_values (contrasts.data (), 256);
       int radius;
+
+      /* FIXME: For some reason this still gives too small kernels.  */
       for (radius = 0; calculate_system_lsf (radius, m_sigma) > /*0.0001*/0.000001; radius++)
 	;
       radius++;
       if (radius < 3)
         radius = 3;
+#if 0
       printf ("Estimated radius for sigma %f: %i\n", m_sigma, radius);
+#endif
       compute_psf (radius);
+#if 0
       printf ("Final radius: %i\n", psf_radius (1));
+#endif
 
 #if 0
       const luminosity_t subscale = 1 / 32.0;
