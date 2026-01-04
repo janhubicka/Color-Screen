@@ -3511,15 +3511,22 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
      rendered screen.  */
   else if (sharpen_mode == sharpen_parameters::none)
     {
+      bool antialias = !sharpen_param.scanner_mtf;
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(ymin, ymax, xmin, xmax, threshold, map, scr, collection_scr)       \
-    reduction(+ : wr, wg, wb, red, green, blue)
+    reduction(+ : wr, wg, wb, red, green, blue, antialias)
       for (int y = ymin; y <= ymax; y++)
         for (int x = xmin; x <= xmax; x++)
           {
 	    point_t p;
-            rgbdata am = antialias_screen (scr, map, x, y, &p);
+            rgbdata am;
+	    /* Scanner MTF already esimtates sensor loss; so we should not need
+	       to antialias.  */
+	    if (!antialias)
+	      am = noantialias_screen (scr, map, x, y, &p);
+	    else
+	      am = antialias_screen (scr, map, x, y, &p);
 	    /* Data collection does not antialias.  So just take pixel in the
 	       middle  */
             rgbdata m = collection_scr.noninterpolated_mult (p);
@@ -3558,11 +3565,18 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ysize = ymax - ymin + 2 * ext + 1;
       std::vector<rgbdata> rendered (xsize * ysize);
 
-      /* Render screen.  */
-      for (int y = ymin - ext; y <= ymax + ext; y++)
-        for (int x = xmin - ext; x <= xmax + ext; x++)
-	  rendered[(y - ymin + ext) * xsize + x - xmin + ext]
-	      = antialias_screen (scr, map, x, y);
+      /* Render screen.
+         Scanner MTF already esimtates sensor loss; so we should not need to antialias.  */
+      if (sharpen_param.scanner_mtf)
+	for (int y = ymin - ext; y <= ymax + ext; y++)
+	  for (int x = xmin - ext; x <= xmax + ext; x++)
+	    rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+		= noantialias_screen (scr, map, x, y);
+      else
+	for (int y = ymin - ext; y <= ymax + ext; y++)
+	  for (int x = xmin - ext; x <= xmax + ext; x++)
+	    rendered[(y - ymin + ext) * xsize + x - xmin + ext]
+		= antialias_screen (scr, map, x, y);
 
       /* Sharpen it  */
       std::vector<rgbdata> rendered2 (xsize * ysize);
@@ -3584,6 +3598,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 	  void *buffer;
 	  size_t len = create_linear_srgb_profile (&buffer);
 	  p.icc_profile = buffer;
+	  p.icc_profile_len = len;
 	  p.filename = "/tmp/sharpened.tif";
 	  p.width = xsize;
 	  p.height = ysize;
@@ -3670,7 +3685,12 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
           }
     }
   if (!(wr > 0 && wg > 0 && wb > 0))
+  {
+    *ret_red = {1, 0, 0};
+    *ret_green = {0, 1, 0};
+    *ret_blue = {0, 0, 1};
     return false;
+  }
   red /= wr;
   green /= wg;
   blue /= wb;
