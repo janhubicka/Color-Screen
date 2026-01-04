@@ -110,8 +110,8 @@ public:
         /* Do not care about values above Nyquist.  */
         if (freq > 0.5)
           continue;
-        luminosity_t contrast = m_mtf.get_contrast (i) * 0.01;
-        luminosity_t contrast2 = system_mtf (freq, sigma);
+        luminosity_t contrast = m_mtf.get_contrast (i);
+        luminosity_t contrast2 = system_mtf (freq, sigma) * 100;
         sum += (contrast - contrast2) * (contrast - contrast2);
       }
     return sum;
@@ -351,19 +351,36 @@ mtf::precompute (progress_info *progress)
           m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
           m_mtf.init_by_y_values (contrasts.data (), size () + 2);
         }
+      if (colorscreen_checking)
+	for (size_t i = 0; i < size (); i++)
+	  {
+	    luminosity_t freq = get_freq (i);
+	    if (fabs (get_contrast (freq) * 0.01 - get_mtf (freq)) > 0.001)
+	      abort ();
+	  }
       compute_psf ();
 
     }
   /* Use gaussian blur + sensor model with a given sigma.  */
   else
     {
-      std::vector<luminosity_t> contrasts (256);
-      for (int i = 0; i < 254; i++)
-        contrasts[i] = system_mtf (i * (0.5 / 253), m_sigma);
-      contrasts[254] = contrasts[255] = 0;
-      m_mtf.set_range (0, 0.5 + (1 / 253));
-      m_mtf.init_by_y_values (contrasts.data (), 256);
+      const int entries = 512;
+      std::vector<luminosity_t> contrasts (entries);
+      luminosity_t step = 1.0 / (entries - 2);
+      for (int i = 0; i < entries - 2; i++)
+        contrasts[i] = system_mtf (i * step, m_sigma);
+      contrasts[entries - 2] = contrasts[entries - 1] = 0;
+      m_mtf.set_range (0, 1 + step);
+      m_mtf.init_by_y_values (contrasts.data (), entries);
       int radius;
+
+      if (colorscreen_checking)
+	for (int i = 0; i < 1000; i++)
+	  if (fabs (system_mtf (i / 1000.0, m_sigma) - m_mtf.apply (i / 1000.0)) > 0.001)
+	    {
+	      printf ("Mismatch %f %f\n", system_mtf (i / 1000.0, m_sigma), m_mtf.apply (i / 1000.0));
+	      abort ();
+	    }
 
       /* FIXME: For some reason this still gives too small kernels.  */
       for (radius = 0; calculate_system_lsf (radius, m_sigma) > /*0.0001*/0.000001; radius++)
@@ -396,6 +413,8 @@ mtf::precompute (progress_info *progress)
     }
   //print_lsf (stdout);
 
+  //m_mtf.plot (0, 1);
+  //m_psf.plot (0, 5);
   m_lock.unlock ();
   return true;
 }
