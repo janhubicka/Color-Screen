@@ -24,8 +24,9 @@ struct sharpen_parameters
   {
     none,
     unsharp_mask,
-    weiner_deconvolution,
+    wiener_deconvolution,
     richardson_lucy_deconvolution,
+    blur_deconvolution,
     sharpen_mode_max
   };
   DLL_PUBLIC static const char *sharpen_mode_names[(int)sharpen_mode_max];
@@ -60,11 +61,14 @@ struct sharpen_parameters
 	return none;
       case unsharp_mask:
 	return usm_radius > 0 && usm_amount > 0 ? unsharp_mask : none;
-      case weiner_deconvolution:
-        return scanner_mtf && scanner_mtf_scale > 0 ? weiner_deconvolution : none;
+      case wiener_deconvolution:
+        return scanner_mtf && scanner_mtf_scale > 0 ? wiener_deconvolution : none;
       case richardson_lucy_deconvolution:
         return scanner_mtf && scanner_mtf_scale > 0 && richardson_lucy_iterations
 	       ? richardson_lucy_deconvolution : none;
+      case blur_deconvolution:
+        return scanner_mtf && scanner_mtf_scale > 0 
+	       ? blur_deconvolution : none;
       default:
 	abort ();
     }
@@ -72,7 +76,8 @@ struct sharpen_parameters
   bool deconvolution_p () const
   {
     enum sharpen_mode mode = get_mode ();
-    return mode == weiner_deconvolution || mode == richardson_lucy_deconvolution;
+    return mode == wiener_deconvolution || mode == richardson_lucy_deconvolution
+	   || mode == blur_deconvolution;
   }
 
   /* Return true if THIS and O will produce same image.
@@ -92,7 +97,7 @@ struct sharpen_parameters
       case unsharp_mask:
 	return fabs (usm_radius - o.usm_radius) < 0.001
 	       && usm_amount == o.usm_amount;
-      case weiner_deconvolution:
+      case wiener_deconvolution:
 	return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
 	       && scanner_snr == o.scanner_snr;
@@ -101,6 +106,9 @@ struct sharpen_parameters
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
 	       && richardson_lucy_iterations == o.richardson_lucy_iterations
 	       && richardson_lucy_sigma == o.richardson_lucy_sigma;
+      case blur_deconvolution:
+        return scanner_mtf == o.scanner_mtf
+	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001;
       default:
 	abort ();
       }
@@ -206,7 +214,7 @@ struct render_parameters
   int tile_adjustments_width, tile_adjustments_height;
   std::vector<tile_adjustment> tile_adjustments;
 
-  /***** Path density parameters  *****/
+  /***** Patch density parameters  *****/
 
   /* Gamma curve of the film (to be replaced by HD curve eventually)  */
   luminosity_t film_gamma;

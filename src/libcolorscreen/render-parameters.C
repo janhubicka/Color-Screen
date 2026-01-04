@@ -65,7 +65,8 @@ const char * sharpen_parameters::sharpen_mode_names [] = {
   "none",
   "unsharp-mask",
   "Wiener-deconvolution",
-  "Richardson-Lucy-deconvolution"
+  "Richardson-Lucy-deconvolution",
+  "blur-deconvolution"
 };
 const char * render_parameters::collection_quality_names [] = {
   "fast",

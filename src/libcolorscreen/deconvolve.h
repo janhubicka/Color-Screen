@@ -18,7 +18,8 @@ public:
   {
     blur,
     sharpen,
-    richardson_lucy_sharpen
+    richardson_lucy_sharpen,
+    blur_deconvolution
   };
   /* Set up deconvolution for given MTF and MTF_SCALE.
      SNR specifies signal to noise ratio
@@ -116,16 +117,28 @@ template <typename O, typename mem_O, typename T, typename P,
           O (*getdata) (T data, int x, int y, int width, P param)>
 bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
-	    const sharpen_parameters &sharpen,
-	    progress_info *progress,
+            const sharpen_parameters &sharpen, progress_info *progress,
             bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
-	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
-  deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
-		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads, mode,
-		   sharpen.richardson_lucy_iterations);
+  deconvolution::mode mode;
+  switch (sharpen.mode)
+    {
+    case sharpen_parameters::richardson_lucy_deconvolution:
+      mode = deconvolution::richardson_lucy_sharpen;
+      break;
+    case sharpen_parameters::wiener_deconvolution:
+      mode = deconvolution::sharpen;
+      break;
+    case sharpen_parameters::blur_deconvolution:
+      mode = deconvolution::blur;
+      break;
+    default:
+      abort ();
+    }
+  deconvolution d (sharpen.scanner_mtf.get (), sharpen.scanner_mtf_scale,
+                   sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
+                   nthreads, mode, sharpen.richardson_lucy_iterations);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -134,12 +147,14 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   if (progress)
     {
       if (mode == deconvolution::sharpen)
-        progress->set_task ("Deconvolution sharpening (Weiner filter)", xtiles * ytiles);
+        progress->set_task ("Deconvolution sharpening (Weiner filter)",
+                            xtiles * ytiles);
       else
-        progress->set_task ("Deconvolution sharpening (Richardson-Lucy)", xtiles * ytiles);
+        progress->set_task ("Deconvolution sharpening (Richardson-Lucy)",
+                            xtiles * ytiles);
     }
-#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
-    shared (width, height,d,progress,out,param,parallel,data) if (parallel)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2) shared(  \
+        width, height, d, progress, out, param, parallel, data) if (parallel)
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
@@ -151,20 +166,20 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
         for (int yy = 0; yy < d.get_tile_size_with_borders (); yy++)
           for (int xx = 0; xx < d.get_tile_size_with_borders (); xx++)
             {
-	      int px = x + xx - d.get_border_size ();
-	      int py = y + yy - d.get_border_size ();
+              int px = x + xx - d.get_border_size ();
+              int py = y + yy - d.get_border_size ();
 
-	      /* Do mirroring to avoid sharp edge at the border of image  */
-	      if (px < 0)
-		px = -px;
-	      if (py < 0)
-		py = -py;
-	      if (px >= width)
-		px = width - (px - width) - 1;
-	      if (py >= height)
-		px = height - (px - height) - 1;
-	      px = std::clamp (px, 0, width - 1);
-	      py = std::clamp (py, 0, height - 1);
+              /* Do mirroring to avoid sharp edge at the border of image  */
+              if (px < 0)
+                px = -px;
+              if (py < 0)
+                py = -py;
+              if (px >= width)
+                px = width - (px - width) - 1;
+              if (py >= height)
+                px = height - (px - height) - 1;
+              px = std::clamp (px, 0, width - 1);
+              py = std::clamp (py, 0, height - 1);
               d.put_pixel (id, xx, yy, getdata (data, px, py, width, param));
             }
         d.process_tile (id);
@@ -188,8 +203,21 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 		bool parallel = true)
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
-  deconvolution::mode mode = sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
-	  		     ? deconvolution::sharpen : deconvolution::richardson_lucy_sharpen;
+  deconvolution::mode mode;
+  switch (sharpen.mode)
+    {
+    case sharpen_parameters::richardson_lucy_deconvolution:
+      mode = deconvolution::richardson_lucy_sharpen;
+      break;
+    case sharpen_parameters::wiener_deconvolution:
+      mode = deconvolution::sharpen;
+      break;
+    case sharpen_parameters::blur_deconvolution:
+      mode = deconvolution::blur;
+      break;
+    default:
+      abort ();
+    }
   deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations);

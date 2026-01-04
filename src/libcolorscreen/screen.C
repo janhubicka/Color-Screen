@@ -1812,8 +1812,10 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			std::clamp (sharpen[c]->scanner_mtf->get_mtf (x, y, step),
 				    (luminosity_t)0, (luminosity_t)1),
 			(luminosity_t)0);
-		    if (mode == sharpen_parameters::weiner_deconvolution)
+		    if (mode == sharpen_parameters::wiener_deconvolution)
 		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
+		    else if (mode == sharpen_parameters::blur_deconvolution)
+		      ker = ker * ker;
 		    ker = ker * data_scale;
 		    fft[y * fft_size + x][0] = real (ker);
 		    fft[y * fft_size + x][1] = imag (ker);
@@ -1896,7 +1898,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      for (int x = 0; x < fft_size * screen::size; x++)
 		{
 		  std::complex ker (fft[x][0], fft[x][1]);
-		  if (mode == sharpen_parameters::weiner_deconvolution)
+		  if (mode == sharpen_parameters::wiener_deconvolution)
 		    ker = ker * (conj (ker) / (std::norm (ker) + k_const));
 		  fft[x][0] = real (ker) * (1.0 / (screen::size * screen::size));
 		  fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));

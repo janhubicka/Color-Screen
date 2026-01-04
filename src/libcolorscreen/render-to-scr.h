@@ -410,6 +410,19 @@ antialias_screen (const screen &scr, const scr_to_img &map,
       am += scr.interpolated_mult (p + pdx * xx + pdy * yy);
   return am * ((coord_t)1.0 / 25);
 }
+/* Determine image pixel X,Y in screen filter SCR using MAP.
+   Do antialiasing.  */
+inline rgbdata
+noantialias_screen (const screen &scr, const scr_to_img &map,
+		    int x, int y, point_t *retp = NULL)
+{
+  point_t p = map.to_scr ({ x + (coord_t)0.5, y + (coord_t)0.5 });
+  if (retp)
+    *retp = p;
+
+  return scr.interpolated_mult (p);
+}
+
 
 struct scr_detect_parameters;
 struct solver_parameters;

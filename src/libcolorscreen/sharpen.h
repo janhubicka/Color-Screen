@@ -23,7 +23,7 @@ non_sharpen(mem_O *out, T data, P param, int width, int height, progress_info *p
 }
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 inline void
-do_sharpen_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T data,int width, int y, luminosity_t amount, P param)
+do_unsharp_mask_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T data,int width, int y, luminosity_t amount, P param)
 {
   for (int x = 0; x < width; x++)
     {
@@ -39,7 +39,7 @@ do_sharpen_loop(mem_O *out, O *hblur, int clen, luminosity_t *rotated_cmatrix, T
    Flattened so avoid doing unnecesary stuff.  */
 template<typename O, typename mem_O, typename T,typename P, O (*getdata)(T data, int x, int y, int width, P param)>
 flatten_attr void
-do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
+do_unsharp_mask(mem_O *out, T data, P param, int width, int height, int clen, luminosity_t *cmatrix, luminosity_t amount, progress_info *progress, bool maybe_parallel = true)
 {
   bool parallel = width * height > 1024 * 128 && maybe_parallel;
 #pragma omp parallel shared(progress,out,clen,cmatrix,width, height, amount, param, data, parallel) default(none) if (width * height > 1024 * 128 && parallel)
@@ -108,25 +108,25 @@ do_sharpen(mem_O *out, T data, P param, int width, int height, int clen, luminos
 	  /* Specialize the inner loop for small clens.  */
 	  switch (clen)
 	    {
-	      case 3: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 5: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 7: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 9: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 11: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 13: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 15: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 17: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 19: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 21: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 23: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 25: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 27: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 29: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
-	      case 31: do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 3: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 5: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 7: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 9: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 11: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 13: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 15: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 17: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 19: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 21: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 23: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 25: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 27: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 29: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
+	      case 31: do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param); break;
 	      default:
 	       if (clen < 32 || !(clen & 1))
 		 abort ();/*__builtin_unreachable ();*/
-	       do_sharpen_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param);
+	       do_unsharp_mask_loop<O, mem_O, T, P, getdata> (out, hblur, clen, rotated_cmatrix, data, width, y, amount, param);
 	       break;
 	    }
 	  if (progress)
@@ -164,8 +164,8 @@ sharpen(mem_O *out, T data, P param, int width, int height, luminosity_t radius,
       return true;
     }
   if (progress)
-    progress->set_task ("sharpening", height);
-  do_sharpen<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress, parallel);
+    progress->set_task ("sharpening (unsharp mask)", height);
+  do_unsharp_mask<O,mem_O,T,P,getdata> (out, data, param, width, height, clen, cmatrix, amount, progress, parallel);
 
   free (cmatrix);
   if (progress && progress->cancelled ())
