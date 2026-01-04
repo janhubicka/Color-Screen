@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
+#include <cstdio>
 #include "base.h"
 
 namespace colorscreen
@@ -221,6 +222,30 @@ public:
   get_max ()
   {
     return m_max_x;
+  }
+
+  void
+  plot (T min, T max)
+  {
+    int lines = 25;
+    T ma = apply (0);
+    T mi = ma;
+    for (int i = 1; i < lines; i++)
+      {
+	T v = apply (min + (max - min) * i / lines);
+	ma = std::max (ma, v);
+	mi = std::min (mi, v);
+      }
+    for (int i = 0; i <= lines; i++)
+      {
+	T x = min + (max - min) * i / lines;
+	T y = apply (x);
+	int w = (y - mi) * 80 / (ma - mi);
+	printf ("%2.2f:", x);
+	for (int i = 0; i < w; i++)
+	  printf (" ");
+	printf ("* %2.2f\n", y);
+      }
   }
 
 private:
