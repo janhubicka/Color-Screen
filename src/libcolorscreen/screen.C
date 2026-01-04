@@ -1782,9 +1782,11 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 {
   fft_2d fft;
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
+#if 0
   printf ("Initial patch proportions:");
   scr.patch_proportions ().print (stdout);
   printf ("\n");
+#endif
   for (int c = 0; c < 3; c++)
     {
       sharpen_parameters::sharpen_mode mode = sharpen[c]->get_mode ();
@@ -1796,8 +1798,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  int this_psf_size = sharpen[c]->scanner_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  sharpen[c]->scanner_mtf->precompute ();
+	  int this_psf_size = sharpen[c]->scanner_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
@@ -1826,6 +1828,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  else
 	    {
 	      std::vector <double> wrapped_psf (screen::size * screen::size, 0.0);
+	      //printf ("This psf size %i\n", this_psf_size);
 
 	      for (int y = 0; y < this_psf_size; y++)
 	        for (int x = 0; x <  this_psf_size; x++)
@@ -1907,9 +1910,11 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       if (all)
 	break;
     }
+#if 0
   printf ("Modified patch proportions:");
   scr.patch_proportions ().print (stdout);
   printf ("\n");
+#endif
 }
 void
 screen::initialize_with_point_spread (
