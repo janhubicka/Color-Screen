@@ -1798,8 +1798,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  sharpen[c]->scanner_mtf->precompute ();
-	  int this_psf_size = sharpen[c]->scanner_mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
+	  mtf *mtf = mtf::get_mtf (*sharpen[c]->scanner_mtf, NULL);
+	  mtf->precompute ();
+	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
 
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
@@ -1809,7 +1810,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp (sharpen[c]->scanner_mtf->get_mtf (x, y, step),
+			std::clamp (mtf->get_mtf (x, y, step),
 				    (luminosity_t)0, (luminosity_t)1),
 			(luminosity_t)0);
 		    if (mode == sharpen_parameters::wiener_deconvolution)
@@ -1835,7 +1836,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      for (int y = 0; y < this_psf_size; y++)
 	        for (int x = 0; x <  this_psf_size; x++)
 		  {
-		    double val = sharpen[c]->scanner_mtf->get_psf (x, y, (step * screen::size));
+		    double val = mtf->get_psf (x, y, (step * screen::size));
 		    int xx = x & (screen::size - 1);
 		    int yy = y & (screen::size - 1);
 		    int nxx = (-x) & (screen::size - 1);
@@ -1904,6 +1905,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		  fft[x][1] = imag (ker) * (1.0 / (screen::size * screen::size));
 		}
 	    }
+          mtf::release_mtf (mtf);
         }
       if (mode != sharpen_parameters::richardson_lucy_deconvolution)
         initialize_with_2D_fft_fast (*this, scr, fft, c, all ? 2 : c);

@@ -6,6 +6,7 @@
 #include "include/base.h"
 #include "include/color.h"
 #include "include/precomputed-function.h"
+#include "include/render-parameters.h"
 
 namespace colorscreen
 {
@@ -57,45 +58,30 @@ public:
   int init_psf (std::vector<double> &psf, luminosity_t scale);
 
 
-  void
-  add_value (luminosity_t freq, luminosity_t contrast)
-  {
-    assert (!m_precomputed);
-    m_data.push_back ({freq, contrast});
-  }
-
   size_t
   size () const
   {
-    return m_data.size ();
+    return m_params.size ();
   }
   luminosity_t
   get_freq (int i) const
   {
-    return m_data[i].freq;
+    return m_params.get_freq (i);
   }
   luminosity_t
   get_contrast (int i) const
   {
-    return m_data[i].contrast;
+    return m_params.get_contrast (i);
   }
 
-  mtf ()
-  : m_sigma (0),
-    m_precomputed (0)
+  mtf (const mtf_parameters &params)
+  : m_params (params)
   { }
-
-  void
-  set_sigma (luminosity_t sigma)
-  {
-    assert (!m_precomputed);
-    m_sigma = sigma;
-  }
 
   luminosity_t
   get_sigma ()
   {
-    return m_sigma;
+    return m_params.sigma;
   }
 
   void
@@ -103,10 +89,11 @@ public:
 
   void
   print_mtf (FILE *);
+
+  static mtf *get_mtf (mtf_parameters &mtfp, progress_info *p);
+  static void release_mtf (mtf *m);
 private:
-  luminosity_t m_sigma;
-  struct entry {luminosity_t freq, contrast;};
-  std::vector <entry> m_data;
+  mtf_parameters m_params;
   precomputed_function<luminosity_t> m_mtf;
   precomputed_function<luminosity_t> m_psf;
   luminosity_t m_psf_radius;

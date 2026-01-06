@@ -1701,8 +1701,8 @@ public:
       {
 	sharpen_parameters sp;
 	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
-	sp.scanner_mtf = std::make_shared<mtf> ();
-	sp.scanner_mtf->set_sigma (get_scanner_mtf_sigma (v));
+	sp.scanner_mtf = std::make_shared<mtf_parameters> ();
+	sp.scanner_mtf->sigma = get_scanner_mtf_sigma (v);
 	sp.scanner_mtf_scale = pixel_size;
 	sp.mode = sharpen_parameters::none;
 	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
@@ -3555,9 +3555,11 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  if (!sharpen_param.scanner_mtf->precompute ())
+	  mtf *mtf = mtf::get_mtf (*sharpen_param.scanner_mtf, NULL);
+	  if (!mtf->precompute ())
 	    return false;
-	  ext = sharpen_param.scanner_mtf->psf_size ( sharpen_param.scanner_mtf_scale);
+	  ext = mtf->psf_size ( sharpen_param.scanner_mtf_scale);
+	  mtf::release_mtf (mtf);
 	}
       else
 	ext = fir_blur::convolve_matrix_length (sharpen_param.usm_radius) / 2;

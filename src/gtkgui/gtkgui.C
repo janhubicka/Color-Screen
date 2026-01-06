@@ -217,7 +217,11 @@ getvals (void)
   rparams.sharpen.usm_radius = gtk_spin_button_get_value (data.sharpen_radius);
   rparams.sharpen.usm_amount = gtk_spin_button_get_value (data.sharpen_amount);
   //rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
-  rparams.set_scanner_mtf_sigma (gtk_spin_button_get_value (data.scanner_mtf_sigma));
+  luminosity_t sigma = gtk_spin_button_get_value (data.scanner_mtf_sigma);
+  if (sigma && !rparams.sharpen.scanner_mtf)
+    rparams.sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+  if (rparams.sharpen.scanner_mtf)
+    rparams.sharpen.scanner_mtf->sigma = gtk_spin_button_get_value (data.scanner_mtf_sigma);
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
   current.tilt_x = gtk_spin_button_get_value (data.tilt_x);
   current.tilt_y = gtk_spin_button_get_value (data.tilt_y);
@@ -254,7 +258,8 @@ setvals (void)
   gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
   gtk_spin_button_set_value (data.sharpen_radius, rparams.sharpen.usm_radius);
   gtk_spin_button_set_value (data.sharpen_amount, rparams.sharpen.usm_amount);
-  gtk_spin_button_set_value (data.scanner_mtf_sigma, rparams.get_scanner_mtf_sigma ());
+  gtk_spin_button_set_value (data.scanner_mtf_sigma, 
+		  rparams.sharpen.scanner_mtf ? rparams.sharpen.scanner_mtf->sigma : 0);
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
   gtk_spin_button_set_value (data.tilt_x, current.tilt_x);
   gtk_spin_button_set_value (data.tilt_y, current.tilt_y);

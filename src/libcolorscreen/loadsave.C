@@ -116,8 +116,18 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		  return false;
 	      }
 	  else
-	    if (fprintf (f, "scanner_mtf_sigma: %f\n",
-		  rparam->sharpen.scanner_mtf->get_sigma ()) < 0)
+	    if (fprintf (f, "scanner_mtf_sigma_px: %f\n",
+		  rparam->sharpen.scanner_mtf->sigma) < 0
+		|| fprintf (f, "scanner_mtf_blur_diameter_px: %f\n",
+		  rparam->sharpen.scanner_mtf->blur_diameter) < 0
+		|| fprintf (f, "scanner_mtf_pixel_pitch_um: %f\n",
+		  rparam->sharpen.scanner_mtf->pixel_pitch) < 0
+		|| fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
+		  rparam->sharpen.scanner_mtf->wavelength) < 0
+		|| fprintf (f, "scanner_mtf_f_stop: %f\n",
+		  rparam->sharpen.scanner_mtf->f_stop) < 0
+		|| fprintf (f, "scanner_mtf_defocus_mm: %f\n",
+		  rparam->sharpen.scanner_mtf->defocus) < 0)
 	      return false;
 	}
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
@@ -1240,7 +1250,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	{
 	  luminosity_t freq, contrast;
 	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf = std::make_shared<mtf> ();
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
 	  first_scanner_mtf = false;
 	  if (!read_luminosity (f, &freq)
 	      || !read_luminosity (f, &contrast))
@@ -1251,11 +1261,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (rparam)
 	    rparam->sharpen.scanner_mtf->add_value (freq, contrast);
 	}
-      else if (!strcmp (buf, "scanner_mtf_sigma"))
+      else if (!strcmp (buf, "scanner_mtf_sigma") || !strcmp (buf, "scanner_mtf_sigma_px"))
 	{
 	  luminosity_t sigma;
 	  if (rparam && first_scanner_mtf)
-	    rparam->sharpen.scanner_mtf = std::make_shared<mtf> ();
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
 	  if (!read_luminosity (f, &sigma))
 	    {
 	      *error = "error parsing scanner_mtf_sigma";
@@ -1263,7 +1273,77 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  first_scanner_mtf = false;
 	  if (rparam)
-	    rparam->sharpen.scanner_mtf->set_sigma (sigma);
+	    rparam->sharpen.scanner_mtf->sigma = sigma;
+	}
+      else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
+	{
+	  luminosity_t blur_diameter;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &blur_diameter))
+	    {
+	      *error = "error parsing scanner_mtf_blur_diameter";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->blur_diameter = blur_diameter;
+	}
+      else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
+	{
+	  luminosity_t pixel_pitch;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &pixel_pitch))
+	    {
+	      *error = "error parsing scanner_mtf_pixel_pitch";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->pixel_pitch = pixel_pitch;
+	}
+      else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
+	{
+	  luminosity_t wavelength;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &wavelength))
+	    {
+	      *error = "error parsing scanner_mtf_wavelength";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->wavelength = wavelength;
+	}
+      else if (!strcmp (buf, "scanner_mtf_f_stop"))
+	{
+	  luminosity_t f_stop;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &f_stop))
+	    {
+	      *error = "error parsing scanner_mtf_f_stop";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->f_stop = f_stop;
+	}
+      else if (!strcmp (buf, "scanner_mtf_defocus_mm"))
+	{
+	  luminosity_t defocus;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &defocus))
+	    {
+	      *error = "error parsing scanner_mtf_defocus";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->defocus = defocus;
 	}
       else
 	{

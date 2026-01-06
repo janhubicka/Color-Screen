@@ -136,9 +136,11 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
     default:
       abort ();
     }
-  deconvolution d (sharpen.scanner_mtf.get (), sharpen.scanner_mtf_scale,
+  mtf *scanner_mtf = mtf::get_mtf (*sharpen.scanner_mtf, progress);
+  deconvolution d (scanner_mtf, sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
                    nthreads, mode, sharpen.richardson_lucy_iterations);
+  mtf::release_mtf (scanner_mtf);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();
@@ -218,9 +220,11 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
     default:
       abort ();
     }
-  deconvolution d (sharpen.scanner_mtf.get(), sharpen.scanner_mtf_scale,
+  mtf *scanner_mtf = mtf::get_mtf (*sharpen.scanner_mtf, progress);
+  deconvolution d (scanner_mtf, sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
 		   sharpen.richardson_lucy_iterations);
+  mtf::release_mtf (scanner_mtf);
 
   int xtiles
       = (width + d.get_basic_tile_size () - 1) / d.get_basic_tile_size ();

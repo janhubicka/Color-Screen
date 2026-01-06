@@ -40,6 +40,16 @@ Changes in version 1.1
    - suport for demosaicing of converted monochromatic camera
    - fixed bug in backlight correction of monochromatic scans
    - gammut warnings
+ - Scanner MTF can now be specified for more precise handling of sharpness of
+   the scanner lens.  This curve can be measured using slanted edge method, i.e
+   using quickMTF
+ - New sharpening algorithms: Wiener filter and Richardson-Lucy deconvolution
+ - Data collection now supports three modes
+   - fast collection (original precise == false)
+   - simple screen collection (original precise == true)
+   - simulated screen collection
+     In this mode screen filter scan is simulated by first rendering unsharp
+     image (using scanner_mtf data) and then applying selected sharpening algorithm
  - Infrastructure improvements:
    - `make check` now executes unit tests for
       - matrix implementation

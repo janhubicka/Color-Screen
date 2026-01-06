@@ -15,7 +15,103 @@ namespace colorscreen
 class render_type_parameters;
 class render_type_property;
 class stitch_project;
-class mtf;
+
+
+/* MTF can be either based on real measured data (then size() != 0)
+   or computed by difraction limit or just a blur disk simulation.
+   In each case one can adjust sigma.  */
+struct mtf_parameters
+{
+  /* Sigma (in pixels) used to estimate gaussian blur.  */
+  luminosity_t sigma;
+
+  /* Size of blur diameter (in pixels) used to estimate defocus.
+     This parameter is used only if pixel_pitch/f_num/wavelength_nm
+     is not defined.  */
+  luminosity_t blur_diameter;
+
+  /* Defocus (in milimeters) */
+  luminosity_t defocus;
+  /* F-stop.  */
+  luminosity_t f_stop;
+  /* Wavelength of light in nm.  */
+  luminosity_t wavelength;
+  /* Sensor pixel pitch (size of a pixel) in micrometers.  */
+  luminosity_t pixel_pitch;
+
+  void
+  add_value (luminosity_t freq, luminosity_t contrast)
+  {
+    m_data.push_back ({freq, contrast});
+  }
+  size_t
+  size () const
+  {
+    return m_data.size ();
+  }
+  luminosity_t
+  get_freq (int i) const
+  {
+    return m_data[i].freq;
+  }
+  luminosity_t
+  get_contrast (int i) const
+  {
+    return m_data[i].contrast;
+  }
+  bool
+  simulate_difraction_p () const
+  {
+    return !size () && pixel_pitch && f_stop && wavelength;
+  }
+  bool
+  operator== (const mtf_parameters &o) const
+  {
+    if (sigma != o.sigma)
+      return false;
+    if (simulate_difraction_p ())
+      return o.simulate_difraction_p ()
+	     && defocus == o.defocus
+	     && blur_diameter == o.blur_diameter
+	     && f_stop == o.f_stop
+	     && wavelength == o.wavelength
+	     && pixel_pitch == o.pixel_pitch;
+    else if (o.simulate_difraction_p ())
+      return false;
+    if (blur_diameter != o.blur_diameter)
+      return false;
+    return m_data == o.m_data;
+  }
+  bool equal_p (const mtf_parameters &o) const
+  {
+    return sigma == o.sigma
+	   && blur_diameter == o.blur_diameter
+	   && defocus == o.defocus
+	   && f_stop == o.f_stop
+	   && wavelength == o.wavelength
+	   && pixel_pitch == o.pixel_pitch
+	   && m_data == o.m_data;
+  }
+  void
+  clear_data ()
+  {
+    std::vector <entry>().swap (m_data);
+  }
+  luminosity_t lens_mtf (luminosity_t pixel_freq);
+  luminosity_t system_mtf (luminosity_t pixel_freq);
+  mtf_parameters ()
+  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), m_data ()
+  { }
+private:
+  struct entry {
+    luminosity_t freq, contrast;
+    bool operator== (const entry &o) const
+    {
+      return freq == o.freq && contrast == o.contrast;
+    }
+  };
+  std::vector <entry> m_data;
+};
 
 /* Parameters of sharpening.  */
 struct sharpen_parameters
@@ -38,7 +134,7 @@ struct sharpen_parameters
   luminosity_t usm_radius, usm_amount;
 
   /* MTF curve of scanner.  */
-  std::shared_ptr <mtf> scanner_mtf;
+  std::shared_ptr <mtf_parameters> scanner_mtf;
 
   /* Signal to noise ratio of the scanner.  */
   luminosity_t scanner_snr;
@@ -380,9 +476,6 @@ struct render_parameters
 
   /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;
-
-  DLL_PUBLIC void set_scanner_mtf_sigma (luminosity_t sigma);
-  DLL_PUBLIC luminosity_t get_scanner_mtf_sigma ();
 
   render_parameters ()
       : 
