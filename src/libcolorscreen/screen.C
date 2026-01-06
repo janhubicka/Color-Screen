@@ -1951,7 +1951,7 @@ screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
           { 0.4167, 0.02031 }, { 0.4303, 0.01796 }, { 0.4439, 0.00999 },
           { 0.4575, 0.01103 }, { 0.4711, 0.00910 }, { 0.4898, 0.00741 } };
   int data_size = sizeof (data) / sizeof (luminosity_t) / 2 - 1;
-  bool use_sqrt = true;
+  bool use_sqrt = false;
   memcpy (add, scr.add, sizeof (add));
 
   if (!use_sqrt)
