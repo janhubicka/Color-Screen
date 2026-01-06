@@ -182,7 +182,7 @@ protected:
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
   luminosity_t *m_rgb_lookup_table[3];
   /* Translates back to gamma 2.  */
-  luminosity_t *m_out_lookup_table;
+  precomputed_function<luminosity_t> *m_out_lookup_table;
   /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
      For subtractive processes it only applies transformations does in process RGB.  */
   color_matrix m_color_matrix;
@@ -432,18 +432,9 @@ render::set_color (luminosity_t r, luminosity_t g, luminosity_t b, int *rr, int 
       g = std::clamp (g, (luminosity_t)0.0, (luminosity_t)1.0);
       b = std::clamp (b, (luminosity_t)0.0, (luminosity_t)1.0);
     }
-#if 0
-  *rr = m_out_lookup_table [(int)(r * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
-  *gg = m_out_lookup_table [(int)(g * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
-  *bb = m_out_lookup_table [(int)(b * (luminosity_t)(out_lookup_table_size-1)+(luminosity_t)0.5)];
-#endif
-  int idx;
-  luminosity_t v = my_modf (r * (out_lookup_table_size - 1), &idx);
-  *rr = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
-  v = my_modf (g * out_lookup_table_size, &idx);
-  *gg = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
-  v = my_modf (b * out_lookup_table_size, &idx);
-  *bb = m_out_lookup_table [idx] * (1 - v) + m_out_lookup_table[idx + 1] * v;
+  *rr = m_out_lookup_table->apply (r);
+  *gg = m_out_lookup_table->apply (g);
+  *bb = m_out_lookup_table->apply (b);
 }
 
 /* Compute color in the final gamma and range 0...m_dst_maxval.

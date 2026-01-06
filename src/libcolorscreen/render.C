@@ -264,10 +264,10 @@ struct out_lookup_table_params
   }
 };
 
-luminosity_t *
+precomputed_function<luminosity_t> *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
 {
-  luminosity_t *lookup_table = new luminosity_t[render::out_lookup_table_size + 1];
+  std::vector<luminosity_t> lookup_table(render::out_lookup_table_size);
   luminosity_t gamma = p.output_gamma;
   if (gamma != -1)
     gamma = std::clamp (gamma, (luminosity_t)0.0001, (luminosity_t)100.0);
@@ -279,16 +279,15 @@ get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
     lookup_table[i]
         = invert_gamma (apply_gamma (i * mul, target_film_gamma), gamma)
           * maxval + (luminosity_t) 0.5;
-  lookup_table[render::out_lookup_table_size] = lookup_table[render::out_lookup_table_size - 1];
 
-  return lookup_table;
+  return new precomputed_function<luminosity_t> (0, 1, lookup_table.data (), render::out_lookup_table_size);
 }
 
 /* To improve interactive response we cache conversion tables.  */
 static lru_cache<lookup_table_params, luminosity_t[], luminosity_t *,
                  get_new_lookup_table, 4>
     lookup_table_cache ("in lookup tables");
-static lru_cache<out_lookup_table_params, luminosity_t[], luminosity_t *,
+static lru_cache<out_lookup_table_params, precomputed_function <luminosity_t>, precomputed_function <luminosity_t> *,
                  get_new_out_lookup_table, 4>
     out_lookup_table_cache ("out lookup tables");
 
