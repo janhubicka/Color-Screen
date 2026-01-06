@@ -52,6 +52,8 @@ static struct scr_detect_parameters undobuf_scr_detect[UNDOLEVELS];
 static struct scr_detect_parameters current_scr_detect;
 static int undopos;
 
+static bool csp_loaded;
+
 static char *paroname;
 static void bigrender (int xoffset, int yoffset, coord_t bigscale, GdkPixbuf * bigpixbuf);
 
@@ -149,7 +151,7 @@ struct _Data
   GdkPixbuf *smallpixbuf;
   GtkWidget *maindisplay_scroll;
   GtkWidget *image_viewer;
-  GtkSpinButton *gamma, *screen_blur, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *scanner_snr, *RL_iterations, *sigma,
+  GtkSpinButton *gamma, *scanner_mtf_sigma, *presaturation, *saturation, *sharpen_radius, *sharpen_amount, *y2, *brightness, *scanner_snr, *RL_iterations, *sigma,
 	       	*tilt_x, *tilt_y, *scanner_mtf_scale, *dark_point, *collection_threshold, *balance_black, *mix_red, *mix_green, *mix_blue,
 	       	*balance_red, *balance_green, *balance_blue;
 };
@@ -198,7 +200,8 @@ openimage (const char *name)
   current.lens_center.x = scan.width * 0.5;
   current.lens_center.y = scan.height * 0.5;
 #endif
-  rparams.gamma = scan.gamma != -2 ? scan.gamma : -1;
+  if (!csp_loaded)
+    rparams.gamma = scan.gamma != -2 ? scan.gamma : -1;
 }
 
 /* Get values displayed in the UI.  */
@@ -213,7 +216,8 @@ getvals (void)
   rparams.presaturation = gtk_spin_button_get_value (data.presaturation);
   rparams.sharpen.usm_radius = gtk_spin_button_get_value (data.sharpen_radius);
   rparams.sharpen.usm_amount = gtk_spin_button_get_value (data.sharpen_amount);
-  rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
+  //rparams.screen_blur_radius = gtk_spin_button_get_value (data.screen_blur);
+  rparams.set_scanner_mtf_sigma (gtk_spin_button_get_value (data.scanner_mtf_sigma));
   rparams.brightness = gtk_spin_button_get_value (data.brightness);
   current.tilt_x = gtk_spin_button_get_value (data.tilt_x);
   current.tilt_y = gtk_spin_button_get_value (data.tilt_y);
@@ -250,7 +254,7 @@ setvals (void)
   gtk_spin_button_set_value (data.presaturation, rparams.presaturation);
   gtk_spin_button_set_value (data.sharpen_radius, rparams.sharpen.usm_radius);
   gtk_spin_button_set_value (data.sharpen_amount, rparams.sharpen.usm_amount);
-  gtk_spin_button_set_value (data.screen_blur, rparams.screen_blur_radius);
+  gtk_spin_button_set_value (data.scanner_mtf_sigma, rparams.get_scanner_mtf_sigma ());
   gtk_spin_button_set_value (data.brightness, rparams.brightness);
   gtk_spin_button_set_value (data.tilt_x, current.tilt_x);
   gtk_spin_button_set_value (data.tilt_y, current.tilt_y);
@@ -898,7 +902,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	fparam.multitile = 3;
 	fparam.range = 4;
-	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | finetune_screen_blur /*| finetune_dufay_strips | finetune_fog*/;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | /*finetune_screen_blur*/ finetune_scanner_mtf_sigma /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
@@ -1293,7 +1297,7 @@ initgtk (int *argc, char **argv)
   // not using an image.
   gtk_image_viewer_zoom_fit (GTK_IMAGE_VIEWER (image_viewer));
   data.gamma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "gamma"));
-  data.screen_blur = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "blur"));
+  data.scanner_mtf_sigma = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "mtf-sigma"));
   data.saturation = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "saturation"));
   data.presaturation = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "presaturation"));
   data.sharpen_radius = GTK_SPIN_BUTTON (gtk_builder_get_object (builder, "sharpen_radius"));
@@ -2274,6 +2278,8 @@ main (int argc, char **argv)
       fprintf (stderr, "Can not load parameters: %s\n", error);
       exit (1);
     }
+  if (in)
+    csp_loaded = true;
   //if (!in && scan.gamma != -2)
     //rparams.gamma = scan.gamma;
   current_mesh = current.mesh_trans;

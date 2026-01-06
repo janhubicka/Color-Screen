@@ -381,6 +381,9 @@ struct render_parameters
   /* Use characteristics curves to restore original luminosity.  */
   bool restore_original_luminosity;
 
+  DLL_PUBLIC void set_scanner_mtf_sigma (luminosity_t sigma);
+  DLL_PUBLIC luminosity_t get_scanner_mtf_sigma ();
+
   render_parameters ()
       : 
 	demosaic (image_data::demosaic_default),

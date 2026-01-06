@@ -1300,4 +1300,23 @@ render_parameters::get_gray_range (int *min, int *max, int maxval)
 	     - 0.5;
     }
 }
+
+void
+render_parameters::set_scanner_mtf_sigma (luminosity_t sigma)
+{
+  if (!sharpen.scanner_mtf
+      || (sharpen.scanner_mtf->get_sigma () != sigma
+	  && !sharpen.scanner_mtf->size ()))
+  {
+    sharpen.scanner_mtf = std::make_shared<mtf> ();
+    sharpen.scanner_mtf->set_sigma (sigma);
+  }
+}
+luminosity_t
+render_parameters::get_scanner_mtf_sigma ()
+{
+  if (!sharpen.scanner_mtf)
+    return 0;
+  return sharpen.scanner_mtf->get_sigma ();
+}
 }

@@ -810,7 +810,7 @@
                       <object class="GtkLabel" id="label2">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">screen blur</property>
+                        <property name="label" translatable="yes">scanner mtf sigma</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -819,7 +819,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="blur">
+                      <object class="GtkSpinButton" id="mtf-sigma">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="invisible_char">●</property>
