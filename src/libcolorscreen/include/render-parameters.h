@@ -39,6 +39,9 @@ struct mtf_parameters
   /* Sensor pixel pitch (size of a pixel) in micrometers.  */
   luminosity_t pixel_pitch;
 
+  /* DPI of the scan; necessary to calculate magnification.  */
+  luminosity_t scan_dpi;
+
   void
   add_value (luminosity_t freq, luminosity_t contrast)
   {
@@ -75,10 +78,13 @@ struct mtf_parameters
 	     && blur_diameter == o.blur_diameter
 	     && f_stop == o.f_stop
 	     && wavelength == o.wavelength
-	     && pixel_pitch == o.pixel_pitch;
+	     && pixel_pitch == o.pixel_pitch
+	     && sigma == o.sigma
+	     && scan_dpi == o.scan_dpi;
     else if (o.simulate_difraction_p ())
       return false;
-    if (blur_diameter != o.blur_diameter)
+    if (blur_diameter != o.blur_diameter
+	|| sigma != o.sigma)
       return false;
     return m_data == o.m_data;
   }
@@ -90,6 +96,7 @@ struct mtf_parameters
 	   && f_stop == o.f_stop
 	   && wavelength == o.wavelength
 	   && pixel_pitch == o.pixel_pitch
+	   && scan_dpi == o.scan_dpi
 	   && m_data == o.m_data;
   }
   void
@@ -97,6 +104,7 @@ struct mtf_parameters
   {
     std::vector <entry>().swap (m_data);
   }
+  luminosity_t effective_f_stop ();
   luminosity_t lens_mtf (luminosity_t pixel_freq);
   luminosity_t system_mtf (luminosity_t pixel_freq);
   mtf_parameters ()

@@ -75,7 +75,7 @@ public:
   }
 
   mtf (const mtf_parameters &params)
-  : m_params (params)
+  : m_params (params), m_precomputed (false)
   { }
 
   luminosity_t

@@ -127,7 +127,9 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		|| fprintf (f, "scanner_mtf_f_stop: %f\n",
 		  rparam->sharpen.scanner_mtf->f_stop) < 0
 		|| fprintf (f, "scanner_mtf_defocus_mm: %f\n",
-		  rparam->sharpen.scanner_mtf->defocus) < 0)
+		  rparam->sharpen.scanner_mtf->defocus) < 0
+		|| fprintf (f, "scan_dpi: %f\n",
+		  rparam->sharpen.scanner_mtf->scan_dpi) < 0)
 	      return false;
 	}
       if (fprintf (f, "presaturation: %f\n", rparam->presaturation) < 0
@@ -1344,6 +1346,20 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  first_scanner_mtf = false;
 	  if (rparam)
 	    rparam->sharpen.scanner_mtf->defocus = defocus;
+	}
+      else if (!strcmp (buf, "scan_dpi"))
+	{
+	  luminosity_t scan_dpi;
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf = std::make_shared<mtf_parameters> ();
+	  if (!read_luminosity (f, &scan_dpi))
+	    {
+	      *error = "error parsing scanner_mtf_scan_dpi";
+	      return false;
+	    }
+	  first_scanner_mtf = false;
+	  if (rparam)
+	    rparam->sharpen.scanner_mtf->scan_dpi = scan_dpi;
 	}
       else
 	{

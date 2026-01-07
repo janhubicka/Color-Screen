@@ -1,15 +1,38 @@
-#include <cmath>
-#include "mtf.h"
-#include "nmsimplex.h"
-#include <complex>
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
+#include "mtf.h"
+#include "nmsimplex.h"
+#include <cmath>
+#include <complex>
 namespace colorscreen
 {
 
 namespace
 {
-/* Normalized sinc function: sin(pi * x) / (pi * x)  
+
+/* Return MTF of given blur circle diameter and given frequency.
+   This is model for small defocus that does not seem to work that well.
+   See Hopkins model below.  */
+double
+defocus_mtf (double freq, double blur_circle_diameter)
+{
+  /* If perfectly in focus or frequency is almost 0, return 1  */
+  if (blur_circle_diameter < 1e-9 || freq < 1e-6)
+    return 1;
+
+  /* The transfer function of a circular blur is 2*J1(x)/x  */
+  double arg = M_PI * freq * blur_circle_diameter;
+  return std::abs (2.0 * j1 (arg) / arg);
+}
+
+/* Return MTF of gaussian blur with a given sigma.  */
+double
+gaussian_blur_mtf (double freq, double sigma)
+{
+  return std::exp (-2.0 * M_PI * M_PI * sigma * sigma * freq * freq);
+}
+
+/* Normalized sinc function: sin(pi * x) / (pi * x)
    Used to model the sensor's pixel aperture effect. */
 double
 sinc (double x)
@@ -20,27 +43,64 @@ sinc (double x)
   return std::sin (M_PI * x) / (M_PI * x);
 }
 
-/* Return MTF of given blur circle diameter and given frequency */
+/* Return sensor MTF at given pixel frequency.  
+   Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
+   near the Nyquist frequency */
 double
-defocus_mtf (double freq, double blur_circle_diameter)
+sensor_mtf (double pixel_freq)
 {
-  /* If perfectly in focus or frequency is almost 0, return 1  */
-  if (blur_circle_diameter < 1e-9 || freq < 1e-6)
-    return 1;
-
-  /* The transfer function of a circular blur is 2*J1(x)/x  */
-  double arg = M_PI * freq * blur_circle_diameter;
-  return std::abs(2.0 * j1(arg) / arg);
+  return std::abs (sinc (pixel_freq));
 }
+#if 0
+/**
+     * Estimates MTF contribution of the Bayer sensor.
+     * @param freq_lp_mm Spatial frequency.
+     * @param channel "green" (high density) or "red_blue" (low density).
+     * @param algorithm_softness 1.0 = perfect reconstruction, 1.5 = typical soft demosaic.
+     */
+    double calculate_mtf(double freq_lp_mm, std::string channel, double algorithm_softness = 1.2) {
+        // 1. Pixel Aperture MTF (The "Box" filter of the physical pixel)
+        // Most modern sensors have a high fill factor, so aperture width approx = pitch.
+        double arg_aperture = std::numbers::pi * freq_lp_mm * pitch;
+        double mtf_aperture = (arg_aperture < 1e-9) ? 1.0 : std::abs(std::sin(arg_aperture) / arg_aperture);
 
-/* Reutrn MTF of gaussian blur with a given sigma.  */
-double
-gaussian_blur_mtf (double freq, double sigma)
-{
-  return std::exp (-2.0 * M_PI * M_PI * sigma * sigma * freq * freq);
-}
+        // 2. Sampling & Demosaic MTF
+        // The effective sampling pitch changes based on the Bayer pattern.
+        double effective_sampling_pitch = pitch;
+        if (channel == "green") {
+            // Green pixels are in a quincunx grid; diagonal distance is pitch * sqrt(2)
+            // but horizontal/vertical sampling is effectively 'pitch'.
+            effective_sampling_pitch = pitch * algorithm_softness;
+        } else {
+            // Red and Blue are sampled at 2x the pitch distance.
+            effective_sampling_pitch = pitch * 2.0 * algorithm_softness;
+        }
+
+        double arg_sampling = std::numbers::pi * freq_lp_mm * effective_sampling_pitch;
+        double mtf_sampling = (arg_sampling < 1e-9) ? 1.0 : std::abs(std::sin(arg_sampling) / arg_sampling);
+
+        return mtf_aperture * mtf_sampling;
+    }
+};
+#endif
 
 #if 0
+double get_polychromatic_mtf(double freq, double defocus_center) {
+    // Weights for human vision / Bayer sensitivity
+    struct SpectralComponent { double lambda; double weight; double focal_shift; };
+    std::vector<SpectralComponent> spectrum = {
+        {0.000450, 0.25, 0.002}, // Blue (shifted slightly)
+        {0.000550, 0.50, 0.000}, // Green (reference)
+        {0.000650, 0.25, -0.002} // Red (shifted slightly)
+    };
+
+    double total_mtf = 0;
+    for (auto& s : spectrum) {
+        total_mtf += s.weight * get_system_mtf(freq, defocus_center + s.focal_shift, s.lambda);
+    }
+    return total_mtf;
+}
+
 /* Pixel pitch of PhaseOne 150MP camera in mm.  */
 #define pixel_size (3.76 / 1000)
 
@@ -139,9 +199,8 @@ debug_data (double freq, double v1, double v2)
   int len = 60;
   int p1 = v1 * len / 100;
   int p2 = v2 * len / 100;
-  printf ("freq %1.2f measured %2.2f obtained %2.2f ", freq,
-	  v1, v2);
-  for (int j = 0; j < len+1; j++)
+  printf ("freq %1.2f measured %2.2f obtained %2.2f ", freq, v1, v2);
+  for (int j = 0; j < len + 1; j++)
     if (j == p1 && j == p2)
       printf ("E");
     else if (j == p1)
@@ -162,43 +221,47 @@ class mtf_solver
   static constexpr const int maxvals = 3;
   static constexpr const double nanometers_min = 380;
   static constexpr const double nanometers_max = 1000;
+
 public:
-  mtf_solver (const mtf &mtf, const mtf_parameters &params, progress_info *progress)
-      : m_mtf (mtf), m_params (params), m_progress (progress), start{ 0.5, 0.5, 0.5 }
+  static constexpr const bool be_verbose = true;
+  mtf_solver (const mtf &mtf, const mtf_parameters &params,
+              progress_info *progress)
+      : m_mtf (mtf), m_params (params), m_progress (progress),
+        start{ 0.5, 0.5, 0.5 }
   {
     nvalues = 0;
     m_params.clear_data ();
     if (!params.pixel_pitch || !params.f_stop)
       {
-	wavelength_index = -1;
-	if (!m_params.sigma)
-	  sigma_index = nvalues++;
-	else
-	  sigma_index = -1;
-	if (!m_params.blur_diameter)
-	  blur_index = nvalues++;
-	else
-	  blur_index = -1;
-	difraction = false;
+        wavelength_index = -1;
+        if (!m_params.sigma)
+          sigma_index = nvalues++;
+        else
+          sigma_index = -1;
+        if (!m_params.blur_diameter)
+          blur_index = nvalues++;
+        else
+          blur_index = -1;
+        difraction = false;
       }
     else
       {
-	difraction = true;
-	if (!m_params.wavelength)
-	  {
-	    wavelength_index = nvalues++;
-	    start[wavelength_index] = 0.5;
-	  }
-	else
-	  wavelength_index = -1;
-	if (!m_params.sigma)
-	  sigma_index = nvalues++;
-	else
-	  sigma_index = -1;
-	if (!m_params.defocus)
-	  blur_index = nvalues++;
-	else
-	  blur_index = -1;
+        difraction = true;
+        if (!m_params.wavelength)
+          {
+            wavelength_index = nvalues++;
+            start[wavelength_index] = 0.5;
+          }
+        else
+          wavelength_index = -1;
+        if (!m_params.sigma)
+          sigma_index = nvalues++;
+        else
+          sigma_index = -1;
+        if (!m_params.defocus)
+          blur_index = nvalues++;
+        else
+          blur_index = -1;
       }
   }
   int
@@ -214,7 +277,7 @@ public:
   bool
   verbose ()
   {
-    return false;
+    return be_verbose;
   }
   luminosity_t
   scale ()
@@ -225,18 +288,20 @@ public:
   constrain (luminosity_t *vals)
   {
     if (sigma_index >= 0 && vals[sigma_index] < 0)
-      vals [sigma_index] = 0;
+      vals[sigma_index] = 0;
     if (blur_index >= 0 && vals[blur_index] < 0)
-      vals [blur_index] = 0;
+      vals[blur_index] = 0;
     if (wavelength_index >= 0)
-      vals [wavelength_index] = std::clamp (vals [wavelength_index], (luminosity_t)0, (luminosity_t)1);
+      vals[wavelength_index] = std::clamp (vals[wavelength_index],
+                                           (luminosity_t)0, (luminosity_t)1);
   }
   luminosity_t
   get_wavelength (luminosity_t *vals)
   {
     if (wavelength_index < 0)
       return m_params.wavelength;
-    return vals[wavelength_index] * (nanometers_max - nanometers_min) + nanometers_min;
+    return vals[wavelength_index] * (nanometers_max - nanometers_min)
+           + nanometers_min;
   }
   luminosity_t
   get_sigma (luminosity_t *vals)
@@ -271,11 +336,10 @@ public:
     if (blur_index >= 0)
       {
         if (difraction)
-	  p.defocus = vals[blur_index] * p.pixel_pitch * (1.0 / 1000);
-	else
-	  p.blur_diameter = vals[blur_index];
+          p.defocus = vals[blur_index] * p.pixel_pitch * (1.0 / 1000);
+        else
+          p.blur_diameter = vals[blur_index];
       }
-    printf ("%f %f %f %f %f %i %i %i\n", vals[0],vals[1],vals[2], p.sigma, p.blur_diameter, sigma_index, blur_index, nvalues);
     for (size_t i = 0; i < m_mtf.size (); i++)
       {
         luminosity_t freq = m_mtf.get_freq (i);
@@ -285,7 +349,8 @@ public:
         luminosity_t contrast = m_mtf.get_contrast (i);
         luminosity_t contrast2 = p.system_mtf (freq) * 100;
         sum += (contrast - contrast2) * (contrast - contrast2);
-	debug_data (freq, contrast, contrast2);
+	if (be_verbose)
+	  debug_data (freq, contrast, contrast2);
       }
     return sum;
   }
@@ -301,26 +366,27 @@ public:
 };
 
 luminosity_t
-determine_lens (const mtf &mtf, mtf_parameters &params, progress_info *progress)
+determine_lens (const mtf &mtf, mtf_parameters &params,
+                progress_info *progress)
 {
   mtf_solver s (mtf, params, progress);
-  simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters", progress);
+  simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
+                                     progress);
   params.wavelength = s.get_wavelength (s.start);
   params.sigma = s.get_sigma (s.start);
   params.defocus = s.get_defocus (s.start);
   params.blur_diameter = s.get_blur_diameter (s.start);
   params.clear_data ();
 
-  if (1)
+  if (mtf_solver::be_verbose)
     {
-
       for (size_t i = 0; i < mtf.size (); i++)
-	{
-	  luminosity_t freq = mtf.get_freq (i);
-	  luminosity_t v1 = mtf.get_contrast (i);
-	  luminosity_t v2 = params.system_mtf (freq) * 100;
-	  debug_data (freq, v1, v2);
-	}
+        {
+          luminosity_t freq = mtf.get_freq (i);
+          luminosity_t v1 = mtf.get_contrast (i);
+          luminosity_t v2 = params.system_mtf (freq) * 100;
+          debug_data (freq, v1, v2);
+        }
     }
   return s.objfunc (s.start);
 }
@@ -346,11 +412,7 @@ get_psf_radius (double *psf, int size, bool *ok = NULL)
   if (this_psf_radius >= size / 2 - 2)
     {
       if (ok)
-	*ok = false;
-#if 0
-      printf ("Psf size is too large; last ratio %f\n",
-	      psf[size / 2 - 1] / peak);
-#endif
+        *ok = false;
     }
   else if (ok)
     *ok = true;
@@ -359,6 +421,26 @@ get_psf_radius (double *psf, int size, bool *ok = NULL)
 
 }
 
+/* The effective f-fstop changes in macro photography based on magnification.  */
+
+luminosity_t
+mtf_parameters::effective_f_stop ()
+{
+  if (!scan_dpi || !f_stop)
+    return f_stop;
+  double scan_pixel_pitch_um = 25400.0 / scan_dpi;
+  double magnification = pixel_pitch / scan_pixel_pitch_um;
+  printf ("Magnification %f\n", magnification);
+  return f_stop * (1 + magnification);
+}
+
+/* Simulate lens as a combinatoin of
+    - difraction limit (pixel_pitch, wavelength_mm, f_stop)
+    - gaussian blur (sigma)
+    - defocus (defocus_mm)
+ */
+ 
+
 luminosity_t
 mtf_parameters::lens_mtf (double pixel_freq)
 {
@@ -366,42 +448,62 @@ mtf_parameters::lens_mtf (double pixel_freq)
     {
       double freq = pixel_freq / (pixel_pitch * (1.0 / 1000));
       double wavelength_mm = wavelength / 1e6;
-      double cutoff_freq = 1.0 / (wavelength_mm * f_stop);
+      double ef_stop = effective_f_stop ();
+      double cutoff_freq = 1.0 / (wavelength_mm * ef_stop);
       /* Normalize frequency (nu) */
       double s = freq / cutoff_freq;
-      if (s >= 1.0) return 0.0;
-      if (s <= 0.0) return 1.0* gaussian_blur_mtf (pixel_freq, blur_diameter);
-      double mtf_diff = (2.0 / M_PI) * (std::acos(s) - s * sqrt(1.0 - s * s));
-      //double blur_diameter = std::abs(defocus) / f_stop;
-      //return mtf_diff * gaussian_blur_mtf (pixel_freq, sigma) * defocus_mtf (freq, blur_diameter);
-     
-      
-    // 3. Calculate Wavefront Defocus (W020)
-    // W020 = delta_z / (8 * f_number^2)
-    double W020 = defocus / (8.0 * std::pow(f_stop, 2));
+      /* nu needs to be in range 0 to 1. 1 is the absolute resoultion of the lens.  */
+      if (s >= 1.0)
+        return 0.0;
+      if (s <= 0.0)
+        return 1.0 * gaussian_blur_mtf (pixel_freq, blur_diameter);
+      /* MTF of perfect difraction limited lens.  */
+      double mtf_diff
+          = (2.0 / M_PI) * (std::acos (s) - s * sqrt (1.0 - s * s));
+      /* Slight defocus model; not seem to be working in practice.  */
+      if (0)
+	{
+	  double blur_diameter = std::abs(defocus) / ef_stop;
+	  return mtf_diff * gaussian_blur_mtf (pixel_freq, sigma) * defocus_mtf (freq, blur_diameter);
+	}
 
-    // 4. Hopkins Defocus Factor
-    // Z = (2 * pi / wavelength) * W020 * 4 * nu * (1 - nu)
-    double Z = (2.0 * M_PI / wavelength_mm) * W020 * 4.0 * s * (1.0 - s);
+      /* Bigger defocus model
+	 Calculate Wavefront Defocus (W_{020}). This convertes physical
+	 distance to wavefront error.
 
-    // 5. Apply the Defocus Transfer Function using Bessel J1
-    // Handle the limit where Z -> 0 to avoid division by zero
-    double defocus_factor = 1.0;
-    if (std::abs(Z) > 1e-9) {
-        defocus_factor = 2.0 * std::cyl_bessel_j(1, Z) / Z;
-    }
-    return mtf_diff * gaussian_blur_mtf (pixel_freq, sigma) * fabs (defocus_factor);
+         W_{020} = delta_z / (8 * f_number^2)  */
+      double W020 = defocus / (8.0 * ef_stop * ef_stop);
+
+      /* Hopkins Defocus Factor
+         Z = (2 * pi / wavelength) * W020 * 4 * nu * (1 - nu)  */
+      double Z = (2.0 * M_PI / wavelength_mm) * W020 * 4.0 * s * (1.0 - s);
+
+      /* Apply the Defocus Transfer Function using Bessel J1
+         Handle the limit where Z -> 0 to avoid division by zero  */
+      double defocus_factor = 1.0;
+      /* Ringing effect of defocus is modelled by Bessel function.  */
+      if (std::abs (Z) > 1e-9)
+        defocus_factor = 2.0 * std::cyl_bessel_j (1, Z) / Z;
+      /* In cases of severe defocus, the Bessel function can return a negative
+         value. In optical terms, this is a phase reversal. For a standard MTF
+         plot, we take the absolute value, though the "contrast" is effectively
+         inverted.  */
+      return mtf_diff * gaussian_blur_mtf (pixel_freq, sigma)
+             * fabs (defocus_factor);
     }
   else
-    return gaussian_blur_mtf (pixel_freq, sigma) * defocus_mtf (pixel_freq, blur_diameter);
+    return gaussian_blur_mtf (pixel_freq, sigma)
+           * defocus_mtf (pixel_freq, blur_diameter);
 }
+
+/* Simulate system as a combination of sensor MTF and lens MTF.  */
 
 luminosity_t
 mtf_parameters::system_mtf (double pixel_freq)
 {
-  double sensor_mtf = std::abs (sinc (pixel_freq));
-  return sensor_mtf * lens_mtf (pixel_freq);
+  return sensor_mtf (pixel_freq) * lens_mtf (pixel_freq);
 }
+
 
 /* Compute PSF as 2D FFT of circular MTF.
    MAX_RADIUS is an estimate of radius.  SUBSCALE is a size of
@@ -418,24 +520,24 @@ mtf::compute_psf (int max_radius, luminosity_t subscale)
       const double psf_step = 1 / (psf_size * subscale);
       std::vector<fftw_complex> mtf_kernel (psf_size * fft_size);
       for (int y = 0; y < fft_size; y++)
-	for (int x = 0; x < fft_size; x++)
-	  {
-	    std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-					  (luminosity_t)0, (luminosity_t)1),
-			      (luminosity_t)0);
-	    mtf_kernel[y * fft_size + x][0] = real (ker);
-	    mtf_kernel[y * fft_size + x][1] = imag (ker);
-	    if (y)
-	      {
-		mtf_kernel[(psf_size - y) * fft_size + x][0] = real (ker);
-		mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
-	      }
-	  }
+        for (int x = 0; x < fft_size; x++)
+          {
+            std::complex ker (std::clamp (get_mtf (x, y, psf_step),
+                                          (luminosity_t)0, (luminosity_t)1),
+                              (luminosity_t)0);
+            mtf_kernel[y * fft_size + x][0] = real (ker);
+            mtf_kernel[y * fft_size + x][1] = imag (ker);
+            if (y)
+              {
+                mtf_kernel[(psf_size - y) * fft_size + x][0] = real (ker);
+                mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
+              }
+          }
       std::vector<double> psf_data (psf_size * psf_size);
       fftw_lock.lock ();
       fftw_plan plan
-	  = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
-				  psf_data.data (), FFTW_ESTIMATE);
+          = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
+                                  psf_data.data (), FFTW_ESTIMATE);
       fftw_lock.unlock ();
       fftw_execute (plan);
       fftw_lock.lock ();
@@ -448,14 +550,14 @@ mtf::compute_psf (int max_radius, luminosity_t subscale)
       int radius = get_psf_radius (psf_data.data (), psf_size, &ok);
       /* If FFT size was to small for the PSF, increase it and restart.  */
       if (!ok && iterations < 10)
-	{
-	  if (psf_size < 4096)
-	    psf_size *= 2;
-	  else
-	    subscale /= 2;
-	  iterations++;
-	  continue;
-	}
+        {
+          if (psf_size < 4096)
+            psf_size *= 2;
+          else
+            subscale /= 2;
+          iterations++;
+          continue;
+        }
       m_psf_radius = radius * subscale;
       // printf ("psf radius %i %f\n", radius, m_psf_radius);
 
@@ -470,43 +572,47 @@ mtf::compute_psf (int max_radius, luminosity_t subscale)
       psf_data[radius] = d1;
       psf_data[radius + 1] = d2;
       if (0)
-	{
-	  tiff_writer_params pp;
-	  int width = psf_size;
-	  int height = psf_size;
-	  pp.width = width;
-	  pp.height = height;
-	  pp.depth = 16;
-	  const char *error;
-	  pp.filename = "/tmp/psf-big.tif";
-	  tiff_writer renderedu (pp, &error);
-	  luminosity_t err = 0, m =0;
-	  for (int y = 0; y < psf_size / 2; y++)
-	    for (int x = 0; x < psf_size / 2; x++)
-	      {
-		luminosity_t val = get_psf (x, y, 1/subscale);
-		luminosity_t diff = fabs (val - psf_data[y * psf_size + x]);
-		if (val > m)
-		  m = val;
-		if (diff > err)
-		  err = diff;
-		psf_data[y * psf_size + x] = val;
-	      }
-	  for (int y = 0; y < height; y++)
-	    {
-	      for (int x = 0; x < width; x++)
-		{
-		  int v = std::clamp ((int)(invert_gamma (psf_data [y * psf_size + x]/m, -1) * (65535) + 0.5), 0, 65535);
-		  renderedu.put_pixel (x, v, v, v);
-		}
-	      if (!renderedu.write_row ())
-		{
-		  printf ("Write error line %i\n", y);
-		  break;
-		}
-	    }
-	  printf ("Max %f, err %f normalized %f\n", m, err, err/m);
-	}
+        {
+          tiff_writer_params pp;
+          int width = psf_size;
+          int height = psf_size;
+          pp.width = width;
+          pp.height = height;
+          pp.depth = 16;
+          const char *error;
+          pp.filename = "/tmp/psf-big.tif";
+          tiff_writer renderedu (pp, &error);
+          luminosity_t err = 0, m = 0;
+          for (int y = 0; y < psf_size / 2; y++)
+            for (int x = 0; x < psf_size / 2; x++)
+              {
+                luminosity_t val = get_psf (x, y, 1 / subscale);
+                luminosity_t diff = fabs (val - psf_data[y * psf_size + x]);
+                if (val > m)
+                  m = val;
+                if (diff > err)
+                  err = diff;
+                psf_data[y * psf_size + x] = val;
+              }
+          for (int y = 0; y < height; y++)
+            {
+              for (int x = 0; x < width; x++)
+                {
+                  int v = std::clamp (
+                      (int)(invert_gamma (psf_data[y * psf_size + x] / m, -1)
+                                * (65535)
+                            + 0.5),
+                      0, 65535);
+                  renderedu.put_pixel (x, v, v, v);
+                }
+              if (!renderedu.write_row ())
+                {
+                  printf ("Write error line %i\n", y);
+                  break;
+                }
+            }
+          printf ("Max %f, err %f normalized %f\n", m, err, err / m);
+        }
       return;
     }
 }
@@ -533,15 +639,19 @@ mtf::precompute (progress_info *progress)
       luminosity_t sqsum = determine_lens (*this, params, progress);
       if (progress)
         progress->pause_stdout ();
-      printf ("Estimation sqsum %f\n", sqsum);
-      printf ("Estimated sigma %f px\n", params.sigma);
+      printf ("Optimization finished with sqsum %f\n", sqsum);
       if (params.simulate_difraction_p ())
-	{
-	  printf ("Estimated wavelength %f nm\n", params.wavelength);
-	  printf ("Estimated defocus %f mm\n", params.defocus);
-	}
+        {
+	  printf ("Pixel pitch %fum\n", params.pixel_pitch);
+	  printf ("f-stop %f\n", params.f_stop);
+	  printf ("Effective f-stop %f\n", params.effective_f_stop ());
+	  printf ("Scan DPI %f\n", params.scan_dpi);
+          printf ("Estimated wavelength %f nm\n", params.wavelength);
+          printf ("Estimated defocus %f mm\n", params.defocus);
+        }
       else
-	printf ("Estimated blur diameter %f px\n", params.blur_diameter);
+        printf ("Estimated blur diameter %f px\n", params.blur_diameter);
+      printf ("Estimated sigma %f px\n", params.sigma);
       if (progress)
         progress->resume_stdout ();
     }
@@ -580,7 +690,8 @@ mtf::precompute (progress_info *progress)
         {
           std::vector<luminosity_t> contrasts (size () + 2);
           for (size_t i = 0; i < size (); i++)
-            contrasts[i] = get_contrast (i) * 0.01 * m_params.lens_mtf (get_freq (i));
+            contrasts[i]
+                = get_contrast (i) * 0.01 * m_params.lens_mtf (get_freq (i));
           /* Be sure that MTF trails in 0.  */
           contrasts[size ()] = 0;
           contrasts[size () + 1] = 0;
@@ -588,14 +699,16 @@ mtf::precompute (progress_info *progress)
           m_mtf.init_by_y_values (contrasts.data (), size () + 2);
         }
       if (colorscreen_checking)
-	for (size_t i = 0; i < size (); i++)
-	  {
-	    luminosity_t freq = get_freq (i);
-	    if (fabs (get_contrast (freq) * 0.01 * m_params.lens_mtf (get_freq (i)) - get_mtf (freq)) > 0.001)
-	      abort ();
-	  }
+        for (size_t i = 0; i < size (); i++)
+          {
+            luminosity_t freq = get_freq (i);
+            if (fabs (get_contrast (freq) * 0.01
+                          * m_params.lens_mtf (get_freq (i))
+                      - get_mtf (freq))
+                > 0.001)
+              abort ();
+          }
       compute_psf ();
-
     }
   /* Use lens model.  */
   else
@@ -611,16 +724,21 @@ mtf::precompute (progress_info *progress)
       int radius;
 
       if (colorscreen_checking)
-	for (int i = 0; i < 1000; i++)
-	  if (fabs (m_params.system_mtf (i / 1000.0) - m_mtf.apply (i / 1000.0)) > 0.001)
-	    {
-	      printf ("Mismatch %f %f\n", m_params.system_mtf (i / 1000.), m_mtf.apply (i / 1000.0));
-	      abort ();
-	    }
+        for (int i = 0; i < 1000; i++)
+          if (fabs (m_params.system_mtf (i / 1000.0)
+                    - m_mtf.apply (i / 1000.0))
+              > 0.001)
+            {
+              printf ("Mismatch %f %f\n", m_params.system_mtf (i / 1000.),
+                      m_mtf.apply (i / 1000.0));
+              abort ();
+            }
 
       /* FIXME: For some reason this still gives too small kernels.  */
-      for (radius = 0; calculate_system_lsf (radius, m_params.sigma) > /*0.0001*/0.000001; radius++)
-	;
+      for (radius = 0;
+           calculate_system_lsf (radius, m_params.sigma) > /*0.0001*/ 0.000001;
+           radius++)
+        ;
       radius++;
       if (radius < 3)
         radius = 3;
@@ -647,7 +765,7 @@ mtf::precompute (progress_info *progress)
       m_lsf.init_by_y_values (contrasts.data (), 256);
 #endif
     }
-  //print_lsf (stdout);
+  // print_lsf (stdout);
 
   m_mtf.plot (0, 1);
   m_psf.plot (0, 5);
@@ -673,8 +791,7 @@ get_new_mtf (struct mtf_parameters &p, progress_info *progress)
 static lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10>
     mtf_cache ("Modulation transfer functions");
 
-
-mtf*
+mtf *
 mtf::get_mtf (mtf_parameters &mtfp, progress_info *p)
 {
   return mtf_cache.get (mtfp, p);
