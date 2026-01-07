@@ -317,6 +317,7 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
   render_parameters rparam;
   rparam.gamma = 1.0;
   rparam.screen_blur_radius = 1;
+  rparam.sharpen.scanner_mtf_scale = 0;
   render_screen (img, param, rparam, dparam, width, height);
   detect_regular_screen_params dsparams;
   dsparams.min_screen_percentage=90;

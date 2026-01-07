@@ -430,7 +430,7 @@ mtf_parameters::effective_f_stop ()
     return f_stop;
   double scan_pixel_pitch_um = 25400.0 / scan_dpi;
   double magnification = pixel_pitch / scan_pixel_pitch_um;
-  printf ("Magnification %f\n", magnification);
+  //printf ("Magnification %f\n", magnification);
   return f_stop * (1 + magnification);
 }
 
