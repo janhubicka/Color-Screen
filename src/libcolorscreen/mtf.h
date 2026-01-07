@@ -90,7 +90,7 @@ public:
   void
   print_mtf (FILE *);
 
-  static mtf *get_mtf (mtf_parameters &mtfp, progress_info *p);
+  static mtf *get_mtf (const mtf_parameters &mtfp, progress_info *p);
   static void release_mtf (mtf *m);
 private:
   mtf_parameters m_params;

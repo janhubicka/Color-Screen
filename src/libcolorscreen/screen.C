@@ -1798,7 +1798,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
           luminosity_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
           luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
-	  mtf *mtf = mtf::get_mtf (*sharpen[c]->scanner_mtf, NULL);
+	  mtf *mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
 	  mtf->precompute ();
 	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);

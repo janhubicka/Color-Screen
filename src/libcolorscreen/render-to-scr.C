@@ -118,7 +118,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   if (progress)
     progress->set_task ("bluring screen", 1);
   //if (p.sharpen.deconvolution_p ())
-  if (p.sharpen.scanner_mtf)
+  if (p.sharpen.scanner_mtf_scale)
     {
       /* No need to adjust by screen::size.  If p.screen_mtf_scale == screen::size
 	 we should scale exactly by it.  */

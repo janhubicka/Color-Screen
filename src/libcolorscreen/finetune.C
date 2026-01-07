@@ -1701,8 +1701,7 @@ public:
       {
 	sharpen_parameters sp;
 	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
-	sp.scanner_mtf = std::make_shared<mtf_parameters> ();
-	sp.scanner_mtf->sigma = get_scanner_mtf_sigma (v);
+	sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
 	sp.scanner_mtf_scale = pixel_size;
 	sp.mode = sharpen_parameters::none;
 	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
@@ -3511,7 +3510,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
      rendered screen.  */
   else if (sharpen_mode == sharpen_parameters::none)
     {
-      bool antialias = !sharpen_param.scanner_mtf;
+      bool antialias = !sharpen_param.scanner_mtf_scale;
 #pragma omp declare reduction(+ : rgbdata : omp_out = omp_out + omp_in)
 #pragma omp parallel for default(none) collapse(2)                            \
     shared(ymin, ymax, xmin, xmax, threshold, map, scr, collection_scr)       \
@@ -3555,7 +3554,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       int ext;
       if (sharpen_param.deconvolution_p ())
 	{
-	  mtf *mtf = mtf::get_mtf (*sharpen_param.scanner_mtf, NULL);
+	  mtf *mtf = mtf::get_mtf (sharpen_param.scanner_mtf, NULL);
 	  if (!mtf->precompute ())
 	    return false;
 	  ext = mtf->psf_size ( sharpen_param.scanner_mtf_scale);
@@ -3569,7 +3568,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
 
       /* Render screen.
          Scanner MTF already esimtates sensor loss; so we should not need to antialias.  */
-      if (sharpen_param.scanner_mtf)
+      if (sharpen_param.scanner_mtf_scale)
 	for (int y = ymin - ext; y <= ymax + ext; y++)
 	  for (int x = xmin - ext; x <= xmax + ext; x++)
 	    rendered[(y - ymin + ext) * xsize + x - xmin + ext]

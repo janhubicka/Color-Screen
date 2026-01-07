@@ -792,9 +792,9 @@ static lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10>
     mtf_cache ("Modulation transfer functions");
 
 mtf *
-mtf::get_mtf (mtf_parameters &mtfp, progress_info *p)
+mtf::get_mtf (const mtf_parameters &mtfp, progress_info *p)
 {
-  return mtf_cache.get (mtfp, p);
+  return mtf_cache.get (const_cast<mtf_parameters &>(mtfp), p);
 }
 
 void

@@ -79,12 +79,10 @@ struct mtf_parameters
 	     && f_stop == o.f_stop
 	     && wavelength == o.wavelength
 	     && pixel_pitch == o.pixel_pitch
-	     && sigma == o.sigma
 	     && scan_dpi == o.scan_dpi;
     else if (o.simulate_difraction_p ())
       return false;
-    if (blur_diameter != o.blur_diameter
-	|| sigma != o.sigma)
+    if (blur_diameter != o.blur_diameter)
       return false;
     return m_data == o.m_data;
   }
@@ -142,7 +140,7 @@ struct sharpen_parameters
   luminosity_t usm_radius, usm_amount;
 
   /* MTF curve of scanner.  */
-  std::shared_ptr <mtf_parameters> scanner_mtf;
+  mtf_parameters scanner_mtf;
 
   /* Signal to noise ratio of the scanner.  */
   luminosity_t scanner_snr;
@@ -166,12 +164,12 @@ struct sharpen_parameters
       case unsharp_mask:
 	return usm_radius > 0 && usm_amount > 0 ? unsharp_mask : none;
       case wiener_deconvolution:
-        return scanner_mtf && scanner_mtf_scale > 0 ? wiener_deconvolution : none;
+        return scanner_mtf_scale > 0 ? wiener_deconvolution : none;
       case richardson_lucy_deconvolution:
-        return scanner_mtf && scanner_mtf_scale > 0 && richardson_lucy_iterations
+        return scanner_mtf_scale > 0 && richardson_lucy_iterations
 	       ? richardson_lucy_deconvolution : none;
       case blur_deconvolution:
-        return scanner_mtf && scanner_mtf_scale > 0 
+        return scanner_mtf_scale > 0 
 	       ? blur_deconvolution : none;
       default:
 	abort ();
@@ -194,7 +192,7 @@ struct sharpen_parameters
     enum sharpen_mode mode = get_mode ();
     if (o.get_mode () != mode)
       return false;
-    switch (o.get_mode ())
+    switch (mode)
       {
       case none:
 	return true;

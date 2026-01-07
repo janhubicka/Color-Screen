@@ -93,7 +93,7 @@ struct lookup_table_params
   luminosity_t gamma;
   std::vector<luminosity_t> gamma_table;
   /* Dark point is subtracted from linear data and then the result is
-   * multiplied by scan_exposure.  */
+     multiplied by scan_exposure.  */
   luminosity_t dark_point, scan_exposure;
   /* True if we should invert positive to negative.  */
   bool invert;
