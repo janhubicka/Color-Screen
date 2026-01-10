@@ -1662,8 +1662,8 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
 {
   tiff_writer_params p;
   rgbdata max = { 0, 0, 0 };
-  void *buffer;
-  size_t len = create_linear_srgb_profile (&buffer);
+  //void *buffer;
+  //size_t len = create_linear_srgb_profile (&buffer);
   if (!normalize)
     max.red = max.green = max.blue = 1;
   else
@@ -1677,29 +1677,29 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
   p.filename = filename;
   p.width = size * tiles;
   p.height = size * tiles;
-  p.icc_profile = buffer;
-  p.icc_profile_len = len;
+  //p.icc_profile = buffer;
+  //p.icc_profile_len = len;
   p.depth = 16;
   const char *error;
   tiff_writer out (p, &error);
-  free (buffer);
+  //free (buffer);
   if (error)
     return false;
   for (int y = 0; y < size * tiles; y++)
     {
       for (int x = 0; x < size * tiles; x++)
         {
-          int r = mult[y % size][x % size][0] / max.red * 65536;
+          int r = invert_gamma (mult[y % size][x % size][0] / max.red, -1) * 65536;
           if (r < 0)
             r = 0;
           if (r > 65535)
             r = 65535;
-          int g = mult[y % size][x % size][1] / max.green * 65536;
+          int g = invert_gamma (mult[y % size][x % size][1] / max.green, -1) * 65536;
           if (g < 0)
             g = 0;
           if (g > 65535)
             g = 65535;
-          int b = mult[y % size][x % size][2] / max.blue * 65536;
+          int b = invert_gamma (mult[y % size][x % size][2] / max.blue, -1) * 65536;
           if (b < 0)
             b = 0;
           if (b > 65535)

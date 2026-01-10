@@ -23,7 +23,7 @@ using namespace colorscreen;
 #define UNDOLEVELS 100 
 #define PREVIEWSIZE 600
 static const bool tmphack = true;
-static const char *colorcmd = "montage -geometry 300x300+10+10 /tmp/colororig.tif /tmp/colorsimulated.tif /tmp/colordiff.tif /tmp/colordot-spread.tif /tmp/colorscr.tif /tmp/colorscr-blur.tif /tmp/colorscr-collected.tif -profile sRGB.icc /tmp/color.tif ; display /tmp/color.tif &";
+static const char *colorcmd = "montage -geometry 300x300+10+10 /tmp/colororig.tif /tmp/colorsimulated.tif /tmp/colordiff.tif /tmp/colordot-spread.tif /tmp/colorscr.tif /tmp/colorscr-blur.tif /tmp/colorscr-collected.tif  /tmp/color.tif ; display /tmp/color.tif &";
 static const char *bwcmd = "montage -geometry 300x300+10+10 /tmp/bworig.tif /tmp/bwsimulated.tif /tmp/bwdiff.tif /tmp/bwdot-spread.tif /tmp/bwscr.tif /tmp/bwscr-blur.tif /tmp/bwscr-collected.tif /tmp/bw.tif ; display /tmp/bw.tif &";
 
 extern "C" {
@@ -903,7 +903,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	fparam.multitile = 3;
 	fparam.range = 4;
-	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | /*finetune_screen_blur*/ finetune_scanner_mtf_sigma /*| finetune_dufay_strips | finetune_fog*/;
+	fparam.flags |= finetune_position | finetune_bw | finetune_verbose | /*finetune_screen_blur*/ finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus /*| finetune_dufay_strips | finetune_fog*/;
 	file_progress_info progress (stdout);
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
@@ -977,7 +977,7 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	  }
 	//fparam.multitile = 3;
 	//fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_mtf_blur*/ | finetune_emulsion_blur /*| finetune_screen_channel_blurs*/ | finetune_screen_blur | finetune_dufay_strips | finetune_fog | finetune_no_normalize;
-	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_channel_blurs*/ | finetune_scanner_mtf_sigma | (current.type != Joly ? finetune_strips : 0) | finetune_fog | finetune_no_normalize | finetune_simulate_infrared /*| finetune_sharpening*/;
+	fparam.flags |= finetune_position | finetune_verbose /*| finetune_screen_channel_blurs*/ | finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus | (current.type != Joly ? finetune_strips : 0) | finetune_fog | finetune_no_normalize | finetune_simulate_infrared /*| finetune_sharpening*/;
 	//fparam.range = 4;
 	fparam.range = 8;
 	//fparam.ignore_outliers=0.001;

@@ -678,15 +678,12 @@ bool
 mtf::precompute (progress_info *progress, const char *filename,
                  const char **error)
 {
-  if (m_precomputed)
-    return true;
   m_lock.lock ();
   if (m_precomputed)
     {
       m_lock.unlock ();
       return true;
     }
-  m_precomputed = true;
 
   /* Determine sigma of data.  Used only for mtf measurements with
      too few data points.  */
@@ -745,7 +742,7 @@ mtf::precompute (progress_info *progress, const char *filename,
                 > 0.01)
             {
               printf ("Mismatch (measured) %i freq %f table %f precomputed %f\n",
-		      i, freq,
+		      (int)i, freq,
 		      get_contrast (i) * 0.01 * m_params.measured_mtf_correction (freq),
                       m_mtf.apply (freq));
               abort ();
@@ -803,6 +800,7 @@ mtf::precompute (progress_info *progress, const char *filename,
 
   //m_mtf.plot (0, 1);
   //m_psf.plot (0, 5);
+  m_precomputed = true;
   m_lock.unlock ();
   return true;
 }

@@ -177,6 +177,7 @@ private:
   int emulsion_blur_index;
   int sharpen_index;
   int mtf_sigma_index;
+  int mtf_defocus_index;
   int screen_index;
   int strips_index;
   int mix_weights_index;
@@ -191,6 +192,7 @@ private:
 
   rgbdata last_blur;
   luminosity_t last_scanner_mtf_sigma;
+  luminosity_t last_scanner_mtf_defocus;
   luminosity_t last_mtf[4];
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
@@ -201,6 +203,7 @@ public:
   std::shared_ptr<screen> original_scr;
   /* Screen with emulsion.  */
   std::shared_ptr<screen> emulsion_scr;
+  mtf_parameters mtf_params;
 
   finetune_solver ()
       : gsl_work (NULL), gsl_X (NULL), gsl_y{ NULL, NULL, NULL }, gsl_c (NULL),
@@ -239,8 +242,10 @@ public:
 
   /* Try to adjust position of center of the patches (+- range)  */
   bool optimize_position;
-  /* Try to optimize screen blur attribute (othervise fixed_mtf is used, if any).  */
+  /* Try to optimize scanner mtf sigma (gaussian blur) (othervise fixed_mtf is used, if any).  */
   bool optimize_scanner_mtf_sigma;
+  /* Try to optimize screen blur attribute (othervise fixed_defocus is used, if any).  */
+  bool optimize_scanner_mtf_defocus;
   /* Try to optimize screen blur attribute (othervise fixed_blur is used).  */
   bool optimize_screen_blur;
   /* Try to optimize screen blur independently in each channel.  */
@@ -470,16 +475,25 @@ public:
     return shrink_range (v, 0.3, screen::max_blur_radius / pixel_size);
   }
 
-  /* Return blue radius of screen. */
+  /* Return sigma of screen. */
   coord_t
   get_scanner_mtf_sigma (coord_t *v)
   {
     if (!optimize_scanner_mtf_sigma)
-      return -1;
+      return mtf_params.sigma;
     return v[mtf_sigma_index];
   }
 
-  /* Return blue radius of screen. */
+  /* Return blur radius of screen. */
+  coord_t
+  get_scanner_mtf_defocus (coord_t *v)
+  {
+    if (!optimize_scanner_mtf_defocus)
+      return mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
+    return v[mtf_defocus_index];
+  }
+
+  /* Return blur radius of screen. */
   coord_t
   get_blur_radius (coord_t *v)
   {
@@ -611,6 +625,8 @@ public:
       printf (" position");
     if (optimize_scanner_mtf_sigma)
       printf (" mtf_sigma");
+    if (optimize_scanner_mtf_defocus)
+      printf (" mtf_defocus");
     if (optimize_screen_blur)
       printf (" screen_blur");
     if (optimize_screen_channel_blurs)
@@ -685,7 +701,14 @@ public:
               get_blur_radius (v), pixel_size,
               get_blur_radius (v) * pixel_size);
     if (optimize_scanner_mtf_sigma)
-      printf ("Scanner mtf sigma %f\n", get_scanner_mtf_sigma (v));
+      printf ("Scanner mtf sigma %f px\n", get_scanner_mtf_sigma (v));
+    if (optimize_scanner_mtf_defocus)
+      {
+	if (!mtf_params.simulate_difraction_p ())
+          printf ("Scanner mtf blur diameter %f px\n", get_scanner_mtf_defocus (v));
+	else
+          printf ("Scanner mtf defocus %f mm\n", get_scanner_mtf_defocus (v));
+      }
     if (optimize_screen_channel_blurs)
       {
         rgbdata b = get_channel_blur_radius (v);
@@ -827,6 +850,8 @@ public:
       to_range (v[screen_index], 0, 1);
     if (optimize_scanner_mtf_sigma)
       to_range (v[mtf_sigma_index], 0, 5);
+    if (optimize_scanner_mtf_defocus)
+      to_range (v[mtf_defocus_index], 0, 5);
     if (optimize_screen_channel_blurs)
       {
         /* Screen blur radius.  */
@@ -1108,6 +1133,7 @@ public:
     optimize_position = flags & finetune_position;
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_scanner_mtf_sigma = flags & finetune_scanner_mtf_sigma;
+    optimize_scanner_mtf_defocus = flags & finetune_scanner_mtf_defocus;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_screen_mtf_blur = flags & finetune_screen_mtf_blur;
     /* Mode guessing point spread; it is not very well tested yet.  */
@@ -1159,7 +1185,8 @@ public:
     /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
         && (optimize_screen_blur || optimize_screen_channel_blurs
-            || optimize_screen_mtf_blur || optimize_scanner_mtf_sigma))
+            || optimize_screen_mtf_blur || optimize_scanner_mtf_sigma
+	    || optimize_scanner_mtf_defocus))
       {
         optimize_emulsion_intensities = true;
         optimize_emulsion_offset = true;
@@ -1172,7 +1199,7 @@ public:
        is already known and use it or try to simulate everything including
        intensities.  */
     if (optimize_emulsion_blur && !optimize_emulsion_intensities)
-      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma
+      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma = optimize_scanner_mtf_defocus
 	  = optimize_screen_mtf_blur = optimize_screen_ps_blur = false;
     /* When simulating infrared fog needs to be subtracted before applying mixing weights.
        This makes equations non-linear.  */
@@ -1299,6 +1326,7 @@ public:
         n_values += 4;
         optimize_screen_blur = false;
         optimize_scanner_mtf_sigma = false;
+        optimize_scanner_mtf_defocus = false;
         optimize_screen_channel_blurs = false;
 	assert (!optimize_screen_channel_blurs && !optimize_screen_blur);
 	assert (!optimize_screen_mtf_blur || !optimize_screen_ps_blur);
@@ -1321,6 +1349,11 @@ public:
     if (optimize_scanner_mtf_sigma)
       {
         mtf_sigma_index = n_values;
+        n_values ++;
+      }
+    if (optimize_scanner_mtf_defocus)
+      {
+        mtf_defocus_index = n_values;
         n_values ++;
       }
 
@@ -1358,6 +1391,7 @@ public:
     /* Set up cached values.   */
     last_blur = { -1, -1, -1 };
     last_scanner_mtf_sigma = -1;
+    last_scanner_mtf_defocus = -1;
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         tiles[tileid].last_emulsion_intensities = { -1, -1, -1 };
@@ -1490,6 +1524,10 @@ public:
     if (optimize_scanner_mtf_sigma)
       {
 	start[mtf_sigma_index] = 0;
+      }
+    if (optimize_scanner_mtf_defocus)
+      {
+	start[mtf_defocus_index] = 0;
       }
     /* TODO: Maybe we want to use previous results and start from params by default.  */
     if (flags & finetune_use_srip_widths)
@@ -1697,11 +1735,17 @@ public:
         src_scr = tiles[tileid].merged_scr;
       }
 
-    if (optimize_scanner_mtf_sigma)
+    if (optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus)
       {
 	sharpen_parameters sp;
+	sp.scanner_mtf = mtf_params;
 	sharpen_parameters *vs[3] = {&sp, &sp, &sp};
+	printf ("%f %f\n", get_scanner_mtf_sigma (v), get_scanner_mtf_defocus (v));
 	sp.scanner_mtf.sigma = get_scanner_mtf_sigma (v);
+	if (sp.scanner_mtf.simulate_difraction_p ())
+	  sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
+	else
+	  sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
 	sp.scanner_mtf_scale = pixel_size;
 	sp.mode = sharpen_parameters::none;
 	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
@@ -1720,6 +1764,7 @@ public:
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t scanner_mtf_sigma = get_scanner_mtf_sigma (v);
+    luminosity_t scanner_mtf_defocus = get_scanner_mtf_defocus (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
     luminosity_t mtf[4];
@@ -1751,6 +1796,7 @@ public:
 
     if (blur != last_blur
 	|| scanner_mtf_sigma != last_scanner_mtf_sigma
+	|| scanner_mtf_defocus != last_scanner_mtf_defocus
         || ((optimize_screen_mtf_blur || optimize_screen_ps_blur)
             && mtf_differs (mtf, last_mtf))
         || tiles[tileid].last_emulsion_intensities != intensities
@@ -1764,6 +1810,7 @@ public:
                                                   : NULL);
         last_blur = blur;
 	last_scanner_mtf_sigma = scanner_mtf_sigma;
+	last_scanner_mtf_defocus = scanner_mtf_defocus;
         tiles[tileid].last_emulsion_intensities = intensities;
         tiles[tileid].last_emulsion_offset = emulsion_offset;
         memcpy (last_mtf, mtf, sizeof (last_mtf));
@@ -1778,7 +1825,7 @@ public:
     /* When using scanner mtf, the screen is already blurred to
        estimate sensor mtf as well.  No need for antialiasing
        then.  */
-    if (optimize_scanner_mtf_sigma)
+    if (1)
       {
         return tiles[tileid].scr->interpolated_mult (p);
       }
@@ -2668,19 +2715,19 @@ public:
   {
     init_screen (v, tileid);
     point_t off = get_offset (v, tileid);
-    void *buffer;
-    size_t len = create_linear_srgb_profile (&buffer);
+    //void *buffer;
+    //size_t len = create_linear_srgb_profile (&buffer);
 
     tiff_writer_params p;
     p.filename = name;
     p.width = twidth;
-    p.icc_profile = buffer;
-    p.icc_profile_len = len;
+    //p.icc_profile = buffer;
+    //p.icc_profile_len = len;
     p.height = theight;
     p.depth = 16;
     const char *error;
     tiff_writer rendered (p, &error);
-    free (buffer);
+    //free (buffer);
     if (error)
       return false;
 
@@ -2721,17 +2768,17 @@ public:
                     {
                       rgbdata c = evaulate_pixel (v, tileid, red, green, blue,
                                                   x, y, off, mix_weights, mix_dark);
-                      rendered.put_pixel (x, c.red * 65535 / rmax,
-                                          c.green * 65535 / gmax,
-                                          c.blue * 65535 / bmax);
+                      rendered.put_pixel (x, invert_gamma (c.red / rmax, -1) * 65535,
+                                          invert_gamma (c.green / gmax, -1) * 65535,
+                                          invert_gamma (c.blue / bmax, -1) * 65535);
                     }
                     break;
                   case 1:
                     {
                       rgbdata d = get_orig_pixel (v, tileid, x, y);
-                      rendered.put_pixel (x, d.red * 65535 / rmax,
-                                          d.green * 65535 / gmax,
-                                          d.blue * 65535 / bmax);
+                      rendered.put_pixel (x, invert_gamma (d.red / rmax, -1) * 65535,
+                                          invert_gamma (d.green / gmax, -1) * 65535,
+                                          invert_gamma (d.blue / bmax, -1) * 65535);
                     }
                     break;
                   case 2:
@@ -2827,6 +2874,16 @@ public:
     ret.red_strip_width = get_red_strip_width (start);
     ret.green_strip_width = get_green_strip_width (start);
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start);
+    if (mtf_params.simulate_difraction_p ())
+      {
+	ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
+	ret.scanner_mtf_blur_diameter = mtf_params.blur_diameter;
+      }
+    else
+      {
+	ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start);
+	ret.scanner_mtf_defocus = mtf_params.defocus;
+      }
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)
@@ -3187,6 +3244,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
             solver.twidth = twidth;
             solver.theight = theight;
             solver.pixel_size = pixel_size;
+	    solver.mtf_params = rparam.sharpen.scanner_mtf;
             solver.collection_threshold = rparam.collection_threshold;
             if (!solver.init_tile (0, cur_txmin, cur_tymin, bw, *mapp[0],
                                    render))
@@ -3226,6 +3284,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.twidth = twidth;
       best_solver.theight = theight;
       best_solver.collection_threshold = rparam.collection_threshold;
+      best_solver.mtf_params = rparam.sharpen.scanner_mtf;
       best_solver.pixel_size = pixel_size;
       for (int tileid = 0; tileid < n_tiles; tileid++)
         {
