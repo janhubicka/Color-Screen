@@ -1643,7 +1643,9 @@ public:
 	    if (tiles[0].color)
 	      {
 		vs[0] = &sp;
+		sp_green = sp;
 		vs[1] = &sp_green;
+		sp_blue = sp;
 		vs[2] = &sp_blue;
 		sp.scanner_mtf.wavelength = 466;
 		sp_green.scanner_mtf.wavelength = 526;
