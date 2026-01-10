@@ -37,7 +37,8 @@ static enum subhelp {
   help_finetune,
   help_lab,
   help_read_chemcad_spectra,
-  help_has_regular_screen
+  help_has_regular_screen,
+  help_mtf
 } subhelp
     = help_basic;
 
@@ -424,6 +425,28 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --border-left=percent     same for left\n");
       fprintf (stderr, "      --border-right=percent    same for right\n");
     }
+  if (subhelp == help_mtf  || subhelp == help_basic)
+    {
+      fprintf (stderr,
+               "  mtf <in_filename>\n");
+      fprintf (stderr,
+               "    various operations with scanner MTF settings\n");
+    }
+  if (subhelp == help_has_regular_screen)
+    {
+      fprintf (stderr, "      --save-csv=name.csv       save MTF (or match) in CSV format\n");
+      fprintf (stderr, "      --save-psf=name.tif       save point spread function to TIF\n");
+      fprintf (stderr, "      --load-quickmtf=name.txt  Load masured MTF data in quickmtf format\n");
+      fprintf (stderr, "      --match  		        match measured MTF with parameters\n");
+      fprintf (stderr, "      --save-matched-psf=n.tif  save point spread function of matched parameters to TIF\n");
+      fprintf (stderr, "      --sigma=pixel_sigma       specify lens sigma (gaussian blur) in pixels\n");
+      fprintf (stderr, "      --blur-diamete=pixels     specify lens blur diameter (used only when there is no info for difraction model)\n");
+      fprintf (stderr, "      --pixel-ptch=um 		specify sensor's pixel size in micrometers\n");
+      fprintf (stderr, "      --wavelength=nm 		specify light wavelength in nanometers\n");
+      fprintf (stderr, "      --f-stop=f 		specify lens nominal f-stop\n");
+      fprintf (stderr, "      --defocus=mm 		specify defocus from sensor plane in milimenters\n");
+      fprintf (stderr, "      --scan-dpi=dpi 		specify scanned DPI (needed to compute magnification)\n");
+    }
   fprintf (stderr, "\n");
   if (subhelp == help_basic)
     fprintf (stderr, "Use %s <command> --help for help on specific command\n",
@@ -461,6 +484,7 @@ parse_mode (const char *mode)
   fprintf (stderr, "Possible values are: ");
   for (int i = 0; i < render_type_max; i++)
     fprintf (stderr, " %s", render_type_properties[i].name);
+  fprintf (stderr, "\n");
   exit (1);
   return render_type_max;
 }
@@ -3443,6 +3467,182 @@ stitch (int argc, char **argv)
 }
 
 int
+do_mtf (int argc, char **argv)
+{
+  const char *cspname = NULL, *error = NULL;
+  const char *csvname = NULL;
+  const char *psfname = NULL;
+  const char *psfname2 = NULL;
+  const char *quickmtfname = NULL;
+  float sigma = 0, blur_diameter = 0, pixel_pitch = 0, wavelength = 0, f_stop = 0, defocus = 0, scan_dpi = 0;
+  bool match = false;
+  render_parameters rparam;
+  for (int i = 0; i < argc; i++)
+    {
+      float flt;
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (!strcmp (argv[i], "--match"))
+	match = true;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-csv"))
+        csvname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "load-quickmtf"))
+        quickmtfname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-psf"))
+        psfname = str;
+      else if (const char *str = arg_with_param (argc, argv, &i, "save-matched-psf"))
+        psfname2 = str;
+      else if (parse_float_param (argc, argv, &i, "sigma", flt, 0, 10))
+	sigma = flt;
+      else if (parse_float_param (argc, argv, &i, "blur-diameter", flt, 0, 10))
+	blur_diameter = flt;
+      else if (parse_float_param (argc, argv, &i, "pixel-ptch", flt, 0, 1000))
+	pixel_pitch = flt;
+      else if (parse_float_param (argc, argv, &i, "wavelength", flt, 300, 2000))
+	wavelength = flt;
+      else if (parse_float_param (argc, argv, &i, "f-stop", flt, 0, 1000))
+	f_stop = flt;
+      else if (parse_float_param (argc, argv, &i, "defocus", flt, 0, 10))
+	defocus = flt;
+      else if (parse_float_param (argc, argv, &i, "dpi", flt, 0, 10))
+	scan_dpi = flt;
+      else
+	{
+	  if (!cspname)
+	    cspname = argv[i];
+	  else
+	    print_help (argv[i]);
+	}
+    }
+  if (!cspname && !quickmtfname && !sigma && !blur_diameter && !pixel_pitch)
+    {
+      fprintf (stderr, "No filename given and no MTF parameters specified\n");
+      exit (-1);
+    }
+  if (cspname)
+    {
+      FILE *in = fopen (cspname, "rt");
+      if (verbose)
+	{
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	}
+      if (!in)
+	{
+	  perror (cspname);
+	  return 1;
+	}
+      if (!load_csp (in, NULL, NULL, &rparam, NULL, &error))
+	{
+	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  return 1;
+	}
+      fclose (in);
+    }
+  if (sigma)
+    rparam.sharpen.scanner_mtf.sigma = sigma;
+  if (blur_diameter)
+    rparam.sharpen.scanner_mtf.blur_diameter = blur_diameter;
+  if (pixel_pitch)
+    rparam.sharpen.scanner_mtf.pixel_pitch = pixel_pitch;
+  if (wavelength)
+    rparam.sharpen.scanner_mtf.wavelength = wavelength;
+  if (f_stop)
+    rparam.sharpen.scanner_mtf.f_stop = f_stop;
+  if (defocus)
+    rparam.sharpen.scanner_mtf.defocus = defocus;
+  if (scan_dpi)
+    rparam.sharpen.scanner_mtf.scan_dpi = scan_dpi;
+  if (quickmtfname)
+    {
+      FILE *in = fopen (quickmtfname, "rt");
+      if (verbose)
+	{
+	  printf ("Loading quickmtf file: %s\n", quickmtfname);
+	}
+      if (!in)
+	{
+	  perror (cspname);
+	  return 1;
+	}
+      char line[1024];
+      float v1, v2, v3, v4, v5;
+      char extra;
+      while (fgets(line, sizeof(line), in)) {
+	int itemsFound = sscanf(line, "%f\t%f\t%f\t%f\t%f %c", &v1, &v2, &v3, &v4, &v5, &extra);
+	rparam.sharpen.scanner_mtf.clear_data ();
+	/* Data are saved in order freq, red, green, blue, combined  */
+	if (itemsFound == 5) 
+	  rparam.sharpen.scanner_mtf.add_value (v1, v4);
+	else
+	  {
+	    printf ("Quickmtf output file should contain 4 tab separated values on every line:\n"
+		    "pixel_frequency	red_contrast	green_constrast	blue_contrast	combined_contrast\n"
+		    "contrasts are in percents.\n");
+	    fclose (in);
+	    exit (1);
+	  }
+      }
+      fclose (in);
+    }
+  if (match)
+    {
+      mtf_parameters estimated;
+      if (verbose)
+	{
+	  if (csvname)
+	    printf ("Estimating parameters and saving CSV: %s\n", csvname);
+	  else
+	    printf ("Estimating parameters\n");
+	}
+      if (!rparam.sharpen.scanner_mtf.size ())
+	{
+	  fprintf (stderr, "No measured MTF (scanner_mtf_point) data to match\n");
+	  return 1;
+	}
+      double sqsum = estimated.estimate_parameters (rparam.sharpen.scanner_mtf, csvname, NULL, &error);
+      if (error)
+	{
+	  fprintf (stderr, "Error estimating mtf: %s\n", error);
+	  exit (1);
+	}
+      if (verbose)
+        printf ("Average error sqare: %f\n\n", sqsum / rparam.sharpen.scanner_mtf.size ());
+      printf ("scanner_mtf_sigma_px: %f\n", estimated.sigma);
+      printf ("scanner_mtf_blur_diameter_px: %f\n", estimated.blur_diameter);
+      printf ("scanner_mtf_pixel_pitch_um: %f\n", estimated.pixel_pitch);
+      printf ("scanner_mtf_wavelength_nm: %f\n", estimated.wavelength);
+      printf ("scanner_mtf_f_stop: %f\n", estimated.f_stop);
+      printf ("scanner_mtf_defocus_mm: %g\n", estimated.defocus);
+      printf ("scan_dpi: %f\n", estimated.scan_dpi);
+      if (psfname2 && verbose)
+	  printf ("Saving estimated PSF to tiff file: %s\n", psfname2);
+      if (psfname2 && !estimated.save_psf (NULL, psfname2, &error))
+	{
+	  fprintf (stderr, "Matched PSF saving failed: %s\n", error);
+	  exit (1);
+	}
+    }
+  else if (csvname)
+    {
+      if (verbose)
+	  printf ("Saving CSV file: %s\n", csvname);
+      if (!rparam.sharpen.scanner_mtf.write_table (csvname, &error))
+	{
+	  fprintf (stderr, "CSV saving failed: %s\n", error);
+	  exit (1);
+	}
+    }
+  if (psfname && verbose)
+    printf ("Saving PSF to tiff file: %s\n", psfname);
+  if (psfname && !rparam.sharpen.scanner_mtf.save_psf (NULL, psfname, &error))
+    {
+      fprintf (stderr, "PSF saving failed: %s\n", error);
+      exit (1);
+    }
+  return 0;
+}
+
+int
 do_has_regular_screen (int argc, char **argv)
 {
   std::vector <char *> filenames;
@@ -3706,6 +3906,8 @@ main (int argc, char **argv)
     read_chemcad (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "has-regular-screen"))
     ret = do_has_regular_screen (argc - 1, argv + 1);
+  else if (!strcmp (argv[0], "mtf"))
+    ret = do_mtf (argc - 1, argv + 1);
   else
     print_help ();
   return ret;

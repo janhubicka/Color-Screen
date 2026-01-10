@@ -23,27 +23,27 @@ class stitch_project;
 struct mtf_parameters
 {
   /* Sigma (in pixels) used to estimate gaussian blur.  */
-  luminosity_t sigma;
+  double sigma;
 
   /* Size of blur diameter (in pixels) used to estimate defocus.
      This parameter is used only if pixel_pitch/f_num/wavelength_nm
      is not defined.  */
-  luminosity_t blur_diameter;
+  double blur_diameter;
 
   /* Defocus (in milimeters) */
-  luminosity_t defocus;
+  double defocus;
   /* F-stop.  */
-  luminosity_t f_stop;
+  double f_stop;
   /* Wavelength of light in nm.  */
-  luminosity_t wavelength;
+  double wavelength;
   /* Sensor pixel pitch (size of a pixel) in micrometers.  */
-  luminosity_t pixel_pitch;
+  double pixel_pitch;
 
   /* DPI of the scan; necessary to calculate magnification.  */
-  luminosity_t scan_dpi;
+  double scan_dpi;
 
   void
-  add_value (luminosity_t freq, luminosity_t contrast)
+  add_value (double freq, luminosity_t contrast)
   {
     m_data.push_back ({freq, contrast});
   }
@@ -52,7 +52,7 @@ struct mtf_parameters
   {
     return m_data.size ();
   }
-  luminosity_t
+  double
   get_freq (int i) const
   {
     return m_data[i].freq;
@@ -102,15 +102,24 @@ struct mtf_parameters
   {
     std::vector <entry>().swap (m_data);
   }
-  luminosity_t effective_f_stop ();
-  luminosity_t lens_mtf (luminosity_t pixel_freq);
-  luminosity_t system_mtf (luminosity_t pixel_freq);
+  pure_attr double effective_f_stop () const;
+  pure_attr double nu (double pixel_freq) const;
+  pure_attr luminosity_t lens_difraction_mtf (double pixe_freq) const;
+  pure_attr luminosity_t hopkins_defocus_mtf (double pixe_freq) const;
+  pure_attr luminosity_t stokseth_defocus_mtf (double pixe_freq) const;
+  pure_attr luminosity_t lens_mtf (double pixel_freq) const;
+  pure_attr luminosity_t system_mtf (double pixel_freq) const;
+  pure_attr luminosity_t measured_mtf_correction (double pixel_freq) const;
+  DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL);
   mtf_parameters ()
   : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), m_data ()
   { }
+  bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
+  bool write_table (const char *write_table, const char **error) const;
 private:
   struct entry {
-    luminosity_t freq, contrast;
+    double freq;
+    luminosity_t contrast;
     bool operator== (const entry &o) const
     {
       return freq == o.freq && contrast == o.contrast;

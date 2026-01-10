@@ -123,7 +123,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    rparam->sharpen.scanner_mtf.wavelength) < 0
 	  || fprintf (f, "scanner_mtf_f_stop: %f\n",
 	    rparam->sharpen.scanner_mtf.f_stop) < 0
-	  || fprintf (f, "scanner_mtf_defocus_mm: %f\n",
+	  /* Use %g; small values matters.  */
+	  || fprintf (f, "scanner_mtf_defocus_mm: %g\n",
 	    rparam->sharpen.scanner_mtf.defocus) < 0
 	  || fprintf (f, "scan_dpi: %f\n",
 	    rparam->sharpen.scanner_mtf.scan_dpi) < 0)
@@ -285,6 +286,16 @@ read_scalar (FILE *f, coord_t *ll)
 
 static bool
 read_luminosity (FILE *f, luminosity_t *ll)
+{
+  double l;
+  if (fscanf (f, "%lf\n", &l) != 1)
+    return false;
+  if (ll)
+    *ll = l;
+  return true;
+}
+static bool
+read_double (FILE *f, double *ll)
 {
   double l;
   if (fscanf (f, "%lf\n", &l) != 1)
@@ -1246,11 +1257,12 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_point"))
 	{
-	  luminosity_t freq, contrast;
+	  double freq;
+	  luminosity_t contrast;
 	  if (rparam && first_scanner_mtf)
 	    rparam->sharpen.scanner_mtf.clear_data ();
 	  first_scanner_mtf = false;
-	  if (!read_luminosity (f, &freq)
+	  if (!read_double (f, &freq)
 	      || !read_luminosity (f, &contrast))
 	    {
 	      *error = "error parsing scanner_mtf_point";
@@ -1261,87 +1273,61 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_sigma") || !strcmp (buf, "scanner_mtf_sigma_px"))
 	{
-	  luminosity_t sigma;
-	  if (!read_luminosity (f, &sigma))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sigma)))
 	    {
 	      *error = "error parsing scanner_mtf_sigma";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.sigma = sigma;
 	}
       else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
 	{
 	  luminosity_t blur_diameter;
-	  if (!read_luminosity (f, &blur_diameter))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.blur_diameter)))
 	    {
 	      *error = "error parsing scanner_mtf_blur_diameter";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.blur_diameter = blur_diameter;
 	}
       else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
 	{
 	  luminosity_t pixel_pitch;
-	  if (!read_luminosity (f, &pixel_pitch))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
 	    {
 	      *error = "error parsing scanner_mtf_pixel_pitch";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.pixel_pitch = pixel_pitch;
 	}
       else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
 	{
-	  luminosity_t wavelength;
-	  if (!read_luminosity (f, &wavelength))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
 	    {
 	      *error = "error parsing scanner_mtf_wavelength";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.wavelength = wavelength;
 	}
       else if (!strcmp (buf, "scanner_mtf_f_stop"))
 	{
-	  luminosity_t f_stop;
-	  if (!read_luminosity (f, &f_stop))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.f_stop)))
 	    {
 	      *error = "error parsing scanner_mtf_f_stop";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.f_stop = f_stop;
 	}
       else if (!strcmp (buf, "scanner_mtf_defocus_mm"))
 	{
-	  luminosity_t defocus;
-	  if (!read_luminosity (f, &defocus))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.defocus)))
 	    {
-	      *error = "error parsing scanner_mtf_defocus";
+	      *error = "error parsing scanner_mtf_defocus_mm";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.defocus = defocus;
 	}
       else if (!strcmp (buf, "scan_dpi"))
 	{
-	  luminosity_t scan_dpi;
-	  if (!read_luminosity (f, &scan_dpi))
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.scan_dpi)))
 	    {
 	      *error = "error parsing scanner_mtf_scan_dpi";
 	      return false;
 	    }
-	  first_scanner_mtf = false;
-	  if (rparam)
-	    rparam->sharpen.scanner_mtf.scan_dpi = scan_dpi;
 	}
       else
 	{

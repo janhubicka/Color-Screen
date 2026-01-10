@@ -14,7 +14,7 @@ extern std::mutex fftw_lock;
 class mtf
 {
 public:
-  bool precompute (progress_info *progress = NULL);
+  bool precompute (progress_info *progress = NULL, const char *filename = NULL, const char **error = NULL);
 
   /* Reutrn 1d MTF value.  */
   inline luminosity_t
@@ -99,7 +99,7 @@ private:
   luminosity_t m_psf_radius;
   bool m_precomputed;
   std::mutex m_lock;
-  void compute_psf (int max_radius = 128, luminosity_t subsample = 1 / 32.0);
+  bool compute_psf (int max_radius = 128, luminosity_t subsample = 1 / 32.0, const char *filename = NULL, const char **error = NULL);
 };
 }
 #endif
