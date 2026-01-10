@@ -15,7 +15,7 @@ struct render_to_file_params;
 class screen_table
 {
 public:
-  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, progress_info *progress);
+  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, const sharpen_parameters &sharpen, progress_info *progress);
   screen &get_screen (int x, int y)
   {
     return m_screen_table[y * m_width + x];

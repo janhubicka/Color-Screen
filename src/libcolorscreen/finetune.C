@@ -192,7 +192,7 @@ private:
 
   rgbdata last_blur;
   luminosity_t last_scanner_mtf_sigma;
-  luminosity_t last_scanner_mtf_defocus;
+  rgbdata last_scanner_mtf_defocus;
   luminosity_t last_emulsion_blur;
   coord_t last_width, last_height;
   luminosity_t min_nonone_clen;
@@ -245,6 +245,8 @@ public:
   bool optimize_scanner_mtf_sigma;
   /* Try to optimize screen blur attribute (othervise fixed_defocus is used, if any).  */
   bool optimize_scanner_mtf_defocus;
+  /* Same but per-cannel.  */
+  bool optimize_scanner_mtf_channel_defocus;
   /* Try to optimize screen blur attribute (othervise fixed_blur is used).  */
   bool optimize_screen_blur;
   /* Try to optimize screen blur independently in each channel.  */
@@ -483,9 +485,27 @@ public:
   coord_t
   get_scanner_mtf_defocus (coord_t *v)
   {
-    if (!optimize_scanner_mtf_defocus)
+    if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
       return mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
+    if (optimize_scanner_mtf_channel_defocus)
+      return (v[mtf_defocus_index] + v[mtf_defocus_index + 1] + v[mtf_defocus_index + 2]) * (1/(coord_t)3);
     return v[mtf_defocus_index];
+  }
+  /* Return blur radius of screen. */
+  rgbdata
+  get_scanner_mtf_channel_defocus (coord_t *v)
+  {
+    if (!optimize_scanner_mtf_defocus && !optimize_scanner_mtf_channel_defocus)
+      {
+	auto r = mtf_params.simulate_difraction_p () ? mtf_params.defocus : mtf_params.blur_diameter;
+	return { r, r, r };
+      }
+    if (!optimize_scanner_mtf_channel_defocus)
+      {
+        auto b = v[mtf_defocus_index];
+        return { b, b, b };
+      }
+    return { v[mtf_defocus_index], v[mtf_defocus_index + 1], v[mtf_defocus_index + 2] };
   }
 
   /* Return blur radius of screen. */
@@ -580,9 +600,11 @@ public:
     if (optimize_position)
       printf (" position");
     if (optimize_scanner_mtf_sigma)
-      printf (" mtf_sigma");
+      printf (" scanner_mtf_sigma");
     if (optimize_scanner_mtf_defocus)
-      printf (" mtf_defocus");
+      printf (" scanner_mtf_defocus");
+    if (optimize_scanner_mtf_channel_defocus)
+      printf (" scanner_mtf_channel_defocus");
     if (optimize_screen_blur)
       printf (" screen_blur");
     if (optimize_screen_channel_blurs)
@@ -648,6 +670,15 @@ public:
           printf ("Scanner mtf blur diameter %f px\n", get_scanner_mtf_defocus (v));
 	else
           printf ("Scanner mtf defocus %f mm\n", get_scanner_mtf_defocus (v));
+      }
+    if (optimize_scanner_mtf_channel_defocus)
+      {
+        rgbdata b = get_scanner_mtf_channel_defocus (v);
+	if (!mtf_params.simulate_difraction_p ())
+          printf ("Scanner mtf blur diameter %f px (red) %f px (green) %f px (blue)\n",
+		  b.red, b.green, b.blue);
+	else
+          printf ("Scanner mtf defocus %f mm (red) %f mm (green) %f mm (blue)\n", b.red, b.green, b.blue);
       }
     if (optimize_screen_channel_blurs)
       {
@@ -792,6 +823,12 @@ public:
       to_range (v[mtf_sigma_index], 0, 20);
     if (optimize_scanner_mtf_defocus)
       to_range (v[mtf_defocus_index], 0, 20);
+    if (optimize_scanner_mtf_channel_defocus)
+      {
+	to_range (v[mtf_defocus_index], 0, 20);
+	to_range (v[mtf_defocus_index+1], 0, 20);
+	to_range (v[mtf_defocus_index+2], 0, 20);
+      }
     if (optimize_screen_channel_blurs)
       {
         /* Screen blur radius.  */
@@ -1067,6 +1104,7 @@ public:
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_scanner_mtf_sigma = flags & finetune_scanner_mtf_sigma;
     optimize_scanner_mtf_defocus = flags & finetune_scanner_mtf_defocus;
+    optimize_scanner_mtf_channel_defocus = flags & finetune_scanner_mtf_channel_defocus;
     optimize_screen_channel_blurs = flags & finetune_screen_channel_blurs;
     optimize_emulsion_blur = flags & finetune_emulsion_blur;
     optimize_strips = (flags & finetune_strips) && screen_with_varying_strips_p (type);
@@ -1114,7 +1152,8 @@ public:
     /* When finetuning emulsion blur, tune also offset carefully.  */
     if (tiles[0].color && optimize_emulsion_blur
         && (optimize_screen_blur || optimize_screen_channel_blurs
-            || optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus))
+            || optimize_scanner_mtf_sigma || optimize_scanner_mtf_defocus
+	    || optimize_scanner_mtf_channel_defocus))
       {
         optimize_emulsion_intensities = true;
         optimize_emulsion_offset = true;
@@ -1127,7 +1166,7 @@ public:
        is already known and use it or try to simulate everything including
        intensities.  */
     if (optimize_emulsion_blur && !optimize_emulsion_intensities)
-      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma = optimize_scanner_mtf_defocus = false;
+      optimize_screen_blur = optimize_screen_channel_blurs = optimize_scanner_mtf_sigma = optimize_scanner_mtf_defocus = optimize_scanner_mtf_channel_defocus = false;
     /* When simulating infrared fog needs to be subtracted before applying mixing weights.
        This makes equations non-linear.  */
     fog_by_least_squares = (optimize_fog && !normalize && least_squares) && !simulate_infrared;
@@ -1267,7 +1306,13 @@ public:
         mtf_sigma_index = n_values;
         n_values ++;
       }
-    if (optimize_scanner_mtf_defocus)
+    if (optimize_scanner_mtf_channel_defocus)
+      {
+        mtf_defocus_index = n_values;
+	optimize_scanner_mtf_defocus = false;
+        n_values += 3;
+      }
+    else if (optimize_scanner_mtf_defocus)
       {
         mtf_defocus_index = n_values;
         n_values ++;
@@ -1307,7 +1352,7 @@ public:
     /* Set up cached values.   */
     last_blur = { -1, -1, -1 };
     last_scanner_mtf_sigma = -1;
-    last_scanner_mtf_defocus = -1;
+    last_scanner_mtf_defocus = {-1, -1, -1};
     for (int tileid = 0; tileid < n_tiles; tileid++)
       {
         tiles[tileid].last_emulsion_intensities = { -1, -1, -1 };
@@ -1435,6 +1480,12 @@ public:
     if (optimize_scanner_mtf_defocus)
       {
 	start[mtf_defocus_index] = 0;
+      }
+    if (optimize_scanner_mtf_channel_defocus)
+      {
+	start[mtf_defocus_index] = 0;
+	start[mtf_defocus_index+1] = 0;
+	start[mtf_defocus_index+2] = 0;
       }
     /* TODO: Maybe we want to use previous results and start from params by default.  */
     if (flags & finetune_use_srip_widths)
@@ -1640,23 +1691,43 @@ public:
 	  {
 	    sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
 	    if (tiles[0].color)
+	      sp.scanner_mtf.wavelength = 550;
+	    if (/*tiles[0].color ||*/ optimize_scanner_mtf_channel_defocus)
 	      {
-#if 0
-	        /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
 		vs[0] = &sp;
 		sp_green = sp;
 		vs[1] = &sp_green;
 		sp_blue = sp;
 		vs[2] = &sp_blue;
+
+		rgbdata defocus = get_scanner_mtf_channel_defocus (v);
+		sp.scanner_mtf.defocus = defocus.red;
+		sp_green.scanner_mtf.defocus = defocus.green;
+		sp_blue.scanner_mtf.defocus = defocus.blue;
+#if 0
+	        /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
 		sp.scanner_mtf.wavelength = 466;
 		sp_green.scanner_mtf.wavelength = 526;
 		sp_blue.scanner_mtf.wavelength = 653;
 #endif
-		sp.scanner_mtf.wavelength = 550;
 	      }
 	  }
 	else
-	  sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
+	  {
+	    sp.scanner_mtf.blur_diameter = get_scanner_mtf_defocus (v);
+	    if (optimize_scanner_mtf_channel_defocus)
+	      {
+		vs[0] = &sp;
+		sp_green = sp;
+		vs[1] = &sp_green;
+		sp_blue = sp;
+		vs[2] = &sp_blue;
+		rgbdata blur_diameter = get_scanner_mtf_channel_defocus (v);
+		sp.scanner_mtf.blur_diameter = blur_diameter.red;
+		sp_green.scanner_mtf.blur_diameter = blur_diameter.green;
+		sp_blue.scanner_mtf.blur_diameter = blur_diameter.blue;
+	      }
+	  }
 	dst_scr->initialize_with_sharpen_parameters (*src_scr, vs, false);
       }
     else
@@ -1669,7 +1740,7 @@ public:
     luminosity_t emulsion_blur = get_emulsion_blur_radius (v);
     rgbdata blur = get_channel_blur_radius (v);
     luminosity_t scanner_mtf_sigma = get_scanner_mtf_sigma (v);
-    luminosity_t scanner_mtf_defocus = get_scanner_mtf_defocus (v);
+    rgbdata scanner_mtf_defocus = get_scanner_mtf_channel_defocus (v);
     luminosity_t red_strip_width = get_red_strip_width (v);
     luminosity_t green_strip_height = get_green_strip_width (v);
     rgbdata intensities = get_emulsion_intensities (v, tileid);
@@ -2784,6 +2855,7 @@ public:
 	ret.scanner_mtf_blur_diameter = get_scanner_mtf_defocus (start);
 	ret.scanner_mtf_defocus = mtf_params.defocus;
       }
+    ret.scanner_mtf_channel_defocus_or_blur = get_scanner_mtf_channel_defocus (start);
     ret.screen_blur_radius = get_blur_radius (start);
     ret.screen_channel_blur_radius = get_channel_blur_radius (start);
     if (tiles[0].color)

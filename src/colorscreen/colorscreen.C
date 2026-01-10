@@ -254,6 +254,8 @@ print_help (char *err = NULL)
                        "scanner MTF (gaussian blur)\n");
       fprintf (stderr, "      --optimize-scanner-mtf-defocus enable finetuning of "
                        "scanner MTF defocus\n");
+      fprintf (stderr, "      --optimize-scanner-mtf-channel-defocus enable finetuning of "
+                       "scanner MTF defocus indiviually for each channel\n");
       fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of "
                        "emulsion blur radius\n");
       fprintf (stderr, "      --optimize-sharpening     enable finetuning of image sharpening\n");
@@ -1201,6 +1203,26 @@ analyze_backlight (int argc, char **argv)
     }
 }
 
+coord_t
+get_correction (scanner_blur_correction_parameters::correction_mode mode, finetune_result &res)
+{
+  switch (mode)
+    {
+    case scanner_blur_correction_parameters::blur_radius:
+      return res.screen_blur_radius;
+      break;
+    case scanner_blur_correction_parameters::mtf_defocus:
+      return res.scanner_mtf_defocus;
+      break;
+    case scanner_blur_correction_parameters::mtf_blur_diameter:
+      return res.scanner_mtf_blur_diameter;
+      break;
+    case scanner_blur_correction_parameters::max_correction:
+      abort ();
+    }
+  abort ();
+}
+
 std::unique_ptr <scanner_blur_correction_parameters>
 analyze_scanner_blur_img (scr_to_img_parameters &param, 
 			  render_parameters &rparam,
@@ -1214,6 +1236,10 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 			  coord_t tolerance,
 			  progress_info *progress)
 {
+  scanner_blur_correction_parameters::correction_mode mode = scanner_blur_correction_parameters::blur_radius;
+  if (flags & (finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus))
+    mode = rparam.sharpen.scanner_mtf.simulate_difraction_p ()
+	   ? scanner_blur_correction_parameters::mtf_defocus : scanner_blur_correction_parameters::mtf_blur_diameter;
   {
     std::vector<finetune_result> prepass (strip_xsteps * strip_ysteps);
     if (verbose)
@@ -1221,10 +1247,10 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	progress->pause_stdout ();
 	if (screen_with_varying_strips_p (param.type))
 	  printf ("Analyzing %ix%i areas to determine strip widths and "
-		  "screen blur (overall %i solutions to be computed)\n",
+		  "blur (overall %i solutions to be computed)\n",
 		  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
 	else
-	  printf ("Analyzing %ix%i areas to determine screen blur (overall %i "
+	  printf ("Analyzing %ix%i areas to determine blur (overall %i "
 		  "solutions to be computed)\n",
 		  strip_xsteps, strip_ysteps, strip_xsteps * strip_ysteps);
 	progress->resume_stdout ();
@@ -1281,7 +1307,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	      red_hist.pre_account (res.red_strip_width);
 	      green_hist.pre_account (res.green_strip_width);
 	    }
-	  blur_hist.pre_account (res.screen_blur_radius);
+	  blur_hist.pre_account (get_correction (mode, res));
 	  nok++;
 	}
     if (!nok)
@@ -1307,7 +1333,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	      red_hist.account (res.red_strip_width);
 	      green_hist.account (res.green_strip_width);
 	    }
-	  blur_hist.account (res.screen_blur_radius);
+	  blur_hist.account (get_correction (mode, res));
 	  nok++;
 	}
 
@@ -1324,8 +1350,23 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	rparam.green_strip_width
 	    = green_hist.find_avg (skipmin / 100, skipmax / 100);
       }
-    rparam.screen_blur_radius
-	= blur_hist.find_avg (skipmin / 100, skipmax / 100);
+    switch (mode)
+      {
+      case scanner_blur_correction_parameters::blur_radius:
+	rparam.screen_blur_radius
+	    = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+	break;
+      case scanner_blur_correction_parameters::mtf_defocus:
+	rparam.sharpen.scanner_mtf.defocus
+	    = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+	break;
+      case scanner_blur_correction_parameters::mtf_blur_diameter:
+	rparam.sharpen.scanner_mtf.blur_diameter
+	    = blur_hist.find_avg (skipmin / 100, skipmax / 100);
+	break;
+      case scanner_blur_correction_parameters::max_correction:
+	abort ();
+      }
     if (verbose)
       {
 	progress->pause_stdout ();
@@ -1336,7 +1377,20 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	    printf ("Green strip width %.2f%%\n",
 		    rparam.green_strip_width * 100);
 	  }
-	printf ("Average screen blur %.2f pixels\n", rparam.screen_blur_radius);
+	switch (mode)
+	  {
+	  case scanner_blur_correction_parameters::blur_radius:
+	    printf ("Average screen blur %.2f pixels\n", rparam.screen_blur_radius);
+	    break;
+	  case scanner_blur_correction_parameters::mtf_defocus:
+	    printf ("Average mtf defocus %.5f mm\n", rparam.sharpen.scanner_mtf.defocus);
+	    break;
+	  case scanner_blur_correction_parameters::mtf_blur_diameter:
+	    printf ("Average mtf blur diameter %.2f pixels\n", rparam.sharpen.scanner_mtf.blur_diameter);
+	    break;
+	  case scanner_blur_correction_parameters::max_correction:
+	    abort ();
+	  }
 	progress->resume_stdout ();
       }
   }
@@ -1369,7 +1423,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
         progress->inc_progress ();
       }
   std::unique_ptr <scanner_blur_correction_parameters> scanner_blur_correction = std::make_unique<scanner_blur_correction_parameters> ();
-  scanner_blur_correction->alloc (xsteps, ysteps);
+  scanner_blur_correction->alloc (xsteps, ysteps, mode);
   coord_t pixel_size;
   scr_to_img map;
   map.set_parameters (param, scan);
@@ -1406,7 +1460,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
 	      if (!res.success || res.uncertainity > uncertainity_threshold)
 		continue;
 	      nok++;
-	      hist.pre_account (res.screen_blur_radius);
+	      hist.pre_account (get_correction (mode, res));
             }
         if (!nok)
           {
@@ -1419,9 +1473,7 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           for (int xx = 0; xx < xsubsteps; xx++)
             {
 	      finetune_result &res = mainpass[(y * ysubsteps + yy) * xsteps * xsubsteps + x * xsubsteps + xx];
-	      if (!res.success || res.uncertainity > uncertainity_threshold)
-		continue;
-              hist.account (res.screen_blur_radius);
+              hist.account (get_correction (mode, res));
             }
         hist.finalize ();
         if (tolerance >= 0
@@ -1429,9 +1481,11 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
                    > tolerance)
           {
 	    progress->pause_stdout ();
-            printf ("Tolerance threshold %f exceeded for entry %i,%i: blur "
-                    "radius range is %f...%f (diff %f)\n",
-                    tolerance, x, y, hist.find_min (skipmin / 100),
+            printf ("Tolerance threshold %f exceeded for entry %i,%i: %s "
+                    " range is %f...%f (diff %f)\n",
+                    tolerance, x, y, 
+		    scanner_blur_correction_parameters::pretty_correction_names[(int)mode],
+		    hist.find_min (skipmin / 100),
                     hist.find_max (skipmax / 100.0),
                     hist.find_max (skipmax / 100.0)
                         - hist.find_min (skipmin / 100));
@@ -1440,7 +1494,9 @@ analyze_scanner_blur_img (scr_to_img_parameters &param,
           }
         luminosity_t b = hist.find_avg (skipmin / 100, skipmax / 100);
         assert (b >= 0 && b <= 1024);
-        scanner_blur_correction->set_gaussian_blur_radius (x, y, b * pixel_size);
+	if (mode == scanner_blur_correction_parameters::blur_radius)
+	  b *= pixel_size;
+        scanner_blur_correction->set_correction (x, y, b);
       }
   if (fail)
     return NULL;
@@ -1463,7 +1519,7 @@ analyze_scanner_blur (int argc, char **argv)
   int strip_ysteps = 0;
   bool reoptimize_strip_widths = false;
   uint64_t flags = finetune_position | finetune_no_progress_report
-		   | finetune_screen_channel_blurs;
+		   | finetune_scanner_mtf_defocus;
 
   for (int i = 0; i < argc; i++)
     {
@@ -1479,13 +1535,23 @@ analyze_scanner_blur (int argc, char **argv)
         reoptimize_strip_widths = false;
       else if (!strcmp (argv[i], "--optimize-screen-blur"))
         {
-          flags &= ~finetune_screen_channel_blurs;
+          flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_screen_blur;
         }
       else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
         {
+          flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
           flags |= finetune_screen_channel_blurs;
-          flags &= ~finetune_screen_blur;
+        }
+      else if (!strcmp (argv[i], "--optimize-scanner-mtf-defocus"))
+        {
+          flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
+          flags |= finetune_scanner_mtf_defocus;
+        }
+      else if (!strcmp (argv[i], "--optimize-scanner-mtf-channel-defocus"))
+        {
+          flags &= ~(finetune_screen_channel_blurs | finetune_screen_blur | finetune_scanner_mtf_defocus | finetune_scanner_mtf_channel_defocus);
+          flags |= finetune_scanner_mtf_channel_defocus;
         }
       else if (!strcmp (argv[i], "--optimize-fog"))
         flags |= finetune_fog;
@@ -2514,6 +2580,8 @@ finetune (int argc, char **argv)
         flags |= finetune_scanner_mtf_sigma;
       else if (!strcmp (argv[i], "--optimize-scanner-mtf-defocus"))
         flags |= finetune_scanner_mtf_defocus;
+      else if (!strcmp (argv[i], "--optimize-scanner-mtf-channel-defocus"))
+        flags |= finetune_scanner_mtf_channel_defocus;
       else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
         flags |= finetune_screen_channel_blurs;
       else if (!strcmp (argv[i], "--optimize-emulsion-blur"))
@@ -2710,7 +2778,6 @@ finetune (int argc, char **argv)
     {
       histogram hist, emulsion_hist;
       rgb_histogram channel_hist;
-      histogram mtf_hist[4];
       for (int y = 0; y < ysteps; y++)
         for (int x = 0; x < xsteps; x++)
           if (results[y * xsteps + x].success)
@@ -2720,15 +2787,10 @@ finetune (int argc, char **argv)
                   results[y * xsteps + x].emulsion_blur_radius);
               channel_hist.pre_account (
                   results[y * xsteps + x].screen_channel_blur_radius);
-              for (int i = 0; i < 4; i++)
-                mtf_hist[i].pre_account (
-                    results[y * xsteps + x].screen_mtf_blur[i]);
             }
       hist.finalize_range (65536);
       emulsion_hist.finalize_range (65536);
       channel_hist.finalize_range (65536);
-      for (int i = 0; i < 4; i++)
-        mtf_hist[i].finalize_range (65536);
       for (int y = 0; y < ysteps; y++)
         for (int x = 0; x < xsteps; x++)
           if (results[y * xsteps + x].success)
@@ -2738,15 +2800,10 @@ finetune (int argc, char **argv)
                   results[y * xsteps + x].emulsion_blur_radius);
               channel_hist.account (
                   results[y * xsteps + x].screen_channel_blur_radius);
-              for (int i = 0; i < 4; i++)
-                mtf_hist[i].account (
-                    results[y * xsteps + x].screen_mtf_blur[i]);
             }
       hist.finalize ();
       emulsion_hist.finalize ();
       channel_hist.finalize ();
-      for (int i = 0; i < 4; i++)
-        mtf_hist[i].finalize ();
       if (flags & (finetune_scanner_mtf_sigma))
         {
           printf ("Detected scanner mtf sigma (pixels)\n");
@@ -2805,6 +2862,35 @@ finetune (int argc, char **argv)
           printf ("Screen blur robust min %f, avg %f, max %f\n",
                   hist.find_min (0.1), hist.find_avg (0.1, 0.1),
                   hist.find_max (0.1));
+        }
+      else if (flags & finetune_scanner_mtf_channel_defocus)
+        {
+          printf ("Detected screen chanel blurs\n");
+          for (int y = 0; y < ysteps; y++)
+            {
+              for (int x = 0; x < xsteps; x++)
+                if (results[y * xsteps + x].success)
+                  printf (
+                      "  %6.3f,%6.3f,%6.3f",
+                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.red,
+                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.green,
+                      results[y * xsteps + x].scanner_mtf_channel_defocus_or_blur.blue);
+                else
+                  printf ("  ------");
+              printf ("\n");
+            }
+          printf ("Red screen blur robust min %f, avg %f, max %f\n",
+                  channel_hist.find_min (0.1).red,
+                  channel_hist.find_avg (0.1, 0.1).red,
+                  channel_hist.find_max (0.1).red);
+          printf ("Green screen blur robust min %f, avg %f, max %f\n",
+                  channel_hist.find_min (0.1).green,
+                  channel_hist.find_avg (0.1, 0.1).green,
+                  channel_hist.find_max (0.1).green);
+          printf ("Blue screen blur robust min %f, avg %f, max %f\n",
+                  channel_hist.find_min (0.1).blue,
+                  channel_hist.find_avg (0.1, 0.1).blue,
+                  channel_hist.find_max (0.1).blue);
         }
       else if (flags & finetune_screen_channel_blurs)
         {

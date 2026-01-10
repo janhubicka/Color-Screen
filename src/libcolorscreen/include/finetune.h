@@ -29,6 +29,7 @@ enum finetune_flags : uint64_t
   finetune_use_screen_blur = 1 << 15,
   finetune_simulate_infrared = 1 << 16,
   finetune_sharpening = 1 << 17,
+  finetune_scanner_mtf_channel_defocus = 1 << 18,
 };
 struct finetune_parameters
 {
@@ -62,10 +63,10 @@ struct finetune_result
   coord_t uncertainity;
   coord_t screen_blur_radius;
   rgbdata screen_channel_blur_radius;
-  luminosity_t screen_mtf_blur[4];
   luminosity_t scanner_mtf_sigma;
   luminosity_t scanner_mtf_blur_diameter;
   luminosity_t scanner_mtf_defocus;
+  rgbdata scanner_mtf_channel_defocus_or_blur;
   coord_t emulsion_blur_radius;
   coord_t red_strip_width;
   coord_t green_strip_width;
@@ -85,8 +86,9 @@ struct finetune_result
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
-    screen_blur_radius (-1), screen_channel_blur_radius (-1, -1, -1), screen_mtf_blur {-1, -1, -1, -1},
+    screen_blur_radius (-1), screen_channel_blur_radius (-1, -1, -1), 
     scanner_mtf_sigma (-1), scanner_mtf_blur_diameter (-1), scanner_mtf_defocus (-1),
+    scanner_mtf_channel_defocus_or_blur {-1, -1, -1},
     emulsion_blur_radius (-1), red_strip_width (-1), green_strip_width (-1),
     screen_coord_adjust {-1, -1}, emulsion_coord_adjust {-1, -1}, color (-1, -1, -1),
     screen_red (-1, -1, -1), screen_green (-1, -1, -1), screen_blue (-1, -1, -1),

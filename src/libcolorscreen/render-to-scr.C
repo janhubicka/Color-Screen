@@ -9,6 +9,7 @@ namespace colorscreen
 screen_table::screen_table (scanner_blur_correction_parameters *param,
                             scr_type type, luminosity_t red_strip_width,
                             luminosity_t green_strip_width,
+			    const sharpen_parameters &sharpen,
                             progress_info *progress)
     : m_id (lru_caches::get ()), m_width (param->get_width ()),
       m_height (param->get_height ()), m_screen_table (m_width * m_height)
@@ -17,15 +18,38 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
   s.initialize (type, red_strip_width, green_strip_width);
   if (progress)
     progress->set_task ("computing screen table", m_width * m_height);
-#pragma omp parallel for default(none) shared(progress) collapse(2)           \
+#pragma omp parallel for default(none) shared(progress,sharpen) collapse(2)           \
     shared(param, s)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
         if (progress && progress->cancel_requested ())
           continue;
-        m_screen_table[y * m_width + x].initialize_with_blur (
-            s, param->get_gaussian_blur_radius (x, y)/* * (1 + (x & 1) + (y & 1))*/);
+	switch (param->get_mode ())
+	  {
+	  case scanner_blur_correction_parameters::blur_radius:
+	    m_screen_table[y * m_width + x].initialize_with_blur (
+		s, param->get_correction (x, y)/* * (1 + (x & 1) + (y & 1))*/);
+	    break;
+	  case scanner_blur_correction_parameters::mtf_defocus:
+	    {
+	      sharpen_parameters sp = sharpen;
+	      sp.scanner_mtf.defocus = param->get_correction (x, y);
+	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
+	      m_screen_table[y * m_width + x].initialize_with_sharpen_parameters (s, vv, false);
+	      break;
+	    }
+	  case scanner_blur_correction_parameters::mtf_blur_diameter:
+	    {
+	      sharpen_parameters sp = sharpen;
+	      sp.scanner_mtf.blur_diameter = param->get_correction (x, y);
+	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
+	      m_screen_table[y * m_width + x].initialize_with_sharpen_parameters (s, vv, false);
+	      break;
+	    }
+	  case scanner_blur_correction_parameters::max_correction:
+	    abort ();
+	  }
         if (progress)
           progress->inc_progress ();
       }
@@ -144,12 +168,14 @@ struct screen_table_params
   uint64_t param_id;
   scr_type type;
   luminosity_t red_strip_width, green_strip_width;
+  sharpen_parameters sharpen;
   bool
   operator== (screen_table_params &o)
   {
     return type == o.type && param_id == o.param_id
            && red_strip_width == o.red_strip_width
-           && green_strip_width == o.green_strip_width;
+           && green_strip_width == o.green_strip_width
+	   && sharpen == o.sharpen;
   }
 };
 
@@ -157,7 +183,7 @@ screen_table *
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   screen_table *s = new screen_table (p.param, p.type, p.red_strip_width,
-                                      p.green_strip_width, progress);
+                                      p.green_strip_width, p.sharpen, progress);
   if (progress && progress->cancelled ())
     {
       delete s;
@@ -272,6 +298,11 @@ render_to_scr::compute_screen_table (progress_info *progress)
       = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
           m_params.red_strip_width, m_params.green_strip_width };
+  if (m_params.scanner_blur_correction->get_mode () != scanner_blur_correction_parameters::blur_radius)
+    {
+      p.sharpen = m_params.sharpen;
+      p.sharpen.scanner_mtf_scale *= pixel_size ();
+    }
   m_screen_table = screen_table_cache.get (p, progress, &m_screen_table_uid);
   return m_screen_table != NULL;
 }
