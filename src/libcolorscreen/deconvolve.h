@@ -26,7 +26,7 @@ public:
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
 		 luminosity_t snr, luminosity_t sigma, int max_threads,
-                 enum mode = sharpen, int iterations = 50);
+                 enum mode = sharpen, int iterations = 50, int supersample = 3);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
@@ -58,31 +58,47 @@ public:
   void
   put_pixel (int threadid, int x, int y, deconvolution_data_t val)
   {
-    m_data[threadid].tile[y * m_mem_tile_size + x] = val;
+    m_data[threadid].tile[y * m_tile_size + x] = val;
+  }
+
+  /* Get pixel from given thread.  */
+  deconvolution_data_t
+  get_pixel (int threadid, int x, int y) const
+  {
+    return m_data[threadid].tile[y * m_tile_size + x];
   }
 
   /* Apply sharpening/blurring to the kernel.  */
   void process_tile (int thread_id);
 
-  /* Get pixel from given thread.  */
-  deconvolution_data_t
-  get_pixel (int threadid, int x, int y)
-  {
-    return m_data[threadid].tile[y * m_mem_tile_size + x];
-  }
-
 
 private:
-  /* Size of border that is not sharpened correctly  */
+
+  /* Put pixel to given thread  */
+  void
+  put_enlarged_pixel (int threadid, int x, int y, deconvolution_data_t val)
+  {
+    (*m_data[threadid].enlarged_tile)[y * m_enlarged_tile_size + x] = val;
+  }
+
+  /* Get pixel from given thread.  */
+  deconvolution_data_t
+  get_enlarged_pixel (int threadid, int x, int y) const
+  {
+    return (*m_data[threadid].enlarged_tile)[y * m_enlarged_tile_size + x];
+  }
+  /* Size of border that is not sharpened correctly (in original tile)  */
   int m_border_size;
-  /* Size of taping along edges.  */
+  /* Size of taping along edges (in enlarged tile).  */
   int m_taper_size;
-  /* Size of tile being sharpened (including borders  */
+  /* Size of original tile being sharpened (including borders)  */
   int m_tile_size;
+  /* Size of enlarged tile being sharpened (including borders)  */
+  int m_enlarged_tile_size;
   /* Size of the FFT problem  */
   int m_fft_size;
-  /* Size of tile in memory (may be bigger if we do mirringing)  */
-  int m_mem_tile_size;
+  /* Supersampling */
+  int m_supersample;
   /* Kernel for bluring or sharpening.  */
   fftw_complex *m_blur_kernel;
 
@@ -102,6 +118,8 @@ private:
   {
     fftw_complex *in;
     std::vector<deconvolution_data_t> tile;
+    std::vector<deconvolution_data_t> *enlarged_tile;
+    std::vector<deconvolution_data_t> enlarged_tile_data;
     std::vector<deconvolution_data_t> ratios;
     bool initialized;
   };
@@ -122,6 +140,8 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
   deconvolution::mode mode;
+  if (progress)
+    progress->set_task ("initializing MTF based deconvolution", 1);
   switch (sharpen.mode)
     {
     case sharpen_parameters::richardson_lucy_deconvolution:
@@ -206,6 +226,8 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
 {
   int nthreads = parallel ? omp_get_max_threads () : 1;
   deconvolution::mode mode;
+  if (progress)
+    progress->set_task ("initializing MTF based deconvolution", 1);
   switch (sharpen.mode)
     {
     case sharpen_parameters::richardson_lucy_deconvolution:

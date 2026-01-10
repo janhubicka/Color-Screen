@@ -164,6 +164,9 @@ struct sharpen_parameters
   /* Dampening parameter sigma.  */
   luminosity_t richardson_lucy_sigma;
 
+  /* Supersampling for deconvolution sharpening.  */
+  int supersample;
+
   enum sharpen_mode get_mode () const
   {
     switch (mode)
@@ -239,7 +242,7 @@ struct sharpen_parameters
   }
   sharpen_parameters ()
   : mode (none), usm_radius (0), usm_amount (0), scanner_snr (2000), scanner_mtf_scale (1),
-    richardson_lucy_iterations (0), richardson_lucy_sigma (0)
+    richardson_lucy_iterations (0), richardson_lucy_sigma (0), supersample (2)
   { }
 };
 
