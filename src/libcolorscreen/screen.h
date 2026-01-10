@@ -86,8 +86,6 @@ public:
   DLL_PUBLIC void initialize_with_blur (screen &scr, coord_t blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
   /* Same but specify different blur for each color.  */
   DLL_PUBLIC void initialize_with_blur (screen &scr, rgbdata blur_radius, enum blur_type = /*blur_mtffilter*/ blur_gaussian, blur_alg alg = blur_auto);
-  DLL_PUBLIC void initialize_with_blur (screen &scr, luminosity_t mtf[4], enum blur_alg alg = blur_auto);
-  DLL_PUBLIC void initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4], enum blur_alg alg = blur_auto);
   DLL_PUBLIC void initialize_with_sharpen_parameters (screen &scr, sharpen_parameters *sharpen[3], bool anticipate_sharpening);
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
@@ -96,7 +94,6 @@ public:
   DLL_PUBLIC bool save_tiff (const char *filename, bool normalize = false, int tiles = 3) const;
   DLL_PUBLIC void clamp ();
   DLL_PUBLIC rgbdata patch_proportions () const;
-  static void print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size);
   void initialize_with_point_spread (screen &scr, precomputed_function<luminosity_t> *point_spread[3], rgbdata scale);
 private:
   /* Initialize screen to the thames screen plate.  */

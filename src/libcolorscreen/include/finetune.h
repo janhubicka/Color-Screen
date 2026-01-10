@@ -14,8 +14,8 @@ enum finetune_flags : uint64_t
   finetune_position = 1 << 0,
   finetune_screen_blur = 1 << 1,
   finetune_screen_channel_blurs = 1 << 2,
-  finetune_screen_mtf_blur = 1 << 3,
-  finetune_screen_ps_blur = 1 << 4,
+  finetune_scanner_mtf_sigma = 1 << 3,
+  finetune_scanner_mtf_defocus = 1 << 4,
   finetune_strips = 1 << 5,
   finetune_fog = 1 << 6,
   finetune_bw = 1 << 7,
@@ -29,8 +29,6 @@ enum finetune_flags : uint64_t
   finetune_use_screen_blur = 1 << 15,
   finetune_simulate_infrared = 1 << 16,
   finetune_sharpening = 1 << 17,
-  finetune_scanner_mtf_sigma = 1 << 18,
-  finetune_scanner_mtf_defocus = 1 << 19,
 };
 struct finetune_parameters
 {

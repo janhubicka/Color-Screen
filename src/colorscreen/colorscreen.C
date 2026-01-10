@@ -250,10 +250,10 @@ print_help (char *err = NULL)
                        "screen blur radius\n");
       fprintf (stderr, "      --optimize-screen-channel-blur enable finetuning of "
                "screen blur radius with each channel independently\n");
-      fprintf (stderr, "      --optimize-screen-mtf-blur enable finetuning of "
-                       "screen blur MTF\n");
-      fprintf (stderr, "      --optimize-screen-ps-blur enable finetuning of "
-                       "screen blur point spread\n");
+      fprintf (stderr, "      --optimize-scanner-mtf-sigma enable finetuning of "
+                       "scanner MTF (gaussian blur)\n");
+      fprintf (stderr, "      --optimize-scanner-mtf-defocus enable finetuning of "
+                       "scanner MTF defocus\n");
       fprintf (stderr, "      --optimize-emulsion-blur  enable finetuning of "
                        "emulsion blur radius\n");
       fprintf (stderr, "      --optimize-sharpening     enable finetuning of image sharpening\n");
@@ -2510,10 +2510,10 @@ finetune (int argc, char **argv)
         flags |= finetune_fog;
       else if (!strcmp (argv[i], "--optimize-screen-blur"))
         flags |= finetune_screen_blur;
-      else if (!strcmp (argv[i], "--optimize-screen-mtf-blur"))
-        flags |= finetune_screen_mtf_blur;
-      else if (!strcmp (argv[i], "--optimize-screen-ps-blur"))
-        flags |= finetune_screen_ps_blur;
+      else if (!strcmp (argv[i], "--optimize-scanner-mtf-sigma"))
+        flags |= finetune_scanner_mtf_sigma;
+      else if (!strcmp (argv[i], "--optimize-scanner-mtf-defocus"))
+        flags |= finetune_scanner_mtf_defocus;
       else if (!strcmp (argv[i], "--optimize-screen-channel-blur"))
         flags |= finetune_screen_channel_blurs;
       else if (!strcmp (argv[i], "--optimize-emulsion-blur"))
@@ -2705,7 +2705,7 @@ finetune (int argc, char **argv)
     }
 
   if (flags
-      & (finetune_screen_mtf_blur | finetune_screen_ps_blur | finetune_screen_blur
+      & (finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus | finetune_screen_blur
          | finetune_screen_channel_blurs | finetune_emulsion_blur))
     {
       histogram hist, emulsion_hist;
@@ -2747,55 +2747,47 @@ finetune (int argc, char **argv)
       channel_hist.finalize ();
       for (int i = 0; i < 4; i++)
         mtf_hist[i].finalize ();
-      if (flags & (finetune_screen_mtf_blur | finetune_screen_ps_blur))
+      if (flags & (finetune_scanner_mtf_sigma))
         {
-	  if (flags & finetune_screen_mtf_blur)
-            printf ("Detected screen mtf (mtf75,mtf50,mtf25,mtf0)\n");
-	  else
-            printf ("Detected screen point spread (75%%,50%%,25%%,0%%)\n");
+          printf ("Detected scanner mtf sigma (pixels)\n");
           for (int y = 0; y < ysteps; y++)
             {
               for (int x = 0; x < xsteps; x++)
                 if (results[y * xsteps + x].success)
-                  printf ("  %6.3f,%6.3f,%6.3f,%6.3f",
-                          results[y * xsteps + x].screen_mtf_blur[0],
-                          results[y * xsteps + x].screen_mtf_blur[1],
-                          results[y * xsteps + x].screen_mtf_blur[2],
-                          results[y * xsteps + x].screen_mtf_blur[3]);
+                  printf ("  %1.3f",
+                          results[y * xsteps + x].scanner_mtf_sigma);
                 else
-                  printf ("  ------,------,------,------");
+                  printf ("  -----");
               printf ("\n");
             }
-	  if (flags & finetune_screen_mtf_blur)
-	    {
-	      printf ("Screen mtf75 robust min %f, avg %f, max %f\n",
-		      mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1, 0.1),
-		      mtf_hist[0].find_max (0.1));
-	      printf ("Screen mtf50 robust min %f, avg %f, max %f\n",
-		      mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1, 0.1),
-		      mtf_hist[1].find_max (0.1));
-	      printf ("Screen mtf25 robust min %f, avg %f, max %f\n",
-		      mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1, 0.1),
-		      mtf_hist[2].find_max (0.1));
-	      printf ("Screen mtf0  robust min %f, avg %f, max %f\n",
-		      mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1, 0.1),
-		      mtf_hist[3].find_max (0.1));
-	    }
-	  else
-	    {
-	      printf ("Screen point spread 75%% robust min %f, avg %f, max %f\n",
-		      mtf_hist[0].find_min (0.1), mtf_hist[0].find_avg (0.1, 0.1),
-		      mtf_hist[0].find_max (0.1));
-	      printf ("Screen point spread 50%% robust min %f, avg %f, max %f\n",
-		      mtf_hist[1].find_min (0.1), mtf_hist[1].find_avg (0.1, 0.1),
-		      mtf_hist[1].find_max (0.1));
-	      printf ("Screen point spread 25%% robust min %f, avg %f, max %f\n",
-		      mtf_hist[2].find_min (0.1), mtf_hist[2].find_avg (0.1, 0.1),
-		      mtf_hist[2].find_max (0.1));
-	      printf ("Screen point spread 0%%  robust min %f, avg %f, max %f\n",
-		      mtf_hist[3].find_min (0.1), mtf_hist[3].find_avg (0.1, 0.1),
-		      mtf_hist[3].find_max (0.1));
-	    }
+        }
+      else if (flags & (finetune_scanner_mtf_defocus) && rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+        {
+          printf ("Detected scanner mtf defocus (mm)\n");
+          for (int y = 0; y < ysteps; y++)
+            {
+              for (int x = 0; x < xsteps; x++)
+                if (results[y * xsteps + x].success)
+                  printf ("  %1.3f",
+                          results[y * xsteps + x].scanner_mtf_defocus);
+                else
+                  printf ("  -----");
+              printf ("\n");
+            }
+        }
+      else if (flags & (finetune_scanner_mtf_defocus) && !rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+        {
+          printf ("Detected scanner mtf blur diameter (pixels)\n");
+          for (int y = 0; y < ysteps; y++)
+            {
+              for (int x = 0; x < xsteps; x++)
+                if (results[y * xsteps + x].success)
+                  printf ("  %1.3f",
+                          results[y * xsteps + x].scanner_mtf_blur_diameter);
+                else
+                  printf ("  -----");
+              printf ("\n");
+            }
         }
       else if (flags & finetune_screen_blur)
         {
@@ -2882,36 +2874,20 @@ finetune (int argc, char **argv)
               for (int x = 0; x < xsteps; x++)
                 if (!results[y * xsteps + x].success)
                   sharpness.put_pixel (x, 65535, 0, 0);
-                else if (flags & finetune_screen_ps_blur)
+                else if (flags & (finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus))
                   {
                     int vr
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[0]
-                                        * 2 * 65535,
+                        = std::min (results[y * xsteps + x].scanner_mtf_sigma
+                                        * 0.5 * 65535,
                                     (coord_t)65535);
+		    double def;
+		    if (rparam.sharpen.scanner_mtf.simulate_difraction_p ())
+		      def = results[y * xsteps + x].scanner_mtf_defocus;
+		    else
+		      def = results[y * xsteps + x].scanner_mtf_blur_diameter;
                     int vg
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[1]
-                                        * 2 * 65535,
-                                    (coord_t)65535);
-                    int vb
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[2]
-                                        * 2 * 65535,
-                                    (coord_t)65535);
-                    sharpness.put_pixel (x, vr, vg, vb);
-                  }
-                else if (flags & finetune_screen_mtf_blur)
-                  {
-                    int vr
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[0]
-                                        / 10 * 65535,
-                                    (coord_t)65535);
-                    int vg
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[1]
-                                        / 10 * 65535,
-                                    (coord_t)65535);
-                    int vb
-                        = std::min (results[y * xsteps + x].screen_mtf_blur[2]
-                                        / 10 * 65535,
-                                    (coord_t)65535);
+                        = std::min (def * 65535, (coord_t)65535);
+                    int vb = 0;
                     sharpness.put_pixel (x, vr, vg, vb);
                   }
                 else if (flags & finetune_screen_blur)

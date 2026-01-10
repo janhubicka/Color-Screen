@@ -1744,38 +1744,6 @@ point_spread_by_4_vals (luminosity_t mtf[4])
 }
 
 void
-screen::print_mtf (FILE *f, luminosity_t mtf[4], coord_t pixel_size)
-{
-  std::unique_ptr<precomputed_function<luminosity_t>> mtfc (
-      mtf_by_4_vals (mtf));
-  luminosity_t step = 1.0;
-  coord_t dpi = 4500;
-  printf ("mtf75:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
-          "lp/mm at %f DPI\n",
-          mtf[0], mtf[0] * pixel_size, mtf[0] * pixel_size * dpi / 25.4, dpi);
-  printf ("mtf50:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
-          "lp/mm at %f DPI\n",
-          mtf[1], mtf[1] * pixel_size, mtf[1] * pixel_size * dpi / 25.4, dpi);
-  printf ("mtf25:%f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
-          "lp/mm at %f DPI\n",
-          mtf[2], mtf[2] * pixel_size, mtf[2] * pixel_size * dpi / 25.4, dpi);
-  printf ("mtf0: %f (screen reciprocal pixels) %f (scan reciprocal pixels) %f "
-          "lp/mm at %f DPI\n",
-          mtf[3], mtf[3] * pixel_size, mtf[3] * pixel_size * dpi / 25.4, dpi);
-  for (int x = 0; x <= size / 2; x++)
-    {
-      luminosity_t w = mtfc->apply (x * step);
-      if (w > 0)
-        {
-          printf ("%4.2f %6.3f:", x * step, x * step * pixel_size);
-          for (int i = 0; i < 80 * w; i++)
-            printf (" ");
-          printf ("* %2.2f\n", w * 100);
-        }
-    }
-}
-
-void
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
 					    bool anticipate_sharpening)
@@ -2021,30 +1989,6 @@ screen::initialize_with_blur (screen &scr, rgbdata blur_radius,
     initialize_with_gaussian_blur (scr, blur_radius, alg);
   else
     initialize_with_fft_blur (scr, blur_radius);
-}
-void
-screen::initialize_with_blur (screen &scr, luminosity_t mtf[4],
-                              enum blur_alg alg)
-{
-#if 0
-  std::unique_ptr<precomputed_function<luminosity_t>> mtfc (
-      point_spread_by_4_vals (mtf));
-  precomputed_function<luminosity_t> *vv[3]
-      = { mtfc.get (), mtfc.get (), mtfc.get () };
-  initialize_with_2D_fft (scr, vv, { 1.0, 1.0, 1.0 });
-#endif
-  /* TODO: Implement correctly.  */
-  abort ();
-}
-void
-screen::initialize_with_blur_point_spread (screen &scr, luminosity_t ps[4],
-                                           enum blur_alg alg)
-{
-  std::unique_ptr<precomputed_function<luminosity_t>> point_spreadc (
-      point_spread_by_4_vals (ps));
-  precomputed_function<luminosity_t> *vv[3]
-      = { point_spreadc.get (), point_spreadc.get (), point_spreadc.get () };
-  screen::initialize_with_point_spread (scr, vv, { 1.0, 1.0, 1.0 });
 }
 void
 screen::clamp ()
