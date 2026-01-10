@@ -1118,6 +1118,7 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "saving failed\n");
       return 1;
     }
+  fclose (out);
   return 0;
 }
 
@@ -3705,6 +3706,96 @@ do_mtf (int argc, char **argv)
 }
 
 int
+do_adjust_par (int argc, char **argv)
+{
+  const char *cspname = NULL, *error = NULL, *outcspname = NULL;
+  std::vector<const char *> csps;
+  for (int i = 0; i < argc; i++)
+    {
+      float flt;
+      if (parse_common_flags (argc, argv, &i))
+        ;
+      else if (const char *str = arg_with_param (argc, argv, &i, "merge"))
+        csps.push_back (str);
+      else if (const char *str = arg_with_param (argc, argv, &i, "out"))
+        outcspname = str;
+      else
+	{
+	  if (!cspname)
+	    cspname = argv[i];
+	  else
+	    print_help (argv[i]);
+	}
+    }
+  if (!cspname)
+    {
+      fprintf (stderr, "No filename given\n");
+      exit (-1);
+    }
+  scr_to_img_parameters param;
+  render_parameters rparam;
+  scr_detect_parameters dparam;
+  struct solver_parameters solver_param;
+  if (cspname)
+    {
+      FILE *in = fopen (cspname, "rt");
+      if (verbose)
+	{
+	  printf ("Loading color screen parameters: %s\n", cspname);
+	}
+      if (!in)
+	{
+	  perror (cspname);
+	  return 1;
+	}
+      if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	{
+	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  return 1;
+	}
+      fclose (in);
+    }
+  for (auto name: csps)
+    {
+      FILE *in = fopen (name, "rt");
+      if (verbose)
+	{
+	  printf ("Merging in color screen parameters: %s\n", name);
+	}
+      if (!in)
+	{
+	  perror (name);
+	  return 1;
+	}
+      if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
+	{
+	  fprintf (stderr, "Can not load %s: %s\n", cspname, error);
+	  return 1;
+	}
+      fclose (in);
+    }
+  if (!outcspname)
+    outcspname = cspname;
+  if (verbose)
+    {
+      printf ("Saving color screen parameters: %s\n", outcspname);
+    }
+  FILE *out = fopen (outcspname, "wt");
+  if (!out)
+    {
+      perror (outcspname);
+      return 1;
+    }
+  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
+    {
+      fprintf (stderr, "saving failed\n");
+      return 1;
+    }
+  fclose (out);
+  return 0;
+}
+
+int
 do_has_regular_screen (int argc, char **argv)
 {
   std::vector <char *> filenames;
@@ -3970,6 +4061,8 @@ main (int argc, char **argv)
     ret = do_has_regular_screen (argc - 1, argv + 1);
   else if (!strcmp (argv[0], "mtf"))
     ret = do_mtf (argc - 1, argv + 1);
+  else if (!strcmp (argv[0], "adjust-par"))
+    ret = do_adjust_par (argc - 1, argv + 1);
   else
     print_help ();
   return ret;

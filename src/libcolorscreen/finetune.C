@@ -3731,7 +3731,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
   *ret_green = (rgbdata){ red.green, green.green, blue.green };
   *ret_blue = (rgbdata){ red.blue, green.blue, blue.blue };
 #endif
-#if 1
+#if 0
   printf ("Color loss info\n");
   ret_red->print (stdout);
   ret_green->print (stdout);
