@@ -789,9 +789,9 @@ public:
     if (optimize_screen_blur)
       to_range (v[screen_index], 0, 1);
     if (optimize_scanner_mtf_sigma)
-      to_range (v[mtf_sigma_index], 0, 5);
+      to_range (v[mtf_sigma_index], 0, 20);
     if (optimize_scanner_mtf_defocus)
-      to_range (v[mtf_defocus_index], 0, 5);
+      to_range (v[mtf_defocus_index], 0, 20);
     if (optimize_screen_channel_blurs)
       {
         /* Screen blur radius.  */

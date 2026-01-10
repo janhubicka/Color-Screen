@@ -1281,6 +1281,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_blur_diameter_px"))
 	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
 	  luminosity_t blur_diameter;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.blur_diameter)))
 	    {
@@ -1290,6 +1293,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_pixel_pitch_um"))
 	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
 	  luminosity_t pixel_pitch;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
 	    {
@@ -1299,6 +1305,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_wavelength_nm"))
 	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.wavelength)))
 	    {
 	      *error = "error parsing scanner_mtf_wavelength";
@@ -1307,6 +1316,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_f_stop"))
 	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.f_stop)))
 	    {
 	      *error = "error parsing scanner_mtf_f_stop";
@@ -1315,6 +1327,9 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scanner_mtf_defocus_mm"))
 	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.defocus)))
 	    {
 	      *error = "error parsing scanner_mtf_defocus_mm";
