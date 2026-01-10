@@ -908,7 +908,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	finetune_result res = finetune (rparams, current, scan, {{(coord_t)x, (coord_t)y}}, NULL, fparam, &progress);
 	if (res.success)
 	  {
-	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    //rparams.screen_blur_radius = res.screen_blur_radius;
+	    rparams.sharpen.scanner_mtf.sigma = res.scanner_mtf_sigma;
+	    rparams.sharpen.scanner_mtf.defocus = res.scanner_mtf_defocus;
+	    rparams.sharpen.scanner_mtf.blur_diameter = res.scanner_mtf_blur_diameter;
 	    display_scheduled = true;
 	    if (tmphack)
 	      system(bwcmd);
@@ -987,7 +990,10 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
 	tune_results.push_back (res);
 	if (res.success)
 	  {
-	    rparams.screen_blur_radius = res.screen_blur_radius;
+	    //rparams.screen_blur_radius = res.screen_blur_radius;
+	    rparams.sharpen.scanner_mtf.sigma = res.scanner_mtf_sigma;
+	    rparams.sharpen.scanner_mtf.defocus = res.scanner_mtf_defocus;
+	    rparams.sharpen.scanner_mtf.blur_diameter = res.scanner_mtf_blur_diameter;
 	    rparams.red_strip_width = res.red_strip_width;
 	    rparams.green_strip_width = res.green_strip_width;
 	    rparams.mix_red = res.mix_weights.red;
