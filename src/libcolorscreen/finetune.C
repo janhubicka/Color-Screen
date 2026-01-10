@@ -1639,9 +1639,10 @@ public:
 	if (sp.scanner_mtf.simulate_difraction_p ())
 	  {
 	    sp.scanner_mtf.defocus = get_scanner_mtf_defocus (v);
-	    /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
 	    if (tiles[0].color)
 	      {
+#if 0
+	        /* TODO: We should defocus only after applying scanner reaction to screen colors.  */
 		vs[0] = &sp;
 		sp_green = sp;
 		vs[1] = &sp_green;
@@ -1650,6 +1651,8 @@ public:
 		sp.scanner_mtf.wavelength = 466;
 		sp_green.scanner_mtf.wavelength = 526;
 		sp_blue.scanner_mtf.wavelength = 653;
+#endif
+		sp.scanner_mtf.wavelength = 550;
 	      }
 	  }
 	else
