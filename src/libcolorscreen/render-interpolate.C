@@ -941,7 +941,7 @@ static double
 get_deltae (xyz fc1, xyz fc2, long *cln = NULL, xyz *mins = NULL,
             xyz *maxs = NULL)
 {
-  xyz bfc1 = fc1, bfc2 = fc2;
+  //xyz bfc1 = fc1, bfc2 = fc2;
   if (mins)
     {
       if (fc1.x < mins->x)

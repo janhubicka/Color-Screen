@@ -1712,37 +1712,6 @@ screen::save_tiff (const char *filename, bool normalize, int tiles) const
   return true;
 }
 
-/* Specify mtf75, mtf50, mtf25 and mtf8.  */
-static precomputed_function<luminosity_t> *
-mtf_by_4_vals (luminosity_t mtf[4])
-{
-  luminosity_t y[] = { 1, 1, 1, 0.75, 0.5, 0.25, 0, 0, 0 };
-  luminosity_t x[]
-      = { -0.02,         -0.01,        0, mtf[0], mtf[1], mtf[2], mtf[3],
-          mtf[3] + 0.01, mtf[3] + 0.02 };
-  // spline<luminosity_t> p(x, y, 9);
-  // return p.precompute (0, mtf[3]+1, 1024);
-  return new precomputed_function<luminosity_t> (0, mtf[3] + 1, 1024, x, y, 9);
-}
-/* Specify mtf75, mtf50, mtf25 and mtf8.  */
-static precomputed_function<luminosity_t> *
-point_spread_by_4_vals (luminosity_t mtf[4])
-{
-  // luminosity_t mtf[4]={0.1,0.2,0.3,0.4};
-  luminosity_t y[] = { 0, 0, 0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25, 0, 0, 0 };
-  luminosity_t x[]
-      = { -(mtf[3] + 0.02), -(mtf[3] + 0.01), -mtf[3], -mtf[2],
-          -mtf[1],          -mtf[0],          0,       mtf[0],
-          mtf[1],           mtf[2],           mtf[3],  mtf[3] + 0.01,
-          mtf[3] + 0.02 };
-#if 0
-  spline<luminosity_t> p (x, y, 13);
-  return p.precompute (0, mtf[3] + 1, 1024);
-#endif
-  return new precomputed_function<luminosity_t> (0, mtf[3] + 1, 1024, x, y,
-                                                 13);
-}
-
 void
 screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],

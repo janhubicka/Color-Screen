@@ -4,7 +4,7 @@
 #include "include/scr-to-img.h"
 #include "mtf.h"
 namespace colorscreen {
-class sharpen_parameters;
+struct sharpen_parameters;
 template<typename T> class precomputed_function;
 /* Representation of the screen wich can then be superposed to the image
    using render_superpose_img.  */
