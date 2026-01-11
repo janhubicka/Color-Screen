@@ -555,6 +555,37 @@ mtf_parameters::system_mtf (double pixel_freq) const
   return sensor_mtf (pixel_freq) * lens_mtf (pixel_freq);
 }
 
+/* Compute right half of LSF.  */
+
+void
+mtf::compute_lsf (std::vector <double,fftw_allocator<double>> &lsf, luminosity_t subsample) const
+{
+  int size = lsf.size ();
+  if (size & 1)
+  {
+    lsf[size - 1] = 0;
+    size --;
+  }
+  std::vector<double> mtf_half(size);
+  double scale = 1/(size * subsample * 2);
+
+  /* Mirror mtf.  */
+  for (int i = 0; i < size; i++)
+    mtf_half[i] = get_mtf (i * scale);
+
+  fftw_plan plan = fftw_plan_r2r_1d(size, mtf_half.data(), lsf.data(),
+                                    FFTW_REDFT00, FFTW_ESTIMATE);
+  fftw_execute(plan);
+  double sum = 0;
+  for (int i = 0; i < size; i++)
+    sum += lsf[i];
+  printf ("sum: %f %i\n", sum, size);
+  double fin_scale = 1.0 / sum;
+  for (int i = 0; i < size; i++)
+    lsf[i] *= fin_scale;
+  fftw_destroy_plan (plan);
+}
+
 /* Compute PSF as 2D FFT of circular MTF.
    MAX_RADIUS is an estimate of radius.  SUBSCALE is a size of
    pixel we compute at (smaller pixel means more precise PSF)  */
@@ -585,7 +616,7 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
                 mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
               }
           }
-      std::vector<double> psf_data (psf_size * psf_size);
+      std::vector<double,fftw_allocator<double>> psf_data (psf_size * psf_size);
       fftw_lock.lock ();
       fftw_plan plan
           = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
@@ -629,7 +660,8 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
           int width = 2 * radius;
           int height = 2 * radius;
           pp.width = width;
-          pp.height = height;
+	  const int lsf_size = 100;
+          pp.height = height + lsf_size;
           pp.depth = 16;
           const char *error;
           pp.filename = filename;
@@ -667,6 +699,33 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
               if (!renderedu.write_row ())
                 return false;
             }
+	  std::vector<double,fftw_allocator<double>> lsf(radius);
+	  mtf::compute_lsf (lsf, subscale);
+	  double lsf_max = lsf[0], collected_lsf_max = 0;
+	  std::vector<double,fftw_allocator<double>> collected_lsf(width);
+          for (int x = 0; x < width; x++)
+	    {
+	      int xx = (x < radius ? radius - x - 1 : x - radius);
+	      for (int y = 0; y < psf_size; y++)
+		collected_lsf[x] += psf_data[xx * psf_size + y];
+	      if (collected_lsf[x] > collected_lsf_max)
+		collected_lsf_max = collected_lsf[x];
+	    }
+          for (int y = 0; y < lsf_size; y++)
+	    {
+              for (int x = 0; x < width; x++)
+	        {
+	          int idx = lsf_size - nearest_int (lsf[(x < radius ? radius - x - 1 : x - radius)] * lsf_size / lsf_max);
+	          int idx2 = lsf_size - nearest_int (psf_data[((x + psf_size / 2 - radius) + psf_size / 2) % psf_size] * lsf_size / m);
+	          int idx3 = lsf_size - nearest_int (collected_lsf[x] * lsf_size / collected_lsf_max);
+		  int r = (idx == y) * 65535;
+		  int g = (idx2 == y) * 65535;
+		  int b = (idx3 == y) * 65535;
+		  renderedu.put_pixel (x, r, g, b);
+	        }
+              if (!renderedu.write_row ())
+                return false;
+	    }
           if (verbose)
             printf ("Max %f, err %f normalized %f\n", m, err, err / m);
         }
@@ -722,7 +781,7 @@ mtf::precompute (progress_info *progress, const char *filename,
         }
       else
         {
-          std::vector<luminosity_t> contrasts (size () + 2);
+          std::vector<luminosity_t,fftw_allocator<double>> contrasts (size () + 2);
           for (size_t i = 0; i < size (); i++)
             contrasts[i]
                 = get_contrast (i) * 0.01 * m_params.measured_mtf_correction (get_freq (i));
@@ -757,7 +816,7 @@ mtf::precompute (progress_info *progress, const char *filename,
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t> contrasts (entries);
+      std::vector<luminosity_t,fftw_allocator<double>> contrasts (entries);
       luminosity_t step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);

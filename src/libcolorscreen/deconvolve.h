@@ -13,6 +13,7 @@ namespace colorscreen
 
 class deconvolution
 {
+static constexpr const double lanczos_a = 3;
 public:
   enum mode
   {
@@ -26,7 +27,7 @@ public:
      for Weiner filter.  MAX_THREADS specifies number of threads.  */
   deconvolution (mtf *mtf, luminosity_t mtf_scale,
 		 luminosity_t snr, luminosity_t sigma, int max_threads,
-                 enum mode = sharpen, int iterations = 50, int supersample = 3);
+                 enum mode, int iterations, int supersample);
   typedef double deconvolution_data_t;
   ~deconvolution ();
 
@@ -108,7 +109,9 @@ private:
   int m_iterations;
 
   /* Weights of edge tapering.  */
-  std::vector<deconvolution_data_t> m_weights;
+  std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> m_weights;
+
+  std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> m_lanczos_kernels;
 
   fftw_plan m_plan_2d_inv, m_plan_2d;
   bool m_plans_exists;
@@ -117,10 +120,10 @@ private:
   struct tile_data
   {
     fftw_complex *in;
-    std::vector<deconvolution_data_t> tile;
-    std::vector<deconvolution_data_t> *enlarged_tile;
-    std::vector<deconvolution_data_t> enlarged_tile_data;
-    std::vector<deconvolution_data_t> ratios;
+    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> tile;
+    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> *enlarged_tile;
+    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> enlarged_tile_data;
+    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> ratios;
     bool initialized;
   };
   std::vector<tile_data> m_data;
@@ -159,7 +162,8 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   mtf *scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
   deconvolution d (scanner_mtf, sharpen.scanner_mtf_scale,
                    sharpen.scanner_snr, sharpen.richardson_lucy_sigma,
-                   nthreads, mode, sharpen.richardson_lucy_iterations);
+                   nthreads, mode, sharpen.richardson_lucy_iterations,
+		   sharpen.supersample);
   mtf::release_mtf (scanner_mtf);
 
   int xtiles
@@ -245,7 +249,8 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
   mtf *scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
   deconvolution d (scanner_mtf, sharpen.scanner_mtf_scale,
 		   sharpen.scanner_snr, sharpen.richardson_lucy_sigma, nthreads * 3, mode,
-		   sharpen.richardson_lucy_iterations);
+		   sharpen.richardson_lucy_iterations,
+		   sharpen.supersample);
   mtf::release_mtf (scanner_mtf);
 
   int xtiles

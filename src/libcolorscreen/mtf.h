@@ -2,6 +2,7 @@
 #define MTF_H
 #include <fftw3.h>
 #include <mutex>
+#include <malloc.h>
 #include "include/progress-info.h"
 #include "include/base.h"
 #include "include/color.h"
@@ -11,6 +12,23 @@
 namespace colorscreen
 {
 extern std::mutex fftw_lock;
+
+/* Allocate aligned memory so vectorized loops works fast.
+   FFTW knows alignent, but it does not pass proper attributes
+   to GCC.  */
+template <class T>
+struct fftw_allocator {
+    typedef T value_type;
+    T* allocate(std::size_t n) {
+        //void* ptr = fftw_malloc (n * sizeof(T));
+        void* ptr = memalign (128, n * sizeof(T));
+        if (!ptr) throw std::bad_alloc();
+        return static_cast<T*>(ptr);
+    }
+    //void deallocate(T* p, std::size_t) { fftw_free(p); }
+    void deallocate(T* p, std::size_t) { free(p); }
+};
+
 class mtf
 {
 public:
@@ -55,7 +73,6 @@ public:
   {
     return psf_radius (scale) * 2 - 1;
   }
-  int init_psf (std::vector<double> &psf, luminosity_t scale);
 
 
   size_t
@@ -100,6 +117,7 @@ private:
   bool m_precomputed;
   std::mutex m_lock;
   bool compute_psf (int max_radius = 128, luminosity_t subsample = 1 / 32.0, const char *filename = NULL, const char **error = NULL);
+  void compute_lsf (std::vector <double, fftw_allocator<double>> &lsf, luminosity_t subsample) const;
 };
 }
 #endif
