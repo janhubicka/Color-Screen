@@ -104,7 +104,6 @@ private:
   fftw_complex *m_blur_kernel;
 
   bool m_richardson_lucy;
-  deconvolution_data_t m_snr;
   deconvolution_data_t m_sigma;
   int m_iterations;
 

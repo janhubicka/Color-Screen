@@ -132,7 +132,7 @@ deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale,
                               int supersample)
     : m_border_size (0), m_taper_size (0), m_tile_size (1),
       m_enlarged_tile_size (1), m_supersample (supersample),
-      m_blur_kernel (NULL), m_snr (snr), m_sigma (sigma),
+      m_blur_kernel (NULL), m_sigma (sigma),
       m_iterations (iterations), m_plans_exists (false)
 {
   mtf->precompute ();
@@ -354,7 +354,6 @@ deconvolution::process_tile (int thread_id)
                           * m_weights[m_enlarged_tile_size - 1 - x]);
         }
       /* Taper bottom edge  */
-#pragma omp simd
       for (int y = m_enlarged_tile_size - m_taper_size;
            y < m_enlarged_tile_size; y++)
         {
@@ -486,7 +485,6 @@ deconvolution::process_tile (int thread_id)
   /* Use bicubic interpolation for upscaling by 2.  */
   if (m_supersample == 2)
     {
-#pragma omp simd
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
 #pragma omp simd
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
@@ -524,15 +522,11 @@ deconvolution::process_tile (int thread_id)
     {
       deconvolution_data_t scale
           = 1 / ((deconvolution_data_t)m_supersample * m_supersample);
-#pragma omp simd
       for (int y = m_border_size; y < m_tile_size - m_border_size; y++)
-#pragma omp simd
         for (int x = m_border_size; x < m_tile_size - m_border_size; x++)
           {
             deconvolution_data_t sum = 0;
-#pragma omp simd
             for (int yy = 0; yy < m_supersample; yy++)
-#pragma omp simd
               for (int xx = 0; xx < m_supersample; xx++)
                 sum += get_enlarged_pixel (thread_id, x * m_supersample + xx,
                                            y * m_supersample + yy);
@@ -544,10 +538,10 @@ deconvolution::process_tile (int thread_id)
 
 deconvolution::~deconvolution ()
 {
-  delete m_blur_kernel;
+  delete[] m_blur_kernel;
   for (size_t i = 0; i < m_data.size (); i++)
     if (m_data[i].initialized)
-      delete (m_data[i].in);
+      delete[] (m_data[i].in);
   fftw_lock.lock ();
   if (m_plans_exists)
     {
