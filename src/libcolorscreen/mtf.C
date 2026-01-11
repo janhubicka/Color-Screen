@@ -776,8 +776,20 @@ mtf::precompute (progress_info *progress, const char *filename,
       /* TODO: Implement.  */
       if (!regular_steps)
         {
-          printf ("Sorry, unimplemented: MTF has irregular steps. \n");
-          abort ();
+          std::vector<luminosity_t,fftw_allocator<double>> contrasts (size () + 2);
+          std::vector<luminosity_t,fftw_allocator<double>> freqs (size () + 2);
+          for (size_t i = 0; i < size (); i++)
+	  {
+            contrasts[i]
+                = get_contrast (i) * 0.01 * m_params.measured_mtf_correction (get_freq (i));
+	    freqs[i] = get_freq (i);
+	  }
+          contrasts[size ()] = 0;
+          contrasts[size () + 1] = 0;
+	  freqs[size ()] = freqs[size()-1] + step;
+	  freqs[size () + 1] = freqs[size()-1] + 2 *step;
+          m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
+          m_mtf.init_by_x_y_values (freqs.data (), contrasts.data (), size () + 2, 1024);
         }
       else
         {

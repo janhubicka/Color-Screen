@@ -36,18 +36,9 @@ public:
   {
     init_by_y_values (y, len);
   }
-  /* Construct linear interpolation between known X and Y values.  */
-  precomputed_function (T min_x, T max_x, int len, const T *x, const T *y,
-                        int npoints)
-      : m_min_x (min_x), m_max_x (max_x)
+  void
+  init_by_x_y_values (const T *x, const T *y, int npoints, int len)
   {
-    /* Sanitize input. */
-    if (m_min_x < x[0])
-      m_min_x = x[0];
-    if (m_max_x > x[npoints - 1])
-      m_max_x = x[npoints - 1];
-    if (m_min_x >= m_max_x)
-      m_max_x = m_min_x + 1;
     /* If there are only 2 npoints we represent linear function.  */
     if (npoints <= 2)
       {
@@ -79,6 +70,20 @@ public:
         }
     init_by_y_values (yy, len);
     free (yy);
+  }
+  /* Construct linear interpolation between known X and Y values.  */
+  precomputed_function (T min_x, T max_x, int len, const T *x, const T *y,
+                        int npoints)
+      : m_min_x (min_x), m_max_x (max_x)
+  {
+    /* Sanitize input. */
+    if (m_min_x < x[0])
+      m_min_x = x[0];
+    if (m_max_x > x[npoints - 1])
+      m_max_x = x[npoints - 1];
+    if (m_min_x >= m_max_x)
+      m_max_x = m_min_x + 1;
+    init_by_x_y_values (x, y, npoints, len);
   }
 
   /* Construct linear interpolation between known X and Y values but organized
