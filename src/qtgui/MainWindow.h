@@ -5,6 +5,7 @@
 #include <vector>
 #include <QElapsedTimer>
 #include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 
 class QSplitter;
@@ -31,6 +32,7 @@ public:
 private slots:
     void onOpenImage();
     void onImageLoaded(); // Called when image is ready
+    void onOpenParameters();
 
 private:
     void setupUi();
@@ -46,7 +48,7 @@ private:
     NavigationView *m_navigationView;
     QTabWidget *m_configTabs;
 
-    // Data
+    // Core Data
     // We keep shared copies or references. 
     // Using std::shared_ptr or just direct members.
     // Given the library usage in gtkgui, direct members are fine.
@@ -54,6 +56,11 @@ private:
     colorscreen::render_parameters m_rparams;
     colorscreen::scr_detect_parameters m_detectParams;
     colorscreen::scr_to_img_parameters m_scrToImgParams;
+    colorscreen::solver_parameters m_solverParams;
+    
+    // Copies for change detection
+    colorscreen::scr_detect_parameters m_prevDetectParams;
+    colorscreen::scr_to_img_parameters m_prevScrToImgParams;
     
     void resetParameters();
 

@@ -10,7 +10,10 @@ class Renderer : public QObject
 {
     Q_OBJECT
 public:
-    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan, const colorscreen::render_parameters &rparams);
+    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan, 
+                      const colorscreen::render_parameters &rparams,
+                      const colorscreen::scr_to_img_parameters &scrToImg,
+                      const colorscreen::scr_detect_parameters &scrDetect);
     ~Renderer() override;
     
     // Optional: method to update params if changed in UI

@@ -5,10 +5,12 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 
-Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan, const colorscreen::render_parameters &rparams)
-    : m_scan(scan), m_rparams(rparams)
+Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan, 
+                   const colorscreen::render_parameters &rparams,
+                   const colorscreen::scr_to_img_parameters &scrToImg,
+                   const colorscreen::scr_detect_parameters &scrDetect)
+    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg), m_scrDetect(scrDetect)
 {
-    // m_scrToImg and m_scrDetect defined in headers should have default ctors
 }
 
 Renderer::~Renderer() = default;
@@ -18,7 +20,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
                       colorscreen::render_parameters frameParams,
                       std::shared_ptr<colorscreen::progress_info> progress)
 {
-    if (!m_scan || !m_scan->data) {
+    if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
         // Nothing to render
         emit imageReady(reqId, QImage(), xOffset, yOffset, scale);
         return;

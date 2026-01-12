@@ -3,6 +3,9 @@
 #include <QWidget>
 #include <QImage>
 #include <QThread>
+#include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "../libcolorscreen/include/scr-detect-parameters.h"
 #include <memory>
 #include "../libcolorscreen/include/progress-info.h"
 
@@ -21,7 +24,10 @@ public:
     ~ImageWidget() override;
 
     // Use shared_ptr and pointer for rparams (we will copy rparams when requesting render)
-    void setImage(std::shared_ptr<colorscreen::image_data> scan, colorscreen::render_parameters *rparams);
+    void setImage(std::shared_ptr<colorscreen::image_data> scan, 
+                  colorscreen::render_parameters *rparams,
+                  colorscreen::scr_to_img_parameters *scrToImg,
+                  colorscreen::scr_detect_parameters *scrDetect);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -43,6 +49,8 @@ private:
 
     std::shared_ptr<colorscreen::image_data> m_scan;
     colorscreen::render_parameters *m_rparams = nullptr;
+    colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
+    colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
 
     Renderer *m_renderer = nullptr;
     QThread *m_renderThread = nullptr;

@@ -103,9 +103,67 @@ void MainWindow::createMenus()
     QMenu *fileMenu = menuBar()->addMenu("&File");
     QAction *openAction = fileMenu->addAction("&Open Image...");
     connect(openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
+    
+    QAction *openParamsAction = fileMenu->addAction("Open &Parameters...");
+    connect(openParamsAction, &QAction::triggered, this, &MainWindow::onOpenParameters);
+    
     fileMenu->addSeparator();
     QAction *exitAction = fileMenu->addAction("E&xit");
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
+}
+
+void MainWindow::onOpenParameters()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, "Open Parameters", QString(), 
+        "Parameters (*.par);;All Files (*)");
+    if (fileName.isEmpty()) return;
+
+    FILE *f = fopen(fileName.toUtf8().constData(), "r");
+    if (!f) {
+        QMessageBox::critical(this, "Error", "Could not open file.");
+        return;
+    }
+
+    const char *error = nullptr;
+    
+    // Store previous state for comparison
+    colorscreen::scr_to_img_parameters oldScrToImg = m_scrToImgParams;
+    colorscreen::scr_detect_parameters oldDetect = m_detectParams;
+    // render_parameters comparison? 
+    // The user said: "Pass scr_to_img_parameters and scr_detect_parameters to renderers. They can be compared by ==."
+    
+    if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams, &error)) {
+        fclose(f);
+        QString errStr = error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
+        QMessageBox::critical(this, "Error Loading Parameters", errStr);
+        return;
+    }
+    fclose(f);
+
+    // Update Renderer if needed
+    // Check if parameters changed
+    bool changed = false;
+    if (!(oldScrToImg == m_scrToImgParams)) changed = true;
+    if (!(oldDetect == m_detectParams)) changed = true;
+    // We should also check m_rparams but user emphasized the others.
+    // Let's assume ANY successful load might warrant a refresh or update.
+    // But specific comparison requested for re-render.
+    
+    if (changed) {
+         if (m_scan) {
+             // Re-set image to re-create renderer with new params
+             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+         }
+    } else {
+        // Just update params... actually setImage logic uses values.
+        // If we want to support run-time tuning without re-creating renderer, we'd need setters in Renderer.
+        // But for Open Parameters (file load), re-creating renderer is fine.
+        // Even if not changed, we might want to update rparams?
+        // Let's just update if we have a scan.
+         if (m_scan) {
+             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+         }
+    }
 }
 
 void MainWindow::onOpenImage()
@@ -113,6 +171,9 @@ void MainWindow::onOpenImage()
     QString fileName = QFileDialog::getOpenFileName(this, "Open Image", QString(), 
         "Images (*.tif *.tiff *.dng *.png *.jpg *.jpeg);;All Files (*)");
     if (fileName.isEmpty()) return;
+    
+    // Clear current image and stop rendering
+    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr);
 
     auto progress = std::make_shared<colorscreen::progress_info>();
     progress->set_task("Loading image", 0);
@@ -126,13 +187,14 @@ void MainWindow::onOpenImage()
     
     std::shared_ptr<colorscreen::image_data> tempScan = std::make_shared<colorscreen::image_data>();
     
-    QFutureWatcher<bool> *watcher = new QFutureWatcher<bool>(this);
-    connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher, tempScan, progress, fileName]() {
-        bool result = watcher->result();
+    // Return status and error message
+    QFutureWatcher<std::pair<bool, QString>> *watcher = new QFutureWatcher<std::pair<bool, QString>>(this);
+    connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this, [this, watcher, tempScan, progress, fileName]() {
+        std::pair<bool, QString> result = watcher->result();
         removeProgress(progress);
         watcher->deleteLater();
         
-        if (result) {
+        if (result.first) {
              // m_scan is now a shared_ptr, we can just assign the pointer
              m_scan = tempScan;
              
@@ -143,20 +205,28 @@ void MainWindow::onOpenImage()
                 m_rparams.gamma = -1; 
 
             // Update Widgets
-            m_imageWidget->setImage(m_scan, &m_rparams);
+            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
             onImageLoaded();
         } else {
              // Error handling
-             // We can't easily get error string from inside thread unless we pass it out.
-             QMessageBox::critical(this, "Error Loading Image", "Failed to load image.");
+             // Check if cancelled
+             if (progress->cancelled()) {
+                 // User cancelled, do nothing (maybe show status?)
+             } else {
+                 QMessageBox::critical(this, "Error Loading Image", 
+                    result.second.isEmpty() ? "Failed to load image." : result.second);
+             }
         }
     });
     
-    QFuture<bool> future = QtConcurrent::run([tempScan, fileName, progress]() {
+    QFuture<std::pair<bool, QString>> future = QtConcurrent::run([tempScan, fileName, progress]() {
         const char *error = nullptr;
-        // set progress info to be used by loader?
-        // image_data::load takes progress_info*.
-        return tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get());
+        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get());
+        QString errStr;
+        if (!res && error) {
+            errStr = QString::fromUtf8(error);
+        }
+        return std::make_pair(res, errStr);
     });
     
     watcher->setFuture(future);

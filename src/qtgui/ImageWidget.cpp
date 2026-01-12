@@ -36,10 +36,16 @@ ImageWidget::~ImageWidget()
     }
 }
 
-void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan, colorscreen::render_parameters *rparams)
+void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan, 
+                          colorscreen::render_parameters *rparams,
+                          colorscreen::scr_to_img_parameters *scrToImg,
+                          colorscreen::scr_detect_parameters *scrDetect)
 {
     m_scan = scan;
     m_rparams = rparams;
+    m_scrToImg = scrToImg;
+    m_scrDetect = scrDetect;
+    m_pixmap = QImage(); // Clear current image
 
     // Reset View
     if (m_scan && m_scan->width > 0) {
@@ -70,17 +76,25 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan, colors
         m_renderThread = nullptr;
     }
     
-    m_renderThread = new QThread(this);
-    // Pass shared_ptr and value copy of params
-    m_renderer = new Renderer(m_scan, *m_rparams);
-    m_renderer->moveToThread(m_renderThread);
+    if (m_scan && m_rparams) {
+        m_renderThread = new QThread(this);
+        // Pass shared_ptr and value copy of params
+        // Check for null pointers on new params, though they should be valid if called from MainWindow
+        static colorscreen::scr_to_img_parameters defaultScrToImg;
+        static colorscreen::scr_detect_parameters defaultScrDetect;
+        
+        m_renderer = new Renderer(m_scan, *m_rparams, 
+            m_scrToImg ? *m_scrToImg : defaultScrToImg, 
+            m_scrDetect ? *m_scrDetect : defaultScrDetect);
+        m_renderer->moveToThread(m_renderThread);
 
-    connect(m_renderThread, &QThread::finished, m_renderer, &QObject::deleteLater);
-    connect(m_renderer, &Renderer::imageReady, this, &ImageWidget::handleImageReady);
-    
-    m_renderThread->start();
+        connect(m_renderThread, &QThread::finished, m_renderer, &QObject::deleteLater);
+        connect(m_renderer, &Renderer::imageReady, this, &ImageWidget::handleImageReady);
+        
+        m_renderThread->start();
 
-    requestRender();
+        requestRender();
+    }
     update();
 }
 
