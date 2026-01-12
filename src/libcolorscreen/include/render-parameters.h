@@ -118,12 +118,22 @@ struct mtf_parameters
   pure_attr luminosity_t system_mtf (double pixel_freq) const;
   pure_attr luminosity_t sensor_mtf (double pixel_freq) const;
   pure_attr luminosity_t measured_mtf_correction (double pixel_freq) const;
+  
+  struct computed_mtf {
+      std::vector<double> system_mtf;
+      std::vector<double> sensor_mtf;
+      std::vector<double> gaussian_blur_mtf;
+      std::vector<double> stokseth_defocus_mtf;
+      std::vector<double> lens_difraction_mtf;
+  };
+  
   DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);
   mtf_parameters ()
   : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), m_data ()
   { }
   bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   bool write_table (const char *write_table, const char **error) const;
+  DLL_PUBLIC computed_mtf compute_curves (int steps) const;
 private:
   struct entry {
     double freq;

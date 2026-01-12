@@ -965,6 +965,29 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
   return true;
 }
 
+mtf_parameters::computed_mtf
+mtf_parameters::compute_curves (int steps) const
+{
+  computed_mtf result;
+  result.system_mtf.reserve (steps);
+  result.sensor_mtf.reserve (steps);
+  result.gaussian_blur_mtf.reserve (steps);
+  result.stokseth_defocus_mtf.reserve (steps);
+  result.lens_difraction_mtf.reserve (steps);
+  
+  for (int i = 0; i < steps; i++)
+    {
+      double freq = i / (double)(steps - 1);
+      result.lens_difraction_mtf.push_back (lens_difraction_mtf (freq));
+      result.stokseth_defocus_mtf.push_back (stokseth_defocus_mtf (freq));
+      result.gaussian_blur_mtf.push_back (gaussian_blur_mtf (freq, sigma));
+      result.sensor_mtf.push_back (sensor_mtf (freq));
+      result.system_mtf.push_back (system_mtf (freq));
+    }
+  
+  return result;
+}
+
 luminosity_t
 mtf_parameters::estimate_parameters (const mtf_parameters &par,
                                      const char *write_table,
