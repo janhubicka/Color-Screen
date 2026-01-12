@@ -31,6 +31,10 @@ public:
                   colorscreen::scr_detect_parameters *scrDetect,
                   colorscreen::render_type_parameters *renderType);
 
+public slots:
+    void setZoom(double scale);
+    void setPan(double x, double y);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
@@ -40,8 +44,12 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 signals:
-    void progressStarted(std::shared_ptr<colorscreen::progress_info> info);
-    void progressFinished(std::shared_ptr<colorscreen::progress_info> info);
+    void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
+    void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
+    void viewStateChanged(QRectF visibleRect, double scale);
+
+public:
+    double getMinScale() const; // Returns scale that fits image to view
 
 private slots:
     void handleImageReady(int reqId, QImage image, double x, double y, double scale);
@@ -64,6 +72,7 @@ private:
     double m_scale = 1.0;
     double m_viewX = 0.0; // Top-left of the view in Image Coordinates
     double m_viewY = 0.0;
+    double m_minScale = 0.1; // Calculated 'fit' scale
 
     int m_currentReqId = 0;
     std::shared_ptr<colorscreen::progress_info> m_currentProgress; // Track current progress info

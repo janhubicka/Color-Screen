@@ -2,7 +2,12 @@
 
 #include <QMainWindow>
 #include <memory>
+#include <memory>
 #include <vector>
+#include <functional>
+#include <map>
+#include <set>
+#include <QVBoxLayout>
 #include <QElapsedTimer>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
@@ -17,17 +22,25 @@ class QSplitter;
 class QTabWidget;
 class QToolBar; // Added
 class QComboBox; // Added
+class QVBoxLayout; // Added for Linearization tab
 class ImageWidget;
 class NavigationView;
 class QProgressBar;
 class QLabel;
 class QPushButton;
 class QTimer;
+#include <QElapsedTimer>
+#include "ParameterState.h"
+#include "LinearizationPanel.h"
+#include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/solver-parameters.h"
 
 struct ProgressEntry {
     std::shared_ptr<colorscreen::progress_info> info;
     QElapsedTimer startTime;
 };
+
+class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow
 {
@@ -35,6 +48,9 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
+    
+    // Internal use by Undo Command
+    void applyState(const ParameterState &state);
 
 private slots:
     void onOpenImage();
@@ -43,12 +59,27 @@ private slots:
     void onModeChanged(int index); // Slot for mode change
     void rotateLeft();
     void rotateRight();
+    
+    // Recent Files
+    void openRecentFile();
 
 private:
     void setupUi();
     void createMenus();
     void createToolbar(); // New helper
     void updateModeMenu(); // Updates combo box items
+    
+    // Recent Files
+    void updateRecentFileActions();
+    void addToRecentFiles(const QString &filePath);
+    void loadRecentFiles();
+    void saveRecentFiles();
+    void loadFile(const QString &fileName);
+    
+    QMenu *m_recentFilesMenu;
+    enum { MaxRecentFiles = 10 };
+    QList<QAction*> m_recentFileActions;
+    QStringList m_recentFiles;
 
     QSplitter *m_mainSplitter;
     
@@ -101,4 +132,13 @@ private:
     
     // Helper to find the longest running task
     ProgressEntry* getLongestRunningTask();
+    
+    // Undo/Redo
+    QUndoStack *m_undoStack;
+    void changeParameters(const ParameterState &newState);
+    ParameterState getCurrentState() const;
+    void updateUIFromState(const ParameterState &state);
+    
+    // Linearization Panel
+    LinearizationPanel *m_linearizationPanel;
 };

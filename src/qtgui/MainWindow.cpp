@@ -16,13 +16,53 @@
 #include <QTimer>
 #include <QtConcurrent>
 #include <QFutureWatcher>
+#include <QSettings>
+#include <QUndoStack>
+#include <QUndoCommand>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QHBoxLayout>
 #include "ImageWidget.h"
+#include "../libcolorscreen/include/base.h"
 #include "NavigationView.h"
 #include "../libcolorscreen/include/render-parameters.h"
+
+// Undo/Redo Implementation
+
+class ChangeParametersCommand : public QUndoCommand
+{
+public:
+    ChangeParametersCommand(MainWindow *window, const ParameterState &oldState, const ParameterState &newState)
+        : m_window(window), m_oldState(oldState), m_newState(newState)
+    {
+        setText("Change Parameters");
+    }
+
+    void undo() override
+    {
+        m_window->applyState(m_oldState);
+    }
+
+    void redo() override
+    {
+        // On first push, redo is called.
+        // We might want to skip applying if it's the current state?
+        // But applying ensures consistency.
+        m_window->applyState(m_newState);
+    }
+
+private:
+    MainWindow *m_window;
+    ParameterState m_oldState;
+    ParameterState m_newState;
+};
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    m_undoStack = new QUndoStack(this);
+
     setupUi();
     resize(1200, 800);
     
@@ -30,6 +70,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_progressTimer = new QTimer(this);
     m_progressTimer->setInterval(100);
     connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::onProgressTimer);
+    
+    loadRecentFiles();
+    
+    loadRecentFiles();
 }
 
 MainWindow::~MainWindow() = default;
@@ -62,10 +106,22 @@ void MainWindow::setupUi()
     m_navigationView->setMinimumHeight(200);
     rightSplitter->addWidget(m_navigationView);
 
+    // Connect Navigation Signals
+    connect(m_imageWidget, &ImageWidget::viewStateChanged, m_navigationView, &NavigationView::onViewStateChanged);
+    connect(m_navigationView, &NavigationView::zoomChanged, m_imageWidget, &ImageWidget::setZoom);
+    connect(m_navigationView, &NavigationView::panChanged, m_imageWidget, &ImageWidget::setPan);
+
     // Bottom Right: Tabs
     m_configTabs = new QTabWidget(this);
-    QWidget *placeholder = new QWidget();
-    m_configTabs->addTab(placeholder, "Parameters");
+    
+    m_linearizationPanel = new LinearizationPanel(
+        [this](){ return getCurrentState(); },
+        [this](const ParameterState &s){ changeParameters(s); },
+        [this](){ return m_scan; },
+        this
+    );
+    
+    m_configTabs->addTab(m_linearizationPanel, "Linearization");
     rightSplitter->addWidget(m_configTabs);
 
     m_mainSplitter->addWidget(m_rightColumn);
@@ -117,10 +173,10 @@ void MainWindow::createToolbar()
     m_toolbar->addWidget(m_modeComboBox);
     
     m_toolbar->addSeparator();
-    QAction *rotLeftAction = m_toolbar->addAction("Rotate Left");
+    QAction *rotLeftAction = m_toolbar->addAction(QIcon::fromTheme("object-rotate-left"), "Rotate Left");
     connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
     
-    QAction *rotRightAction = m_toolbar->addAction("Rotate Right");
+    QAction *rotRightAction = m_toolbar->addAction(QIcon::fromTheme("object-rotate-right"), "Rotate Right");
     connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
     
     updateModeMenu();
@@ -131,6 +187,7 @@ void MainWindow::rotateLeft()
     if (!m_scan) return;
     m_scrToImgParams.final_rotation -= 90.0;
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+    m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
 }
 
 void MainWindow::rotateRight()
@@ -138,6 +195,7 @@ void MainWindow::rotateRight()
     if (!m_scan) return;
     m_scrToImgParams.final_rotation += 90.0;
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+    m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
 }
 
 void MainWindow::updateModeMenu()
@@ -219,12 +277,23 @@ void MainWindow::createMenus()
     QAction *openAction = fileMenu->addAction("&Open Image...");
     connect(openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
     
+    m_recentFilesMenu = fileMenu->addMenu("Open &Recent");
+    updateRecentFileActions();
+    
     QAction *openParamsAction = fileMenu->addAction("Open &Parameters...");
     connect(openParamsAction, &QAction::triggered, this, &MainWindow::onOpenParameters);
     
-    fileMenu->addSeparator();
     QAction *exitAction = fileMenu->addAction("E&xit");
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
+
+    QMenu *editMenu = menuBar()->addMenu("&Edit");
+    QAction *undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
+    undoAction->setShortcut(QKeySequence::Undo);
+    editMenu->addAction(undoAction);
+    
+    QAction *redoAction = m_undoStack->createRedoAction(this, tr("&Redo"));
+    redoAction->setShortcut(QKeySequence::Redo);
+    editMenu->addAction(redoAction);
 }
 
 
@@ -278,9 +347,12 @@ void MainWindow::onOpenParameters()
         // Let's just update if we have a scan.
          if (m_scan) {
              m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+             m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams); // Update nav too
          }
     }
+    m_undoStack->clear();
     updateModeMenu();
+    updateUIFromState(getCurrentState());
 }
 
 void MainWindow::onOpenImage()
@@ -289,101 +361,7 @@ void MainWindow::onOpenImage()
         "Images (*.tif *.tiff *.dng *.png *.jpg *.jpeg);;All Files (*)");
     if (fileName.isEmpty()) return;
     
-    // Clear current image and stop rendering
-    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr);
-    
-    // Check for .par file
-    QFileInfo fileInfo(fileName);
-    QString parFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
-    
-    if (QFile::exists(parFile)) {
-        if (QMessageBox::question(this, "Load Parameters?", 
-                                  "A parameter file was found for this image. Do you want to load it?") 
-            == QMessageBox::Yes) {
-            
-            FILE *f = fopen(parFile.toUtf8().constData(), "r");
-            if (f) {
-                const char *error = nullptr;
-                // We load into members. Note: if successful, m_rparams will be updated.
-                // We trust the library to handle potentially partial loads safely or we rely on it failing atomically.
-                if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams, &error)) {
-                    QMessageBox::warning(this, "Error Loading Parameters", 
-                        error ? QString::fromUtf8(error) : "Unknown error loading parameters.");
-                } else {
-                    // Update our tracking for "changed" state
-                    m_prevScrToImgParams = m_scrToImgParams;
-                    m_prevDetectParams = m_detectParams;
-                }
-                fclose(f);
-            }
-        }
-    }
-
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    progress->set_task("Loading image", 0);
-    addProgress(progress);
-    
-    // Use QtConcurrent to load in background
-    // We capture pointers, but we must ensure safety. 
-    // Loading loads into m_scan. m_scan is in MainWindow. 
-    // We must ensure UI doesn't access m_scan while loading.
-    // Ideally use a temporary image_data and swap it in.
-    
-    std::shared_ptr<colorscreen::image_data> tempScan = std::make_shared<colorscreen::image_data>();
-    
-    // Check if rparams was updated by load_csp
-    colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
-    
-    // Return status and error message
-    QFutureWatcher<std::pair<bool, QString>> *watcher = new QFutureWatcher<std::pair<bool, QString>>(this);
-    connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this, [this, watcher, tempScan, progress, fileName]() {
-        std::pair<bool, QString> result = watcher->result();
-        removeProgress(progress);
-        watcher->deleteLater();
-        
-        if (result.first) {
-             // m_scan is now a shared_ptr, we can just assign the pointer
-             m_scan = tempScan;
-             
-             // Initialize default parameters akin to gtkgui IF not loaded from par?
-             // GTKGUI logic often resets or sets based on image if not loaded.
-             // But if we loaded parameters, we might want to respect them.
-             // However, some parameters like gamma might be auto-detected if not specified? 
-             // m_scan->gamma is filled by loader.
-             // If m_rparams.gamma was loaded, we keep it. If it was default (not loaded), maybe update?
-             // load_csp populates rparams.
-             
-            if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 && m_rparams.gamma == -1) // Update only if unknown
-                m_rparams.gamma = m_scan->gamma;
-            else if (m_rparams.gamma == -1)
-                m_rparams.gamma = -1; // Keep unknown if both unknown
-
-            // Update Widgets (pass all params)
-            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
-            onImageLoaded();
-        } else {
-             // Error handling
-             // Check if cancelled
-             if (progress->cancelled()) {
-                 // User cancelled, do nothing (maybe show status?)
-             } else {
-                 QMessageBox::critical(this, "Error Loading Image", 
-                    result.second.isEmpty() ? "Failed to load image." : result.second);
-             }
-        }
-    });
-    
-    QFuture<std::pair<bool, QString>> future = QtConcurrent::run([tempScan, fileName, progress, demosaic]() {
-        const char *error = nullptr;
-        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get(), demosaic);
-        QString errStr;
-        if (!res && error) {
-            errStr = QString::fromUtf8(error);
-        }
-        return std::make_pair(res, errStr);
-    });
-    
-    watcher->setFuture(future);
+    loadFile(fileName);
 }
 
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info)
@@ -463,5 +441,206 @@ void MainWindow::onImageLoaded()
 {
    // Update UI components that depend on loaded image
    updateModeMenu();
+      if (m_scan) {
+        m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+        m_navigationView->setMinScale(m_imageWidget->getMinScale());
+    }
+    
+    // Refresh param values too
+    applyState(getCurrentState());
 }
+
+// Recent Files Implementation
+
+void MainWindow::addToRecentFiles(const QString &filePath)
+{
+    m_recentFiles.removeAll(filePath);
+    m_recentFiles.prepend(filePath);
+    
+    while (m_recentFiles.size() > MaxRecentFiles)
+        m_recentFiles.removeLast();
+        
+    updateRecentFileActions();
+    saveRecentFiles();
+}
+
+void MainWindow::updateRecentFileActions()
+{
+    m_recentFilesMenu->clear();
+    m_recentFileActions.clear();
+    
+    for (int i = 0; i < m_recentFiles.size(); ++i) {
+        QString text = tr("&%1 %2").arg(i + 1).arg(QFileInfo(m_recentFiles[i]).fileName());
+        QAction *action = m_recentFilesMenu->addAction(text, this, &MainWindow::openRecentFile);
+        action->setData(m_recentFiles[i]);
+        action->setToolTip(m_recentFiles[i]);
+        m_recentFileActions.append(action);
+    }
+    
+    if (m_recentFiles.isEmpty()) {
+        m_recentFilesMenu->addAction("No Recent Files")->setEnabled(false);
+    } else {
+        m_recentFilesMenu->addSeparator();
+        QAction *clearAction = m_recentFilesMenu->addAction("Clear Recent Files");
+        connect(clearAction, &QAction::triggered, this, [this](){
+            m_recentFiles.clear();
+            updateRecentFileActions();
+            saveRecentFiles();
+        });
+    }
+}
+
+void MainWindow::openRecentFile()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (action) {
+        QString fileName = action->data().toString();
+        loadFile(fileName);
+    }
+}
+
+void MainWindow::loadFile(const QString &fileName)
+{
+    if (fileName.isEmpty()) return;
+    
+    // Clear current image and stop rendering
+    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr);
+    
+    // Check for .par file
+    QFileInfo fileInfo(fileName);
+    QString parFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+    
+    if (QFile::exists(parFile)) {
+         if (QMessageBox::question(this, "Load Parameters?", 
+                                   "A parameter file was found for this image. Do you want to load it?") 
+             == QMessageBox::Yes) {
+            
+            FILE *f = fopen(parFile.toUtf8().constData(), "r");
+            if (f) {
+                const char *error = nullptr;
+                if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams, &error)) {
+                    QMessageBox::warning(this, "Error Loading Parameters", 
+                        error ? QString::fromUtf8(error) : "Unknown error loading parameters.");
+                } else {
+                    m_prevScrToImgParams = m_scrToImgParams;
+                    m_prevDetectParams = m_detectParams;
+                }
+                fclose(f);
+            }
+        }
+    }
+
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    progress->set_task("Loading image", 0);
+    addProgress(progress);
+    
+    std::shared_ptr<colorscreen::image_data> tempScan = std::make_shared<colorscreen::image_data>();
+    // Access m_rparams carefully. It's a member.
+    colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+    
+    QFutureWatcher<std::pair<bool, QString>> *watcher = new QFutureWatcher<std::pair<bool, QString>>(this);
+    connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this, [this, watcher, tempScan, progress, fileName]() {
+        std::pair<bool, QString> result = watcher->result();
+        removeProgress(progress);
+        watcher->deleteLater();
+        
+        if (result.first) {
+             m_scan = tempScan;
+             
+            if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 && m_rparams.gamma == -1) // Update only if unknown
+                m_rparams.gamma = m_scan->gamma;
+            else if (m_rparams.gamma == -1)
+                m_rparams.gamma = -1; 
+
+            m_undoStack->clear();
+
+            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+            onImageLoaded();
+            
+            // Add to recent files
+            addToRecentFiles(fileName);
+            
+        } else {
+             if (progress->cancelled()) {
+             } else {
+                 QMessageBox::critical(this, "Error Loading Image", 
+                    result.second.isEmpty() ? "Failed to load image." : result.second);
+             }
+        }
+    });
+    
+    QFuture<std::pair<bool, QString>> future = QtConcurrent::run([tempScan, fileName, progress, demosaic]() {
+        const char *error = nullptr;
+        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get(), demosaic);
+        QString errStr;
+        if (!res && error) {
+            errStr = QString::fromUtf8(error);
+        }
+        return std::make_pair(res, errStr);
+    });
+    
+    watcher->setFuture(future);
+}
+
+void MainWindow::loadRecentFiles()
+{
+    QSettings settings;
+    m_recentFiles = settings.value("recentFiles").toStringList();
+    updateRecentFileActions();
+}
+
+void MainWindow::saveRecentFiles()
+{
+    QSettings settings;
+    settings.setValue("recentFiles", m_recentFiles);
+}
+
+// Undo/Redo Implementation
+
+void MainWindow::applyState(const ParameterState &state)
+{
+    // User requested rotation is not part of parameters.
+    // Preserve current rotation when applying state.
+    double currentRot = m_scrToImgParams.final_rotation;
+    
+    m_rparams = state.rparams;
+    m_scrToImgParams = state.scrToImg;
+    m_detectParams = state.detect;
+    m_solverParams = state.solver; // Manually copy logic if needed? Struct copy should work if fields are copyable.
+    // solver_parameters has vector, copy constructor should be fine (std::vector).
+    
+    m_scrToImgParams.final_rotation = currentRot;
+    
+    // Update image widget logic
+    if (m_scan) {
+        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+        m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+    }
+    
+    updateUIFromState(state);
+}
+
+void MainWindow::updateUIFromState(const ParameterState &state)
+{
+    m_linearizationPanel->updateUI();
+}
+
+ParameterState MainWindow::getCurrentState() const
+{
+    ParameterState state;
+    state.rparams = m_rparams;
+    state.scrToImg = m_scrToImgParams;
+    state.detect = m_detectParams;
+    state.solver = m_solverParams;
+    return state;
+}
+
+void MainWindow::changeParameters(const ParameterState &newState)
+{
+    ParameterState currentState = getCurrentState();
+    if (currentState == newState) return;
+    
+    m_undoStack->push(new ChangeParametersCommand(this, currentState, newState));
+}
+
 

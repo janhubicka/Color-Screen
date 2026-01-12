@@ -28,6 +28,37 @@ ImageWidget::ImageWidget(QWidget *parent)
     setMouseTracking(false); // Only track when dragging
 }
 
+double ImageWidget::getMinScale() const { return m_minScale; }
+
+void ImageWidget::setZoom(double scale)
+{
+    if (qAbs(scale - m_scale) > 0.000001) {
+        // Keep center? For now just zoom.
+        // Ideally zoom around center of view.
+        double centerX = m_viewX + (width() / m_scale) / 2.0;
+        double centerY = m_viewY + (height() / m_scale) / 2.0;
+        
+        m_scale = scale;
+        
+        // New view top-left
+        m_viewX = centerX - (width() / m_scale) / 2.0;
+        m_viewY = centerY - (height() / m_scale) / 2.0;
+        
+        requestRender();
+        emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+    }
+}
+
+void ImageWidget::setPan(double x, double y)
+{
+    if (qAbs(x - m_viewX) > 0.1 || qAbs(y - m_viewY) > 0.1) {
+        m_viewX = x;
+        m_viewY = y;
+        requestRender();
+        emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+    }
+}
+
 ImageWidget::~ImageWidget()
 {
     if (m_renderThread) {
@@ -73,12 +104,17 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
            double scaleY = h / imgH;
            m_scale = qMin(scaleX, scaleY);
            if (m_scale == 0) m_scale = 1.0;
+           m_minScale = m_scale;
         } else {
             m_scale = 0.1; // Fallback
+            m_minScale = 0.1;
         }
         m_viewX = 0;
         m_viewY = 0;
     }
+    
+    emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+    update();
 
     // Initialize Renderer if needed
     if (m_renderer) {
@@ -173,6 +209,7 @@ void ImageWidget::paintEvent(QPaintEvent *event)
 void ImageWidget::resizeEvent(QResizeEvent *event)
 {
     requestRender();
+    emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
 void ImageWidget::mousePressEvent(QMouseEvent *event)
@@ -194,6 +231,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event)
         m_viewY -= delta.y() / m_scale;
 
         requestRender();
+        emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
     }
 }
 
@@ -226,4 +264,5 @@ void ImageWidget::wheelEvent(QWheelEvent *event)
     m_viewY = mouseImageY - mouseY / m_scale;
 
     requestRender();
+    emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
