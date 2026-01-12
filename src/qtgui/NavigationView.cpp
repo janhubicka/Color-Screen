@@ -47,7 +47,9 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
-    m_previewImage = QImage();
+    if (m_scan != scan) {
+        m_previewImage = QImage();
+    }
     
     // Determine render type
     if (m_scrToImg && m_scrToImg->type != colorscreen::Random) {

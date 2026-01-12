@@ -37,6 +37,28 @@ public:
     {
         setText("Change Parameters");
     }
+    
+    int id() const override
+    {
+        return 1234; // Unique ID for parameter changes
+    }
+    
+    bool mergeWith(const QUndoCommand *other) override
+    {
+        if (other->id() != id()) return false;
+        
+        const ChangeParametersCommand *cmd = static_cast<const ChangeParametersCommand*>(other);
+        
+        // We merged with 'other'. 'other' is the NEWER command. 
+        // We are the older command on the stack.
+        // Wait, QUndoStack::mergeWith(const QUndoCommand * command)
+        // "Attempts to merge this command with command. ... If this function returns true, command is deleted."
+        // "this" is the previous command. "command" is the new one.
+        // So we update OUR "newState" to be "command"s newState.
+        
+        m_newState = cmd->m_newState;
+        return true;
+    }
 
     void undo() override
     {
@@ -45,9 +67,6 @@ public:
 
     void redo() override
     {
-        // On first push, redo is called.
-        // We might want to skip applying if it's the current state?
-        // But applying ensures consistency.
         m_window->applyState(m_newState);
     }
 
@@ -73,7 +92,8 @@ MainWindow::MainWindow(QWidget *parent)
     
     loadRecentFiles();
     
-    loadRecentFiles();
+    // Initialize UI state
+    updateUIFromState(getCurrentState());
 }
 
 MainWindow::~MainWindow() = default;
@@ -121,13 +141,21 @@ void MainWindow::setupUi()
         this
     );
     
+    m_sharpnessPanel = new SharpnessPanel(
+        [this](){ return getCurrentState(); },
+        [this](const ParameterState &s){ changeParameters(s); },
+        [this](){ return m_scan; },
+        this
+    );
+    
     m_configTabs->addTab(m_linearizationPanel, "Linearization");
+    m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
     rightSplitter->addWidget(m_configTabs);
 
     m_mainSplitter->addWidget(m_rightColumn);
     
-    // Set initial sizes (approx 75% for image)
-    m_mainSplitter->setStretchFactor(0, 3);
+    // Set initial sizes (approx 80% for image, 20% for right panel)
+    m_mainSplitter->setStretchFactor(0, 9);
     m_mainSplitter->setStretchFactor(1, 1);
     
     // Status Bar
@@ -623,6 +651,7 @@ void MainWindow::applyState(const ParameterState &state)
 void MainWindow::updateUIFromState(const ParameterState &state)
 {
     m_linearizationPanel->updateUI();
+    m_sharpnessPanel->updateUI();
 }
 
 ParameterState MainWindow::getCurrentState() const

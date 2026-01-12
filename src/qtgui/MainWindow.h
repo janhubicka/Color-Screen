@@ -32,6 +32,7 @@ class QTimer;
 #include <QElapsedTimer>
 #include "ParameterState.h"
 #include "LinearizationPanel.h"
+#include "SharpnessPanel.h"
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 
@@ -141,4 +142,5 @@ private:
     
     // Linearization Panel
     LinearizationPanel *m_linearizationPanel;
+    SharpnessPanel *m_sharpnessPanel;
 };

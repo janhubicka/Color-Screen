@@ -21,7 +21,7 @@ ImageWidget::ImageWidget(QWidget *parent)
     
     // Background color
     QPalette pal = palette();
-    pal.setColor(QPalette::Window, Qt::darkGray);
+    pal.setColor(QPalette::Window, Qt::black);
     setAutoFillBackground(true);
     setPalette(pal);
     
@@ -78,7 +78,9 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
     m_renderType = renderType;
-    m_pixmap = QImage(); // Clear current image
+    if (m_scan != scan) {
+        m_pixmap = QImage(); // Clear if new image loaded
+    }
 
     // Reset View
     if (m_scan && m_scan->width > 0) {
