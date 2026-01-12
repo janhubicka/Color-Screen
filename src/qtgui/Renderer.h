@@ -3,8 +3,13 @@
 #include <QObject>
 #include <QImage>
 #include <atomic>
-#include "../libcolorscreen/include/colorscreen.h"
-#include "../libcolorscreen/include/scr-to-img.h" // For scr_to_img_parameters
+#include <memory> // Added for std::shared_ptr
+#include "../libcolorscreen/include/imagedata.h" // Replaces part of colorscreen.h
+#include "../libcolorscreen/include/render-parameters.h" // Replaces part of colorscreen.h
+#include "../libcolorscreen/include/render-type-parameters.h" // Added as per instruction
+#include "../libcolorscreen/include/scr-to-img-parameters.h" // Replaces scr-to-img.h and part of colorscreen.h
+#include "../libcolorscreen/include/scr-detect-parameters.h" // Replaces part of colorscreen.h
+#include "../libcolorscreen/include/progress-info.h" // Added for colorscreen::progress_info
 
 class Renderer : public QObject
 {
@@ -13,7 +18,8 @@ public:
     explicit Renderer(std::shared_ptr<colorscreen::image_data> scan, 
                       const colorscreen::render_parameters &rparams,
                       const colorscreen::scr_to_img_parameters &scrToImg,
-                      const colorscreen::scr_detect_parameters &scrDetect);
+                      const colorscreen::scr_detect_parameters &scrDetect,
+                      const colorscreen::render_type_parameters &renderType);
     ~Renderer() override;
     
     // Optional: method to update params if changed in UI
@@ -35,4 +41,5 @@ private:
     // We maintain copies or use defaults for now
     colorscreen::scr_to_img_parameters m_scrToImg;
     colorscreen::scr_detect_parameters m_scrDetect;
+    colorscreen::render_type_parameters m_renderType;
 };

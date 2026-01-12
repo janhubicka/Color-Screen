@@ -4,12 +4,14 @@
 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "../libcolorscreen/render-tile.h"
 
 Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan, 
                    const colorscreen::render_parameters &rparams,
                    const colorscreen::scr_to_img_parameters &scrToImg,
-                   const colorscreen::scr_detect_parameters &scrDetect)
-    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg), m_scrDetect(scrDetect)
+                   const colorscreen::scr_detect_parameters &scrDetect,
+                   const colorscreen::render_type_parameters &renderType)
+    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg), m_scrDetect(scrDetect), m_renderType(renderType)
 {
 }
 
@@ -53,18 +55,16 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     tile.rowstride = image.bytesPerLine();
 
     // Render type
-    colorscreen::render_type_parameters rtparam;
-    rtparam.type = colorscreen::render_type_original; // or interpolated? 
-    // Just default for now... actually gtkgui sets this based on mode
-    rtparam.color = true;
-    
-    // Antialias heuristic
-    if (tile.step > 2.0) rtparam.antialias = true;
-    else rtparam.antialias = false;
+    // Use member render type params
+    // We need a non-const reference for render_tile? No, render_tile takes reference but likely non-const?
+    // Let's check: render_tile(..., render_type_parameters &rtparam, ...)
+    // So we need to copy it to modify or just pass it if it's not modified.
+    // It's passed as non-const ref, so we should make a copy to be safe thread-wise if it modifies it.
+    colorscreen::render_type_parameters rtparams = m_renderType;
 
     // Render
     // Use m_rparams (updated from frameParams)
-    bool success = colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparam, tile, progress.get());
+    bool success = colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
 
     if (success) {
         emit imageReady(reqId, image, xOffset, yOffset, scale);

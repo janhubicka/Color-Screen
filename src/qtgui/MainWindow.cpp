@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include <QMenuBar>
 #include <QMenu>
+#include <QToolBar>
+#include <QComboBox>
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -96,6 +98,98 @@ void MainWindow::setupUi()
     
     statusBar->addPermanentWidget(m_progressContainer);
     m_progressContainer->setVisible(false); // Hidden by default
+    
+    createToolbar(); // Initialize toolbar
+}
+
+void MainWindow::createToolbar()
+{
+    m_toolbar = addToolBar("Main Toolbar");
+    m_toolbar->setMovable(false);
+    
+    QLabel *modeLabel = new QLabel("Mode: ", m_toolbar);
+    m_toolbar->addWidget(modeLabel);
+    
+    m_modeComboBox = new QComboBox(m_toolbar);
+    m_modeComboBox->setMinimumWidth(200);
+    connect(m_modeComboBox, qOverload<int>(&QComboBox::currentIndexChanged), 
+            this, &MainWindow::onModeChanged);
+    m_toolbar->addWidget(m_modeComboBox);
+    
+    updateModeMenu();
+}
+
+void MainWindow::updateModeMenu()
+{
+    m_modeComboBox->blockSignals(true);
+    m_modeComboBox->clear();
+    
+    // We access the static array in anonymous namespace from render-type-parameters.h
+    // Since we included the header, we can try accessing it via the namespace.
+    // However, anonymous namespace members have internal linkage. 
+    // Usually headers shouldn't define static data in anonymous namespaces unless used carefully.
+    // Assuming we can access colorscreen::render_type_properties 
+    // NOTE: In C++, anonymous namespace members are accessible in the same TU.
+    // If render_type_properties is in a header in anonymous namespace, each TU gets a copy.
+    // But we need to refer to it. It's inside namespace colorscreen { namespace { ... } } or just namespace { ... } inside colorscreen?
+    // The header has: namespace colorscreen { namespace { static const ... } }
+    
+    using namespace colorscreen;
+    
+    for (int i = 0; i < render_type_max; ++i) {
+        const render_type_property &prop = render_type_properties[i];
+        
+        // Filter logic
+        bool show = true;
+        
+        // If given type has render_type_property::NEEDS_SCR_TO_IMG do not show it if scr_to_img type is Random.
+        if (prop.flags & render_type_property::NEEDS_SCR_TO_IMG) {
+            if (m_scrToImgParams.type == colorscreen::Random) {
+                show = false;
+            }
+        }
+        
+        // If given type has render_type_property::NEEDS_RGB do not show it if m_scan->rgbdata is NULL.
+        if (prop.flags & render_type_property::NEEDS_RGB) {
+            // Check m_scan
+            if (!m_scan || !m_scan->rgbdata) {
+                show = false;
+            }
+        }
+        
+        if (show) {
+            m_modeComboBox->addItem(prop.name, QVariant(i));
+        }
+    }
+    
+    // Select current type if present
+    int idx = m_modeComboBox->findData((int)m_renderTypeParams.type);
+    if (idx != -1) {
+        m_modeComboBox->setCurrentIndex(idx);
+    } else if (m_modeComboBox->count() > 0) {
+        // Fallback
+        m_modeComboBox->setCurrentIndex(0);
+        // We might want to update m_renderTypeParams.type? 
+        // Let's defer that to user interaction or explicit set.
+    }
+    
+    m_modeComboBox->blockSignals(false);
+}
+
+void MainWindow::onModeChanged(int index)
+{
+    if (index < 0) return;
+    
+    int newType = m_modeComboBox->itemData(index).toInt();
+    if (newType >= 0 && newType < colorscreen::render_type_max) {
+        if (m_renderTypeParams.type != (colorscreen::render_type_t)newType) {
+            m_renderTypeParams.type = (colorscreen::render_type_t)newType;
+            // Trigger render update
+            if (m_scan) {
+                m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+            }
+        }
+    }
 }
 
 void MainWindow::createMenus()
@@ -111,6 +205,7 @@ void MainWindow::createMenus()
     QAction *exitAction = fileMenu->addAction("E&xit");
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
 }
+
 
 void MainWindow::onOpenParameters()
 {
@@ -152,7 +247,7 @@ void MainWindow::onOpenParameters()
     if (changed) {
          if (m_scan) {
              // Re-set image to re-create renderer with new params
-             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
          }
     } else {
         // Just update params... actually setImage logic uses values.
@@ -161,9 +256,10 @@ void MainWindow::onOpenParameters()
         // Even if not changed, we might want to update rparams?
         // Let's just update if we have a scan.
          if (m_scan) {
-             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+             m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
          }
     }
+    updateModeMenu();
 }
 
 void MainWindow::onOpenImage()
@@ -173,7 +269,34 @@ void MainWindow::onOpenImage()
     if (fileName.isEmpty()) return;
     
     // Clear current image and stop rendering
-    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr);
+    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr);
+    
+    // Check for .par file
+    QFileInfo fileInfo(fileName);
+    QString parFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+    
+    if (QFile::exists(parFile)) {
+        if (QMessageBox::question(this, "Load Parameters?", 
+                                  "A parameter file was found for this image. Do you want to load it?") 
+            == QMessageBox::Yes) {
+            
+            FILE *f = fopen(parFile.toUtf8().constData(), "r");
+            if (f) {
+                const char *error = nullptr;
+                // We load into members. Note: if successful, m_rparams will be updated.
+                // We trust the library to handle potentially partial loads safely or we rely on it failing atomically.
+                if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams, &error)) {
+                    QMessageBox::warning(this, "Error Loading Parameters", 
+                        error ? QString::fromUtf8(error) : "Unknown error loading parameters.");
+                } else {
+                    // Update our tracking for "changed" state
+                    m_prevScrToImgParams = m_scrToImgParams;
+                    m_prevDetectParams = m_detectParams;
+                }
+                fclose(f);
+            }
+        }
+    }
 
     auto progress = std::make_shared<colorscreen::progress_info>();
     progress->set_task("Loading image", 0);
@@ -187,6 +310,9 @@ void MainWindow::onOpenImage()
     
     std::shared_ptr<colorscreen::image_data> tempScan = std::make_shared<colorscreen::image_data>();
     
+    // Check if rparams was updated by load_csp
+    colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+    
     // Return status and error message
     QFutureWatcher<std::pair<bool, QString>> *watcher = new QFutureWatcher<std::pair<bool, QString>>(this);
     connect(watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this, [this, watcher, tempScan, progress, fileName]() {
@@ -198,14 +324,21 @@ void MainWindow::onOpenImage()
              // m_scan is now a shared_ptr, we can just assign the pointer
              m_scan = tempScan;
              
-             // Initialize default parameters akin to gtkgui
-            if ((int)m_scan->gamma != -2 && m_scan->gamma > 0)
+             // Initialize default parameters akin to gtkgui IF not loaded from par?
+             // GTKGUI logic often resets or sets based on image if not loaded.
+             // But if we loaded parameters, we might want to respect them.
+             // However, some parameters like gamma might be auto-detected if not specified? 
+             // m_scan->gamma is filled by loader.
+             // If m_rparams.gamma was loaded, we keep it. If it was default (not loaded), maybe update?
+             // load_csp populates rparams.
+             
+            if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 && m_rparams.gamma == -1) // Update only if unknown
                 m_rparams.gamma = m_scan->gamma;
-            else
-                m_rparams.gamma = -1; 
+            else if (m_rparams.gamma == -1)
+                m_rparams.gamma = -1; // Keep unknown if both unknown
 
-            // Update Widgets
-            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+            // Update Widgets (pass all params)
+            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
             onImageLoaded();
         } else {
              // Error handling
@@ -219,9 +352,9 @@ void MainWindow::onOpenImage()
         }
     });
     
-    QFuture<std::pair<bool, QString>> future = QtConcurrent::run([tempScan, fileName, progress]() {
+    QFuture<std::pair<bool, QString>> future = QtConcurrent::run([tempScan, fileName, progress, demosaic]() {
         const char *error = nullptr;
-        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get());
+        bool res = tempScan->load(fileName.toUtf8().constData(), true, &error, progress.get(), demosaic);
         QString errStr;
         if (!res && error) {
             errStr = QString::fromUtf8(error);
@@ -307,6 +440,7 @@ void MainWindow::onCancelClicked()
 
 void MainWindow::onImageLoaded()
 {
-   // TODO: Update UI components that depend on loaded image
+   // Update UI components that depend on loaded image
+   updateModeMenu();
 }
 

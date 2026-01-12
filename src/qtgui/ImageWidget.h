@@ -6,6 +6,7 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
+#include "../libcolorscreen/include/render-type-parameters.h"
 #include <memory>
 #include "../libcolorscreen/include/progress-info.h"
 
@@ -27,7 +28,8 @@ public:
     void setImage(std::shared_ptr<colorscreen::image_data> scan, 
                   colorscreen::render_parameters *rparams,
                   colorscreen::scr_to_img_parameters *scrToImg,
-                  colorscreen::scr_detect_parameters *scrDetect);
+                  colorscreen::scr_detect_parameters *scrDetect,
+                  colorscreen::render_type_parameters *renderType);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -51,6 +53,7 @@ private:
     colorscreen::render_parameters *m_rparams = nullptr;
     colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
     colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
+    colorscreen::render_type_parameters *m_renderType = nullptr;
 
     Renderer *m_renderer = nullptr;
     QThread *m_renderThread = nullptr;

@@ -6,10 +6,17 @@
 #include <QElapsedTimer>
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/render-type-parameters.h" // Added
+#include "../libcolorscreen/include/scr-detect-parameters.h"
+#include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 
 class QSplitter;
 class QTabWidget;
+class QToolBar; // Added
+class QComboBox; // Added
 class ImageWidget;
 class NavigationView;
 class QProgressBar;
@@ -33,10 +40,13 @@ private slots:
     void onOpenImage();
     void onImageLoaded(); // Called when image is ready
     void onOpenParameters();
+    void onModeChanged(int index); // Slot for mode change
 
 private:
     void setupUi();
     void createMenus();
+    void createToolbar(); // New helper
+    void updateModeMenu(); // Updates combo box items
 
     QSplitter *m_mainSplitter;
     
@@ -48,6 +58,9 @@ private:
     NavigationView *m_navigationView;
     QTabWidget *m_configTabs;
 
+    QToolBar *m_toolbar; // New toolbar
+    QComboBox *m_modeComboBox; // Mode selector
+
     // Core Data
     // We keep shared copies or references. 
     // Using std::shared_ptr or just direct members.
@@ -57,6 +70,7 @@ private:
     colorscreen::scr_detect_parameters m_detectParams;
     colorscreen::scr_to_img_parameters m_scrToImgParams;
     colorscreen::solver_parameters m_solverParams;
+    colorscreen::render_type_parameters m_renderTypeParams; // New member
     
     // Copies for change detection
     colorscreen::scr_detect_parameters m_prevDetectParams;

@@ -39,12 +39,14 @@ ImageWidget::~ImageWidget()
 void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan, 
                           colorscreen::render_parameters *rparams,
                           colorscreen::scr_to_img_parameters *scrToImg,
-                          colorscreen::scr_detect_parameters *scrDetect)
+                          colorscreen::scr_detect_parameters *scrDetect,
+                          colorscreen::render_type_parameters *renderType)
 {
     m_scan = scan;
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
+    m_renderType = renderType;
     m_pixmap = QImage(); // Clear current image
 
     // Reset View
@@ -82,10 +84,12 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
         // Check for null pointers on new params, though they should be valid if called from MainWindow
         static colorscreen::scr_to_img_parameters defaultScrToImg;
         static colorscreen::scr_detect_parameters defaultScrDetect;
+        static colorscreen::render_type_parameters defaultRenderType;
         
         m_renderer = new Renderer(m_scan, *m_rparams, 
             m_scrToImg ? *m_scrToImg : defaultScrToImg, 
-            m_scrDetect ? *m_scrDetect : defaultScrDetect);
+            m_scrDetect ? *m_scrDetect : defaultScrDetect,
+            m_renderType ? *m_renderType : defaultRenderType);
         m_renderer->moveToThread(m_renderThread);
 
         connect(m_renderThread, &QThread::finished, m_renderer, &QObject::deleteLater);
