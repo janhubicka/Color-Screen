@@ -119,6 +119,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    rparam->sharpen.scanner_mtf.blur_diameter) < 0
 	  || fprintf (f, "scanner_mtf_pixel_pitch_um: %f\n",
 	    rparam->sharpen.scanner_mtf.pixel_pitch) < 0
+	  || fprintf (f, "scanner_mtf_sensor_fill_factor: %f\n",
+	    rparam->sharpen.scanner_mtf.sensor_fill_factor) < 0
 	  || fprintf (f, "scanner_mtf_wavelength_nm: %f\n",
 	    rparam->sharpen.scanner_mtf.wavelength) < 0
 	  || fprintf (f, "scanner_mtf_f_stop: %f\n",
@@ -1300,6 +1302,18 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.pixel_pitch)))
 	    {
 	      *error = "error parsing scanner_mtf_pixel_pitch";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scanner_mtf_sensor_fill_factor"))
+	{
+	  if (rparam && first_scanner_mtf)
+	    rparam->sharpen.scanner_mtf.clear_data ();
+	  first_scanner_mtf = false;
+	  luminosity_t sensor_fill_factor;
+	  if (!read_double (f, rparam_check (sharpen.scanner_mtf.sensor_fill_factor)))
+	    {
+	      *error = "error parsing scanner_mtf_sensor_fill_factor";
 	      return false;
 	    }
 	}

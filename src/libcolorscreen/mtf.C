@@ -43,14 +43,6 @@ sinc (double x)
   return std::sin (M_PI * x) / (M_PI * x);
 }
 
-/* Return sensor MTF at given pixel frequency.
-   Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
-   near the Nyquist frequency */
-double
-sensor_mtf (double pixel_freq)
-{
-  return std::abs (sinc (pixel_freq));
-}
 #if 0
 /**
      * Estimates MTF contribution of the Bayer sensor.
@@ -393,6 +385,16 @@ get_psf_radius (double *psf, int size, bool *ok = NULL)
   return this_psf_radius;
 }
 
+}
+
+/* Return sensor MTF at given pixel frequency.
+   TODO: model Bayer.
+   Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
+   near the Nyquist frequency */
+double
+mtf_parameters::sensor_mtf(double pixel_freq) const
+{
+  return std::abs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
 }
 
 /* The effective f-fstop changes in macro photography based on magnification.
@@ -915,6 +917,14 @@ mtf_parameters::save_psf (progress_info *progress, const char *write_table,
 }
 
 bool
+mtf_parameters::print_csv_header (FILE *f) const
+{
+  return fprintf (f, "difraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm magnification %f pixel pitch %f	defocus %.5fmm	"
+                   "sigma=%.2fpx	lens	sensor fill factor %.1f	estimated\n",
+                   f_stop, effective_f_stop (), wavelength, pixel_pitch / (25400.0 / scan_dpi), pixel_pitch, defocus, sigma, sensor_fill_factor) >= 0;
+}
+
+bool
 mtf_parameters::write_table (const char *write_table, const char **error) const
 {
   if (write_table)
@@ -925,11 +935,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
           *error = "failed to open output file";
           return false;
         }
-      if (fprintf (f,
-                   "frequency	difraction	defocus=%.5fmm	"
-                   "sigma=%.2fpx	lens	sensor	estimated\n",
-                   defocus, sigma)
-          < 0)
+      if (fprintf (f, "frequency	") < 0 || !print_csv_header (f))
         {
           *error = "write error";
           return false;
@@ -963,7 +969,8 @@ luminosity_t
 mtf_parameters::estimate_parameters (const mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error)
+                                     const char **error,
+				     bool verbose)
 {
   *this = par;
   clear_data ();
@@ -985,12 +992,8 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
           *error = "failed to open CSV file for writting";
           return -1;
         }
-      if (fprintf (
-              f,
-              "frequency	measured MTF	difraction	"
-              "defocus=%.5fmm	sigma=%.2fpx	lens	sensor	estimated\n",
-              defocus, sigma)
-          < 0)
+      if (fprintf ( f, "frequency	measured MTF	") < 0
+	  || !print_csv_header (f))
         {
           *error = "write error in CSV file";
           return -1;

@@ -38,6 +38,12 @@ struct mtf_parameters
   double wavelength;
   /* Sensor pixel pitch (size of a pixel) in micrometers.  */
   double pixel_pitch;
+  /* The ratio of the active area to the total pixel area of the sensor.
+     Usually in range 0..1 but for scanner and linear sensor it may be grater
+     than that.  For Nikon Coolscan it seems to be 4.
+
+     0 disables accounting sensor MTF.  */
+  double sensor_fill_factor;
 
   /* DPI of the scan; necessary to calculate magnification.  */
   double scan_dpi;
@@ -70,7 +76,7 @@ struct mtf_parameters
   bool
   operator== (const mtf_parameters &o) const
   {
-    if (sigma != o.sigma)
+    if (sigma != o.sigma || sensor_fill_factor != o.sensor_fill_factor)
       return false;
     if (simulate_difraction_p ())
       return o.simulate_difraction_p ()
@@ -95,7 +101,8 @@ struct mtf_parameters
 	   && wavelength == o.wavelength
 	   && pixel_pitch == o.pixel_pitch
 	   && scan_dpi == o.scan_dpi
-	   && m_data == o.m_data;
+	   && m_data == o.m_data
+	   && sensor_fill_factor == o.sensor_fill_factor;
   }
   void
   clear_data ()
@@ -109,10 +116,11 @@ struct mtf_parameters
   pure_attr luminosity_t stokseth_defocus_mtf (double pixe_freq) const;
   pure_attr luminosity_t lens_mtf (double pixel_freq) const;
   pure_attr luminosity_t system_mtf (double pixel_freq) const;
+  pure_attr luminosity_t sensor_mtf (double pixel_freq) const;
   pure_attr luminosity_t measured_mtf_correction (double pixel_freq) const;
-  DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL);
+  DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);
   mtf_parameters ()
-  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), m_data ()
+  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), m_data ()
   { }
   bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   bool write_table (const char *write_table, const char **error) const;
@@ -126,6 +134,7 @@ private:
     }
   };
   std::vector <entry> m_data;
+  bool print_csv_header (FILE *f) const;
 };
 
 /* Parameters of sharpening.  */
