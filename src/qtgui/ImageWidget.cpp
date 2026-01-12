@@ -1,0 +1,197 @@
+#include "ImageWidget.h"
+#include "Renderer.h"
+#include <QPainter>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <QtMath>
+#include <QDebug>
+#include "../libcolorscreen/include/imagedata.h" 
+#include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/progress-info.h"
+
+// Ensure shared ptr can be passed via signals
+Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
+Q_DECLARE_METATYPE(colorscreen::render_parameters)
+
+ImageWidget::ImageWidget(QWidget *parent)
+    : QWidget(parent)
+{
+    qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
+    qRegisterMetaType<colorscreen::render_parameters>();
+    
+    // Background color
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, Qt::darkGray);
+    setAutoFillBackground(true);
+    setPalette(pal);
+    
+    setMouseTracking(false); // Only track when dragging
+}
+
+ImageWidget::~ImageWidget()
+{
+    if (m_renderThread) {
+        m_renderThread->quit();
+        m_renderThread->wait();
+    }
+}
+
+void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan, colorscreen::render_parameters *rparams)
+{
+    m_scan = scan;
+    m_rparams = rparams;
+
+    // Reset View
+    if (m_scan && m_scan->width > 0) {
+        // Fit to view
+        double w = width();
+        double h = height();
+        if (w > 0 && h > 0) {
+           double scaleX = w / (double)m_scan->width;
+           double scaleY = h / (double)m_scan->height;
+           m_scale = qMin(scaleX, scaleY);
+           if (m_scale == 0) m_scale = 1.0;
+        } else {
+            m_scale = 0.1; // Fallback
+        }
+        m_viewX = 0;
+        m_viewY = 0;
+    }
+
+    // Initialize Renderer if needed
+    if (m_renderer) {
+        m_renderer->deleteLater();
+        m_renderer = nullptr;
+    }
+    if (m_renderThread) {
+        m_renderThread->quit();
+        m_renderThread->wait();
+        m_renderThread->deleteLater();
+        m_renderThread = nullptr;
+    }
+    
+    m_renderThread = new QThread(this);
+    // Pass shared_ptr and value copy of params
+    m_renderer = new Renderer(m_scan, *m_rparams);
+    m_renderer->moveToThread(m_renderThread);
+
+    connect(m_renderThread, &QThread::finished, m_renderer, &QObject::deleteLater);
+    connect(m_renderer, &Renderer::imageReady, this, &ImageWidget::handleImageReady);
+    
+    m_renderThread->start();
+
+    requestRender();
+    update();
+}
+
+void ImageWidget::requestRender()
+{
+    if (!m_renderer || !m_scan) return;
+    
+    // Cancel previous
+    if (m_currentProgress) {
+        m_currentProgress->cancel();
+        emit progressFinished(m_currentProgress);
+        m_currentProgress.reset();
+    }
+
+    m_currentReqId++;
+    double xOff = m_viewX * m_scale;
+    double yOff = m_viewY * m_scale;
+    
+    m_currentProgress = std::make_shared<colorscreen::progress_info>();
+    m_currentProgress->set_task("Rendering", 0);
+    emit progressStarted(m_currentProgress);
+    
+    // Invoke render on worker thread
+    QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
+        Q_ARG(int, m_currentReqId),
+        Q_ARG(double, xOff),
+        Q_ARG(double, yOff),
+        Q_ARG(double, m_scale),
+        Q_ARG(int, width()),
+        Q_ARG(int, height()),
+        Q_ARG(colorscreen::render_parameters, *m_rparams),
+        Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_currentProgress)
+    );
+}
+
+void ImageWidget::handleImageReady(int reqId, QImage image, double x, double y, double scale)
+{
+    if (reqId == m_currentReqId) {
+        m_pixmap = image;
+        if (m_currentProgress) {
+             emit progressFinished(m_currentProgress);
+             m_currentProgress.reset();
+        }
+        update();
+    }
+}
+
+void ImageWidget::paintEvent(QPaintEvent *event)
+{
+    QPainter p(this);
+    if (!m_pixmap.isNull()) {
+        p.drawImage(0, 0, m_pixmap);
+    } else {
+        p.drawText(rect(), Qt::AlignCenter, "No Image");
+    }
+}
+
+void ImageWidget::resizeEvent(QResizeEvent *event)
+{
+    requestRender();
+}
+
+void ImageWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_isDragging = true;
+        m_lastMousePos = event->pos();
+    }
+}
+
+void ImageWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if (m_isDragging) {
+        QPoint delta = event->pos() - m_lastMousePos;
+        m_lastMousePos = event->pos();
+
+        // Move view opposite to drag
+        m_viewX -= delta.x() / m_scale;
+        m_viewY -= delta.y() / m_scale;
+
+        requestRender();
+    }
+}
+
+void ImageWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_isDragging = false;
+    }
+}
+
+void ImageWidget::wheelEvent(QWheelEvent *event)
+{
+    double numDegrees = event->angleDelta().y() / 8.0;
+    double numSteps = numDegrees / 15.0;
+    double factor = qPow(1.1, numSteps);
+
+    double mouseX = event->position().x();
+    double mouseY = event->position().y();
+
+    double mouseImageX = m_viewX + mouseX / m_scale;
+    double mouseImageY = m_viewY + mouseY / m_scale;
+
+    m_scale *= factor;
+    
+    // Clamp scale? (Optional)
+
+    // Adjust view so mouseImageX remains under mouseX
+    // new_viewX + mouseX / new_scale = mouseImageX
+    m_viewX = mouseImageX - mouseX / m_scale;
+    m_viewY = mouseImageY - mouseY / m_scale;
+
+    requestRender();
+}

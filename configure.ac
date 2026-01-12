@@ -178,7 +178,22 @@ AC_ARG_ENABLE([static-link],AS_HELP_STRING([--disable-static-link],
 AM_CONDITIONAL([static_link], [test "$enable_static_link" != "no"])
 AM_CONDITIONAL([gtkgui], [test x"$enable_gtkgui" == x"yes"])
 AM_CONDITIONAL([RENDER_EXTRA], [test x"$enable_render_extra" == x"yes"])
-AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
+
+AC_ARG_ENABLE([qtgui],AS_HELP_STRING([--enable-qtgui],
+				     [enable Qt6 based gui interface]))
+if test x"$enable_qtgui" == x"yes"; then
+  PKG_CHECK_MODULES([Qt6], [Qt6Core Qt6Gui Qt6Widgets Qt6Concurrent])
+  
+  # Search for moc in specific qt6 path first, then general names
+  AC_PATH_PROGS(MOC, [moc-qt6 moc], [], [/usr/libexec/qt6:$PATH])
+  
+  if test -z "$MOC"; then
+    AC_MSG_ERROR([moc not found. Please install Qt6 development tools.])
+  fi
+fi
+AM_CONDITIONAL([qtgui], [test x"$enable_qtgui" == x"yes"])
+
+AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
 AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h])
 
 AC_OUTPUT
