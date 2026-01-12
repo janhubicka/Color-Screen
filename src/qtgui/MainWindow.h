@@ -41,6 +41,8 @@ private slots:
     void onImageLoaded(); // Called when image is ready
     void onOpenParameters();
     void onModeChanged(int index); // Slot for mode change
+    void rotateLeft();
+    void rotateRight();
 
 private:
     void setupUi();

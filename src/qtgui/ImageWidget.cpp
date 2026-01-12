@@ -54,9 +54,23 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
         // Fit to view
         double w = width();
         double h = height();
+        
+        // Handle rotation for scale calculation
+        double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
+        int angle = (int)rot; 
+        angle = angle % 360;
+        if (angle < 0) angle += 360;
+        
+        double imgW = m_scan->width;
+        double imgH = m_scan->height;
+        
+        if (angle == 90 || angle == 270) {
+            std::swap(imgW, imgH);
+        }
+
         if (w > 0 && h > 0) {
-           double scaleX = w / (double)m_scan->width;
-           double scaleY = h / (double)m_scan->height;
+           double scaleX = w / imgW;
+           double scaleY = h / imgH;
            m_scale = qMin(scaleX, scaleY);
            if (m_scale == 0) m_scale = 1.0;
         } else {

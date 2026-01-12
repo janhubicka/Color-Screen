@@ -116,7 +116,28 @@ void MainWindow::createToolbar()
             this, &MainWindow::onModeChanged);
     m_toolbar->addWidget(m_modeComboBox);
     
+    m_toolbar->addSeparator();
+    QAction *rotLeftAction = m_toolbar->addAction("Rotate Left");
+    connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
+    
+    QAction *rotRightAction = m_toolbar->addAction("Rotate Right");
+    connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
+    
     updateModeMenu();
+}
+
+void MainWindow::rotateLeft()
+{
+    if (!m_scan) return;
+    m_scrToImgParams.final_rotation -= 90.0;
+    m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+}
+
+void MainWindow::rotateRight()
+{
+    if (!m_scan) return;
+    m_scrToImgParams.final_rotation += 90.0;
+    m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
 }
 
 void MainWindow::updateModeMenu()
