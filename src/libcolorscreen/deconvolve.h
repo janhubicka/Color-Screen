@@ -183,7 +183,7 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
   for (int y = 0; y < height; y += d.get_basic_tile_size ())
     for (int x = 0; x < width; x += d.get_basic_tile_size ())
       {
-        if (progress && progress->cancelled ())
+        if (progress && progress->cancel_requested ())
           continue;
         int id = parallel ? omp_get_thread_num () : 0;
         d.init (id);

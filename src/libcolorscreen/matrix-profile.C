@@ -512,7 +512,7 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
       color_matrix c = determine_color_matrix (
           colors.data (), NULL, targets.data (), n, d50_white, 3, report, &r,
           proportions, progress);
-      if (progress && progress->cancelled ())
+      if (!progress && progress->cancel_requested ())
         return false;
       /* Do basic sanity check.  All the values should be relative close to
          range 0...1  */
