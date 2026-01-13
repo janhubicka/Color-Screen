@@ -67,7 +67,12 @@ private:
 
     Renderer *m_renderer = nullptr;
     QThread *m_renderThread = nullptr;
-    std::shared_ptr<colorscreen::progress_info> m_currentProgress; // Track current render progress
+    
+    std::shared_ptr<colorscreen::progress_info> m_currentProgress;
+    
+    // Single-thread rendering queue
+    bool m_renderInProgress = false;
+    bool m_hasPendingRender = false;
     
     QImage m_previewImage;
     double m_previewScale = 1.0; // Scale of preview relative to original scan

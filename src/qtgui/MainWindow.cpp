@@ -832,7 +832,7 @@ void MainWindow::applyState(const ParameterState &state)
     
     // Update widgets - use updateParameters to avoid blocking
     if (m_scan) {
-        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
         m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
     }
     

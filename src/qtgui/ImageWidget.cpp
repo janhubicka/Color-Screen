@@ -119,22 +119,34 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
     update();
 
-    // Initialize Renderer if needed
-    if (m_renderer) {
-        m_renderer->deleteLater();
-        m_renderer = nullptr;
+    // Cancel current progress if exists
+    if (m_currentProgress) {
+        m_currentProgress->cancel();
     }
+
+    // Let old renderer finish naturally
     if (m_renderThread) {
-        m_renderThread->quit();
         m_renderThread->wait();
         m_renderThread->deleteLater();
         m_renderThread = nullptr;
     }
+    if (m_renderer) {
+        m_renderer->deleteLater();
+        m_renderer = nullptr;
+    }
+    
+    // Manually emit progressFinished for current progress
+    if (m_currentProgress) {
+        emit progressFinished(m_currentProgress);
+        m_currentProgress.reset();
+    }
+    
+    // Reset render queue state for new renderer
+    m_renderInProgress = false;
+    m_hasPendingRender = false;
     
     if (m_scan && m_rparams) {
         m_renderThread = new QThread(this);
-        // Pass shared_ptr and value copy of params
-        // Check for null pointers on new params, though they should be valid if called from MainWindow
         static colorscreen::scr_to_img_parameters defaultScrToImg;
         static colorscreen::scr_detect_parameters defaultScrDetect;
         static colorscreen::render_type_parameters defaultRenderType;
@@ -164,23 +176,20 @@ void ImageWidget::updateParameters(colorscreen::render_parameters *rparams,
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
-    if (renderType) {
-        m_renderType = renderType;
-    }
+    m_renderType = renderType;
     
-    // Update renderer's cached copies (on worker thread)
-    if (m_renderer && rparams && scrToImg && scrDetect && m_renderType) {
+    // Update renderer's cached parameters if it exists
+    if (m_renderer) {
         QMetaObject::invokeMethod(m_renderer, "updateParameters", Qt::QueuedConnection,
-            Q_ARG(colorscreen::render_parameters, *rparams),
-            Q_ARG(colorscreen::scr_to_img_parameters, *scrToImg),
-            Q_ARG(colorscreen::scr_detect_parameters, *scrDetect),
-            Q_ARG(colorscreen::render_type_parameters, *m_renderType));
+            Q_ARG(colorscreen::render_parameters, m_rparams ? *m_rparams : colorscreen::render_parameters()),
+            Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters()),
+            Q_ARG(colorscreen::scr_detect_parameters, m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters()),
+            Q_ARG(colorscreen::render_type_parameters, m_renderType ? *m_renderType : colorscreen::render_type_parameters())
+        );
     }
     
-    // Request new render with updated parameters
-    if (m_scan && m_renderer) {
-        requestRender();
-    }
+    // Request Re-render
+    requestRender();
 }
 
 
@@ -188,14 +197,23 @@ void ImageWidget::requestRender()
 {
     if (!m_renderer || !m_scan) return;
     
-    // Cancel previous
-    if (m_currentProgress) {
-        m_currentProgress->cancel();
-        emit progressFinished(m_currentProgress);
-        m_currentProgress.reset();
+    // If render is in progress, cancel it and queue this request as pending
+    if (m_renderInProgress) {
+        if (m_currentProgress) {
+            m_currentProgress->cancel();
+        }
+        // Store pending render parameters (only latest)
+        m_hasPendingRender = true;
+        m_pendingViewX = m_viewX;
+        m_pendingViewY = m_viewY;
+        m_pendingScale = m_scale;
+        return;  // Don't start render yet, wait for current to finish
     }
-
-    m_currentReqId++;
+    
+    // No render in progress, start new one
+    m_renderInProgress = true;
+    m_hasPendingRender = false;
+    
     double xOff = m_viewX * m_scale;
     double yOff = m_viewY * m_scale;
     
@@ -204,8 +222,9 @@ void ImageWidget::requestRender()
     emit progressStarted(m_currentProgress);
     
     // Invoke render on worker thread
-    QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
-        Q_ARG(int, m_currentReqId),
+    QMetaObject::invokeMethod(m_renderer, "render",
+        Qt::QueuedConnection,
+        Q_ARG(int, 0),  // reqId not needed anymore
         Q_ARG(double, xOff),
         Q_ARG(double, yOff),
         Q_ARG(double, m_scale),
@@ -218,30 +237,33 @@ void ImageWidget::requestRender()
 
 void ImageWidget::handleImageReady(int reqId, QImage image, double x, double y, double scale, bool success)
 {
-    if (reqId == m_currentReqId) {
-        // Check if render was cancelled
-        bool wasCancelled = false;
-        if (m_currentProgress) {
-            wasCancelled = m_currentProgress->cancelled();
-            emit progressFinished(m_currentProgress);
-            m_currentProgress.reset();
-        }
-        
-        if (wasCancelled) {
-            // Do nothing if cancelled - user interrupted the render
-            return;
-        }
-        
-        if (!success) {
-            // Show error message to user
-            QMessageBox::warning(this, "Rendering Error", 
-                "Failed to render image. The rendering process encountered an error.");
-            return;
-        }
-        
+    // This is always the current render completing (only one active at a time)
+    bool wasCancelled = false;
+    if (m_currentProgress) {
+        wasCancelled = m_currentProgress->cancelled();
+        emit progressFinished(m_currentProgress);
+        m_currentProgress.reset();
+    }
+    
+    // Mark render as no longer in progress
+    m_renderInProgress = false;
+    
+    if (wasCancelled) {
+        // Do nothing with image if cancelled
+    } else if (!success) {
+        // Show error message to user
+        QMessageBox::warning(this, "Rendering Error", 
+            "Failed to render image. The rendering process encountered an error.");
+    } else {
         // Success - update the displayed image
         m_pixmap = image;
         update();
+    }
+    
+    // Start pending render if one is queued
+    if (m_hasPendingRender) {
+        m_hasPendingRender = false;
+        requestRender();
     }
 }
 

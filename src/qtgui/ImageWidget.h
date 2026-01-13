@@ -80,8 +80,14 @@ private:
     double m_viewY = 0.0;
     double m_minScale = 0.1; // Calculated 'fit' scale
 
-    int m_currentReqId = 0;
-    std::shared_ptr<colorscreen::progress_info> m_currentProgress; // Track current progress info
+    std::shared_ptr<colorscreen::progress_info> m_currentProgress;
+    
+    // Single-thread rendering queue
+    bool m_renderInProgress = false;
+    bool m_hasPendingRender = false;
+    double m_pendingViewX = 0.0;
+    double m_pendingViewY = 0.0;
+    double m_pendingScale = 1.0;
 
     // Interaction
     QPoint m_lastMousePos;
