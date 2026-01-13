@@ -25,6 +25,8 @@ MOC_SOURCES = \
     moc_SmartSpinBox.cpp \
     moc_MTFChartWidget.cpp
 
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h
+
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)
 
