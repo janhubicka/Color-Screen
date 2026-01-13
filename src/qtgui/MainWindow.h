@@ -22,6 +22,7 @@ class QSplitter;
 class QTabWidget;
 class QToolBar; // Added
 class QComboBox; // Added
+class QCheckBox; // Added
 class QVBoxLayout; // Added for Linearization tab
 class ImageWidget;
 class NavigationView;
@@ -60,6 +61,7 @@ private slots:
     void onModeChanged(int index); // Slot for mode change
     void rotateLeft();
     void rotateRight();
+    void onColorCheckBoxChanged(bool checked); // Slot for color checkbox
     
     // Recent Files
     void openRecentFile();
@@ -94,6 +96,7 @@ private:
 
     QToolBar *m_toolbar; // New toolbar
     QComboBox *m_modeComboBox; // Mode selector
+    QCheckBox *m_colorCheckBox; // Color checkbox (IR/RGB switch)
 
     // Core Data
     // We keep shared copies or references. 

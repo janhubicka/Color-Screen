@@ -3,6 +3,7 @@
 #include <QMenu>
 #include <QToolBar>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -207,6 +208,12 @@ void MainWindow::createToolbar()
     QAction *rotRightAction = m_toolbar->addAction(QIcon::fromTheme("object-rotate-right"), "Rotate Right");
     connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
     
+    m_toolbar->addSeparator();
+    m_colorCheckBox = new QCheckBox("Color", m_toolbar);
+    m_colorCheckBox->setEnabled(false); // Initially disabled
+    connect(m_colorCheckBox, &QCheckBox::toggled, this, &MainWindow::onColorCheckBoxChanged);
+    m_toolbar->addWidget(m_colorCheckBox);
+    
     updateModeMenu();
 }
 
@@ -224,6 +231,17 @@ void MainWindow::rotateRight()
     m_scrToImgParams.final_rotation += 90.0;
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+}
+
+void MainWindow::onColorCheckBoxChanged(bool checked)
+{
+    // Update the color field in render_type_parameters
+    m_renderTypeParams.color = checked;
+    
+    // Trigger re-render when color changes
+    if (m_scan) {
+        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+    }
 }
 
 void MainWindow::updateModeMenu()
@@ -280,6 +298,14 @@ void MainWindow::updateModeMenu()
         // Let's defer that to user interaction or explicit set.
     }
     
+    // Update color checkbox state based on current render type
+    const render_type_property &currentProp = render_type_properties[(int)m_renderTypeParams.type];
+    bool supportsColorSwitch = currentProp.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
+    m_colorCheckBox->setEnabled(supportsColorSwitch);
+    m_colorCheckBox->blockSignals(true);
+    m_colorCheckBox->setChecked(m_renderTypeParams.color);
+    m_colorCheckBox->blockSignals(false);
+    
     m_modeComboBox->blockSignals(false);
 }
 
@@ -291,6 +317,16 @@ void MainWindow::onModeChanged(int index)
     if (newType >= 0 && newType < colorscreen::render_type_max) {
         if (m_renderTypeParams.type != (colorscreen::render_type_t)newType) {
             m_renderTypeParams.type = (colorscreen::render_type_t)newType;
+            
+            // Update color checkbox based on new render type
+            using namespace colorscreen;
+            const render_type_property &prop = render_type_properties[newType];
+            bool supportsColorSwitch = prop.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
+            m_colorCheckBox->setEnabled(supportsColorSwitch);
+            m_colorCheckBox->blockSignals(true);
+            m_colorCheckBox->setChecked(m_renderTypeParams.color);
+            m_colorCheckBox->blockSignals(false);
+            
             // Trigger render update
             if (m_scan) {
                 m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);

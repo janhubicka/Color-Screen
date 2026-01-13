@@ -9,7 +9,8 @@ colorscreen_qt_SOURCES = \
     ParameterState.cpp \
     LinearizationPanel.cpp \
     ParameterPanel.cpp \
-    SharpnessPanel.cpp
+    SharpnessPanel.cpp \
+    MTFChartWidget.cpp
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT
@@ -21,7 +22,8 @@ MOC_SOURCES = \
     moc_LinearizationPanel.cpp \
     moc_ParameterPanel.cpp \
     moc_SharpnessPanel.cpp \
-    moc_SmartSpinBox.cpp
+    moc_SmartSpinBox.cpp \
+    moc_MTFChartWidget.cpp
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)

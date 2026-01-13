@@ -8,17 +8,30 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QToolButton>
+#include <QScrollArea>
 #include "../libcolorscreen/include/base.h"
 
 ParameterPanel::ParameterPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
-    : QWidget(parent)
-    , m_stateGetter(stateGetter)
-    , m_stateSetter(stateSetter)
-    , m_imageGetter(imageGetter)
+    : QWidget(parent),
+      m_stateGetter(stateGetter),
+      m_stateSetter(stateSetter),
+      m_imageGetter(imageGetter),
+      m_currentGroupForm(nullptr)
 {
     m_layout = new QVBoxLayout(this);
-    m_form = new QFormLayout();
-    m_layout->addLayout(m_form);
+    m_layout->setContentsMargins(0, 0, 0, 0);
+
+    // Create scroll area for the form
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    QWidget *scrollWidget = new QWidget();
+    m_form = new QFormLayout(scrollWidget);
+    scrollArea->setWidget(scrollWidget);
+
+    m_layout->addWidget(scrollArea);
 }
 
 ParameterPanel::~ParameterPanel() = default;
@@ -33,9 +46,12 @@ void ParameterPanel::updateUI()
     }
     
     // Update Widget State (Availability)
-    for (auto &updater : m_widgetStateUpdaters) {
-        updater();
+    for (auto &widgetUpdater : m_widgetStateUpdaters) {
+        widgetUpdater();
     }
+    
+    // Call virtual method for derived classes
+    onParametersRefreshed(state);
 }
 
 void ParameterPanel::applyChange(std::function<void(ParameterState&)> modifier)
@@ -289,7 +305,7 @@ void ParameterPanel::addEnumParameter(const QString &label, const std::map<int, 
     }
 }
 
-void ParameterPanel::addSeparator(const QString &title)
+QToolButton* ParameterPanel::addSeparator(const QString &title)
 {
     QGroupBox *group = new QGroupBox();
     group->setFlat(true);
@@ -353,4 +369,6 @@ void ParameterPanel::addSeparator(const QString &title)
     
     m_form->addRow(group);
     m_currentGroupForm = groupForm;
+    
+    return arrowBtn;  // Return the toggle button
 }

@@ -2,6 +2,7 @@
 #define PARAMETER_PANEL_H
 
 #include <QWidget>
+#include <QToolButton>
 #include <vector>
 #include <functional>
 #include <map>
@@ -58,9 +59,10 @@ protected:
                           std::function<void(ParameterState&, int)> setter,
                           std::function<bool(const ParameterState&)> enabledCheck = nullptr);
     
-    void addSeparator(const QString &title);
+    QToolButton* addSeparator(const QString &title);
 
 protected:
+    virtual void applyChange(std::function<void(ParameterState&)> modifier);
     QFormLayout *m_currentGroupForm = nullptr;
     
     StateGetter m_stateGetter;
@@ -73,8 +75,7 @@ protected:
     std::vector<std::function<void(const ParameterState&)>> m_paramUpdaters;
     std::vector<std::function<void()>> m_widgetStateUpdaters;
     
-    // Helper to emit changes
-    void applyChange(std::function<void(ParameterState&)> modifier);
+    virtual void onParametersRefreshed(const ParameterState &state) {}
 };
 
 #endif // PARAMETER_PANEL_H

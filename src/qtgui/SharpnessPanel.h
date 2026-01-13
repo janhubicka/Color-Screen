@@ -3,6 +3,8 @@
 
 #include "ParameterPanel.h"
 
+class MTFChartWidget;
+
 class SharpnessPanel : public ParameterPanel
 {
     Q_OBJECT
@@ -12,6 +14,11 @@ public:
 
 private:
     void setupUi();
+    void updateMTFChart();
+    void applyChange(std::function<void(ParameterState&)> modifier) override;
+    void onParametersRefreshed(const ParameterState &state) override;
+    
+    MTFChartWidget *m_mtfChart = nullptr;
 };
 
 #endif // SHARPNESS_PANEL_H

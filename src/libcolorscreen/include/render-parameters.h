@@ -125,6 +125,7 @@ struct mtf_parameters
       std::vector<double> gaussian_blur_mtf;
       std::vector<double> stokseth_defocus_mtf;
       std::vector<double> lens_difraction_mtf;
+      std::vector<double> lens_mtf;
   };
   
   DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);

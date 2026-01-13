@@ -1,4 +1,10 @@
 #include "SharpnessPanel.h"
+#include "MTFChartWidget.h"
+#include "../libcolorscreen/include/render-parameters.h"
+#include <QFormLayout>
+
+using namespace colorscreen;
+using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
 
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
@@ -10,18 +16,31 @@ SharpnessPanel::~SharpnessPanel() = default;
 
 void SharpnessPanel::setupUi()
 {
-    // Sharpen Mode
+    // Sharpen mode dropdown
     std::map<int, QString> sharpenModes;
-    for (int i = 0; i < (int)colorscreen::sharpen_parameters::sharpen_mode_max; ++i) {
-        sharpenModes[i] = QString::fromUtf8(colorscreen::sharpen_parameters::sharpen_mode_names[i]);
+    for (int i = 0; i < (int)sharpen_mode::sharpen_mode_max; ++i) {
+        sharpenModes[i] = QString::fromUtf8(sharpen_parameters::sharpen_mode_names[i]);
     }
     
-    addEnumParameter("Sharpen", sharpenModes,
+    addEnumParameter(
+        "Sharpen",
+        sharpenModes,
         [](const ParameterState &s) { return (int)s.rparams.sharpen.mode; },
-        [](ParameterState &s, int v) { s.rparams.sharpen.mode = (colorscreen::sharpen_parameters::sharpen_mode)v; }
+        [](ParameterState &s, int v) { s.rparams.sharpen.mode = (sharpen_mode)v; }
     );
     
-    addSeparator("Scanner/Camera properties");
+    QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
+    
+    // MTF Chart
+    m_mtfChart = new MTFChartWidget();
+    m_mtfChart->setMinimumHeight(250);
+    m_form->addRow(m_mtfChart);
+    updateMTFChart();
+    
+    // Connect separator toggle to chart visibility
+    if (separatorToggle) {
+        connect(separatorToggle, &QToolButton::toggled, m_mtfChart, &QWidget::setVisible);
+    }
     
     // Gaussian blur (Sigma)
     // Range 0.0 - 20.0, Pixels.
@@ -84,4 +103,28 @@ void SharpnessPanel::setupUi()
     );
     
     addSeparator("Unsharp mask");
+}
+
+void SharpnessPanel::updateMTFChart()
+{
+    if (!m_mtfChart)
+        return;
+    
+    ParameterState state = m_stateGetter();
+    
+    // Compute MTF curves with 100 steps
+    mtf_parameters::computed_mtf curves = state.rparams.sharpen.scanner_mtf.compute_curves(100);
+    
+    m_mtfChart->setMTFData(curves);
+}
+
+void SharpnessPanel::applyChange(std::function<void(ParameterState&)> modifier)
+{
+    ParameterPanel::applyChange(modifier);
+    updateMTFChart();
+}
+
+void SharpnessPanel::onParametersRefreshed(const ParameterState &state)
+{
+    updateMTFChart();
 }
