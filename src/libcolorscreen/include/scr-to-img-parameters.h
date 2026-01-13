@@ -219,7 +219,7 @@ struct scr_to_img_parameters
     free (motor_correction_y);
   }
   bool
-  operator== (scr_to_img_parameters &other) const
+  operator== (const scr_to_img_parameters &other) const
   {
     if (n_motor_corrections != other.n_motor_corrections)
       return false;

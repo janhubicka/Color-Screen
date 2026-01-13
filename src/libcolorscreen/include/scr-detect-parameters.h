@@ -27,7 +27,7 @@ struct scr_detect_parameters
   coord_t sharpen_radius;
   luminosity_t sharpen_amount;
   bool
-  operator== (scr_detect_parameters &other) const
+  operator== (const scr_detect_parameters &other) const
   {
     return black == other.black && red == other.red && green == other.green
            && blue == other.blue && sharpen_radius == other.sharpen_radius

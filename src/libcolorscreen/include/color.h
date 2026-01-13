@@ -335,7 +335,7 @@ struct rgbdata
   { }
   rgbdata (const std::nothrow_t&)
   { }
-  bool operator== (rgbdata &other) const
+  bool operator== (const rgbdata &other) const
   {
     return red == other.red
 	   && green == other.green

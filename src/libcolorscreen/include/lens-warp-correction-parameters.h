@@ -17,7 +17,7 @@ struct lens_warp_correction_parameters
   }
 
   pure_attr bool
-  operator== (lens_warp_correction_parameters &other) const
+  operator== (const lens_warp_correction_parameters &other) const
   {
     return center == other.center && kr[0] == other.kr[0]
            && kr[1] == other.kr[1] && kr[2] == other.kr[2]

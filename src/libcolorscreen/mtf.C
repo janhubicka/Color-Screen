@@ -970,6 +970,7 @@ mtf_parameters::compute_curves (int steps) const
   result.stokseth_defocus_mtf.reserve (steps);
   result.lens_difraction_mtf.reserve (steps);
   result.lens_mtf.reserve (steps);
+  result.hopkins_blur_mtf.reserve (steps);
   
   for (int i = 0; i < steps; i++)
     {
@@ -980,6 +981,7 @@ mtf_parameters::compute_curves (int steps) const
       result.lens_mtf.push_back (lens_mtf (freq));
       result.sensor_mtf.push_back (sensor_mtf (freq));
       result.system_mtf.push_back (system_mtf (freq));
+      result.hopkins_blur_mtf.push_back (defocus_mtf (freq, blur_diameter));
     }
   
   return result;

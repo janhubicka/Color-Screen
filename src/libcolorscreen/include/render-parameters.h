@@ -148,6 +148,7 @@ struct mtf_parameters
       std::vector<double> stokseth_defocus_mtf;
       std::vector<double> lens_difraction_mtf;
       std::vector<double> lens_mtf;
+      std::vector<double> hopkins_blur_mtf;
   };
   
   DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);
@@ -278,7 +279,7 @@ struct sharpen_parameters
     return mode == o.mode
 	   && usm_radius == o.usm_radius
            && usm_amount == o.usm_amount
-	   && scanner_mtf == o.scanner_mtf
+	   && scanner_mtf.equal_p (o.scanner_mtf)
 	   && scanner_snr == o.scanner_snr
 	   && scanner_mtf_scale == o.scanner_mtf_scale
 	   && richardson_lucy_iterations == o.richardson_lucy_iterations
@@ -349,14 +350,14 @@ struct render_parameters
     {
     }
     bool
-    operator== (tile_adjustment &other) const
+    operator== (const tile_adjustment &other) const
     {
       return enabled == other.enabled && dark_point == other.dark_point
              && exposure == other.exposure
              && scanner_blur_correction == other.scanner_blur_correction;
     }
     bool
-    operator!= (tile_adjustment &other) const
+    operator!= (const tile_adjustment &other) const
     {
       return !(*this == other);
     }
@@ -598,7 +599,7 @@ struct render_parameters
   DLL_PUBLIC tile_adjustment &get_tile_adjustment (int x, int y);
 
   bool
-  operator== (render_parameters &other) const
+  operator== (const render_parameters &other) const
   {
     if (tile_adjustments.size () != other.tile_adjustments.size ()
         || tile_adjustments_width != other.tile_adjustments_width
