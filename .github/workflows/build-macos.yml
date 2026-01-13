@@ -78,45 +78,6 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
-    - name: Set up Maven
-      uses: stCarolas/setup-maven@v5
-      with:
-        maven-version: 3.9.6
-    - name: test maven
-      run: mvn -v
-    - name: digital coloring GUI
-      run: git clone https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI.git
-    - name: Set properties
-      run: cp .github/workflows/digital-coloring-github-macos.properties Color-Screen-GUI/src/main/resources/maven-config-properties/user.properties
-    - name: Downgrade java in maven
-      run: sed -i.bck s/21/18/ Color-Screen-GUI/pom.xml
-    - name: setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '18'
-        distribution: 'temurin'
-        cache: maven
-        cache-dependency-path: Color-Screen-GUI/pom.xml
-    - name: Run maven build
-      run: cd Color-Screen-GUI ; mvn  clean package
-    - uses: actions/upload-artifact@v4
-      with:
-        name: macOS-colorscreenGUI-target
-        path: Color-Screen-GUI/target
-    - name: Package GUI
-      run: |
-        mkdir Color-Screen-GUI-package
-        mkdir Color-Screen-GUI-package/lib
-        cp Color-Screen-GUI/target/lib/librender.dylib Color-Screen-GUI-package/lib
-        #cp -r Color-Screen-GUI/target/src Color-Screen-GUI-package/src
-        dylibbundler -od -b -x Color-Screen-GUI-package/lib/librender.dylib -d Color-Screen-GUI-package/libs -p @loader_path/libs
-        otool -L Color-Screen-GUI-package/lib/librender.dylib
-        cp Color-Screen-GUI/target/*dependencies*jar Color-Screen-GUI-package/Color-Screen-GUI.jar
-        ditto -ck --rsrc --sequesterRsrc Color-Screen-GUI-package Color-Screen-GUI-package.zip
-    - uses: actions/upload-artifact@v4
-      with:
-        name: macOS-colorscreenGUI-package
-        path: Color-Screen-GUI-package.zip
     - name: Package CLI
       run: |
         mkdir Color-Screen-package
@@ -155,19 +116,3 @@ jobs:
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
       run: Color-Screen-package/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
-    - name: build package
-      run: |
-        cd Color-Screen-GUI/InstallPackaging/macOS
-        jpackage --name Color-Screen-GUI-Demo \
-                 --input InstallSource \
-                 --main-jar color-screen-gui.jar \
-                 --module-path InstallSource/lib \
-                 --add-modules javafx.base,javafx.fxml,javafx.controls,javafx.graphics \
-                 --java-options '-Djava.library.path=$APPDIR/lib' \
-                 --license-file ../../LICENSE \
-                 --icon IconResources/Color-Screen-GUI-Demo.icns \
-                 --verbose
-    - uses: actions/upload-artifact@v4
-      with:
-        name: macOS-GUI-package
-        path: /Users/runner/work/Color-Screen/Color-Screen/Color-Screen-GUI/InstallPackaging/macOS/Color-Screen-GUI-Demo-1.0.dmg
