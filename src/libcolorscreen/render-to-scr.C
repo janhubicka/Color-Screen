@@ -120,6 +120,9 @@ struct screen_params
     return t == o.t && preview == o.preview 
 	   && anticipate_sharpening == o.anticipate_sharpening
 	   && sharpen == o.sharpen
+	   /* We also blur, so we need to compare MTF if used.  */
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
            && (!screen_with_varying_strips_p (t)
                || (red_strip_width == o.red_strip_width
                    && green_strip_width == o.green_strip_width));
@@ -175,6 +178,8 @@ struct screen_table_params
     return type == o.type && param_id == o.param_id
            && red_strip_width == o.red_strip_width
            && green_strip_width == o.green_strip_width
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
 	   && sharpen == o.sharpen;
   }
 };
@@ -215,6 +220,8 @@ struct saturation_loss_params
     return scr_table_id == o.scr_table_id
            && collection_threshold == o.collection_threshold
            && sharpen == o.sharpen
+	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
+	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
            && img_width == o.img_width && img_height == o.img_height
            && mesh_id == o.mesh_id
            && (mesh_id || scr_to_img_params == o.scr_to_img_params);
