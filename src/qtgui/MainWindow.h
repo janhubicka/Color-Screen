@@ -130,6 +130,8 @@ public:
 private slots:
     void onProgressTimer();
     void onCancelClicked();
+    void onPrevProgress();
+    void onNextProgress();
 
 private:
     // Status Bar Widgets
@@ -137,10 +139,16 @@ private:
     QLabel *m_statusLabel;
     QPushButton *m_cancelButton;
     QWidget *m_progressContainer; // Container for the above
+    
+    // Progress switcher UI (for multiple progresses)
+    QLabel *m_progressCountLabel;
+    QPushButton *m_prevProgressButton;
+    QPushButton *m_nextProgressButton;
 
     QTimer *m_progressTimer;
     std::vector<ProgressEntry> m_activeProgresses;
     std::shared_ptr<colorscreen::progress_info> m_currentlyDisplayedProgress; // Track displayed progress for cancel button
+    int m_manuallySelectedProgressIndex; // -1 = auto-select, >= 0 = manual selection
     
     // Helper to find the longest running task
     ProgressEntry* getLongestRunningTask();

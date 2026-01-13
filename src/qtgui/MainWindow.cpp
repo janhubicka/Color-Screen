@@ -177,26 +177,48 @@ void MainWindow::setupUi()
     QStatusBar *statusBar = new QStatusBar(this);
     setStatusBar(statusBar);
     
-    // Progress Container
-    m_progressContainer = new QWidget(this);
+    // Progress Container (initially hidden)
+    m_progressContainer = new QWidget(statusBar);
     QHBoxLayout *progressLayout = new QHBoxLayout(m_progressContainer);
     progressLayout->setContentsMargins(0, 0, 0, 0);
+    progressLayout->setSpacing(8);
+    
+    m_statusLabel = new QLabel("", m_progressContainer);
+    m_statusLabel->setMinimumWidth(150);
+    progressLayout->addWidget(m_statusLabel);
     
     m_progressBar = new QProgressBar(m_progressContainer);
     m_progressBar->setRange(0, 100);
-    m_progressBar->setTextVisible(true);
+    m_progressBar->setTextVisible(false);
+    m_progressBar->setMinimumWidth(200);
+    progressLayout->addWidget(m_progressBar);
     
-    m_statusLabel = new QLabel(m_progressContainer);
+    // Progress switcher (count + prev/next buttons)
+    m_progressCountLabel = new QLabel("1/1", m_progressContainer);
+    m_progressCountLabel->setMinimumWidth(40);
+    progressLayout->addWidget(m_progressCountLabel);
+    
+    m_prevProgressButton = new QPushButton("<", m_progressContainer);
+    m_prevProgressButton->setMaximumWidth(30);
+    m_prevProgressButton->setToolTip("Previous progress");
+    connect(m_prevProgressButton, &QPushButton::clicked, this, &MainWindow::onPrevProgress);
+    progressLayout->addWidget(m_prevProgressButton);
+    
+    m_nextProgressButton = new QPushButton(">", m_progressContainer);
+    m_nextProgressButton->setMaximumWidth(30);
+    m_nextProgressButton->setToolTip("Next progress");
+    connect(m_nextProgressButton, &QPushButton::clicked, this, &MainWindow::onNextProgress);
+    progressLayout->addWidget(m_nextProgressButton);
     
     m_cancelButton = new QPushButton("Cancel", m_progressContainer);
     connect(m_cancelButton, &QPushButton::clicked, this, &MainWindow::onCancelClicked);
-    
-    progressLayout->addWidget(m_statusLabel);
-    progressLayout->addWidget(m_progressBar);
     progressLayout->addWidget(m_cancelButton);
     
     statusBar->addPermanentWidget(m_progressContainer);
-    m_progressContainer->setVisible(false); // Hidden by default
+    m_progressContainer->setVisible(false);
+    
+    // Initialize manual selection tracking
+    m_manuallySelectedProgressIndex = -1;
     
     createToolbar(); // Initialize toolbar
 }
@@ -456,8 +478,10 @@ void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info)
 
 void MainWindow::removeProgress(std::shared_ptr<colorscreen::progress_info> info)
 {
+    int removedIndex = -1;
     for (auto it = m_activeProgresses.begin(); it != m_activeProgresses.end(); ++it) {
         if (it->info == info) {
+            removedIndex = std::distance(m_activeProgresses.begin(), it);
             m_activeProgresses.erase(it);
             break;
         }
@@ -468,10 +492,22 @@ void MainWindow::removeProgress(std::shared_ptr<colorscreen::progress_info> info
         m_currentlyDisplayedProgress.reset();
     }
     
+    // Handle manual selection when progress is removed
+    if (removedIndex >= 0) {
+        if (m_manuallySelectedProgressIndex == removedIndex) {
+            // The manually selected progress was removed, reset to auto-select
+            m_manuallySelectedProgressIndex = -1;
+        } else if (m_manuallySelectedProgressIndex > removedIndex) {
+            // Adjust index if progress before the selected one was removed
+            m_manuallySelectedProgressIndex--;
+        }
+    }
+    
     if (m_activeProgresses.empty()) {
         m_progressTimer->stop();
         m_progressContainer->setVisible(false);
         m_currentlyDisplayedProgress.reset();
+        m_manuallySelectedProgressIndex = -1;
     }
 }
 
@@ -509,16 +545,51 @@ ProgressEntry* MainWindow::getLongestRunningTask()
 
 void MainWindow::onProgressTimer()
 {
-    ProgressEntry* task = getLongestRunningTask();
-    if (!task) {
+    if (m_activeProgresses.empty()) {
         // No active tasks, hide progress
         m_progressContainer->setVisible(false);
         m_currentlyDisplayedProgress.reset();
+        m_manuallySelectedProgressIndex = -1;
         return;
     }
     
+    ProgressEntry* task = nullptr;
+    int currentIndex = 0;
+    
+    // Determine which progress to display
+    if (m_manuallySelectedProgressIndex >= 0 && 
+        m_manuallySelectedProgressIndex < (int)m_activeProgresses.size()) {
+        // Use manually selected progress
+        task = &m_activeProgresses[m_manuallySelectedProgressIndex];
+        currentIndex = m_manuallySelectedProgressIndex;
+    } else {
+        // Auto-select: use default logic
+        task = getLongestRunningTask();
+        if (task) {
+            // Find index of this task for display
+            for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
+                if (&m_activeProgresses[i] == task) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+        }
+        m_manuallySelectedProgressIndex = -1; // Reset manual selection
+    }
+    
+    if (!task) return;
+    
     // Track which progress is currently being displayed (for cancel button)
     m_currentlyDisplayedProgress = task->info;
+    
+    // Update progress count label
+    m_progressCountLabel->setText(QString("%1/%2").arg(currentIndex + 1).arg(m_activeProgresses.size()));
+    
+    // Show/hide prev/next buttons based on count
+    bool multipleProgresses = m_activeProgresses.size() > 1;
+    m_prevProgressButton->setVisible(multipleProgresses);
+    m_nextProgressButton->setVisible(multipleProgresses);
+    m_progressCountLabel->setVisible(multipleProgresses);
     
     if (task->startTime.elapsed() > 300) {
         if (!m_progressContainer->isVisible()) {
@@ -544,6 +615,44 @@ void MainWindow::onCancelClicked()
     if (m_currentlyDisplayedProgress) {
         m_currentlyDisplayedProgress->cancel();
     }
+}
+
+void MainWindow::onPrevProgress()
+{
+    if (m_activeProgresses.size() <= 1) return;
+    
+    // If not manually selected yet, start from current auto-selected index
+    if (m_manuallySelectedProgressIndex < 0) {
+        ProgressEntry* currentTask = getLongestRunningTask();
+        for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
+            if (&m_activeProgresses[i] == currentTask) {
+                m_manuallySelectedProgressIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Go to previous
+    m_manuallySelectedProgressIndex = (m_manuallySelectedProgressIndex - 1 + m_activeProgresses.size()) % m_activeProgresses.size();
+}
+
+void MainWindow::onNextProgress()
+{
+    if (m_activeProgresses.size() <= 1) return;
+    
+    // If not manually selected yet, start from current auto-selected index
+    if (m_manuallySelectedProgressIndex < 0) {
+        ProgressEntry* currentTask = getLongestRunningTask();
+        for (size_t i = 0; i < m_activeProgresses.size(); ++i) {
+            if (&m_activeProgresses[i] == currentTask) {
+                m_manuallySelectedProgressIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Go to next
+    m_manuallySelectedProgressIndex = (m_manuallySelectedProgressIndex + 1) % m_activeProgresses.size();
 }
 
 
