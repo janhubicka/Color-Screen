@@ -66,11 +66,18 @@ private slots:
     // Recent Files
     void openRecentFile();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     void setupUi();
     void createMenus();
     void createToolbar(); // New helper
     void updateModeMenu(); // Updates combo box items
+    
+    // Window state management
+    void saveWindowState();
+    void restoreWindowState();
     
     // Recent Files
     void updateRecentFileActions();

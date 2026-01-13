@@ -1,6 +1,9 @@
 #include "MainWindow.h"
 #include <QMenuBar>
 #include <QMenu>
+#include <QCloseEvent>
+#include <QScreen>
+#include <QApplication>
 #include <QToolBar>
 #include <QComboBox>
 #include <QCheckBox>
@@ -84,7 +87,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_undoStack = new QUndoStack(this);
 
     setupUi();
-    resize(1200, 800);
     
     // Progress Timer
     m_progressTimer = new QTimer(this);
@@ -92,6 +94,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_progressTimer, &QTimer::timeout, this, &MainWindow::onProgressTimer);
     
     loadRecentFiles();
+    
+    // Restore window state (position, size, splitters)
+    restoreWindowState();
     
     // Initialize UI state
     updateUIFromState(getCurrentState());
@@ -712,4 +717,72 @@ void MainWindow::changeParameters(const ParameterState &newState)
     m_undoStack->push(new ChangeParametersCommand(this, currentState, newState));
 }
 
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveWindowState();
+    event->accept();
+}
+
+void MainWindow::saveWindowState()
+{
+    QSettings settings;
+    
+    // Save window geometry and state
+    settings.setValue("windowGeometry", saveGeometry());
+    settings.setValue("windowState", saveState());
+    
+    // Save desktop size for validation on restore
+    QScreen *screen = QApplication::primaryScreen();
+    if (screen) {
+        settings.setValue("desktopSize", screen->availableGeometry().size());
+    }
+    
+    // Save splitter positions
+    if (m_mainSplitter) {
+        settings.setValue("mainSplitterState", m_mainSplitter->saveState());
+    }
+}
+
+void MainWindow::restoreWindowState()
+{
+    QSettings settings;
+    
+    // Check if desktop size has changed
+    bool desktopSizeValid = true;
+    QScreen *screen = QApplication::primaryScreen();
+    if (screen) {
+        QSize savedDesktopSize = settings.value("desktopSize").toSize();
+        QSize currentDesktopSize = screen->availableGeometry().size();
+        
+        // Allow some tolerance (e.g., taskbar changes)
+        if (savedDesktopSize.isValid()) {
+            int widthDiff = qAbs(savedDesktopSize.width() - currentDesktopSize.width());
+            int heightDiff = qAbs(savedDesktopSize.height() - currentDesktopSize.height());
+            
+            // If desktop size changed significantly (more than 100 pixels), don't restore
+            if (widthDiff > 100 || heightDiff > 100) {
+                desktopSizeValid = false;
+            }
+        }
+    }
+    
+    // Restore window geometry if desktop size is compatible
+    if (desktopSizeValid && settings.contains("windowGeometry")) {
+        restoreGeometry(settings.value("windowGeometry").toByteArray());
+        restoreState(settings.value("windowState").toByteArray());
+    } else {
+        // Default size and position
+        resize(1200, 800);
+        // Center on screen
+        if (screen) {
+            QRect screenGeometry = screen->availableGeometry();
+            move(screenGeometry.center() - rect().center());
+        }
+    }
+    
+    // Restore splitter state (always try this, it's safe)
+    if (m_mainSplitter && settings.contains("mainSplitterState")) {
+        m_mainSplitter->restoreState(settings.value("mainSplitterState").toByteArray());
+    }
+}
 
