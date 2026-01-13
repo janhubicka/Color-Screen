@@ -21,6 +21,7 @@
 #include <QtConcurrent>
 #include <QFutureWatcher>
 #include <QSettings>
+#include <QDateTime> // Added QDateTime include
 #include <QUndoStack>
 #include <QUndoCommand>
 #include <QDoubleSpinBox>
@@ -40,11 +41,12 @@ public:
         : m_window(window), m_oldState(oldState), m_newState(newState)
     {
         setText("Change Parameters");
+        m_timestamp = QDateTime::currentMSecsSinceEpoch();
     }
     
     int id() const override
     {
-        return 1234; // Unique ID for parameter changes
+        return 1; // All parameter changes have the same ID
     }
     
     bool mergeWith(const QUndoCommand *other) override
@@ -53,14 +55,16 @@ public:
         
         const ChangeParametersCommand *cmd = static_cast<const ChangeParametersCommand*>(other);
         
-        // We merged with 'other'. 'other' is the NEWER command. 
-        // We are the older command on the stack.
-        // Wait, QUndoStack::mergeWith(const QUndoCommand * command)
-        // "Attempts to merge this command with command. ... If this function returns true, command is deleted."
-        // "this" is the previous command. "command" is the new one.
-        // So we update OUR "newState" to be "command"s newState.
+        // Only merge if commands are within 500ms of each other (e.g., slider dragging)
+        qint64 timeDiff = cmd->m_timestamp - m_timestamp;
+        if (timeDiff > 500) {
+            return false; // Don't merge - create separate undo step
+        }
         
+        // Merge: update our newState to the newer command's newState
+        // This allows slider dragging to be one undo operation
         m_newState = cmd->m_newState;
+        m_timestamp = cmd->m_timestamp; // Update timestamp for next merge check
         return true;
     }
 
@@ -78,6 +82,7 @@ private:
     MainWindow *m_window;
     ParameterState m_oldState;
     ParameterState m_newState;
+    qint64 m_timestamp; // Timestamp for merge window
 };
 
 
@@ -458,30 +463,62 @@ void MainWindow::removeProgress(std::shared_ptr<colorscreen::progress_info> info
         }
     }
     
+    // Clear the currently displayed progress if it was the one we just removed
+    if (m_currentlyDisplayedProgress == info) {
+        m_currentlyDisplayedProgress.reset();
+    }
+    
     if (m_activeProgresses.empty()) {
         m_progressTimer->stop();
         m_progressContainer->setVisible(false);
+        m_currentlyDisplayedProgress.reset();
     }
 }
 
 ProgressEntry* MainWindow::getLongestRunningTask()
 {
-   ProgressEntry* maxEntry = nullptr;
-   qint64 maxTime = -1;
-   
-   for (auto &entry : m_activeProgresses) {
-       if (entry.startTime.elapsed() > maxTime) {
-           maxTime = entry.startTime.elapsed();
-           maxEntry = &entry;
-       }
-   }
-   return maxEntry;
+    ProgressEntry* oldestActive = nullptr;
+    ProgressEntry* oldestAny = nullptr;
+    qint64 maxActiveTime = -1;
+    qint64 maxAnyTime = -1;
+    
+    for (auto &entry : m_activeProgresses) {
+        qint64 elapsed = entry.startTime.elapsed();
+        
+        // Check if this task has non-zero progress
+        const char *tName = "";
+        float percent = 0;
+        entry.info->get_status(&tName, &percent);
+        
+        // Track oldest task with non-zero progress
+        if (percent > 0 && elapsed > maxActiveTime) {
+            maxActiveTime = elapsed;
+            oldestActive = &entry;
+        }
+        
+        // Also track oldest task overall as fallback
+        if (elapsed > maxAnyTime) {
+            maxAnyTime = elapsed;
+            oldestAny = &entry;
+        }
+    }
+    
+    // Prefer task with non-zero progress, otherwise use oldest
+    return oldestActive ? oldestActive : oldestAny;
 }
 
 void MainWindow::onProgressTimer()
 {
     ProgressEntry* task = getLongestRunningTask();
-    if (!task) return;
+    if (!task) {
+        // No active tasks, hide progress
+        m_progressContainer->setVisible(false);
+        m_currentlyDisplayedProgress.reset();
+        return;
+    }
+    
+    // Track which progress is currently being displayed (for cancel button)
+    m_currentlyDisplayedProgress = task->info;
     
     if (task->startTime.elapsed() > 300) {
         if (!m_progressContainer->isVisible()) {
@@ -503,9 +540,9 @@ void MainWindow::onProgressTimer()
 
 void MainWindow::onCancelClicked()
 {
-    ProgressEntry* task = getLongestRunningTask();
-    if (task && task->info) {
-        task->info->cancel();
+    // Cancel the currently displayed progress (not necessarily the longest running)
+    if (m_currentlyDisplayedProgress) {
+        m_currentlyDisplayedProgress->cancel();
     }
 }
 

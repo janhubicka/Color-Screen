@@ -140,6 +140,7 @@ private:
 
     QTimer *m_progressTimer;
     std::vector<ProgressEntry> m_activeProgresses;
+    std::shared_ptr<colorscreen::progress_info> m_currentlyDisplayedProgress; // Track displayed progress for cancel button
     
     // Helper to find the longest running task
     ProgressEntry* getLongestRunningTask();
