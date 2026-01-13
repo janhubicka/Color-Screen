@@ -4,6 +4,7 @@
 #include "nmsimplex.h"
 #include <cmath>
 #include <complex>
+#include <memory>
 namespace colorscreen
 {
 
@@ -602,25 +603,29 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
     {
       int fft_size = psf_size / 2 + 1;
       const double psf_step = 1 / (psf_size * subscale);
-      std::vector<fftw_complex> mtf_kernel (psf_size * fft_size);
+      // Use unique_ptr with FFTW allocator for fftw_complex array
+      std::unique_ptr<fftw_complex, decltype(&fftw_free)> mtf_kernel(
+          (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * psf_size * fft_size),
+          &fftw_free
+      );
       for (int y = 0; y < fft_size; y++)
         for (int x = 0; x < fft_size; x++)
           {
             std::complex ker (std::clamp (get_mtf (x, y, psf_step),
                                           (luminosity_t)0, (luminosity_t)1),
                               (luminosity_t)0);
-            mtf_kernel[y * fft_size + x][0] = real (ker);
-            mtf_kernel[y * fft_size + x][1] = imag (ker);
+            mtf_kernel.get()[y * fft_size + x][0] = real (ker);
+            mtf_kernel.get()[y * fft_size + x][1] = imag (ker);
             if (y)
               {
-                mtf_kernel[(psf_size - y) * fft_size + x][0] = real (ker);
-                mtf_kernel[(psf_size - y) * fft_size + x][1] = imag (ker);
+                mtf_kernel.get()[(psf_size - y) * fft_size + x][0] = real (ker);
+                mtf_kernel.get()[(psf_size - y) * fft_size + x][1] = imag (ker);
               }
           }
       std::vector<double,fftw_allocator<double>> psf_data (psf_size * psf_size);
       fftw_lock.lock ();
       fftw_plan plan
-          = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.data (),
+          = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.get (),
                                   psf_data.data (), FFTW_ESTIMATE);
       fftw_lock.unlock ();
       fftw_execute (plan);
