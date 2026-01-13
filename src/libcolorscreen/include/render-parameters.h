@@ -92,11 +92,12 @@ struct mtf_parameters
   {
     if (use_measured_mtf_p ())
       {
-	if (o.use_measured_mtf || !o.size ())
+	if (!o.use_measured_mtf_p ())
 	  return false;
 	return m_data == o.m_data;
       }
-    else if (!o.use_measured_mtf || !size ())
+    else if (o.use_measured_mtf_p ())
+      return false;
     if (sigma != o.sigma || sensor_fill_factor != o.sensor_fill_factor)
       return false;
     if (simulate_difraction_p ())
