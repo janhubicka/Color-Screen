@@ -222,7 +222,6 @@ public:
         start{ 0.5, 0.5, 0.5 }
   {
     nvalues = 0;
-    m_params.clear_data ();
     if (!params.pixel_pitch || !params.f_stop)
       {
         wavelength_index = -1;
@@ -995,8 +994,8 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
 				     bool verbose)
 {
   *this = par;
-  clear_data ();
 
+  use_measured_mtf = false;
   mtf_solver s (*this, par, progress);
   simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
                                      progress);
@@ -1004,7 +1003,6 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
   sigma = s.get_sigma (s.start);
   defocus = s.get_defocus (s.start);
   blur_diameter = s.get_blur_diameter (s.start);
-  clear_data ();
 
   if (write_table)
     {

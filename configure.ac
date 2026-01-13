@@ -19,6 +19,10 @@ AC_OPENMP
 CXXFLAGS="$CXXFLAGS $OPENMP_CXXFLAGS"
 LDFLAGS="$LDFLAGS $OPENMP_CXXFLAGS"
 
+# Check for malloc.h header and memalign function
+AC_CHECK_HEADERS([malloc.h])
+AC_CHECK_FUNCS([memalign])
+
 AC_SEARCH_LIBS([sqrt], [m])
 AC_CHECK_LIB([m],[cos])
 AC_ARG_ENABLE([dependencies],AS_HELP_STRING([--disable-dependencies],

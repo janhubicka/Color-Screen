@@ -2,7 +2,10 @@
 #define MTF_H
 #include <fftw3.h>
 #include <mutex>
+#include "config.h"
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #include "include/progress-info.h"
 #include "include/base.h"
 #include "include/color.h"
@@ -20,13 +23,19 @@ template <class T>
 struct fftw_allocator {
     typedef T value_type;
     T* allocate(std::size_t n) {
-        //void* ptr = fftw_malloc (n * sizeof(T));
+#ifdef HAVE_MEMALIGN
         void* ptr = memalign (128, n * sizeof(T));
+#else
+        void* ptr = fftw_malloc (n * sizeof(T));
+#endif
         if (!ptr) throw std::bad_alloc();
         return static_cast<T*>(ptr);
     }
-    //void deallocate(T* p, std::size_t) { fftw_free(p); }
+#ifdef HAVE_MEMALIGN
     void deallocate(T* p, std::size_t) { free(p); }
+#else
+    void deallocate(T* p, std::size_t) { fftw_free(p); }
+#endif
 };
 
 class mtf
