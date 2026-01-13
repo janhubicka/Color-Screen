@@ -102,6 +102,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
 	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
 	  || fprintf (f, "scanner_mtf_scale: %f\n", rparam->sharpen.scanner_mtf_scale) < 0
+	  || fprintf (f, "scanner_mtf_use_measured: %s\n", bool_names [(int)rparam->sharpen.scanner_mtf.use_measured_mtf]) < 0
 	  || fprintf (f, "richardson_lucy_iterations: %i\n", rparam->sharpen.richardson_lucy_iterations) < 0
 	  || fprintf (f, "richardson_lucy_sigma: %f\n", rparam->sharpen.richardson_lucy_sigma) < 0)
 	return false;
@@ -1257,6 +1258,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 		}
 	    }
 	}
+      else if (!strcmp (buf, "scanner_mtf_use_measured"))
+        {
+	  if (!parse_bool (f, rparam_check (sharpen.scanner_mtf.use_measured_mtf)))
+	    {
+	      *error = "error parsing scanner_mtf_use_measured";
+	      return false;
+	    }
+        }
       else if (!strcmp (buf, "scanner_mtf_point"))
 	{
 	  double freq;

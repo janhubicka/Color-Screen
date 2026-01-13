@@ -746,13 +746,8 @@ mtf::precompute (progress_info *progress, const char *filename,
       return true;
     }
 
-  /* Determine sigma of data.  Used only for mtf measurements with
-     too few data points.  */
-  if (size () < 10)
-    m_params.estimate_parameters (m_params, NULL, progress);
-
-  /* If there seeems enough data point, use actual MTF data.  */
-  if (size () >= 10)
+  /* Use actual MTF data.  */
+  if (m_params.use_measured_mtf_p ())
     {
       bool monotone = true;
       for (size_t i = 1; i < size () && monotone; i++)

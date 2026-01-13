@@ -48,6 +48,15 @@ struct mtf_parameters
   /* DPI of the scan; necessary to calculate magnification.  */
   double scan_dpi;
 
+  /* True if measured mtf should be used.  */
+  bool use_measured_mtf;
+
+  bool
+  use_measured_mtf_p () const
+  {
+    return use_measured_mtf && size () > 2;
+  }
+
   void
   add_value (double freq, luminosity_t contrast)
   {
@@ -69,13 +78,25 @@ struct mtf_parameters
     return m_data[i].contrast;
   }
   bool
+  can_simulate_difraction_p () const
+  {
+    return pixel_pitch && f_stop && wavelength && scan_dpi;
+  }
+  bool
   simulate_difraction_p () const
   {
-    return !size () && pixel_pitch && f_stop && wavelength;
+    return !use_measured_mtf_p () && can_simulate_difraction_p ();
   }
   bool
   operator== (const mtf_parameters &o) const
   {
+    if (use_measured_mtf_p ())
+      {
+	if (o.use_measured_mtf || !o.size ())
+	  return false;
+	return m_data == o.m_data;
+      }
+    else if (!o.use_measured_mtf || !size ())
     if (sigma != o.sigma || sensor_fill_factor != o.sensor_fill_factor)
       return false;
     if (simulate_difraction_p ())
@@ -90,7 +111,7 @@ struct mtf_parameters
       return false;
     if (blur_diameter != o.blur_diameter)
       return false;
-    return m_data == o.m_data;
+    return true;
   }
   bool equal_p (const mtf_parameters &o) const
   {
@@ -101,6 +122,7 @@ struct mtf_parameters
 	   && wavelength == o.wavelength
 	   && pixel_pitch == o.pixel_pitch
 	   && scan_dpi == o.scan_dpi
+	   && use_measured_mtf == o.use_measured_mtf
 	   && m_data == o.m_data
 	   && sensor_fill_factor == o.sensor_fill_factor;
   }
@@ -130,7 +152,7 @@ struct mtf_parameters
   
   DLL_PUBLIC double estimate_parameters (const mtf_parameters &par, const char *write_table = NULL, progress_info *progress = NULL, const char **error = NULL, bool verbose = false);
   mtf_parameters ()
-  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), m_data ()
+  : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), use_measured_mtf (0), m_data ()
   { }
   bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
   bool write_table (const char *write_table, const char **error) const;
