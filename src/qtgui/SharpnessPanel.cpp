@@ -31,6 +31,15 @@ void SharpnessPanel::setupUi()
     
     QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
     
+    // Add "Use measured MTF" checkbox (visible only if measured data exists and separator is open)
+    addCheckboxParameter("Use measured MTF",
+        [](const ParameterState &s) { return s.rparams.sharpen.scanner_mtf.use_measured_mtf; },
+        [](ParameterState &s, bool v) { s.rparams.sharpen.scanner_mtf.use_measured_mtf = v; },
+        [](const ParameterState &s) { 
+            return s.rparams.sharpen.scanner_mtf.size() > 2; 
+        }
+    );
+    
     // MTF Chart
     m_mtfChart = new MTFChartWidget();
     m_mtfChart->setMinimumHeight(250);
@@ -173,7 +182,31 @@ void SharpnessPanel::updateMTFChart()
     // Compute MTF curves with 100 steps
     mtf_parameters::computed_mtf curves = state.rparams.sharpen.scanner_mtf.compute_curves(100);
     
-    m_mtfChart->setMTFData(curves);
+    // Pass simulation flag to chart
+    bool canSimulateDifraction = state.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+    m_mtfChart->setMTFData(curves, canSimulateDifraction);
+    
+    // Extract measured MTF data if available
+    const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;
+    if (scanner_mtf.size() > 0)
+    {
+        std::vector<double> freq, contrast;
+        freq.reserve(scanner_mtf.size());
+        contrast.reserve(scanner_mtf.size());
+        
+        for (size_t i = 0; i < scanner_mtf.size(); ++i)
+        {
+            freq.push_back(scanner_mtf.get_freq(i));
+            contrast.push_back(scanner_mtf.get_contrast(i));
+        }
+        
+        m_mtfChart->setMeasuredMTF(freq, contrast);
+    }
+    else
+    {
+        // No measured data, clear it
+        m_mtfChart->setMeasuredMTF({}, {});
+    }
 }
 
 void SharpnessPanel::applyChange(std::function<void(ParameterState&)> modifier)

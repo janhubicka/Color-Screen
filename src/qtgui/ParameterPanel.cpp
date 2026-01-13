@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QSlider>
 #include <QLabel>
+#include <QCheckBox>
 #include <QGroupBox>
 #include <QToolButton>
 #include <QScrollArea>
@@ -301,6 +302,52 @@ void ParameterPanel::addEnumParameter(const QString &label, const std::map<int, 
             combo->setEnabled(en);
              QWidget* labelWidget = m_form->labelForField(combo);
              if(labelWidget) labelWidget->setEnabled(en);
+        });
+    }
+}
+
+void ParameterPanel::addCheckboxParameter(const QString &label,
+                              std::function<bool(const ParameterState&)> getter,
+                              std::function<void(ParameterState&, bool)> setter,
+                              std::function<bool(const ParameterState&)> enabledCheck)
+{
+    // Create container with label on left, checkbox on right
+    QWidget *container = new QWidget();
+    QHBoxLayout *hLayout = new QHBoxLayout(container);
+    hLayout->setContentsMargins(0, 0, 0, 0);
+    
+    QCheckBox *checkbox = new QCheckBox();
+    QLabel *textLabel = new QLabel(label);
+    
+    hLayout->addWidget(checkbox, 0);   // Checkbox fixed size on left
+    hLayout->addWidget(textLabel, 1);  // Label expands to fill space
+    
+    // Add to form (single column - container spans both label and field)
+    if (m_currentGroupForm) {
+        m_currentGroupForm->addRow(container);
+    } else {
+        m_form->addRow(container);
+    }
+    
+    // Connect changes: UI -> State
+    connect(checkbox, &QCheckBox::toggled, this, [this, setter](bool checked) {
+        applyChange([setter, checked](ParameterState &s) { setter(s, checked); });
+    });
+    
+    // Updater: State -> UI
+    m_paramUpdaters.push_back([checkbox, getter](const ParameterState &state) {
+        bool val = getter(state);
+        checkbox->blockSignals(true);
+        checkbox->setChecked(val);
+        checkbox->blockSignals(false);
+    });
+    
+    // Enable/Visibility Update
+    if (enabledCheck) {
+        m_widgetStateUpdaters.push_back([this, container, enabledCheck]() {
+            ParameterState state = m_stateGetter();
+            bool visible = enabledCheck(state);
+            container->setVisible(visible);
         });
     }
 }

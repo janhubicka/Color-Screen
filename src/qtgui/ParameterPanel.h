@@ -59,6 +59,11 @@ protected:
                           std::function<void(ParameterState&, int)> setter,
                           std::function<bool(const ParameterState&)> enabledCheck = nullptr);
     
+    void addCheckboxParameter(const QString &label,
+                              std::function<bool(const ParameterState&)> getter,
+                              std::function<void(ParameterState&, bool)> setter,
+                              std::function<bool(const ParameterState&)> enabledCheck = nullptr);
+    
     QToolButton* addSeparator(const QString &title);
 
 protected:

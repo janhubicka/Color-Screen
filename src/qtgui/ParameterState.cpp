@@ -21,17 +21,11 @@ static bool areSolverParamsEqual(const colorscreen::solver_parameters &a, const 
 // ParameterState equality
 bool ParameterState::operator==(const ParameterState &other) const
 {
-    // libcolorscreen operator== signatures might take non-const reference.
-    // We trust that operator== doesn't modify the object.
+    if (!(const_cast<colorscreen::render_parameters&>(rparams) == other.rparams)) return false;
     
-    colorscreen::render_parameters &other_rparams = const_cast<colorscreen::render_parameters&>(other.rparams);
-    if (!(const_cast<colorscreen::render_parameters&>(rparams) == other_rparams)) return false;
+    if (!(const_cast<colorscreen::scr_to_img_parameters&>(scrToImg) == other.scrToImg)) return false;
     
-    colorscreen::scr_to_img_parameters &other_scrToImg = const_cast<colorscreen::scr_to_img_parameters&>(other.scrToImg);
-    if (!(const_cast<colorscreen::scr_to_img_parameters&>(scrToImg) == other_scrToImg)) return false;
-    
-    colorscreen::scr_detect_parameters &other_detect = const_cast<colorscreen::scr_detect_parameters&>(other.detect);
-    if (!(const_cast<colorscreen::scr_detect_parameters&>(detect) == other_detect)) return false;
+    if (!(const_cast<colorscreen::scr_detect_parameters&>(detect) == other.detect)) return false;
     
     if (!areSolverParamsEqual(solver, other.solver)) return false;
     
