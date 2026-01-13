@@ -74,11 +74,12 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
                           colorscreen::scr_detect_parameters *scrDetect,
                           colorscreen::render_type_parameters *renderType)
 {
-    m_scan = scan;
+    // Store new parameters
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
     m_renderType = renderType;
+    // Don't set m_scan yet - will set it after cleanup to release old image first
     if (m_scan != scan) {
         m_pixmap = QImage(); // Clear if new image loaded
     }
@@ -123,16 +124,33 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     if (m_currentProgress) {
         m_currentProgress->cancel();
     }
+    
+    // Clear old scan to release it from memory before loading new one
+    m_scan = nullptr;
 
-    // Let old renderer finish naturally
-    if (m_renderThread) {
-        m_renderThread->wait();
-        m_renderThread->deleteLater();
-        m_renderThread = nullptr;
-    }
+    // Clean up old renderer and thread
     if (m_renderer) {
+        // Disconnect all signals to prevent callbacks during shutdown
+        disconnect(m_renderer, nullptr, this, nullptr);
         m_renderer->deleteLater();
         m_renderer = nullptr;
+    }
+    
+    if (m_renderThread) {
+        // Disconnect thread signals to prevent deadlock
+        disconnect(m_renderThread, nullptr, nullptr, nullptr);
+        
+        // Only quit and wait if thread is running
+        if (m_renderThread->isRunning()) {
+            m_renderThread->quit();
+            // Wait briefly - if it doesn't finish, just let deleteLater handle it
+            if (!m_renderThread->wait(100)) {
+                // Thread is taking too long, deleteLater will clean up when it's done
+            }
+        }
+        // Always use deleteLater to avoid crash if thread is still running
+        m_renderThread->deleteLater();
+        m_renderThread = nullptr;
     }
     
     // Manually emit progressFinished for current progress
@@ -144,6 +162,9 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     // Reset render queue state for new renderer
     m_renderInProgress = false;
     m_hasPendingRender = false;
+    
+    // Now set the new scan pointer (old one is released)
+    m_scan = scan;
     
     if (m_scan && m_rparams) {
         m_renderThread = new QThread(this);
