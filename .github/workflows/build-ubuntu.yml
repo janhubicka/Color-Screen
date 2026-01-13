@@ -32,7 +32,7 @@ jobs:
     - name: Install fftw3
       run: sudo apt-get install -y libfftw3-dev
     - name: Install qt6-base-dev
-      run: sudo apt-get install -y libgtk2.0-dev
+      run: sudo apt-get install -y qt6-base-dev
     - name: configure
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui
     - name: make
