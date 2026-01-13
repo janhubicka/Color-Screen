@@ -31,8 +31,10 @@ jobs:
       run: sudo apt-get install -y libgtk2.0-dev
     - name: Install fftw3
       run: sudo apt-get install -y libfftw3-dev
+    - name: Install qt6-base-dev
+      run: sudo apt-get install -y libgtk2.0-dev
     - name: configure
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui
+      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui
     - name: make
       run: make
     - name: make check
@@ -55,7 +57,7 @@ jobs:
     - name: make distclean
       run: make distclean
     - name: configure with checking
-      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui
+      run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
       run: make
     - name: make check (checking enabled)
