@@ -22,7 +22,7 @@ defocus_mtf (double freq, double blur_circle_diameter)
 
   /* The transfer function of a circular blur is 2*J1(x)/x  */
   double arg = M_PI * freq * blur_circle_diameter;
-  return std::abs (2.0 * j1 (arg) / arg);
+  return std::abs (2.0 * std::cyl_bessel_j (1, arg) / arg);
 }
 
 /* Return MTF of gaussian blur with a given sigma.  */
