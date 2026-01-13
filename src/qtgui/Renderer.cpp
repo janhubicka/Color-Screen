@@ -17,6 +17,16 @@ Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,
 
 Renderer::~Renderer() = default;
 
+void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
+                                const colorscreen::scr_to_img_parameters &scrToImg,
+                                const colorscreen::scr_detect_parameters &scrDetect)
+{
+    m_rparams = rparams;
+    m_scrToImg = scrToImg;
+    m_scrDetect = scrDetect;
+}
+
+
 
 void Renderer::render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
                       colorscreen::render_parameters frameParams,

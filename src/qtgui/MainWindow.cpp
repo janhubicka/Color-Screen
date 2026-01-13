@@ -684,10 +684,10 @@ void MainWindow::applyState(const ParameterState &state)
     
     m_scrToImgParams.final_rotation = currentRot;
     
-    // Update image widget logic
+    // Update widgets - use updateParameters to avoid blocking
     if (m_scan) {
-        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
-        m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams);
+        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+        m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
     }
     
     updateUIFromState(state);

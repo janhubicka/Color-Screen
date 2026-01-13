@@ -95,6 +95,30 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     update();
 }
 
+void NavigationView::updateParameters(colorscreen::render_parameters *rparams,
+                                      colorscreen::scr_to_img_parameters *scrToImg,
+                                      colorscreen::scr_detect_parameters *scrDetect)
+{
+    // Update parameter pointers
+    m_rparams = rparams;
+    m_scrToImg = scrToImg;
+    m_scrDetect = scrDetect;
+    
+    // Update renderer's cached copies (on worker thread)
+    if (m_renderer && rparams && scrToImg && scrDetect) {
+        QMetaObject::invokeMethod(m_renderer, "updateParameters", Qt::QueuedConnection,
+            Q_ARG(colorscreen::render_parameters, *rparams),
+            Q_ARG(colorscreen::scr_to_img_parameters, *scrToImg),
+            Q_ARG(colorscreen::scr_detect_parameters, *scrDetect));
+    }
+    
+    // Request new render with updated parameters (non-blocking)
+    if (m_scan && m_renderer) {
+        requestRender();
+    }
+}
+
+
 void NavigationView::resizeEvent(QResizeEvent *event)
 {
     requestRender();

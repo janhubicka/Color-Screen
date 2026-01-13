@@ -30,6 +30,11 @@ public:
                   colorscreen::scr_to_img_parameters *scrToImg,
                   colorscreen::scr_detect_parameters *scrDetect,
                   colorscreen::render_type_parameters *renderType);
+    
+    // Update parameters without recreating renderer (non-blocking)
+    void updateParameters(colorscreen::render_parameters *rparams,
+                         colorscreen::scr_to_img_parameters *scrToImg,
+                         colorscreen::scr_detect_parameters *scrDetect);
 
 public slots:
     void setZoom(double scale);

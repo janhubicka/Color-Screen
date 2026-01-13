@@ -25,6 +25,11 @@ public:
                   colorscreen::render_parameters *rparams,
                   colorscreen::scr_to_img_parameters *scrToImg,
                   colorscreen::scr_detect_parameters *scrDetect);
+    
+    // Update parameters without recreating renderer (non-blocking)
+    void updateParameters(colorscreen::render_parameters *rparams,
+                         colorscreen::scr_to_img_parameters *scrToImg,
+                         colorscreen::scr_detect_parameters *scrDetect);
 
 public slots:
     void onViewStateChanged(QRectF visibleRect, double scale); // Connected to ImageWidget
