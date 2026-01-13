@@ -95,7 +95,7 @@ struct synthetic_hd_curve_parameters
 };
 
 /* Densitivity curve of an "ideal" digital camera with safety buffer in upper 90%.  */
-extern struct synthetic_hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
+extern DLL_PUBLIC struct synthetic_hd_curve_parameters safe_output_curve_params, safe_reversal_output_curve_params, input_curve_params;
 
 /* Produce a synthetic HD curve.  */
 class synthetic_hd_curve : public hd_curve
