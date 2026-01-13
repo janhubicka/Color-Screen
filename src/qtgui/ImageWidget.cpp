@@ -157,19 +157,24 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
 void ImageWidget::updateParameters(colorscreen::render_parameters *rparams,
                                    colorscreen::scr_to_img_parameters *scrToImg,
-                                   colorscreen::scr_detect_parameters *scrDetect)
+                                   colorscreen::scr_detect_parameters *scrDetect,
+                                   colorscreen::render_type_parameters *renderType)
 {
     // Update the parameter pointers
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
+    if (renderType) {
+        m_renderType = renderType;
+    }
     
     // Update renderer's cached copies (on worker thread)
-    if (m_renderer && rparams && scrToImg && scrDetect) {
+    if (m_renderer && rparams && scrToImg && scrDetect && m_renderType) {
         QMetaObject::invokeMethod(m_renderer, "updateParameters", Qt::QueuedConnection,
             Q_ARG(colorscreen::render_parameters, *rparams),
             Q_ARG(colorscreen::scr_to_img_parameters, *scrToImg),
-            Q_ARG(colorscreen::scr_detect_parameters, *scrDetect));
+            Q_ARG(colorscreen::scr_detect_parameters, *scrDetect),
+            Q_ARG(colorscreen::render_type_parameters, *m_renderType));
     }
     
     // Request new render with updated parameters

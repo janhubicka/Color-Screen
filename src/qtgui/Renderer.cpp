@@ -19,11 +19,13 @@ Renderer::~Renderer() = default;
 
 void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
                                 const colorscreen::scr_to_img_parameters &scrToImg,
-                                const colorscreen::scr_detect_parameters &scrDetect)
+                                const colorscreen::scr_detect_parameters &scrDetect,
+                                const colorscreen::render_type_parameters &renderType)
 {
     m_rparams = rparams;
     m_scrToImg = scrToImg;
     m_scrDetect = scrDetect;
+    m_renderType = renderType;
 }
 
 

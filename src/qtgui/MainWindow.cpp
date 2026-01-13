@@ -252,9 +252,9 @@ void MainWindow::onColorCheckBoxChanged(bool checked)
     // Update the color field in render_type_parameters
     m_renderTypeParams.color = checked;
     
-    // Trigger re-render when color changes
+    // Trigger re-render when color changes (without resetting view)
     if (m_scan) {
-        m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
     }
 }
 
@@ -341,9 +341,9 @@ void MainWindow::onModeChanged(int index)
             m_colorCheckBox->setChecked(m_renderTypeParams.color);
             m_colorCheckBox->blockSignals(false);
             
-            // Trigger render update
+            // Trigger render update (without resetting view)
             if (m_scan) {
-                m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
+                m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams);
             }
         }
     }

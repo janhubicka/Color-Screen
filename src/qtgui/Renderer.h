@@ -34,7 +34,8 @@ public slots:
     // Update internal parameter copies (for non-blocking parameter updates)
     void updateParameters(const colorscreen::render_parameters &rparams,
                          const colorscreen::scr_to_img_parameters &scrToImg,
-                         const colorscreen::scr_detect_parameters &scrDetect);
+                         const colorscreen::scr_detect_parameters &scrDetect,
+                         const colorscreen::render_type_parameters &renderType);
 
 signals:
     void imageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success);
