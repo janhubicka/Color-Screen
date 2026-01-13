@@ -102,7 +102,65 @@ void SharpnessPanel::setupUi()
         [](const ParameterState &s) { return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p(); }
     );
     
+    addSeparator("Deconvolution");
+    
+    // Supersample
+    // Range 1 - 16, integer
+    addSliderParameter("Supersample", 1.0, 16.0, 1.0, 0, "", "",
+        [](const ParameterState &s) { return (double)s.rparams.sharpen.supersample; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.supersample = (int)v; }
+    );
+    
+    addSeparator("Wiener filter");
+    
+    // Signal to noise ratio
+    // Range 0 - 65535, slow at start (gamma 2.0)
+    addSliderParameter("Signal to noise ratio", 0.0, 65535.0, 1.0, 0, "", "",
+        [](const ParameterState &s) { return s.rparams.sharpen.scanner_snr; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.scanner_snr = v; },
+        2.0 // Gamma (slow start)
+    );
+    
+    addSeparator("Richardson–Lucy deconvolution");
+    
+    // Richardson-Lucy iterations
+    // Range 0 - 50000, integer, slow at beginning (gamma 2.0)
+    addSliderParameter("Iterations", 0.0, 50000.0, 1.0, 0, "", "",
+        [](const ParameterState &s) { return (double)s.rparams.sharpen.richardson_lucy_iterations; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.richardson_lucy_iterations = (int)v; },
+        2.0 // Gamma (slow start)
+    );
+    
+    // Richardson-Lucy sigma
+    // Range 0.0 - 2.0, floating point
+    addSliderParameter("Sigma", 0.0, 2.0, 1000.0, 3, "", "",
+        [](const ParameterState &s) { return s.rparams.sharpen.richardson_lucy_sigma; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.richardson_lucy_sigma = v; }
+    );
+    
     addSeparator("Unsharp mask");
+    
+    // Unsharp mask radius
+    // Range 0.0 - 20.0, Pixels
+    // Same properties as Gaussian blur sigma
+    // Enabled only when mode is unsharp_mask
+    addSliderParameter("Radius", 0.0, 20.0, 1000.0, 3, "pixels", "",
+        [](const ParameterState &s) { return s.rparams.sharpen.usm_radius; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.usm_radius = v; },
+        1.0, // No gamma
+        [](const ParameterState &s) { return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask; }
+    );
+    
+    // Unsharp mask amount
+    // Range 0.0 - 100.0
+    // Gamma 2.0 for slow start
+    // Enabled only when mode is unsharp_mask
+    addSliderParameter("Amount", 0.0, 100.0, 100.0, 1, "", "",
+        [](const ParameterState &s) { return s.rparams.sharpen.usm_amount; },
+        [](ParameterState &s, double v) { s.rparams.sharpen.usm_amount = v; },
+        2.0, // Gamma (slow start)
+        [](const ParameterState &s) { return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask; }
+    );
 }
 
 void SharpnessPanel::updateMTFChart()

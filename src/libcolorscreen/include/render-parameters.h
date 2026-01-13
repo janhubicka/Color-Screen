@@ -234,12 +234,14 @@ struct sharpen_parameters
       case wiener_deconvolution:
 	return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
-	       && scanner_snr == o.scanner_snr;
+	       && scanner_snr == o.scanner_snr
+	       && supersample == o.supersample;
       case richardson_lucy_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001
 	       && richardson_lucy_iterations == o.richardson_lucy_iterations
-	       && richardson_lucy_sigma == o.richardson_lucy_sigma;
+	       && richardson_lucy_sigma == o.richardson_lucy_sigma
+	       && supersample == o.supersample;
       case blur_deconvolution:
         return scanner_mtf == o.scanner_mtf
 	       && fabs (scanner_mtf_scale - o.scanner_mtf_scale) < 0.001;
@@ -258,7 +260,8 @@ struct sharpen_parameters
 	   && scanner_snr == o.scanner_snr
 	   && scanner_mtf_scale == o.scanner_mtf_scale
 	   && richardson_lucy_iterations == o.richardson_lucy_iterations
-	   && richardson_lucy_sigma == o.richardson_lucy_sigma;
+	   && richardson_lucy_sigma == o.richardson_lucy_sigma
+	   && supersample == o.supersample;
   }
   sharpen_parameters ()
   : mode (none), usm_radius (0), usm_amount (0), scanner_snr (2000), scanner_mtf_scale (1),
