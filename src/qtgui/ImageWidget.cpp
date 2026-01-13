@@ -84,20 +84,20 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
         m_pixmap = QImage(); // Clear if new image loaded
     }
 
-    // Reset View
-    if (m_scan && m_scan->width > 0) {
+    // Reset View - use scan parameter (not m_scan which isn't set yet)
+    if (scan && scan->width > 0) {
         // Fit to view
         double w = width();
         double h = height();
         
         // Handle rotation for scale calculation
-        double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
+        double rot = scrToImg ? scrToImg->final_rotation : 0.0;
         int angle = (int)rot; 
         angle = angle % 360;
         if (angle < 0) angle += 360;
         
-        double imgW = m_scan->width;
-        double imgH = m_scan->height;
+        double imgW = scan->width;
+        double imgH = scan->height;
         
         if (angle == 90 || angle == 270) {
             std::swap(imgW, imgH);

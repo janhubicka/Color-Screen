@@ -2,6 +2,7 @@
 #include "MTFChartWidget.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include <QFormLayout>
+#include <QPushButton>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
@@ -39,6 +40,30 @@ void SharpnessPanel::setupUi()
             return s.rparams.sharpen.scanner_mtf.size() > 2; 
         }
     );
+    
+    // Add "Match measured data" button (visible only if measured data exists)
+    QPushButton *matchButton = new QPushButton("Match measured data");
+    m_form->addRow(matchButton);
+    
+    // Wire up the button
+    connect(matchButton, &QPushButton::clicked, this, [this]() {
+        applyChange([](ParameterState &s) {
+            const char *error = nullptr;
+            double result = s.rparams.sharpen.scanner_mtf.estimate_parameters(
+                s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error, false);
+            if (error) {
+                // Handle error if needed
+                qDebug() << "estimate_parameters error:" << error;
+            }
+        });
+    });
+    
+    // Update button visibility (only visible if measured data exists)
+    m_widgetStateUpdaters.push_back([matchButton, this]() {
+        ParameterState s = m_stateGetter();
+        bool visible = s.rparams.sharpen.scanner_mtf.size() > 0;
+        matchButton->setVisible(visible);
+    });
     
     // MTF Chart
     m_mtfChart = new MTFChartWidget();
