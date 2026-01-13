@@ -216,6 +216,8 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
         if (progress)
           progress->inc_progress ();
       }
+  if (progress && progress->cancelled ())
+    return false;
   return true;
 }
 /* Deconvolution worker for rgbdata and related types (having red, green and blue fields)  */
@@ -324,6 +326,8 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
         if (progress)
           progress->inc_progress ();
       }
+  if (progress && progress->cancelled ())
+    return false;
   return true;
 }
 

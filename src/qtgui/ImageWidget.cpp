@@ -5,6 +5,7 @@
 #include <QWheelEvent>
 #include <QtMath>
 #include <QDebug>
+#include <QMessageBox>
 #include "../libcolorscreen/include/imagedata.h" 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
@@ -186,14 +187,31 @@ void ImageWidget::requestRender()
     );
 }
 
-void ImageWidget::handleImageReady(int reqId, QImage image, double x, double y, double scale)
+void ImageWidget::handleImageReady(int reqId, QImage image, double x, double y, double scale, bool success)
 {
     if (reqId == m_currentReqId) {
-        m_pixmap = image;
+        // Check if render was cancelled
+        bool wasCancelled = false;
         if (m_currentProgress) {
-             emit progressFinished(m_currentProgress);
-             m_currentProgress.reset();
+            wasCancelled = m_currentProgress->cancelled();
+            emit progressFinished(m_currentProgress);
+            m_currentProgress.reset();
         }
+        
+        if (wasCancelled) {
+            // Do nothing if cancelled - user interrupted the render
+            return;
+        }
+        
+        if (!success) {
+            // Show error message to user
+            QMessageBox::warning(this, "Rendering Error", 
+                "Failed to render image. The rendering process encountered an error.");
+            return;
+        }
+        
+        // Success - update the displayed image
+        m_pixmap = image;
         update();
     }
 }

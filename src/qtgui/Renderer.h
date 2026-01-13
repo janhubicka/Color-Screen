@@ -32,7 +32,7 @@ public slots:
                 std::shared_ptr<colorscreen::progress_info> progress);
 
 signals:
-    void imageReady(int reqId, QImage image, double xOffset, double yOffset, double scale);
+    void imageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success);
 
 private:
     std::shared_ptr<colorscreen::image_data> m_scan;

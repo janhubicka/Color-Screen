@@ -104,6 +104,13 @@ void NavigationView::requestRender()
 {
     if (!m_renderer || !m_scan) return;
     
+    // Cancel previous render if still running
+    if (m_currentProgress) {
+        m_currentProgress->cancel();
+        emit progressFinished(m_currentProgress);
+        m_currentProgress.reset();
+    }
+    
     // Render to fit widget size
     // Calculate rotation to know dimensions
     double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
@@ -141,6 +148,11 @@ void NavigationView::requestRender()
     int targetW = (int)(imgW * scale);
     int targetH = (int)(imgH * scale);
     
+    // Create new progress tracker
+    m_currentProgress = std::make_shared<colorscreen::progress_info>();
+    m_currentProgress->set_task("Rendering Navigation", 0);
+    emit progressStarted(m_currentProgress);
+    
     // Request render
     // NOTE: Renderer expects xOffset/yOffset in Rotated Coordinate System (Widget Pixels) if we follow ImageWidget logic?
     // In ImageWidget, xOffset passed to render was `viewX * scale`.
@@ -159,14 +171,24 @@ void NavigationView::requestRender()
         Q_ARG(int, targetW),
         Q_ARG(int, targetH),
         Q_ARG(colorscreen::render_parameters, *m_rparams),
-        Q_ARG(std::shared_ptr<colorscreen::progress_info>, nullptr)
+        Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_currentProgress)
     );
 }
 
-void NavigationView::onImageReady(int reqId, QImage image, double x, double y, double scale)
+void NavigationView::onImageReady(int reqId, QImage image, double x, double y, double scale, bool success)
 {
-    m_previewImage = image;
-    update();
+    // Emit progress finished and reset tracker
+    if (m_currentProgress) {
+        emit progressFinished(m_currentProgress);
+        m_currentProgress.reset();
+    }
+    
+    // Only update preview image if render was successful
+    if (success) {
+        m_previewImage = image;
+        update();
+    }
+    // If render failed or was cancelled, do nothing (keep old image)
 }
 
 void NavigationView::onViewStateChanged(QRectF visibleRect, double scale)

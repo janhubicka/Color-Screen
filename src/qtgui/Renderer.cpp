@@ -24,7 +24,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
 {
     if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
         // Nothing to render
-        emit imageReady(reqId, QImage(), xOffset, yOffset, scale);
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
         return;
     }
 
@@ -121,16 +121,23 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     // Use m_rparams (updated from frameParams)
     bool success = colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
     
-    // Rotate result
+    // Check if render was cancelled
+    if (progress && progress->cancelled()) {
+        // Don't emit anything if cancelled
+        return;
+    }
+    
+    // Rotate result if successful
     if (success && angle != 0) {
         QTransform trans;
         trans.rotate(angle);
         image = image.transformed(trans);
     }
 
+    // Emit result with success status
     if (success) {
-        emit imageReady(reqId, image, xOffset, yOffset, scale);
+        emit imageReady(reqId, image, xOffset, yOffset, scale, true);
     } else {
-        emit imageReady(reqId, QImage(), xOffset, yOffset, scale);
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
     }
 }

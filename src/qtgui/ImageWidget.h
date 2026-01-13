@@ -52,7 +52,7 @@ public:
     double getMinScale() const; // Returns scale that fits image to view
 
 private slots:
-    void handleImageReady(int reqId, QImage image, double x, double y, double scale);
+    void handleImageReady(int reqId, QImage image, double x, double y, double scale, bool success);
 
 private:
     void requestRender();

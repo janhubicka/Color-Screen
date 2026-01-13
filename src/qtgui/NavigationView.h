@@ -8,6 +8,7 @@
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/render-type-parameters.h"
+#include "../libcolorscreen/include/progress-info.h"
 
 class QSlider;
 class QThread;
@@ -32,6 +33,8 @@ public slots:
 signals:
     void zoomChanged(double scale);
     void panChanged(double x, double y);
+    void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
+    void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -42,7 +45,7 @@ protected:
 
 private slots:
     void onSliderValueChanged(int value);
-    void onImageReady(int reqId, QImage image, double x, double y, double scale);
+    void onImageReady(int reqId, QImage image, double x, double y, double scale, bool success);
 
 private:
     void requestRender();
@@ -59,6 +62,7 @@ private:
 
     Renderer *m_renderer = nullptr;
     QThread *m_renderThread = nullptr;
+    std::shared_ptr<colorscreen::progress_info> m_currentProgress; // Track current render progress
     
     QImage m_previewImage;
     double m_previewScale = 1.0; // Scale of preview relative to original scan

@@ -131,6 +131,10 @@ void MainWindow::setupUi()
     connect(m_imageWidget, &ImageWidget::viewStateChanged, m_navigationView, &NavigationView::onViewStateChanged);
     connect(m_navigationView, &NavigationView::zoomChanged, m_imageWidget, &ImageWidget::setZoom);
     connect(m_navigationView, &NavigationView::panChanged, m_imageWidget, &ImageWidget::setPan);
+    
+    // Connect NavigationView progress signals
+    connect(m_navigationView, &NavigationView::progressStarted, this, &MainWindow::addProgress);
+    connect(m_navigationView, &NavigationView::progressFinished, this, &MainWindow::removeProgress);
 
     // Bottom Right: Tabs
     m_configTabs = new QTabWidget(this);
