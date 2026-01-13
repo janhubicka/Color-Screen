@@ -11,6 +11,16 @@ namespace colorscreen
 namespace
 {
 
+double get_j1(double x) {
+#if defined(__cpp_lib_math_special_functions) || defined(_GLIBCXX_USE_STD_SPEC_FUNCS)
+    return std::cyl_bessel_j(1, x);
+#elif defined(_WIN32) && !defined(__cpp_lib_math_special_functions)
+    return _j1 (x);
+#else
+    return j1(x); // Fallback for macOS/libc++
+#endif
+}
+
 /* Return MTF of given blur circle diameter and given frequency.
    This is model for small defocus that does not seem to work that well.
    See Hopkins model below.  */
@@ -23,7 +33,7 @@ defocus_mtf (double freq, double blur_circle_diameter)
 
   /* The transfer function of a circular blur is 2*J1(x)/x  */
   double arg = M_PI * freq * blur_circle_diameter;
-  return std::abs (2.0 * std::cyl_bessel_j (1, arg) / arg);
+  return std::abs (2.0 * get_j1 (arg) / arg);
 }
 
 /* Return MTF of gaussian blur with a given sigma.  */
@@ -470,7 +480,7 @@ mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
      Handle the limit where Z -> 0 to avoid division by zero  */
   /* Ringing effect of defocus is modelled by Bessel function.  */
   if (std::abs (Z) > 1e-9)
-    return fabs (2.0 * std::cyl_bessel_j (1, Z) / Z);
+    return fabs (2.0 * get_j1 (Z) / Z);
   // return fabs (2.0 * j1 (Z) / Z);
   return 1;
 }
@@ -503,7 +513,7 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
   // 5. Defocus MTF using Bessel J1
   // 2*J1(B)/B is the optical transfer of a circular blur
   double j_term
-      = (std::abs (B) < 1e-8) ? 1.0 : 2.0 * std::cyl_bessel_j (1, B) / B;
+      = (std::abs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
 
   // 6. Full Stokseth Polynomial Correction (1 - 0.6s + 0.4s^2)
   double stokseth_poly = 1.0 - 0.6 * s + 0.4 * s * s;
