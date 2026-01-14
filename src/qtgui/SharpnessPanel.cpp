@@ -12,6 +12,8 @@
 #include <QtConcurrent>
 #include <QFutureWatcher>
 #include <QDebug>
+#include <QTimer>
+#include <QResizeEvent>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
@@ -29,12 +31,10 @@ Q_DECLARE_METATYPE(TileRenderResult)
 
 namespace {
     // Render all 3 tiles in background thread
-    TileRenderResult renderTiles(ParameterState state, int scanWidth, int scanHeight, int generation) {
+    TileRenderResult renderTiles(ParameterState state, int scanWidth, int scanHeight, int generation, int tileSize, std::shared_ptr<colorscreen::progress_info> progress) {
         TileRenderResult result;
         result.generation = generation;
         result.success = false;
-        
-        const int tileSize = 128;
         
         // Create tile parameters
         tile_parameters tile;
@@ -51,21 +51,21 @@ namespace {
         // Render original
         std::vector<uint8_t> originalPixels(tileSize * tileSize * 3);
         tile.pixels = originalPixels.data();
-        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, original_screen, nullptr)) {
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, original_screen, progress.get())) {
             result.originalTile = QImage(originalPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
         }
         
         // Render blurred
         std::vector<uint8_t> bluredPixels(tileSize * tileSize * 3);
         tile.pixels = bluredPixels.data();
-        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, blured_screen, nullptr)) {
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, blured_screen, progress.get())) {
             result.bluredTile = QImage(bluredPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
         }
         
         // Render sharpened
         std::vector<uint8_t> sharpenedPixels(tileSize * tileSize * 3);
         tile.pixels = sharpenedPixels.data();
-        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, sharpened_screen, nullptr)) {
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, sharpened_screen, progress.get())) {
             result.sharpenedTile = QImage(sharpenedPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
         }
         
@@ -77,21 +77,30 @@ namespace {
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
 {
+    // Initialize debounce timer for tile updates
+    m_updateTimer = new QTimer(this);
+    m_updateTimer->setSingleShot(true);
+    m_updateTimer->setInterval(30); // 30ms debounce
+    connect(m_updateTimer, &QTimer::timeout, this, &SharpnessPanel::performTileRender);
+    
     // Initialize tile watcher for async rendering
     m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
     connect(m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this, [this]() {
         TileRenderResult result = m_tileWatcher->result();
         
-        qDebug() << "Tile finished: gen=" << result.generation << "current=" << m_tileGenerationCounter << "success=" << result.success;
         
         // Only update if this is still the current generation
         if (result.generation == m_tileGenerationCounter && result.success) {
-            qDebug() << "Updating tiles";
             m_originalTileLabel->setPixmap(QPixmap::fromImage(result.originalTile));
             m_bluredTileLabel->setPixmap(QPixmap::fromImage(result.bluredTile));
             m_sharpenedTileLabel->setPixmap(QPixmap::fromImage(result.sharpenedTile));
         } else {
-            qDebug() << "Skipping update";
+        }
+        
+        // Clear progress when done
+        if (m_tileProgress) {
+            // Progress completed;
+            m_tileProgress.reset();
         }
     });
     
@@ -111,19 +120,19 @@ void SharpnessPanel::setupUi()
     m_originalTileLabel->setScaledContents(false);
     m_originalTileLabel->setAlignment(Qt::AlignCenter);
     m_originalTileLabel->setMinimumSize(100, 100);
-    m_originalTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_originalTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     
     m_bluredTileLabel = new QLabel();
     m_bluredTileLabel->setScaledContents(false);
     m_bluredTileLabel->setAlignment(Qt::AlignCenter);
     m_bluredTileLabel->setMinimumSize(100, 100);
-    m_bluredTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_bluredTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     
     m_sharpenedTileLabel = new QLabel();
     m_sharpenedTileLabel->setScaledContents(false);
     m_sharpenedTileLabel->setAlignment(Qt::AlignCenter);
     m_sharpenedTileLabel->setMinimumSize(100, 100);
-    m_sharpenedTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_sharpenedTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     
     tilesLayout->addWidget(m_originalTileLabel, 1);
     tilesLayout->addWidget(m_bluredTileLabel, 1);
@@ -174,7 +183,6 @@ void SharpnessPanel::setupUi()
                 s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error, false);
             if (error) {
                 // Handle error if needed
-                qDebug() << "estimate_parameters error:" << error;
             }
         });
     });
@@ -357,38 +365,8 @@ void SharpnessPanel::updateMTFChart()
 
 void SharpnessPanel::updateScreenTiles()
 {
-    qDebug() << "=== updateScreenTiles called ===";
-    
-    if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel) {
-        qDebug() << "updateScreenTiles: labels not ready!";
-        return;
-    }
-    qDebug() << "Labels OK";
-    
-    ParameterState state = m_stateGetter();
-    std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
-    
-    qDebug() << "scan=" << (scan ? "yes" : "no") << "type=" << (int)state.scrToImg.type;
-    
-    // Only update if we have an image and scrToImg is not Random
-    if (!scan || state.scrToImg.type == scr_type::Random)
-    {
-        qDebug() << "Clearing tiles (no scan or Random)";
-        m_originalTileLabel->clear();
-        m_bluredTileLabel->clear();
-        m_sharpenedTileLabel->clear();
-        return;
-    }
-    
-    // Increment generation and launch async render
-    m_tileGenerationCounter++;
-    int currentGen = m_tileGenerationCounter;
-    
-    qDebug() << "updateScreenTiles: gen=" << currentGen << "type=" << (int)state.scrToImg.type;
-    
-    // Launch async tile rendering
-    QFuture<TileRenderResult> future = QtConcurrent::run(renderTiles, state, scan->width, scan->height, currentGen);
-    m_tileWatcher->setFuture(future);
+    // Schedule debounced update
+    scheduleTileUpdate();
 }
 
 
@@ -403,4 +381,87 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state)
 {
     updateMTFChart();
     updateScreenTiles();
+}
+
+void SharpnessPanel::scheduleTileUpdate()
+{
+    // Restart debounce timer
+    m_updateTimer->start();
+}
+
+void SharpnessPanel::performTileRender()
+{
+    if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel)
+        return;
+    
+    ParameterState state = m_stateGetter();
+    std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+    
+    // Only update if we have an image and scrToImg is not Random
+    if (!scan || state.scrToImg.type == scr_type::Random) {
+        m_originalTileLabel->clear();
+        m_bluredTileLabel->clear();
+        m_sharpenedTileLabel->clear();
+        return;
+    }
+    
+    // Calculate dynamic tile size (1/3 of panel width)
+    int tileSize = qMax(64, width() / 3);  // Minimum 64px
+    
+    // Set fixed square size for all labels to maintain aspect ratio
+    m_originalTileLabel->setFixedSize(tileSize, tileSize);
+    m_bluredTileLabel->setFixedSize(tileSize, tileSize);
+    m_sharpenedTileLabel->setFixedSize(tileSize, tileSize);
+    
+    // Compute pixel size
+    scr_to_img scrToImgObj;
+    scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
+    coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
+    
+    // Check if any relevant parameters changed
+    bool needsUpdate = false;
+    if (m_lastTileSize == 0 ||  // First run
+        //abs(tileSize - m_lastTileSize) > 10 ||  // Size changed significantly
+	tileSize != m_lastTileSize ||
+        fabs (1 - pixel_size / m_lastPixelSize) > 0.1 ||
+        (int)state.scrToImg.type != m_lastScrType ||
+        !state.rparams.sharpen.equal_p(m_lastSharpen) ||
+        state.rparams.red_strip_width != m_lastRedStripWidth ||
+        state.rparams.green_strip_width != m_lastGreenStripWidth) {
+        needsUpdate = true;
+    }
+    
+    if (!needsUpdate) {
+        return;
+    }
+    
+    // Cache current parameters
+    m_lastTileSize = tileSize;
+    m_lastPixelSize = pixel_size;
+    m_lastScrType = (int)state.scrToImg.type;
+    m_lastSharpen = state.rparams.sharpen;
+    m_lastRedStripWidth = state.rparams.red_strip_width;
+    m_lastGreenStripWidth = state.rparams.green_strip_width;
+    
+    // Create progress info
+    m_tileProgress = std::make_shared<colorscreen::progress_info>();
+    
+    // Increment generation and launch async render
+    m_tileGenerationCounter++;
+    int currentGen = m_tileGenerationCounter;
+    
+    
+    // Launch async tile rendering
+    QFuture<TileRenderResult> future = QtConcurrent::run(renderTiles, state, scan->width, scan->height, currentGen, tileSize, m_tileProgress);
+    m_tileWatcher->setFuture(future);
+}
+
+void SharpnessPanel::resizeEvent(QResizeEvent *event)
+{
+    ParameterPanel::resizeEvent(event);
+    
+    // Schedule tile update when panel is resized
+    if (m_updateTimer && event->size() != event->oldSize()) {
+        scheduleTileUpdate();
+    }
 }
