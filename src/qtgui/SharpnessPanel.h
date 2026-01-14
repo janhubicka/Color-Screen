@@ -6,6 +6,8 @@
 class MTFChartWidget;
 class QLabel;
 class QWidget;
+class QImage;
+template<typename T> class QFutureWatcher;
 
 class SharpnessPanel : public ParameterPanel
 {
@@ -26,6 +28,10 @@ private:
     QLabel *m_bluredTileLabel = nullptr;
     QLabel *m_sharpenedTileLabel = nullptr;
     QWidget *m_tilesContainer = nullptr;
+    
+    // Async tile rendering
+    QFutureWatcher<struct TileRenderResult> *m_tileWatcher = nullptr;
+    int m_tileGenerationCounter = 0;
 };
 
 #endif // SHARPNESS_PANEL_H

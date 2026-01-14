@@ -9,18 +9,96 @@
 #include <QHBoxLayout>
 #include <QPixmap>
 #include <QImage>
+#include <QtConcurrent>
+#include <QFutureWatcher>
+#include <QDebug>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
 
+// Result of rendering all 3 tiles
+struct TileRenderResult {
+    QImage originalTile;
+    QImage bluredTile;
+    QImage sharpenedTile;
+    int generation = 0;
+    bool success = false;
+};
+
+Q_DECLARE_METATYPE(TileRenderResult)
+
+namespace {
+    // Render all 3 tiles in background thread
+    TileRenderResult renderTiles(ParameterState state, int scanWidth, int scanHeight, int generation) {
+        TileRenderResult result;
+        result.generation = generation;
+        result.success = false;
+        
+        const int tileSize = 128;
+        
+        // Create tile parameters
+        tile_parameters tile;
+        tile.width = tileSize;
+        tile.height = tileSize;
+        tile.pixelbytes = 3;
+        tile.rowstride = tileSize * 3;  // 3 bytes per pixel (RGB)
+        
+        // Compute pixel size
+        scr_to_img scrToImgObj;
+        scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
+        coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
+        
+        // Render original
+        std::vector<uint8_t> originalPixels(tileSize * tileSize * 3);
+        tile.pixels = originalPixels.data();
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, original_screen, nullptr)) {
+            result.originalTile = QImage(originalPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
+        }
+        
+        // Render blurred
+        std::vector<uint8_t> bluredPixels(tileSize * tileSize * 3);
+        tile.pixels = bluredPixels.data();
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, blured_screen, nullptr)) {
+            result.bluredTile = QImage(bluredPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
+        }
+        
+        // Render sharpened
+        std::vector<uint8_t> sharpenedPixels(tileSize * tileSize * 3);
+        tile.pixels = sharpenedPixels.data();
+        if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, sharpened_screen, nullptr)) {
+            result.sharpenedTile = QImage(sharpenedPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888).copy();
+        }
+        
+        result.success = !result.originalTile.isNull() && !result.bluredTile.isNull() && !result.sharpenedTile.isNull();
+        return result;
+    }
+}
+
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
 {
+    // Initialize tile watcher for async rendering
+    m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
+    connect(m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this, [this]() {
+        TileRenderResult result = m_tileWatcher->result();
+        
+        qDebug() << "Tile finished: gen=" << result.generation << "current=" << m_tileGenerationCounter << "success=" << result.success;
+        
+        // Only update if this is still the current generation
+        if (result.generation == m_tileGenerationCounter && result.success) {
+            qDebug() << "Updating tiles";
+            m_originalTileLabel->setPixmap(QPixmap::fromImage(result.originalTile));
+            m_bluredTileLabel->setPixmap(QPixmap::fromImage(result.bluredTile));
+            m_sharpenedTileLabel->setPixmap(QPixmap::fromImage(result.sharpenedTile));
+        } else {
+            qDebug() << "Skipping update";
+        }
+    });
+    
     setupUi();
 }
 
 SharpnessPanel::~SharpnessPanel() = default;
-
 void SharpnessPanel::setupUi()
 {
     // Screen tile previews (Original, Blurred, Sharpened)
@@ -279,68 +357,40 @@ void SharpnessPanel::updateMTFChart()
 
 void SharpnessPanel::updateScreenTiles()
 {
-    if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel)
+    qDebug() << "=== updateScreenTiles called ===";
+    
+    if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel) {
+        qDebug() << "updateScreenTiles: labels not ready!";
         return;
+    }
+    qDebug() << "Labels OK";
     
     ParameterState state = m_stateGetter();
     std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
     
+    qDebug() << "scan=" << (scan ? "yes" : "no") << "type=" << (int)state.scrToImg.type;
+    
     // Only update if we have an image and scrToImg is not Random
     if (!scan || state.scrToImg.type == scr_type::Random)
     {
+        qDebug() << "Clearing tiles (no scan or Random)";
         m_originalTileLabel->clear();
         m_bluredTileLabel->clear();
         m_sharpenedTileLabel->clear();
         return;
     }
     
-    // Calculate tile size (make them square)
-    int tileSize = 128; // Fixed size for now
+    // Increment generation and launch async render
+    m_tileGenerationCounter++;
+    int currentGen = m_tileGenerationCounter;
     
-    // Create tile parameters
-    tile_parameters tile;
-    tile.width = tileSize;
-    tile.height = tileSize;
-    tile.pixelbytes = 3;  // RGB
-    tile.rowstride = tileSize * 3;
+    qDebug() << "updateScreenTiles: gen=" << currentGen << "type=" << (int)state.scrToImg.type;
     
-    // Center the tile
-    tile.pos.x = scan->width / 2.0;
-    tile.pos.y = scan->height / 2.0;
-    tile.step = 1.0;  // 1:1 pixel mapping
-    
-    // Compute pixel size using scr_to_img
-    scr_to_img scrToImgObj;
-    scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-    coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
-    
-    // Render original screen
-    std::vector<uint8_t> originalPixels(tileSize * tileSize * 3);
-    tile.pixels = originalPixels.data();
-    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, original_screen, nullptr))
-    {
-        QImage img(originalPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
-        m_originalTileLabel->setPixmap(QPixmap::fromImage(img));
-    }
-    
-    // Render blurred screen
-    std::vector<uint8_t> bluredPixels(tileSize * tileSize * 3);
-    tile.pixels = bluredPixels.data();
-    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, blured_screen, nullptr))
-    {
-        QImage img(bluredPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
-        m_bluredTileLabel->setPixmap(QPixmap::fromImage(img));
-    }
-    
-    // Render sharpened screen
-    std::vector<uint8_t> sharpenedPixels(tileSize * tileSize * 3);
-    tile.pixels = sharpenedPixels.data();
-    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, sharpened_screen, nullptr))
-    {
-        QImage img(sharpenedPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
-        m_sharpenedTileLabel->setPixmap(QPixmap::fromImage(img));
-    }
+    // Launch async tile rendering
+    QFuture<TileRenderResult> future = QtConcurrent::run(renderTiles, state, scan->width, scan->height, currentGen);
+    m_tileWatcher->setFuture(future);
 }
+
 
 void SharpnessPanel::applyChange(std::function<void(ParameterState&)> modifier)
 {
