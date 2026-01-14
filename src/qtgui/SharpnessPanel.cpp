@@ -1,8 +1,14 @@
 #include "SharpnessPanel.h"
 #include "MTFChartWidget.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/scr-to-img.h"
 #include <QFormLayout>
 #include <QPushButton>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QPixmap>
+#include <QImage>
 
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
@@ -17,6 +23,43 @@ SharpnessPanel::~SharpnessPanel() = default;
 
 void SharpnessPanel::setupUi()
 {
+    // Screen tile previews (Original, Blurred, Sharpened)
+    m_tilesContainer = new QWidget();
+    QHBoxLayout *tilesLayout = new QHBoxLayout(m_tilesContainer);
+    tilesLayout->setContentsMargins(0, 0, 0, 0);
+    tilesLayout->setSpacing(5);
+    
+    m_originalTileLabel = new QLabel();
+    m_originalTileLabel->setScaledContents(false);
+    m_originalTileLabel->setAlignment(Qt::AlignCenter);
+    m_originalTileLabel->setMinimumSize(100, 100);
+    m_originalTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    m_bluredTileLabel = new QLabel();
+    m_bluredTileLabel->setScaledContents(false);
+    m_bluredTileLabel->setAlignment(Qt::AlignCenter);
+    m_bluredTileLabel->setMinimumSize(100, 100);
+    m_bluredTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    m_sharpenedTileLabel = new QLabel();
+    m_sharpenedTileLabel->setScaledContents(false);
+    m_sharpenedTileLabel->setAlignment(Qt::AlignCenter);
+    m_sharpenedTileLabel->setMinimumSize(100, 100);
+    m_sharpenedTileLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    tilesLayout->addWidget(m_originalTileLabel, 1);
+    tilesLayout->addWidget(m_bluredTileLabel, 1);
+    tilesLayout->addWidget(m_sharpenedTileLabel, 1);
+    
+    m_form->addRow(m_tilesContainer);
+    
+    // Update tile visibility (only visible if scrToImg != Random)
+    m_widgetStateUpdaters.push_back([this]() {
+        ParameterState s = m_stateGetter();
+        bool visible = s.scrToImg.type != scr_type::Random;
+        m_tilesContainer->setVisible(visible);
+    });
+    
     // Sharpen mode dropdown
     std::map<int, QString> sharpenModes;
     for (int i = 0; i < (int)sharpen_mode::sharpen_mode_max; ++i) {
@@ -234,13 +277,80 @@ void SharpnessPanel::updateMTFChart()
     }
 }
 
+void SharpnessPanel::updateScreenTiles()
+{
+    if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel)
+        return;
+    
+    ParameterState state = m_stateGetter();
+    std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+    
+    // Only update if we have an image and scrToImg is not Random
+    if (!scan || state.scrToImg.type == scr_type::Random)
+    {
+        m_originalTileLabel->clear();
+        m_bluredTileLabel->clear();
+        m_sharpenedTileLabel->clear();
+        return;
+    }
+    
+    // Calculate tile size (make them square)
+    int tileSize = 128; // Fixed size for now
+    
+    // Create tile parameters
+    tile_parameters tile;
+    tile.width = tileSize;
+    tile.height = tileSize;
+    tile.pixelbytes = 3;  // RGB
+    tile.rowstride = tileSize * 3;
+    
+    // Center the tile
+    tile.pos.x = scan->width / 2.0;
+    tile.pos.y = scan->height / 2.0;
+    tile.step = 1.0;  // 1:1 pixel mapping
+    
+    // Compute pixel size using scr_to_img
+    scr_to_img scrToImgObj;
+    scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
+    coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
+    
+    // Render original screen
+    std::vector<uint8_t> originalPixels(tileSize * tileSize * 3);
+    tile.pixels = originalPixels.data();
+    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, original_screen, nullptr))
+    {
+        QImage img(originalPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
+        m_originalTileLabel->setPixmap(QPixmap::fromImage(img));
+    }
+    
+    // Render blurred screen
+    std::vector<uint8_t> bluredPixels(tileSize * tileSize * 3);
+    tile.pixels = bluredPixels.data();
+    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, blured_screen, nullptr))
+    {
+        QImage img(bluredPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
+        m_bluredTileLabel->setPixmap(QPixmap::fromImage(img));
+    }
+    
+    // Render sharpened screen
+    std::vector<uint8_t> sharpenedPixels(tileSize * tileSize * 3);
+    tile.pixels = sharpenedPixels.data();
+    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size, sharpened_screen, nullptr))
+    {
+        QImage img(sharpenedPixels.data(), tileSize, tileSize, tile.rowstride, QImage::Format_RGB888);
+        m_sharpenedTileLabel->setPixmap(QPixmap::fromImage(img));
+    }
+}
+
 void SharpnessPanel::applyChange(std::function<void(ParameterState&)> modifier)
 {
     ParameterPanel::applyChange(modifier);
     updateMTFChart();
+    updateScreenTiles();
 }
 
 void SharpnessPanel::onParametersRefreshed(const ParameterState &state)
 {
     updateMTFChart();
+    updateScreenTiles();
 }

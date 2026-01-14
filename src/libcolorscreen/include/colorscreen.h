@@ -152,7 +152,8 @@ enum render_screen_tile_type
 };
 DLL_PUBLIC bool render_screen_tile (tile_parameters &tile,
 				    scr_type type,
-				    const scr_to_img_parameters &param,
+				    const render_parameters &rparam,
+				    coord_t pixel_size,
 				    enum render_screen_tile_type,
 				    progress_info *p);
 DLL_PUBLIC bool complete_rendered_file_parameters
