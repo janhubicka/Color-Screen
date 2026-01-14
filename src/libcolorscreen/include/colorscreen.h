@@ -144,6 +144,17 @@ DLL_PUBLIC bool render_tile (image_data &scan, scr_to_img_parameters &param,
                              render_type_parameters &rtparam,
                              tile_parameters &tile,
                              progress_info *progress = NULL);
+enum render_screen_tile_type
+{
+  original_screen,
+  blured_screen,
+  sharpened_screen
+};
+DLL_PUBLIC bool render_screen_tile (tile_parameters &tile,
+				    scr_type type,
+				    const scr_to_img_parameters &param,
+				    enum render_screen_tile_type,
+				    progress_info *p);
 DLL_PUBLIC bool complete_rendered_file_parameters
 				  (render_type_parameters &rtparams,
                                    scr_to_img_parameters &param,

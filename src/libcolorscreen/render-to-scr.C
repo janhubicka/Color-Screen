@@ -386,5 +386,36 @@ render_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
   else
     render::get_color_data (data, x, y, width, height, pixelsize, progress);
 }
+DLL_PUBLIC
+bool render_screen_tile (tile_parameters &tile,
+			 scr_type type,
+			 const render_parameters &rparam,
+			 enum render_screen_tile_type rst,
+			 progress_info *progress)
+{
+  sharpen_parameters nosp;
+  if (type == Random)
+    return false;
+  screen *scr = render_to_scr::get_screen (type, false,
+			   rst == sharpened_screen,
+			   rst == original_screen ? nosp : rparam.sharpen,
+                           rparam.red_strip_width, rparam.green_strip_width,
+                           progress);
+  if (!scr)
+    return false;
+  for (int y = 0; y < tile.height; y++)
+    for (int x = 0; x < tile.width; x++)
+      {
+	rgbdata wd = scr->interpolated_mult ({x * (1 / ((coord_t)screen::size * 3)),
+					      y * (1 / (coord_t)screen::size)});
+	wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
+	wd.clamp ();
+	tile.pixels[x * 3 + y * tile.rowstride * 3] = invert_gamma (wd.red, -1) * 255 + 0.5;
+	tile.pixels[x * 3 + y * tile.rowstride * 3 + 1] = invert_gamma (wd.green, -1) * 255 + 0.5;
+	tile.pixels[x * 3 + y * tile.rowstride * 3 + 2] = invert_gamma (wd.blue, -1) * 255 + 0.5;
+      }
+  render_to_scr::release_screen (scr);
+  return true;
+}
 
 }
