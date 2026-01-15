@@ -374,6 +374,8 @@ colorscreen_qt_SOURCES = \
     SharpnessPanel.cpp \
     MTFChartWidget.cpp
 
+@static_link_TRUE@AM_LDFLAGS = -static
+@static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT

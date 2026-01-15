@@ -14,7 +14,7 @@ colorscreen_qt_SOURCES = \
 
 if static_link
   AM_LDFLAGS = -static
-  AM_CXXFLAGS += -DLIBCOLORSCREEN -static
+  AM_CXXFLAGS = -DLIBCOLORSCREEN -static
 endif
 
 # MOC Generation
