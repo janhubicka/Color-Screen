@@ -26,14 +26,7 @@ jobs:
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
-    - name: Debug Windows Environment
-      shell: msys2 {0}
-      run: |
-        export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        echo "PATH=$PATH"
-        type -p moc || echo "moc not in path"
-        type -p moc-qt6 || echo "moc-qt6 not in path"
-        ls -F /${{matrix.sys}}/share/qt6/bin/moc* || echo "ls share failed"
+
     - name: configure
       shell: msys2 {0}
       run: |
