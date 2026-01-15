@@ -114,12 +114,27 @@ jobs:
       run: |
         mkdir Color-Screen-package
         mkdir Color-Screen-package/libs
-        cp /tmp/Color-Screen-MacOS/bin/colorscreen /tmp/Color-Screen-MacOS/bin/colorscreen-gtk Color-Screen-package
+        cp /tmp/Color-Screen-MacOS/bin/colorscreen /tmp/Color-Screen-MacOS/bin/colorscreen-gtk /tmp/Color-Screen-MacOS/bin/colorscreen-qt Color-Screen-package
         cp /tmp/Color-Screen-MacOS/share/colorscreen/gtkgui.glade Color-Screen-package
         dylibbundler -od -b -x Color-Screen-package/colorscreen -d Color-Screen-package/libs -p @executable_path/libs
         dylibbundler -od -b -x Color-Screen-package/colorscreen-gtk -d Color-Screen-package/libs -p @executable_path/libs
+        dylibbundler -od -b -x Color-Screen-package/colorscreen-qt -d Color-Screen-package/libs -p @executable_path/libs
+        
+        # Bundle Qt Platform Plugin
+        QT6_PREFIX=$(brew --prefix qt6)
+        QCOCOA=$(find "$QT6_PREFIX" -name libqcocoa.dylib -type f | head -n 1)
+        if [ -n "$QCOCOA" ]; then
+           mkdir -p Color-Screen-package/platforms
+           cp "$QCOCOA" Color-Screen-package/platforms/
+           # Fixup the plugin library references
+           dylibbundler -of -b -x Color-Screen-package/platforms/libqcocoa.dylib -d Color-Screen-package/libs -p @executable_path/libs
+        else
+           echo "WARNING: libqcocoa.dylib not found!"
+        fi
+
         otool -L Color-Screen-package/colorscreen
         otool -L Color-Screen-package/colorscreen-gtk
+        otool -L Color-Screen-package/colorscreen-qt
         ditto -ck --rsrc --sequesterRsrc Color-Screen-package Color-Screen-package.zip
     - uses: actions/upload-artifact@v4
       with:
