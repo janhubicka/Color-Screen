@@ -26,6 +26,13 @@ jobs:
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
+    - name: Debug Windows Environment
+      shell: msys2 {0}
+      run: |
+        echo "PATH=$PATH"
+        type -p moc || echo "moc not in path"
+        type -p moc-qt6 || echo "moc-qt6 not in path"
+        ls -F /${{matrix.sys}}/bin/moc* || echo "ls failed"
     - name: configure
       shell: msys2 {0}
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install
