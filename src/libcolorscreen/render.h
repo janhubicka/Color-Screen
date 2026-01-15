@@ -83,7 +83,7 @@ public:
   pure_attr inline luminosity_t get_linearized_data_red (int x, int y) const;
   pure_attr inline luminosity_t get_linearized_data_green (int x, int y) const;
   pure_attr inline luminosity_t get_linearized_data_blue (int x, int y) const;
-  bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress);
+  DLL_PUBLIC bool precompute_all (bool grayscale_needed, bool normalized_patches, rgbdata patch_proportions, progress_info *progress);
   pure_attr inline rgbdata
   get_linearized_rgb_pixel (int x, int y) const
   {
