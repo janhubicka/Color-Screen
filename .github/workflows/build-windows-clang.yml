@@ -21,13 +21,15 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw
+        install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
     - name: configure
       shell: msys2 {0}
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --prefix=/c/Color-Screen-install #--disable-static-link
+      run: |
+        export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
+        CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: make
       shell: msys2 {0}
       run: make
@@ -58,7 +60,12 @@ jobs:
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
     - name: copy dlls
       shell: msys2 {0}
-      run: cp /clang64/bin/libc++.dll /clang64/bin/libomp.dll /clang64/bin/libgdk-win32*.dll /clang64/bin/libgtk-win32*.dll /clang64/bin/libgdk_pixbuf*.dll /clang64/bin/libcairo*.dll /clang64/bin/libgobject*.dll /clang64/bin/libglib*.dll /clang64/bin/libtiff*.dll /clang64/bin/libzip.dll /clang64/bin/libturbojpeg.dll /clang64/bin/libraw*.dll /clang64/bin/libwinpthread*.dll /clang64/bin/liblcms2*.dll /clang64/bin/libgsl*.dll /clang64/bin/zlib1.dll /clang64/bin/libpng16*.dll /clang64/bin/libintl*.dll /clang64/bin/libgmodule*.dll /clang64/bin/libfontconfig*.dll /clang64/bin/libgio*.dll /clang64/bin/libfreetype*.dll /clang64/bin/libpangocairo*.dll /clang64/bin/libpango*.dll /clang64/bin/libpixman*.dll /clang64/bin/libpangowin32*.dll /clang64/bin/libatk*.dll /clang64/bin/libffi*.dll /clang64/bin/libpcre2*.dll /clang64/bin/libzstd.dll /clang64/bin/liblzma*.dll /clang64/bin/libLerc.dll /clang64/bin/libwebp*.dll /clang64/bin/libjbig*.dll /clang64/bin/libjpeg*.dll /clang64/bin/libdeflate.dll /clang64/bin/libbz2*.dll /clang64/bin/libgslcblas*.dll /clang64/bin/libiconv*.dll /clang64/bin/libexpat*.dll /clang64/bin/libharfbuzz*.dll /clang64/bin/libbrotlidec.dll /clang64/bin/libpangoft2*.dll /clang64/bin/libthai*.dll /clang64/bin/libfribidi*.dll /clang64/bin/libsharpyuv*.dll /clang64/bin/libunwind.dll /clang64/bin/libgraphite2.dll /clang64/bin/libbrotlicommon.dll /clang64/bin/libdatrie*.dll /c/Color-Screen-install/bin
+      run: cp /clang64/bin/libc++.dll /clang64/bin/libomp.dll /clang64/bin/libgdk-win32*.dll /clang64/bin/libgtk-win32*.dll /clang64/bin/libgdk_pixbuf*.dll /clang64/bin/libcairo*.dll /clang64/bin/libgobject*.dll /clang64/bin/libglib*.dll /clang64/bin/libtiff*.dll /clang64/bin/libzip.dll /clang64/bin/libturbojpeg.dll /clang64/bin/libraw*.dll /clang64/bin/libwinpthread*.dll /clang64/bin/liblcms2*.dll /clang64/bin/libgsl*.dll /clang64/bin/zlib1.dll /clang64/bin/libpng16*.dll /clang64/bin/libintl*.dll /clang64/bin/libgmodule*.dll /clang64/bin/libfontconfig*.dll /clang64/bin/libgio*.dll /clang64/bin/libfreetype*.dll /clang64/bin/libpangocairo*.dll /clang64/bin/libpango*.dll /clang64/bin/libpixman*.dll /clang64/bin/libpangowin32*.dll /clang64/bin/libatk*.dll /clang64/bin/libffi*.dll /clang64/bin/libpcre2*.dll /clang64/bin/libzstd.dll /clang64/bin/liblzma*.dll /clang64/bin/libLerc.dll /clang64/bin/libwebp*.dll /clang64/bin/libjbig*.dll /clang64/bin/libjpeg*.dll /clang64/bin/libdeflate.dll /clang64/bin/libbz2*.dll /clang64/bin/libgslcblas*.dll /clang64/bin/libiconv*.dll /clang64/bin/libexpat*.dll /clang64/bin/libharfbuzz*.dll /clang64/bin/libbrotlidec.dll /clang64/bin/libpangoft2*.dll /clang64/bin/libthai*.dll /clang64/bin/libfribidi*.dll /clang64/bin/libsharpyuv*.dll /clang64/bin/libunwind.dll /clang64/bin/libgraphite2.dll /clang64/bin/libbrotlicommon.dll /clang64/bin/libdatrie*.dll /${{matrix.sys}}/bin/Qt6*.dll /${{matrix.sys}}/bin/libfftw3-*.dll /${{matrix.sys}}/bin/libb2-*.dll /${{matrix.sys}}/bin/libdouble-conversion*.dll /${{matrix.sys}}/bin/libicuin*.dll /${{matrix.sys}}/bin/libicuuc*.dll /${{matrix.sys}}/bin/libmd4c*.dll /${{matrix.sys}}/bin/libicudt*.dll /c/Color-Screen-install/bin
+    - name: copy qt plugins
+      shell: msys2 {0}
+      run: |
+        mkdir -p /c/Color-Screen-install/bin/platforms
+        cp /${{matrix.sys}}/share/qt6/plugins/platforms/qwindows.dll /c/Color-Screen-install/bin/platforms/
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary-${{matrix.sys}}
