@@ -247,6 +247,10 @@ public:
           blur_index = nvalues++;
         else
           blur_index = -1;
+        if (!m_params.sensor_fill_factor)
+          fill_factor_index = nvalues++;
+        else
+          fill_factor_index = -1;
       }
   }
   int
@@ -272,6 +276,10 @@ public:
   void
   constrain (luminosity_t *vals)
   {
+    if (fill_factor_index >= 0 && vals[fill_factor_index] < 0.1)
+      vals[fill_factor_index] = 0.1;
+    if (fill_factor_index >= 0 && vals[fill_factor_index] > 8)
+      vals[fill_factor_index] = 8;
     if (sigma_index >= 0 && vals[sigma_index] < 0)
       vals[sigma_index] = 0;
     if (blur_index >= 0 && vals[blur_index] < 0)
@@ -279,6 +287,13 @@ public:
     if (wavelength_index >= 0)
       vals[wavelength_index] = std::clamp (vals[wavelength_index],
                                            (luminosity_t)0, (luminosity_t)1);
+  }
+  luminosity_t
+  get_fill_factor (luminosity_t *vals)
+  {
+    if (fill_factor_index < 0)
+      return m_params.sensor_fill_factor;
+    return vals[fill_factor_index];
   }
   luminosity_t
   get_wavelength (luminosity_t *vals)
@@ -346,6 +361,7 @@ public:
   bool difraction;
   int nvalues;
   int sigma_index;
+  int fill_factor_index;
   int wavelength_index;
   int blur_index;
 };
@@ -1095,6 +1111,7 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
   sigma = s.get_sigma (s.start);
   defocus = s.get_defocus (s.start);
   blur_diameter = s.get_blur_diameter (s.start);
+  sensor_fill_factor = s.get_fill_factor (s.start);
 
   if (write_table)
     {
