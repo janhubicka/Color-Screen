@@ -64,7 +64,10 @@ private slots:
   void onColorCheckBoxChanged(bool checked); // Slot for color checkbox
 
   // Recent Files
+  // Recent Files
   void openRecentFile();
+  // Recent Parameters
+  void openRecentParams();
 
 protected:
   void closeEvent(QCloseEvent *event) override;
@@ -85,10 +88,20 @@ private:
   void loadRecentFiles();
   void saveRecentFiles();
 
+  // Recent Parameters
+  void updateRecentParamsActions();
+  void addToRecentParams(const QString &filePath);
+  void loadRecentParams();
+  void saveRecentParams();
+
   QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
   QList<QAction *> m_recentFileActions;
   QStringList m_recentFiles;
+
+  QMenu *m_recentParamsMenu;
+  QList<QAction *> m_recentParamsActions;
+  QStringList m_recentParams;
 
   QSplitter *m_mainSplitter;
 
