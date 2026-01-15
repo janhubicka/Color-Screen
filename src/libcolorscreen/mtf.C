@@ -579,15 +579,17 @@ mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
       lsf[size - 1] = 0;
       size--;
     }
-  std::vector<double> mtf_half (size);
+  std::vector<double, fftw_allocator<double>> mtf_half (size);
   double scale = 1 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
     mtf_half[i] = get_mtf (i * scale);
 
+  fftw_lock.lock ();
   fftw_plan plan = fftw_plan_r2r_1d (size, mtf_half.data (), lsf.data (),
                                      FFTW_REDFT00, FFTW_ESTIMATE);
+  fftw_lock.unlock ();
   fftw_execute (plan);
   double sum = 0;
   for (int i = 0; i < size; i++)
@@ -595,7 +597,9 @@ mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
   double fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
+  fftw_lock.lock ();
   fftw_destroy_plan (plan);
+  fftw_lock.unlock ();
 }
 
 std::vector<double, fftw_allocator<double>>
