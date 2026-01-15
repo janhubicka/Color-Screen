@@ -188,10 +188,15 @@ AC_ARG_ENABLE([qtgui],AS_HELP_STRING([--enable-qtgui],
 if test x"$enable_qtgui" == x"yes"; then
   PKG_CHECK_MODULES([Qt6], [Qt6Core Qt6Gui Qt6Widgets Qt6Concurrent])
   
-  # Search for moc in specific qt6 path first, then general names
-  PKG_CHECK_VAR(QT_HOST_BINS, [Qt6Core], [host_bins])
-  AC_PATH_PROGS(MOC, [moc-qt6 moc], [], [$QT_HOST_BINS:/usr/libexec/qt6:$PATH])
+  # Use autoconf-archive macro to detect Qt
+  AC_PATH_PROGS(QMAKE, [qmake6 qmake-qt6 qmake])
+  AX_HAVE_QT
   
+  # Backward compatibility: AX_HAVE_QT sets QT_MOC, but our Makefile might expect MOC
+  if test -n "$QT_MOC"; then
+      MOC="$QT_MOC"
+  fi
+
   if test -z "$MOC"; then
     AC_MSG_ERROR([moc not found. Please install Qt6 development tools.])
   fi

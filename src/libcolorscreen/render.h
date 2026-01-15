@@ -59,7 +59,7 @@ public:
     else
       m_params.output_curve = NULL;
   }
-  ~render ();
+  DLL_PUBLIC ~render ();
   pure_attr inline luminosity_t get_img_pixel (coord_t x, coord_t y) const;
   pure_attr inline luminosity_t get_unadjusted_img_pixel (coord_t x, coord_t y) const;
   inline void get_img_rgb_pixel (coord_t x, coord_t y, luminosity_t *r, luminosity_t *g, luminosity_t *b) const;
