@@ -55,14 +55,33 @@ jobs:
         #/opt/homebrew/lib/libcblas.a
         #ls /opt/homebrew/lib/*.a
         export PATH="/opt/homebrew/opt/qt6/bin:/opt/homebrew/opt/qt/bin:$(brew --prefix qt6)/bin:$PATH"
-        # Attempt to find Qt6 bin via pkg-config which is known to work
-        QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
-        if [ -n "$QT6_BIN" ]; then
-          echo "Qt6 bin from pkg-config: $QT6_BIN"
-          export PATH="$QT6_BIN:$PATH"
+        # Debug and find MOC explicitly
+        echo "Looking for moc..."
+        QT6_PREFIX=$(brew --prefix qt6)
+        MOC_CANDIDATE=$(find "$QT6_PREFIX" -name "moc" -type f -perm +111 | head -n 1)
+        if [ -z "$MOC_CANDIDATE" ]; then
+             MOC_CANDIDATE=$(find /opt/homebrew -name "moc" -type f -perm +111 2>/dev/null | grep qt | head -n 1)
         fi
         
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libjasper.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libzstd.a /opt/homebrew/lib/liblzma.a /opt/homebrew/lib/libgslcblas.a /opt/homebrew/lib/libgsl.a /opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a /opt/homebrew/lib/liblcms2.a /opt/homebrew/lib/libfftw3.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp $(pwd)/libzip*/lib/libzip.a" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --disable-static-link --disable-dependencies
+        if [ -n "$MOC_CANDIDATE" ]; then
+          echo "Found moc at: $MOC_CANDIDATE"
+          export MOC="$MOC_CANDIDATE"
+          # Also add its dir to PATH
+          export PATH="$(dirname "$MOC_CANDIDATE"):$PATH"
+        else
+          echo "WARNING: Could not find moc executable via find."
+          # Fallback to pkg-config attempt
+          QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
+          if [ -n "$QT6_BIN" ]; then
+             echo "Qt6 bin from pkg-config: $QT6_BIN"
+             export PATH="$QT6_BIN:$PATH"
+          fi
+        fi
+        
+        echo "Final PATH=$PATH"
+        echo "MOC=$MOC"
+
+        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libjasper.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libzstd.a /opt/homebrew/lib/liblzma.a /opt/homebrew/lib/libgslcblas.a /opt/homebrew/lib/libgsl.a /opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a /opt/homebrew/lib/liblcms2.a /opt/homebrew/lib/libfftw3.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp $(pwd)/libzip*/lib/libzip.a" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --disable-static-link --disable-dependencies MOC="$MOC"
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
@@ -111,12 +130,26 @@ jobs:
     - name: configure with checking
       run: |
         export PATH="/opt/homebrew/opt/qt6/bin:/opt/homebrew/opt/qt/bin:$(brew --prefix qt6)/bin:$PATH"
-        # Attempt to find Qt6 bin via pkg-config
-        QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
-        if [ -n "$QT6_BIN" ]; then
-          export PATH="$QT6_BIN:$PATH"
+        # Debug and find MOC explicitly
+        echo "Looking for moc..."
+        QT6_PREFIX=$(brew --prefix qt6)
+        MOC_CANDIDATE=$(find "$QT6_PREFIX" -name "moc" -type f -perm +111 | head -n 1)
+        if [ -z "$MOC_CANDIDATE" ]; then
+             MOC_CANDIDATE=$(find /opt/homebrew -name "moc" -type f -perm +111 2>/dev/null | grep qt | head -n 1)
         fi
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --enable-checking --disable-static-link
+        
+        if [ -n "$MOC_CANDIDATE" ]; then
+          echo "Found moc at: $MOC_CANDIDATE"
+          export MOC="$MOC_CANDIDATE"
+          export PATH="$(dirname "$MOC_CANDIDATE"):$PATH"
+        else
+          QT6_BIN=$(pkg-config --variable=host_bins Qt6Core)
+          if [ -n "$QT6_BIN" ]; then
+             export PATH="$QT6_BIN:$PATH"
+          fi
+        fi
+        
+        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --enable-checking --disable-static-link MOC="$MOC"
     - name: make (checking enabled)
       run: make
     - name: make check (checking enabled)
