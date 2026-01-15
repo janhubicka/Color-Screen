@@ -39,11 +39,10 @@ jobs:
       run: brew link qt6 --force
     - name: Debug MacOS Environment
       run: |
+        export PATH="/opt/homebrew/opt/qt6/bin:/opt/homebrew/opt/qt/bin:$PATH"
         echo "PATH=$PATH"
-        brew --prefix qt6
-        ls -F "$(brew --prefix qt6)/bin" || echo "ls brew bin failed"
-        find /opt/homebrew -name moc -type f 2>/dev/null || true
-        find /usr/local -name moc -type f 2>/dev/null || true
+        brew --prefix qt6 || echo "brew prefix qt6 failed"
+        ls -F /opt/homebrew/opt/qt6/bin/moc* || echo "ls qt6 bin failed"
     - name: Install dynlibbundler
       run: brew install -v dylibbundler
     - name: Bulid libzip
@@ -60,7 +59,7 @@ jobs:
         #CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a /opt/homebrew/opt/libomp/lib/libomp.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib " CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui
         #/opt/homebrew/lib/libcblas.a
         #ls /opt/homebrew/lib/*.a
-        export PATH="$(brew --prefix qt6)/bin:$PATH"
+        export PATH="/opt/homebrew/opt/qt6/bin:/opt/homebrew/opt/qt/bin:$(brew --prefix qt6)/bin:$PATH"
         CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libjasper.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libzstd.a /opt/homebrew/lib/liblzma.a /opt/homebrew/lib/libgslcblas.a /opt/homebrew/lib/libgsl.a /opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a  /opt/homebrew/lib/liblcms2.a /opt/homebrew/lib/libfftw3.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp "`pwd`"/libzip*/lib/libzip.a" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --disable-static-link --disable-dependencies
     - name: Upload config.log
       uses: actions/upload-artifact@v4
