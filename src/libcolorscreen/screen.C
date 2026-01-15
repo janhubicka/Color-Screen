@@ -1770,23 +1770,29 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      std::vector <double> wrapped_psf (screen::size * screen::size, 0.0);
 	      //printf ("This psf size %i\n", this_psf_size);
 
-	      for (int y = 0; y < this_psf_size; y++)
-	        for (int x = 0; x <  this_psf_size; x++)
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared(wrapped_psf,mtf,step,this_psf_size)
+	      for (int yy = 0; yy < screen::size; yy++)
+	        for (int xx = 0; xx < screen::size; xx++)
 		  {
-		    double val = mtf->get_psf (x, y, (step * screen::size));
-		    int xx = x & (screen::size - 1);
-		    int yy = y & (screen::size - 1);
-		    int nxx = (-x) & (screen::size - 1);
-		    wrapped_psf [yy * screen::size + xx] += val;
-		    if (x)
-		      wrapped_psf [yy * screen::size + nxx] += val;
-		    if (y)
-		      {
-			int nyy = (-y) & (screen::size - 1);
-			wrapped_psf [nyy * screen::size + xx] += val;
-			if (x)
-			  wrapped_psf [nyy * screen::size + nxx] += val;
-		      }
+		    double sum = 0.0;
+		    for (int y = yy; y < this_psf_size; y += screen::size)
+		      for (int x = xx; x < this_psf_size; x += screen::size)
+			sum += mtf->get_psf (x, y, (step * screen::size));
+		    
+		    for (int y = yy; y < this_psf_size; y += screen::size)
+		      for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			sum += mtf->get_psf (x, y, (step * screen::size));
+		    
+		    for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+		      for (int x = xx; x < this_psf_size; x += screen::size)
+			sum += mtf->get_psf (x, y, (step * screen::size));
+		    
+		    for (int y = screen::size - yy; y < this_psf_size; y += screen::size)
+		      for (int x = screen::size - xx; x < this_psf_size; x += screen::size)
+			sum += mtf->get_psf (x, y, (step * screen::size));
+		    
+		    wrapped_psf[yy * screen::size + xx] = sum;
 		  }
 	      double sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
