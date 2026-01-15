@@ -481,7 +481,9 @@ void MainWindow::onOpenParameters() {
 void MainWindow::onOpenImage() {
   QString fileName = QFileDialog::getOpenFileName(
       this, "Open Image", QString(),
-      "Images (*.tif *.tiff *.dng *.png *.jpg *.jpeg);;All Files (*)");
+      "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
+      "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
+      "(*)");
   if (fileName.isEmpty())
     return;
 
