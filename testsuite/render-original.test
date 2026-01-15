@@ -12,7 +12,7 @@ echo 1..6
 . $srcdir/defs.sh
 pexec $RUNCOLORSCREEN render --mode original --geometry scan --output-profile=original "$srcdir/checkerboard.tif" "$srcdir/empty.par"  "out-render-chekerboard.tif" || exit 1
 echo 'ok 1 - rendering checkerboard'
-image is 8-bit; compare two 16bit images.
+#image is 8-bit; compare two 16bit images.
 pexec $RUNCOLORSCREEN render --mode original --geometry scan --output-profile=original "out-render-chekerboard.tif" "$srcdir/empty.par" "out2-render-checkerboard.tif"|| exit 1
 echo 'ok 2 - rendering checkerboard 2'
 pexec $RUNCOLORSCREEN lab compare-images "out-render-chekerboard.tif" "out2-render-checkerboard.tif" || exit 1
