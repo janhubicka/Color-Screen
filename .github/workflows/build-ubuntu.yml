@@ -14,6 +14,7 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
+      PATH: /usr/lib/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     steps:
     - uses: actions/checkout@v4
@@ -36,7 +37,7 @@ jobs:
     - name: Install fftw3
       run: sudo apt-get install -y libfftw3-dev
     - name: Install qt6-base-dev
-      run: sudo apt-get install -y qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n autoconf-archive qmake6
+      run: sudo apt-get install -y qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n
     - name: configure
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui
     - name: make
