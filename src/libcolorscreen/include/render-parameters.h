@@ -156,8 +156,8 @@ struct mtf_parameters
   mtf_parameters ()
   : sigma (0), blur_diameter (0), defocus (0), f_stop (0), wavelength (0), pixel_pitch (0), sensor_fill_factor (1), scan_dpi (0), use_measured_mtf (0), m_data ()
   { }
-  bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
-  bool write_table (const char *write_table, const char **error) const;
+  DLL_PUBLIC bool save_psf (progress_info *progress, const char *write_table, const char **error) const;
+  DLL_PUBLIC bool write_table (const char *write_table, const char **error) const;
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;
 private:
   struct entry {
