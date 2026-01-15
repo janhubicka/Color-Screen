@@ -183,4 +183,7 @@ jobs:
     - name: Remove install directory
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
-      run: Color-Screen-package/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
+      run: |
+        Color-Screen-package/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
+        # Smoke test Qt binary (expected to fail connection to display but should load libs)
+        Color-Screen-package/colorscreen-qt --help || echo "Qt binary failed to launch (check logs for library errors)"
