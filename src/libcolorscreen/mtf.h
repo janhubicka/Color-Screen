@@ -1,15 +1,15 @@
 #ifndef MTF_H
 #define MTF_H
+#include "config.h"
 #include <fftw3.h>
 #include <mutex>
-#include "config.h"
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
-#include "include/progress-info.h"
 #include "include/base.h"
 #include "include/color.h"
 #include "include/precomputed-function.h"
+#include "include/progress-info.h"
 #include "include/render-parameters.h"
 
 namespace colorscreen
@@ -19,29 +19,43 @@ extern std::mutex fftw_lock;
 /* Allocate aligned memory so vectorized loops works fast.
    FFTW knows alignent, but it does not pass proper attributes
    to GCC.  */
-template <class T>
-struct fftw_allocator {
-    typedef T value_type;
-    T* allocate(std::size_t n) {
+template <class T> struct fftw_allocator
+{
+  typedef T value_type;
+  T *
+  allocate (std::size_t n)
+  {
 #ifdef HAVE_MEMALIGN
-        void* ptr = memalign (128, n * sizeof(T));
+    void *ptr = memalign (128, n * sizeof (T));
 #else
-        void* ptr = fftw_malloc (n * sizeof(T));
+    void *ptr = fftw_malloc (n * sizeof (T));
 #endif
-        if (!ptr) throw std::bad_alloc();
-        return static_cast<T*>(ptr);
-    }
+    if (!ptr)
+      throw std::bad_alloc ();
+    return static_cast<T *> (ptr);
+  }
 #ifdef HAVE_MEMALIGN
-    void deallocate(T* p, std::size_t) { free(p); }
+  void
+  deallocate (T *p, std::size_t)
+  {
+    free (p);
+  }
 #else
-    void deallocate(T* p, std::size_t) { fftw_free(p); }
+  void
+  deallocate (T *p, std::size_t)
+  {
+    fftw_free (p);
+  }
 #endif
 };
 
 class mtf
 {
 public:
-  bool precompute (progress_info *progress = NULL, const char *filename = NULL, const char **error = NULL);
+  bool precompute (progress_info *progress = NULL);
+  /* Precompute psf, psf_radius and psf_size estimate may be revisited.  */
+  bool precompute_psf (progress_info *progress = NULL, const char *filename = NULL,
+                   const char **error = NULL);
 
   /* Reutrn 1d MTF value.  */
   inline luminosity_t
@@ -49,7 +63,6 @@ public:
   {
     return m_mtf.apply (val);
   }
-
 
   /* Return 2d MTF value.  */
   inline luminosity_t
@@ -83,7 +96,6 @@ public:
     return psf_radius (scale) * 2 - 1;
   }
 
-
   size_t
   size () const
   {
@@ -100,9 +112,9 @@ public:
     return m_params.get_contrast (i);
   }
 
-  mtf (const mtf_parameters &params)
-  : m_params (params), m_precomputed (false)
-  { }
+  mtf (const mtf_parameters &params) : m_params (params), m_precomputed (false), m_precomputed_psf (false)
+  {
+  }
 
   luminosity_t
   get_sigma ()
@@ -110,23 +122,29 @@ public:
     return m_params.sigma;
   }
 
-  void
-  print_psf (FILE *);
+  void print_psf (FILE *);
 
-  void
-  print_mtf (FILE *);
+  void print_mtf (FILE *);
 
   static mtf *get_mtf (const mtf_parameters &mtfp, progress_info *p);
   static void release_mtf (mtf *m);
+  std::vector<double, fftw_allocator<double>>
+  compute_2d_psf (int psf_size, luminosity_t subscale,
+		  progress_info *progress = NULL);
+
 private:
   mtf_parameters m_params;
   precomputed_function<luminosity_t> m_mtf;
   precomputed_function<luminosity_t> m_psf;
   luminosity_t m_psf_radius;
   bool m_precomputed;
+  bool m_precomputed_psf;
   std::mutex m_lock;
-  bool compute_psf (int max_radius = 128, luminosity_t subsample = 1 / 32.0, const char *filename = NULL, const char **error = NULL);
-  void compute_lsf (std::vector <double, fftw_allocator<double>> &lsf, luminosity_t subsample) const;
+  luminosity_t estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
+  bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
+                    const char *filename, const char **error);
+  void compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
+                    luminosity_t subsample) const;
 };
 }
 #endif

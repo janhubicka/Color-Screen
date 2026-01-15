@@ -1739,6 +1739,12 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  mtf->precompute ();
 	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
 	  //printf ("screen step %f %f psf size %i\n", step, screen::size * step, this_psf_size);
+	  /* PSF may revisit this_psf_size.  */
+	  if (this_psf_size > screen::size)
+	    {
+	      mtf->precompute_psf ();
+	      this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
+	    }
 
 	  /* Small PSF size: use fast path of producing its FFT directly.  */
 	  if (this_psf_size < screen::size)

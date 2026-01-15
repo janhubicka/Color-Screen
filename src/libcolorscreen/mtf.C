@@ -11,13 +11,16 @@ namespace colorscreen
 namespace
 {
 
-double get_j1(double x) {
-#if defined(__cpp_lib_math_special_functions) || defined(_GLIBCXX_USE_STD_SPEC_FUNCS)
-    return std::cyl_bessel_j(1, x);
+double
+get_j1 (double x)
+{
+#if defined(__cpp_lib_math_special_functions)                                 \
+    || defined(_GLIBCXX_USE_STD_SPEC_FUNCS)
+  return std::cyl_bessel_j (1, x);
 #elif defined(_WIN32) && !defined(__cpp_lib_math_special_functions)
-    return _j1 (x);
+  return _j1 (x);
 #else
-    return j1(x); // Fallback for macOS/libc++
+  return j1 (x); // Fallback for macOS/libc++
 #endif
 }
 
@@ -175,26 +178,6 @@ calculate_lsf (double x, double sigma)
   return coefficient * std::exp (exponent);
 }
 #endif
-
-/* Calculates LSF accounting for both Lens (sigma) and Sensor (pixel aperture)
- */
-double
-calculate_system_lsf (double x, double sigma)
-{
-  if (sigma < 0.01)
-    {
-      /* If sigma is near zero, LSF is just the pixel box (Rect function)  */
-      return (std::abs (x) <= 0.5) ? 1.0 : 0.0;
-    }
-
-  const double sqrt2 = 1.41421356237;
-
-  // Integration of Gaussian from (x - 0.5) to (x + 0.5)
-  double term1 = std::erf ((x + 0.5) / (sigma * sqrt2));
-  double term2 = std::erf ((x - 0.5) / (sigma * sqrt2));
-
-  return 0.5 * (term1 - term2);
-}
 
 void
 debug_data (double freq, double v1, double v2)
@@ -402,7 +385,7 @@ get_psf_radius (double *psf, int size, bool *ok = NULL)
    Bayer demosaicing usually reduces MTF by an additional factor of 0.8 to 0.9
    near the Nyquist frequency */
 double
-mtf_parameters::sensor_mtf(double pixel_freq) const
+mtf_parameters::sensor_mtf (double pixel_freq) const
 {
   return std::abs (sinc (pixel_freq * my_sqrt (sensor_fill_factor)));
 }
@@ -512,8 +495,7 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 
   // 5. Defocus MTF using Bessel J1
   // 2*J1(B)/B is the optical transfer of a circular blur
-  double j_term
-      = (std::abs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
+  double j_term = (std::abs (B) < 1e-8) ? 1.0 : 2.0 * get_j1 (B) / B;
 
   // 6. Full Stokseth Polynomial Correction (1 - 0.6s + 0.4s^2)
   double stokseth_poly = 1.0 - 0.6 * s + 0.4 * s * s;
@@ -545,7 +527,7 @@ mtf_parameters::lens_mtf (double pixel_freq) const
            * defocus_mtf (pixel_freq, blur_diameter);
 }
 
-/* Adjustment factor to measured mtf basd on 
+/* Adjustment factor to measured mtf basd on
     - gaussian blur (sigma)
     - defocus (defocus_mm)
  */
@@ -554,9 +536,11 @@ luminosity_t
 mtf_parameters::measured_mtf_correction (double pixel_freq) const
 {
   if (simulate_difraction_p ())
-    return stokseth_defocus_mtf (pixel_freq) * gaussian_blur_mtf (pixel_freq, sigma);
+    return stokseth_defocus_mtf (pixel_freq)
+           * gaussian_blur_mtf (pixel_freq, sigma);
   else
-    return gaussian_blur_mtf (pixel_freq, sigma) * defocus_mtf (pixel_freq, blur_diameter);
+    return gaussian_blur_mtf (pixel_freq, sigma)
+           * defocus_mtf (pixel_freq, blur_diameter);
 }
 
 /* Simulate system as a combination of sensor MTF and lens MTF.  */
@@ -570,82 +554,147 @@ mtf_parameters::system_mtf (double pixel_freq) const
 /* Compute right half of LSF.  */
 
 void
-mtf::compute_lsf (std::vector <double,fftw_allocator<double>> &lsf, luminosity_t subsample) const
+mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
+                  luminosity_t subsample) const
 {
   int size = lsf.size ();
   if (size & 1)
-  {
-    lsf[size - 1] = 0;
-    size --;
-  }
-  std::vector<double> mtf_half(size);
-  double scale = 1/(size * subsample * 2);
+    {
+      lsf[size - 1] = 0;
+      size--;
+    }
+  std::vector<double> mtf_half (size);
+  double scale = 1 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
     mtf_half[i] = get_mtf (i * scale);
 
-  fftw_plan plan = fftw_plan_r2r_1d(size, mtf_half.data(), lsf.data(),
-                                    FFTW_REDFT00, FFTW_ESTIMATE);
-  fftw_execute(plan);
+  fftw_plan plan = fftw_plan_r2r_1d (size, mtf_half.data (), lsf.data (),
+                                     FFTW_REDFT00, FFTW_ESTIMATE);
+  fftw_execute (plan);
   double sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
-  printf ("sum: %f %i\n", sum, size);
   double fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
   fftw_destroy_plan (plan);
 }
 
+std::vector<double, fftw_allocator<double>>
+mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
+                     progress_info *progress)
+{
+  int fft_size = psf_size / 2 + 1;
+  const double psf_step = 1 / (psf_size * subscale);
+  // Use unique_ptr with FFTW allocator for fftw_complex array
+  std::unique_ptr<fftw_complex, decltype (&fftw_free)> mtf_kernel (
+      (fftw_complex *)fftw_malloc (sizeof (fftw_complex) * psf_size
+                                   * fft_size),
+      &fftw_free);
+#pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
+    shared(fft_size, psf_step, mtf_kernel, psf_size)
+  for (int y = 0; y < fft_size; y++)
+    for (int x = 0; x < fft_size; x++)
+      {
+        std::complex ker (std::clamp (get_mtf (x, y, psf_step),
+                                      (luminosity_t)0, (luminosity_t)1),
+                          (luminosity_t)0);
+        mtf_kernel.get ()[y * fft_size + x][0] = real (ker);
+        mtf_kernel.get ()[y * fft_size + x][1] = imag (ker);
+        if (y)
+          {
+            mtf_kernel.get ()[(psf_size - y) * fft_size + x][0] = real (ker);
+            mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
+          }
+      }
+  std::vector<double, fftw_allocator<double>> psf_data (psf_size * psf_size);
+  fftw_lock.lock ();
+  fftw_plan plan = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.get (),
+                                         psf_data.data (), FFTW_ESTIMATE);
+  fftw_lock.unlock ();
+  fftw_execute (plan);
+  fftw_lock.lock ();
+  fftw_destroy_plan (plan);
+  fftw_lock.unlock ();
+  return psf_data;
+}
+
+/* Determine raidus of PSF to be sure that the minimal value is at most MAX *
+   MIN_THRESHOLD. If SUM_THRESHOLD is non-zero reduce it then so the sum of the
+   kernel up to radius is 1-sum_threshold of the overall kernel.  */
+luminosity_t
+mtf::estimate_psf_size (luminosity_t min_threshold,
+                        luminosity_t sum_threshold) const
+{
+  /* Make a guess that PSF does not spread over 4 pixels.  */
+  luminosity_t subscale = 1 / 32.0;
+  int lsf_size = 256;
+  while (true)
+    {
+      std::vector<double, fftw_allocator<double>> lsf (lsf_size);
+      compute_lsf (lsf, subscale);
+      double max = 0;
+      for (auto v : lsf)
+        max = std::max (max, v);
+      /* Not good enough.  */
+      if (lsf.back () > max * min_threshold)
+        {
+          if (lsf_size < 4096)
+            lsf_size *= 2;
+          else
+            subscale *= 2;
+          continue;
+        }
+      int radius = 1;
+      for (int v = 2; v < lsf_size; v++)
+        if (lsf[v] > max * min_threshold)
+          radius = v + 1;
+#if 0
+      if (sum_threshold)
+	{
+	  double sum = 0;
+	  for (int radius = 0; radius < lsf_size && sum < 1 - sum_threshold; radius++)
+	    sum += lsf[radius];
+	  if (radius == lsf_size)
+	    {
+	      printf ("Upscaling 2 %i %f %f\n", lsf_size, subscale, sum);
+	      if (lsf_size < 4096)
+		lsf_size *= 2;
+	      else
+		subscale *= 2;
+	      continue;
+	    }
+	}
+#endif
+      assert (radius);
+      return radius * subscale;
+    }
+}
+
 /* Compute PSF as 2D FFT of circular MTF.
    MAX_RADIUS is an estimate of radius.  SUBSCALE is a size of
    pixel we compute at (smaller pixel means more precise PSF)  */
 bool
-mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
+mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *filename,
                   const char **error)
 {
   bool verbose = false;
+  /* Cap size of FFT to solve.  */
+  while (ceil (max_radius / subscale) * 2 + 1 > 4096)
+    subscale *= 2;
   int psf_size = ceil (max_radius / subscale) * 2 + 1;
   int iterations = 0;
 
   while (true)
     {
-      int fft_size = psf_size / 2 + 1;
-      const double psf_step = 1 / (psf_size * subscale);
-      // Use unique_ptr with FFTW allocator for fftw_complex array
-      std::unique_ptr<fftw_complex, decltype(&fftw_free)> mtf_kernel(
-          (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * psf_size * fft_size),
-          &fftw_free
-      );
-      for (int y = 0; y < fft_size; y++)
-        for (int x = 0; x < fft_size; x++)
-          {
-            std::complex ker (std::clamp (get_mtf (x, y, psf_step),
-                                          (luminosity_t)0, (luminosity_t)1),
-                              (luminosity_t)0);
-            mtf_kernel.get()[y * fft_size + x][0] = real (ker);
-            mtf_kernel.get()[y * fft_size + x][1] = imag (ker);
-            if (y)
-              {
-                mtf_kernel.get()[(psf_size - y) * fft_size + x][0] = real (ker);
-                mtf_kernel.get()[(psf_size - y) * fft_size + x][1] = imag (ker);
-              }
-          }
-      std::vector<double,fftw_allocator<double>> psf_data (psf_size * psf_size);
-      fftw_lock.lock ();
-      fftw_plan plan
-          = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.get (),
-                                  psf_data.data (), FFTW_ESTIMATE);
-      fftw_lock.unlock ();
-      fftw_execute (plan);
-      fftw_lock.lock ();
-      fftw_destroy_plan (plan);
-      fftw_lock.unlock ();
-
       /* Determine PSF radius.  */
 
       bool ok;
+      auto psf_data = mtf::compute_2d_psf (psf_size, subscale, NULL);
+      if (!psf_data.size ())
+        return false;
       int radius = get_psf_radius (psf_data.data (), psf_size, &ok);
       /* If FFT size was to small for the PSF, increase it and restart.  */
       if (!ok && iterations < 10)
@@ -654,11 +703,11 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
             psf_size *= 2;
           else
             subscale /= 2;
+	  printf ("Iterating PSF computation %i %i %f\n", iterations, psf_size, subscale);
           iterations++;
           continue;
         }
       m_psf_radius = radius * subscale;
-      // printf ("psf radius %i %f\n", radius, m_psf_radius);
 
       /* Compute LSF. Circular LSF is PSF.  */
       /* Make sure PSF also trails by 0.  */
@@ -676,7 +725,7 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
           int width = 2 * radius;
           int height = 2 * radius;
           pp.width = width;
-	  const int lsf_size = 100;
+          const int lsf_size = 100;
           pp.height = height + lsf_size;
           pp.depth = 16;
           const char *error;
@@ -702,46 +751,59 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
                 {
                   int xp = nearest_int (x * subscale);
                   int yp = nearest_int (y * subscale);
-                  int xx = ((x + psf_size / 2 - radius) + psf_size / 2) % psf_size;
-                  int yy = ((y + psf_size / 2 - radius)+ psf_size / 2) % psf_size;
+                  int xx = ((x + psf_size / 2 - radius) + psf_size / 2)
+                           % psf_size;
+                  int yy = ((y + psf_size / 2 - radius) + psf_size / 2)
+                           % psf_size;
                   int v = std::clamp (
                       (int)(invert_gamma (psf_data[yy * psf_size + xx] / m, -1)
                                 * (65535)
                             + 0.5),
                       0, 65535);
-                  int vv = std::clamp (v + 100 * 256 * ((xp + yp) % 2), 0, 65535);
+                  int vv
+                      = std::clamp (v + 100 * 256 * ((xp + yp) % 2), 0, 65535);
                   renderedu.put_pixel (x, v, v, vv);
                 }
               if (!renderedu.write_row ())
                 return false;
             }
-	  std::vector<double,fftw_allocator<double>> lsf(radius);
-	  mtf::compute_lsf (lsf, subscale);
-	  double lsf_max = lsf[0], collected_lsf_max = 0;
-	  std::vector<double,fftw_allocator<double>> collected_lsf(width);
+          std::vector<double, fftw_allocator<double>> lsf (radius);
+          compute_lsf (lsf, subscale);
+          double lsf_max = lsf[0], collected_lsf_max = 0;
+          std::vector<double, fftw_allocator<double>> collected_lsf (width);
           for (int x = 0; x < width; x++)
-	    {
-	      int xx = (x < radius ? radius - x - 1 : x - radius);
-	      for (int y = 0; y < psf_size; y++)
-		collected_lsf[x] += psf_data[xx * psf_size + y];
-	      if (collected_lsf[x] > collected_lsf_max)
-		collected_lsf_max = collected_lsf[x];
-	    }
+            {
+              int xx = (x < radius ? radius - x - 1 : x - radius);
+              for (int y = 0; y < psf_size; y++)
+                collected_lsf[x] += psf_data[xx * psf_size + y];
+              if (collected_lsf[x] > collected_lsf_max)
+                collected_lsf_max = collected_lsf[x];
+            }
           for (int y = 0; y < lsf_size; y++)
-	    {
+            {
               for (int x = 0; x < width; x++)
-	        {
-	          int idx = lsf_size - nearest_int (lsf[(x < radius ? radius - x - 1 : x - radius)] * lsf_size / lsf_max);
-	          int idx2 = lsf_size - nearest_int (psf_data[((x + psf_size / 2 - radius) + psf_size / 2) % psf_size] * lsf_size / m);
-	          int idx3 = lsf_size - nearest_int (collected_lsf[x] * lsf_size / collected_lsf_max);
-		  int r = (idx == y) * 65535;
-		  int g = (idx2 == y) * 65535;
-		  int b = (idx3 == y) * 65535;
-		  renderedu.put_pixel (x, r, g, b);
-	        }
+                {
+                  int idx = lsf_size
+                            - nearest_int (
+                                lsf[(x < radius ? radius - x - 1 : x - radius)]
+                                * lsf_size / lsf_max);
+                  int idx2
+                      = lsf_size
+                        - nearest_int (psf_data[((x + psf_size / 2 - radius)
+                                                 + psf_size / 2)
+                                                % psf_size]
+                                       * lsf_size / m);
+                  int idx3 = lsf_size
+                             - nearest_int (collected_lsf[x] * lsf_size
+                                            / collected_lsf_max);
+                  int r = (idx == y) * 65535;
+                  int g = (idx2 == y) * 65535;
+                  int b = (idx3 == y) * 65535;
+                  renderedu.put_pixel (x, r, g, b);
+                }
               if (!renderedu.write_row ())
                 return false;
-	    }
+            }
           if (verbose)
             printf ("Max %f, err %f normalized %f\n", m, err, err / m);
         }
@@ -750,8 +812,7 @@ mtf::compute_psf (int max_radius, luminosity_t subscale, const char *filename,
 }
 
 bool
-mtf::precompute (progress_info *progress, const char *filename,
-                 const char **error)
+mtf::precompute (progress_info *progress)
 {
   m_lock.lock ();
   if (m_precomputed)
@@ -787,27 +848,31 @@ mtf::precompute (progress_info *progress, const char *filename,
       /* TODO: Implement.  */
       if (!regular_steps)
         {
-          std::vector<luminosity_t,fftw_allocator<double>> contrasts (size () + 2);
-          std::vector<luminosity_t,fftw_allocator<double>> freqs (size () + 2);
+          std::vector<luminosity_t, fftw_allocator<double>> contrasts (size ()
+                                                                       + 2);
+          std::vector<luminosity_t, fftw_allocator<double>> freqs (size ()
+                                                                   + 2);
           for (size_t i = 0; i < size (); i++)
-	  {
-            contrasts[i]
-                = get_contrast (i) * 0.01 * m_params.measured_mtf_correction (get_freq (i));
-	    freqs[i] = get_freq (i);
-	  }
+            {
+              contrasts[i] = get_contrast (i) * 0.01
+                             * m_params.measured_mtf_correction (get_freq (i));
+              freqs[i] = get_freq (i);
+            }
           contrasts[size ()] = 0;
           contrasts[size () + 1] = 0;
-	  freqs[size ()] = freqs[size()-1] + step;
-	  freqs[size () + 1] = freqs[size()-1] + 2 *step;
+          freqs[size ()] = freqs[size () - 1] + step;
+          freqs[size () + 1] = freqs[size () - 1] + 2 * step;
           m_mtf.set_range (get_freq (0), get_freq (size () - 1) + 2 * step);
-          m_mtf.init_by_x_y_values (freqs.data (), contrasts.data (), size () + 2, 1024);
+          m_mtf.init_by_x_y_values (freqs.data (), contrasts.data (),
+                                    size () + 2, 1024);
         }
       else
         {
-          std::vector<luminosity_t,fftw_allocator<double>> contrasts (size () + 2);
+          std::vector<luminosity_t, fftw_allocator<double>> contrasts (size ()
+                                                                       + 2);
           for (size_t i = 0; i < size (); i++)
-            contrasts[i]
-                = get_contrast (i) * 0.01 * m_params.measured_mtf_correction (get_freq (i));
+            contrasts[i] = get_contrast (i) * 0.01
+                           * m_params.measured_mtf_correction (get_freq (i));
           /* Be sure that MTF trails in 0.  */
           contrasts[size ()] = 0;
           contrasts[size () + 1] = 0;
@@ -822,24 +887,25 @@ mtf::precompute (progress_info *progress, const char *filename,
                           * m_params.measured_mtf_correction (freq)
                       - get_mtf (freq))
                 > 0.01)
-            {
-              printf ("Mismatch (measured) %i freq %f table %f precomputed %f\n",
-		      (int)i, freq,
-		      get_contrast (i) * 0.01 * m_params.measured_mtf_correction (freq),
-                      m_mtf.apply (freq));
-              abort ();
-            }
+              {
+                printf (
+                    "Mismatch (measured) %i freq %f table %f precomputed %f\n",
+                    (int)i, freq,
+                    get_contrast (i) * 0.01
+                        * m_params.measured_mtf_correction (freq),
+                    m_mtf.apply (freq));
+                abort ();
+              }
           }
 
       if (progress)
-	progress->set_task ("computing point spread function", 1);
-      compute_psf (128, 1 / 32.0, filename, error);
+        progress->set_task ("computing point spread function", 1);
     }
   /* Use lens model.  */
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t,fftw_allocator<double>> contrasts (entries);
+      std::vector<luminosity_t, fftw_allocator<double>> contrasts (entries);
       luminosity_t step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);
@@ -854,35 +920,40 @@ mtf::precompute (progress_info *progress, const char *filename,
                     - m_mtf.apply (i / 1000.0))
               > 0.001)
             {
-              printf ("Mismatch (model) %f %f\n", m_params.system_mtf (i / 1000.),
+              printf ("Mismatch (model) %f %f\n",
+                      m_params.system_mtf (i / 1000.),
                       m_mtf.apply (i / 1000.0));
               abort ();
             }
 
-      /* FIXME: For some reason this still gives too small kernels.  */
-      for (radius = 0;
-           calculate_system_lsf (radius, m_params.sigma) > /*0.0001*/ 0.000001;
-           radius++)
-        ;
-      radius++;
-      if (radius < 3)
-        radius = 3;
-#if 0
-      printf ("Estimated radius for sigma %f: %i\n", m_sigma, radius);
-#endif
       if (progress)
-	progress->set_task ("computing point spread function", 1);
-      if (!compute_psf (radius, 1 / 32.0, filename, error))
-        return false;
-#if 0
-      printf ("Final radius: %i\n", psf_radius (1));
-#endif
+        progress->set_task ("computing point spread function", 1);
     }
+  m_psf_radius = estimate_psf_size ();
   // print_lsf (stdout);
 
-  //m_mtf.plot (0, 1);
-  //m_psf.plot (0, 5);
+  // m_mtf.plot (0, 1);
+  // m_psf.plot (0, 5);
   m_precomputed = true;
+  m_lock.unlock ();
+  return true;
+}
+bool
+mtf::precompute_psf (progress_info *progress, const char *filename, const char **error)
+{
+  if (!precompute (progress))
+    return false;
+  m_lock.lock ();
+  if (m_precomputed_psf)
+    {
+      m_lock.unlock ();
+      return true;
+    }
+  if (!compute_psf (psf_size (1), 1 / 32.0, filename, error))
+    {
+      m_lock.unlock ();
+      return false;
+    }
   m_lock.unlock ();
   return true;
 }
@@ -922,15 +993,21 @@ mtf_parameters::save_psf (progress_info *progress, const char *write_table,
                           const char **error) const
 {
   mtf mtf (*this);
-  return mtf.precompute (progress, write_table, error);
+  return mtf.precompute_psf (progress, write_table, error);
 }
 
 bool
 mtf_parameters::print_csv_header (FILE *f) const
 {
-  return fprintf (f, "difraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm magnification %f pixel pitch %f	defocus %.5fmm	"
-                   "sigma=%.2fpx	lens	sensor fill factor %.1f	estimated\n",
-                   f_stop, effective_f_stop (), wavelength, pixel_pitch / (25400.0 / scan_dpi), pixel_pitch, defocus, sigma, sensor_fill_factor) >= 0;
+  return fprintf (
+             f,
+             "difraction f-stop 0/%.0f (effective 0/%.0f) wavelength %f.0nm "
+             "magnification %f pixel pitch %f	defocus %.5fmm	"
+             "sigma=%.2fpx	lens	sensor fill factor %.1f	estimated\n",
+             f_stop, effective_f_stop (), wavelength,
+             pixel_pitch / (25400.0 / scan_dpi), pixel_pitch, defocus, sigma,
+             sensor_fill_factor)
+         >= 0;
 }
 
 bool
@@ -952,13 +1029,14 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
       for (size_t i = 0; i < 400; i++)
         {
           luminosity_t freq = i / 400.0;
-          if (fprintf (
-                  f,
-                  "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f\n",
-                  freq, lens_difraction_mtf (freq) * 100,
-                  stokseth_defocus_mtf (freq) * 100,
-                  gaussian_blur_mtf (freq, sigma) * 100, lens_mtf (freq) * 100,
-                  sensor_mtf (freq) * 100, system_mtf (freq) * 100)
+          if (fprintf (f,
+                       "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
+                       "%2.2f\n",
+                       freq, lens_difraction_mtf (freq) * 100,
+                       stokseth_defocus_mtf (freq) * 100,
+                       gaussian_blur_mtf (freq, sigma) * 100,
+                       lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
+                       system_mtf (freq) * 100)
               < 0)
             {
               *error = "write error";
@@ -985,7 +1063,7 @@ mtf_parameters::compute_curves (int steps) const
   result.lens_difraction_mtf.reserve (steps);
   result.lens_mtf.reserve (steps);
   result.hopkins_blur_mtf.reserve (steps);
-  
+
   for (int i = 0; i < steps; i++)
     {
       double freq = i / (double)(steps - 1);
@@ -997,7 +1075,7 @@ mtf_parameters::compute_curves (int steps) const
       result.system_mtf.push_back (system_mtf (freq));
       result.hopkins_blur_mtf.push_back (defocus_mtf (freq, blur_diameter));
     }
-  
+
   return result;
 }
 
@@ -1005,8 +1083,7 @@ luminosity_t
 mtf_parameters::estimate_parameters (const mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error,
-				     bool verbose)
+                                     const char **error, bool verbose)
 {
   *this = par;
 
@@ -1027,8 +1104,8 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
           *error = "failed to open CSV file for writting";
           return -1;
         }
-      if (fprintf ( f, "frequency	measured MTF	") < 0
-	  || !print_csv_header (f))
+      if (fprintf (f, "frequency	measured MTF	") < 0
+          || !print_csv_header (f))
         {
           *error = "write error in CSV file";
           return -1;
@@ -1037,13 +1114,14 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
         {
           luminosity_t freq = par.get_freq (i);
           luminosity_t c = par.get_contrast (i);
-          if (fprintf (
-                  f,
-                  "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f\n",
-                  freq, c, lens_difraction_mtf (freq) * 100,
-                  stokseth_defocus_mtf (freq) * 100,
-                  gaussian_blur_mtf (freq, sigma) * 100, lens_mtf (freq) * 100,
-                  sensor_mtf (freq) * 100, system_mtf (freq) * 100)
+          if (fprintf (f,
+                       "%1.3f	%2.2f	%2.2f	%2.2f	%2.2f	%2.2f	"
+                       "%2.2f	%2.2f\n",
+                       freq, c, lens_difraction_mtf (freq) * 100,
+                       stokseth_defocus_mtf (freq) * 100,
+                       gaussian_blur_mtf (freq, sigma) * 100,
+                       lens_mtf (freq) * 100, sensor_mtf (freq) * 100,
+                       system_mtf (freq) * 100)
               < 0)
             {
               *error = "write error in CSV file";
