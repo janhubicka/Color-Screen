@@ -29,13 +29,16 @@ jobs:
     - name: Debug Windows Environment
       shell: msys2 {0}
       run: |
+        export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         echo "PATH=$PATH"
         type -p moc || echo "moc not in path"
         type -p moc-qt6 || echo "moc-qt6 not in path"
-        ls -F /${{matrix.sys}}/bin/moc* || echo "ls failed"
+        ls -F /${{matrix.sys}}/share/qt6/bin/moc* || echo "ls share failed"
     - name: configure
       shell: msys2 {0}
-      run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install
+      run: |
+        export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
+        CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install
     - name: make
       shell: msys2 {0}
       run: make
