@@ -37,6 +37,13 @@ jobs:
       run: brew install -v qt6
     - name: Link qt6
       run: brew link qt6 --force
+    - name: Debug MacOS Environment
+      run: |
+        echo "PATH=$PATH"
+        brew --prefix qt6
+        ls -F "$(brew --prefix qt6)/bin" || echo "ls brew bin failed"
+        find /opt/homebrew -name moc -type f 2>/dev/null || true
+        find /usr/local -name moc -type f 2>/dev/null || true
     - name: Install dynlibbundler
       run: brew install -v dylibbundler
     - name: Bulid libzip
