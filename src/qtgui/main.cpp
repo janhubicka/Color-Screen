@@ -1,6 +1,9 @@
 #include "MainWindow.h"
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QCoreApplication>
+#include <QDebug>
+#include <QIcon>
 
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
@@ -13,10 +16,24 @@ int main(int argc, char *argv[]) {
   parser.addVersionOption();
   parser.addPositionalArgument("image", "Image file to open.");
   parser.process(app);
+
+  // Set icon search paths and theme
 #ifdef Q_OS_WIN
-  // Windows doesn't have a system-wide XDG icon theme, so we bundled Adwaita.
-  // We need to tell Qt to use it.
+  QStringList paths = QIcon::themeSearchPaths();
+  QString appDir = QCoreApplication::applicationDirPath();
+  // Add ../share/icons relative to bin/
+  paths.prepend(appDir + "/../share/icons");
+  // Also try local share/icons for robustness
+  paths.prepend(appDir + "/share/icons");
+  QIcon::setThemeSearchPaths(paths);
+
+  // Use Adwaita
   QIcon::setThemeName("Adwaita");
+
+  // Debug: Print paths to verify
+  qDebug() << "App Dir:" << appDir;
+  qDebug() << "Icon Theme:" << QIcon::themeName();
+  qDebug() << "Icon Search Paths:" << QIcon::themeSearchPaths();
 #endif
 
   // Set dark mode palette
