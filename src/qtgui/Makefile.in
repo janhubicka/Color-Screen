@@ -116,7 +116,9 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-ParameterState.$(OBJEXT) \
 	colorscreen_qt-LinearizationPanel.$(OBJEXT) \
 	colorscreen_qt-ParameterPanel.$(OBJEXT) \
+	colorscreen_qt-TilePreviewPanel.$(OBJEXT) \
 	colorscreen_qt-SharpnessPanel.$(OBJEXT) \
+	colorscreen_qt-ColorPanel.$(OBJEXT) \
 	colorscreen_qt-MTFChartWidget.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
@@ -124,7 +126,9 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_NavigationView.$(OBJEXT) \
 	colorscreen_qt-moc_LinearizationPanel.$(OBJEXT) \
 	colorscreen_qt-moc_ParameterPanel.$(OBJEXT) \
+	colorscreen_qt-moc_TilePreviewPanel.$(OBJEXT) \
 	colorscreen_qt-moc_SharpnessPanel.$(OBJEXT) \
+	colorscreen_qt-moc_ColorPanel.$(OBJEXT) \
 	colorscreen_qt-moc_SmartSpinBox.$(OBJEXT) \
 	colorscreen_qt-moc_MTFChartWidget.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1)
@@ -157,7 +161,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_builddir)/src/gtkgui -I$(top_builddir)/src/libcolorscreen/include
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
+am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
@@ -166,7 +171,9 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterState.Po \
 	./$(DEPDIR)/colorscreen_qt-Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po \
@@ -175,7 +182,8 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
+	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -371,7 +379,9 @@ colorscreen_qt_SOURCES = \
     ParameterState.cpp \
     LinearizationPanel.cpp \
     ParameterPanel.cpp \
+    TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
+    ColorPanel.cpp \
     MTFChartWidget.cpp
 
 @static_link_TRUE@AM_LDFLAGS = -static
@@ -386,11 +396,13 @@ MOC_SOURCES = \
     moc_NavigationView.cpp \
     moc_LinearizationPanel.cpp \
     moc_ParameterPanel.cpp \
+    moc_TilePreviewPanel.cpp \
     moc_SharpnessPanel.cpp \
+    moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
     moc_MTFChartWidget.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)
@@ -498,6 +510,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po@am__quote@ # am--include-marker
@@ -507,7 +520,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterState.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po@am__quote@ # am--include-marker
@@ -517,6 +532,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -660,6 +676,20 @@ colorscreen_qt-ParameterPanel.obj: ParameterPanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ParameterPanel.obj `if test -f 'ParameterPanel.cpp'; then $(CYGPATH_W) 'ParameterPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/ParameterPanel.cpp'; fi`
 
+colorscreen_qt-TilePreviewPanel.o: TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TilePreviewPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Tpo -c -o colorscreen_qt-TilePreviewPanel.o `test -f 'TilePreviewPanel.cpp' || echo '$(srcdir)/'`TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Tpo $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TilePreviewPanel.cpp' object='colorscreen_qt-TilePreviewPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TilePreviewPanel.o `test -f 'TilePreviewPanel.cpp' || echo '$(srcdir)/'`TilePreviewPanel.cpp
+
+colorscreen_qt-TilePreviewPanel.obj: TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TilePreviewPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Tpo -c -o colorscreen_qt-TilePreviewPanel.obj `if test -f 'TilePreviewPanel.cpp'; then $(CYGPATH_W) 'TilePreviewPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/TilePreviewPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Tpo $(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TilePreviewPanel.cpp' object='colorscreen_qt-TilePreviewPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TilePreviewPanel.obj `if test -f 'TilePreviewPanel.cpp'; then $(CYGPATH_W) 'TilePreviewPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/TilePreviewPanel.cpp'; fi`
+
 colorscreen_qt-SharpnessPanel.o: SharpnessPanel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-SharpnessPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-SharpnessPanel.Tpo -c -o colorscreen_qt-SharpnessPanel.o `test -f 'SharpnessPanel.cpp' || echo '$(srcdir)/'`SharpnessPanel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-SharpnessPanel.Tpo $(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
@@ -673,6 +703,20 @@ colorscreen_qt-SharpnessPanel.obj: SharpnessPanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='SharpnessPanel.cpp' object='colorscreen_qt-SharpnessPanel.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-SharpnessPanel.obj `if test -f 'SharpnessPanel.cpp'; then $(CYGPATH_W) 'SharpnessPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/SharpnessPanel.cpp'; fi`
+
+colorscreen_qt-ColorPanel.o: ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ColorPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-ColorPanel.Tpo -c -o colorscreen_qt-ColorPanel.o `test -f 'ColorPanel.cpp' || echo '$(srcdir)/'`ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ColorPanel.Tpo $(DEPDIR)/colorscreen_qt-ColorPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ColorPanel.cpp' object='colorscreen_qt-ColorPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ColorPanel.o `test -f 'ColorPanel.cpp' || echo '$(srcdir)/'`ColorPanel.cpp
+
+colorscreen_qt-ColorPanel.obj: ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ColorPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-ColorPanel.Tpo -c -o colorscreen_qt-ColorPanel.obj `if test -f 'ColorPanel.cpp'; then $(CYGPATH_W) 'ColorPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/ColorPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ColorPanel.Tpo $(DEPDIR)/colorscreen_qt-ColorPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ColorPanel.cpp' object='colorscreen_qt-ColorPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ColorPanel.obj `if test -f 'ColorPanel.cpp'; then $(CYGPATH_W) 'ColorPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/ColorPanel.cpp'; fi`
 
 colorscreen_qt-MTFChartWidget.o: MTFChartWidget.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-MTFChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-MTFChartWidget.Tpo -c -o colorscreen_qt-MTFChartWidget.o `test -f 'MTFChartWidget.cpp' || echo '$(srcdir)/'`MTFChartWidget.cpp
@@ -772,6 +816,20 @@ colorscreen_qt-moc_ParameterPanel.obj: moc_ParameterPanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ParameterPanel.obj `if test -f 'moc_ParameterPanel.cpp'; then $(CYGPATH_W) 'moc_ParameterPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ParameterPanel.cpp'; fi`
 
+colorscreen_qt-moc_TilePreviewPanel.o: moc_TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TilePreviewPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Tpo -c -o colorscreen_qt-moc_TilePreviewPanel.o `test -f 'moc_TilePreviewPanel.cpp' || echo '$(srcdir)/'`moc_TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_TilePreviewPanel.cpp' object='colorscreen_qt-moc_TilePreviewPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TilePreviewPanel.o `test -f 'moc_TilePreviewPanel.cpp' || echo '$(srcdir)/'`moc_TilePreviewPanel.cpp
+
+colorscreen_qt-moc_TilePreviewPanel.obj: moc_TilePreviewPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TilePreviewPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Tpo -c -o colorscreen_qt-moc_TilePreviewPanel.obj `if test -f 'moc_TilePreviewPanel.cpp'; then $(CYGPATH_W) 'moc_TilePreviewPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TilePreviewPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_TilePreviewPanel.cpp' object='colorscreen_qt-moc_TilePreviewPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TilePreviewPanel.obj `if test -f 'moc_TilePreviewPanel.cpp'; then $(CYGPATH_W) 'moc_TilePreviewPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TilePreviewPanel.cpp'; fi`
+
 colorscreen_qt-moc_SharpnessPanel.o: moc_SharpnessPanel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_SharpnessPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Tpo -c -o colorscreen_qt-moc_SharpnessPanel.o `test -f 'moc_SharpnessPanel.cpp' || echo '$(srcdir)/'`moc_SharpnessPanel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
@@ -785,6 +843,20 @@ colorscreen_qt-moc_SharpnessPanel.obj: moc_SharpnessPanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_SharpnessPanel.cpp' object='colorscreen_qt-moc_SharpnessPanel.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_SharpnessPanel.obj `if test -f 'moc_SharpnessPanel.cpp'; then $(CYGPATH_W) 'moc_SharpnessPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_SharpnessPanel.cpp'; fi`
+
+colorscreen_qt-moc_ColorPanel.o: moc_ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ColorPanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Tpo -c -o colorscreen_qt-moc_ColorPanel.o `test -f 'moc_ColorPanel.cpp' || echo '$(srcdir)/'`moc_ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ColorPanel.cpp' object='colorscreen_qt-moc_ColorPanel.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ColorPanel.o `test -f 'moc_ColorPanel.cpp' || echo '$(srcdir)/'`moc_ColorPanel.cpp
+
+colorscreen_qt-moc_ColorPanel.obj: moc_ColorPanel.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_ColorPanel.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Tpo -c -o colorscreen_qt-moc_ColorPanel.obj `if test -f 'moc_ColorPanel.cpp'; then $(CYGPATH_W) 'moc_ColorPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ColorPanel.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Tpo $(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ColorPanel.cpp' object='colorscreen_qt-moc_ColorPanel.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ColorPanel.obj `if test -f 'moc_ColorPanel.cpp'; then $(CYGPATH_W) 'moc_ColorPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ColorPanel.cpp'; fi`
 
 colorscreen_qt-moc_SmartSpinBox.o: moc_SmartSpinBox.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_SmartSpinBox.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Tpo -c -o colorscreen_qt-moc_SmartSpinBox.o `test -f 'moc_SmartSpinBox.cpp' || echo '$(srcdir)/'`moc_SmartSpinBox.cpp
@@ -952,6 +1024,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
@@ -961,7 +1034,9 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
@@ -971,6 +1046,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1016,6 +1092,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
@@ -1025,7 +1102,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
@@ -1035,6 +1114,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

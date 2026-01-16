@@ -31,6 +31,7 @@ class QPushButton;
 class QTimer;
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include "ColorPanel.h"
 #include "LinearizationPanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
@@ -178,8 +179,10 @@ private:
   // Linearization Panel
   LinearizationPanel *m_linearizationPanel;
   SharpnessPanel *m_sharpnessPanel;
+  ColorPanel *m_colorPanel;
 
   // Docks
   QDockWidget *m_mtfDock;
   QDockWidget *m_tilesDock;
+  QDockWidget *m_colorTilesDock;
 };

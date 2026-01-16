@@ -148,7 +148,10 @@ enum render_screen_tile_type
 {
   original_screen,
   blured_screen,
-  sharpened_screen
+  sharpened_screen,
+  backlight_screen,
+  detail_screen,
+  full_screen
 };
 DLL_PUBLIC bool render_screen_tile (tile_parameters &tile,
 				    scr_type type,

@@ -15,7 +15,9 @@ struct progress_info;
 struct sharpen_parameters;
 } // namespace colorscreen
 
-class SharpnessPanel : public ParameterPanel {
+#include "TilePreviewPanel.h"
+
+class SharpnessPanel : public TilePreviewPanel {
   Q_OBJECT
 public:
   explicit SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -24,60 +26,32 @@ public:
 
   // Accessors for Dock Widgets
   QWidget *getMTFChartWidget() const;
-  QWidget *getTilesWidget() const;
 
   // Methods to handle re-attaching
   void reattachMTFChart(QWidget *widget);
-  void reattachTiles(QWidget *widget);
 
 signals:
   void detachMTFChartRequested(QWidget *widget);
-  void detachTilesRequested(QWidget *widget);
 
 protected:
-  void resizeEvent(QResizeEvent *event) override;
+  // TilePreviewPanel overrides
+  std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
+  getTileTypes() const override;
+  bool shouldUpdateTiles(const ParameterState &state) override;
+  void onTileUpdateScheduled() override;
 
 private:
   void setupUi();
   void updateMTFChart();
-  void updateScreenTiles();
-  void scheduleTileUpdate();
-  void performTileRender();
+  void updateScreenTiles(); // Wrapper to schedule
   void applyChange(std::function<void(ParameterState &)> modifier) override;
   void onParametersRefreshed(const ParameterState &state) override;
-
-  // Helpers to create detachable sections
-  QWidget *createDetachableSection(const QString &title, QWidget *content,
-                                   std::function<void()> onDetach);
 
   MTFChartWidget *m_mtfChart = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
 
-  QLabel *m_originalTileLabel = nullptr;
-  QLabel *m_bluredTileLabel = nullptr;
-  QLabel *m_sharpenedTileLabel = nullptr;
-  QWidget *m_tilesContainer = nullptr;
-  QVBoxLayout *m_tilesLayoutContainer = nullptr; // Container Layout
-
-  // Async tile rendering
-  struct RenderRequest {
-    ParameterState state;
-    int scanWidth;
-    int scanHeight;
-    int tileSize;
-    double pixelSize;
-    std::shared_ptr<colorscreen::image_data> scan;
-  };
-  RenderRequest m_pendingRequest;
-  bool m_hasPendingRequest = false;
-  void startNextRender();
-
-  QFutureWatcher<struct TileRenderResult> *m_tileWatcher = nullptr;
-  int m_tileGenerationCounter = 0;
-  QTimer *m_updateTimer = nullptr;
-  std::shared_ptr<colorscreen::progress_info> m_tileProgress;
-
-  // Cached parameters for change detection
+  // Cached parameters for change detection (moved from private to be used in
+  // shouldUpdateTiles)
   int m_lastTileSize = 0;
   double m_lastPixelSize = 0.0;
   int m_lastScrType = -1;

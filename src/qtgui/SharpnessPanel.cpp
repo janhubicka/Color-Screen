@@ -21,209 +21,16 @@
 using namespace colorscreen;
 using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
 
-// Result of rendering all 3 tiles
-struct TileRenderResult {
-  QImage originalTile;
-  QImage bluredTile;
-  QImage sharpenedTile;
-  int generation = 0;
-  bool success = false;
-};
-
-Q_DECLARE_METATYPE(TileRenderResult)
-
-namespace {
-// Render all 3 tiles in background thread
-TileRenderResult
-renderTiles(ParameterState state, int scanWidth, int scanHeight, int generation,
-            int tileSize,
-            std::shared_ptr<colorscreen::progress_info> progress) {
-  TileRenderResult result;
-  result.generation = generation;
-  result.success = false;
-
-  // Create tile parameters
-  tile_parameters tile;
-  tile.width = tileSize;
-  tile.height = tileSize;
-  tile.pixelbytes = 3;
-  tile.rowstride = tileSize * 3; // 3 bytes per pixel (RGB)
-
-  // Compute pixel size
-  scr_to_img scrToImgObj;
-  scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
-  coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
-
-  // Render original
-  std::vector<uint8_t> originalPixels(tileSize * tileSize * 3);
-  tile.pixels = originalPixels.data();
-  if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size,
-                         original_screen, progress.get())) {
-    result.originalTile = QImage(originalPixels.data(), tileSize, tileSize,
-                                 tile.rowstride, QImage::Format_RGB888)
-                              .copy();
-  }
-
-  // Render blurred
-  std::vector<uint8_t> bluredPixels(tileSize * tileSize * 3);
-  tile.pixels = bluredPixels.data();
-  if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size,
-                         blured_screen, progress.get())) {
-    result.bluredTile = QImage(bluredPixels.data(), tileSize, tileSize,
-                               tile.rowstride, QImage::Format_RGB888)
-                            .copy();
-  }
-
-  // Render sharpened
-  std::vector<uint8_t> sharpenedPixels(tileSize * tileSize * 3);
-  tile.pixels = sharpenedPixels.data();
-  if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size,
-                         sharpened_screen, progress.get())) {
-    result.sharpenedTile = QImage(sharpenedPixels.data(), tileSize, tileSize,
-                                  tile.rowstride, QImage::Format_RGB888)
-                               .copy();
-  }
-
-  result.success = !result.originalTile.isNull() &&
-                   !result.bluredTile.isNull() &&
-                   !result.sharpenedTile.isNull();
-  return result;
-}
-} // namespace
-
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent)
-    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
-  // Initialize debounce timer for tile updates
-  m_updateTimer = new QTimer(this);
-  m_updateTimer->setSingleShot(true);
-  m_updateTimer->setInterval(30); // 30ms debounce
-  connect(m_updateTimer, &QTimer::timeout, this,
-          &SharpnessPanel::performTileRender);
-
-  // Initialize tile watcher for async rendering
-  m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
-  connect(
-      m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this,
-      [this]() {
-        TileRenderResult result = m_tileWatcher->result();
-
-        // Only update if this is still the current generation
-        if (result.generation == m_tileGenerationCounter && result.success) {
-          m_originalTileLabel->setPixmap(
-              QPixmap::fromImage(result.originalTile));
-          m_bluredTileLabel->setPixmap(QPixmap::fromImage(result.bluredTile));
-          m_sharpenedTileLabel->setPixmap(
-              QPixmap::fromImage(result.sharpenedTile));
-        } else {
-        }
-
-        // Clear progress when done
-        if (m_tileProgress) {
-          // Progress completed;
-          m_tileProgress.reset();
-        }
-
-        // Check if there is a pending request
-        startNextRender();
-      });
-
+    : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
   setupUi();
 }
 
 SharpnessPanel::~SharpnessPanel() = default;
 void SharpnessPanel::setupUi() {
-  // Screen tile previews (Original, Blurred, Sharpened)
-  m_tilesContainer = new QWidget();
-  QHBoxLayout *tilesLayout = new QHBoxLayout(m_tilesContainer);
-  tilesLayout->setContentsMargins(0, 0, 0, 0);
-  tilesLayout->setSpacing(5);
-
-  m_originalTileLabel = new QLabel();
-  m_originalTileLabel->setScaledContents(false);
-  m_originalTileLabel->setAlignment(Qt::AlignCenter);
-  m_originalTileLabel->setMinimumSize(100, 100);
-  m_originalTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-  // Install resize event filter on container to trigger updates
-  class TileResizeEventFilter : public QObject {
-    SharpnessPanel *m_panel;
-
-  public:
-    TileResizeEventFilter(SharpnessPanel *panel)
-        : QObject(panel), m_panel(panel) {}
-
-  protected:
-    bool eventFilter(QObject *obj, QEvent *event) override {
-      if (event->type() == QEvent::Resize) {
-        m_panel->scheduleTileUpdate();
-      }
-      return QObject::eventFilter(obj, event);
-    }
-  };
-  m_tilesContainer->installEventFilter(new TileResizeEventFilter(this));
-
-  m_bluredTileLabel = new QLabel();
-  m_bluredTileLabel->setScaledContents(false);
-  m_bluredTileLabel->setAlignment(Qt::AlignCenter);
-  m_bluredTileLabel->setMinimumSize(100, 100);
-  m_bluredTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-  m_sharpenedTileLabel = new QLabel();
-  m_sharpenedTileLabel->setScaledContents(false);
-  m_sharpenedTileLabel->setAlignment(Qt::AlignCenter);
-  m_sharpenedTileLabel->setMinimumSize(100, 100);
-  m_sharpenedTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-  // Helper to create captioned tile
-  auto createCaptionedTile = [](QLabel *imageLabel, const QString &caption) {
-    QWidget *container = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(2);
-
-    layout->addWidget(imageLabel, 1); // Image expands
-
-    QLabel *captionLabel = new QLabel(caption);
-    captionLabel->setAlignment(Qt::AlignCenter);
-    // Make caption smaller/lighter if desired, but default is fine for now
-
-    layout->addWidget(captionLabel, 0); // Caption fixed height
-
-    return container;
-  };
-
-  tilesLayout->addWidget(createCaptionedTile(m_originalTileLabel, "Original"),
-                         1);
-  tilesLayout->addWidget(createCaptionedTile(m_bluredTileLabel, "Blured"), 1);
-  tilesLayout->addWidget(createCaptionedTile(m_sharpenedTileLabel, "Sharpened"),
-                         1);
-
-  // Create container for Tiles
-  m_tilesLayoutContainer = new QVBoxLayout();
-  m_tilesLayoutContainer->setContentsMargins(0, 0, 0, 0);
-
-  // Wrap tiles in a detachable section
-  QWidget *detachableTiles =
-      createDetachableSection("Sharpness Preview", m_tilesContainer, [this]() {
-        emit detachTilesRequested(m_tilesContainer);
-      });
-  m_tilesLayoutContainer->addWidget(detachableTiles);
-
-  m_form->addRow(m_tilesLayoutContainer);
-
-  // Update tile visibility (only visible if scrToImg != Random)
-  m_widgetStateUpdaters.push_back([this]() {
-    ParameterState s = m_stateGetter();
-    bool visible = s.scrToImg.type != scr_type::Random;
-
-    // Toggle container visibility
-    for (int i = 0; i < m_tilesLayoutContainer->count(); ++i) {
-      QWidget *w = m_tilesLayoutContainer->itemAt(i)->widget();
-      if (w)
-        w->setVisible(visible);
-    }
-  });
+  // Screen tile previews
+  setupTiles("Sharpness Preview");
 
   // Sharpen mode dropdown
   std::map<int, QString> sharpenModes;
@@ -550,192 +357,44 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
   updateScreenTiles();
 }
 
-void SharpnessPanel::scheduleTileUpdate() {
-  // Restart debounce timer
-  m_updateTimer->start();
+// Methods removed as they are now in TilePreviewPanel or handled by it
+// scheduleTileUpdate, startNextRender, performTileRender, resizeEvent
+
+std::vector<std::pair<render_screen_tile_type, QString>>
+SharpnessPanel::getTileTypes() const {
+  return {{original_screen, "Original"},
+          {blured_screen, "Blured"},
+          {sharpened_screen, "Sharpened"}};
 }
 
-void SharpnessPanel::startNextRender() {
-  if (!m_hasPendingRequest)
-    return;
-
-  // Consume pending request
-  RenderRequest req = m_pendingRequest;
-  m_hasPendingRequest = false;
-  m_tileGenerationCounter++;
-  int generation = m_tileGenerationCounter;
-
-  // Create new progress info
-  m_tileProgress = std::make_shared<progress_info>();
-
-  // Start async render
-  QFuture<TileRenderResult> future =
-      QtConcurrent::run([req, generation, progress = m_tileProgress]() {
-        return renderTiles(req.state, req.scanWidth, req.scanHeight, generation,
-                           req.tileSize, progress);
-      });
-  m_tileWatcher->setFuture(future);
-}
-
-void SharpnessPanel::performTileRender() {
-  if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel)
-    return;
-
-  ParameterState state = m_stateGetter();
-  std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
-
-  // Only update if we have an image and scrToImg is not Random
-  if (!scan || state.scrToImg.type == scr_type::Random) {
-    m_originalTileLabel->clear();
-    m_bluredTileLabel->clear();
-    m_sharpenedTileLabel->clear();
-    return;
-  }
-
-  // Calculate dynamic tile size (1/3 of available width)
-  int availableWidth = width(); // Default to panel width
-
-  // If tiles container is visible and has valid width (detached or not), check
-  // if we should use its width
-  if (m_tilesContainer && m_tilesContainer->isVisible() &&
-      m_tilesContainer->width() > 100) {
-    // If detached (not child of this panel's scroll area basically), usage of
-    // container width is more correct Or simply, we want to fill the container.
-    availableWidth = m_tilesContainer->width() - 20; // safe margin
-  } else {
-    QScrollArea *sa = findChild<QScrollArea *>();
-    if (sa && sa->viewport()) {
-      availableWidth = sa->viewport()->width();
-    }
-  }
-
-  // Account for margins and spacing
-  int margins = 0;
-  if (m_form) {
-    int l, t, r, b;
-    m_form->getContentsMargins(&l, &t, &r, &b);
-    margins = l + r;
-  }
-  int spacing = 10; // 2 * 5px spacing between 3 items
-
-  int tileSize = qMax(64, (availableWidth - margins - spacing) / 3);
-
-  // Set fixed square size for all labels to maintain aspect ratio
-  m_originalTileLabel->setFixedSize(tileSize, tileSize);
-  m_bluredTileLabel->setFixedSize(tileSize, tileSize);
-  m_sharpenedTileLabel->setFixedSize(tileSize, tileSize);
-
-  // Compute pixel size
-  scr_to_img scrToImgObj;
-  scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-  coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
-
+bool SharpnessPanel::shouldUpdateTiles(const ParameterState &state) {
   // Check if any relevant parameters changed
   bool needsUpdate = false;
   if (m_lastTileSize == 0 || // First run
-                             // abs(tileSize - m_lastTileSize) > 10 ||  // Size
-                             // changed significantly
-      tileSize != m_lastTileSize ||
-      fabs(1 - pixel_size / m_lastPixelSize) > 0.1 ||
+                             // tileSize check is done in base
       (int)state.scrToImg.type != m_lastScrType ||
       !state.rparams.sharpen.equal_p(m_lastSharpen) ||
       state.rparams.red_strip_width != m_lastRedStripWidth ||
       state.rparams.green_strip_width != m_lastGreenStripWidth) {
     needsUpdate = true;
-
-    // Store parameters for pending request
-    m_pendingRequest.state = state;
-    m_pendingRequest.scanWidth = scan->width;
-    m_pendingRequest.scanHeight = scan->height;
-    m_pendingRequest.tileSize = tileSize;
-    m_pendingRequest.pixelSize = pixel_size;
-    m_pendingRequest.scan = scan;
-    m_hasPendingRequest = true;
-
-    // Check if watcher is running
-    if (m_tileWatcher->isRunning()) {
-      // Cancel current
-      if (m_tileProgress)
-        m_tileProgress->cancel();
-      // Logic continues in finished() signal which calls startNextRender()
-      return;
-    }
-
-    // Start immediately
-    startNextRender();
   }
-
-  // Update cached params only if we actually scheduled/started (conceptually
-  // we did, even if queued)
-  if (needsUpdate) {
-    m_lastTileSize = tileSize;
-    m_lastPixelSize = pixel_size;
-    m_lastScrType = (int)state.scrToImg.type;
-    m_lastSharpen = state.rparams.sharpen;
-    m_lastRedStripWidth = state.rparams.red_strip_width;
-    m_lastGreenStripWidth = state.rparams.green_strip_width;
-  }
+  return needsUpdate;
 }
 
-void SharpnessPanel::resizeEvent(QResizeEvent *event) {
-  ParameterPanel::resizeEvent(event);
-
-  // Schedule tile update when panel is resized
-  if (m_updateTimer && event->size() != event->oldSize()) {
-    scheduleTileUpdate();
-  }
+void SharpnessPanel::onTileUpdateScheduled() {
+  ParameterState state = m_stateGetter();
+  // Cache current parameters
+  m_lastScrType = (int)state.scrToImg.type;
+  m_lastSharpen = state.rparams.sharpen;
+  m_lastRedStripWidth = state.rparams.red_strip_width;
+  m_lastGreenStripWidth = state.rparams.green_strip_width;
 }
 
 QWidget *SharpnessPanel::getMTFChartWidget() const { return m_mtfChart; }
 
-QWidget *SharpnessPanel::getTilesWidget() const { return m_tilesContainer; }
+// getTilesWidget removed here (in base)
 
-QWidget *
-SharpnessPanel::createDetachableSection(const QString &title, QWidget *content,
-                                        std::function<void()> onDetach) {
-  QWidget *container = new QWidget();
-  QVBoxLayout *layout = new QVBoxLayout(container);
-  layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(0);
-
-  // Header
-  QWidget *header = new QWidget();
-  QHBoxLayout *headerLayout = new QHBoxLayout(header);
-  headerLayout->setContentsMargins(0, 0, 0, 0);
-
-  headerLayout->addStretch(1);
-
-  QPushButton *detachBtn =
-      new QPushButton(QIcon::fromTheme("view-restore"), "Detach");
-  detachBtn->setFlat(true);
-  detachBtn->setCursor(Qt::PointingHandCursor);
-  detachBtn->setMaximumHeight(24);
-
-  headerLayout->addWidget(detachBtn);
-
-  layout->addWidget(header);
-  layout->addWidget(content);
-
-  connect(detachBtn, &QPushButton::clicked, this,
-          [onDetach, container, title, header]() {
-            if (onDetach)
-              onDetach();
-
-            // Remove content from layout (it is reparented by Dock anyway)
-            // Add placeholder
-            if (container->layout()->count() > 1) { // Header + Content
-              container->layout()->takeAt(1);       // Remove content item
-            }
-
-            QWidget *placeholder = new QWidget();
-            placeholder->setVisible(false);
-            container->layout()->addWidget(placeholder);
-
-            header->hide();
-          });
-
-  return container;
-}
+// createDetachableSection removed (moved to ParameterPanel)
 
 void SharpnessPanel::reattachMTFChart(QWidget *widget) {
   if (widget != m_mtfChart)
@@ -768,32 +427,4 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
   }
 }
 
-void SharpnessPanel::reattachTiles(QWidget *widget) {
-  if (widget != m_tilesContainer)
-    return;
-
-  if (m_tilesLayoutContainer && m_tilesLayoutContainer->count() > 0) {
-    QWidget *section = m_tilesLayoutContainer->itemAt(0)->widget();
-    if (section && section->layout()) {
-      // Remove placeholder
-      QLayoutItem *item =
-          section->layout()->takeAt(section->layout()->count() - 1);
-      if (item) {
-        if (item->widget())
-          delete item->widget();
-        delete item;
-      }
-      // Add widget back
-      section->layout()->addWidget(widget);
-      widget->show();
-
-      // Show header again
-      if (section->layout()->count() > 0) {
-        QLayoutItem *headerItem = section->layout()->itemAt(0);
-        if (headerItem && headerItem->widget()) {
-          headerItem->widget()->show();
-        }
-      }
-    }
-  }
-}
+// reattachTiles removed (in base)

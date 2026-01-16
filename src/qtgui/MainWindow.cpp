@@ -155,6 +155,12 @@ void MainWindow::setupUi() {
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
 
+  // Create Color Panel (after Sharpness)
+  m_colorPanel =
+      new ColorPanel([this]() { return getCurrentState(); },
+                     [this](const ParameterState &s) { changeParameters(s); },
+                     [this]() { return m_scan; }, this);
+
   // Create Docks for Sharpness components
   m_mtfDock = new QDockWidget("MTF Chart", this);
   m_mtfDock->setObjectName("MTFChartDock");
@@ -165,6 +171,12 @@ void MainWindow::setupUi() {
   m_tilesDock->setObjectName("TilesDock");
   m_tilesDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_tilesDock);
+
+  // Create Docks for Color components
+  m_colorTilesDock = new QDockWidget("Color Preview", this);
+  m_colorTilesDock->setObjectName("ColorTilesDock");
+  m_colorTilesDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_colorTilesDock);
 
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
@@ -207,6 +219,17 @@ void MainWindow::setupUi() {
               m_tilesDock->resize(w->sizeHint());
           });
 
+  connect(m_colorPanel, &ColorPanel::detachTilesRequested, this,
+          [this](QWidget *w) {
+            if (!w)
+              return;
+            m_colorTilesDock->setWidget(w);
+            m_colorTilesDock->setFloating(true);
+            m_colorTilesDock->show();
+            if (w->sizeHint().isValid())
+              m_colorTilesDock->resize(w->sizeHint());
+          });
+
   // Connect Dock closing to Reattach logic
   // Install filters for Reattach logic
   m_mtfDock->installEventFilter(new DockCloseEventFilter(m_mtfDock, [this]() {
@@ -224,6 +247,14 @@ void MainWindow::setupUi() {
         }
       }));
 
+  m_colorTilesDock->installEventFilter(
+      new DockCloseEventFilter(m_colorTilesDock, [this]() {
+        if (m_colorTilesDock->widget()) {
+          m_colorPanel->reattachTiles(m_colorTilesDock->widget());
+          m_colorTilesDock->setWidget(nullptr);
+        }
+      }));
+
   // Linearization Panel creation (re-ordered slightly or kept as is)
   m_linearizationPanel = new LinearizationPanel(
       [this]() { return getCurrentState(); },
@@ -231,6 +262,7 @@ void MainWindow::setupUi() {
       [this]() { return m_scan; }, this);
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
+  m_configTabs->addTab(m_colorPanel, "Color");
   rightSplitter->addWidget(m_configTabs);
 
   m_mainSplitter->addWidget(m_rightColumn);

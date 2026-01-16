@@ -1,0 +1,334 @@
+#include "TilePreviewPanel.h"
+#include "../libcolorscreen/include/scr-to-img.h"
+#include <QDebug>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QResizeEvent>
+#include <QScrollArea>
+#include <QtConcurrent>
+
+using namespace colorscreen;
+
+namespace {
+TileRenderResult
+renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
+                   int generation, int tileSize,
+                   std::vector<render_screen_tile_type> tileTypes,
+                   std::shared_ptr<colorscreen::progress_info> progress) {
+  TileRenderResult result;
+  result.generation = generation;
+  result.success = false;
+
+  // Create tile parameters
+  tile_parameters tile;
+  tile.width = tileSize;
+  tile.height = tileSize;
+  tile.pixelbytes = 3;
+  tile.rowstride = tileSize * 3; // 3 bytes per pixel (RGB)
+
+  // Compute pixel size
+  scr_to_img scrToImgObj;
+  scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
+  coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
+
+  result.tiles.resize(tileTypes.size());
+
+  bool allSuccess = true;
+  for (size_t i = 0; i < tileTypes.size(); ++i) {
+    if (progress && progress->cancelled()) {
+      allSuccess = false;
+      break;
+    }
+
+    std::vector<uint8_t> pixels(tileSize * tileSize * 3);
+    tile.pixels = pixels.data();
+
+    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size,
+                           tileTypes[i], progress.get())) {
+      result.tiles[i] = QImage(pixels.data(), tileSize, tileSize,
+                               tile.rowstride, QImage::Format_RGB888)
+                            .copy();
+    } else {
+      allSuccess = false;
+    }
+  }
+
+  result.success = allSuccess;
+  return result;
+}
+} // namespace
+
+TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
+                                   StateSetter stateSetter,
+                                   ImageGetter imageGetter, QWidget *parent)
+    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
+
+  // Initialize debounce timer
+  m_updateTimer = new QTimer(this);
+  m_updateTimer->setSingleShot(true);
+  m_updateTimer->setInterval(30);
+  connect(m_updateTimer, &QTimer::timeout, this,
+          &TilePreviewPanel::performTileRender);
+
+  // Initialize watcher
+  m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
+  connect(
+      m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this,
+      [this]() {
+        TileRenderResult result = m_tileWatcher->result();
+
+        if (result.generation == m_tileGenerationCounter && result.success) {
+          if (result.tiles.size() == m_tileLabels.size()) {
+            for (size_t i = 0; i < m_tileLabels.size(); ++i) {
+              m_tileLabels[i]->setPixmap(QPixmap::fromImage(result.tiles[i]));
+            }
+          }
+        }
+
+        if (m_tileProgress) {
+          m_tileProgress.reset();
+        }
+
+        startNextRender();
+      });
+}
+
+TilePreviewPanel::~TilePreviewPanel() = default;
+
+void TilePreviewPanel::setupTiles(const QString &title) {
+  auto types = getTileTypes();
+
+  m_tilesContainer = new QWidget();
+  QHBoxLayout *tilesLayout = new QHBoxLayout(m_tilesContainer);
+  tilesLayout->setContentsMargins(0, 0, 0, 0);
+  tilesLayout->setSpacing(5);
+
+  // Install resize event filter
+  class TileResizeEventFilter : public QObject {
+    TilePreviewPanel *m_panel;
+
+  public:
+    TileResizeEventFilter(TilePreviewPanel *panel)
+        : QObject(panel), m_panel(panel) {}
+
+  protected:
+    bool eventFilter(QObject *obj, QEvent *event) override {
+      if (event->type() == QEvent::Resize) {
+        m_panel->scheduleTileUpdate();
+      }
+      return QObject::eventFilter(obj, event);
+    }
+  };
+  m_tilesContainer->installEventFilter(new TileResizeEventFilter(this));
+
+  m_tileLabels.clear();
+  for (const auto &pair : types) {
+    QLabel *label = new QLabel();
+    label->setScaledContents(false);
+    label->setAlignment(Qt::AlignCenter);
+    label->setMinimumSize(100, 100);
+    label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_tileLabels.push_back(label);
+
+    // Helper to create captioned tile
+    auto createCaptionedTile = [](QLabel *imageLabel, const QString &caption) {
+      QWidget *container = new QWidget();
+      QVBoxLayout *layout = new QVBoxLayout(container);
+      layout->setContentsMargins(0, 0, 0, 0);
+      layout->setSpacing(2);
+
+      layout->addWidget(imageLabel, 1);
+
+      QLabel *captionLabel = new QLabel(caption);
+      captionLabel->setAlignment(Qt::AlignCenter);
+
+      layout->addWidget(captionLabel, 0);
+      return container;
+    };
+
+    tilesLayout->addWidget(createCaptionedTile(label, pair.second), 1);
+  }
+
+  // Create layout container and detachable section
+  m_tilesLayoutContainer = new QVBoxLayout();
+  m_tilesLayoutContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *detachableTiles =
+      createDetachableSection(title, m_tilesContainer, [this]() {
+        emit detachTilesRequested(m_tilesContainer);
+      });
+
+  // Hack: Rename title based on subclass?
+  // Actually createDetachableSection uses "Tile Preview" here, but Sharpness
+  // used "Sharpness Preview". We can allow overriding title later if needed, or
+  // loop it into setupTiles("Title")? User requested: "On the top there add
+  // three tiles in a dockable widget analogous to ones in Sharpness" "Sharpness
+  // Preview" is the title in SharpnessPanel. "Tile Preview" is generic. We
+  // might want to pass it.
+
+  m_tilesLayoutContainer->addWidget(detachableTiles);
+
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(m_tilesLayoutContainer);
+  else
+    m_form->addRow(m_tilesLayoutContainer);
+
+  // Update logic for visibility
+  m_widgetStateUpdaters.push_back([this]() {
+    ParameterState s = m_stateGetter();
+    bool visible = isTileRenderingEnabled(s);
+
+    for (int i = 0; i < m_tilesLayoutContainer->count(); ++i) {
+      QWidget *w = m_tilesLayoutContainer->itemAt(i)->widget();
+      if (w)
+        w->setVisible(visible);
+    }
+  });
+}
+
+void TilePreviewPanel::scheduleTileUpdate() { m_updateTimer->start(); }
+
+void TilePreviewPanel::performTileRender() {
+  if (m_tileLabels.empty())
+    return;
+
+  ParameterState state = m_stateGetter();
+  std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
+
+  if (!scan || !isTileRenderingEnabled(state)) {
+    for (auto l : m_tileLabels)
+      l->clear();
+    return;
+  }
+
+  // Calculate dynamic tile size
+  int availableWidth = width();
+  if (m_tilesContainer && m_tilesContainer->isVisible() &&
+      m_tilesContainer->width() > 100) {
+    availableWidth = m_tilesContainer->width() - 20;
+  } else {
+    QScrollArea *sa = findChild<QScrollArea *>();
+    if (sa && sa->viewport()) {
+      availableWidth = sa->viewport()->width();
+    }
+  }
+
+  // Margins
+  int margins = 0;
+  if (m_form) {
+    int l, t, r, b;
+    m_form->getContentsMargins(&l, &t, &r, &b);
+    margins = l + r;
+  }
+  int spacing = 10;
+  int numTiles = m_tileLabels.size();
+  if (numTiles == 0)
+    numTiles = 1;
+
+  int tileSize = qMax(64, (availableWidth - margins - spacing) / numTiles);
+
+  for (auto l : m_tileLabels)
+    l->setFixedSize(tileSize, tileSize);
+
+  // Compute pixel size for check/render
+  scr_to_img scrToImgObj;
+  scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
+  coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
+
+  // Subclass check
+  bool needsUpdate = shouldUpdateTiles(state);
+
+  // Also check if tileSize changed significantly or first run
+  static int lastTileSize = 0;
+  if (tileSize != lastTileSize) {
+    needsUpdate = true;
+    lastTileSize = tileSize;
+  }
+
+  if (!needsUpdate)
+    return;
+
+  onTileUpdateScheduled();
+
+  // Prepare types
+  std::vector<render_screen_tile_type> types;
+  for (const auto &p : getTileTypes())
+    types.push_back(p.first);
+
+  m_pendingRequest.state = state;
+  m_pendingRequest.scanWidth = scan->width;
+  m_pendingRequest.scanHeight = scan->height;
+  m_pendingRequest.tileSize = tileSize;
+  m_pendingRequest.pixelSize = pixel_size;
+  m_pendingRequest.scan = scan;
+  m_pendingRequest.tileTypes = types;
+  m_hasPendingRequest = true;
+
+  if (m_tileWatcher->isRunning()) {
+    if (m_tileProgress)
+      m_tileProgress->cancel();
+    return;
+  }
+
+  startNextRender();
+}
+
+void TilePreviewPanel::startNextRender() {
+  if (!m_hasPendingRequest)
+    return;
+
+  RenderRequest req = m_pendingRequest;
+  m_hasPendingRequest = false;
+  m_tileGenerationCounter++;
+  int generation = m_tileGenerationCounter;
+
+  m_tileProgress = std::make_shared<progress_info>();
+
+  QFuture<TileRenderResult> future =
+      QtConcurrent::run([req, generation, progress = m_tileProgress]() {
+        return renderTilesGeneric(req.state, req.scanWidth, req.scanHeight,
+                                  generation, req.tileSize, req.tileTypes,
+                                  progress);
+      });
+  m_tileWatcher->setFuture(future);
+}
+
+void TilePreviewPanel::resizeEvent(QResizeEvent *event) {
+  ParameterPanel::resizeEvent(event);
+  if (m_updateTimer && event->size() != event->oldSize()) {
+    scheduleTileUpdate();
+  }
+}
+
+QWidget *TilePreviewPanel::getTilesWidget() const { return m_tilesContainer; }
+
+void TilePreviewPanel::reattachTiles(QWidget *widget) {
+  if (widget != m_tilesContainer)
+    return;
+
+  if (m_tilesLayoutContainer && m_tilesLayoutContainer->count() > 0) {
+    QWidget *section = m_tilesLayoutContainer->itemAt(0)->widget();
+    if (section && section->layout()) {
+      QLayoutItem *item =
+          section->layout()->takeAt(section->layout()->count() - 1);
+      if (item) {
+        if (item->widget())
+          delete item->widget();
+        delete item;
+      }
+      section->layout()->addWidget(widget);
+      widget->show();
+      if (section->layout()->count() > 0) {
+        QLayoutItem *headerItem = section->layout()->itemAt(0);
+        if (headerItem && headerItem->widget())
+          headerItem->widget()->show();
+      }
+    }
+  }
+}
+
+bool TilePreviewPanel::isTileRenderingEnabled(
+    const ParameterState &state) const {
+  return state.scrToImg.type != scr_type::Random;
+}
