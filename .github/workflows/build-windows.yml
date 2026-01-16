@@ -22,7 +22,7 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -68,6 +68,23 @@ jobs:
       run: |
         mkdir -p /c/Color-Screen-install/bin/platforms
         cp /${{matrix.sys}}/share/qt6/plugins/platforms/qwindows.dll /c/Color-Screen-install/bin/platforms/
+        mkdir -p /c/Color-Screen-install/bin/imageformats
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qjpeg.dll /c/Color-Screen-install/bin/imageformats/
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qtiff.dll /c/Color-Screen-install/bin/imageformats/
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qwebp.dll /c/Color-Screen-install/bin/imageformats/
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qico.dll /c/Color-Screen-install/bin/imageformats/
+        mkdir -p /c/Color-Screen-install/bin/iconengines
+        cp /${{matrix.sys}}/share/qt6/plugins/iconengines/qsvgicon.dll /c/Color-Screen-install/bin/iconengines/
+        mkdir -p /c/Color-Screen-install/bin/styles
+        cp /${{matrix.sys}}/share/qt6/plugins/styles/qwindowsvistastyle.dll /c/Color-Screen-install/bin/styles/
+        # Try copying newer styles if available (ignore errors if missing)
+        cp /${{matrix.sys}}/share/qt6/plugins/styles/qwindows11style.dll /c/Color-Screen-install/bin/styles/ || true
+        cp /${{matrix.sys}}/share/qt6/plugins/styles/qmodernwindowsstyle.dll /c/Color-Screen-install/bin/styles/ || true
+    - name: copy icons
+      shell: msys2 {0}
+      run: |
+        mkdir -p /c/Color-Screen-install/share/icons
+        cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/share/icons/
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary-${{matrix.sys}}
