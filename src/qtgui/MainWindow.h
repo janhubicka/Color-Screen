@@ -18,6 +18,7 @@
 
 class QSplitter;
 class QTabWidget;
+class QDockWidget; // Added
 class QToolBar;    // Added
 class QComboBox;   // Added
 class QCheckBox;   // Added
@@ -177,4 +178,8 @@ private:
   // Linearization Panel
   LinearizationPanel *m_linearizationPanel;
   SharpnessPanel *m_sharpnessPanel;
+
+  // Docks
+  QDockWidget *m_mtfDock;
+  QDockWidget *m_tilesDock;
 };

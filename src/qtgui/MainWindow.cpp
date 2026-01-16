@@ -8,7 +8,8 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
-#include <QDateTime> // Added QDateTime include
+#include <QDateTime>   // Added QDateTime include
+#include <QDockWidget> // Added
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -148,18 +149,88 @@ void MainWindow::setupUi() {
   // Bottom Right: Tabs
   m_configTabs = new QTabWidget(this);
 
-  m_linearizationPanel = new LinearizationPanel(
-      [this]() { return getCurrentState(); },
-      [this](const ParameterState &s) { changeParameters(s); },
-      [this]() { return m_scan; }, this);
-
+  // Create Sharpness Panel
   m_sharpnessPanel = new SharpnessPanel(
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
-
-  m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
+
+  // Create Docks for Sharpness components
+  m_mtfDock = new QDockWidget("MTF Chart", this);
+  m_mtfDock->setObjectName("MTFChartDock");
+  m_mtfDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_mtfDock);
+
+  m_tilesDock = new QDockWidget("Sharpness Preview", this);
+  m_tilesDock->setObjectName("TilesDock");
+  m_tilesDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_tilesDock);
+
+  // Event Filter for robust Close detection
+  class DockCloseEventFilter : public QObject {
+    std::function<void()> m_onClose;
+
+  public:
+    DockCloseEventFilter(QObject *parent, std::function<void()> onClose)
+        : QObject(parent), m_onClose(onClose) {}
+
+  protected:
+    bool eventFilter(QObject *obj, QEvent *event) override {
+      if (event->type() == QEvent::Close) {
+        if (m_onClose)
+          m_onClose();
+      }
+      return QObject::eventFilter(obj, event);
+    }
+  };
+
+  // Connect Detach Signals with sizing and Float
+  connect(m_sharpnessPanel, &SharpnessPanel::detachMTFChartRequested, this,
+          [this](QWidget *w) {
+            if (!w)
+              return;
+            m_mtfDock->setWidget(w);
+            m_mtfDock->setFloating(true);
+            m_mtfDock->show();
+            if (w->sizeHint().isValid())
+              m_mtfDock->resize(w->sizeHint());
+          });
+
+  connect(m_sharpnessPanel, &SharpnessPanel::detachTilesRequested, this,
+          [this](QWidget *w) {
+            if (!w)
+              return;
+            m_tilesDock->setWidget(w);
+            m_tilesDock->setFloating(true);
+            m_tilesDock->show();
+            if (w->sizeHint().isValid())
+              m_tilesDock->resize(w->sizeHint());
+          });
+
+  // Connect Dock closing to Reattach logic
+  // Install filters for Reattach logic
+  m_mtfDock->installEventFilter(new DockCloseEventFilter(m_mtfDock, [this]() {
+    if (m_mtfDock->widget()) {
+      m_sharpnessPanel->reattachMTFChart(m_mtfDock->widget());
+      m_mtfDock->setWidget(nullptr);
+    }
+  }));
+
+  m_tilesDock->installEventFilter(
+      new DockCloseEventFilter(m_tilesDock, [this]() {
+        if (m_tilesDock->widget()) {
+          m_sharpnessPanel->reattachTiles(m_tilesDock->widget());
+          m_tilesDock->setWidget(nullptr);
+        }
+      }));
+
+  // Linearization Panel creation (re-ordered slightly or kept as is)
+  m_linearizationPanel = new LinearizationPanel(
+      [this]() { return getCurrentState(); },
+      [this](const ParameterState &s) { changeParameters(s); },
+      [this]() { return m_scan; }, this);
+  m_configTabs->addTab(m_linearizationPanel, "Linearization");
   rightSplitter->addWidget(m_configTabs);
 
   m_mainSplitter->addWidget(m_rightColumn);

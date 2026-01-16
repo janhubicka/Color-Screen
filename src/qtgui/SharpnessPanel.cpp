@@ -7,6 +7,7 @@
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
+#include <QIcon> // Added
 #include <QImage>
 #include <QLabel>
 #include <QPixmap>
@@ -14,6 +15,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QTimer>
+#include <QVBoxLayout> // Added
 #include <QtConcurrent>
 
 using namespace colorscreen;
@@ -140,6 +142,24 @@ void SharpnessPanel::setupUi() {
   m_originalTileLabel->setMinimumSize(100, 100);
   m_originalTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
+  // Install resize event filter on container to trigger updates
+  class TileResizeEventFilter : public QObject {
+    SharpnessPanel *m_panel;
+
+  public:
+    TileResizeEventFilter(SharpnessPanel *panel)
+        : QObject(panel), m_panel(panel) {}
+
+  protected:
+    bool eventFilter(QObject *obj, QEvent *event) override {
+      if (event->type() == QEvent::Resize) {
+        m_panel->scheduleTileUpdate();
+      }
+      return QObject::eventFilter(obj, event);
+    }
+  };
+  m_tilesContainer->installEventFilter(new TileResizeEventFilter(this));
+
   m_bluredTileLabel = new QLabel();
   m_bluredTileLabel->setScaledContents(false);
   m_bluredTileLabel->setAlignment(Qt::AlignCenter);
@@ -156,13 +176,30 @@ void SharpnessPanel::setupUi() {
   tilesLayout->addWidget(m_bluredTileLabel, 1);
   tilesLayout->addWidget(m_sharpenedTileLabel, 1);
 
-  m_form->addRow(m_tilesContainer);
+  // Create container for Tiles
+  m_tilesLayoutContainer = new QVBoxLayout();
+  m_tilesLayoutContainer->setContentsMargins(0, 0, 0, 0);
+
+  // Wrap tiles in a detachable section
+  QWidget *detachableTiles =
+      createDetachableSection("Sharpness Preview", m_tilesContainer, [this]() {
+        emit detachTilesRequested(m_tilesContainer);
+      });
+  m_tilesLayoutContainer->addWidget(detachableTiles);
+
+  m_form->addRow(m_tilesLayoutContainer);
 
   // Update tile visibility (only visible if scrToImg != Random)
   m_widgetStateUpdaters.push_back([this]() {
     ParameterState s = m_stateGetter();
     bool visible = s.scrToImg.type != scr_type::Random;
-    m_tilesContainer->setVisible(visible);
+
+    // Toggle container visibility
+    for (int i = 0; i < m_tilesLayoutContainer->count(); ++i) {
+      QWidget *w = m_tilesLayoutContainer->itemAt(i)->widget();
+      if (w)
+        w->setVisible(visible);
+    }
   });
 
   // Sharpen mode dropdown
@@ -221,7 +258,18 @@ void SharpnessPanel::setupUi() {
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
   m_mtfChart->setMinimumHeight(250);
-  m_form->addRow(m_mtfChart);
+
+  // Create container for MTF
+  m_mtfContainer = new QVBoxLayout();
+  m_mtfContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *detachableMTF =
+      createDetachableSection("MTF Chart", m_mtfChart, [this]() {
+        emit detachMTFChartRequested(m_mtfChart);
+      });
+  m_mtfContainer->addWidget(detachableMTF);
+
+  m_form->addRow(m_mtfContainer);
   updateMTFChart();
 
   // Connect separator toggle to chart visibility
@@ -474,10 +522,20 @@ void SharpnessPanel::performTileRender() {
   }
 
   // Calculate dynamic tile size (1/3 of available width)
-  int availableWidth = width();
-  QScrollArea *sa = findChild<QScrollArea *>();
-  if (sa && sa->viewport()) {
-    availableWidth = sa->viewport()->width();
+  int availableWidth = width(); // Default to panel width
+
+  // If tiles container is visible and has valid width (detached or not), check
+  // if we should use its width
+  if (m_tilesContainer && m_tilesContainer->isVisible() &&
+      m_tilesContainer->width() > 100) {
+    // If detached (not child of this panel's scroll area basically), usage of
+    // container width is more correct Or simply, we want to fill the container.
+    availableWidth = m_tilesContainer->width() - 20; // safe margin
+  } else {
+    QScrollArea *sa = findChild<QScrollArea *>();
+    if (sa && sa->viewport()) {
+      availableWidth = sa->viewport()->width();
+    }
   }
 
   // Account for margins and spacing
@@ -547,5 +605,101 @@ void SharpnessPanel::resizeEvent(QResizeEvent *event) {
   // Schedule tile update when panel is resized
   if (m_updateTimer && event->size() != event->oldSize()) {
     scheduleTileUpdate();
+  }
+}
+
+QWidget *SharpnessPanel::getMTFChartWidget() const { return m_mtfChart; }
+
+QWidget *SharpnessPanel::getTilesWidget() const { return m_tilesContainer; }
+
+QWidget *
+SharpnessPanel::createDetachableSection(const QString &title, QWidget *content,
+                                        std::function<void()> onDetach) {
+  QWidget *container = new QWidget();
+  QVBoxLayout *layout = new QVBoxLayout(container);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+
+  // Header
+  QWidget *header = new QWidget();
+  QHBoxLayout *headerLayout = new QHBoxLayout(header);
+  headerLayout->setContentsMargins(0, 0, 0, 0);
+
+  headerLayout->addStretch(1);
+
+  QPushButton *detachBtn =
+      new QPushButton(QIcon::fromTheme("view-restore"), "Detach");
+  detachBtn->setFlat(true);
+  detachBtn->setCursor(Qt::PointingHandCursor);
+  detachBtn->setMaximumHeight(24);
+
+  headerLayout->addWidget(detachBtn);
+
+  layout->addWidget(header);
+  layout->addWidget(content);
+
+  connect(
+      detachBtn, &QPushButton::clicked, this, [onDetach, container, title]() {
+        if (onDetach)
+          onDetach();
+
+        // Remove content from layout (it is reparented by Dock anyway)
+        // Add placeholder
+        if (container->layout()->count() > 1) { // Header + Content
+          container->layout()->takeAt(1);       // Remove content item
+        }
+
+        QLabel *placeholder = new QLabel(QString("%1 is detached").arg(title));
+        placeholder->setAlignment(Qt::AlignCenter);
+        placeholder->setStyleSheet(
+            "color: gray; font-style: italic; padding: 20px;");
+        container->layout()->addWidget(placeholder);
+      });
+
+  return container;
+}
+
+void SharpnessPanel::reattachMTFChart(QWidget *widget) {
+  if (widget != m_mtfChart)
+    return;
+
+  if (m_mtfContainer && m_mtfContainer->count() > 0) {
+    QWidget *section = m_mtfContainer->itemAt(0)->widget();
+    if (section && section->layout()) {
+      // Remove placeholder (last item)
+      QLayoutItem *item =
+          section->layout()->takeAt(section->layout()->count() - 1);
+      if (item) {
+        if (item->widget())
+          delete item->widget();
+        delete item;
+      }
+
+      // Add widget back
+      section->layout()->addWidget(widget);
+      widget->show();
+    }
+  }
+}
+
+void SharpnessPanel::reattachTiles(QWidget *widget) {
+  if (widget != m_tilesContainer)
+    return;
+
+  if (m_tilesLayoutContainer && m_tilesLayoutContainer->count() > 0) {
+    QWidget *section = m_tilesLayoutContainer->itemAt(0)->widget();
+    if (section && section->layout()) {
+      // Remove placeholder
+      QLayoutItem *item =
+          section->layout()->takeAt(section->layout()->count() - 1);
+      if (item) {
+        if (item->widget())
+          delete item->widget();
+        delete item;
+      }
+      // Add widget back
+      section->layout()->addWidget(widget);
+      widget->show();
+    }
   }
 }
