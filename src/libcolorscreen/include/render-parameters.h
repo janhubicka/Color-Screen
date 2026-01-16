@@ -700,11 +700,11 @@ struct render_parameters
 
   void adjust_for (render_type_parameters &rtparam, render_parameters &rparam);
   color_matrix get_profile_matrix (rgbdata patch_proportions);
+  color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized,
+                                const image_data *img, transmission_data *transmission_data = NULL) const;
 
 private:
   static const bool debug = colorscreen_checking;
-  color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized,
-                                const image_data *img, transmission_data *transmission_data = NULL) const;
   color_matrix get_balanced_dyes_matrix (const image_data *img,
                                          bool normalized_patches,
                                          rgbdata patch_proportions,

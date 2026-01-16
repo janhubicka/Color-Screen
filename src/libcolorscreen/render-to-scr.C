@@ -386,59 +386,105 @@ render_img::get_color_data (rgbdata *data, coord_t x, coord_t y, int width,
   else
     render::get_color_data (data, x, y, width, height, pixelsize, progress);
 }
+
+static void
+init_to_color (rgbdata color, tile_parameters &tile)
+{
+  color = color.clamp ();
+  int r = invert_gamma (color.red, -1) * 255 + 0.5;
+  int g = invert_gamma (color.green, -1) * 255 + 0.5;
+  int b = invert_gamma (color.blue, -1) * 255 + 0.5;
+
+  for (int y = 0; y < tile.height; y++)
+    for (int x = 0; x < tile.width; x++)
+      {
+	tile.pixels[x * 3 + y * tile.rowstride] = r;
+	tile.pixels[x * 3 + y * tile.rowstride + 1] = g;
+	tile.pixels[x * 3 + y * tile.rowstride + 2] = b;
+      }
+}
+
 DLL_PUBLIC
 bool
 render_screen_tile (tile_parameters &tile, scr_type type,
                     const render_parameters &rparam, coord_t pixel_size,
                     enum render_screen_tile_type rst, progress_info *progress)
 {
-  if ((int)rst <= sharpened_screen)
+  color_matrix m;
+  sharpen_parameters sp;
+  bool avg = false;
+  if (rst >= (int)backlight_screen)
     {
-      sharpen_parameters sp;
-      if (type == Random)
-	return false;
-      if (rst != original_screen)
+      spectrum_dyes_to_xyz s;
+      s.set_backlight (spectrum_dyes_to_xyz::il_D,
+                       rparam.backlight_temperature);
+      xyz backlight_white = s.whitepoint_xyz ();
+      xyz_srgb_matrix a;
+      rgbdata backlight;
+      a.apply_to_rgb (backlight_white.x, backlight_white.y, backlight_white.z,
+                      &backlight.red, &backlight.green, &backlight.blue);
+      luminosity_t max = 1 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
+      if (rst == backlight_screen)
 	{
-	  sp = rparam.sharpen;
-	  sp.usm_radius *= pixel_size;
-	  sp.scanner_mtf_scale *= pixel_size;
-	  if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
-	    sp.mode = sharpen_parameters::blur_deconvolution;
+	  init_to_color (backlight * max, tile);
+	  return true;
 	}
-      screen *scr = render_to_scr::get_screen (
-	  type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
-	  rparam.green_strip_width, progress);
-      if (!scr)
-	return false;
-      for (int y = 0; y < tile.height; y++)
-	for (int x = 0; x < tile.width; x++)
-	  {
-	    rgbdata wd = scr->interpolated_mult (
-		{ x * (3 / ((coord_t)tile.width)),
-		  y * (3 / ((coord_t)tile.height)) });
-	    // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
-	    wd = wd.clamp ();
-	    tile.pixels[x * 3 + y * tile.rowstride]
-		= invert_gamma (wd.red, -1) * 255 + 0.5;
-	    tile.pixels[x * 3 + y * tile.rowstride + 1]
-		= invert_gamma (wd.green, -1) * 255 + 0.5;
-	    tile.pixels[x * 3 + y * tile.rowstride + 2]
-		= invert_gamma (wd.blue, -1) * 255 + 0.5;
-	  }
-      render_to_scr::release_screen (scr);
+
+      bool spectrum_based;
+      bool optimized;
+      render_parameters r = rparam;
+      m = r.get_dyes_matrix (&spectrum_based, &optimized, NULL) * max;
+      m = a * m;
+      if (rst == full_screen)
+        avg = true;
+      rst = original_screen;
     }
-#if 0
+  if (type == Random)
+    return false;
+  if (rst != original_screen)
+    {
+      sp = rparam.sharpen;
+      sp.usm_radius *= pixel_size;
+      sp.scanner_mtf_scale *= pixel_size;
+      if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
+        sp.mode = sharpen_parameters::blur_deconvolution;
+    }
+  screen *scr = render_to_scr::get_screen (
+      type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
+      rparam.green_strip_width, progress);
+  if (!scr)
+    return false;
+  if (!avg)
+    for (int y = 0; y < tile.height; y++)
+      for (int x = 0; x < tile.width; x++)
+        {
+          rgbdata wd
+              = scr->interpolated_mult ({ x * (3 / ((coord_t)tile.width)),
+                                          y * (3 / ((coord_t)tile.height)) });
+          m.apply_to_rgb (wd.red, wd.green, wd.blue, &wd.red, &wd.green,
+                          &wd.blue);
+          // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
+          wd = wd.clamp ();
+          tile.pixels[x * 3 + y * tile.rowstride]
+              = invert_gamma (wd.red, -1) * 255 + 0.5;
+          tile.pixels[x * 3 + y * tile.rowstride + 1]
+              = invert_gamma (wd.green, -1) * 255 + 0.5;
+          tile.pixels[x * 3 + y * tile.rowstride + 2]
+              = invert_gamma (wd.blue, -1) * 255 + 0.5;
+        }
   else
     {
-      image_data img;
-      img.set_dimensions (1,1);
-      render r (img, rparam, 256);
-      r.precompute (false, false, {1.0/3,1.0/3,1.0/3}, NULL);
-      rgbdata white;
-      r.set_linear_hdr_color (1, 1, 1, &white.red, &white.blur, &white.green);
-      luminosity
+      rgbdata sum = { 0, 0, 0 };
+      for (int y = 0; y < screen::size; y++)
+        for (int x = 0; x < screen::size; x++)
+          sum += { scr->mult[y][x][0], scr->mult[y][x][1],
+                   scr->mult[y][x][2] };
+      sum *= 1 / (luminosity_t)(screen::size * screen::size);
+      m.apply_to_rgb (sum.red, sum.green, sum.blue, &sum.red, &sum.green,
+                      &sum.blue);
+      init_to_color (sum, tile);
     }
-#endif
+  render_to_scr::release_screen (scr);
   return true;
 }
 
