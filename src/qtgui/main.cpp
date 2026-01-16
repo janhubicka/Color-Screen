@@ -34,6 +34,8 @@ int main(int argc, char *argv[]) {
   qDebug() << "App Dir:" << appDir;
   qDebug() << "Icon Theme:" << QIcon::themeName();
   qDebug() << "Icon Search Paths:" << QIcon::themeSearchPaths();
+  qDebug() << "Supported Image Formats:"
+           << QImageReader::supportedImageFormats();
 #endif
 
   // Set dark mode palette

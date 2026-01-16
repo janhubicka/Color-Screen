@@ -67,7 +67,7 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        windeployqt --release --no-translations --compiler-runtime --dir /c/Color-Screen-install/bin /c/Color-Screen-install/bin/colorscreen-qt.exe
+        windeployqt --release --no-translations --compiler-runtime --dir /c/Color-Screen-install/bin /c/Color-Screen-install/bin/colorscreen-qt.exe -svg
     - name: copy icons
       shell: msys2 {0}
       run: |
