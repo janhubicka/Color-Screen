@@ -171,47 +171,63 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
     }
   };
 
+  struct LegendItem {
+    QString name;
+    QColor color;
+    int width;
+    bool visible;
+    const std::vector<double> *data;
+  };
+
+  // Define styling and data in one place
+  LegendItem items[] = {
+      {"Difraction", QColor(255, 100, 100), 2, m_canSimulateDifraction,
+       &m_data.lens_difraction_mtf},
+      {"Defocus", QColor(255, 165, 0), 2, m_canSimulateDifraction,
+       &m_data.stokseth_defocus_mtf},
+      {"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDifraction,
+       &m_data.hopkins_blur_mtf},
+      {"Gaussian blur", QColor(100, 200, 100), 2, true,
+       &m_data.gaussian_blur_mtf},
+      {"Lens", Qt::blue, 2, true, &m_data.lens_mtf},
+      {"Sensor", Qt::gray, 2, true, &m_data.sensor_mtf},
+      {"System", Qt::white, 4, true, &m_data.system_mtf},
+      {"Measured MTF", Qt::red, 4, m_hasMeasuredData,
+       nullptr} // Measured data handled separately
+  };
+
   // Draw all curves
-  // Only show difraction-specific curves if difraction can be simulated
-  if (m_canSimulateDifraction) {
-    drawCurve(m_data.lens_difraction_mtf,
-              QColor(255, 100, 100)); // Red - Difraction
-    drawCurve(m_data.stokseth_defocus_mtf,
-              QColor(255, 165, 0)); // Orange - Defocus
-  } else {
-    // Show Hopkins blur when difraction cannot be simulated
-    drawCurve(m_data.hopkins_blur_mtf,
-              QColor(139, 69, 19)); // Brown - Hopkins blur
-  }
+  for (const auto &item : items) {
+    if (!item.visible)
+      continue;
 
-  drawCurve(m_data.gaussian_blur_mtf,
-            QColor(100, 200, 100));           // Green - Gaussian blur
-  drawCurve(m_data.lens_mtf, Qt::cyan, 2);    // Cyan - Lens
-  drawCurve(m_data.sensor_mtf, Qt::gray, 2);  // Gray - Sensor
-  drawCurve(m_data.system_mtf, Qt::white, 2); // White - System
+    // Standard curves
+    if (item.data) {
+      drawCurve(*item.data, item.color, item.width);
+    }
+    // Measured MTF special case
+    else if (item.name == "Measured MTF" && m_hasMeasuredData &&
+             m_measuredFreq.size() == m_measuredContrast.size()) {
+      painter.setPen(QPen(item.color, item.width));
+      QPointF prevPoint;
 
-  // Draw measured MTF data if available
-  if (m_hasMeasuredData && m_measuredFreq.size() == m_measuredContrast.size()) {
-    painter.setPen(QPen(Qt::red, 2)); // Red
-    QPointF prevPoint;
+      for (size_t i = 0; i < m_measuredFreq.size(); ++i) {
+        double freq = m_measuredFreq[i];
+        double value = m_measuredContrast[i] * 0.01;
 
-    for (size_t i = 0; i < m_measuredFreq.size(); ++i) {
-      double freq = m_measuredFreq[i];
-      double value = m_measuredContrast[i] * 0.01;
+        if (freq < 0.0 || freq > 1.0)
+          continue;
 
-      // Clamp to visible range
-      if (freq < 0.0 || freq > 1.0)
-        continue;
+        int x = chartRect.left() + (int)(freq * chartRect.width());
+        int y = chartRect.bottom() - (int)(value * chartRect.height());
 
-      int x = chartRect.left() + (int)(freq * chartRect.width());
-      int y = chartRect.bottom() - (int)(value * chartRect.height());
+        QPointF point(x, y);
 
-      QPointF point(x, y);
+        if (i > 0)
+          painter.drawLine(prevPoint, point);
 
-      if (i > 0)
-        painter.drawLine(prevPoint, point);
-
-      prevPoint = point;
+        prevPoint = point;
+      }
     }
   }
 
@@ -220,23 +236,6 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   int legendX = chartRect.left();
   int itemWidth = 120;
   int lineHeight = 20;
-
-  struct LegendItem {
-    QString name;
-    QColor color;
-    int width;
-    bool visible;
-  };
-
-  LegendItem items[] = {
-      {"Difraction", QColor(255, 100, 100), 2, m_canSimulateDifraction},
-      {"Defocus", QColor(255, 165, 0), 2, m_canSimulateDifraction},
-      {"Hopkins blur", QColor(139, 69, 19), 2, !m_canSimulateDifraction},
-      {"Gaussian blur", QColor(100, 200, 100), 2, true},
-      {"Lens", Qt::cyan, 2, true},
-      {"Sensor", Qt::gray, 2, true},
-      {"System", Qt::white, 2, true},
-      {"Measured MTF", Qt::red, 2, m_hasMeasuredData}};
 
   int col = 0;
   for (const auto &item : items) {
