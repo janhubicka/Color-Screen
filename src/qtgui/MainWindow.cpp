@@ -236,11 +236,11 @@ void MainWindow::createToolbar() {
 
   m_toolbar->addSeparator();
   QAction *rotLeftAction = m_toolbar->addAction(
-      QIcon::fromTheme("object-rotate-left"), "Rotate Left");
+      QIcon::fromTheme("object-rotate-left-symbolic"), "Rotate Left");
   connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
 
   QAction *rotRightAction = m_toolbar->addAction(
-      QIcon::fromTheme("object-rotate-right"), "Rotate Right");
+      QIcon::fromTheme("object-rotate-right-symbolic"), "Rotate Right");
   connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
 
   m_toolbar->addSeparator();
@@ -402,10 +402,12 @@ void MainWindow::createMenus() {
 
   QMenu *editMenu = menuBar()->addMenu("&Edit");
   QAction *undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
+  undoAction->setIcon(QIcon::fromTheme("edit-undo-symbolic"));
   undoAction->setShortcut(QKeySequence::Undo);
   editMenu->addAction(undoAction);
 
   QAction *redoAction = m_undoStack->createRedoAction(this, tr("&Redo"));
+  redoAction->setIcon(QIcon::fromTheme("edit-redo-symbolic"));
   redoAction->setShortcut(QKeySequence::Redo);
   editMenu->addAction(redoAction);
 }

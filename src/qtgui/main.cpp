@@ -33,51 +33,6 @@ int main(int argc, char *argv[]) {
   // Use Adwaita
   QIcon::setThemeName("Adwaita");
 
-  // Debug: Print paths to verify
-  qDebug() << "App Dir:" << appDir;
-  qDebug() << "Icon Theme:" << QIcon::themeName();
-  qDebug() << "Icon Search Paths:" << QIcon::themeSearchPaths();
-  qDebug() << "Supported Image Formats:"
-           << QImageReader::supportedImageFormats();
-
-  for (const QString &path : paths) {
-    QDir dir(path);
-    if (dir.exists()) {
-      qDebug() << "Search Path Exists:" << path;
-      qDebug() << "Contents:"
-               << dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-      if (dir.exists("Adwaita")) {
-        qDebug() << "Adwaita found in" << path;
-        QDir adwaitaDir(dir.filePath("Adwaita"));
-        if (adwaitaDir.exists("index.theme")) {
-          qDebug() << "index.theme found in Adwaita";
-
-          qDebug() << "Searching for *rotate-left* in Adwaita ("
-                   << adwaitaDir.absolutePath() << ")...";
-          QDirIterator it(adwaitaDir.absolutePath(),
-                          QStringList() << "*rotate-left*", QDir::Files,
-                          QDirIterator::Subdirectories);
-          while (it.hasNext()) {
-            QString file = it.next();
-            qDebug() << "Found file:" << file;
-            QIcon directIcon(file);
-            qDebug() << "  Direct load QIcon::isNull():" << directIcon.isNull();
-            QPixmap pm(file);
-            qDebug() << "  Direct load QPixmap::isNull():" << pm.isNull();
-          }
-        } else {
-          qDebug() << "index.theme MISSING in Adwaita";
-        }
-      }
-    } else {
-      qDebug() << "Search Path DOES NOT EXIST:" << path;
-    }
-  }
-
-  qDebug() << "Has 'object-rotate-left'?"
-           << QIcon::hasThemeIcon("object-rotate-left");
-  qDebug() << "Has 'edit-undo'?" << QIcon::hasThemeIcon("edit-undo");
-
 #endif
 
   // Set dark mode palette
