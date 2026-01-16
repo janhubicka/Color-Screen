@@ -32,10 +32,10 @@ jobs:
         CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: make
       shell: msys2 {0}
-      run: make
+      run: make -j$(nproc)
     - name: make check
       shell: msys2 {0}
-      run: make check
+      run: make -j$(nproc) check
     - name: Find testsuite
       shell: msys2 {0}
       if: always()
@@ -65,7 +65,12 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        windeployqt --release --no-translations --compiler-runtime --dir /c/Color-Screen-install/bin /c/Color-Screen-install/bin/colorscreen-qt.exe --svg
+        windeployqt --release --no-translations --compiler-runtime --dir /c/Color-Screen-install/bin /c/Color-Screen-install/bin/colorscreen-qt.exe
+        # Manually copy SVG plugins since windeployqt misses them (not directly linked)
+        mkdir -p /c/Color-Screen-install/bin/imageformats
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qsvg.dll /c/Color-Screen-install/bin/imageformats/ || true
+        mkdir -p /c/Color-Screen-install/bin/iconengines
+        cp /${{matrix.sys}}/share/qt6/plugins/iconengines/qsvgicon.dll /c/Color-Screen-install/bin/iconengines/ || true
     - name: copy icons
       shell: msys2 {0}
       run: |
