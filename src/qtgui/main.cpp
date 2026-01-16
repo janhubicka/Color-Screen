@@ -3,6 +3,8 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
+#include <QDirIterator>
 #include <QIcon>
 #include <QImageReader>
 
@@ -37,6 +39,26 @@ int main(int argc, char *argv[]) {
   qDebug() << "Icon Search Paths:" << QIcon::themeSearchPaths();
   qDebug() << "Supported Image Formats:"
            << QImageReader::supportedImageFormats();
+
+  for (const QString &path : paths) {
+    QDir dir(path);
+    if (dir.exists()) {
+      qDebug() << "Search Path Exists:" << path;
+      qDebug() << "Contents:"
+               << dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+      if (dir.exists("Adwaita")) {
+        qDebug() << "Adwaita found in" << path;
+        QDir adwaitaDir(dir.filePath("Adwaita"));
+        if (adwaitaDir.exists("index.theme")) {
+          qDebug() << "index.theme found in Adwaita";
+        } else {
+          qDebug() << "index.theme MISSING in Adwaita";
+        }
+      }
+    } else {
+      qDebug() << "Search Path DOES NOT EXIST:" << path;
+    }
+  }
 #endif
 
   // Set dark mode palette
