@@ -178,6 +178,12 @@ void MainWindow::setupUi() {
   m_colorTilesDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_colorTilesDock);
 
+  // Connection for Color Panel Spectra Chart
+  m_spectraDock = new QDockWidget("Spectral Transmitance", this);
+  m_spectraDock->setObjectName("SpectraDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_spectraDock);
+  m_spectraDock->hide(); // Initially hidden
+
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
     std::function<void()> m_onClose;
@@ -196,64 +202,45 @@ void MainWindow::setupUi() {
     }
   };
 
-  // Connect Detach Signals with sizing and Float
-  connect(m_sharpnessPanel, &SharpnessPanel::detachMTFChartRequested, this,
-          [this](QWidget *w) {
-            if (!w)
-              return;
-            m_mtfDock->setWidget(w);
-            m_mtfDock->setFloating(true);
-            m_mtfDock->show();
-            if (w->sizeHint().isValid())
-              m_mtfDock->resize(w->sizeHint());
-          });
+  // Generic helper for docking connections
+  auto setupDock = [this](QDockWidget *dock, auto *panel, auto detachSignal,
+                          auto reattachMethod) {
+    // Connect Detach
+    connect(panel, detachSignal, this, [dock](QWidget *w) {
+      if (!w)
+        return;
+      dock->setWidget(w);
+      dock->setFloating(true);
+      dock->show();
+      if (w->sizeHint().isValid())
+        dock->resize(w->sizeHint());
+    });
 
-  connect(m_sharpnessPanel, &SharpnessPanel::detachTilesRequested, this,
-          [this](QWidget *w) {
-            if (!w)
-              return;
-            m_tilesDock->setWidget(w);
-            m_tilesDock->setFloating(true);
-            m_tilesDock->show();
-            if (w->sizeHint().isValid())
-              m_tilesDock->resize(w->sizeHint());
-          });
+    // Connect Close/Reattach via Event Filter
+    dock->installEventFilter(
+        new DockCloseEventFilter(dock, [dock, panel, reattachMethod]() {
+          if (dock->widget()) {
+            (panel->*reattachMethod)(dock->widget());
+            dock->setWidget(nullptr);
+          }
+        }));
+  };
 
-  connect(m_colorPanel, &ColorPanel::detachTilesRequested, this,
-          [this](QWidget *w) {
-            if (!w)
-              return;
-            m_colorTilesDock->setWidget(w);
-            m_colorTilesDock->setFloating(true);
-            m_colorTilesDock->show();
-            if (w->sizeHint().isValid())
-              m_colorTilesDock->resize(w->sizeHint());
-          });
+  // Wire up docks
+  setupDock(m_mtfDock, m_sharpnessPanel,
+            &SharpnessPanel::detachMTFChartRequested,
+            &SharpnessPanel::reattachMTFChart);
 
-  // Connect Dock closing to Reattach logic
-  // Install filters for Reattach logic
-  m_mtfDock->installEventFilter(new DockCloseEventFilter(m_mtfDock, [this]() {
-    if (m_mtfDock->widget()) {
-      m_sharpnessPanel->reattachMTFChart(m_mtfDock->widget());
-      m_mtfDock->setWidget(nullptr);
-    }
-  }));
+  setupDock(m_tilesDock, m_sharpnessPanel,
+            &SharpnessPanel::detachTilesRequested,
+            &SharpnessPanel::reattachTiles);
 
-  m_tilesDock->installEventFilter(
-      new DockCloseEventFilter(m_tilesDock, [this]() {
-        if (m_tilesDock->widget()) {
-          m_sharpnessPanel->reattachTiles(m_tilesDock->widget());
-          m_tilesDock->setWidget(nullptr);
-        }
-      }));
+  setupDock(m_colorTilesDock, m_colorPanel, &ColorPanel::detachTilesRequested,
+            &ColorPanel::reattachTiles);
 
-  m_colorTilesDock->installEventFilter(
-      new DockCloseEventFilter(m_colorTilesDock, [this]() {
-        if (m_colorTilesDock->widget()) {
-          m_colorPanel->reattachTiles(m_colorTilesDock->widget());
-          m_colorTilesDock->setWidget(nullptr);
-        }
-      }));
+  setupDock(m_spectraDock, m_colorPanel,
+            &ColorPanel::detachSpectraChartRequested,
+            &ColorPanel::reattachSpectraChart);
 
   // Linearization Panel creation (re-ordered slightly or kept as is)
   m_linearizationPanel = new LinearizationPanel(

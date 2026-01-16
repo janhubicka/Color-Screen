@@ -183,6 +183,7 @@ private:
 
   // Docks
   QDockWidget *m_mtfDock;
+  QDockWidget *m_spectraDock;
   QDockWidget *m_tilesDock;
   QDockWidget *m_colorTilesDock;
 };

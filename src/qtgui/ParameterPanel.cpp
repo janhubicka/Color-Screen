@@ -284,6 +284,9 @@ void ParameterPanel::addEnumParameter(
     std::function<void(ParameterState &, int)> setter,
     std::function<bool(const ParameterState &)> enabledCheck) {
   QComboBox *combo = new QComboBox();
+  combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  combo->setMinimumContentsLength(10);
+  combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   for (auto const &[val, text] : options) {
     combo->addItem(text, val);
   }

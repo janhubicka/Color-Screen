@@ -119,7 +119,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-TilePreviewPanel.$(OBJEXT) \
 	colorscreen_qt-SharpnessPanel.$(OBJEXT) \
 	colorscreen_qt-ColorPanel.$(OBJEXT) \
-	colorscreen_qt-MTFChartWidget.$(OBJEXT)
+	colorscreen_qt-MTFChartWidget.$(OBJEXT) \
+	colorscreen_qt-SpectraChartWidget.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_Renderer.$(OBJEXT) \
@@ -130,7 +131,8 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_SharpnessPanel.$(OBJEXT) \
 	colorscreen_qt-moc_ColorPanel.$(OBJEXT) \
 	colorscreen_qt-moc_SmartSpinBox.$(OBJEXT) \
-	colorscreen_qt-moc_MTFChartWidget.$(OBJEXT)
+	colorscreen_qt-moc_MTFChartWidget.$(OBJEXT) \
+	colorscreen_qt-moc_SpectraChartWidget.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
 	$(nodist_colorscreen_qt_OBJECTS)
@@ -171,6 +173,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterState.Po \
 	./$(DEPDIR)/colorscreen_qt-Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
@@ -183,6 +186,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
@@ -382,7 +386,8 @@ colorscreen_qt_SOURCES = \
     TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
     ColorPanel.cpp \
-    MTFChartWidget.cpp
+    MTFChartWidget.cpp \
+    SpectraChartWidget.cpp
 
 @static_link_TRUE@AM_LDFLAGS = -static
 @static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
@@ -400,9 +405,10 @@ MOC_SOURCES = \
     moc_SharpnessPanel.cpp \
     moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
-    moc_MTFChartWidget.cpp
+    moc_MTFChartWidget.cpp \
+    moc_SpectraChartWidget.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h SpectraChartWidget.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)
@@ -520,6 +526,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterState.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
@@ -532,6 +539,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -732,6 +740,20 @@ colorscreen_qt-MTFChartWidget.obj: MTFChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-MTFChartWidget.obj `if test -f 'MTFChartWidget.cpp'; then $(CYGPATH_W) 'MTFChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/MTFChartWidget.cpp'; fi`
 
+colorscreen_qt-SpectraChartWidget.o: SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-SpectraChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Tpo -c -o colorscreen_qt-SpectraChartWidget.o `test -f 'SpectraChartWidget.cpp' || echo '$(srcdir)/'`SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Tpo $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='SpectraChartWidget.cpp' object='colorscreen_qt-SpectraChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-SpectraChartWidget.o `test -f 'SpectraChartWidget.cpp' || echo '$(srcdir)/'`SpectraChartWidget.cpp
+
+colorscreen_qt-SpectraChartWidget.obj: SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-SpectraChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Tpo -c -o colorscreen_qt-SpectraChartWidget.obj `if test -f 'SpectraChartWidget.cpp'; then $(CYGPATH_W) 'SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/SpectraChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Tpo $(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='SpectraChartWidget.cpp' object='colorscreen_qt-SpectraChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-SpectraChartWidget.obj `if test -f 'SpectraChartWidget.cpp'; then $(CYGPATH_W) 'SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/SpectraChartWidget.cpp'; fi`
+
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo $(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -886,6 +908,20 @@ colorscreen_qt-moc_MTFChartWidget.obj: moc_MTFChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_MTFChartWidget.obj `if test -f 'moc_MTFChartWidget.cpp'; then $(CYGPATH_W) 'moc_MTFChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_MTFChartWidget.cpp'; fi`
 
+colorscreen_qt-moc_SpectraChartWidget.o: moc_SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_SpectraChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Tpo -c -o colorscreen_qt-moc_SpectraChartWidget.o `test -f 'moc_SpectraChartWidget.cpp' || echo '$(srcdir)/'`moc_SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_SpectraChartWidget.cpp' object='colorscreen_qt-moc_SpectraChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_SpectraChartWidget.o `test -f 'moc_SpectraChartWidget.cpp' || echo '$(srcdir)/'`moc_SpectraChartWidget.cpp
+
+colorscreen_qt-moc_SpectraChartWidget.obj: moc_SpectraChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_SpectraChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Tpo -c -o colorscreen_qt-moc_SpectraChartWidget.obj `if test -f 'moc_SpectraChartWidget.cpp'; then $(CYGPATH_W) 'moc_SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_SpectraChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_SpectraChartWidget.cpp' object='colorscreen_qt-moc_SpectraChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_SpectraChartWidget.obj `if test -f 'moc_SpectraChartWidget.cpp'; then $(CYGPATH_W) 'moc_SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_SpectraChartWidget.cpp'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1034,6 +1070,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
@@ -1046,6 +1083,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -1102,6 +1140,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
@@ -1114,6 +1153,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

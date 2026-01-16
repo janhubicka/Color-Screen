@@ -4,12 +4,21 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "TilePreviewPanel.h"
 
+class SpectraChartWidget;
+
 class ColorPanel : public TilePreviewPanel {
   Q_OBJECT
 public:
   explicit ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
                       ImageGetter imageGetter, QWidget *parent = nullptr);
   ~ColorPanel() override;
+
+  // Accessors for Dock Widgets
+  QWidget *getSpectraChartWidget() const;
+  void reattachSpectraChart(QWidget *widget);
+
+signals:
+  void detachSpectraChartRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -21,6 +30,7 @@ protected:
 
 private:
   void setupUi();
+  void updateSpectraChart();
   void applyChange(std::function<void(ParameterState &)> modifier) override;
   void onParametersRefreshed(const ParameterState &state) override;
 
@@ -32,6 +42,9 @@ private:
   // width/height or image source changes are handled by TilePreviewPanel check
   // of scan ptr and pixelSize? TilePreviewPanel checks pixelSize and scan
   // pointer. We just need to check if parameters relevant to render changed.
+
+  SpectraChartWidget *m_spectraChart = nullptr;
+  QVBoxLayout *m_spectraContainer = nullptr;
 };
 
 #endif // COLOR_PANEL_H

@@ -682,6 +682,16 @@ struct render_parameters
                                       progress_info *progress = NULL,
                                       luminosity_t dark_cut = 0.01,
                                       luminosity_t light_cut = 0.001);
+  struct transmission_data
+  {
+    luminosity_t min_freq;
+    luminosity_t max_freq;
+    std::vector<luminosity_t> red;
+    std::vector<luminosity_t> green;
+    std::vector<luminosity_t> blue;
+    std::vector<luminosity_t> backlight;
+  };
+  DLL_PUBLIC bool get_transmission_data (transmission_data &data) const;
 
   /* Initialize render parameters for showing original scan.
      In this case we do not want to apply color models etc.  */
@@ -694,7 +704,7 @@ struct render_parameters
 private:
   static const bool debug = colorscreen_checking;
   color_matrix get_dyes_matrix (bool *spectrum_based, bool *optimized,
-                                const image_data *img);
+                                const image_data *img, transmission_data *transmission_data = NULL) const;
   color_matrix get_balanced_dyes_matrix (const image_data *img,
                                          bool normalized_patches,
                                          rgbdata patch_proportions,

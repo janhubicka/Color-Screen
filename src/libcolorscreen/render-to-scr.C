@@ -392,38 +392,53 @@ render_screen_tile (tile_parameters &tile, scr_type type,
                     const render_parameters &rparam, coord_t pixel_size,
                     enum render_screen_tile_type rst, progress_info *progress)
 {
-  sharpen_parameters sp;
-  if (type == Random)
-    return false;
-  if (rst != original_screen)
+  if ((int)rst <= sharpened_screen)
     {
-      sp = rparam.sharpen;
-      sp.usm_radius *= pixel_size;
-      sp.scanner_mtf_scale *= pixel_size;
-      if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
-        sp.mode = sharpen_parameters::blur_deconvolution;
+      sharpen_parameters sp;
+      if (type == Random)
+	return false;
+      if (rst != original_screen)
+	{
+	  sp = rparam.sharpen;
+	  sp.usm_radius *= pixel_size;
+	  sp.scanner_mtf_scale *= pixel_size;
+	  if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
+	    sp.mode = sharpen_parameters::blur_deconvolution;
+	}
+      screen *scr = render_to_scr::get_screen (
+	  type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
+	  rparam.green_strip_width, progress);
+      if (!scr)
+	return false;
+      for (int y = 0; y < tile.height; y++)
+	for (int x = 0; x < tile.width; x++)
+	  {
+	    rgbdata wd = scr->interpolated_mult (
+		{ x * (3 / ((coord_t)tile.width)),
+		  y * (3 / ((coord_t)tile.height)) });
+	    // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
+	    wd = wd.clamp ();
+	    tile.pixels[x * 3 + y * tile.rowstride]
+		= invert_gamma (wd.red, -1) * 255 + 0.5;
+	    tile.pixels[x * 3 + y * tile.rowstride + 1]
+		= invert_gamma (wd.green, -1) * 255 + 0.5;
+	    tile.pixels[x * 3 + y * tile.rowstride + 2]
+		= invert_gamma (wd.blue, -1) * 255 + 0.5;
+	  }
+      render_to_scr::release_screen (scr);
     }
-  screen *scr = render_to_scr::get_screen (
-      type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
-      rparam.green_strip_width, progress);
-  if (!scr)
-    return false;
-  for (int y = 0; y < tile.height; y++)
-    for (int x = 0; x < tile.width; x++)
-      {
-        rgbdata wd = scr->interpolated_mult (
-            { x * (3 / ((coord_t)tile.width)),
-              y * (3 / ((coord_t)tile.height)) });
-        // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
-        wd = wd.clamp ();
-        tile.pixels[x * 3 + y * tile.rowstride]
-            = invert_gamma (wd.red, -1) * 255 + 0.5;
-        tile.pixels[x * 3 + y * tile.rowstride + 1]
-            = invert_gamma (wd.green, -1) * 255 + 0.5;
-        tile.pixels[x * 3 + y * tile.rowstride + 2]
-            = invert_gamma (wd.blue, -1) * 255 + 0.5;
-      }
-  render_to_scr::release_screen (scr);
+#if 0
+  else
+    {
+      image_data img;
+      img.set_dimensions (1,1);
+      render r (img, rparam, 256);
+      r.precompute (false, false, {1.0/3,1.0/3,1.0/3}, NULL);
+      rgbdata white;
+      r.set_linear_hdr_color (1, 1, 1, &white.red, &white.blur, &white.green);
+      luminosity
+    }
+#endif
   return true;
 }
 

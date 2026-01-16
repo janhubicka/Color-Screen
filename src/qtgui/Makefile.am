@@ -12,7 +12,8 @@ colorscreen_qt_SOURCES = \
     TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
     ColorPanel.cpp \
-    MTFChartWidget.cpp
+    MTFChartWidget.cpp \
+    SpectraChartWidget.cpp
 
 if static_link
   AM_LDFLAGS = -static
@@ -32,9 +33,10 @@ MOC_SOURCES = \
     moc_SharpnessPanel.cpp \
     moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
-    moc_MTFChartWidget.cpp
+    moc_MTFChartWidget.cpp \
+    moc_SpectraChartWidget.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h SpectraChartWidget.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)

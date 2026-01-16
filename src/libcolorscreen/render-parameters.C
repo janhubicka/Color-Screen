@@ -167,7 +167,7 @@ apply_balance_to_model (render_parameters::color_model_t color_model)
    If OPTIMIZED is true, then the matrix is optimized camera matrix construted from
    process simulation and both temperature and backlight_temperature parameters are handled correctly.  */
 color_matrix
-render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img)
+render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const image_data *img, transmission_data *transmission_data) const
 {
   std::unique_ptr <spectrum_dyes_to_xyz> spect = NULL;
   color_matrix dyes;
@@ -438,6 +438,37 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	{
 	  *spectrum_based = true;
 	  dyes = spect->xyz_matrix ();
+	  if (transmission_data)
+	    {
+	      int size = transmission_data->red.size ();
+	      luminosity_t maxb = 0;
+	      for (int i = 0; i < size; i++)
+	        {
+		  luminosity_t p = (transmission_data->min_freq
+			            + i * (transmission_data->max_freq - transmission_data->min_freq)
+			            / (luminosity_t)size - SPECTRUM_START) / SPECTRUM_STEP;
+		  if (p >= 0 && p < SPECTRUM_SIZE)
+		    {
+		      int pi;
+		      p = my_modf (p, &pi);
+		      int pn = std::min (pi + 1, SPECTRUM_SIZE - 1);
+		      transmission_data->red[i] = spect->red[pi] * (1 -p) + spect->red[pn] * p;
+		      transmission_data->green[i] = spect->green[pi] * (1 -p) + spect->green[pn] * p;
+		      transmission_data->blue[i] = spect->blue[pi] * (1 -p) + spect->blue[pn] * p;
+		      transmission_data->backlight[i] = (spect->backlight[pi] * (1 -p) + spect->backlight[pn] * p);
+		      maxb = std::max (maxb, transmission_data->backlight[i]);
+		    }
+		  else
+		    {
+		      transmission_data->red[i] = 0;
+		      transmission_data->green[i] = 0;
+		      transmission_data->blue[i] = 0;
+		      transmission_data->backlight[i] = 0;
+		    }
+	        }
+	      for (int i = 0; i < size; i++)
+	       transmission_data->backlight[i] *= (1 / maxb);
+	    }
 	}
     }
   /* dye_whitepoint is the whitepoint xyz values of dyes was measured for.
@@ -463,6 +494,20 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       //dyes.print (stdout);
     }
   return dyes;
+}
+
+/* data is expected to have initialized min_freq and max_freq and all vectors
+   of equal size. Then the vectors are filled by transmitance data in regular
+   steps from min_freq to max_freq.
+   Function return false when no data are present.  */
+bool
+render_parameters::get_transmission_data (transmission_data &data) const
+{
+  bool spectrum_based;
+  bool optimized;
+  get_dyes_matrix (&spectrum_based, &optimized, NULL, &data);
+  //printf ("%i %i %i %f\n", (int)color_model, spectrum_based, data.red.size (), data.red[0]);
+  return spectrum_based;
 }
 
 /* Return matrix which contains the color of dyes either as rgb or xyz.
