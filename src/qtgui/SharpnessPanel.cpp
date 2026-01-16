@@ -172,9 +172,29 @@ void SharpnessPanel::setupUi() {
   m_sharpenedTileLabel->setMinimumSize(100, 100);
   m_sharpenedTileLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
-  tilesLayout->addWidget(m_originalTileLabel, 1);
-  tilesLayout->addWidget(m_bluredTileLabel, 1);
-  tilesLayout->addWidget(m_sharpenedTileLabel, 1);
+  // Helper to create captioned tile
+  auto createCaptionedTile = [](QLabel *imageLabel, const QString &caption) {
+    QWidget *container = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    layout->addWidget(imageLabel, 1); // Image expands
+
+    QLabel *captionLabel = new QLabel(caption);
+    captionLabel->setAlignment(Qt::AlignCenter);
+    // Make caption smaller/lighter if desired, but default is fine for now
+
+    layout->addWidget(captionLabel, 0); // Caption fixed height
+
+    return container;
+  };
+
+  tilesLayout->addWidget(createCaptionedTile(m_originalTileLabel, "Original"),
+                         1);
+  tilesLayout->addWidget(createCaptionedTile(m_bluredTileLabel, "Blured"), 1);
+  tilesLayout->addWidget(createCaptionedTile(m_sharpenedTileLabel, "Sharpened"),
+                         1);
 
   // Create container for Tiles
   m_tilesLayoutContainer = new QVBoxLayout();
@@ -238,7 +258,6 @@ void SharpnessPanel::setupUi() {
   else
     m_form->addRow(mtfWrapper);
   updateMTFChart();
-
 
   // Add "Use measured MTF" checkbox (visible only if measured data exists and
   // separator is open)
