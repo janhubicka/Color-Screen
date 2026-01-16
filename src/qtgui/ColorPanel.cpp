@@ -101,17 +101,9 @@ ColorPanel::getTileTypes() const {
 }
 
 bool ColorPanel::shouldUpdateTiles(const ParameterState &state) {
-  if (!(m_lastRParams == state.rparams)) {
+  if (!(m_lastRParams == state.rparams)
+      || (int)state.scrToImg.type != m_lastScrType)
     return true;
-  }
-
-  // Also check scrtotype if it affects us?
-  // Based on user request "rerendered when rparam changes"
-  // But scan parameters might change too.
-  // m_lastScrType was used before.
-  if ((int)state.scrToImg.type != m_lastScrType) {
-    return true;
-  }
 
   return false;
 }

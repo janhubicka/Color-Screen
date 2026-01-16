@@ -368,17 +368,14 @@ SharpnessPanel::getTileTypes() const {
 }
 
 bool SharpnessPanel::shouldUpdateTiles(const ParameterState &state) {
-  // Check if any relevant parameters changed
-  bool needsUpdate = false;
   if (m_lastTileSize == 0 || // First run
                              // tileSize check is done in base
       (int)state.scrToImg.type != m_lastScrType ||
       !state.rparams.sharpen.equal_p(m_lastSharpen) ||
       state.rparams.red_strip_width != m_lastRedStripWidth ||
-      state.rparams.green_strip_width != m_lastGreenStripWidth) {
-    needsUpdate = true;
-  }
-  return needsUpdate;
+      state.rparams.green_strip_width != m_lastGreenStripWidth) 
+    return true;
+  return false;
 }
 
 void SharpnessPanel::onTileUpdateScheduled() {
