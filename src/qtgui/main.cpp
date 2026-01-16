@@ -51,6 +51,20 @@ int main(int argc, char *argv[]) {
         QDir adwaitaDir(dir.filePath("Adwaita"));
         if (adwaitaDir.exists("index.theme")) {
           qDebug() << "index.theme found in Adwaita";
+
+          qDebug() << "Searching for *rotate-left* in Adwaita ("
+                   << adwaitaDir.absolutePath() << ")...";
+          QDirIterator it(adwaitaDir.absolutePath(),
+                          QStringList() << "*rotate-left*", QDir::Files,
+                          QDirIterator::Subdirectories);
+          while (it.hasNext()) {
+            QString file = it.next();
+            qDebug() << "Found file:" << file;
+            QIcon directIcon(file);
+            qDebug() << "  Direct load QIcon::isNull():" << directIcon.isNull();
+            QPixmap pm(file);
+            qDebug() << "  Direct load QPixmap::isNull():" << pm.isNull();
+          }
         } else {
           qDebug() << "index.theme MISSING in Adwaita";
         }
@@ -63,6 +77,7 @@ int main(int argc, char *argv[]) {
   qDebug() << "Has 'object-rotate-left'?"
            << QIcon::hasThemeIcon("object-rotate-left");
   qDebug() << "Has 'edit-undo'?" << QIcon::hasThemeIcon("edit-undo");
+
 #endif
 
   // Set dark mode palette
