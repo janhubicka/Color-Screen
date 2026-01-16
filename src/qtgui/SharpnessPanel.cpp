@@ -671,23 +671,23 @@ SharpnessPanel::createDetachableSection(const QString &title, QWidget *content,
   layout->addWidget(header);
   layout->addWidget(content);
 
-  connect(
-      detachBtn, &QPushButton::clicked, this, [onDetach, container, title]() {
-        if (onDetach)
-          onDetach();
+  connect(detachBtn, &QPushButton::clicked, this,
+          [onDetach, container, title, header]() {
+            if (onDetach)
+              onDetach();
 
-        // Remove content from layout (it is reparented by Dock anyway)
-        // Add placeholder
-        if (container->layout()->count() > 1) { // Header + Content
-          container->layout()->takeAt(1);       // Remove content item
-        }
+            // Remove content from layout (it is reparented by Dock anyway)
+            // Add placeholder
+            if (container->layout()->count() > 1) { // Header + Content
+              container->layout()->takeAt(1);       // Remove content item
+            }
 
-        QLabel *placeholder = new QLabel(QString("%1 is detached").arg(title));
-        placeholder->setAlignment(Qt::AlignCenter);
-        placeholder->setStyleSheet(
-            "color: gray; font-style: italic; padding: 20px;");
-        container->layout()->addWidget(placeholder);
-      });
+            QWidget *placeholder = new QWidget();
+            placeholder->setVisible(false);
+            container->layout()->addWidget(placeholder);
+
+            header->hide();
+          });
 
   return container;
 }
@@ -711,6 +711,14 @@ void SharpnessPanel::reattachMTFChart(QWidget *widget) {
       // Add widget back
       section->layout()->addWidget(widget);
       widget->show();
+
+      // Show header again
+      if (section->layout()->count() > 0) {
+        QLayoutItem *headerItem = section->layout()->itemAt(0);
+        if (headerItem && headerItem->widget()) {
+          headerItem->widget()->show();
+        }
+      }
     }
   }
 }
@@ -733,6 +741,14 @@ void SharpnessPanel::reattachTiles(QWidget *widget) {
       // Add widget back
       section->layout()->addWidget(widget);
       widget->show();
+
+      // Show header again
+      if (section->layout()->count() > 0) {
+        QLayoutItem *headerItem = section->layout()->itemAt(0);
+        if (headerItem && headerItem->widget()) {
+          headerItem->widget()->show();
+        }
+      }
     }
   }
 }
