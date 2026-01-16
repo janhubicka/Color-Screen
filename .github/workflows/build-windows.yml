@@ -68,16 +68,19 @@ jobs:
       run: |
         mkdir -p /c/Color-Screen-install/bin/platforms
         cp /${{matrix.sys}}/share/qt6/plugins/platforms/qwindows.dll /c/Color-Screen-install/bin/platforms/
+        # Copy imageformats (optional, ignore if missing)
         mkdir -p /c/Color-Screen-install/bin/imageformats
-        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qjpeg.dll /c/Color-Screen-install/bin/imageformats/
-        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qtiff.dll /c/Color-Screen-install/bin/imageformats/
-        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qwebp.dll /c/Color-Screen-install/bin/imageformats/
-        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qico.dll /c/Color-Screen-install/bin/imageformats/
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qjpeg.dll /c/Color-Screen-install/bin/imageformats/ || true
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qtiff.dll /c/Color-Screen-install/bin/imageformats/ || true
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qwebp.dll /c/Color-Screen-install/bin/imageformats/ || true
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qico.dll /c/Color-Screen-install/bin/imageformats/ || true
+        cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qsvg.dll /c/Color-Screen-install/bin/imageformats/ || true
+        # Copy iconengines (critical for SVG icons)
         mkdir -p /c/Color-Screen-install/bin/iconengines
-        cp /${{matrix.sys}}/share/qt6/plugins/iconengines/qsvgicon.dll /c/Color-Screen-install/bin/iconengines/
+        cp /${{matrix.sys}}/share/qt6/plugins/iconengines/qsvgicon.dll /c/Color-Screen-install/bin/iconengines/ || true
+        # Copy styles
         mkdir -p /c/Color-Screen-install/bin/styles
-        cp /${{matrix.sys}}/share/qt6/plugins/styles/qwindowsvistastyle.dll /c/Color-Screen-install/bin/styles/
-        # Try copying newer styles if available (ignore errors if missing)
+        cp /${{matrix.sys}}/share/qt6/plugins/styles/qwindowsvistastyle.dll /c/Color-Screen-install/bin/styles/ || true
         cp /${{matrix.sys}}/share/qt6/plugins/styles/qwindows11style.dll /c/Color-Screen-install/bin/styles/ || true
         cp /${{matrix.sys}}/share/qt6/plugins/styles/qmodernwindowsstyle.dll /c/Color-Screen-install/bin/styles/ || true
     - name: copy icons
