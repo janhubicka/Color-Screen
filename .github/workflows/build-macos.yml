@@ -164,7 +164,7 @@ jobs:
           fi
         fi
         
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --enable-checking --disable-static-link MOC="$MOC"
+        CXXFLAGS="-O3 -ffast-math -Wall -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp -march=native" LDFLAGS="-L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --enable-checking --disable-static-link MOC="$MOC"
     - name: make (checking enabled)
       run: make
     - name: make check (checking enabled)

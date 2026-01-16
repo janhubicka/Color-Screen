@@ -29,7 +29,7 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
+        CXXFLAGS="-O3 -ffast-math -Wall -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: make
       shell: msys2 {0}
       run: make -j$(nproc)
