@@ -76,6 +76,9 @@ jobs:
       run: |
         mkdir -p /c/Color-Screen-install/share/icons
         cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/share/icons/
+        cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/share/icons/
+        rm -f /c/Color-Screen-install/share/icons/Adwaita/icon-theme.cache
+        rm -f /c/Color-Screen-install/share/icons/hicolor/icon-theme.cache
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary-${{matrix.sys}}

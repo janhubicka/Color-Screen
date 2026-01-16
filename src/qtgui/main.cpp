@@ -59,6 +59,10 @@ int main(int argc, char *argv[]) {
       qDebug() << "Search Path DOES NOT EXIST:" << path;
     }
   }
+
+  qDebug() << "Has 'object-rotate-left'?"
+           << QIcon::hasThemeIcon("object-rotate-left");
+  qDebug() << "Has 'edit-undo'?" << QIcon::hasThemeIcon("edit-undo");
 #endif
 
   // Set dark mode palette
