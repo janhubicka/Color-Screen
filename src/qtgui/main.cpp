@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QIcon>
+#include <QImageReader>
 
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
