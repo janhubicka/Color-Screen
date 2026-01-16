@@ -278,6 +278,17 @@ void SharpnessPanel::setupUi() {
             &QWidget::setVisible);
   }
 
+  // Scan DPI
+  // Range 0.0 - 10000.0 (0.0 = unknown)
+  addSliderParameter(
+      "Scan DPI", 0.0, 10000.0, 10.0, 1, "dpi", "unknown",
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.scan_dpi;
+      },
+      [](ParameterState &s, double v) {
+        s.rparams.sharpen.scanner_mtf.scan_dpi = v;
+      });
+
   // Gaussian blur (Sigma)
   // Range 0.0 - 20.0, Pixels.
   // Slider step? 3 decimal precision for entry, but slider might be coarser or
@@ -369,6 +380,17 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+      });
+
+  // MTF Scale
+  // Range 0.0 - 2.0 (0.0 = no MTF)
+  addSliderParameter(
+      "MTF scale", 0.0, 2.0, 100.0, 2, "", "no MTF",
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf_scale;
+      },
+      [](ParameterState &s, double v) {
+        s.rparams.sharpen.scanner_mtf_scale = v;
       });
 
   addSeparator("Deconvolution");
