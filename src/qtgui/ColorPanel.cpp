@@ -13,6 +13,19 @@ ColorPanel::~ColorPanel() = default;
 void ColorPanel::setupUi() {
   setupTiles("Color Preview");
 
+  // Dyes dropdown
+  std::map<int, QString> dyes;
+  for (int i = 0; i < render_parameters::color_model_max; ++i) {
+    dyes[i] = QString::fromUtf8(render_parameters::color_model_names[i]);
+  }
+
+  addEnumParameter(
+      "Dyes", dyes,
+      [](const ParameterState &s) { return (int)s.rparams.color_model; },
+      [](ParameterState &s, int v) {
+        s.rparams.color_model = (render_parameters::color_model_t)v;
+      });
+
   // Future: Add color parameters here
 }
 
