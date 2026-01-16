@@ -702,7 +702,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
 {
   bool verbose = false;
   /* Cap size of FFT to solve.  */
-  while (ceil (max_radius / subscale) * 2 + 1 > 4096)
+  while (ceil (max_radius / subscale) * 2 + 1 > 1024)
     subscale *= 2;
   int psf_size = ceil (max_radius / subscale) * 2 + 1;
   int iterations = 0;
@@ -719,7 +719,7 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
       /* If FFT size was to small for the PSF, increase it and restart.  */
       if (!ok && iterations < 10)
         {
-          if (psf_size < 4096)
+          if (psf_size < 1024)
             psf_size *= 2;
           else
             subscale /= 2;

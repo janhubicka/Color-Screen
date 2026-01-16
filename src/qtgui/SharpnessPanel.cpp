@@ -123,6 +123,9 @@ SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
           // Progress completed;
           m_tileProgress.reset();
         }
+
+        // Check if there is a pending request
+        startNextRender();
       });
 
   setupUi();
@@ -552,6 +555,28 @@ void SharpnessPanel::scheduleTileUpdate() {
   m_updateTimer->start();
 }
 
+void SharpnessPanel::startNextRender() {
+  if (!m_hasPendingRequest)
+    return;
+
+  // Consume pending request
+  RenderRequest req = m_pendingRequest;
+  m_hasPendingRequest = false;
+  m_tileGenerationCounter++;
+  int generation = m_tileGenerationCounter;
+
+  // Create new progress info
+  m_tileProgress = std::make_shared<progress_info>();
+
+  // Start async render
+  QFuture<TileRenderResult> future =
+      QtConcurrent::run([req, generation, progress = m_tileProgress]() {
+        return renderTiles(req.state, req.scanWidth, req.scanHeight, generation,
+                           req.tileSize, progress);
+      });
+  m_tileWatcher->setFuture(future);
+}
+
 void SharpnessPanel::performTileRender() {
   if (!m_originalTileLabel || !m_bluredTileLabel || !m_sharpenedTileLabel)
     return;
@@ -617,32 +642,39 @@ void SharpnessPanel::performTileRender() {
       state.rparams.red_strip_width != m_lastRedStripWidth ||
       state.rparams.green_strip_width != m_lastGreenStripWidth) {
     needsUpdate = true;
+
+    // Store parameters for pending request
+    m_pendingRequest.state = state;
+    m_pendingRequest.scanWidth = scan->width;
+    m_pendingRequest.scanHeight = scan->height;
+    m_pendingRequest.tileSize = tileSize;
+    m_pendingRequest.pixelSize = pixel_size;
+    m_pendingRequest.scan = scan;
+    m_hasPendingRequest = true;
+
+    // Check if watcher is running
+    if (m_tileWatcher->isRunning()) {
+      // Cancel current
+      if (m_tileProgress)
+        m_tileProgress->cancel();
+      // Logic continues in finished() signal which calls startNextRender()
+      return;
+    }
+
+    // Start immediately
+    startNextRender();
   }
 
-  if (!needsUpdate) {
-    return;
+  // Update cached params only if we actually scheduled/started (conceptually
+  // we did, even if queued)
+  if (needsUpdate) {
+    m_lastTileSize = tileSize;
+    m_lastPixelSize = pixel_size;
+    m_lastScrType = (int)state.scrToImg.type;
+    m_lastSharpen = state.rparams.sharpen;
+    m_lastRedStripWidth = state.rparams.red_strip_width;
+    m_lastGreenStripWidth = state.rparams.green_strip_width;
   }
-
-  // Cache current parameters
-  m_lastTileSize = tileSize;
-  m_lastPixelSize = pixel_size;
-  m_lastScrType = (int)state.scrToImg.type;
-  m_lastSharpen = state.rparams.sharpen;
-  m_lastRedStripWidth = state.rparams.red_strip_width;
-  m_lastGreenStripWidth = state.rparams.green_strip_width;
-
-  // Create progress info
-  m_tileProgress = std::make_shared<colorscreen::progress_info>();
-
-  // Increment generation and launch async render
-  m_tileGenerationCounter++;
-  int currentGen = m_tileGenerationCounter;
-
-  // Launch async tile rendering
-  QFuture<TileRenderResult> future =
-      QtConcurrent::run(renderTiles, state, scan->width, scan->height,
-                        currentGen, tileSize, m_tileProgress);
-  m_tileWatcher->setFuture(future);
 }
 
 void SharpnessPanel::resizeEvent(QResizeEvent *event) {

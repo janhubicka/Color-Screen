@@ -60,6 +60,18 @@ private:
   QVBoxLayout *m_tilesLayoutContainer = nullptr; // Container Layout
 
   // Async tile rendering
+  struct RenderRequest {
+    ParameterState state;
+    int scanWidth;
+    int scanHeight;
+    int tileSize;
+    double pixelSize;
+    std::shared_ptr<colorscreen::image_data> scan;
+  };
+  RenderRequest m_pendingRequest;
+  bool m_hasPendingRequest = false;
+  void startNextRender();
+
   QFutureWatcher<struct TileRenderResult> *m_tileWatcher = nullptr;
   int m_tileGenerationCounter = 0;
   QTimer *m_updateTimer = nullptr;
