@@ -218,20 +218,6 @@ void SharpnessPanel::setupUi() {
 
   QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
 
-  // Add "Use measured MTF" checkbox (visible only if measured data exists and
-  // separator is open)
-  addCheckboxParameter(
-      "Use measured MTF",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.use_measured_mtf;
-      },
-      [](ParameterState &s, bool v) {
-        s.rparams.sharpen.scanner_mtf.use_measured_mtf = v;
-      },
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.size() > 2;
-      });
-
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
   m_mtfChart->setMinimumHeight(250);
@@ -253,12 +239,20 @@ void SharpnessPanel::setupUi() {
     m_form->addRow(mtfWrapper);
   updateMTFChart();
 
-  // Connect separator toggle to chart visibility
-  // (Chart is now in the group layout, so default toggle logic works)
-  /* if (separatorToggle) {
-    connect(separatorToggle, &QToolButton::toggled, m_mtfChart,
-            &QWidget::setVisible);
-  } */
+
+  // Add "Use measured MTF" checkbox (visible only if measured data exists and
+  // separator is open)
+  addCheckboxParameter(
+      "Use measured MTF",
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.use_measured_mtf;
+      },
+      [](ParameterState &s, bool v) {
+        s.rparams.sharpen.scanner_mtf.use_measured_mtf = v;
+      },
+      [](const ParameterState &s) {
+        return s.rparams.sharpen.scanner_mtf.size() > 2;
+      });
 
   // Scan DPI
   // Range 0.0 - 10000.0 (0.0 = unknown)
