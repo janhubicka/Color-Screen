@@ -234,7 +234,10 @@ void SharpnessPanel::setupUi() {
 
   // Add "Match measured data" button (visible only if measured data exists)
   QPushButton *matchButton = new QPushButton("Match measured data");
-  m_form->addRow(matchButton);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(matchButton);
+  else
+    m_form->addRow(matchButton);
 
   // Wire up the button
   connect(matchButton, &QPushButton::clicked, this, [this]() {
@@ -249,9 +252,12 @@ void SharpnessPanel::setupUi() {
   });
 
   // Update button visibility (only visible if measured data exists)
-  m_widgetStateUpdaters.push_back([matchButton, this]() {
+  // Update button visibility (only visible if measured data exists)
+  m_widgetStateUpdaters.push_back([matchButton, this, separatorToggle]() {
     ParameterState s = m_stateGetter();
     bool visible = s.rparams.sharpen.scanner_mtf.size() > 0;
+    if (separatorToggle && !separatorToggle->isChecked())
+      visible = false;
     matchButton->setVisible(visible);
   });
 
@@ -260,7 +266,8 @@ void SharpnessPanel::setupUi() {
   m_mtfChart->setMinimumHeight(250);
 
   // Create container for MTF
-  m_mtfContainer = new QVBoxLayout();
+  QWidget *mtfWrapper = new QWidget();
+  m_mtfContainer = new QVBoxLayout(mtfWrapper);
   m_mtfContainer->setContentsMargins(0, 0, 0, 0);
 
   QWidget *detachableMTF =
@@ -269,14 +276,18 @@ void SharpnessPanel::setupUi() {
       });
   m_mtfContainer->addWidget(detachableMTF);
 
-  m_form->addRow(m_mtfContainer);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(mtfWrapper);
+  else
+    m_form->addRow(mtfWrapper);
   updateMTFChart();
 
   // Connect separator toggle to chart visibility
-  if (separatorToggle) {
+  // (Chart is now in the group layout, so default toggle logic works)
+  /* if (separatorToggle) {
     connect(separatorToggle, &QToolButton::toggled, m_mtfChart,
             &QWidget::setVisible);
-  }
+  } */
 
   // Scan DPI
   // Range 0.0 - 10000.0 (0.0 = unknown)
