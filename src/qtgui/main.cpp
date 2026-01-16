@@ -13,6 +13,11 @@ int main(int argc, char *argv[]) {
   parser.addVersionOption();
   parser.addPositionalArgument("image", "Image file to open.");
   parser.process(app);
+#ifdef Q_OS_WIN
+  // Windows doesn't have a system-wide XDG icon theme, so we bundled Adwaita.
+  // We need to tell Qt to use it.
+  QIcon::setThemeName("Adwaita");
+#endif
 
   // Set dark mode palette
   QPalette darkPalette;
