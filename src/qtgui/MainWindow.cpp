@@ -154,7 +154,6 @@ void MainWindow::setupUi() {
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
-  m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
 
   // Create Docks for Sharpness components
   m_mtfDock = new QDockWidget("MTF Chart", this);
@@ -231,6 +230,7 @@ void MainWindow::setupUi() {
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
+  m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   rightSplitter->addWidget(m_configTabs);
 
   m_mainSplitter->addWidget(m_rightColumn);
