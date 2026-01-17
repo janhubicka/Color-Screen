@@ -1063,6 +1063,20 @@ void MainWindow::restoreWindowState() {
   if (desktopSizeValid && settings.contains("windowGeometry")) {
     restoreGeometry(settings.value("windowGeometry").toByteArray());
     restoreState(settings.value("windowState").toByteArray());
+    restoreState(settings.value("windowState").toByteArray());
+
+    // Fix for docks showing up empty if restored as visible but content is in
+    // panel (not detached)
+    auto fixDockVisibility = [](QDockWidget *dock) {
+      if (dock && dock->widget() == nullptr) {
+        dock->hide();
+        dock->setFloating(false); // Ensure it's not floating empty
+      }
+    };
+    fixDockVisibility(m_mtfDock);
+    fixDockVisibility(m_tilesDock);
+    fixDockVisibility(m_colorTilesDock);
+    fixDockVisibility(m_correctedColorTilesDock);
   } else {
     // Default size and position
     resize(1200, 800);
