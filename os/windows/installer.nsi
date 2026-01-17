@@ -11,8 +11,12 @@ RequestExecutionLevel admin
 !define MUI_UNICON "icon.ico"
 
 !insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_PAGE_LICENSE "${SOURCE_DIR}\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+
+# Finish page with Readme option
+!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README.txt"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_WELCOME
@@ -26,6 +30,8 @@ Section "Install"
     SetOutPath "$INSTDIR"
     File /r "${SOURCE_DIR}\bin\*.*"
     File /r "${SOURCE_DIR}\share"
+    File "/oname=LICENSE.txt" "${SOURCE_DIR}\LICENSE"
+    File "/oname=README.txt" "${SOURCE_DIR}\README.md"
 
     WriteUninstaller "$INSTDIR\uninstall.exe"
 

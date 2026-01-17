@@ -656,7 +656,8 @@ struct render_parameters
            && scanner_blur_correction == other.scanner_blur_correction
            && backlight_correction == other.backlight_correction
            && backlight_correction_black == other.backlight_correction_black
-	   && observer_whitepoint == other.observer_whitepoint;
+	   && observer_whitepoint == other.observer_whitepoint
+	   && white_balance == other.white_balance;
   }
   bool
   operator!= (render_parameters &other) const
