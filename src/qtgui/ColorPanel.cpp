@@ -9,6 +9,46 @@
 
 using namespace colorscreen;
 
+namespace {
+class CorrectedPreviewPanel : public TilePreviewPanel {
+public:
+  CorrectedPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
+                        ImageGetter imageGetter, QWidget *parent = nullptr)
+      : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {}
+
+  void init(const QString &title) { setupTiles(title); }
+
+protected:
+  std::vector<std::pair<render_screen_tile_type, QString>>
+  getTileTypes() const override {
+    return {{coorected_backlight_screen, "Backlight"},
+            {coorected_detail_screen, "Detail"},
+            {coorected_full_screen, "Screen"}};
+  }
+
+  bool shouldUpdateTiles(const ParameterState &state) override {
+    if (!(m_lastRParams == state.rparams) ||
+        (int)state.scrToImg.type != m_lastScrType)
+      return true;
+    return false;
+  }
+
+  void onTileUpdateScheduled() override {
+    ParameterState state = m_stateGetter();
+    m_lastScrType = (int)state.scrToImg.type;
+    m_lastRParams = state.rparams;
+  }
+
+  bool isTileRenderingEnabled(const ParameterState &state) const override {
+    return true;
+  }
+
+private:
+  render_parameters m_lastRParams;
+  int m_lastScrType = -1;
+};
+} // namespace
+
 ColorPanel::ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
                        ImageGetter imageGetter, QWidget *parent)
     : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
@@ -314,6 +354,41 @@ void ColorPanel::setupUi() {
     connect(slider, &QSlider::valueChanged, this, handler);
     connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             spinHandler);
+  }
+
+  // Separator
+  addSeparator("Viewing conditions correction");
+
+  // Corrected Color Preview
+  {
+    CorrectedPreviewPanel *correctedPreview =
+        new CorrectedPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+    correctedPreview->init("Corrected Color Preview");
+
+    // We need to trigger updates when parent updates
+    m_widgetStateUpdaters.push_back(
+        [correctedPreview]() { correctedPreview->updateUI(); });
+
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow(correctedPreview);
+    else
+      m_form->addRow(correctedPreview);
+  }
+
+  // Dye Balancing Selector
+  {
+    using dye_balance = render_parameters::dye_balance_t;
+    std::map<int, QString> modes;
+    for (int i = 0; i < (int)dye_balance::dye_balance_max; ++i) {
+      modes[i] = QString::fromUtf8(render_parameters::dye_balance_names[i]);
+    }
+
+    addEnumParameter(
+        "Dye balancing", modes,
+        [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
+        [](ParameterState &s, int v) {
+          s.rparams.dye_balance = (dye_balance)v;
+        });
   }
 
   // Spacer to push everything up
