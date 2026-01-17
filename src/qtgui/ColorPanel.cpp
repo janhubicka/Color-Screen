@@ -68,6 +68,23 @@ void ColorPanel::reattachCorrectedTiles(QWidget *widget) {
 }
 
 void ColorPanel::setupUi() {
+  addSeparator("Backlight");
+
+  // Backlight intensity
+  addSliderParameter(
+      "Backlight intensity", 0, 65535, 1, 0, "", "",
+      [](const ParameterState &s) { return s.rparams.brightness; },
+      [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0);
+
+  // Backlight temperature
+  addSliderParameter(
+      "Backlight temperature", 2500, 25000, 1, 0, "K", "",
+      [](const ParameterState &s) { return s.rparams.backlight_temperature; },
+      [](ParameterState &s, double v) { s.rparams.backlight_temperature = v; },
+      3.0);
+
+  m_currentGroupForm = nullptr; // End Backlight section
+  addSeparator("Screen dyes");
   setupTiles("Color Preview");
 
   // Dyes dropdown (Moved before Spectral Chart)
@@ -315,83 +332,7 @@ void ColorPanel::setupUi() {
   else
     m_form->addRow("", m_linkDyeAges);
 
-  // Backlight Temperature
-  {
-    QWidget *container = new QWidget();
-    QHBoxLayout *hLayout = new QHBoxLayout(container);
-    hLayout->setContentsMargins(0, 0, 0, 0);
-
-    QSlider *slider = new QSlider(Qt::Horizontal);
-    slider->setRange(0, 1000); // Internal resolution
-
-    QDoubleSpinBox *spin = new QDoubleSpinBox();
-    spin->setRange(2500, 25000);
-    spin->setSingleStep(100);
-    spin->setSuffix(" K");
-
-    hLayout->addWidget(slider, 1);
-    hLayout->addWidget(spin, 0);
-
-    if (m_currentGroupForm)
-      m_currentGroupForm->addRow("Backlight temperature", container);
-    else
-      m_form->addRow("Backlight temperature", container);
-
-    // cubic mapping: K = min + (max - min) * (t^3)
-    auto toK = [](int sliderVal) -> double {
-      double t = sliderVal / 1000.0;
-      return 2500.0 + (25000.0 - 2500.0) * (t * t * t);
-    };
-
-    auto toSlider = [](double k) -> int {
-      double t3 = (k - 2500.0) / (25000.0 - 2500.0);
-      double t = std::cbrt(t3); // cubic root
-      return std::clamp((int)(t * 1000.0), 0, 1000);
-    };
-
-    // Connect synchronization
-    connect(slider, &QSlider::valueChanged, this, [spin, toK](int val) {
-      spin->blockSignals(true);
-      spin->setValue(toK(val));
-      spin->blockSignals(false);
-    });
-    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            [slider, toSlider](double val) {
-              slider->blockSignals(true);
-              slider->setValue(toSlider(val));
-              slider->blockSignals(false);
-            });
-
-    // Updater
-    m_paramUpdaters.push_back(
-        [slider, spin, toSlider](const ParameterState &s) {
-          double v = s.rparams.backlight_temperature;
-          spin->blockSignals(true);
-          spin->setValue(v);
-          spin->blockSignals(false);
-
-          slider->blockSignals(true);
-          slider->setValue(toSlider(v));
-          slider->blockSignals(false);
-        });
-
-    // Change handler
-    auto handler = [this, toK](int sliderVal) {
-      applyChange([toK, sliderVal](ParameterState &s) {
-        s.rparams.backlight_temperature = toK(sliderVal);
-      });
-    };
-    // Note: Spinbox handler needs to be separate or adapted
-    auto spinHandler = [this](double val) {
-      applyChange(
-          [val](ParameterState &s) { s.rparams.backlight_temperature = val; });
-    };
-
-    connect(slider, &QSlider::valueChanged, this, handler);
-    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            spinHandler);
-  }
-
+  m_currentGroupForm = nullptr; // End Screen dyes section
   // Separator
   addSeparator("Viewing conditions correction");
 

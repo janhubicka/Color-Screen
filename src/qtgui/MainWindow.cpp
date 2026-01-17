@@ -199,12 +199,9 @@ void MainWindow::setupUi() {
                      [this](const ParameterState &s) { changeParameters(s); },
                      [this]() { return m_scan; }, this);
 
-  // Create Docks for Sharpness components
+  m_configTabs->setObjectName("ConfigTabs");
   m_mtfDock = new QDockWidget("MTF Chart", this);
 
-  m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
-  m_configTabs->addTab(m_screenPanel, "Screen");
-  m_configTabs->addTab(m_colorPanel, "Color");
   m_mtfDock->setObjectName("MTFChartDock");
   m_mtfDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_mtfDock);
@@ -305,13 +302,13 @@ void MainWindow::setupUi() {
             &ScreenPanel::detachPreviewRequested,
             &ScreenPanel::reattachPreview);
 
-  // Linearization Panel creation (re-ordered slightly or kept as is)
   m_linearizationPanel = new LinearizationPanel(
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
+  m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_colorPanel, "Color");
   rightSplitter->addWidget(m_configTabs);
 

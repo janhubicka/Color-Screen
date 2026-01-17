@@ -44,6 +44,16 @@ set(SOURCES
     Renderer.cpp
     ParameterState.cpp
     LinearizationPanel.cpp
+    ParameterPanel.cpp
+    TilePreviewPanel.cpp
+    SharpnessPanel.cpp
+    ScreenPanel.cpp
+    ColorPanel.cpp
+    MTFChartWidget.cpp
+    SpectraChartWidget.cpp
+    CIEChartWidget.cpp
+    ThamesAnimation.cpp
+    PagetAnimation.cpp
 )
 
 set(HEADERS
@@ -51,6 +61,18 @@ set(HEADERS
     ImageWidget.h
     Renderer.h
     NavigationView.h
+    LinearizationPanel.h
+    ParameterPanel.h
+    TilePreviewPanel.h
+    SharpnessPanel.h
+    ScreenPanel.h
+    ColorPanel.h
+    MTFChartWidget.h
+    SpectraChartWidget.h
+    CIEChartWidget.h
+    ThamesAnimation.h
+    PagetAnimation.h
+    SmartSpinBox.h
 )
 
 add_executable(colorscreen-qt
