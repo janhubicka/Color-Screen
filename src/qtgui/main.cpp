@@ -15,6 +15,9 @@ int main(int argc, char *argv[]) {
   QApplication::setApplicationName("colorscreen-qt");
   QApplication::setApplicationVersion("1.1");
   QApplication::setStyle(QStyleFactory::create("Fusion"));
+  
+  // Set application window icon
+  QApplication::setWindowIcon(QIcon(":/images/icon.svg"));
 
   QCommandLineParser parser;
   parser.setApplicationDescription("ColorScreen Qt GUI");

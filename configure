@@ -657,6 +657,7 @@ LTLIBOBJS
 LIBOBJS
 qtgui_FALSE
 qtgui_TRUE
+RCC
 MOC
 Qt6_LIBS
 Qt6_CFLAGS
@@ -22322,6 +22323,64 @@ done
 
   if test -z "$MOC"; then
     as_fn_error $? "moc not found. Please install Qt6 development tools." "$LINENO" 5
+  fi
+
+  # Search for rcc in specific qt6 path first, then general names
+  for ac_prog in rcc-qt6 rcc
+do
+  # Extract the first word of "$ac_prog", so it can be a program name with args.
+set dummy $ac_prog; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_path_RCC+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) case $RCC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_RCC="$RCC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+as_dummy="/usr/libexec/qt6:$PATH"
+for as_dir in $as_dummy
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_path_RCC="$as_dir$ac_word$ac_exec_ext"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac ;;
+esac
+fi
+RCC=$ac_cv_path_RCC
+if test -n "$RCC"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $RCC" >&5
+printf "%s\n" "$RCC" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+
+  test -n "$RCC" && break
+done
+
+
+  if test -z "$RCC"; then
+    as_fn_error $? "rcc not found. Please install Qt6 development tools." "$LINENO" 5
   fi
 fi
  if test x"$enable_qtgui" == x"yes"; then

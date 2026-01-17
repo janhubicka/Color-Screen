@@ -137,7 +137,8 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_MTFChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_SpectraChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_CIEChartWidget.$(OBJEXT)
-nodist_colorscreen_qt_OBJECTS = $(am__objects_1)
+nodist_colorscreen_qt_OBJECTS = $(am__objects_1) \
+	colorscreen_qt-qrc_resources.$(OBJEXT)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
 	$(nodist_colorscreen_qt_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -195,7 +196,8 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
+	./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po \
+	./$(DEPDIR)/colorscreen_qt-qrc_resources.Po
 am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
@@ -319,6 +321,7 @@ PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 Qt6_CFLAGS = @Qt6_CFLAGS@
 Qt6_LIBS = @Qt6_LIBS@
 RANLIB = @RANLIB@
+RCC = @RCC@
 RDYNAMIC = @RDYNAMIC@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -423,10 +426,10 @@ MOC_SOURCES = \
 EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h
 
 # Add moc files to the build
-nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)
+nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Cleanup generated files
-CLEANFILES = $(MOC_SOURCES)
+CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Compiler flags
 colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/
@@ -437,8 +440,8 @@ colorscreen_qt_LDADD = \
     $(Qt6_LIBS)
 
 
-# Ensure moc is run before compilation
-BUILT_SOURCES = $(MOC_SOURCES)
+# Ensure moc and rcc are run before compilation
+BUILT_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -557,6 +560,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-qrc_resources.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -994,6 +998,20 @@ colorscreen_qt-moc_CIEChartWidget.obj: moc_CIEChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_CIEChartWidget.obj `if test -f 'moc_CIEChartWidget.cpp'; then $(CYGPATH_W) 'moc_CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_CIEChartWidget.cpp'; fi`
 
+colorscreen_qt-qrc_resources.o: qrc_resources.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-qrc_resources.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo -c -o colorscreen_qt-qrc_resources.o `test -f 'qrc_resources.cpp' || echo '$(srcdir)/'`qrc_resources.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo $(DEPDIR)/colorscreen_qt-qrc_resources.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='qrc_resources.cpp' object='colorscreen_qt-qrc_resources.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-qrc_resources.o `test -f 'qrc_resources.cpp' || echo '$(srcdir)/'`qrc_resources.cpp
+
+colorscreen_qt-qrc_resources.obj: qrc_resources.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-qrc_resources.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo -c -o colorscreen_qt-qrc_resources.obj `if test -f 'qrc_resources.cpp'; then $(CYGPATH_W) 'qrc_resources.cpp'; else $(CYGPATH_W) '$(srcdir)/qrc_resources.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo $(DEPDIR)/colorscreen_qt-qrc_resources.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='qrc_resources.cpp' object='colorscreen_qt-qrc_resources.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-qrc_resources.obj `if test -f 'qrc_resources.cpp'; then $(CYGPATH_W) 'qrc_resources.cpp'; else $(CYGPATH_W) '$(srcdir)/qrc_resources.cpp'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1161,6 +1179,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-qrc_resources.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1235,6 +1254,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-qrc_resources.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -1275,6 +1295,10 @@ uninstall-am: uninstall-binPROGRAMS
 # Rules to generate moc files
 moc_%.cpp: %.h
 	$(MOC) $< -o $@
+
+# Rule to generate resource file (RCC is set by configure)
+qrc_resources.cpp: resources.qrc
+	$(RCC) $< -o $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

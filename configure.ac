@@ -194,6 +194,13 @@ if test x"$enable_qtgui" == x"yes"; then
   if test -z "$MOC"; then
     AC_MSG_ERROR([moc not found. Please install Qt6 development tools.])
   fi
+  
+  # Search for rcc in specific qt6 path first, then general names
+  AC_PATH_PROGS(RCC, [rcc-qt6 rcc], [], [/usr/libexec/qt6:$PATH])
+
+  if test -z "$RCC"; then
+    AC_MSG_ERROR([rcc not found. Please install Qt6 development tools.])
+  fi
 fi
 AM_CONDITIONAL([qtgui], [test x"$enable_qtgui" == x"yes"])
 
