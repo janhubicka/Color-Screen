@@ -1045,36 +1045,38 @@ void MainWindow::openRecentFile() {
   }
 }
 
-void MainWindow::loadFile(const QString &fileName) {
+void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
   // Clear current image and stop rendering
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr);
 
-  // Check for .par file
-  QFileInfo fileInfo(fileName);
-  QString parFile =
-      fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+  // Check for .par file (only if not suppressed, e.g., during recovery)
+  if (!suppressParamPrompt) {
+    QFileInfo fileInfo(fileName);
+    QString parFile =
+        fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
 
-  if (QFile::exists(parFile)) {
-    if (QMessageBox::question(this, "Load Parameters?",
-                              "A parameter file was found for this image. Do "
-                              "you want to load it?") == QMessageBox::Yes) {
+    if (QFile::exists(parFile)) {
+      if (QMessageBox::question(this, "Load Parameters?",
+                                "A parameter file was found for this image. Do "
+                                "you want to load it?") == QMessageBox::Yes) {
 
-      FILE *f = fopen(parFile.toUtf8().constData(), "r");
-      if (f) {
-        const char *error = nullptr;
-        if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
-                                   &m_rparams, &m_solverParams, &error)) {
-          QMessageBox::warning(this, "Error Loading Parameters",
-                               error ? QString::fromUtf8(error)
-                                     : "Unknown error loading parameters.");
-        } else {
-          m_prevScrToImgParams = m_scrToImgParams;
-          m_prevDetectParams = m_detectParams;
+        FILE *f = fopen(parFile.toUtf8().constData(), "r");
+        if (f) {
+          const char *error = nullptr;
+          if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
+                                     &m_rparams, &m_solverParams, &error)) {
+            QMessageBox::warning(this, "Error Loading Parameters",
+                                 error ? QString::fromUtf8(error)
+                                       : "Unknown error loading parameters.");
+          } else {
+            m_prevScrToImgParams = m_scrToImgParams;
+            m_prevDetectParams = m_detectParams;
+          }
+          fclose(f);
         }
-        fclose(f);
       }
     }
   }
@@ -1573,7 +1575,7 @@ void MainWindow::loadRecoveryState() {
 
   // Load image if path was saved
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
-    loadFile(imageToLoad);
+    loadFile(imageToLoad, true);  // Suppress param prompt during recovery
   } else if (!imageToLoad.isEmpty()) {
     QMessageBox::warning(this, "Recovery Warning",
                         QString("Could not find image file: %1").arg(imageToLoad));

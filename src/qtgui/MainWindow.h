@@ -55,7 +55,7 @@ public:
   void applyState(const ParameterState &state);
 
   // Public method for loading files (CLI support)
-  void loadFile(const QString &fileName);
+  void loadFile(const QString &fileName, bool suppressParamPrompt = false);
 
 private slots:
   void onZoomIn();
