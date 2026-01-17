@@ -20,6 +20,33 @@ ColorPanel::~ColorPanel() = default;
 void ColorPanel::setupUi() {
   setupTiles("Color Preview");
 
+  // Spectral Transmitance Chart
+  m_spectraChart = new SpectraChartWidget();
+
+  // Wrap layout in a widget to add to FormLayout
+  QWidget *spectraWrapper = new QWidget();
+  m_spectraContainer = new QVBoxLayout(spectraWrapper);
+  m_spectraContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *chartWrapper = new QWidget();
+  QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
+  wrapperLayout->setContentsMargins(0, 0, 0, 0);
+  wrapperLayout->addWidget(m_spectraChart);
+
+  // Detachable section
+  m_spectraSection = createDetachableSection(
+      "Spectral Transmitance", chartWrapper, [this, chartWrapper]() {
+        emit detachSpectraChartRequested(chartWrapper);
+      });
+
+  m_spectraContainer->addWidget(m_spectraSection);
+
+  // Add to form layout (at the top)
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(spectraWrapper);
+  else
+    m_form->addRow(spectraWrapper);
+
   // Dyes dropdown
   using color_model = render_parameters::color_model_t;
   std::map<int, QString> dyes;
@@ -195,33 +222,6 @@ void ColorPanel::setupUi() {
     m_currentGroupForm->addRow("", m_linkDyeAges);
   else
     m_form->addRow("", m_linkDyeAges);
-
-  // Spectral Transmitance Chart
-  m_spectraChart = new SpectraChartWidget();
-
-  // Wrap layout in a widget to add to FormLayout
-  QWidget *spectraWrapper = new QWidget();
-  m_spectraContainer = new QVBoxLayout(spectraWrapper);
-  m_spectraContainer->setContentsMargins(0, 0, 0, 0);
-
-  QWidget *chartWrapper = new QWidget();
-  QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
-  wrapperLayout->setContentsMargins(0, 0, 0, 0);
-  wrapperLayout->addWidget(m_spectraChart);
-
-  // Detachable section
-  m_spectraSection = createDetachableSection(
-      "Spectral Transmitance", chartWrapper, [this, chartWrapper]() {
-        emit detachSpectraChartRequested(chartWrapper);
-      });
-
-  m_spectraContainer->addWidget(m_spectraSection);
-
-  // Add to form layout (after Dyes)
-  if (m_currentGroupForm)
-    m_currentGroupForm->addRow(spectraWrapper);
-  else
-    m_form->addRow(spectraWrapper);
 
   // Spacer to push everything up
   QWidget *spacer = new QWidget();
