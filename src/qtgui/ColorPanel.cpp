@@ -116,7 +116,7 @@ void ColorPanel::setupUi() {
   using color_model = render_parameters::color_model_t;
   std::map<int, QString> dyes;
   for (int i = 0; i < (int)color_model::color_model_max; ++i) {
-    dyes[i] = QString::fromUtf8(render_parameters::color_model_properties[i].name);
+    dyes[i] = QString::fromUtf8(render_parameters::color_model_properties[i].pretty_name);
   }
 
   addEnumParameter(
@@ -192,6 +192,21 @@ void ColorPanel::setupUi() {
   auto red = addManualSlider("Red dye age", 0);
   auto green = addManualSlider("Green dye age", 1);
   auto blue = addManualSlider("Blue dye age", 2);
+
+  // Updater for slider enablement
+  m_paramUpdaters.push_back([red, green, blue, this](const ParameterState &s) {
+    bool supportsAging =
+        render_parameters::color_model_properties[s.rparams.color_model].flags &
+        render_parameters::SUPPORTS_AGING;
+    
+    red.first->setEnabled(supportsAging);
+    red.second->setEnabled(supportsAging);
+    green.first->setEnabled(supportsAging);
+    green.second->setEnabled(supportsAging);
+    blue.first->setEnabled(supportsAging);
+    blue.second->setEnabled(supportsAging);
+    m_linkDyeAges->setEnabled(supportsAging);
+  });
 
   // Common change handler
   auto handleValueChange = [this, red, green, blue](int channel,
@@ -460,6 +475,20 @@ void ColorPanel::setupUi() {
     m_form->addRow(spacer);
 
   // Future: Add color parameters here
+  
+    // Updater for Spectra Chart visibility in main layout
+  m_paramUpdaters.push_back([this](const ParameterState &s) {
+    bool spectraBased =
+        render_parameters::color_model_properties[s.rparams.color_model].flags &
+        render_parameters::SPECTRA_BASED;
+        
+     if (spectraBased) {
+         if (m_spectraSection) m_spectraSection->show();
+     } else {
+         if (m_spectraSection) m_spectraSection->hide();
+     }
+  });
+  
   updateUI();
 }
 
