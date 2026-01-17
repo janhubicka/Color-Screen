@@ -494,6 +494,8 @@ struct render_parameters
   /* Aging simulation (0 new dyes, 1 aged dyes).
      Only effective for color models that support aging simulation.  */
   rgbdata age;
+  /* Density (concentration) adjustment of dyes in color screen.  */
+  rgbdata dye_density;
   /* Temperature in K of daylight in photograph.  */
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
@@ -579,7 +581,7 @@ struct render_parameters
 
         /* Output adjustment.  */
         white_balance ({ 1, 1, 1 }), presaturation (1),
-        color_model (color_model_none), age {1,1,1}, temperature (5000),
+        color_model (color_model_none), age {1,1,1}, dye_density {1,1,1}, temperature (5000),
         backlight_temperature (5000),
         observer_whitepoint (/*srgb_white*/ d50_white),
         dye_balance (dye_balance_bradford), saturation (1), brightness (1),
@@ -638,6 +640,7 @@ struct render_parameters
            && scanner_red == other.scanner_red
            && scanner_green == other.scanner_green
            && scanner_blue == other.scanner_blue && age == other.age
+	   && dye_density == other.dye_density
            && backlight_temperature == other.backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure

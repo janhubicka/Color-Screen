@@ -437,6 +437,15 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       else
 	{
 	  *spectrum_based = true;
+	  if (dye_density.red != 1)
+            for (int i = 0; i < SPECTRUM_SIZE; i++)
+	      spect->red[i] = my_pow (spect->red[i], dye_density.red);
+	  if (dye_density.green != 1)
+            for (int i = 0; i < SPECTRUM_SIZE; i++)
+	      spect->green[i] = my_pow (spect->green[i], dye_density.green);
+	  if (dye_density.blue != 1)
+            for (int i = 0; i < SPECTRUM_SIZE; i++)
+	      spect->blue[i] = my_pow (spect->blue[i], dye_density.blue);
 	  dyes = spect->xyz_matrix ();
 	  if (transmission_data)
 	    {
@@ -478,6 +487,24 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
       spectrum_dyes_to_xyz s;
       s.set_backlight (spectrum_dyes_to_xyz::il_D, backlight_temperature);
       xyz backlight_white = s.whitepoint_xyz ();
+      if (dye_density.red != 1)
+	{
+	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.red);
+	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.red);
+	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.red);
+	}
+      if (dye_density.green != 1)
+	{
+	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.green);
+	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.green);
+	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.green);
+	}
+      if (dye_density.blue != 1)
+	{
+	  dyes.m_elements[0][0] = my_pow (dyes.m_elements[0][0], dye_density.blue);
+	  dyes.m_elements[0][1] = my_pow (dyes.m_elements[0][1], dye_density.blue);
+	  dyes.m_elements[0][2] = my_pow (dyes.m_elements[0][2], dye_density.blue);
+	}
 	
       //printf (" Dye :");
       //dye_whitepoint.print (stdout);
