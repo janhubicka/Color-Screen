@@ -2,6 +2,7 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "TilePreviewPanel.h"
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QFormLayout>
@@ -30,6 +31,38 @@ protected:
     painter.drawControl(QStyle::CE_ComboBoxLabel, opt);
   }
 };
+
+class ScreenPreviewPanel : public TilePreviewPanel {
+public:
+  ScreenPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
+                     ImageGetter imageGetter, QWidget *parent = nullptr)
+      : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent, false) {
+  }
+
+  void init(const QString &title) { setupTiles(title); }
+
+protected:
+  std::vector<std::pair<render_screen_tile_type, QString>>
+  getTileTypes() const override {
+    return {{original_screen, "Screen"}};
+  }
+
+  bool shouldUpdateTiles(const ParameterState &state) override {
+    if ((int)state.scrToImg.type != m_lastScrType)
+      return true;
+    return false;
+  }
+
+  void onTileUpdateScheduled() override {
+    ParameterState state = m_stateGetter();
+    m_lastScrType = (int)state.scrToImg.type;
+  }
+
+  bool requiresScan() const override { return false; }
+
+private:
+  int m_lastScrType = -1;
+};
 } // namespace
 
 ScreenPanel::ScreenPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -39,6 +72,11 @@ ScreenPanel::ScreenPanel(StateGetter stateGetter, StateSetter stateSetter,
 }
 
 ScreenPanel::~ScreenPanel() = default;
+
+void ScreenPanel::reattachPreview(QWidget *widget) {
+  if (m_previewPanel)
+    m_previewPanel->reattachTiles(widget);
+}
 
 void ScreenPanel::setupUi() {
   // Screen Type Selector
@@ -108,6 +146,28 @@ void ScreenPanel::setupUi() {
       screenCombo->blockSignals(false);
     }
   });
+
+  addSeparator("Regular screen");
+
+  ScreenPreviewPanel *preview =
+      new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+  m_previewPanel = preview;
+  preview->init("");
+
+  connect(preview, &TilePreviewPanel::detachTilesRequested, this,
+          &ScreenPanel::detachPreviewRequested);
+
+  m_widgetStateUpdaters.push_back([this, preview]() {
+    preview->updateUI();
+    bool visible = m_stateGetter().scrToImg.type != Random;
+    preview->setVisible(visible);
+  });
+
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow(preview);
+  } else {
+    m_form->addRow(preview);
+  }
 
   // Placeholder for future parameters (scr_to_img_parameters,
   // scr_detect_parameters, solver_parameters)

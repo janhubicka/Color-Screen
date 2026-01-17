@@ -194,4 +194,5 @@ private:
   QDockWidget *m_tilesDock;
   QDockWidget *m_colorTilesDock;
   QDockWidget *m_correctedColorTilesDock;
+  QDockWidget *m_screenPreviewDock;
 };

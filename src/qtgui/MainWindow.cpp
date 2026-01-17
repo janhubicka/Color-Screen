@@ -190,9 +190,17 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::BottomDockWidgetArea, m_colorTilesDock);
 
   m_correctedColorTilesDock = new QDockWidget("Corrected Color Preview", this);
-  m_correctedColorTilesDock->setObjectName("CorrectedColorTilesDock");
-  m_correctedColorTilesDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_correctedColorTilesDock);
+  m_correctedColorTilesDock->setObjectName("CorrectedColorPreviewDock");
+  m_correctedColorTilesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+  addDockWidget(Qt::RightDockWidgetArea, m_correctedColorTilesDock);
+  m_correctedColorTilesDock->hide(); // Initially hidden
+
+  // Screen Preview Dock
+  m_screenPreviewDock = new QDockWidget("Screen Preview", this);
+  m_screenPreviewDock->setObjectName("ScreenPreviewDock");
+  m_screenPreviewDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+  addDockWidget(Qt::RightDockWidgetArea, m_screenPreviewDock);
+  m_screenPreviewDock->hide(); // Initially hidden
 
   // Connection for Color Panel Spectra Chart
   m_spectraDock = new QDockWidget("Spectral Transmitance", this);
@@ -262,6 +270,10 @@ void MainWindow::setupUi() {
             &ColorPanel::detachSpectraChartRequested,
             &ColorPanel::reattachSpectraChart);
 
+  setupDock(m_screenPreviewDock, m_screenPanel,
+            &ScreenPanel::detachPreviewRequested,
+            &ScreenPanel::reattachPreview);
+
   // Linearization Panel creation (re-ordered slightly or kept as is)
   m_linearizationPanel = new LinearizationPanel(
       [this]() { return getCurrentState(); },
@@ -276,6 +288,7 @@ void MainWindow::setupUi() {
   // updates necessarily)
   m_panels.push_back(m_linearizationPanel);
   m_panels.push_back(m_sharpnessPanel);
+  m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_colorPanel);
 
   m_mainSplitter->addWidget(m_rightColumn);
