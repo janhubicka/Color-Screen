@@ -13,7 +13,7 @@ using namespace colorscreen;
 namespace {
 TileRenderResult
 renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
-                   int generation, int tileSize,
+                   int generation, int tileSize, coord_t pixel_size,
                    std::vector<render_screen_tile_type> tileTypes,
                    std::shared_ptr<colorscreen::progress_info> progress) {
   TileRenderResult result;
@@ -27,10 +27,10 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
   tile.pixelbytes = 3;
   tile.rowstride = tileSize * 3; // 3 bytes per pixel (RGB)
 
-  // Compute pixel size
-  scr_to_img scrToImgObj;
-  scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
-  coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
+  // Compute pixel size - passed in argument
+  // scr_to_img scrToImgObj;
+  // scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
+  // coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
 
   result.tiles.resize(tileTypes.size());
 
@@ -44,8 +44,20 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
     std::vector<uint8_t> pixels(tileSize * tileSize * 3);
     tile.pixels = pixels.data();
 
-    if (render_screen_tile(tile, state.scrToImg.type, state.rparams, pixel_size,
-                           tileTypes[i], progress.get())) {
+    colorscreen::scr_type type = state.scrToImg.type;
+    // If panel does not require scan (e.g. ColorPanel), and type is Random
+    // (default), force a valid screen type (e.g. Paget) so that
+    // render_screen_tile does not abort. This allows visualizing dyes even
+    // without a loaded image/screen detection.
+    if (type == colorscreen::Random) {
+      // We can't use requiresScan() here easily because this function is
+      // static/free helper. But we pass 'state'. Wait, renderTilesGeneric is
+      // free function. We need to pass requiresScan flag to it or handle it in
+      // performTileRender.
+    }
+
+    if (render_screen_tile(tile, type, state.rparams, pixel_size, tileTypes[i],
+                           progress.get())) {
       result.tiles[i] = QImage(pixels.data(), tileSize, tileSize,
                                tile.rowstride, QImage::Format_RGB888)
                             .copy();
@@ -73,25 +85,31 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
 
   // Initialize watcher
   m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
-  connect(
-      m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this,
-      [this]() {
-        TileRenderResult result = m_tileWatcher->result();
+  connect(m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this,
+          [this]() {
+            TileRenderResult result = m_tileWatcher->result();
 
-        if (result.generation == m_tileGenerationCounter && result.success) {
-          if (result.tiles.size() == m_tileLabels.size()) {
-            for (size_t i = 0; i < m_tileLabels.size(); ++i) {
-              m_tileLabels[i]->setPixmap(QPixmap::fromImage(result.tiles[i]));
+            if (result.generation == m_tileGenerationCounter) {
+              if (result.success) {
+                if (result.tiles.size() == m_tileLabels.size()) {
+                  for (size_t i = 0; i < m_tileLabels.size(); ++i) {
+                    m_tileLabels[i]->setPixmap(
+                        QPixmap::fromImage(result.tiles[i]));
+                  }
+                }
+              } else {
+                // If failed, reset last rendered size so we try again next time
+                // (e.g. on resize or param change)
+                m_lastRenderedTileSize = 0;
+              }
             }
-          }
-        }
 
-        if (m_tileProgress) {
-          m_tileProgress.reset();
-        }
+            if (m_tileProgress) {
+              m_tileProgress.reset();
+            }
 
-        startNextRender();
-      });
+            startNextRender();
+          });
 }
 
 TilePreviewPanel::~TilePreviewPanel() = default;
@@ -138,12 +156,13 @@ void TilePreviewPanel::setupTiles(const QString &title) {
       layout->setContentsMargins(0, 0, 0, 0);
       layout->setSpacing(2);
 
-      layout->addWidget(imageLabel, 1);
+      layout->addWidget(imageLabel, 0, Qt::AlignHCenter);
 
       QLabel *captionLabel = new QLabel(caption);
       captionLabel->setAlignment(Qt::AlignCenter);
 
-      layout->addWidget(captionLabel, 0);
+      layout->addWidget(captionLabel, 0, Qt::AlignHCenter);
+      layout->addStretch(1);
       return container;
     };
 
@@ -158,6 +177,7 @@ void TilePreviewPanel::setupTiles(const QString &title) {
       createDetachableSection(title, m_tilesContainer, [this]() {
         emit detachTilesRequested(m_tilesContainer);
       });
+  detachableTiles->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
   // Hack: Rename title based on subclass?
   // Actually createDetachableSection uses "Tile Preview" here, but Sharpness
@@ -196,7 +216,7 @@ void TilePreviewPanel::performTileRender() {
   ParameterState state = m_stateGetter();
   std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
 
-  if (!scan || !isTileRenderingEnabled(state)) {
+  if ((!scan && requiresScan()) || !isTileRenderingEnabled(state)) {
     for (auto l : m_tileLabels)
       l->clear();
     return;
@@ -232,18 +252,26 @@ void TilePreviewPanel::performTileRender() {
     l->setFixedSize(tileSize, tileSize);
 
   // Compute pixel size for check/render
-  scr_to_img scrToImgObj;
-  scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-  coord_t pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
+  coord_t pixel_size = 1.0;
+  if (scan) {
+    scr_to_img scrToImgObj;
+    scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
+    pixel_size = scrToImgObj.pixel_size(scan->width, scan->height);
+  }
 
   // Subclass check
   bool needsUpdate = shouldUpdateTiles(state);
 
   // Also check if tileSize changed significantly or first run
-  static int lastTileSize = 0;
-  if (tileSize != lastTileSize) {
+  // Also check if tileSize changed significantly or first run
+  if (tileSize != m_lastRenderedTileSize) {
     needsUpdate = true;
-    lastTileSize = tileSize;
+    m_lastRenderedTileSize = tileSize;
+  }
+
+  // Force update if tiles are empty/not rendered yet
+  if (!m_tileLabels.empty() && m_tileLabels[0]->pixmap().isNull()) {
+    needsUpdate = true;
   }
 
   if (!needsUpdate)
@@ -257,8 +285,13 @@ void TilePreviewPanel::performTileRender() {
     types.push_back(p.first);
 
   m_pendingRequest.state = state;
-  m_pendingRequest.scanWidth = scan->width;
-  m_pendingRequest.scanHeight = scan->height;
+  if (scan) {
+    m_pendingRequest.scanWidth = scan->width;
+    m_pendingRequest.scanHeight = scan->height;
+  } else {
+    m_pendingRequest.scanWidth = 0;
+    m_pendingRequest.scanHeight = 0;
+  }
   m_pendingRequest.tileSize = tileSize;
   m_pendingRequest.pixelSize = pixel_size;
   m_pendingRequest.scan = scan;
@@ -288,8 +321,8 @@ void TilePreviewPanel::startNextRender() {
   QFuture<TileRenderResult> future =
       QtConcurrent::run([req, generation, progress = m_tileProgress]() {
         return renderTilesGeneric(req.state, req.scanWidth, req.scanHeight,
-                                  generation, req.tileSize, req.tileTypes,
-                                  progress);
+                                  generation, req.tileSize, req.pixelSize,
+                                  req.tileTypes, progress);
       });
   m_tileWatcher->setFuture(future);
 }
@@ -299,6 +332,11 @@ void TilePreviewPanel::resizeEvent(QResizeEvent *event) {
   if (m_updateTimer && event->size() != event->oldSize()) {
     scheduleTileUpdate();
   }
+}
+
+void TilePreviewPanel::showEvent(QShowEvent *event) {
+  ParameterPanel::showEvent(event);
+  scheduleTileUpdate();
 }
 
 QWidget *TilePreviewPanel::getTilesWidget() const { return m_tilesContainer; }

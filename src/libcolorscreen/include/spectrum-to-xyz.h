@@ -247,7 +247,7 @@ public:
   DLL_PUBLIC void set_characteristic_curve (enum characteristic_curves);
   /* Set dyes to given measured spectra.
      If dyes2 is set and age > 1, then mix the two spectras in given ratio.  */
-  DLL_PUBLIC void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, luminosity_t age = 1);
+  DLL_PUBLIC void set_dyes (enum dyes, enum dyes dyes2 = dyes_max, rgbdata age = {1,1,1});
   DLL_PUBLIC void set_backlight (enum illuminants il, luminosity_t temperature = 5400);
   /* Adjust rscale, gscale and bscale so dye tgb (1,1,1) results
      in white in a given temperature of daylight.  */

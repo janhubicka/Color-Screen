@@ -559,18 +559,20 @@ cb_key_press_event (GtkWidget * widget, GdkEventKey * event)
       display_scheduled = true;
       preview_display_scheduled = true;
     }
-  if (k == 'q' && rparams.age > 0)
+  if (k == 'q')
     {
-      rparams.age-=0.1;
-      if (rparams.age < 0)
-	rparams.age = 0;
+      rparams.age.red-=0.1;
+      rparams.age.green-=0.1;
+      rparams.age.blue-=0.1;
       printf ("Age: %f\n", rparams.age);
       display_scheduled = true;
       preview_display_scheduled = true;
     }
   if (k == 'Q')
     {
-      rparams.age+=0.1;
+      rparams.age.red+=0.1;
+      rparams.age.green+=0.1;
+      rparams.age.blue+=0.1;
       printf ("Age: %f\n", rparams.age);
       display_scheduled = true;
       preview_display_scheduled = true;

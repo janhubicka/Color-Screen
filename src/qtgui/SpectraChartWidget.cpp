@@ -33,7 +33,7 @@ void SpectraChartWidget::clear() {
 }
 
 QSize SpectraChartWidget::sizeHint() const {
-  return QSize(500, 435); // Matches MTFChartWidget
+  return QSize(600, 325); // ~ 600/3 + 125
 }
 
 QSize SpectraChartWidget::minimumSizeHint() const { return QSize(300, 310); }
@@ -41,11 +41,10 @@ QSize SpectraChartWidget::minimumSizeHint() const { return QSize(300, 310); }
 bool SpectraChartWidget::hasHeightForWidth() const { return true; }
 
 int SpectraChartWidget::heightForWidth(int width) const {
-  int chartHeight = static_cast<int>(width / 1.61);
+  int chartHeight = static_cast<int>(width / 3.0);
   return chartHeight + 125;
 }
 
-// Approximate Wavelength to RGB conversion
 // Precise Wavelength to RGB conversion using CIE CMFs
 static QColor wavelengthToRGB(double wavelength) {
   if (wavelength < 380 || wavelength > 780)
@@ -59,30 +58,14 @@ static QColor wavelengthToRGB(double wavelength) {
   if (idx < 0 || idx >= SPECTRUM_SIZE - 1)
     return QColor(0, 0, 0);
 
-  double x_val = colorscreen::cie_cmf_x[idx] * (1 - t) +
-                 colorscreen::cie_cmf_x[idx + 1] * t;
-  double y_val = colorscreen::cie_cmf_y[idx] * (1 - t) +
-                 colorscreen::cie_cmf_y[idx + 1] * t;
-  double z_val = colorscreen::cie_cmf_z[idx] * (1 - t) +
-                 colorscreen::cie_cmf_z[idx + 1] * t;
-
-  // Convert XYZ to Linear RGB (D65) using library matrix
-  double r, g, b;
-  colorscreen::xyz_srgb_matrix m;
-  m.apply_to_rgb(x_val, y_val, z_val, &r, &g, &b);
-
-  // Normalize to max 1.0 to preserve hue but maximize brightness
-  double maxVal = std::max({r, g, b});
-  if (maxVal > 0) {
-    r /= maxVal;
-    g /= maxVal;
-    b /= maxVal;
-  }
-
-  // Convert to sRGB (Gamma Correct) using library function
-  r = colorscreen::linear_to_srgb(r);
-  g = colorscreen::linear_to_srgb(g);
-  b = colorscreen::linear_to_srgb(b);
+  colorscreen::xyz c = {colorscreen::cie_cmf_x[idx] * (1 - t) +
+                            colorscreen::cie_cmf_x[idx + 1] * t,
+                        colorscreen::cie_cmf_y[idx] * (1 - t) +
+                            colorscreen::cie_cmf_y[idx + 1] * t,
+                        colorscreen::cie_cmf_z[idx] * (1 - t) +
+                            colorscreen::cie_cmf_z[idx + 1] * t};
+  colorscreen::luminosity_t r, g, b;
+  (c * 0.15).to_srgb(&r, &g, &b);
 
   return QColor(std::clamp((int)(r * 255), 0, 255),
                 std::clamp((int)(g * 255), 0, 255),
@@ -115,10 +98,9 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
     double wl = 400.0 + t * (720.0 - 400.0);
     QColor col = wavelengthToRGB(wl);
 
-    // Apply 30% brightness as requested
-    int r = col.red() * 0.3;
-    int g = col.green() * 0.3;
-    int b = col.blue() * 0.3;
+    int r = col.red();
+    int g = col.green();
+    int b = col.blue();
 
     bgImage.setPixel(x, 0, qRgb(r, g, b));
   }

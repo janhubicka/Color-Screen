@@ -895,7 +895,7 @@ render_cmd (int argc, char **argv)
 
   /* Apply command line parameters.  */
   if (age != -100)
-    rparam.age = age;
+    rparam.age = {age, age, age};
   if (color_model != render_parameters::color_model_max)
     rparam.color_model = color_model;
   if (dye_balance != render_parameters::dye_balance_max)

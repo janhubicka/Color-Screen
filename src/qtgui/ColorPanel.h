@@ -3,6 +3,7 @@
 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "TilePreviewPanel.h"
+#include <QCheckBox>
 
 class SpectraChartWidget;
 
@@ -27,6 +28,7 @@ protected:
   bool shouldUpdateTiles(const ParameterState &state) override;
   void onTileUpdateScheduled() override;
   bool isTileRenderingEnabled(const ParameterState &state) const override;
+  bool requiresScan() const override { return false; }
 
 private:
   void setupUi();
@@ -43,6 +45,8 @@ private:
   // of scan ptr and pixelSize? TilePreviewPanel checks pixelSize and scan
   // pointer. We just need to check if parameters relevant to render changed.
 
+  QWidget *m_spectraSection = nullptr;
+  QCheckBox *m_linkDyeAges = nullptr;
   SpectraChartWidget *m_spectraChart = nullptr;
   QVBoxLayout *m_spectraContainer = nullptr;
 };

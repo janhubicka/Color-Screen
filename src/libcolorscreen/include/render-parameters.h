@@ -484,7 +484,7 @@ struct render_parameters
   enum color_model_t color_model;
   /* Aging simulation (0 new dyes, 1 aged dyes).
      Only effective for color models that support aging simulation.  */
-  luminosity_t age;
+  rgbdata age;
   /* Temperature in K of daylight in photograph.  */
   static const int temperature_min = 2500;
   static const int temperature_max = 25000;
@@ -570,7 +570,7 @@ struct render_parameters
 
         /* Output adjustment.  */
         white_balance ({ 1, 1, 1 }), presaturation (1),
-        color_model (color_model_none), age (1), temperature (5000),
+        color_model (color_model_none), age {1,1,1}, temperature (5000),
         backlight_temperature (5000),
         observer_whitepoint (/*srgb_white*/ d50_white),
         dye_balance (dye_balance_bradford), saturation (1), brightness (1),

@@ -4955,7 +4955,7 @@ spectrum_dyes_to_xyz::synthetic_dufay_blue (luminosity_t d1, luminosity_t d2)
 }
 
 void
-spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t age)
+spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, rgbdata age)
 {
 #if 0
   if ((int)dyes >= (int)dufaycolor_color_cinematography
@@ -4967,15 +4967,15 @@ spectrum_dyes_to_xyz::set_dyes (enum dyes dyes, enum dyes dyes2, luminosity_t ag
     }
 #endif
   subtractive = set_dyes_to (red, green, blue, cyan, magenta, yellow, dyes);
-  if (age > 0 && dyes2 != dyes_max)
+  if ((age.red != 0 || age.green != 0 || age.blue != 0) && dyes2 != dyes_max)
     {
       spectrum aged_red, aged_green, aged_blue;
       set_dyes_to (aged_red, aged_green, aged_blue, cyan, magenta, yellow, dyes2);
       for (int i = 0; i < SPECTRUM_SIZE; i++)
 	{
-	  red[i] = red[i] * (1 - age) + aged_red[i] * age;
-	  green[i] = green[i] * (1 - age) + aged_green[i] * age;
-	  blue[i] = blue[i] * (1 - age) + aged_blue[i] * age;
+	  red[i] = red[i] * (1 - age.red) + aged_red[i] * age.red;
+	  green[i] = green[i] * (1 - age.green) + aged_green[i] * age.green;
+	  blue[i] = blue[i] * (1 - age.blue) + aged_blue[i] * age.blue;
 	}
     }
 }

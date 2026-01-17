@@ -424,6 +424,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       a.apply_to_rgb (backlight_white.x, backlight_white.y, backlight_white.z,
                       &backlight.red, &backlight.green, &backlight.blue);
       luminosity_t max = 1 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
+      if (type == Random)
+        type = Joly;
       if (rst == backlight_screen)
 	{
 	  init_to_color (backlight * max, tile);

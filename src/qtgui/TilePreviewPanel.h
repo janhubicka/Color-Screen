@@ -4,6 +4,7 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "ParameterPanel.h"
 #include <QFutureWatcher>
+#include <QImage>
 #include <QLabel>
 #include <QTimer>
 #include <memory>
@@ -36,6 +37,7 @@ signals:
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
+  void showEvent(QShowEvent *event) override;
 
   // Must be implemented by subclasses
   virtual std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
@@ -45,6 +47,10 @@ protected:
   } // Called when update logic decides to proceed (e.g. to update cache)
 
   virtual bool isTileRenderingEnabled(const ParameterState &state) const;
+
+  // Return false if tiles can be rendered without a scan (e.g. using synthetic
+  // patterns) Default is true.
+  virtual bool requiresScan() const { return true; }
 
   // Call this to initialize the tiles UI
   void setupTiles(const QString &title);
@@ -78,6 +84,8 @@ private:
   };
   RenderRequest m_pendingRequest;
   bool m_hasPendingRequest = false;
+
+  int m_lastRenderedTileSize = 0;
 };
 
 #endif // TILE_PREVIEW_PANEL_H
