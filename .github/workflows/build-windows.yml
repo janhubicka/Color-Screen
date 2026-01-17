@@ -22,7 +22,7 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-gtk2 mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -31,7 +31,7 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-gtkgui --enable-qtgui --prefix=/c/Color-Screen-install
+        CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216" ./configure --enable-qtgui --prefix=/c/Color-Screen-install
     - name: make
       shell: msys2 {0}
       run: make -j$(nproc)
@@ -54,15 +54,13 @@ jobs:
     - name: make install-strip
       shell: msys2 {0}
       run: make install
-    - name: print dlls gtk
-      shell: msys2 {0}
-      run: ldd /c/Color-Screen-install/bin/colorscreen-gtk
+
     - name: print dlls dll
       shell: msys2 {0}
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
     - name: copy dlls
       shell: msys2 {0}
-      run: cp /${{matrix.sys}}/bin/libgcc_s_seh-*.dll /${{matrix.sys}}/bin/libcairo-*.dll /${{matrix.sys}}/bin/libgdk_pixbuf-*.dll /${{matrix.sys}}/bin/libgdk-*.dll /${{matrix.sys}}/bin/libglib-*.dll /${{matrix.sys}}/bin/libgomp-*.dll /${{matrix.sys}}/bin/libgobject-*.dll /${{matrix.sys}}/bin/libgsl-*.dll /${{matrix.sys}}/bin/libwinpthread-*.dll /${{matrix.sys}}/bin/libgtk-*.dll /${{matrix.sys}}/bin/liblcms2-*.dll /${{matrix.sys}}/bin/libtiff-*.dll /${{matrix.sys}}/bin/libraw-*.dll /${{matrix.sys}}/bin/libstdc++-*.dll /${{matrix.sys}}/bin/libzip.dll /${{matrix.sys}}/bin/libturbojpeg.dll /${{matrix.sys}}/bin/libgio-*.dll /${{matrix.sys}}/bin/libintl-*.dll /${{matrix.sys}}/bin/libpango-*.dll /${{matrix.sys}}/bin/libpangocairo-*.dll /${{matrix.sys}}/bin/libfontconfig-*.dll /${{matrix.sys}}/bin/libpixman-*.dll /${{matrix.sys}}/bin/libfreetype-*.dll /${{matrix.sys}}/bin/libpng16-*.dll /${{matrix.sys}}/bin/zlib1.dll /${{matrix.sys}}/bin/libgmodule-*.dll /${{matrix.sys}}/bin/libffi-*.dll /${{matrix.sys}}/bin/libpcre2-*.dll /${{matrix.sys}}/bin/libatk-*.dll /${{matrix.sys}}/bin/libgslcblas-*.dll /${{matrix.sys}}/bin/libdeflate.dll /${{matrix.sys}}/bin/libjbig-*.dll /${{matrix.sys}}/bin/libjpeg-*.dll /${{matrix.sys}}/bin/libLerc.dll /${{matrix.sys}}/bin/liblzma-*.dll /${{matrix.sys}}/bin/libwebp-*.dll /${{matrix.sys}}/bin/libzstd.dll /${{matrix.sys}}/bin/libpangowin32-*.dll /${{matrix.sys}}/bin/libbz2-*.dll /${{matrix.sys}}/bin/libiconv-*.dll /${{matrix.sys}}/bin/libharfbuzz-*.dll /${{matrix.sys}}/bin/libthai-*.dll /${{matrix.sys}}/bin/libfribidi-*.dll /${{matrix.sys}}/bin/libpangoft2-*.dll /${{matrix.sys}}/bin/libexpat-*.dll /${{matrix.sys}}/bin/libbrotlidec.dll /${{matrix.sys}}/bin/libsharpyuv-*.dll /${{matrix.sys}}/bin/libgraphite2.dll /${{matrix.sys}}/bin/libdatrie-*.dll /${{matrix.sys}}/bin/libbrotlicommon.dll /${{matrix.sys}}/bin/libfftw3-*.dll /${{matrix.sys}}/bin/libb2-*.dll /${{matrix.sys}}/bin/libdouble-conversion*.dll /${{matrix.sys}}/bin/libicuin*.dll /${{matrix.sys}}/bin/libicuuc*.dll /${{matrix.sys}}/bin/libmd4c*.dll /${{matrix.sys}}/bin/libicudt*.dll /c/Color-Screen-install/bin
+      run: cp /${{matrix.sys}}/bin/libgcc_s_seh-*.dll /${{matrix.sys}}/bin/libgomp-*.dll /${{matrix.sys}}/bin/libgsl-*.dll /${{matrix.sys}}/bin/libwinpthread-*.dll /${{matrix.sys}}/bin/liblcms2-*.dll /${{matrix.sys}}/bin/libtiff-*.dll /${{matrix.sys}}/bin/libraw-*.dll /${{matrix.sys}}/bin/libstdc++-*.dll /${{matrix.sys}}/bin/libzip.dll /${{matrix.sys}}/bin/libturbojpeg.dll /${{matrix.sys}}/bin/zlib1.dll /${{matrix.sys}}/bin/libgslcblas-*.dll /${{matrix.sys}}/bin/libdeflate.dll /${{matrix.sys}}/bin/libjbig-*.dll /${{matrix.sys}}/bin/libjpeg-*.dll /${{matrix.sys}}/bin/libLerc.dll /${{matrix.sys}}/bin/liblzma-*.dll /${{matrix.sys}}/bin/libwebp-*.dll /${{matrix.sys}}/bin/libzstd.dll /${{matrix.sys}}/bin/libbz2-*.dll /${{matrix.sys}}/bin/libsharpyuv-*.dll /${{matrix.sys}}/bin/libfftw3-*.dll /${{matrix.sys}}/bin/libb2-*.dll /${{matrix.sys}}/bin/libdouble-conversion*.dll /${{matrix.sys}}/bin/libicuin*.dll /${{matrix.sys}}/bin/libicuuc*.dll /${{matrix.sys}}/bin/libmd4c*.dll /${{matrix.sys}}/bin/libicudt*.dll /c/Color-Screen-install/bin
     - name: deploy qt
       shell: msys2 {0}
       run: |

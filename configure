@@ -22333,7 +22333,7 @@ else
 fi
 
 
-ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile"
 
 ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h"
 
@@ -23497,6 +23497,7 @@ do
     "src/colorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/colorscreen/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "examples/amcolony/Makefile") CONFIG_FILES="$CONFIG_FILES examples/amcolony/Makefile" ;;
+    "images/Makefile") CONFIG_FILES="$CONFIG_FILES images/Makefile" ;;
     "src/libcolorscreen/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/config.h" ;;
     "src/gtkgui/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/gtkgui/config.h" ;;
     "src/libcolorscreen/include/colorscreen-config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/include/colorscreen-config.h" ;;

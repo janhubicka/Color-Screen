@@ -197,7 +197,7 @@ if test x"$enable_qtgui" == x"yes"; then
 fi
 AM_CONDITIONAL([qtgui], [test x"$enable_qtgui" == x"yes"])
 
-AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile])
 AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h])
 
 AC_OUTPUT
