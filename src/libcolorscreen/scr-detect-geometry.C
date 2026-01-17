@@ -160,7 +160,7 @@ try_guess_screen (FILE *report_file, scr_type type, color_class_map &color_map,
   const int max_size = 1000;
   struct patch_info rbpatches[npatches][npatches * 2];
   patch_entry entries[max_size];
-  const char *scrname = scr_names[(int)type];
+  const char *scrname = scr_names[(int)type].name;
 
   scr_detect::color_class my_red = scr_detect::red;
   scr_detect::color_class my_green = scr_detect::green;

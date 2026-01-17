@@ -5,6 +5,11 @@
 #include "colorscreen-config.h"
 namespace colorscreen
 {
+struct property_t {
+  const char *name;
+  const char *pretty_name;
+  const char *help;
+};
 #define flatten_attr __attribute__ ((__flatten__))
 #define always_inline_attr __attribute__ ((__always_inline__))
 #ifdef COLORSCREEN_CHECKING

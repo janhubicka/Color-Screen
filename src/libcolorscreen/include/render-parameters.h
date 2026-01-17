@@ -184,7 +184,7 @@ struct sharpen_parameters
     blur_deconvolution,
     sharpen_mode_max
   };
-  DLL_PUBLIC static const char *sharpen_mode_names[(int)sharpen_mode_max];
+  DLL_PUBLIC static const property_t sharpen_mode_names[(int)sharpen_mode_max];
 
   /* Sharpening mode.  */
   enum sharpen_mode mode;
@@ -390,7 +390,7 @@ struct render_parameters
     max_collection_quality
   };
   collection_quality_t collection_quality;
-  DLL_PUBLIC static const char *collection_quality_names[(int)max_collection_quality];
+  DLL_PUBLIC static const property_t collection_quality_names[(int)max_collection_quality];
 
   /* Radius (in image pixels) the screen should be blured.  */
   coord_t screen_blur_radius;
@@ -514,7 +514,7 @@ struct render_parameters
     dye_balance_whitepoint,
     dye_balance_max
   };
-  DLL_PUBLIC static const char *dye_balance_names[(int)dye_balance_max];
+  DLL_PUBLIC static const property_t dye_balance_names[(int)dye_balance_max];
   /* How to balance dye colors.  */
   enum dye_balance_t dye_balance;
 

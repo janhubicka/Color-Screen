@@ -63,7 +63,7 @@ screen_with_varying_strips_p (enum scr_type t)
   return dufay_like_screen_p (t) || screen_with_vertical_strips_p (t);
 }
 
-DLL_PUBLIC extern const char *const scr_names[max_scr_type];
+DLL_PUBLIC extern const property_t scr_names[max_scr_type];
 pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
                                                 const render_parameters *);
 
@@ -85,7 +85,7 @@ is_fixed_lens (scanner_type type)
          || type == fixed_lens_sensor_move_vertically;
 }
 
-DLL_PUBLIC extern const char *const scanner_type_names[max_scanner_type];
+DLL_PUBLIC extern const property_t scanner_type_names[max_scanner_type];
 
 /* This implements to translate image coordiantes to coordinates of the viewing
    screen. In the viewing screen the coordinats (0,0) describe a green dot and

@@ -36,7 +36,7 @@ void SharpnessPanel::setupUi() {
   std::map<int, QString> sharpenModes;
   for (int i = 0; i < (int)sharpen_mode::sharpen_mode_max; ++i) {
     sharpenModes[i] =
-        QString::fromUtf8(sharpen_parameters::sharpen_mode_names[i]);
+        QString::fromUtf8(sharpen_parameters::sharpen_mode_names[i].pretty_name);
   }
 
   addEnumParameter(

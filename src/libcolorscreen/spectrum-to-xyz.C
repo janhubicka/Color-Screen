@@ -11,10 +11,7 @@
 #include "spectrum-dyes.h"
 namespace colorscreen
 {
-constexpr const char *spectrum_dyes_to_xyz::dyes_names[spectrum_dyes_to_xyz::dyes_max];
-constexpr const char *spectrum_dyes_to_xyz::illuminants_names[spectrum_dyes_to_xyz::illuminants_max];
-constexpr const char *spectrum_dyes_to_xyz::responses_names[spectrum_dyes_to_xyz::responses_max];
-constexpr const char *spectrum_dyes_to_xyz::characteristic_curve_names[spectrum_dyes_to_xyz::characteristic_curves_max];
+
 
 /* EBU TLCI ColorChecker samples */
 static xspect TLCI_2012_TCS[] = {

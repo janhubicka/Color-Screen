@@ -64,34 +64,33 @@ public:
     debug_dyes,
     dyes_max
   };
-  DLL_PUBLIC constexpr static const char *dyes_names[dyes_max] =
-  {
-    "dufaycolor_color_cinematography",
-    "dufaycolor_harrison_horner",
-    "dufaycolor_collins_giles",
-    "dufaycolor_dufaycolor_manual",
-    "dufaycolor_photography_its_materials_and_processes",
-    "dufaycolor_separation_filters_photography_its_materials_and_processes",
-    "dufaycolor_narrow_cut_filters_harrison_hordner",
-    "dufaycolor_NSMM_Bradford_11948",
-    "dufaycolor_NSMM_Bradford_11951",
-    "dufaycolor_NSMM_Bradford_11960",
-    "dufaycolor_NSMM_Bradford_11967",
-    "spicer_dufay_NSMM_Bradford_12075",
-    "cinecolor_koshofer",
-    "autochrome_Casella_Tsukada",
-    "autochrome_Casella_Tsukada_aged",
-    "wratten_25_58_47_color_cinematograpjy",
-    "wratten_25_58_47_kodak_1945",
-    "kodachrome_25_sensitivity",
-    "phase_one_sensitivity",
-    "nikon_d3_sensitivity",
-    "nikon_coolscan_9000ED_sensitivity",
-    "thames_Mees_Pledge",
-    "dioptichrome_Mees_Pledge",
-    "autochrome_Mees_Pledge",
-    "debug",
-  };
+  DLL_PUBLIC constexpr static const property_t dyes_names[dyes_max]  = {
+  { "dufaycolor_color_cinematography", "Dufaycolor color cinematography", "" },
+  { "dufaycolor_harrison_horner", "Dufaycolor harrison horner", "" },
+  { "dufaycolor_collins_giles", "Dufaycolor collins giles", "" },
+  { "dufaycolor_dufaycolor_manual", "Dufaycolor dufaycolor manual", "" },
+  { "dufaycolor_photography_its_materials_and_processes", "Dufaycolor photography its materials and processes", "" },
+  { "dufaycolor_separation_filters_photography_its_materials_and_processes", "Dufaycolor separation filters photography its materials and processes", "" },
+  { "dufaycolor_narrow_cut_filters_harrison_hordner", "Dufaycolor narrow cut filters harrison hordner", "" },
+  { "dufaycolor_NSMM_Bradford_11948", "Dufaycolor NSMM Bradford 11948", "" },
+  { "dufaycolor_NSMM_Bradford_11951", "Dufaycolor NSMM Bradford 11951", "" },
+  { "dufaycolor_NSMM_Bradford_11960", "Dufaycolor NSMM Bradford 11960", "" },
+  { "dufaycolor_NSMM_Bradford_11967", "Dufaycolor NSMM Bradford 11967", "" },
+  { "spicer_dufay_NSMM_Bradford_12075", "Spicer dufay NSMM Bradford 12075", "" },
+  { "cinecolor_koshofer", "Cinecolor koshofer", "" },
+  { "autochrome_Casella_Tsukada", "Autochrome Casella Tsukada", "" },
+  { "autochrome_Casella_Tsukada_aged", "Autochrome Casella Tsukada aged", "" },
+  { "wratten_25_58_47_color_cinematograpjy", "Wratten 25 58 47 color cinematograpjy", "" },
+  { "wratten_25_58_47_kodak_1945", "Wratten 25 58 47 kodak 1945", "" },
+  { "kodachrome_25_sensitivity", "Kodachrome 25 sensitivity", "" },
+  { "phase_one_sensitivity", "Phase one sensitivity", "" },
+  { "nikon_d3_sensitivity", "Nikon d3 sensitivity", "" },
+  { "nikon_coolscan_9000ED_sensitivity", "Nikon coolscan 9000ED sensitivity", "" },
+  { "thames_Mees_Pledge", "Thames Mees Pledge", "" },
+  { "dioptichrome_Mees_Pledge", "Dioptichrome Mees Pledge", "" },
+  { "autochrome_Mees_Pledge", "Autochrome Mees Pledge", "" },
+  { "debug", "Debug", "" },
+};
   enum illuminants {
      il_A,
      il_B,
@@ -105,19 +104,18 @@ public:
      il_debug,
      illuminants_max
   };
-  DLL_PUBLIC constexpr static const char *illuminants_names[illuminants_max] =
-  {
-     "A",
-     "B",
-     "C",
-     "D",
-     "band",
-     "equal_energy",
-     "nikon_coolscan_9000ED_LED_red",
-     "nikon_coolscan_9000ED_LED_green",
-     "nikon_coolscan_9000ED_LED_blue",
-     "debug"
-  };
+  DLL_PUBLIC constexpr static const property_t illuminants_names[illuminants_max]  = {
+  { "A", "A", "" },
+  { "B", "B", "" },
+  { "C", "C", "" },
+  { "D", "D", "" },
+  { "band", "Band", "" },
+  { "equal_energy", "Equal energy", "" },
+  { "nikon_coolscan_9000ED_LED_red", "Nikon coolscan 9000ED LED red", "" },
+  { "nikon_coolscan_9000ED_LED_green", "Nikon coolscan 9000ED LED green", "" },
+  { "nikon_coolscan_9000ED_LED_blue", "Nikon coolscan 9000ED LED blue", "" },
+  { "debug", "Debug", "" },
+};
   enum responses {
     neopan_100,
     ilford_panchromatic,
@@ -140,28 +138,27 @@ public:
     response_even,
     responses_max
   };
-  DLL_PUBLIC constexpr static const char *responses_names[responses_max] =
-  {
-    "neopan_100",
-    "ilford_panchromatic",
-    "ilford_panchromatic_fp4",
-    "ilford_sfx200",
-    "ilford_fp4_plus",
-    "rollei_retro_80s",
-    "spicer_dufay_guess",
-    "bergger_pancro_400",
-    "ilford_delta_400_professional",
-    "fomapan_400",
-    "fomapan_100_classic",
-    "kodak_professional_trix_400",
-    "dufaycolor_harrison_horner_emulsion_cut",
-    "aviphot_pan_400s",
-    "aviphot_pan_40_pe0",
-    "aviphot_pan_40_pe0_cut",
-    "monochromatic_ccd",
-    "observer_y",
-    "even"
-  };
+  DLL_PUBLIC constexpr static const property_t responses_names[responses_max]  = {
+  { "neopan_100", "Neopan 100", "" },
+  { "ilford_panchromatic", "Ilford panchromatic", "" },
+  { "ilford_panchromatic_fp4", "Ilford panchromatic fp4", "" },
+  { "ilford_sfx200", "Ilford sfx200", "" },
+  { "ilford_fp4_plus", "Ilford fp4 plus", "" },
+  { "rollei_retro_80s", "Rollei retro 80s", "" },
+  { "spicer_dufay_guess", "Spicer dufay guess", "" },
+  { "bergger_pancro_400", "Bergger pancro 400", "" },
+  { "ilford_delta_400_professional", "Ilford delta 400 professional", "" },
+  { "fomapan_400", "Fomapan 400", "" },
+  { "fomapan_100_classic", "Fomapan 100 classic", "" },
+  { "kodak_professional_trix_400", "Kodak professional trix 400", "" },
+  { "dufaycolor_harrison_horner_emulsion_cut", "Dufaycolor harrison horner emulsion cut", "" },
+  { "aviphot_pan_400s", "Aviphot pan 400s", "" },
+  { "aviphot_pan_40_pe0", "Aviphot pan 40 pe0", "" },
+  { "aviphot_pan_40_pe0_cut", "Aviphot pan 40 pe0 cut", "" },
+  { "monochromatic_ccd", "Monochromatic ccd", "" },
+  { "observer_y", "Observer y", "" },
+  { "even", "Even", "" },
+};
   enum characteristic_curves {
     linear_reversal_curve,
     input_curve,
@@ -176,20 +173,19 @@ public:
     spicer_dufay_reversal_curve_high,
     characteristic_curves_max
   };
-  DLL_PUBLIC constexpr static const char *characteristic_curve_names[characteristic_curves_max] =
-  {
-    "linear_reversal",
-    "input",
-    "safe",
-    "safe_reversal",
-    "kodachrome25",
-    "spicer_dufay_low",
-    "spicer_dufay_mid",
-    "spicer_dufay_high",
-    "spicer_dufay_reversal_low",
-    "spicer_dufay_reversal_mid",
-    "spicer_dufay_reversal_high",
-  };
+  DLL_PUBLIC constexpr static const property_t characteristic_curve_names[characteristic_curves_max]  = {
+  { "linear_reversal", "Linear reversal", "" },
+  { "input", "Input", "" },
+  { "safe", "Safe", "" },
+  { "safe_reversal", "Safe reversal", "" },
+  { "kodachrome25", "Kodachrome25", "" },
+  { "spicer_dufay_low", "Spicer dufay low", "" },
+  { "spicer_dufay_mid", "Spicer dufay mid", "" },
+  { "spicer_dufay_high", "Spicer dufay high", "" },
+  { "spicer_dufay_reversal_low", "Spicer dufay reversal low", "" },
+  { "spicer_dufay_reversal_mid", "Spicer dufay reversal mid", "" },
+  { "spicer_dufay_reversal_high", "Spicer dufay reversal high", "" },
+};
 
   static const int default_observer = 1931;
   spectrum_dyes_to_xyz ()

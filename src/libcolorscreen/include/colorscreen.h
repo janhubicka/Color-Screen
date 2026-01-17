@@ -37,7 +37,7 @@ struct render_to_file_params
     max_geometry,
   } geometry;
 
-  static const DLL_PUBLIC char * const geometry_names[(int)max_geometry];
+  static const DLL_PUBLIC property_t geometry_names[(int)max_geometry];
 
 
   /* Width and height of the output file.  It will be computed if set to 0.  */

@@ -420,7 +420,7 @@ void ColorPanel::setupUi() {
     using dye_balance = render_parameters::dye_balance_t;
     std::map<int, QString> modes;
     for (int i = 0; i < (int)dye_balance::dye_balance_max; ++i) {
-      modes[i] = QString::fromUtf8(render_parameters::dye_balance_names[i]);
+      modes[i] = QString::fromUtf8(render_parameters::dye_balance_names[i].pretty_name);
     }
 
     addEnumParameter(

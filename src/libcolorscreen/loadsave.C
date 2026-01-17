@@ -7,27 +7,25 @@
 namespace colorscreen
 {
 
-const char * const scr_names[max_scr_type] =
-{
-  "Random",
-  "Paget",
-  "Thames",
-  "Finlay",
-  "Dufay",
-  "Dioptichrome-B",
-  "ImprovedDioptichrome-B",
-  "Warner-Powrie",
-  "Joly",
-  "Omnicolore",
+const property_t scr_names[max_scr_type]  = {
+  { "Random", "Random", "" },
+  { "Paget", "Paget", "" },
+  { "Thames", "Thames", "" },
+  { "Finlay", "Finlay", "" },
+  { "Dufay", "Dufay", "" },
+  { "Dioptichrome-B", "Dioptichrome-B", "" },
+  { "ImprovedDioptichrome-B", "ImprovedDioptichrome-B", "" },
+  { "Warner-Powrie", "Warner-Powrie", "" },
+  { "Joly", "Joly", "" },
+  { "Omnicolore", "Omnicolore", "" },
 };
 
-const char * const scanner_type_names[max_scanner_type] =
-{
-  "fixed-lens",
-  "fixed-lens-horisontally-moving-sensor",
-  "fixed-lens-vertically-moving-sensor",
-  "horisontally-moving-lens",
-  "vertically-moving-lens"
+const property_t scanner_type_names[max_scanner_type]  = {
+  { "fixed-lens", "Fixed-lens", "" },
+  { "fixed-lens-horisontally-moving-sensor", "Fixed-lens-horisontally-moving-sensor", "" },
+  { "fixed-lens-vertically-moving-sensor", "Fixed-lens-vertically-moving-sensor", "" },
+  { "horisontally-moving-lens", "Horisontally-moving-lens", "" },
+  { "vertically-moving-lens", "Vertically-moving-lens", "" },
 };
 
 static const char * const bool_names[2] =
@@ -46,8 +44,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
   /* Save param.  */
   if (param)
     {
-      if (fprintf (f, "screen_type: %s\n", scr_names [param->type]) < 0
-	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type]) < 0
+      if (fprintf (f, "screen_type: %s\n", scr_names [param->type].name) < 0
+	  || fprintf (f, "scanner_type: %s\n", scanner_type_names [param->scanner_type].name) < 0
 	  //|| fprintf (f, "lens_center: %f %f\n", param->lens_center_x, param->lens_center_y) < 0
 	  || fprintf (f, "screen_shift: %f %f\n", param->center.x, param->center.y) < 0
 	  || fprintf (f, "coordinate_x: %f %f\n", param->coordinate1.x, param->coordinate1.y) < 0
@@ -92,12 +90,12 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     }
   if (rparam)
     {
-      if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic]) < 0
+      if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic].name) < 0
 	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
-	  || fprintf (f, "sharpen: %s\n", sharpen_parameters::sharpen_mode_names [(int)rparam->sharpen.mode]) < 0
+	  || fprintf (f, "sharpen: %s\n", sharpen_parameters::sharpen_mode_names [(int)rparam->sharpen.mode].name) < 0
 	  || fprintf (f, "sharpen_radius: %f\n", rparam->sharpen.usm_radius) < 0
 	  || fprintf (f, "sharpen_amount: %f\n", rparam->sharpen.usm_amount) < 0
 	  || fprintf (f, "scanner_snr: %f\n", rparam->sharpen.scanner_snr) < 0
@@ -143,13 +141,13 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_properties [rparam->color_model].name) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
-	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance]) < 0
+	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance].name) < 0
 	  //|| fprintf (f, "gray_range: %i %i\n", rparam->gray_min, rparam->gray_max) < 0
 	  || fprintf (f, "scan_exposure: %f\n", rparam->scan_exposure) < 0
 	  || fprintf (f, "dark_point: %f\n", rparam->dark_point) < 0
 	  || fprintf (f, "backlight_correction_black: %f\n", rparam->backlight_correction_black) < 0
 	  || fprintf (f, "invert: %s\n", bool_names [(int)rparam->invert]) < 0
-	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality]) < 0
+	  || fprintf (f, "collection_quality: %s\n", render_parameters::collection_quality_names [(int)rparam->collection_quality].name) < 0
 	  || fprintf (f, "mix_weights: %f %f %f\n", rparam->mix_red, rparam->mix_green, rparam->mix_blue) < 0
 	  || fprintf (f, "mix_dark: %f %f %f\n", rparam->mix_dark.red, rparam->mix_dark.green, rparam->mix_dark.blue) < 0
 	  || fprintf (f, "profiled_dark: %f %f %f\n", rparam->profiled_dark.red, rparam->profiled_dark.green, rparam->profiled_dark.blue) < 0
@@ -460,7 +458,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < max_scr_type; j++)
-	    if (!strcmp (buf2, scr_names[j]))
+	    if (!strcmp (buf2, scr_names[j].name))
 	      break;
 	  if (j == max_scr_type
 	      && !strcmp (buf2, "PagetFinlay"))
@@ -478,7 +476,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < max_scanner_type; j++)
-	    if (!strcmp (buf2, scanner_type_names[j]))
+	    if (!strcmp (buf2, scanner_type_names[j].name))
 	      break;
 	  if (j == max_scanner_type)
 	    {
@@ -676,7 +674,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < (int)image_data::demosaic_max; j++)
-	    if (!strcmp (buf2, image_data::demosaic_names[j]))
+	    if (!strcmp (buf2, image_data::demosaic_names[j].name))
 	      break;
 	  if (j == image_data::demosaic_max)
 	    {
@@ -891,7 +889,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < sharpen_parameters::sharpen_mode_max; j++)
-	    if (!strcmp (buf2, sharpen_parameters::sharpen_mode_names[j]))
+	    if (!strcmp (buf2, sharpen_parameters::sharpen_mode_names[j].name))
 	      break;
 	  if (j == sharpen_parameters::sharpen_mode_max)
 	    {
@@ -921,7 +919,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < render_parameters::dye_balance_max; j++)
-	    if (!strcmp (buf2, render_parameters::dye_balance_names[j]))
+	    if (!strcmp (buf2, render_parameters::dye_balance_names[j].name))
 	      break;
 	  if (j == render_parameters::dye_balance_max)
 	    {
@@ -999,7 +997,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  get_keyword (f, buf2);
 	  int j;
 	  for (j = 0; j < render_parameters::max_collection_quality; j++)
-	    if (!strcmp (buf2, render_parameters::collection_quality_names[j]))
+	    if (!strcmp (buf2, render_parameters::collection_quality_names[j].name))
 	      break;
 	  if (j == render_parameters::max_collection_quality)
 	    {

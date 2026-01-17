@@ -25,19 +25,21 @@ namespace colorscreen
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
-const char *image_data::demosaic_names[(int)demosaic_max]
-    = { "default",
-        "linear",
-        "half",
-        "monochromatic",
-        "monochromatic_bayer_corrected",
-        "VNG",
-        "PPG",
-        "AHD",
-        "DCB",
-        "DHT",
-        "AAHD",
-        "none" };
+const property_t image_data::demosaic_names[(int)demosaic_max]
+     = {
+  { "default", "Default", "" },
+  { "linear", "Linear", "" },
+  { "half", "Half", "" },
+  { "monochromatic", "Monochromatic", "" },
+  { "monochromatic_bayer_corrected", "Monochromatic bayer corrected", "" },
+  { "VNG", "VNG", "" },
+  { "PPG", "PPG", "" },
+  { "AHD", "AHD", "" },
+  { "DCB", "DCB", "" },
+  { "DHT", "DHT", "" },
+  { "AAHD", "AAHD", "" },
+  { "none", "None", "" },
+};
 
 class image_data_loader
 {

@@ -16,10 +16,11 @@
 namespace colorscreen
 {
 
-const char * const render_to_file_params::geometry_names [] = {
-	"screen",
-	"scan",
-	"default"};
+const property_t render_to_file_params::geometry_names []  = {
+  { "screen", "Screen", "" },
+  { "scan", "Scan", "" },
+  { "default", "Default", "" },
+};
 bool
 complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
 {

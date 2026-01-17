@@ -49,29 +49,29 @@ const render_parameters::color_model_property render_parameters::color_model_pro
   { "dioptichrome_Mees_Pledge", "dioptichrome Mees Pledge", "", SPECTRA_BASED },
   { "autochrome_Mees_Pledge", "autochrome Mees Pledge", "", SPECTRA_BASED },
 };
-const char * render_parameters::dye_balance_names [] = {
-  "none",
-  "brightness",
-  "bradford",
-  "neutral",
-  "whitepoint"
+const property_t render_parameters::dye_balance_names []  = {
+  { "none", "None", "" },
+  { "brightness", "Brightness", "" },
+  { "bradford", "Bradford", "" },
+  { "neutral", "Neutral", "" },
+  { "whitepoint", "Whitepoint", "" },
 };
 const char * render_parameters::output_profile_names [] = {
   "sRGB",
   "XYZ",
   "original"
 };
-const char * sharpen_parameters::sharpen_mode_names [] = {
-  "none",
-  "unsharp-mask",
-  "Wiener-deconvolution",
-  "Richardson-Lucy-deconvolution",
-  "blur-deconvolution"
+const property_t sharpen_parameters::sharpen_mode_names []  = {
+  { "none", "None", "" },
+  { "unsharp-mask", "Unsharp-mask", "" },
+  { "Wiener-deconvolution", "Wiener-deconvolution", "" },
+  { "Richardson-Lucy-deconvolution", "Richardson-Lucy-deconvolution", "" },
+  { "blur-deconvolution", "Blur-deconvolution", "" },
 };
-const char * render_parameters::collection_quality_names [] = {
-  "fast",
-  "simple-screen",
-  "simulated-screen"
+const property_t render_parameters::collection_quality_names []  = {
+  { "fast", "Fast", "" },
+  { "simple-screen", "Simple-screen", "" },
+  { "simulated-screen", "Simulated-screen", "" },
 };
 
 

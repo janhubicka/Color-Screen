@@ -91,7 +91,7 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --dye-balance=mode        force dye balance\n");
       fprintf (stderr, "                                suported modes:");
       for (int j = 0; j < render_parameters::dye_balance_max; j++)
-        fprintf (stderr, " %s", render_parameters::dye_balance_names[j]);
+        fprintf (stderr, " %s", render_parameters::dye_balance_names[j].name);
       fprintf (stderr, "\n");
       fprintf (stderr, "      --output-gamma=gamma      set gamma correction "
                        "of output file\n");
@@ -381,7 +381,7 @@ print_help (char *err = NULL)
         {
           if (!(j % 4))
             fprintf (stderr, "\n                                 ");
-          fprintf (stderr, " %s", scanner_type_names[j]);
+          fprintf (stderr, " %s", scanner_type_names[j].name);
         }
       fprintf (stderr, "\n");
       fprintf (stderr, "      --screen-type=type       specify scanner type\n");
@@ -391,7 +391,7 @@ print_help (char *err = NULL)
         {
           if (!(j % 4))
             fprintf (stderr, "\n                                 ");
-          fprintf (stderr, " %s", scr_names[j]);
+          fprintf (stderr, " %s", scr_names[j].name);
         }
       fprintf (stderr, "\n");
       fprintf (stderr, "      --mesh                    compute mesh of "
@@ -533,29 +533,31 @@ parse_color_model (const char *model)
 static enum image_data::demosaicing_t
 parse_demosaic (const char *model)
 {
-  return parse_enum<enum image_data::demosaicing_t,
+  return parse_enum_property<enum image_data::demosaicing_t,
+                    property_t,
                     image_data::demosaic_names,
                     (int)image_data::demosaic_max> (
       model, "Unkonwn demosaicing algorithm:%s\n");
 }
 
-static enum scanner_type
+static scanner_type
 parse_scanner_type (const char *model)
 {
-  return parse_enum<scanner_type, scanner_type_names, (int)max_scanner_type> (
-      model, "Unkonwn scanner type:%s\n");
+  return parse_enum_property<scanner_type, property_t, scanner_type_names,
+                    (int)max_scanner_type> (model, "Unkonwn scanner type:%s\n");
 }
 static enum scr_type
 parse_scr_type (const char *model)
 {
-  return parse_enum<scr_type, scr_names, (int)max_scr_type> (
+  return parse_enum_property<scr_type, property_t, scr_names, (int)max_scr_type> (
       model, "Unkonwn screen type:%s\n");
 }
 
 static enum render_parameters::dye_balance_t
 parse_dye_balance (const char *model)
 {
-  return parse_enum<enum render_parameters::dye_balance_t,
+  return parse_enum_property<enum render_parameters::dye_balance_t,
+                    property_t,
                     render_parameters::dye_balance_names,
                     (int)render_parameters::dye_balance_max> (
       model, "Unkonwn dye balance:%s\n");
@@ -721,9 +723,10 @@ parse_detect_regular_screen_params (detect_regular_screen_params &dsparams,
 static enum render_to_file_params::output_geometry
 parse_geometry (const char *profile)
 {
-  return parse_enum<enum render_to_file_params::output_geometry,
+  return parse_enum_property<enum render_to_file_params::output_geometry,
+                    property_t,
                     render_to_file_params::geometry_names,
-		    render_to_file_params::max_geometry>
+                    render_to_file_params::max_geometry>
 		    (profile, "Unkonwn geometry:%s\n");
 }
 
@@ -1920,7 +1923,7 @@ read_chemcad (int argc, char **argv)
 static enum spectrum_dyes_to_xyz::dyes
 parse_dyes (const char *profile)
 {
-  return parse_enum<enum spectrum_dyes_to_xyz::dyes,
+  return parse_enum_property<enum spectrum_dyes_to_xyz::dyes, property_t,
                     spectrum_dyes_to_xyz::dyes_names,
                     (int)spectrum_dyes_to_xyz::dyes_max> (profile,
                                                           "Unkonwn dye:%s\n");
@@ -1942,7 +1945,7 @@ parse_illuminant (const char *il, luminosity_t *temperature)
       return spectrum_dyes_to_xyz::il_band;
     }
   for (int i = 0; i < (int)spectrum_dyes_to_xyz::illuminants_max; i++)
-    if (!strcmp (il, spectrum_dyes_to_xyz::illuminants_names[i])
+    if (!strcmp (il, spectrum_dyes_to_xyz::illuminants_names[i].name)
         && (spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_D
         && (spectrum_dyes_to_xyz::illuminants)i
                != spectrum_dyes_to_xyz::il_band)
@@ -1954,7 +1957,7 @@ parse_illuminant (const char *il, luminosity_t *temperature)
     if ((spectrum_dyes_to_xyz::illuminants)i != spectrum_dyes_to_xyz::il_D
         && (spectrum_dyes_to_xyz::illuminants)i
                != spectrum_dyes_to_xyz::il_band)
-      fprintf (stderr, ", %s", spectrum_dyes_to_xyz::illuminants_names[i]);
+      fprintf (stderr, ", %s", spectrum_dyes_to_xyz::illuminants_names[i].name);
   fprintf (stderr, "\n");
   exit (1);
 }
@@ -1968,7 +1971,7 @@ parse_tone_curve (const char *profile)
 static enum spectrum_dyes_to_xyz::responses
 parse_response (const char *profile)
 {
-  return parse_enum<enum spectrum_dyes_to_xyz::responses,
+  return parse_enum_property<enum spectrum_dyes_to_xyz::responses, property_t,
                     spectrum_dyes_to_xyz::responses_names,
                     (int)spectrum_dyes_to_xyz::responses_max> (
       profile, "Unkonwn film response:%s\n");
@@ -1976,7 +1979,8 @@ parse_response (const char *profile)
 static enum spectrum_dyes_to_xyz::characteristic_curves
 parse_characteristic_curve (const char *profile)
 {
-  return parse_enum<enum spectrum_dyes_to_xyz::characteristic_curves,
+  return parse_enum_property<enum spectrum_dyes_to_xyz::characteristic_curves,
+                    property_t,
                     spectrum_dyes_to_xyz::characteristic_curve_names,
                     (int)spectrum_dyes_to_xyz::characteristic_curves_max> (
       profile, "Unkonwn film characteristic curve:%s\n");

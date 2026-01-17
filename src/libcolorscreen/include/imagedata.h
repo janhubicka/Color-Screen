@@ -33,7 +33,7 @@ public:
     demosaic_max
   };
   demosaicing_t demosaic;
-  DLL_PUBLIC static const char *demosaic_names[(int)demosaic_max];
+  DLL_PUBLIC static const property_t demosaic_names[(int)demosaic_max];
 
   typedef unsigned short gray;
   struct pixel

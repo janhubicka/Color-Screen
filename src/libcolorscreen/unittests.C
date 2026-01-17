@@ -166,8 +166,8 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
   bool ok = true;
   printf ("\n%s test with scanner %s, process %s and tolerance %f\naverage "
 	  "distances:",
-	  test_name, scanner_type_names[(int) param.scanner_type],
-	  scr_names[(int) param.type], epsilon);
+	  test_name, scanner_type_names[(int) param.scanner_type].name,
+	  scr_names[(int) param.type].name, epsilon);
   for (int y = 0; y < grid; y++)
     {
       printf ("\n  ");

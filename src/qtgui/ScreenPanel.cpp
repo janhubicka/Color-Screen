@@ -84,11 +84,11 @@ void ScreenPanel::setupUi() {
   screenCombo->view()->setIconSize(QSize(64, 64));
 
   for (int i = 0; i < max_scr_type; ++i) {
-    if (!scr_names[i])
+    if (!scr_names[i].name)
       continue;
 
     scr_type type = (scr_type)i;
-    QString name = QString::fromUtf8(scr_names[i]);
+    QString name = QString::fromUtf8(scr_names[i].pretty_name);
 
     if (type == Random) {
       screenCombo->addItem(name, i);
