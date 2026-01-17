@@ -119,8 +119,11 @@ void ScreenPanel::setupUi() {
       } else {
         screenCombo->addItem(name, i);
       }
+
     }
   }
+
+  addEnumTooltips<scr_names, max_scr_type>(screenCombo);
 
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow("Screen type", screenCombo);

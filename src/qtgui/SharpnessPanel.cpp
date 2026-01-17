@@ -4,6 +4,8 @@
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "MTFChartWidget.h"
 #include <QDebug>
+#include <QComboBox>
+#include <QString>
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
@@ -33,14 +35,9 @@ void SharpnessPanel::setupUi() {
   setupTiles("Sharpness Preview");
 
   // Sharpen mode dropdown
-  std::map<int, QString> sharpenModes;
-  for (int i = 0; i < (int)sharpen_mode::sharpen_mode_max; ++i) {
-    sharpenModes[i] =
-        QString::fromUtf8(sharpen_parameters::sharpen_mode_names[i].pretty_name);
-  }
-
-  addEnumParameter(
-      "Sharpen", sharpenModes,
+  addEnumParameter<sharpen_mode, sharpen_parameters::sharpen_mode_names,
+                   (int)sharpen_mode::sharpen_mode_max>(
+      "Sharpen",
       [](const ParameterState &s) { return (int)s.rparams.sharpen.mode; },
       [](ParameterState &s, int v) {
         s.rparams.sharpen.mode = (sharpen_mode)v;

@@ -2,6 +2,8 @@
 #define PARAMETER_PANEL_H
 
 #include "ParameterState.h"
+#include <QComboBox>
+#include <QString>
 #include <QToolButton>
 #include <QWidget>
 #include <functional>
@@ -16,7 +18,6 @@ class image_data;
 class QVBoxLayout;
 class QFormLayout;
 class QGroupBox;
-class QComboBox;
 
 class ParameterPanel : public QWidget {
   Q_OBJECT
@@ -61,6 +62,41 @@ protected:
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
+  template <const colorscreen::property_t Names[], int Max>
+  void addEnumTooltips(QComboBox *combo) {
+    for (int i = 0; i < combo->count(); ++i) {
+      int val = combo->itemData(i).toInt();
+      if (val >= 0 && val < Max) {
+        const char *help = Names[val].help;
+        if (help && help[0]) {
+          combo->setItemData(i, QString::fromUtf8(help), Qt::ToolTipRole);
+        }
+      }
+    }
+  }
+
+  template <typename EnumType, const colorscreen::property_t Names[], int Max>
+  QComboBox *addEnumParameter(
+      const QString &label,
+      std::function<int(const ParameterState &)> getter,
+      std::function<void(ParameterState &, int)> setter,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr) {
+    std::map<int, QString> options;
+    for (int i = 0; i < Max; ++i) {
+      if (Names[i].pretty_name && Names[i].pretty_name[0]) {
+        options[i] = QString::fromUtf8(Names[i].pretty_name);
+      } else if (Names[i].name && Names[i].name[0]) {
+        options[i] = QString::fromUtf8(Names[i].name);
+      }
+    }
+
+    QComboBox *combo =
+        addEnumParameter(label, options, getter, setter, enabledCheck);
+
+    addEnumTooltips<Names, Max>(combo);
+    return combo;
+  }
 
   void addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,

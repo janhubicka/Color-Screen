@@ -416,20 +416,14 @@ void ColorPanel::setupUi() {
   }
 
   // Dye Balancing Selector
-  {
-    using dye_balance = render_parameters::dye_balance_t;
-    std::map<int, QString> modes;
-    for (int i = 0; i < (int)dye_balance::dye_balance_max; ++i) {
-      modes[i] = QString::fromUtf8(render_parameters::dye_balance_names[i].pretty_name);
-    }
-
-    addEnumParameter(
-        "Dye balancing", modes,
-        [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
-        [](ParameterState &s, int v) {
-          s.rparams.dye_balance = (dye_balance)v;
-        });
-  }
+  addEnumParameter<render_parameters::dye_balance_t,
+                   render_parameters::dye_balance_names,
+                   (int)render_parameters::dye_balance_t::dye_balance_max>(
+      "Dye balancing",
+      [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
+      [](ParameterState &s, int v) {
+        s.rparams.dye_balance = (render_parameters::dye_balance_t)v;
+      });
 
   // Observer Whitepoint
   {
