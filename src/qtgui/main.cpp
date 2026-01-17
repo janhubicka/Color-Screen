@@ -9,11 +9,18 @@
 #include <QImageReader>
 
 #include <QStyleFactory>
+#include <QSettings>
 
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
+  QApplication::setOrganizationName("ColorScreen");
+  QApplication::setOrganizationDomain("colorscreen.org");
   QApplication::setApplicationName("colorscreen-qt");
   QApplication::setApplicationVersion("1.1");
+  
+  // Use INI format for settings to ensure persistence on Windows without registry
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+
   QApplication::setStyle(QStyleFactory::create("Fusion"));
   
   // Set application window icon
