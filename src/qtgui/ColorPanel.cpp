@@ -42,7 +42,7 @@ void ColorPanel::setupUi() {
 
     QSlider *slider = new QSlider(Qt::Horizontal);
     int min = -100;
-    int max = 100;
+    int max = 200;
     slider->setRange(min, max);
 
     QDoubleSpinBox *spin = new QDoubleSpinBox();
@@ -81,6 +81,9 @@ void ColorPanel::setupUi() {
         v = s.rparams.age.green;
       if (channel == 2)
         v = s.rparams.age.blue;
+
+      // Convert internal 0-1 range (approx) to percent 0-100
+      v *= 100.0;
 
       spin->blockSignals(true);
       spin->setValue(v);
