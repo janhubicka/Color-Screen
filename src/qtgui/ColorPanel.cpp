@@ -70,6 +70,28 @@ void ColorPanel::reattachCorrectedTiles(QWidget *widget) {
 void ColorPanel::setupUi() {
   setupTiles("Color Preview");
 
+  // Dyes dropdown (Moved before Spectral Chart)
+  using color_model = render_parameters::color_model_t;
+  std::map<int, QString> dyes;
+  for (int i = 0; i < (int)color_model::color_model_max; ++i) {
+    dyes[i] = QString::fromUtf8(render_parameters::color_model_properties[i].pretty_name);
+  }
+
+  QComboBox *dyesCombo = addEnumParameter(
+      "Dyes", dyes,
+      [](const ParameterState &s) { return (int)s.rparams.color_model; },
+      [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; });
+
+  // Add Tooltips
+  for (int i = 0; i < dyesCombo->count(); ++i) {
+    int val = dyesCombo->itemData(i).toInt();
+    if (val >= 0 && val < (int)color_model::color_model_max) {
+      dyesCombo->setItemData(
+          i, QString::fromUtf8(render_parameters::color_model_properties[val].description),
+          Qt::ToolTipRole);
+    }
+  }
+
   // Spectral Transmitance Chart
   m_spectraChart = new SpectraChartWidget();
 
@@ -112,17 +134,7 @@ void ColorPanel::setupUi() {
   else
     m_form->addRow(spectraWrapper);
 
-  // Dyes dropdown
-  using color_model = render_parameters::color_model_t;
-  std::map<int, QString> dyes;
-  for (int i = 0; i < (int)color_model::color_model_max; ++i) {
-    dyes[i] = QString::fromUtf8(render_parameters::color_model_properties[i].pretty_name);
-  }
 
-  addEnumParameter(
-      "Dyes", dyes,
-      [](const ParameterState &s) { return (int)s.rparams.color_model; },
-      [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; });
 
   // Manual Slider Implementation for Synchronized Dyes
   auto addManualSlider =

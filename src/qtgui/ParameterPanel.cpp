@@ -287,7 +287,7 @@ void ParameterPanel::addSliderParameter(
   }
 }
 
-void ParameterPanel::addEnumParameter(
+QComboBox *ParameterPanel::addEnumParameter(
     const QString &label, const std::map<int, QString> &options,
     std::function<int(const ParameterState &)> getter,
     std::function<void(ParameterState &, int)> setter,
@@ -334,6 +334,7 @@ void ParameterPanel::addEnumParameter(
         labelWidget->setEnabled(en);
     });
   }
+  return combo;
 }
 
 void ParameterPanel::addCheckboxParameter(

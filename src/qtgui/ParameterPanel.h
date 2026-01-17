@@ -16,6 +16,7 @@ class image_data;
 class QVBoxLayout;
 class QFormLayout;
 class QGroupBox;
+class QComboBox;
 
 class ParameterPanel : public QWidget {
   Q_OBJECT
@@ -55,7 +56,7 @@ protected:
       std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
-  void addEnumParameter(
+  QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
