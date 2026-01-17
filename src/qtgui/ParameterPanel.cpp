@@ -448,6 +448,153 @@ void ParameterPanel::addCheckboxParameter(
   }
 }
 
+void ParameterPanel::addCorrelatedRGBParameter(
+    const QString &label, double min, double max, double scale, int decimals,
+    const QString &suffix,
+    std::function<colorscreen::rgbdata(const ParameterState &)> getter,
+    std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
+    std::function<bool(const ParameterState &)> enabledCheck) {
+
+  // 1. Link Checkbox
+  QCheckBox *linkCheck = new QCheckBox("Link channels");
+  linkCheck->setChecked(true);
+
+  // 2. Three channels
+  struct Channel {
+    QSlider *slider;
+    QDoubleSpinBox *spin;
+  };
+  std::vector<Channel> channels;
+  QStringList names = {"Red", "Green", "Blue"};
+
+  for (int i = 0; i < 3; ++i) {
+    QWidget *container = new QWidget();
+    QHBoxLayout *hLayout = new QHBoxLayout(container);
+    hLayout->setContentsMargins(0, 0, 0, 0);
+
+    QSlider *slider = new QSlider(Qt::Horizontal);
+    slider->setRange(min * scale, max * scale);
+
+    QDoubleSpinBox *spin = new QDoubleSpinBox();
+    spin->setRange(min, max);
+    spin->setDecimals(decimals);
+    spin->setSingleStep(1.0 / scale);
+    if (!suffix.isEmpty())
+      spin->setSuffix(QString(" %1").arg(suffix));
+
+    hLayout->addWidget(slider, 1);
+    hLayout->addWidget(spin, 0);
+
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow(QString("%1 %2").arg(names[i]).arg(label),
+                                 container);
+    else
+      m_form->addRow(QString("%1 %2").arg(names[i]).arg(label), container);
+
+    channels.push_back({slider, spin});
+
+    // Internal Sync for each channel
+    connect(slider, &QSlider::valueChanged, this, [spin, scale](int val) {
+      spin->blockSignals(true);
+      spin->setValue((double)val / scale);
+      spin->blockSignals(false);
+    });
+    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            [slider, scale](double val) {
+              slider->blockSignals(true);
+              slider->setValue(qRound(val * scale));
+              slider->blockSignals(false);
+            });
+  }
+
+  // Link Checkbox row
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow("", linkCheck);
+  else
+    m_form->addRow("", linkCheck);
+
+  // Interaction Logic
+  auto handleValueChange = [this, channels, linkCheck, getter, setter,
+                            scale](int changedIdx, double newVal) {
+    ParameterState s = m_stateGetter();
+    colorscreen::rgbdata current = getter(s);
+    double oldVal = current[changedIdx];
+    double delta = newVal - oldVal;
+
+    colorscreen::rgbdata next = current;
+    next[changedIdx] = newVal;
+
+    if (linkCheck->isChecked()) {
+      for (int i = 0; i < 3; ++i) {
+        if (i != changedIdx) {
+          next[i] += delta;
+        }
+      }
+    }
+
+    applyChange([setter, next](ParameterState &state) { setter(state, next); });
+
+    // Optimistic UI update for linked sliders
+    if (linkCheck->isChecked()) {
+      for (int i = 0; i < 3; ++i) {
+        if (i != changedIdx) {
+          channels[i].spin->blockSignals(true);
+          channels[i].spin->setValue(next[i]);
+          channels[i].spin->blockSignals(false);
+
+          channels[i].slider->blockSignals(true);
+          channels[i].slider->setValue(qRound(next[i] * scale));
+          channels[i].slider->blockSignals(false);
+        }
+      }
+    }
+  };
+
+  // Connect user interaction
+  for (int i = 0; i < 3; ++i) {
+    int idx = i;
+    connect(channels[i].spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [handleValueChange, idx](double v) {
+              handleValueChange(idx, v);
+            });
+    connect(channels[i].slider, &QSlider::valueChanged, this,
+            [handleValueChange, idx, scale](int v) {
+              handleValueChange(idx, (double)v / scale);
+            });
+  }
+
+  // Updater State -> UI
+  m_paramUpdaters.push_back([channels, getter, scale](const ParameterState &s) {
+    colorscreen::rgbdata v = getter(s);
+    for (int i = 0; i < 3; ++i) {
+      channels[i].spin->blockSignals(true);
+      channels[i].spin->setValue(v[i]);
+      channels[i].spin->blockSignals(false);
+
+      channels[i].slider->blockSignals(true);
+      channels[i].slider->setValue(qRound(v[i] * scale));
+      channels[i].slider->blockSignals(false);
+    }
+  });
+
+  // Enablement
+  if (enabledCheck) {
+    m_widgetStateUpdaters.push_back(
+        [this, channels, linkCheck, enabledCheck, label]() {
+          ParameterState s = m_stateGetter();
+          bool en = enabledCheck(s);
+          linkCheck->setEnabled(en);
+          for (auto &c : channels) {
+            c.slider->setEnabled(en);
+            c.spin->setEnabled(en);
+            QWidget *labelWidget = m_form->labelForField(c.slider->parentWidget());
+            if (labelWidget)
+              labelWidget->setEnabled(en);
+          }
+        });
+  }
+}
+
 QToolButton *ParameterPanel::addSeparator(const QString &title) {
   QGroupBox *group = new QGroupBox();
   group->setFlat(true);

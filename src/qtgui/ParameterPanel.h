@@ -86,6 +86,13 @@ protected:
       std::function<void(ParameterState &, bool)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
+  void addCorrelatedRGBParameter(
+      const QString &label, double min, double max, double scale, int decimals,
+      const QString &suffix,
+      std::function<colorscreen::rgbdata(const ParameterState &)> getter,
+      std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
   QToolButton *addSeparator(const QString &title);
 
   // Helpers to create detachable sections

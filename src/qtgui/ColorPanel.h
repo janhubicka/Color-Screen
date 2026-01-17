@@ -45,7 +45,6 @@ private:
   int m_lastScrType = -1;
 
   QWidget *m_spectraSection = nullptr;
-  QCheckBox *m_linkDyeAges = nullptr;
   SpectraChartWidget *m_spectraChart = nullptr;
   QVBoxLayout *m_spectraContainer = nullptr;
   QComboBox *m_spectraMode = nullptr;
