@@ -8,6 +8,10 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <QComboBox>
 #include <QDateTime>   // Added QDateTime include
 #include <QDockWidget> // Added
@@ -91,6 +95,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   m_progressTimer->setInterval(100);
   connect(m_progressTimer, &QTimer::timeout, this,
           &MainWindow::onProgressTimer);
+
+  // Initialize crash recovery directory
+  m_recoveryDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+  // Use "colorscreen" instead of app name "colorscreen-qt"
+  m_recoveryDir.replace("/colorscreen-qt", "/colorscreen");
+  QDir().mkpath(m_recoveryDir);
+
+  // Check for recovery files and offer restoration
+  if (hasRecoveryFiles()) {
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, "Crash Recovery",
+        "The application did not exit cleanly last time.\n"
+        "Would you like to restore your previous session?",
+        QMessageBox::Yes | QMessageBox::No);
+    
+    if (reply == QMessageBox::Yes) {
+      loadRecoveryState();
+    } else {
+      clearRecoveryFiles();
+    }
+  }
+
+  // Set up recovery auto-save timer (30 seconds)
+  m_recoveryTimer = new QTimer(this);
+  m_recoveryTimer->setInterval(30000); // 30 seconds
+  connect(m_recoveryTimer, &QTimer::timeout, this, &MainWindow::saveRecoveryState);
+  m_recoveryTimer->start();
 
   loadRecentFiles();
   loadRecentParams();
@@ -1204,6 +1235,9 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     return;
   }
   
+  // Clean up recovery files on normal exit
+  clearRecoveryFiles();
+  
   saveWindowState();
   saveRecentFiles();
   saveRecentParams();
@@ -1468,4 +1502,91 @@ void MainWindow::onGamutWarningToggled(bool checked) {
                                       &m_detectParams, &m_renderTypeParams);
     }
   }
+}
+
+// Crash Recovery Methods
+
+bool MainWindow::hasRecoveryFiles() {
+  QString imagePath = m_recoveryDir + "/recovery_image.txt";
+  QString paramsPath = m_recoveryDir + "/recovery_params.par";
+  return QFile::exists(imagePath) || QFile::exists(paramsPath);
+}
+
+void MainWindow::saveRecoveryState() {
+  // Only save if we have an image loaded
+  if (!m_scan) {
+    return;
+  }
+
+  // Save current image path
+  QString imagePath = m_recoveryDir + "/recovery_image.txt";
+  QFile imageFile(imagePath);
+  if (imageFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    QTextStream out(&imageFile);
+    // We need to track the current image path - for now use recent files
+    if (!m_recentFiles.isEmpty()) {
+      out << m_recentFiles.first();
+    }
+    imageFile.close();
+  }
+
+  // Save current parameters
+  QString paramsPath = m_recoveryDir + "/recovery_params.par";
+  FILE *f = fopen(paramsPath.toUtf8().constData(), "wt");
+  if (f) {
+    bool has_rgb = m_scan && m_scan->has_rgb();
+    colorscreen::save_csp(f, &m_scrToImgParams,
+                          has_rgb ? &m_detectParams : nullptr,
+                          &m_rparams, &m_solverParams);
+    fclose(f);
+  }
+}
+
+void MainWindow::loadRecoveryState() {
+  // Load image path
+  QString imagePath = m_recoveryDir + "/recovery_image.txt";
+  QString imageToLoad;
+  
+  QFile imageFile(imagePath);
+  if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QTextStream in(&imageFile);
+    imageToLoad = in.readLine().trimmed();
+    imageFile.close();
+  }
+
+  // Load parameters
+  QString paramsPath = m_recoveryDir + "/recovery_params.par";
+  if (QFile::exists(paramsPath)) {
+    FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
+    if (f) {
+      const char *error = nullptr;
+      colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
+                            &m_rparams, &m_solverParams, &error);
+      fclose(f);
+      
+      if (error) {
+        QMessageBox::warning(this, "Recovery Warning",
+                            QString("Error loading parameters: %1").arg(error));
+      }
+    }
+  }
+
+  // Load image if path was saved
+  if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
+    loadFile(imageToLoad);
+  } else if (!imageToLoad.isEmpty()) {
+    QMessageBox::warning(this, "Recovery Warning",
+                        QString("Could not find image file: %1").arg(imageToLoad));
+  }
+
+  // Update UI with recovered parameters
+  updateUIFromState(getCurrentState());
+}
+
+void MainWindow::clearRecoveryFiles() {
+  QString imagePath = m_recoveryDir + "/recovery_image.txt";
+  QString paramsPath = m_recoveryDir + "/recovery_params.par";
+  
+  QFile::remove(imagePath);
+  QFile::remove(paramsPath);
 }

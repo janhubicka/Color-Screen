@@ -468,6 +468,7 @@ struct render_parameters
     color_model_dufay3,
     color_model_dufay4,
     color_model_dufay5,
+    color_model_autochrome_ciortan_arteaga_trumpy,
     color_model_autochrome,
     color_model_autochrome2,
     color_model_thames_mees_pledge,

@@ -38,6 +38,7 @@ const render_parameters::color_model_property render_parameters::color_model_pro
   { "dufaycolor_NSMM_Bradford_11960", "Dufaycolor NSMM Bradford 11960", "", SPECTRA_BASED | SUPPORTS_AGING },
   { "dufaycolor_NSMM_Bradford_11967", "Dufaycolor NSMM Bradford 11967", "", SPECTRA_BASED | SUPPORTS_AGING },
   { "spicer_dufay_NSMM_Bradford_12075", "Spicer-Dufay NSMM Bradford 12075", "", 0 },
+  { "autochrome_ciortan_arteaga_trumpy", "Autochrome unfaded, Ciortan-Arteaga-Trumpy 2025", "", SPECTRA_BASED },
   { "cinecolor_koshofer", "Cinecolor Koshofer", "", SPECTRA_BASED },
   { "autochrome_Casella_Tsukada", "Autochrome Casella Tsukada", "", SPECTRA_BASED | SUPPORTS_AGING },
   { "thames_Mees_Pledge", "Thames Mees Pledge", "", SPECTRA_BASED },
@@ -302,6 +303,12 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
 	  dyes = matrix_by_dye_xy (0.620, 0.315,
 				   0.304, 0.541,
 				   0.182, 0.135);
+	  break;
+	}
+      case render_parameters::color_model_autochrome_ciortan_arteaga_trumpy:
+	{
+	  spect = std::make_unique <spectrum_dyes_to_xyz> ();
+	  spect->set_dyes (spectrum_dyes_to_xyz::autochrome_ciortan_arteaga_trumpy);
 	  break;
 	}
       case render_parameters::color_model_autochrome:

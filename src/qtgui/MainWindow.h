@@ -192,6 +192,7 @@ private:
   QPushButton *m_nextProgressButton;
 
   QTimer *m_progressTimer;
+  QTimer *m_recoveryTimer;  // Auto-save timer for crash recovery
   std::vector<ProgressEntry> m_activeProgresses;
   std::shared_ptr<colorscreen::progress_info>
       m_currentlyDisplayedProgress;    // Track displayed progress for cancel
@@ -229,4 +230,11 @@ private:
 
   // Current parameters file path
   QString m_currentParamsFile;
+
+  // Crash recovery
+  QString m_recoveryDir;
+  void saveRecoveryState();
+  void loadRecoveryState();
+  void clearRecoveryFiles();
+  bool hasRecoveryFiles();
 };
