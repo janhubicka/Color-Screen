@@ -11,6 +11,7 @@ colorscreen_qt_SOURCES = \
     ParameterPanel.cpp \
     TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
+    ScreenPanel.cpp \
     ColorPanel.cpp \
     MTFChartWidget.cpp \
     SpectraChartWidget.cpp \
@@ -32,6 +33,7 @@ MOC_SOURCES = \
     moc_ParameterPanel.cpp \
     moc_TilePreviewPanel.cpp \
     moc_SharpnessPanel.cpp \
+    moc_ScreenPanel.cpp \
     moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
     moc_MTFChartWidget.cpp \

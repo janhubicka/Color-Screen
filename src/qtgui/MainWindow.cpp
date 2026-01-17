@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "ImageWidget.h"
 #include "NavigationView.h"
+#include "ScreenPanel.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -155,6 +156,12 @@ void MainWindow::setupUi() {
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
 
+  // Create Screen Panel
+  m_screenPanel =
+      new ScreenPanel([this]() { return getCurrentState(); },
+                      [this](const ParameterState &s) { changeParameters(s); },
+                      [this]() { return m_scan; }, this);
+
   // Create Color Panel (after Sharpness)
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
@@ -163,6 +170,10 @@ void MainWindow::setupUi() {
 
   // Create Docks for Sharpness components
   m_mtfDock = new QDockWidget("MTF Chart", this);
+
+  m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
+  m_configTabs->addTab(m_screenPanel, "Screen");
+  m_configTabs->addTab(m_colorPanel, "Color");
   m_mtfDock->setObjectName("MTFChartDock");
   m_mtfDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_mtfDock);

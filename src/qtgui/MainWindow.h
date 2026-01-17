@@ -42,6 +42,7 @@ struct ProgressEntry {
   QElapsedTimer startTime;
 };
 
+class ScreenPanel;
 class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow {
@@ -178,8 +179,10 @@ private:
 
   // Linearization Panel
   // Linearization Panel
+  // Linearization Panel
   LinearizationPanel *m_linearizationPanel;
   SharpnessPanel *m_sharpnessPanel;
+  ScreenPanel *m_screenPanel;
   ColorPanel *m_colorPanel;
 
   // List of all panels for automated updates
