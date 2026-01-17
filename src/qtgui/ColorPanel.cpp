@@ -1,4 +1,5 @@
 #include "ColorPanel.h"
+#include "CIEChartWidget.h"
 #include "SpectraChartWidget.h"
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -14,16 +15,17 @@ class CorrectedPreviewPanel : public TilePreviewPanel {
 public:
   CorrectedPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
                         ImageGetter imageGetter, QWidget *parent = nullptr)
-      : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {}
+      : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent, false) {
+  }
 
   void init(const QString &title) { setupTiles(title); }
 
 protected:
   std::vector<std::pair<render_screen_tile_type, QString>>
   getTileTypes() const override {
-    return {{coorected_backlight_screen, "Backlight"},
-            {coorected_detail_screen, "Detail"},
-            {coorected_full_screen, "Screen"}};
+    return {{corrected_backlight_screen, "Backlight"},
+            {corrected_detail_screen, "Detail"},
+            {corrected_full_screen, "Screen"}};
   }
 
   bool shouldUpdateTiles(const ParameterState &state) override {
@@ -43,6 +45,8 @@ protected:
     return true;
   }
 
+  bool requiresScan() const override { return false; }
+
 private:
   render_parameters m_lastRParams;
   int m_lastScrType = -1;
@@ -57,6 +61,11 @@ ColorPanel::ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
 }
 
 ColorPanel::~ColorPanel() = default;
+
+void ColorPanel::reattachCorrectedTiles(QWidget *widget) {
+  if (m_correctedPreview)
+    m_correctedPreview->reattachTiles(widget);
+}
 
 void ColorPanel::setupUi() {
   setupTiles("Color Preview");
@@ -363,7 +372,11 @@ void ColorPanel::setupUi() {
   {
     CorrectedPreviewPanel *correctedPreview =
         new CorrectedPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+    m_correctedPreview = correctedPreview;
     correctedPreview->init("Corrected Color Preview");
+
+    connect(correctedPreview, &TilePreviewPanel::detachTilesRequested, this,
+            &ColorPanel::detachCorrectedTilesRequested);
 
     // We need to trigger updates when parent updates
     m_widgetStateUpdaters.push_back(
@@ -389,6 +402,53 @@ void ColorPanel::setupUi() {
         [](ParameterState &s, int v) {
           s.rparams.dye_balance = (dye_balance)v;
         });
+  }
+
+  // Observer Whitepoint
+  {
+    QWidget *wrapper = new QWidget();
+    QHBoxLayout *hLayout = new QHBoxLayout(wrapper);
+    hLayout->setContentsMargins(0, 5, 0, 5); // Add some vertical breathing room
+
+    QLabel *label = new QLabel("Observer whitepoint");
+    // Ensure vertical centering relative to the tall chart
+    hLayout->addWidget(label, 0, Qt::AlignVCenter);
+
+    // "Move selector more to right"
+    hLayout->addSpacing(40);
+
+    CIEChartWidget *cieChart = new CIEChartWidget();
+    cieChart->setFixedHeight(200); // Reasonable height
+    cieChart->setFixedWidth(
+        200); // Also fix width to keep aspect sensible or let it expand?
+              // User said "move to right", implying it might be small?
+              // Let's allow expanding but maybe add a stretch before it?
+              // Actually, standard behavior is fine, just added spacing.
+    hLayout->addWidget(cieChart);
+
+    // If we want it to push to the right edge:
+    // hLayout->addStretch();
+    // But usually charts should be left-aligned after the label/spacing.
+    // I'll stick to addSpacing(40).
+
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow(wrapper);
+    else
+      m_form->addRow(wrapper);
+
+    // Connect updates
+    connect(cieChart, &CIEChartWidget::whitepointChanged, this,
+            [this](double x, double y) {
+              applyChange([x, y](ParameterState &s) {
+                s.rparams.observer_whitepoint = colorscreen::xy_t(x, y);
+              });
+            });
+
+    // Update from state
+    m_paramUpdaters.push_back([cieChart](const ParameterState &s) {
+      cieChart->setWhitepoint(s.rparams.observer_whitepoint.x,
+                              s.rparams.observer_whitepoint.y);
+    });
   }
 
   // Spacer to push everything up
@@ -490,9 +550,5 @@ bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
 
 void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier) {
   ParameterPanel::applyChange(modifier);
-  scheduleTileUpdate();
-}
-
-void ColorPanel::onParametersRefreshed(const ParameterState &state) {
   scheduleTileUpdate();
 }

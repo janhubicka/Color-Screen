@@ -73,8 +73,10 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
 
 TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
                                    StateSetter stateSetter,
-                                   ImageGetter imageGetter, QWidget *parent)
-    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
+                                   ImageGetter imageGetter, QWidget *parent,
+                                   bool useScrollArea)
+    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent,
+                     useScrollArea) {
 
   // Initialize debounce timer
   m_updateTimer = new QTimer(this);
@@ -205,6 +207,10 @@ void TilePreviewPanel::setupTiles(const QString &title) {
         w->setVisible(visible);
     }
   });
+}
+
+void TilePreviewPanel::onParametersRefreshed(const ParameterState &state) {
+  scheduleTileUpdate();
 }
 
 void TilePreviewPanel::scheduleTileUpdate() { m_updateTimer->start(); }

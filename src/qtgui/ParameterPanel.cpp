@@ -15,23 +15,32 @@
 #include <QVBoxLayout>
 
 ParameterPanel::ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
-                               ImageGetter imageGetter, QWidget *parent)
+                               ImageGetter imageGetter, QWidget *parent,
+                               bool useScrollArea)
     : QWidget(parent), m_stateGetter(stateGetter), m_stateSetter(stateSetter),
       m_imageGetter(imageGetter), m_currentGroupForm(nullptr) {
   m_layout = new QVBoxLayout(this);
   m_layout->setContentsMargins(0, 0, 0, 0);
 
-  // Create scroll area for the form
-  QScrollArea *scrollArea = new QScrollArea(this);
-  scrollArea->setWidgetResizable(true);
-  scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  scrollArea->setFrameShape(QFrame::NoFrame);
+  if (useScrollArea) {
+    // Create scroll area for the form
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setFrameShape(QFrame::NoFrame);
 
-  QWidget *scrollWidget = new QWidget();
-  m_form = new QFormLayout(scrollWidget);
-  scrollArea->setWidget(scrollWidget);
+    QWidget *scrollWidget = new QWidget();
+    m_form = new QFormLayout(scrollWidget);
+    scrollArea->setWidget(scrollWidget);
 
-  m_layout->addWidget(scrollArea);
+    m_layout->addWidget(scrollArea);
+  } else {
+    // No scroll area - layout directly
+    m_form = new QFormLayout();
+    m_layout->addLayout(m_form);
+    m_layout->setSizeConstraint(
+        QLayout::SetMinAndMaxSize); // Ensure widget resizes with content
+  }
 }
 
 ParameterPanel::~ParameterPanel() = default;

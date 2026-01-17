@@ -25,7 +25,8 @@ public:
   using ImageGetter = std::function<std::shared_ptr<colorscreen::image_data>()>;
 
   explicit ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
-                          ImageGetter imageGetter, QWidget *parent = nullptr);
+                          ImageGetter imageGetter, QWidget *parent = nullptr,
+                          bool useScrollArea = true);
   ~ParameterPanel() override;
 
   // Called when the external state changes (Undo/Redo, Code Load)

@@ -190,4 +190,5 @@ private:
   QDockWidget *m_spectraDock;
   QDockWidget *m_tilesDock;
   QDockWidget *m_colorTilesDock;
+  QDockWidget *m_correctedColorTilesDock;
 };

@@ -20,9 +20,11 @@ public:
   // Accessors for Dock Widgets
   QWidget *getSpectraChartWidget() const;
   void reattachSpectraChart(QWidget *widget);
+  void reattachCorrectedTiles(QWidget *widget);
 
 signals:
   void detachSpectraChartRequested(QWidget *widget);
+  void detachCorrectedTilesRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -37,22 +39,17 @@ private:
   void setupUi();
   void updateSpectraChart();
   void applyChange(std::function<void(ParameterState &)> modifier) override;
-  void onParametersRefreshed(const ParameterState &state) override;
 
   // Cached parameters for change detection
   colorscreen::render_parameters m_lastRParams;
   int m_lastScrType = -1;
-  // We might want to check more than just rparams if other things affect color
-  // rendering, but user said "rerendered when rparam changes". Also scan
-  // width/height or image source changes are handled by TilePreviewPanel check
-  // of scan ptr and pixelSize? TilePreviewPanel checks pixelSize and scan
-  // pointer. We just need to check if parameters relevant to render changed.
 
   QWidget *m_spectraSection = nullptr;
   QCheckBox *m_linkDyeAges = nullptr;
   SpectraChartWidget *m_spectraChart = nullptr;
   QVBoxLayout *m_spectraContainer = nullptr;
-  QComboBox *m_spectraMode = nullptr; // Added QComboBox member
+  QComboBox *m_spectraMode = nullptr;
+  TilePreviewPanel *m_correctedPreview = nullptr;
 };
 
 #endif // COLOR_PANEL_H

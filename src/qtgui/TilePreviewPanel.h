@@ -26,7 +26,8 @@ class TilePreviewPanel : public ParameterPanel {
   Q_OBJECT
 public:
   TilePreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
-                   ImageGetter imageGetter, QWidget *parent = nullptr);
+                   ImageGetter imageGetter, QWidget *parent = nullptr,
+                   bool useScrollArea = true);
   ~TilePreviewPanel() override;
 
   QWidget *getTilesWidget() const;
@@ -38,6 +39,8 @@ signals:
 protected:
   void resizeEvent(QResizeEvent *event) override;
   void showEvent(QShowEvent *event) override;
+
+  void onParametersRefreshed(const ParameterState &state) override;
 
   // Must be implemented by subclasses
   virtual std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>

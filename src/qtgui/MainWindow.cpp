@@ -178,6 +178,11 @@ void MainWindow::setupUi() {
   m_colorTilesDock->setVisible(false);
   addDockWidget(Qt::BottomDockWidgetArea, m_colorTilesDock);
 
+  m_correctedColorTilesDock = new QDockWidget("Corrected Color Preview", this);
+  m_correctedColorTilesDock->setObjectName("CorrectedColorTilesDock");
+  m_correctedColorTilesDock->setVisible(false);
+  addDockWidget(Qt::BottomDockWidgetArea, m_correctedColorTilesDock);
+
   // Connection for Color Panel Spectra Chart
   m_spectraDock = new QDockWidget("Spectral Transmitance", this);
   m_spectraDock->setObjectName("SpectraDock");
@@ -237,6 +242,10 @@ void MainWindow::setupUi() {
 
   setupDock(m_colorTilesDock, m_colorPanel, &ColorPanel::detachTilesRequested,
             &ColorPanel::reattachTiles);
+
+  setupDock(m_correctedColorTilesDock, m_colorPanel,
+            &ColorPanel::detachCorrectedTilesRequested,
+            &ColorPanel::reattachCorrectedTiles);
 
   setupDock(m_spectraDock, m_colorPanel,
             &ColorPanel::detachSpectraChartRequested,

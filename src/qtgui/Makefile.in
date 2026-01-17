@@ -120,7 +120,8 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-SharpnessPanel.$(OBJEXT) \
 	colorscreen_qt-ColorPanel.$(OBJEXT) \
 	colorscreen_qt-MTFChartWidget.$(OBJEXT) \
-	colorscreen_qt-SpectraChartWidget.$(OBJEXT)
+	colorscreen_qt-SpectraChartWidget.$(OBJEXT) \
+	colorscreen_qt-CIEChartWidget.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_Renderer.$(OBJEXT) \
@@ -132,7 +133,8 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ColorPanel.$(OBJEXT) \
 	colorscreen_qt-moc_SmartSpinBox.$(OBJEXT) \
 	colorscreen_qt-moc_MTFChartWidget.$(OBJEXT) \
-	colorscreen_qt-moc_SpectraChartWidget.$(OBJEXT)
+	colorscreen_qt-moc_SpectraChartWidget.$(OBJEXT) \
+	colorscreen_qt-moc_CIEChartWidget.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
 	$(nodist_colorscreen_qt_OBJECTS)
@@ -163,7 +165,8 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_builddir)/src/gtkgui -I$(top_builddir)/src/libcolorscreen/include
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
+am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
@@ -176,6 +179,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po \
@@ -387,7 +391,8 @@ colorscreen_qt_SOURCES = \
     SharpnessPanel.cpp \
     ColorPanel.cpp \
     MTFChartWidget.cpp \
-    SpectraChartWidget.cpp
+    SpectraChartWidget.cpp \
+    CIEChartWidget.cpp
 
 @static_link_TRUE@AM_LDFLAGS = -static
 @static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
@@ -406,9 +411,10 @@ MOC_SOURCES = \
     moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
     moc_MTFChartWidget.cpp \
-    moc_SpectraChartWidget.cpp
+    moc_SpectraChartWidget.cpp \
+    moc_CIEChartWidget.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h SpectraChartWidget.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES)
@@ -516,6 +522,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po@am__quote@ # am--include-marker
@@ -529,6 +536,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po@am__quote@ # am--include-marker
@@ -754,6 +762,20 @@ colorscreen_qt-SpectraChartWidget.obj: SpectraChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-SpectraChartWidget.obj `if test -f 'SpectraChartWidget.cpp'; then $(CYGPATH_W) 'SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/SpectraChartWidget.cpp'; fi`
 
+colorscreen_qt-CIEChartWidget.o: CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-CIEChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-CIEChartWidget.Tpo -c -o colorscreen_qt-CIEChartWidget.o `test -f 'CIEChartWidget.cpp' || echo '$(srcdir)/'`CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-CIEChartWidget.Tpo $(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='CIEChartWidget.cpp' object='colorscreen_qt-CIEChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-CIEChartWidget.o `test -f 'CIEChartWidget.cpp' || echo '$(srcdir)/'`CIEChartWidget.cpp
+
+colorscreen_qt-CIEChartWidget.obj: CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-CIEChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-CIEChartWidget.Tpo -c -o colorscreen_qt-CIEChartWidget.obj `if test -f 'CIEChartWidget.cpp'; then $(CYGPATH_W) 'CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/CIEChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-CIEChartWidget.Tpo $(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='CIEChartWidget.cpp' object='colorscreen_qt-CIEChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-CIEChartWidget.obj `if test -f 'CIEChartWidget.cpp'; then $(CYGPATH_W) 'CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/CIEChartWidget.cpp'; fi`
+
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo $(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -922,6 +944,20 @@ colorscreen_qt-moc_SpectraChartWidget.obj: moc_SpectraChartWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_SpectraChartWidget.obj `if test -f 'moc_SpectraChartWidget.cpp'; then $(CYGPATH_W) 'moc_SpectraChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_SpectraChartWidget.cpp'; fi`
 
+colorscreen_qt-moc_CIEChartWidget.o: moc_CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_CIEChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Tpo -c -o colorscreen_qt-moc_CIEChartWidget.o `test -f 'moc_CIEChartWidget.cpp' || echo '$(srcdir)/'`moc_CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_CIEChartWidget.cpp' object='colorscreen_qt-moc_CIEChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_CIEChartWidget.o `test -f 'moc_CIEChartWidget.cpp' || echo '$(srcdir)/'`moc_CIEChartWidget.cpp
+
+colorscreen_qt-moc_CIEChartWidget.obj: moc_CIEChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_CIEChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Tpo -c -o colorscreen_qt-moc_CIEChartWidget.obj `if test -f 'moc_CIEChartWidget.cpp'; then $(CYGPATH_W) 'moc_CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_CIEChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_CIEChartWidget.cpp' object='colorscreen_qt-moc_CIEChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_CIEChartWidget.obj `if test -f 'moc_CIEChartWidget.cpp'; then $(CYGPATH_W) 'moc_CIEChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_CIEChartWidget.cpp'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
@@ -1060,6 +1096,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
@@ -1073,6 +1110,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
@@ -1130,6 +1168,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
@@ -1143,6 +1182,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
