@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRandomGenerator>
 #include <QWheelEvent>
 #include <QtMath>
 
@@ -23,6 +24,19 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
   pal.setColor(QPalette::Window, Qt::black);
   setAutoFillBackground(true);
   setPalette(pal);
+
+  // Create both animations for when no image is loaded
+  m_thamesAnim = new ThamesAnimation(this);
+  m_thamesAnim->setGeometry(rect());
+  m_thamesAnim->hide();
+  
+  m_pagetAnim = new PagetAnimation(this);
+  m_pagetAnim->setGeometry(rect());
+  m_pagetAnim->hide();
+  
+  // Randomly choose which animation to use
+  m_activeAnim = (QRandomGenerator::global()->bounded(2) == 0) ? static_cast<QWidget*>(m_thamesAnim) 
+                                     : static_cast<QWidget*>(m_pagetAnim);
 
   setMouseTracking(false); // Only track when dragging
 }
@@ -252,8 +266,33 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   if (!m_pixmap.isNull()) {
     p.drawImage(0, 0, m_pixmap);
+    // Hide animations when we have an image
+    if (m_thamesAnim && !m_thamesAnim->isHidden()) {
+      m_thamesAnim->stopAnimation();
+      m_thamesAnim->hide();
+    }
+    if (m_pagetAnim && !m_pagetAnim->isHidden()) {
+      m_pagetAnim->stopAnimation();
+      m_pagetAnim->hide();
+    }
   } else {
-    p.drawText(rect(), Qt::AlignCenter, "No Image");
+    // Show active animation when no image
+    if (m_activeAnim && m_activeAnim->isHidden()) {
+      m_activeAnim->setGeometry(rect());
+      m_activeAnim->show();
+      
+      // Start the appropriate animation
+      if (m_activeAnim == m_thamesAnim) {
+        m_thamesAnim->startAnimation();
+      } else if (m_activeAnim == m_pagetAnim) {
+        m_pagetAnim->startAnimation();
+      }
+    }
+    
+    // Update geometry if needed
+    if (m_activeAnim) {
+      m_activeAnim->setGeometry(rect());
+    }
   }
 }
 

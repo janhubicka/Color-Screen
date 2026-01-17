@@ -9,6 +9,8 @@
 #include <QThread>
 #include <QWidget>
 #include <memory>
+#include "ThamesAnimation.h"
+#include "PagetAnimation.h"
 
 // Forward declarations
 namespace colorscreen {
@@ -96,4 +98,9 @@ private:
   // Interaction
   QPoint m_lastMousePos;
   bool m_isDragging = false;
+  
+  // Animations for when no image loaded
+  ThamesAnimation *m_thamesAnim = nullptr;
+  PagetAnimation *m_pagetAnim = nullptr;
+  QWidget *m_activeAnim = nullptr; // Points to whichever is active
 };
