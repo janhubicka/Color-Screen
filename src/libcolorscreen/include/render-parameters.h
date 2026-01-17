@@ -443,14 +443,10 @@ struct render_parameters
   /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
   enum color_model_t
   {
-    color_model_none,
-    color_model_scan,
     color_model_srgb,
     color_model_red,
     color_model_green,
     color_model_blue,
-    color_model_max_separation,
-    color_model_paget,
     color_model_miethe_goerz_reconstructed_wager,
     color_model_miethe_goerz_original_wager,
     color_model_wratten_25_58_47_xyz,
@@ -474,10 +470,14 @@ struct render_parameters
     color_model_dufay5,
     color_model_autochrome,
     color_model_autochrome2,
-    color_model_kodachrome25,
     color_model_thames_mees_pledge,
     color_model_dioptichrome_mees_pledge,
     color_model_autochrome_mees_pledge,
+    color_model_kodachrome25,
+    color_model_paget,
+    color_model_max_separation,
+    color_model_none,
+    color_model_scan,
     color_model_max
   };
   struct color_model_property
