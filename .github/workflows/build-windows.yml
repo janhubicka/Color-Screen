@@ -22,7 +22,7 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg
+        install: make mingw-w64-${{matrix.env}}-gcc mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-pkg-config mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -79,6 +79,15 @@ jobs:
         cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/share/icons/
         rm -f /c/Color-Screen-install/share/icons/Adwaita/icon-theme.cache
         rm -f /c/Color-Screen-install/share/icons/hicolor/icon-theme.cache
+    - name: build installer
+      shell: msys2 {0}
+      run: |
+        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
+        makensis -DSOURCE_DIR="C:\Color-Screen-install" os/windows/installer.nsi
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer-${{matrix.sys}}
+        path: os/windows/Color-Screen-Installer.exe
     - uses: actions/upload-artifact@v4
       with:
         name: windows-binary-${{matrix.sys}}
