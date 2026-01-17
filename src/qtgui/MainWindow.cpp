@@ -594,6 +594,11 @@ void MainWindow::createMenus() {
 }
 
 void MainWindow::onOpenParameters() {
+  // Check for unsaved changes before loading new parameters
+  if (!maybeSave()) {
+    return;
+  }
+  
   QString fileName = QFileDialog::getOpenFileName(
       this, "Open Parameters", QString(), "Parameters (*.par);;All Files (*)");
   if (fileName.isEmpty())
@@ -689,6 +694,11 @@ void MainWindow::onSaveParameters() {
 
   fclose(f);
   statusBar()->showMessage(QString("Parameters saved to %1").arg(m_currentParamsFile), 3000);
+  
+  // Mark as saved (clean state)
+  if (m_undoStack) {
+    m_undoStack->setClean();
+  }
 }
 
 void MainWindow::onSaveParametersAs() {
@@ -729,6 +739,11 @@ void MainWindow::onSaveParametersAs() {
   addToRecentParams(fileName);
   
   statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
+  
+  // Mark as saved (clean state)
+  if (m_undoStack) {
+    m_undoStack->setClean();
+  }
 }
 
 
@@ -1157,8 +1172,41 @@ void MainWindow::changeParameters(const ParameterState &newState) {
   m_undoStack->push(new ChangeParametersCommand(this, currentState, newState));
 }
 
+// Helper to check for unsaved changes and prompt to save
+bool MainWindow::maybeSave() {
+  // Only prompt if there are unsaved changes (undo stack is not clean)
+  if (!m_undoStack || m_undoStack->isClean()) {
+    return true; // No changes or no undo stack, proceed
+  }
+
+  QMessageBox::StandardButton ret = QMessageBox::warning(
+      this, "Unsaved Changes",
+      "Parameters have been modified.\nDo you want to save your changes?",
+      QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+  switch (ret) {
+  case QMessageBox::Save:
+    onSaveParameters();
+    // If save was successful or user cancelled save dialog, we're clean
+    return true;
+  case QMessageBox::Discard:
+    return true;
+  case QMessageBox::Cancel:
+  default:
+    return false;
+  }
+}
+
 void MainWindow::closeEvent(QCloseEvent *event) {
+  // Check for unsaved changes
+  if (!maybeSave()) {
+    event->ignore();
+    return;
+  }
+  
   saveWindowState();
+  saveRecentFiles();
+  saveRecentParams();
   event->accept();
 }
 

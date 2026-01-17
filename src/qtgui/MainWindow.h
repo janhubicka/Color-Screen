@@ -83,6 +83,9 @@ protected:
   void closeEvent(QCloseEvent *event) override;
 
 private:
+  // Helper to check for unsaved changes and prompt to save
+  bool maybeSave();
+
   void setupUi();
   void createMenus();
   void createToolbar();  // New helper
