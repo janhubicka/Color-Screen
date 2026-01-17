@@ -68,6 +68,7 @@ private slots:
   void onModeChanged(int index); // Slot for mode change
   void rotateLeft();
   void rotateRight();
+  void onGamutWarningToggled(bool checked);
   void onColorCheckBoxChanged(bool checked); // Slot for color checkbox
 
   // Recent Files
@@ -108,12 +109,13 @@ private:
   QMenu *m_helpMenu;
 
   QAction *m_openAction;
-  QAction *m_zoomInAction;      // Added
-  QAction *m_zoomOutAction;     // Added
-  QAction *m_zoom100Action;     // Added
-  QAction *m_zoomFitAction;     // Added
-  QAction *m_rotateLeftAction;  // Added (to be explicitly exposed)
-  QAction *m_rotateRightAction; // Added (to be explicitly exposed)
+  QAction *m_zoomInAction;       // Added
+  QAction *m_zoomOutAction;      // Added
+  QAction *m_zoom100Action;      // Added
+  QAction *m_zoomFitAction;      // Added
+  QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
+  QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
+  QAction *m_gamutWarningAction; // Added Gamut Warning toggle
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QMenu *m_recentFilesMenu;

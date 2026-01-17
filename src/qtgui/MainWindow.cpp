@@ -553,6 +553,14 @@ void MainWindow::createMenus() {
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
 
+  // Gamut Warning Action
+  m_gamutWarningAction = new QAction(tr("Gamut Warning"), this);
+  m_gamutWarningAction->setCheckable(true);
+  m_gamutWarningAction->setChecked(false);
+  connect(m_gamutWarningAction, &QAction::toggled, this,
+          &MainWindow::onGamutWarningToggled);
+  m_viewMenu->addAction(m_gamutWarningAction);
+
   m_viewMenu->addSeparator();
 
   m_rotateLeftAction = m_viewMenu->addAction("Rotate &Left");
@@ -1233,7 +1241,17 @@ void MainWindow::openRecentParams() {
       m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                  &m_detectParams);
 
+      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                                 &m_detectParams);
+
       updateColorCheckBoxState();
+    }
+
+    // Sync Gamut Warning Button
+    if (m_gamutWarningAction) {
+      bool signalBlocked = m_gamutWarningAction->blockSignals(true);
+      m_gamutWarningAction->setChecked(m_rparams.gammut_warning);
+      m_gamutWarningAction->blockSignals(signalBlocked);
     }
 
     m_undoStack->clear();
@@ -1307,4 +1325,16 @@ void MainWindow::updateColorCheckBoxState() {
     m_colorCheckBox->setChecked(m_renderTypeParams.color);
   }
   m_colorCheckBox->blockSignals(false);
+}
+
+void MainWindow::onGamutWarningToggled(bool checked) {
+  if (m_rparams.gammut_warning != checked) {
+    m_rparams.gammut_warning = checked;
+
+    // Trigger update
+    if (m_scan) {
+      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                      &m_detectParams, &m_renderTypeParams);
+    }
+  }
 }
