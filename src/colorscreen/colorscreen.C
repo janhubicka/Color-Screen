@@ -475,6 +475,23 @@ parse_enum (const char *arg, const char *errmsg)
   return (T)max;
 }
 
+
+template <typename T, typename P, const P names[], int max>
+T
+parse_enum_property (const char *arg, const char *errmsg)
+{
+  for (int i = 0; i < max; i++)
+    if (!strcmp (arg, names[i].name))
+      return (T)i;
+  fprintf (stderr, errmsg, arg);
+  fprintf (stderr, "Possible values are: ");
+  for (int i = 0; i < max; i++)
+    fprintf (stderr, " %s", names[i].name);
+  fprintf (stderr, "\n");
+  exit (1);
+  return (T)max;
+}
+
 /* Parse output mode.  */
 static enum render_type_t
 parse_mode (const char *mode)
@@ -505,9 +522,10 @@ parse_output_profile (const char *profile)
 static enum render_parameters::color_model_t
 parse_color_model (const char *model)
 {
-  return parse_enum<enum render_parameters::color_model_t,
-                    render_parameters::color_model_names,
-                    (int)render_parameters::color_model_max> (
+  return parse_enum_property<enum render_parameters::color_model_t,
+                             render_parameters::color_model_property,
+                             render_parameters::color_model_names,
+                             (int)render_parameters::color_model_max> (
       model, "Unkonwn color model:%s\n");
 }
 

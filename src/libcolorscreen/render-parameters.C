@@ -12,42 +12,42 @@
 #include "render-interpolate.h"
 namespace colorscreen
 {
-const char * render_parameters::color_model_names [] = {
-  "none",
-  "scan",
-  "sRGB",
-  "red",
-  "green",
-  "blue",
-  "Wall_max_separation",
-  "paget",
-  "Miethe_Goerz_reconstructed_by_Wagner",
-  "Miethe_Goerz_mesured_by_Wagner",
-  "Wratten_25_58_47_xyz",
-  "Wratten_25_58_47_spectra",
-  "dufaycolor_reseau_by_dufaycolor_manual",
-  "dufaycolor_reseau_by_color_cinematography_xyY",
-  "dufaycolor_reseau_by_color_cinematography_xyY_correctedY",
-  "dufaycolor_reseau_by_color_cinematography_wavelength",
-  "dufaycolor_reseau_by_color_cinematography_spectra",
-  "dufaycolor_reseau_by_color_cinematography_spectra_correction",
-  "dufaycolor_reseau_by_harrison_horner_spectra",
-  "dufaycolor_reseau_by_harrison_horner_spectra_correction",
-  "dufaycolor_reseau_by_collins_giles_spectra",
-  "dufaycolor_reseau_by_collins_giles_spectra_correction",
-  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra",
-  "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra_correction",
-  "dufaycolor_NSMM_Bradford_11948",
-  "dufaycolor_NSMM_Bradford_11951",
-  "dufaycolor_NSMM_Bradford_11960",
-  "dufaycolor_NSMM_Bradford_11967",
-  "spicer_dufay_NSMM_Bradford_12075",
-  "cinecolor_koshofer",
-  "autochrome_Casella_Tsukada",
-  "kodachrome25",
-  "thames_Mees_Pledge",
-  "dioptichrome_Mees_Pledge",
-  "autochrome_Mees_Pledge",
+const render_parameters::color_model_property render_parameters::color_model_names[] = {
+  { "none", "None", "", 0 },
+  { "scan", "scan", "", 0 },
+  { "sRGB", "sRGB", "", 0 },
+  { "red", "red", "", 0 },
+  { "green", "green", "", 0 },
+  { "blue", "blue", "", 0 },
+  { "Wall_max_separation", "Wall max separation", "", 0 },
+  { "paget", "paget", "", 0 },
+  { "Miethe_Goerz_reconstructed_by_Wagner", "Miethe Goerz reconstructed by Wagner", "", 0 },
+  { "Miethe_Goerz_mesured_by_Wagner", "Miethe Goerz mesured by Wagner", "", 0 },
+  { "Wratten_25_58_47_xyz", "Wratten 25 58 47 xyz", "", 0 },
+  { "Wratten_25_58_47_spectra", "Wratten 25 58 47 spectra", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_dufaycolor_manual", "dufaycolor reseau by dufaycolor manual", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_color_cinematography_xyY", "dufaycolor reseau by color cinematography xyY", "", 0 },
+  { "dufaycolor_reseau_by_color_cinematography_xyY_correctedY", "dufaycolor reseau by color cinematography xyY correctedY", "", 0 },
+  { "dufaycolor_reseau_by_color_cinematography_wavelength", "dufaycolor reseau by color cinematography wavelength", "", 0 },
+  { "dufaycolor_reseau_by_color_cinematography_spectra", "dufaycolor reseau by color cinematography spectra", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_color_cinematography_spectra_correction", "dufaycolor reseau by color cinematography spectra correction", "", 0 },
+  { "dufaycolor_reseau_by_harrison_horner_spectra", "dufaycolor reseau by harrison horner spectra", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_harrison_horner_spectra_correction", "dufaycolor reseau by harrison horner spectra correction", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_collins_giles_spectra", "dufaycolor reseau by collins giles spectra", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_collins_giles_spectra_correction", "dufaycolor reseau by collins giles spectra correction", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra", "dufaycolor reseau by photography its materials and processes spectra", "", SPECTRA_BASED },
+  { "dufaycolor_reseau_by_photography_its_materials_and_processes_spectra_correction", "dufaycolor reseau by photography its materials and processes spectra correction", "", SPECTRA_BASED },
+  { "dufaycolor_NSMM_Bradford_11948", "dufaycolor NSMM Bradford 11948", "", SPECTRA_BASED | SUPPORTS_AGING },
+  { "dufaycolor_NSMM_Bradford_11951", "dufaycolor NSMM Bradford 11951", "", SPECTRA_BASED | SUPPORTS_AGING },
+  { "dufaycolor_NSMM_Bradford_11960", "dufaycolor NSMM Bradford 11960", "", SPECTRA_BASED | SUPPORTS_AGING },
+  { "dufaycolor_NSMM_Bradford_11967", "dufaycolor NSMM Bradford 11967", "", SPECTRA_BASED | SUPPORTS_AGING },
+  { "spicer_dufay_NSMM_Bradford_12075", "spicer dufay NSMM Bradford 12075", "", 0 },
+  { "cinecolor_koshofer", "cinecolor koshofer", "", SPECTRA_BASED },
+  { "autochrome_Casella_Tsukada", "autochrome Casella Tsukada", "", SPECTRA_BASED | SUPPORTS_AGING },
+  { "kodachrome25", "kodachrome25", "", 0 },
+  { "thames_Mees_Pledge", "thames Mees Pledge", "", SPECTRA_BASED },
+  { "dioptichrome_Mees_Pledge", "dioptichrome Mees Pledge", "", SPECTRA_BASED },
+  { "autochrome_Mees_Pledge", "autochrome Mees Pledge", "", SPECTRA_BASED },
 };
 const char * render_parameters::dye_balance_names [] = {
   "none",
@@ -670,7 +670,7 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
-  return create_profile (color_model_names[color_model], r, g, b, observer_whitepoint, output_gamma, buffer);
+  return create_profile(color_model_names[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
 }
 
 void
