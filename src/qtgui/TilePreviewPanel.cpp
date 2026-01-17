@@ -209,6 +209,10 @@ void TilePreviewPanel::setupTiles(const QString &title) {
 
 void TilePreviewPanel::scheduleTileUpdate() { m_updateTimer->start(); }
 
+void TilePreviewPanel::setDebounceInterval(int msec) {
+  m_updateTimer->setInterval(msec);
+}
+
 void TilePreviewPanel::performTileRender() {
   if (m_tileLabels.empty())
     return;

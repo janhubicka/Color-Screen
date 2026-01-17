@@ -58,6 +58,9 @@ protected:
   // Call this to trigger an update (debounced)
   void scheduleTileUpdate();
 
+  // Set the debounce interval (default 30ms)
+  void setDebounceInterval(int msec);
+
   // Internal render function
   void performTileRender();
 

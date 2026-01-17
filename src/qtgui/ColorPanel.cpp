@@ -11,6 +11,7 @@ using namespace colorscreen;
 ColorPanel::ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
                        ImageGetter imageGetter, QWidget *parent)
     : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
+  setDebounceInterval(5); // Fast update for smoother sliders
   setupUi();
 }
 
