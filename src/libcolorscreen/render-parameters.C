@@ -12,7 +12,7 @@
 #include "render-interpolate.h"
 namespace colorscreen
 {
-const render_parameters::color_model_property render_parameters::color_model_names[] = {
+const render_parameters::color_model_property render_parameters::color_model_properties[] = {
   { "none", "None", "", 0 },
   { "scan", "scan", "", 0 },
   { "sRGB", "sRGB", "", 0 },
@@ -670,7 +670,7 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
   xyz r = {dyes.m_elements[0][0], dyes.m_elements[0][1], dyes.m_elements[0][2]};
   xyz g = {dyes.m_elements[1][0], dyes.m_elements[1][1], dyes.m_elements[1][2]};
   xyz b = {dyes.m_elements[2][0], dyes.m_elements[2][1], dyes.m_elements[2][2]};
-  return create_profile(color_model_names[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
+  return create_profile(color_model_properties[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
 }
 
 void

@@ -489,7 +489,7 @@ struct render_parameters
   };
   static const int SUPPORTS_AGING = 1;
   static const int SPECTRA_BASED = 2; // For informational purposes
-  DLL_PUBLIC static const color_model_property color_model_names[(int)color_model_max];
+  DLL_PUBLIC static const color_model_property color_model_properties[(int)color_model_max];
   enum color_model_t color_model;
   /* Aging simulation (0 new dyes, 1 aged dyes).
      Only effective for color models that support aging simulation.  */

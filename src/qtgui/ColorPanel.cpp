@@ -116,7 +116,7 @@ void ColorPanel::setupUi() {
   using color_model = render_parameters::color_model_t;
   std::map<int, QString> dyes;
   for (int i = 0; i < (int)color_model::color_model_max; ++i) {
-    dyes[i] = QString::fromUtf8(render_parameters::color_model_names[i].name);
+    dyes[i] = QString::fromUtf8(render_parameters::color_model_properties[i].name);
   }
 
   addEnumParameter(

@@ -524,7 +524,7 @@ parse_color_model (const char *model)
 {
   return parse_enum_property<enum render_parameters::color_model_t,
                              render_parameters::color_model_property,
-                             render_parameters::color_model_names,
+                             render_parameters::color_model_properties,
                              (int)render_parameters::color_model_max> (
       model, "Unkonwn color model:%s\n");
 }
