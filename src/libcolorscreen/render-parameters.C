@@ -62,16 +62,16 @@ const char * render_parameters::output_profile_names [] = {
   "original"
 };
 const property_t sharpen_parameters::sharpen_mode_names []  = {
-  { "none", "None", "" },
-  { "unsharp-mask", "Unsharp-mask", "" },
-  { "Wiener-deconvolution", "Wiener-deconvolution", "" },
-  { "Richardson-Lucy-deconvolution", "Richardson-Lucy-deconvolution", "" },
-  { "blur-deconvolution", "Blur-deconvolution", "" },
+  { "none", "None", "No sharpening." },
+  { "unsharp-mask", "Unsharp mask", "Unsharp mask algorithm. Not precise but fast." },
+  { "Wiener-deconvolution", "Wiener deconvolution", "Reverse sharpness loss using Modulation Transfer Function estimate." },
+  { "Richardson-Lucy-deconvolution", "Richardson-Lucy deconvolution", "Reverse sharpness loss using Modulation Transfer Function estimate in multiple steps for better precision." },
+  { "blur-deconvolution", "Blur deconvolution.", "" },
 };
 const property_t render_parameters::collection_quality_names []  = {
-  { "fast", "Fast", "" },
-  { "simple-screen", "Simple-screen", "" },
-  { "simulated-screen", "Simulated-screen", "" },
+  { "fast", "Fast", "Sample each patch in its center" },
+  { "simple-screen", "Simple-screen", "Collect denisty of patches on multiple pixels.  Do fast estimation on sharpened srceen filter." },
+  { "simulated-screen", "Simulated-screen", "Collect denisty of patches on multiple pixels.  Render blured screen filter and sharpen it." },
 };
 
 
