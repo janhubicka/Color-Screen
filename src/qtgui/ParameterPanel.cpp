@@ -337,6 +337,25 @@ QComboBox *ParameterPanel::addEnumParameter(
   return combo;
 }
 
+QComboBox *ParameterPanel::addEnumParameter(
+    const QString &label, const colorscreen::property_t *names, int max,
+    std::function<int(const ParameterState &)> getter,
+    std::function<void(ParameterState &, int)> setter,
+    std::function<bool(const ParameterState &)> enabledCheck) {
+  std::map<int, QString> options;
+  for (int i = 0; i < max; ++i) {
+    if (names[i].pretty_name && names[i].pretty_name[0]) {
+      options[i] = QString::fromUtf8(names[i].pretty_name);
+    } else if (names[i].name && names[i].name[0]) {
+      options[i] = QString::fromUtf8(names[i].name);
+    }
+  }
+
+  QComboBox *combo = addEnumParameter(label, options, getter, setter, enabledCheck);
+  addEnumTooltips(combo, names, max);
+  return combo;
+}
+
 void ParameterPanel::addEnumTooltips(QComboBox *combo, const colorscreen::property_t *names, int max) {
   for (int i = 0; i < combo->count(); ++i) {
     int val = combo->itemData(i).toInt();

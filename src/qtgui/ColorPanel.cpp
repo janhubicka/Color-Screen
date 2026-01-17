@@ -416,10 +416,9 @@ void ColorPanel::setupUi() {
   }
 
   // Dye Balancing Selector
-  addEnumParameter<render_parameters::dye_balance_t,
-                   render_parameters::dye_balance_names,
-                   (int)render_parameters::dye_balance_t::dye_balance_max>(
-      "Dye balancing",
+  addEnumParameter(
+      "Dye balancing", render_parameters::dye_balance_names,
+      (int)render_parameters::dye_balance_t::dye_balance_max,
       [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
       [](ParameterState &s, int v) {
         s.rparams.dye_balance = (render_parameters::dye_balance_t)v;

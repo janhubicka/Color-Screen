@@ -63,29 +63,21 @@ protected:
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
+  QComboBox *addEnumParameter(
+      const QString &label, const colorscreen::property_t *names, int max,
+      std::function<int(const ParameterState &)> getter,
+      std::function<void(ParameterState &, int)> setter,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
   // Non-template version for runtime arrays (Windows compatibility)
   void addEnumTooltips(QComboBox *combo, const colorscreen::property_t *names, int max);
 
   template <typename EnumType, const colorscreen::property_t Names[], int Max>
   QComboBox *addEnumParameter(
-      const QString &label,
-      std::function<int(const ParameterState &)> getter,
+      const QString &label, std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr) {
-    std::map<int, QString> options;
-    for (int i = 0; i < Max; ++i) {
-      if (Names[i].pretty_name && Names[i].pretty_name[0]) {
-        options[i] = QString::fromUtf8(Names[i].pretty_name);
-      } else if (Names[i].name && Names[i].name[0]) {
-        options[i] = QString::fromUtf8(Names[i].name);
-      }
-    }
-
-    QComboBox *combo =
-        addEnumParameter(label, options, getter, setter, enabledCheck);
-
-    addEnumTooltips(combo, Names, Max);
-    return combo;
+    return addEnumParameter(label, Names, Max, getter, setter, enabledCheck);
   }
 
   void addCheckboxParameter(
