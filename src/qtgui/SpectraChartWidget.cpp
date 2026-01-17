@@ -72,6 +72,15 @@ static QColor wavelengthToRGB(double wavelength) {
                 std::clamp((int)(b * 255), 0, 255));
 }
 
+void SpectraChartWidget::setYAxis(double min, double max, const QString &title,
+                                  const QString &suffix) {
+  m_yMin = min;
+  m_yMax = max;
+  m_yTitle = title;
+  m_ySuffix = suffix;
+  update();
+}
+
 void SpectraChartWidget::paintEvent(QPaintEvent *) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
@@ -120,7 +129,13 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
     int y = chartRect.bottom() - (chartRect.height() * i / 10);
     painter.drawLine(chartRect.left() - 5, y, chartRect.left(), y);
 
-    QString label = QString::number(i * 10) + "%";
+    double val = m_yMin + (m_yMax - m_yMin) * (i / 10.0);
+    QString label;
+    if (m_ySuffix == "%")
+      label = QString::number(val * 100.0, 'f', 0) + m_ySuffix;
+    else
+      label = QString::number(val, 'f', 1) + m_ySuffix;
+
     QRect textRect(0, y - 10, marginLeft - 10, 20);
     painter.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
 
@@ -160,7 +175,7 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
   painter.save();
   painter.translate(12, height() / 2);
   painter.rotate(-90);
-  painter.drawText(-50, 0, 100, 20, Qt::AlignCenter, "Transmitance");
+  painter.drawText(-50, 0, 100, 20, Qt::AlignCenter, m_yTitle);
   painter.restore();
 
   // Draw Curves
@@ -180,10 +195,11 @@ void SpectraChartWidget::paintEvent(QPaintEvent *) {
 
     for (size_t i = 0; i < data.size(); ++i) {
       double t = i / (double)(data.size() - 1);
-      double val = std::clamp(data[i], 0.0, 1.0);
+      double val = std::clamp(data[i], m_yMin, m_yMax);
+      double normalized = (val - m_yMin) / (m_yMax - m_yMin);
 
       int x = chartRect.left() + (int)(t * chartRect.width());
-      int y = chartRect.bottom() - (int)(val * chartRect.height());
+      int y = chartRect.bottom() - (int)(normalized * chartRect.height());
       QPointF point(x, y);
 
       if (i > 0)

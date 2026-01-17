@@ -3,6 +3,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QSlider>
 #include <QVBoxLayout>
 
@@ -23,6 +24,13 @@ void ColorPanel::setupUi() {
   // Spectral Transmitance Chart
   m_spectraChart = new SpectraChartWidget();
 
+  // Mode Selector
+  m_spectraMode = new QComboBox();
+  m_spectraMode->addItem("Transmittance", 0);
+  m_spectraMode->addItem("Absorbance (0-4)", 1);
+  connect(m_spectraMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int) { updateSpectraChart(); });
+
   // Wrap layout in a widget to add to FormLayout
   QWidget *spectraWrapper = new QWidget();
   m_spectraContainer = new QVBoxLayout(spectraWrapper);
@@ -31,11 +39,19 @@ void ColorPanel::setupUi() {
   QWidget *chartWrapper = new QWidget();
   QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
   wrapperLayout->setContentsMargins(0, 0, 0, 0);
+
+  // Header with mode
+  QHBoxLayout *headerLayout = new QHBoxLayout();
+  headerLayout->addStretch();
+  headerLayout->addWidget(new QLabel("Mode:"));
+  headerLayout->addWidget(m_spectraMode);
+  wrapperLayout->addLayout(headerLayout);
+
   wrapperLayout->addWidget(m_spectraChart);
 
   // Detachable section
   m_spectraSection = createDetachableSection(
-      "Spectral Transmitance", chartWrapper, [this, chartWrapper]() {
+      "Spectral Chart", chartWrapper, [this, chartWrapper]() {
         emit detachSpectraChartRequested(chartWrapper);
       });
 
@@ -223,6 +239,83 @@ void ColorPanel::setupUi() {
   else
     m_form->addRow("", m_linkDyeAges);
 
+  // Backlight Temperature
+  {
+    QWidget *container = new QWidget();
+    QHBoxLayout *hLayout = new QHBoxLayout(container);
+    hLayout->setContentsMargins(0, 0, 0, 0);
+
+    QSlider *slider = new QSlider(Qt::Horizontal);
+    slider->setRange(0, 1000); // Internal resolution
+
+    QDoubleSpinBox *spin = new QDoubleSpinBox();
+    spin->setRange(2500, 25000);
+    spin->setSingleStep(100);
+    spin->setSuffix(" K");
+
+    hLayout->addWidget(slider, 1);
+    hLayout->addWidget(spin, 0);
+
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow("Backlight temperature", container);
+    else
+      m_form->addRow("Backlight temperature", container);
+
+    // cubic mapping: K = min + (max - min) * (t^3)
+    auto toK = [](int sliderVal) -> double {
+      double t = sliderVal / 1000.0;
+      return 2500.0 + (25000.0 - 2500.0) * (t * t * t);
+    };
+
+    auto toSlider = [](double k) -> int {
+      double t3 = (k - 2500.0) / (25000.0 - 2500.0);
+      double t = std::cbrt(t3); // cubic root
+      return std::clamp((int)(t * 1000.0), 0, 1000);
+    };
+
+    // Connect synchronization
+    connect(slider, &QSlider::valueChanged, this, [spin, toK](int val) {
+      spin->blockSignals(true);
+      spin->setValue(toK(val));
+      spin->blockSignals(false);
+    });
+    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            [slider, toSlider](double val) {
+              slider->blockSignals(true);
+              slider->setValue(toSlider(val));
+              slider->blockSignals(false);
+            });
+
+    // Updater
+    m_paramUpdaters.push_back(
+        [slider, spin, toSlider](const ParameterState &s) {
+          double v = s.rparams.backlight_temperature;
+          spin->blockSignals(true);
+          spin->setValue(v);
+          spin->blockSignals(false);
+
+          slider->blockSignals(true);
+          slider->setValue(toSlider(v));
+          slider->blockSignals(false);
+        });
+
+    // Change handler
+    auto handler = [this, toK](int sliderVal) {
+      applyChange([toK, sliderVal](ParameterState &s) {
+        s.rparams.backlight_temperature = toK(sliderVal);
+      });
+    };
+    // Note: Spinbox handler needs to be separate or adapted
+    auto spinHandler = [this](double val) {
+      applyChange(
+          [val](ParameterState &s) { s.rparams.backlight_temperature = val; });
+    };
+
+    connect(slider, &QSlider::valueChanged, this, handler);
+    connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            spinHandler);
+  }
+
   // Spacer to push everything up
   QWidget *spacer = new QWidget();
   spacer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
@@ -248,6 +341,24 @@ void ColorPanel::updateSpectraChart() {
   data.backlight.resize(size);
 
   if (state.rparams.get_transmission_data(data)) {
+    bool absorbance = (m_spectraMode->currentIndex() == 1);
+
+    if (absorbance) {
+      // Convert to Absorbance
+      for (auto &v : data.red)
+        v = colorscreen::transmitance_to_absorbance(v);
+      for (auto &v : data.green)
+        v = colorscreen::transmitance_to_absorbance(v);
+      for (auto &v : data.blue)
+        v = colorscreen::transmitance_to_absorbance(v);
+      for (auto &v : data.backlight)
+        v = colorscreen::transmitance_to_absorbance(v);
+
+      m_spectraChart->setYAxis(0.0, 4.0, "Absorbance", "");
+    } else {
+      m_spectraChart->setYAxis(0.0, 1.0, "Transmittance", "%");
+    }
+
     m_spectraChart->setSpectraData(data.red, data.green, data.blue,
                                    data.backlight);
     if (m_spectraSection)

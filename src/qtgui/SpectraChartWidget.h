@@ -25,6 +25,9 @@ public:
   bool hasHeightForWidth() const override;
   int heightForWidth(int width) const override;
 
+  void setYAxis(double min, double max, const QString &title,
+                const QString &suffix = "");
+
 protected:
   void paintEvent(QPaintEvent *event) override;
 
@@ -35,6 +38,11 @@ private:
   std::vector<double> m_backlight;
 
   bool m_hasData = false;
+
+  double m_yMin = 0.0;
+  double m_yMax = 1.0;
+  QString m_yTitle = "Transmitance";
+  QString m_ySuffix = "%";
 };
 
 #endif // SPECTRACHARTWIDGET_H

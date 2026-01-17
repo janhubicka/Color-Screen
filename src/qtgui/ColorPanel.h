@@ -4,6 +4,9 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "TilePreviewPanel.h"
 #include <QCheckBox>
+#include <QComboBox>
+#include <QWidget>
+#include <vector>
 
 class SpectraChartWidget;
 
@@ -49,6 +52,7 @@ private:
   QCheckBox *m_linkDyeAges = nullptr;
   SpectraChartWidget *m_spectraChart = nullptr;
   QVBoxLayout *m_spectraContainer = nullptr;
+  QComboBox *m_spectraMode = nullptr; // Added QComboBox member
 };
 
 #endif // COLOR_PANEL_H
