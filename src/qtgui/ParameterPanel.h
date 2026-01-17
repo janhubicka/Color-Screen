@@ -63,18 +63,8 @@ protected:
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
-  template <const colorscreen::property_t Names[], int Max>
-  void addEnumTooltips(QComboBox *combo) {
-    for (int i = 0; i < combo->count(); ++i) {
-      int val = combo->itemData(i).toInt();
-      if (val >= 0 && val < Max) {
-        const char *help = Names[val].help;
-        if (help && help[0]) {
-          combo->setItemData(i, QString::fromUtf8(help), Qt::ToolTipRole);
-        }
-      }
-    }
-  }
+  // Non-template version for runtime arrays (Windows compatibility)
+  void addEnumTooltips(QComboBox *combo, const colorscreen::property_t *names, int max);
 
   template <typename EnumType, const colorscreen::property_t Names[], int Max>
   QComboBox *addEnumParameter(
@@ -94,7 +84,7 @@ protected:
     QComboBox *combo =
         addEnumParameter(label, options, getter, setter, enabledCheck);
 
-    addEnumTooltips<Names, Max>(combo);
+    addEnumTooltips(combo, Names, Max);
     return combo;
   }
 

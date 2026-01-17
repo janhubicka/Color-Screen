@@ -337,6 +337,18 @@ QComboBox *ParameterPanel::addEnumParameter(
   return combo;
 }
 
+void ParameterPanel::addEnumTooltips(QComboBox *combo, const colorscreen::property_t *names, int max) {
+  for (int i = 0; i < combo->count(); ++i) {
+    int val = combo->itemData(i).toInt();
+    if (val >= 0 && val < max) {
+      const char *help = names[val].help;
+      if (help && help[0]) {
+        combo->setItemData(i, QString::fromUtf8(help), Qt::ToolTipRole);
+      }
+    }
+  }
+}
+
 void ParameterPanel::addCheckboxParameter(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
