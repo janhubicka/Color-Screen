@@ -60,6 +60,7 @@ public:
 private slots:
   void onZoomIn();
   void onZoomOut();
+  void onZoom100();
   void onZoomFit();
   void onOpenImage();
   void onImageLoaded(); // Called when image is ready
@@ -109,6 +110,7 @@ private:
   QAction *m_openAction;
   QAction *m_zoomInAction;      // Added
   QAction *m_zoomOutAction;     // Added
+  QAction *m_zoom100Action;     // Added
   QAction *m_zoomFitAction;     // Added
   QAction *m_rotateLeftAction;  // Added (to be explicitly exposed)
   QAction *m_rotateRightAction; // Added (to be explicitly exposed)

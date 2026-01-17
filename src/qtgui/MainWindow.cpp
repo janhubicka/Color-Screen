@@ -548,13 +548,22 @@ void MainWindow::createMenus() {
   m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
-  m_zoomOutAction = m_viewMenu->addAction("Zoom &Out");
+  m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
   m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
+  m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
+  m_viewMenu->addAction(m_zoomOutAction);
 
-  m_zoomFitAction = m_viewMenu->addAction("Fit to Screen");
+  m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
+  m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+  m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
+  connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
+  m_viewMenu->addAction(m_zoom100Action);
+
+  m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
+  m_viewMenu->addAction(m_zoomFitAction);
 
   m_viewMenu->addSeparator();
 
@@ -1260,8 +1269,16 @@ void MainWindow::onZoomIn() {
 }
 
 void MainWindow::onZoomOut() {
-  double currentZoom = m_imageWidget->getZoom();
-  m_imageWidget->setZoom(currentZoom / 1.25);
+  if (m_imageWidget) {
+    double currentZoom = m_imageWidget->getZoom();
+    m_imageWidget->setZoom(currentZoom / 1.1); // Zoom out by 10%
+  }
+}
+
+void MainWindow::onZoom100() {
+  if (m_imageWidget) {
+    m_imageWidget->setZoom(1.0);
+  }
 }
 
 void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
