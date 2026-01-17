@@ -21,17 +21,16 @@ void ColorPanel::setupUi() {
   setupTiles("Color Preview");
 
   // Dyes dropdown
+  using color_model = render_parameters::color_model_t;
   std::map<int, QString> dyes;
-  for (int i = 0; i < render_parameters::color_model_max; ++i) {
+  for (int i = 0; i < (int)color_model::color_model_max; ++i) {
     dyes[i] = QString::fromUtf8(render_parameters::color_model_names[i]);
   }
 
   addEnumParameter(
       "Dyes", dyes,
       [](const ParameterState &s) { return (int)s.rparams.color_model; },
-      [](ParameterState &s, int v) {
-        s.rparams.color_model = (render_parameters::color_model_t)v;
-      });
+      [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; });
 
   // Manual Slider Implementation for Synchronized Dyes
   auto addManualSlider =

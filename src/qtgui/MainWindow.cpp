@@ -252,6 +252,12 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_colorPanel, "Color");
   rightSplitter->addWidget(m_configTabs);
 
+  // Register panels for updates (Order matters for tab order but not for
+  // updates necessarily)
+  m_panels.push_back(m_linearizationPanel);
+  m_panels.push_back(m_sharpnessPanel);
+  m_panels.push_back(m_colorPanel);
+
   m_mainSplitter->addWidget(m_rightColumn);
 
   // Set initial sizes (approx 80% for image, 20% for right panel)
@@ -972,8 +978,10 @@ void MainWindow::applyState(const ParameterState &state) {
 }
 
 void MainWindow::updateUIFromState(const ParameterState &state) {
-  m_linearizationPanel->updateUI();
-  m_sharpnessPanel->updateUI();
+  for (auto panel : m_panels) {
+    if (panel)
+      panel->updateUI();
+  }
 }
 
 ParameterState MainWindow::getCurrentState() const {

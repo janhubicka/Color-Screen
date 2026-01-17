@@ -177,9 +177,13 @@ private:
   void updateUIFromState(const ParameterState &state);
 
   // Linearization Panel
+  // Linearization Panel
   LinearizationPanel *m_linearizationPanel;
   SharpnessPanel *m_sharpnessPanel;
   ColorPanel *m_colorPanel;
+
+  // List of all panels for automated updates
+  std::vector<ParameterPanel *> m_panels;
 
   // Docks
   QDockWidget *m_mtfDock;
