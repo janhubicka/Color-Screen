@@ -55,7 +55,8 @@ protected:
       const QString &suffix, const QString &specialValueText,
       std::function<double(const ParameterState &)> getter,
       std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
-      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      bool logarithmic = false);
 
   QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,

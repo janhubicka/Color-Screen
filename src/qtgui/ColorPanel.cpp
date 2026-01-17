@@ -16,6 +16,7 @@ public:
   CorrectedPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
                         ImageGetter imageGetter, QWidget *parent = nullptr)
       : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent, false) {
+    setDebounceInterval(5);
   }
 
   void init(const QString &title) { setupTiles(title); }
@@ -72,9 +73,10 @@ void ColorPanel::setupUi() {
 
   // Backlight intensity
   addSliderParameter(
-      "Backlight intensity", 0, 65535, 1, 0, "", "",
+      "Backlight intensity", 0, 65535, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.brightness; },
-      [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0);
+      [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0,
+      nullptr, true);
 
   // Backlight temperature
   addSliderParameter(

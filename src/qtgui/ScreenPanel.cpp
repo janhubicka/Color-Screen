@@ -37,6 +37,7 @@ public:
   ScreenPreviewPanel(StateGetter stateGetter, StateSetter stateSetter,
                      ImageGetter imageGetter, QWidget *parent = nullptr)
       : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent, false) {
+    setDebounceInterval(5);
   }
 
   void init(const QString &title) { setupTiles(title); }

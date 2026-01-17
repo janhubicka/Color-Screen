@@ -169,7 +169,8 @@ void ParameterPanel::addSliderParameter(
     const QString &suffix, const QString &specialValueText,
     std::function<double(const ParameterState &)> getter,
     std::function<void(ParameterState &, double)> setter, double gamma,
-    std::function<bool(const ParameterState &)> enabledCheck) {
+    std::function<bool(const ParameterState &)> enabledCheck,
+    bool logarithmic) {
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -178,9 +179,9 @@ void ParameterPanel::addSliderParameter(
   QSlider *slider = new QSlider(Qt::Horizontal);
 
   // For non-linear, use fixed high resolution range
-  const int SLIDER_MAX = 10000;
+  const int SLIDER_MAX = 65535;
 
-  if (gamma != 1.0) {
+  if (gamma != 1.0 || logarithmic) {
     slider->setRange(0, SLIDER_MAX);
   } else {
     int minInt = min * scale;
@@ -207,25 +208,59 @@ void ParameterPanel::addSliderParameter(
   }
 
   // Helper to map Slider -> Value
-  auto sliderToValue = [min, max, scale, gamma, SLIDER_MAX](int s) -> double {
-    if (gamma == 1.0)
+  auto sliderToValue = [min, max, scale, gamma, SLIDER_MAX,
+                        logarithmic](int s) -> double {
+    if (!logarithmic && gamma == 1.0)
       return (double)s / scale;
+
     double t = (double)s / SLIDER_MAX; // 0..1
+
+    if (logarithmic) {
+      if (min <= 0) {
+        // v = (max + 1)^t - 1
+        return std::pow(max + 1.0, t) - 1.0;
+      } else {
+        // v = min * (max/min)^t
+        return min * std::pow(max / min, t);
+      }
+    }
+
     // v = min + (max-min) * t^gamma
     return min + (max - min) * std::pow(t, gamma);
   };
 
   // Helper to map Value -> Slider
-  auto valueToSlider = [min, max, scale, gamma, SLIDER_MAX](double v) -> int {
-    if (gamma == 1.0)
+  auto valueToSlider = [min, max, scale, gamma, SLIDER_MAX,
+                        logarithmic](double v) -> int {
+    if (!logarithmic && gamma == 1.0)
       return qRound(v * scale);
-    // t = ((v - min) / (max - min)) ^ (1/gamma)
-    double ratio = (v - min) / (max - min);
-    if (ratio < 0)
-      ratio = 0;
-    if (ratio > 1)
-      ratio = 1;
-    return qRound(std::pow(ratio, 1.0 / gamma) * SLIDER_MAX);
+
+    double t = 0;
+    if (logarithmic) {
+      if (min <= 0) {
+        // t = log(v + 1) / log(max + 1)
+        if (v <= 0)
+          t = 0;
+        else
+          t = std::log(v + 1.0) / std::log(max + 1.0);
+      } else {
+        // t = log(v/min) / log(max/min)
+        if (v <= min)
+          t = 0;
+        else
+          t = std::log(v / min) / std::log(max / min);
+      }
+    } else {
+      // t = ((v - min) / (max - min)) ^ (1/gamma)
+      double ratio = (v - min) / (max - min);
+      if (ratio <= 0)
+        t = 0;
+      else if (ratio >= 1)
+        t = 1;
+      else
+        t = std::pow(ratio, 1.0 / gamma);
+    }
+    return std::clamp((int)qRound(t * SLIDER_MAX), 0, SLIDER_MAX);
   };
 
   // Synchronization

@@ -191,10 +191,13 @@ void TilePreviewPanel::setupTiles(const QString &title) {
 
   m_tilesLayoutContainer->addWidget(detachableTiles);
 
+  QWidget *wrapper = new QWidget();
+  wrapper->setLayout(m_tilesLayoutContainer);
+
   if (m_currentGroupForm)
-    m_currentGroupForm->addRow(m_tilesLayoutContainer);
+    m_currentGroupForm->addRow(wrapper);
   else
-    m_form->addRow(m_tilesLayoutContainer);
+    m_form->addRow(wrapper);
 
   // Update logic for visibility
   m_widgetStateUpdaters.push_back([this]() {

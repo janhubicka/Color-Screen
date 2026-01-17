@@ -26,6 +26,7 @@ using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent)
     : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent) {
+  setDebounceInterval(5);
   setupUi();
 }
 
