@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include "../libcolorscreen/include/solver-parameters.h"
 #include <QImage>
 #include <QThread>
 #include <QWidget>
@@ -31,14 +32,21 @@ public:
                 colorscreen::render_parameters *rparams,
                 colorscreen::scr_to_img_parameters *scrToImg,
                 colorscreen::scr_detect_parameters *scrDetect,
-                colorscreen::render_type_parameters *renderType);
+                colorscreen::render_type_parameters *renderType,
+                colorscreen::solver_parameters *solver);
 
   // Update parameters without recreating renderer (non-blocking)
   void
   updateParameters(colorscreen::render_parameters *rparams,
                    colorscreen::scr_to_img_parameters *scrToImg,
                    colorscreen::scr_detect_parameters *scrDetect,
-                   colorscreen::render_type_parameters *renderType = nullptr);
+                   colorscreen::render_type_parameters *renderType = nullptr,
+                   colorscreen::solver_parameters *solver = nullptr);
+
+  void setShowControlPoints(bool show) {
+    m_showControlPoints = show;
+    update();
+  }
 
 public slots:
   void setZoom(double scale);
@@ -62,6 +70,10 @@ public:
   double getMinScale() const; // Returns scale that fits image to view
   double getZoom() const { return m_scale; }
 
+  // Coordinate mapping API
+  QPointF imageToWidget(colorscreen::point_t p) const;
+  colorscreen::point_t widgetToImage(QPointF p) const;
+
 private slots:
   void handleImageReady(int reqId, QImage image, double x, double y,
                         double scale, bool success);
@@ -74,6 +86,9 @@ private:
   colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
+  colorscreen::solver_parameters *m_solver = nullptr;
+
+  bool m_showControlPoints = false;
 
   Renderer *m_renderer = nullptr;
   QThread *m_renderThread = nullptr;

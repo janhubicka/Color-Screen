@@ -415,7 +415,8 @@ void MainWindow::rotateLeft() {
     return;
   m_scrToImgParams.final_rotation -= 90.0;
   m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                          &m_detectParams, &m_renderTypeParams);
+                          &m_detectParams, &m_renderTypeParams,
+                          &m_solverParams);
   m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                              &m_detectParams);
 }
@@ -425,7 +426,8 @@ void MainWindow::rotateRight() {
     return;
   m_scrToImgParams.final_rotation += 90.0;
   m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                          &m_detectParams, &m_renderTypeParams);
+                          &m_detectParams, &m_renderTypeParams,
+                          &m_solverParams);
   m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                              &m_detectParams);
 }
@@ -437,7 +439,8 @@ void MainWindow::onColorCheckBoxChanged(bool checked) {
   // Trigger re-render when color changes (without resetting view)
   if (m_scan) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                    &m_detectParams, &m_renderTypeParams);
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
   }
 }
 
@@ -521,7 +524,8 @@ void MainWindow::onModeChanged(int index) {
       // Trigger render update (without resetting view)
       if (m_scan) {
         m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                        &m_detectParams, &m_renderTypeParams);
+                                        &m_detectParams, &m_renderTypeParams,
+                                        &m_solverParams);
       }
     }
   }
@@ -601,6 +605,14 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
+  // Control Points Action
+  m_controlPointsAction = new QAction(tr("Control &Points"), this);
+  m_controlPointsAction->setCheckable(true);
+  m_controlPointsAction->setChecked(false);
+  connect(m_controlPointsAction, &QAction::toggled, this,
+          &MainWindow::onControlPointsToggled);
+  m_viewMenu->addAction(m_controlPointsAction);
+
   m_viewMenu->addSeparator();
 
   m_rotateLeftAction = m_viewMenu->addAction("Rotate &Left");
@@ -672,7 +684,8 @@ void MainWindow::onOpenParameters() {
     if (m_scan) {
       // Re-set image to re-create renderer with new params
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams);
+                              &m_detectParams, &m_renderTypeParams,
+                              &m_solverParams);
     }
   } else {
     // Just update params... actually setImage logic uses values.
@@ -682,7 +695,8 @@ void MainWindow::onOpenParameters() {
     // update rparams? Let's just update if we have a scan.
     if (m_scan) {
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams);
+                              &m_detectParams, &m_renderTypeParams,
+                              &m_solverParams);
       m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                  &m_detectParams); // Update nav too
     }
@@ -1047,7 +1061,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   // Clear current image and stop rendering
-  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr);
+  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
   // Check for .par file (only if not suppressed, e.g., during recovery)
   if (!suppressParamPrompt) {
@@ -1107,7 +1121,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
               m_undoStack->clear();
 
               m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams);
+                                      &m_detectParams, &m_renderTypeParams,
+                                      &m_solverParams);
               onImageLoaded();
 
               // Add to recent files
@@ -1170,7 +1185,8 @@ void MainWindow::applyState(const ParameterState &state) {
   // Update widgets - use updateParameters to avoid blocking
   if (m_scan) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                    &m_detectParams, &m_renderTypeParams);
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
     m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
                                        &m_detectParams);
   }
@@ -1400,7 +1416,8 @@ void MainWindow::openRecentParams() {
 
     if (m_scan) {
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams);
+                              &m_detectParams, &m_renderTypeParams,
+                              &m_solverParams);
       // Also update navigation view image
       m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                  &m_detectParams);
@@ -1457,6 +1474,10 @@ void MainWindow::onZoom100() {
 
 void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
 
+void MainWindow::onControlPointsToggled(bool checked) {
+  m_imageWidget->setShowControlPoints(checked);
+}
+
 void MainWindow::updateColorCheckBoxState() {
   if (!m_colorCheckBox || !m_colorCheckBoxAction)
     return;
@@ -1498,7 +1519,8 @@ void MainWindow::onGamutWarningToggled(bool checked) {
     // Trigger update
     if (m_scan) {
       m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams);
+                                      &m_detectParams, &m_renderTypeParams,
+                                      &m_solverParams);
     }
   }
 }

@@ -71,7 +71,8 @@ private slots:
   void rotateLeft();
   void rotateRight();
   void onGamutWarningToggled(bool checked);
-  void onColorCheckBoxChanged(bool checked); // Slot for color checkbox
+  void onColorCheckBoxChanged(bool checked);  // Slot for color checkbox
+  void onControlPointsToggled(bool checked); // Slot for Control Points toggle
 
   // Recent Files
   // Recent Files
@@ -123,6 +124,7 @@ private:
   QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
   QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
+  QAction *m_controlPointsAction; // Control points toggle
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QMenu *m_recentFilesMenu;

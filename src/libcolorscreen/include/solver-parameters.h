@@ -42,7 +42,7 @@ struct solver_parameters
 
     /* Translate point color to RGB.  */
     rgbdata
-    get_rgb ()
+    get_rgb () const
     {
       static const rgbdata colors[]
           = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
