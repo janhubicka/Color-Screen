@@ -114,6 +114,8 @@ private:
   QAction *m_zoomFitAction;     // Added
   QAction *m_rotateLeftAction;  // Added (to be explicitly exposed)
   QAction *m_rotateRightAction; // Added (to be explicitly exposed)
+  QAction
+      *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
   QList<QAction *> m_recentFileActions;
@@ -164,6 +166,9 @@ private slots:
   void onCancelClicked();
   void onPrevProgress();
   void onNextProgress();
+
+  // Helper to update color checkbox state and visibility
+  void updateColorCheckBoxState();
 
 private:
   // Status Bar Widgets

@@ -377,7 +377,7 @@ void MainWindow::createToolbar() {
   m_colorCheckBox->setEnabled(false); // Initially disabled
   connect(m_colorCheckBox, &QCheckBox::toggled, this,
           &MainWindow::onColorCheckBoxChanged);
-  m_toolbar->addWidget(m_colorCheckBox);
+  m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
 
   updateModeMenu();
 }
@@ -431,6 +431,8 @@ void MainWindow::updateModeMenu() {
 
   using namespace colorscreen;
 
+  // Update color checkbox state based on current render type
+  updateColorCheckBoxState();
   for (int i = 0; i < render_type_max; ++i) {
     const render_type_property &prop = render_type_properties[i];
 
@@ -471,14 +473,7 @@ void MainWindow::updateModeMenu() {
   }
 
   // Update color checkbox state based on current render type
-  const render_type_property &currentProp =
-      render_type_properties[(int)m_renderTypeParams.type];
-  bool supportsColorSwitch =
-      currentProp.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
-  m_colorCheckBox->setEnabled(supportsColorSwitch);
-  m_colorCheckBox->blockSignals(true);
-  m_colorCheckBox->setChecked(m_renderTypeParams.color);
-  m_colorCheckBox->blockSignals(false);
+  updateColorCheckBoxState();
 
   m_modeComboBox->blockSignals(false);
 }
@@ -493,14 +488,7 @@ void MainWindow::onModeChanged(int index) {
       m_renderTypeParams.type = (colorscreen::render_type_t)newType;
 
       // Update color checkbox based on new render type
-      using namespace colorscreen;
-      const render_type_property &prop = render_type_properties[newType];
-      bool supportsColorSwitch =
-          prop.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
-      m_colorCheckBox->setEnabled(supportsColorSwitch);
-      m_colorCheckBox->blockSignals(true);
-      m_colorCheckBox->setChecked(m_renderTypeParams.color);
-      m_colorCheckBox->blockSignals(false);
+      updateColorCheckBoxState();
 
       // Trigger render update (without resetting view)
       if (m_scan) {
@@ -1087,6 +1075,7 @@ void MainWindow::saveWindowState() {
   QSettings settings;
 
   // Save window geometry and state
+  // Save window geometry and state
   settings.setValue("windowGeometry", saveGeometry());
   settings.setValue("windowState", saveState());
 
@@ -1240,8 +1229,11 @@ void MainWindow::openRecentParams() {
     if (m_scan) {
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                               &m_detectParams, &m_renderTypeParams);
+      // Also update navigation view image
       m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                  &m_detectParams);
+
+      updateColorCheckBoxState();
     }
 
     m_undoStack->clear();
@@ -1282,3 +1274,37 @@ void MainWindow::onZoom100() {
 }
 
 void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
+
+void MainWindow::updateColorCheckBoxState() {
+  if (!m_colorCheckBox || !m_colorCheckBoxAction)
+    return;
+
+  bool hasRgb = m_scan && m_scan->has_rgb();
+
+  // Calculate enabled state based on render type support
+  using namespace colorscreen;
+  const render_type_property &prop =
+      render_type_properties[(int)m_renderTypeParams.type];
+  bool supportsColorSwitch =
+      prop.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
+
+  // Final Visibility Rule:
+  // Must have RGB data AND (optionally) rely on render type logic if we wanted
+  // to hide it for non-supported types. But user request specifically says
+  // "invisible when m_scan->rgbdata is NULL".
+
+  bool isVisible = hasRgb;
+  bool isEnabled = supportsColorSwitch && hasRgb;
+
+  m_colorCheckBoxAction->setVisible(isVisible);
+  m_colorCheckBox->setVisible(isVisible);
+  m_colorCheckBox->setEnabled(isEnabled);
+
+  m_colorCheckBox->blockSignals(true);
+  if (!hasRgb) {
+    m_colorCheckBox->setChecked(false);
+  } else {
+    m_colorCheckBox->setChecked(m_renderTypeParams.color);
+  }
+  m_colorCheckBox->blockSignals(false);
+}
