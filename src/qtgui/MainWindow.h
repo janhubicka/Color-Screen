@@ -65,6 +65,8 @@ private slots:
   void onOpenImage();
   void onImageLoaded(); // Called when image is ready
   void onOpenParameters();
+  void onSaveParameters();
+  void onSaveParametersAs();
   void onModeChanged(int index); // Slot for mode change
   void rotateLeft();
   void rotateRight();
@@ -109,6 +111,8 @@ private:
   QMenu *m_helpMenu;
 
   QAction *m_openAction;
+  QAction *m_saveAction;
+  QAction *m_saveAsAction;
   QAction *m_zoomInAction;       // Added
   QAction *m_zoomOutAction;      // Added
   QAction *m_zoom100Action;      // Added
@@ -219,4 +223,7 @@ private:
   QDockWidget *m_colorTilesDock;
   QDockWidget *m_correctedColorTilesDock;
   QDockWidget *m_screenPreviewDock;
+
+  // Current parameters file path
+  QString m_currentParamsFile;
 };

@@ -515,6 +515,18 @@ void MainWindow::createMenus() {
   m_recentParamsMenu = fileMenu->addMenu("Open Recent &Parameters");
   updateRecentParamsActions();
 
+  fileMenu->addSeparator();
+
+  m_saveAction = fileMenu->addAction("&Save Parameters");
+  m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
+  connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveParameters);
+
+  m_saveAsAction = fileMenu->addAction("Save Parameters &As...");
+  m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
+  connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveParametersAs);
+
+  fileMenu->addSeparator();
+
   QAction *exitAction = fileMenu->addAction("E&xit");
   connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
@@ -647,7 +659,78 @@ void MainWindow::onOpenParameters() {
   updateUIFromState(getCurrentState());
 
   addToRecentParams(fileName);
+  m_currentParamsFile = fileName; // Track current file for Save
 }
+
+void MainWindow::onSaveParameters() {
+  // If we don't have a current file, fall back to Save As
+  if (m_currentParamsFile.isEmpty()) {
+    onSaveParametersAs();
+    return;
+  }
+
+  FILE *f = fopen(m_currentParamsFile.toUtf8().constData(), "wt");
+  if (!f) {
+    QMessageBox::critical(this, "Error", 
+                          QString("Could not open file for writing: %1").arg(m_currentParamsFile));
+    return;
+  }
+
+  // Save parameters using save_csp
+  // Pass scan detection params only if we have RGB data (matching GTK behavior)
+  bool has_rgb = m_scan && m_scan->has_rgb();
+  if (!colorscreen::save_csp(f, &m_scrToImgParams, 
+                             has_rgb ? &m_detectParams : nullptr,
+                             &m_rparams, &m_solverParams)) {
+    fclose(f);
+    QMessageBox::critical(this, "Error", "Failed to save parameters.");
+    return;
+  }
+
+  fclose(f);
+  statusBar()->showMessage(QString("Parameters saved to %1").arg(m_currentParamsFile), 3000);
+}
+
+void MainWindow::onSaveParametersAs() {
+  QString fileName = QFileDialog::getSaveFileName(
+      this, "Save Parameters", m_currentParamsFile.isEmpty() ? QString() : m_currentParamsFile,
+      "Parameters (*.par);;All Files (*)");
+  
+  if (fileName.isEmpty())
+    return;
+
+  // Add .par extension if not present
+  if (!fileName.endsWith(".par", Qt::CaseInsensitive)) {
+    fileName += ".par";
+  }
+
+  FILE *f = fopen(fileName.toUtf8().constData(), "wt");
+  if (!f) {
+    QMessageBox::critical(this, "Error", 
+                          QString("Could not open file for writing: %1").arg(fileName));
+    return;
+  }
+
+  // Save parameters using save_csp
+  // Pass scan detection params only if we have RGB data (matching GTK behavior)
+  bool has_rgb = m_scan && m_scan->has_rgb();
+  if (!colorscreen::save_csp(f, &m_scrToImgParams, 
+                             has_rgb ? &m_detectParams : nullptr,
+                             &m_rparams, &m_solverParams)) {
+    fclose(f);
+    QMessageBox::critical(this, "Error", "Failed to save parameters.");
+    return;
+  }
+
+  fclose(f);
+  
+  // Update current file path and add to recent
+  m_currentParamsFile = fileName;
+  addToRecentParams(fileName);
+  
+  statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
+}
+
 
 void MainWindow::onOpenImage() {
   QString fileName = QFileDialog::getOpenFileName(
