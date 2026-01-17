@@ -78,78 +78,33 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_scrToImg = scrToImg;
   m_scrDetect = scrDetect;
   m_renderType = renderType;
-  // Don't set m_scan yet - will set it after cleanup to release old image first
+
   if (m_scan != scan) {
     m_pixmap = QImage(); // Clear if new image loaded
   }
-
-  // Reset View - use scan parameter (not m_scan which isn't set yet)
-  if (scan && scan->width > 0) {
-    // Fit to view
-    double w = width();
-    double h = height();
-
-    // Handle rotation for scale calculation
-    double rot = scrToImg ? scrToImg->final_rotation : 0.0;
-    int angle = (int)rot;
-    angle = angle % 360;
-    if (angle < 0)
-      angle += 360;
-
-    double imgW = scan->width;
-    double imgH = scan->height;
-
-    if (angle == 90 || angle == 270) {
-      std::swap(imgW, imgH);
-    }
-
-    if (w > 0 && h > 0) {
-      double scaleX = w / imgW;
-      double scaleY = h / imgH;
-      m_scale = qMin(scaleX, scaleY);
-      if (m_scale == 0)
-        m_scale = 1.0;
-      m_minScale = m_scale;
-    } else {
-      m_scale = 0.1; // Fallback
-      m_minScale = 0.1;
-    }
-    m_viewX = 0;
-    m_viewY = 0;
-  }
-
-  emit viewStateChanged(
-      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
-  update();
 
   // Cancel current progress if exists
   if (m_currentProgress) {
     m_currentProgress->cancel();
   }
 
-  // Clear old scan to release it from memory before loading new one
+  // Clear old scan to release it from memory
   m_scan = nullptr;
 
   // Clean up old renderer and thread
   if (m_renderer) {
-    // Disconnect all signals to prevent callbacks during shutdown
     disconnect(m_renderer, nullptr, this, nullptr);
     m_renderer->deleteLater();
     m_renderer = nullptr;
   }
 
   if (m_renderThread) {
-    // Disconnect thread signals to prevent deadlock
     disconnect(m_renderThread, nullptr, nullptr, nullptr);
-
-    // Ensure thread stops
     if (m_renderThread->isRunning()) {
       m_renderThread->requestInterruption();
       m_renderThread->quit();
-      m_renderThread->wait(); // Wait indefinitely for it to finish
+      m_renderThread->wait();
     }
-
-    // Safe to delete immediately as it's finished
     delete m_renderThread;
     m_renderThread = nullptr;
   }
@@ -160,12 +115,12 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_currentProgress.reset();
   }
 
-  // Reset render queue state for new renderer
   m_renderInProgress = false;
   m_hasPendingRender = false;
 
-  // Now set the new scan pointer (old one is released)
   m_scan = scan;
+
+  fitToView();
 
   if (m_scan && m_rparams) {
     m_renderThread = new QThread(this);
@@ -356,6 +311,48 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   // new_viewX + mouseX / new_scale = mouseImageX
   m_viewX = mouseImageX - mouseX / m_scale;
   m_viewY = mouseImageY - mouseY / m_scale;
+
+  requestRender();
+  emit viewStateChanged(
+      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+}
+
+void ImageWidget::fitToView() {
+  if (!m_scan || m_scan->width <= 0)
+    return;
+
+  double w = width();
+  double h = height();
+
+  // Handle rotation for scale calculation
+  double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
+  int angle = (int)rot;
+  angle = angle % 360;
+  if (angle < 0)
+    angle += 360;
+
+  double imgW = m_scan->width;
+  double imgH = m_scan->height;
+
+  if (angle == 90 || angle == 270) {
+    std::swap(imgW, imgH);
+  }
+
+  if (w > 0 && h > 0 && imgW > 0 && imgH > 0) {
+    double scaleX = w / imgW;
+    double scaleY = h / imgH;
+    m_scale = qMin(scaleX, scaleY);
+    if (m_scale == 0)
+      m_scale = 1.0;
+    m_minScale = m_scale;
+  } else {
+    m_scale = 0.1; // Fallback
+    m_minScale = 0.1;
+  }
+
+  // Center view
+  m_viewX = (imgW - w / m_scale) / 2.0;
+  m_viewY = (imgH - h / m_scale) / 2.0;
 
   requestRender();
   emit viewStateChanged(

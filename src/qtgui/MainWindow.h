@@ -58,6 +58,9 @@ public:
   void loadFile(const QString &fileName);
 
 private slots:
+  void onZoomIn();
+  void onZoomOut();
+  void onZoomFit();
   void onOpenImage();
   void onImageLoaded(); // Called when image is ready
   void onOpenParameters();
@@ -97,6 +100,18 @@ private:
   void loadRecentParams();
   void saveRecentParams();
 
+  QMenu *m_fileMenu;
+  QMenu *m_viewMenu; // Added
+  QMenu *m_modeMenu;
+  QMenu *m_windowMenu;
+  QMenu *m_helpMenu;
+
+  QAction *m_openAction;
+  QAction *m_zoomInAction;      // Added
+  QAction *m_zoomOutAction;     // Added
+  QAction *m_zoomFitAction;     // Added
+  QAction *m_rotateLeftAction;  // Added (to be explicitly exposed)
+  QAction *m_rotateRightAction; // Added (to be explicitly exposed)
   QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
   QList<QAction *> m_recentFileActions;

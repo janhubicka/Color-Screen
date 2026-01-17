@@ -513,8 +513,9 @@ void MainWindow::onModeChanged(int index) {
 
 void MainWindow::createMenus() {
   QMenu *fileMenu = menuBar()->addMenu("&File");
-  QAction *openAction = fileMenu->addAction("&Open Image...");
-  connect(openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
+  m_openAction = fileMenu->addAction("&Open Image...");
+  m_openAction->setShortcut(QKeySequence::Open); // Ctrl+O
+  connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
 
   m_recentFilesMenu = fileMenu->addMenu("Open &Recent");
   updateRecentFileActions();
@@ -539,6 +540,40 @@ void MainWindow::createMenus() {
   redoAction->setIcon(QIcon::fromTheme("edit-redo-symbolic"));
   redoAction->setShortcut(QKeySequence::Redo);
   editMenu->addAction(redoAction);
+
+  // View Menu
+  m_viewMenu = menuBar()->addMenu("&View");
+
+  m_zoomInAction = m_viewMenu->addAction("Zoom &In");
+  m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
+  connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
+
+  m_zoomOutAction = m_viewMenu->addAction("Zoom &Out");
+  m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
+  connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
+
+  m_zoomFitAction = m_viewMenu->addAction("Fit to Screen");
+  m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
+  connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
+
+  m_viewMenu->addSeparator();
+
+  m_rotateLeftAction = m_viewMenu->addAction("Rotate &Left");
+  m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_Left); // Or Ctrl+L?
+  // User asked for "usual shortcuts". Photoshop uses Image > Image Rotation.
+  // Viewers use L/R or Ctrl+L/Ctrl+R.
+  // Let's bind Ctrl+L and Ctrl+R for explicit global feeling if not
+  // conflicting. Actually, Qt::Key_L and Qt::Key_R are better than arrows
+  // (which might pan). But navigation pan is usually just arrows. Let's use
+  // Ctrl+L and Ctrl+R.
+  m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
+  connect(m_rotateLeftAction, &QAction::triggered, this,
+          &MainWindow::rotateLeft);
+
+  m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
+  m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
+  connect(m_rotateRightAction, &QAction::triggered, this,
+          &MainWindow::rotateRight);
 }
 
 void MainWindow::onOpenParameters() {
@@ -1218,3 +1253,15 @@ void MainWindow::saveRecentParams() {
   QSettings settings;
   settings.setValue("recentParams", m_recentParams);
 }
+
+void MainWindow::onZoomIn() {
+  double currentZoom = m_imageWidget->getZoom();
+  m_imageWidget->setZoom(currentZoom * 1.25);
+}
+
+void MainWindow::onZoomOut() {
+  double currentZoom = m_imageWidget->getZoom();
+  m_imageWidget->setZoom(currentZoom / 1.25);
+}
+
+void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
