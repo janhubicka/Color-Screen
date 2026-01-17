@@ -426,7 +426,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       luminosity_t max = 1 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
       if (type == Random)
         type = Joly;
-      if (rst == backlight_screen)
+      if (rst == backlight_screen || rst == corrected_backlight_screen)
 	{
 	  init_to_color (backlight * max, tile);
 	  return true;
@@ -435,9 +435,12 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       bool spectrum_based;
       bool optimized;
       render_parameters r = rparam;
-      m = r.get_dyes_matrix (&spectrum_based, &optimized, NULL) * max;
+      if (rst < (int)corrected_backlight_screen)
+        m = r.get_dyes_matrix (&spectrum_based, &optimized, NULL) * max;
+      else
+        m = r.get_rgb_to_xyz_matrix (NULL, false, patch_proportions (type, &rparam), d65_white) * max;
       m = a * m;
-      if (rst == full_screen)
+      if (rst == full_screen || rst == corrected_full_screen)
         avg = true;
       rst = original_screen;
     }

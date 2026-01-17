@@ -642,7 +642,8 @@ struct render_parameters
            && output_curve == other.output_curve
            && scanner_blur_correction == other.scanner_blur_correction
            && backlight_correction == other.backlight_correction
-           && backlight_correction_black == other.backlight_correction_black;
+           && backlight_correction_black == other.backlight_correction_black
+	   && observer_whitepoint == other.observer_whitepoint;
   }
   bool
   operator!= (render_parameters &other) const
