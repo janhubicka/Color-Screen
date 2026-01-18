@@ -73,7 +73,7 @@ render_simulated_screen (simulated_screen &img,
     //for (size_t x = 0; x < (size_t)p.width; x++)
       //img.put_pixel (x, y, img.get_pixel (x, y).clamp (0, 1));
 
-  if (1)
+  if (0)
     {
       p.scr->save_tiff ("/tmp/simulation-scr.tif", false, 3);
       tiff_writer_params pp;

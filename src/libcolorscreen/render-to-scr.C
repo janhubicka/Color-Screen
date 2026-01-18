@@ -154,7 +154,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
       blurred->empty ();
       blurred->initialize_with_sharpen_parameters (*s, vv, p.anticipate_sharpening);
       //blurred->initialize_with_2D_fft (*s, vv, { p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale, p.sharpen.scanner_mtf_scale }, p.anticipate_sharpening ? p.sharpen.scanner_snr : 0);
-      blurred->save_tiff ("/tmp/scr.tif", false, 3);
+      //blurred->save_tiff ("/tmp/scr.tif", false, 3);
     }
   else
     blurred->initialize_with_blur (*s, p.sharpen.usm_radius);
