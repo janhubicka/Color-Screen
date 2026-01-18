@@ -20,7 +20,8 @@ colorscreen_qt_SOURCES = \
     SpectraChartWidget.cpp \
     CIEChartWidget.cpp \
     ThamesAnimation.cpp \
-    PagetAnimation.cpp
+    PagetAnimation.cpp \
+    RenderQueue.cpp
 
 if static_link
   AM_LDFLAGS = -static
@@ -48,9 +49,10 @@ MOC_SOURCES = \
     moc_SpectraChartWidget.cpp \
     moc_CIEChartWidget.cpp \
     moc_ThamesAnimation.cpp \
-    moc_PagetAnimation.cpp
+    moc_PagetAnimation.cpp \
+    moc_RenderQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h colorscreen.rc
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h RenderQueue.h colorscreen.rc
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -77,7 +79,7 @@ colorscreen_qt_LDADD = \
 # Windows Resource File
 if HOST_WIN32
 colorscreen_qt_LDADD += colorscreen_res.o
-colorscreen_qt_LDFLAGS = -mwindows
+# colorscreen_qt_LDFLAGS = -mwindows
 endif
 
 colorscreen_res.o: colorscreen.rc
