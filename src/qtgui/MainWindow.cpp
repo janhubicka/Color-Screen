@@ -515,6 +515,10 @@ void MainWindow::createToolbar() {
   m_toolbar->addAction(m_lockRelativeCoordinatesAction);
   m_lockRelativeCoordinatesAction->setVisible(false);
 
+  // Optimize button (visible only when Set Center is active)
+  m_toolbar->addAction(m_optimizeCoordinatesAction);
+  m_optimizeCoordinatesAction->setVisible(false);
+
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
@@ -535,6 +539,7 @@ void MainWindow::createToolbar() {
         m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
     }
     m_lockRelativeCoordinatesAction->setVisible(checked);
+    m_optimizeCoordinatesAction->setVisible(checked);
   });
   
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
@@ -836,6 +841,10 @@ void MainWindow::createMenus() {
 
   // Connect toggle to update tool state
   connect(m_registrationPointsAction, &QAction::toggled, this, &MainWindow::updateRegistrationActions);
+
+  m_optimizeCoordinatesAction = new QAction(QIcon::fromTheme("system-run"), tr("Optimize Coordinates"), this);
+  m_optimizeCoordinatesAction->setToolTip("Optimize Coordinates");
+  connect(m_optimizeCoordinatesAction, &QAction::triggered, this, &MainWindow::onOptimizeCoordinates);
 }
 
 void MainWindow::onOpenParameters() {
@@ -1996,6 +2005,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   }
 }
 
+
 void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   if (!m_scan) {
     return;
@@ -2007,4 +2017,42 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   // Update the image widget with new parameters
   m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
   m_imageWidget->update();
+}
+
+void MainWindow::onOptimizeCoordinates() {
+  if (!m_scan)
+    return;
+
+  colorscreen::finetune_parameters fparams;
+  fparams.flags = colorscreen::finetune_position |
+                  colorscreen::finetune_coordinates |
+                  colorscreen::finetune_bw |
+                  colorscreen::finetune_use_srip_widths;
+
+  std::vector<colorscreen::point_t> locs;
+  
+  statusBar()->showMessage("Optimizing coordinates...");
+  QApplication::setOverrideCursor(Qt::WaitCursor);
+  QApplication::processEvents(); // Ensure UI updates
+
+  colorscreen::finetune_result ret = colorscreen::finetune(
+      m_rparams, m_scrToImgParams, *m_scan, locs, nullptr, fparams, nullptr);
+
+  QApplication::restoreOverrideCursor();
+  statusBar()->clearMessage();
+
+  if (ret.success) {
+      // Update parameters
+      m_scrToImgParams.center = ret.center;
+      m_scrToImgParams.coordinate1 = ret.coordinate1;
+      m_scrToImgParams.coordinate2 = ret.coordinate2;
+      
+      // Update UI
+      changeParameters(getCurrentState());
+      m_imageWidget->update();
+      
+      QMessageBox::information(this, "Optimization", "Coordinates optimized successfully.");
+  } else {
+      QMessageBox::warning(this, "Optimization", "Optimization failed: " + QString::fromStdString(ret.err));
+  }
 }

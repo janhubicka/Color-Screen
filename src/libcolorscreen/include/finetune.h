@@ -85,7 +85,7 @@ struct finetune_result
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
 
-  point_t center, coodinate1, coordinate2;
+  point_t center, coordinate1, coordinate2;
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),

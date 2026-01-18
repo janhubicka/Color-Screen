@@ -2836,7 +2836,8 @@ public:
     return true;
   }
   void
-  set_results (finetune_result &ret, render_parameters &rparam, bool verbose,
+  set_results (finetune_result &ret, scr_to_img_parameters param,
+	       render_parameters &rparam, bool verbose,
                progress_info *progress)
   {
     ret.badness = objfunc (start);
@@ -2848,6 +2849,10 @@ public:
     ret.red_strip_width = get_red_strip_width (start);
     ret.green_strip_width = get_green_strip_width (start);
     ret.scanner_mtf_sigma = get_scanner_mtf_sigma (start);
+
+    ret.center = param.center + get_offset (start, 0);
+    ret.coordinate1 = param.coordinate1;
+    ret.coordinate2 = param.coordinate2;
     if (mtf_params.simulate_difraction_p ())
       {
 	ret.scanner_mtf_defocus = get_scanner_mtf_defocus (start);
@@ -2880,7 +2885,7 @@ public:
         ret.mix_dark = rparam.mix_dark;
       }
 
-    if (optimize_position)
+    if (optimize_position && !optimize_coordinate1)
       {
         int tileid = 0;
         /* Construct solver point.  Try to get closest point to the center of
@@ -2995,12 +3000,24 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   finetune_result ret;
 
   int n_tiles = locs.size ();
-  if (n_tiles > finetune_solver::max_tiles)
-    n_tiles = finetune_solver::max_tiles;
-  if (!n_tiles)
+  if (fparams.flags & finetune_coordinates)
     {
-      ret.err = "no tile locations";
-      return ret;
+      if (n_tiles)
+	{
+	  ret.err = "did not expect tiles";
+	  return ret;
+	}
+      n_tiles = 1;
+    }
+  else
+    {
+      if (n_tiles > finetune_solver::max_tiles)
+	n_tiles = finetune_solver::max_tiles;
+      if (!n_tiles)
+	{
+	  ret.err = "no tile locations";
+	  return ret;
+	}
     }
   const image_data *imgp[finetune_solver::max_tiles];
   scr_to_img *mapp[finetune_solver::max_tiles];
@@ -3015,8 +3032,16 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
   y[0] = 0;
   for (int tileid = 0; tileid < n_tiles; tileid++)
     {
-      x[tileid] = locs[tileid].x;
-      y[tileid] = locs[tileid].y;
+      if (fparams.flags & finetune_coordinates)
+	{
+	  x[tileid] = param.center.x;
+	  y[tileid] = param.center.y;
+	}
+      else
+	{
+	  x[tileid] = locs[tileid].x;
+	  y[tileid] = locs[tileid].y;
+	}
       imgp[tileid] = &img;
       if (img.stitch)
         {
@@ -3350,7 +3375,7 @@ finetune (render_parameters &rparam, const scr_to_img_parameters &param,
       best_solver.print_values (best_solver.start);
       progress->resume_stdout ();
     }
-  best_solver.set_results (ret, rparam, verbose, progress);
+  best_solver.set_results (ret, param, rparam, verbose, progress);
 
   if (fparams.simulated_file)
     best_solver.write_file (best_solver.start, fparams.simulated_file, 0, 0);
