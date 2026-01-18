@@ -239,13 +239,16 @@ struct scr_to_img_parameters
            && lens_correction == other.lens_correction;
   }
   void
-  merge_solver_solution (const scr_to_img_parameters &other) const
+  merge_solver_solution (const scr_to_img_parameters &other)
   {
     center = other.center;
     coordinate1 = other.coordinate1;
     coordinate2 = other.coordinate2;
+    tilt_x = other.tilt_x;
+    tilt_y = other.tilt_y;
+    lens_correction = other.lens_correction;
     projection_distance = other.projection_distance;
-    mesh_trans = other.mest_trans;
+    mesh_trans = other.mesh_trans;
   }
   bool
   operator!= (scr_to_img_parameters &other) const
