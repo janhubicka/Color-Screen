@@ -380,8 +380,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (sparam.n_points () < (screen_with_vertical_strips_p (param->type) ? 4 : 3))
     return 0;
 
-  if (param->mesh_trans)
-    abort ();
+  param->mesh_trans = NULL;
 
   /* Require more points for strips; we only can verify 1d info.  */
   bool optimize_lens = sparam.optimize_lens && (sparam.n_points () > (screen_with_vertical_strips_p (param->type) ? 200 : 100));

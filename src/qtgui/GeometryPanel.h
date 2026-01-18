@@ -12,6 +12,7 @@ public:
 
 signals:
   void optimizeRequested(bool autoChecked);
+  void nonlinearToggled(bool checked);
 
 private:
   void setupUi();

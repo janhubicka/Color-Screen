@@ -16,7 +16,8 @@ public:
 public slots:
   void solve(int reqId, colorscreen::scr_to_img_parameters params,
              colorscreen::solver_parameters solverParams,
-             std::shared_ptr<colorscreen::progress_info> progress);
+             std::shared_ptr<colorscreen::progress_info> progress,
+             bool computeMesh = false);
 
 signals:
   void finished(int reqId, colorscreen::scr_to_img_parameters result, bool success);

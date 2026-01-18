@@ -28,6 +28,12 @@ void GeometryPanel::setupUi() {
   connect(optButton, &QPushButton::clicked, this, [this, autoBtn]() {
       emit optimizeRequested(autoBtn->isChecked());
   });
+
+  QCheckBox *nonLinearBox = new QCheckBox("Nonlinear corrections");
+  nonLinearBox->setObjectName("nonLinearBox");
+  m_form->addRow(nonLinearBox);
+
+  connect(nonLinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
   
   // To make it easy for MainWindow to sync, let's give it an object name
   showBox->setObjectName("showRegistrationPointsBox");

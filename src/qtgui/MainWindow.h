@@ -75,7 +75,9 @@ private slots:
   void onGamutWarningToggled(bool checked);
   void onColorCheckBoxChanged(bool checked);  // Slot for color checkbox
   void onRegistrationPointsToggled(bool checked); // Slot for Registration Points toggle
-  void onOptimizeGeometry(bool autoChecked);      // Slot for Geometry Optimization
+  void onOptimizeGeometry(bool autoChecked);
+  void onNonlinearToggled(bool checked);
+      // Slot for Geometry Optimization
   void onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result,
                         bool success);
 

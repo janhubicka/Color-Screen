@@ -6,6 +6,7 @@
 #include "ScreenPanel.h"
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
+#include "mesh.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -344,7 +345,10 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_colorPanel);
 
   // Link Geometry Panel signals
-  connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this, &MainWindow::onOptimizeGeometry);
+  connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this,
+          &MainWindow::onOptimizeGeometry);
+  connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
+          &MainWindow::onNonlinearToggled);
 
   // Synchronization for Registration Points visibility
   m_registrationPointsAction->setChecked(
@@ -369,11 +373,18 @@ void MainWindow::setupUi() {
     }
   });
 
-  // Link GeometryPanel checkbox -> ImageWidget
-  QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox*>("showRegistrationPointsBox");
+  // Link GeometryPanel checkbox  // Registration Points checkbox
+  QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
   if (regBox) {
-      connect(regBox, &QCheckBox::toggled, m_imageWidget, &ImageWidget::setShowRegistrationPoints);
-      regBox->setChecked(m_imageWidget->registrationPointsVisible());
+    QSignalBlocker blocker(regBox);
+    regBox->setChecked(m_imageWidget->registrationPointsVisible());
+  }
+
+  // Nonlinear corrections checkbox
+  QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
+  if (nlBox) {
+    QSignalBlocker blocker(nlBox);
+    nlBox->setChecked(m_scrToImgParams.mesh_trans != nullptr);
   }
 
   m_mainSplitter->addWidget(m_rightColumn);
@@ -1256,6 +1267,13 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     if (panel)
       panel->updateUI();
   }
+
+  // Sync nonlinear checkbox in GeometryPanel
+  QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
+  if (nlBox) {
+    QSignalBlocker blocker(nlBox);
+    nlBox->setChecked(state.scrToImg.mesh_trans != nullptr);
+  }
 }
 
 ParameterState MainWindow::getCurrentState() const {
@@ -1528,6 +1546,21 @@ void MainWindow::onZoom100() {
     m_imageWidget->setZoom(1.0);
   }
 }
+void MainWindow::onNonlinearToggled(bool checked) {
+  if (checked) {
+    // If not already set, trigger optimization
+    if (!m_scrToImgParams.mesh_trans) {
+       onOptimizeGeometry(false); // pass false for Auto assuming button is manual
+    }
+  } else {
+    // If set, clear it
+    if (m_scrToImgParams.mesh_trans) {
+      ParameterState newState = getCurrentState();
+      newState.scrToImg.mesh_trans = nullptr;
+      changeParameters(newState);
+    }
+  }
+}
 
 void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
 
@@ -1544,12 +1577,17 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   m_solverProgress->set_task("Optimizing geometry", 100);
   addProgress(m_solverProgress);
 
-  // Request solve
-  QMetaObject::invokeMethod(m_solverWorker, "solve", Qt::QueuedConnection,
-                           Q_ARG(int, 0), // reqId
-                           Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
-                           Q_ARG(colorscreen::solver_parameters, m_solverParams),
-                           Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_solverProgress));
+  // Check if nonlinear corrections are enabled
+  QCheckBox *nonlinearBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
+  bool computeMesh = nonlinearBox && nonlinearBox->isChecked();
+
+  // Invoke solver in worker
+  QMetaObject::invokeMethod(
+      m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, 0),
+      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+      Q_ARG(colorscreen::solver_parameters, m_solverParams),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_solverProgress),
+      Q_ARG(bool, computeMesh));
 }
 
 void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success) {
