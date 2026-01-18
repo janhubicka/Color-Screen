@@ -16,6 +16,7 @@
 #include <set>
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
+#include "RenderQueue.h"
 
 // Forward declarations
 namespace colorscreen {
@@ -113,7 +114,7 @@ private slots:
 
 private:
   void requestRender();
-  void processRenderQueue();
+
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters *m_rparams = nullptr;
@@ -145,19 +146,12 @@ private:
 
   std::shared_ptr<colorscreen::progress_info> m_currentProgress;
 
-  // Rendering state
-  struct ActiveRender {
-      int reqId;
-      QElapsedTimer startTime;
-      std::shared_ptr<colorscreen::progress_info> progress;
-      
-      bool operator==(const ActiveRender& other) const { return reqId == other.reqId; }
-  };
+  RenderQueue m_renderQueue;
   
-  std::list<ActiveRender> m_activeRenders;
-  int m_requestCounter = 0;
-  int m_lastCompletedReqId = -1; // To prevent stale updates
+private slots:
+  void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
   
+private:
   // Last successfully rendered state to compare against updates
   double m_lastRenderedScale = 1.0;
   double m_lastRenderedX = 0.0;

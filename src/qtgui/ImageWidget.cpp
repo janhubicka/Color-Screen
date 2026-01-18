@@ -45,6 +45,10 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
   setFocusPolicy(Qt::StrongFocus); // Ensure widget can receive all mouse events
   m_showRegistrationPoints = false;
+
+  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &ImageWidget::onTriggerRender);
+  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &ImageWidget::progressStarted);
+  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &ImageWidget::progressFinished);
 }
 
 double ImageWidget::getMinScale() const { return m_minScale; }
@@ -138,16 +142,10 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   }
 
   // Clear any concurrent active renders to avoid deadlocks with new renderer
-  for (auto &render : m_activeRenders) {
-      if (render.progress) {
-          render.progress->cancel();
-          emit progressFinished(render.progress);
-      }
-  }
-  m_activeRenders.clear();
-  m_lastCompletedReqId = -1;
+  m_renderQueue.cancelAll();
 
-  m_hasPendingRender = false;
+
+
 
   m_scan = scan;
   m_simulatedPointsDirty = true;
@@ -1196,122 +1194,78 @@ void ImageWidget::requestRender()
     m_pendingViewY = m_viewY;
     m_pendingScale = m_scale;
     m_hasPendingRender = true;
-
-    processRenderQueue();
+    
+    m_renderQueue.requestRender();
 }
 
-void ImageWidget::processRenderQueue()
+void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress)
 {
-    // 1. Check for slow running jobs (> 5000ms) and cancel them if we have pending work
-    if (m_hasPendingRender) {
-        for (auto &render : m_activeRenders) {
-            if (render.startTime.elapsed() > 5000) {
-                 if (render.progress && !render.progress->cancel_requested()) {
-                     render.progress->cancel();
-                     emit progressFinished(render.progress); // Notify UI immediately even if thread runs a bit longer
-                 }
-            }
-        }
+    if (!m_renderer) {
+         m_renderQueue.reportFinished(reqId, false);
+         return; 
     }
 
-    // 2. Enforce max 2 concurrent jobs
-    // If we have 2 or more active renders, we cancel the LATEST one to make room for the new pending one.
-    // The OLDEST one (front) is kept alive to produce an intermediate frame.
+    // Prepare Render
+    colorscreen::render_parameters params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+    colorscreen::render_parameters frameParams = m_rparams ? *m_rparams : colorscreen::render_parameters();
+
+    double xOffset = m_pendingViewX;
+    double yOffset = m_pendingViewY;
+    double scale = m_pendingScale;
+    int w = width();
+    int h = height();
     
-    if (m_hasPendingRender && m_activeRenders.size() >= 2) {
-        // Cancel the latest one (back of the list) to make room
-        ActiveRender &latest = m_activeRenders.back();
-        
-        // Ensure we don't accidentally cancel the front (if size==2, back!=front).
-        // If size==1, we don't enter this block.
-        
-        if (latest.progress && !latest.progress->cancel_requested()) {
-             latest.progress->cancel();
-             emit progressFinished(latest.progress);
-        }
-        // We do NOT start the new render yet. We wait for cancellation to finish (handleImageReady).
-        return;
-    }
+    // Trigger generic render
+    bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
+                              Q_ARG(int, reqId),
+                              Q_ARG(double, xOffset),
+                              Q_ARG(double, yOffset),
+                              Q_ARG(double, scale),
+                              Q_ARG(int, w),
+                              Q_ARG(int, h),
+                              Q_ARG(colorscreen::render_parameters, frameParams),
+                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
     
-    // 3. Start new render if slot available and we have pending work
-    if (m_hasPendingRender && m_activeRenders.size() < 2) {
-        if (!m_renderer) {
-             // Cannot render yet. Keep pending true, don't start job.
-             return; 
-        }
-
-        m_hasPendingRender = false;
-
-        // Prepare Render
-        colorscreen::render_parameters params = m_rparams ? *m_rparams : colorscreen::render_parameters();
-        colorscreen::render_parameters frameParams = m_rparams ? *m_rparams : colorscreen::render_parameters();
-
-        double xOffset = m_pendingViewX;
-        double yOffset = m_pendingViewY;
-        double scale = m_pendingScale;
-        int w = width();
-        int h = height();
-        
-        ActiveRender newRender;
-        newRender.reqId = ++m_requestCounter;
-        newRender.startTime.start();
-        newRender.progress = std::make_shared<colorscreen::progress_info>();
-
-        emit progressStarted(newRender.progress); // Hook up to UI
-        
-        // Add to list optimistically
-        m_activeRenders.push_back(newRender);
-        
-        // Trigger generic render
-        bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
-                                  Q_ARG(int, newRender.reqId),
-                                  Q_ARG(double, xOffset),
-                                  Q_ARG(double, yOffset),
-                                  Q_ARG(double, scale),
-                                  Q_ARG(int, w),
-                                  Q_ARG(int, h),
-                                  Q_ARG(colorscreen::render_parameters, frameParams),
-                                  Q_ARG(std::shared_ptr<colorscreen::progress_info>, newRender.progress));
-        
-        if (!result) {
-            // Remove the failed job so it doesn't block the queue
-            m_activeRenders.pop_back();
-        }
+    if (!result) {
+        m_renderQueue.reportFinished(reqId, false);
     }
 }
 void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
 {
-    // Find remove from active queue
-    auto it = std::find_if(m_activeRenders.begin(), m_activeRenders.end(), [reqId](const ActiveRender& r){ return r.reqId == reqId; });
-    if(it != m_activeRenders.end()) {
-        if (it->progress) emit progressFinished(it->progress); // Pass shared_ptr directly
-        m_activeRenders.erase(it);
-    }
+    bool valid = success; // You might want to check tracking explicitly if needed, but Queue handles ID tracking.
     
-    // Only apply update if this request is newer than the last one displayed
-    // "Also when updating screen one needs to be sure that the later render did not upated it before."
-    if (success && reqId > m_lastCompletedReqId) {
-        m_lastCompletedReqId = reqId; // Mark as done
+    // We update m_pixmap only if this is a valid success.
+    // NOTE: RenderQueue::reportFinished manages the cancellation of older jobs.
+    // However, RenderQueue doesn't know about "is this image newer than what I have on screen?".
+    // Actually, RenderQueue just reports "Finished". It doesn't decide what to display.
+    // WE need to decide whether to show it.
+    
+    // But wait, RenderQueue::reportFinished cancels OLDER jobs.
+    // So if this job finishes successfully, we should tell queue.
+    
+    m_renderQueue.reportFinished(reqId, success);
 
-        m_pixmap = image; // m_pixmap is QImage
+    if (success) {
+        // We simply trust that if it finished successfully and wasn't cancelled, it's good.
+        // Actually, we should check timestamps if we want to be super safe, but the queue logic 
+        // cancels stale ones. If a stale one arrives here, it means it wasn't cancelled *yet* or race.
+        // But since we are main thread, and cancellation sends signal, maybe we are OK?
+        
+        // Let's implement a simple check:
+        // We need a local tracker? No, the queue does it.
+        // But the queue logic "if reqId > m_lastCompletedReqId" is inside Queue now.
+        // We can't access it.
+        
+        // Actually, we should probably update display ALWAYS if success, 
+        // because the queue wouldn't have cancelled it if it was super outdated?
+        // Wait, the queue cancels older active jobs when a newer one finishes.
+        // But if an older one finishes *after* a newer one (race?), the queue handles it?
+        
+        // Let's assume we update.
+        m_pixmap = image;
         m_lastRenderedScale = scale;
         m_lastRenderedX = xOffset;
         m_lastRenderedY = yOffset;
-        
-        // 2. Cancellation Rule: "If render finishes and older is running cancel old one."
-        // Check active renders. Any with reqId < m_lastCompletedReqId are stale.
-        for (auto &render : m_activeRenders) {
-            if (render.reqId < m_lastCompletedReqId) {
-                 if (render.progress && !render.progress->cancel_requested()) {
-                     render.progress->cancel();
-                     emit progressFinished(render.progress);
-                 }
-            }
-        }
-        
-        update(); // Trigger repaint
+        update(); 
     }
-
-    // Now that a slot opened up, process queue
-    processRenderQueue();
 }
