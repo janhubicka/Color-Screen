@@ -503,10 +503,10 @@ void MainWindow::createToolbar() {
   m_addPointAction->setShortcut(QKeySequence("A"));
   m_toolbar->addAction(m_addPointAction);
 
-  m_setCenterAction = new QAction(QIcon::fromTheme("crosshairs"), "Set Center", this);
+  m_setCenterAction = new QAction(QIcon::fromTheme("crosshairs"), "Screen coordinates", this);
   m_setCenterAction->setActionGroup(toolGroup);
   m_setCenterAction->setCheckable(true);
-  m_setCenterAction->setToolTip("Set Screen Center (C)");
+  m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
   m_toolbar->addAction(m_setCenterAction);
 
