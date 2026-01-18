@@ -117,8 +117,8 @@ private:
   colorscreen::solver_parameters *m_solver = nullptr;
   
   // Coordinate system editing state
-  bool m_draggingCenter = false;
-  bool m_draggingAxes = false;
+  enum class DragTarget { None, Center, Axis1, Axis2 };
+  DragTarget m_dragTarget = DragTarget::None;
   QPointF m_dragStartWidget;
   colorscreen::point_t m_dragStartImg;
   colorscreen::scr_to_img_parameters m_pressParams;

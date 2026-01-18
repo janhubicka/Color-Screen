@@ -664,27 +664,36 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
 
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
   if (m_interactionMode == SetCenterMode) {
-    // Set center mode: left-click drags center, right-click/ctrl-click drags axes
-    if (event->button() == Qt::LeftButton && !(event->modifiers() & Qt::ControlModifier)) {
+    bool ctrl = event->modifiers() & Qt::ControlModifier;
+    bool alt = event->modifiers() & Qt::AltModifier; 
+
+    // Determine target based on button/modifiers
+    if (event->button() == Qt::LeftButton && !ctrl && !alt) {
       // Start dragging center
-      m_draggingCenter = true;
-      m_draggingAxes = false; 
+      m_dragTarget = DragTarget::Center;
       m_dragStartWidget = event->position();
       m_dragStartImg = widgetToImage(event->position());
       if (m_scrToImg) {
         m_pressParams = *m_scrToImg;
       }
-    } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier))) {
-      // Start dragging axes
-      m_draggingAxes = true;
-      m_draggingCenter = false;
+    } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && ctrl)) {
+      // Start dragging Axis 1 (X)
+      m_dragTarget = DragTarget::Axis1;
       m_dragStartWidget = event->position();
       m_dragStartImg = widgetToImage(event->position());
       if (m_scrToImg) {
         m_pressParams = *m_scrToImg;
       }
-      
-      // Grab mouse to ensure we receive move/release events for right button (Windows/Linux quirks)
+      grabMouse();
+      event->accept();
+    } else if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && alt)) {
+      // Start dragging Axis 2 (Y)
+      m_dragTarget = DragTarget::Axis2;
+      m_dragStartWidget = event->position();
+      m_dragStartImg = widgetToImage(event->position());
+      if (m_scrToImg) {
+        m_pressParams = *m_scrToImg;
+      }
       grabMouse();
       event->accept();
     }
@@ -770,7 +779,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
   } else if (m_interactionMode == SetCenterMode) {
-    if (m_draggingCenter && m_scrToImg) {
+    if (m_dragTarget == DragTarget::Center && m_scrToImg) {
       // Drag center: translate by offset
       colorscreen::point_t currentImg = widgetToImage(event->position());
       double xOffset = currentImg.x - m_dragStartImg.x;
@@ -779,14 +788,31 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       m_scrToImg->center.y = m_pressParams.center.y + yOffset;
       emit coordinateSystemChanged();
       update();
-    } else if (m_draggingAxes && m_scrToImg) {
-      // Drag axes: rotate and scale based on GTK implementation
+    } else if ((m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) && m_scrToImg) {
+      // Drag axes: rotate and scale generic logic
+      // This rotates the whole system based on angle change from start
       colorscreen::point_t currentImg = widgetToImage(event->position());
       double x1 = m_dragStartImg.x - m_pressParams.center.x;
       double y1 = m_dragStartImg.y - m_pressParams.center.y;
       double x2 = currentImg.x - m_pressParams.center.x;  // Use press params center, not current
       double y2 = currentImg.y - m_pressParams.center.y;
-      double scale = sqrt((x2 * x2) + (y2 * y2)) / sqrt((x1 * x1) + (y1 * y1));
+      
+      double startDist = sqrt((x1 * x1) + (y1 * y1));
+      double currentDist = sqrt((x2 * x2) + (y2 * y2));
+      double scale = (startDist > 1e-9) ? currentDist / startDist : 1.0;
+      
+      // Enforce minimum length of 2.0 for both axes
+      double len1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
+                         m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
+      double len2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
+                         m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
+      
+      double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
+      double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
+      double minScale = std::max(minScale1, minScale2);
+      
+      if (scale < minScale) scale = minScale;
+
       double angle = atan2(y2, x2) - atan2(y1, x1);
       
       if (angle != 0.0) {
@@ -848,38 +874,33 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
     }
   }
 
-  // Handle SetCenterMode (for both Left and Right buttons)
+  // Handle SetCenterMode
   if (m_interactionMode == SetCenterMode) {
-    if (m_draggingAxes) {
-      releaseMouse(); // Release the grab from right-click
+    if (m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) {
+      releaseMouse(); // Release the grab
     }
 
     // Handle click logic (only if it was a small movement)
     QPointF dragDistance = event->position() - m_dragStartWidget;
     bool isClick = dragDistance.manhattanLength() < 5;
 
-    if (m_draggingCenter && isClick && m_scrToImg) {
-       // It was a click, not a drag. Set center to this specific point.
+    if (m_dragTarget == DragTarget::Center && isClick && m_scrToImg) {
+       // Set center to this specific point.
        m_scrToImg->center = widgetToImage(event->position());
        emit coordinateSystemChanged();
        update();
-    } else if (m_draggingAxes && isClick && m_scrToImg) {
-       // Click with Right Button or Ctrl+Left -> Reposition Coordinate1
-       // Set coordinate1 so that center + coordinate1 = clicked point.
-       // Update coordinate2 to preserve relative angle and scale from the INITIAL state (m_pressParams).
-
+    } else if (m_dragTarget == DragTarget::Axis1 && isClick && m_scrToImg) {
+       // Set Coordinate1
        colorscreen::point_t clickImg = widgetToImage(event->position());
-       colorscreen::point_t center = m_scrToImg->center; // Use current center
+       colorscreen::point_t center = m_scrToImg->center;
 
-       // New coordinate1 vector
        double newC1x = clickImg.x - center.x;
        double newC1y = clickImg.y - center.y;
 
-       // Old coordinate1 vector (from press params to preserve original relationship)
+       // Old coords from press params
        double oldC1x = m_pressParams.coordinate1.x;
        double oldC1y = m_pressParams.coordinate1.y;
 
-       // Calculate scale and rotation from Old to New
        double oldLenSq = oldC1x*oldC1x + oldC1y*oldC1y;
        double newLenSq = newC1x*newC1x + newC1y*newC1y;
 
@@ -887,38 +908,83 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
            double oldLen = sqrt(oldLenSq);
            double newLen = sqrt(newLenSq);
            
-           // Calculate angles
+           if (newLen < 2.0) return; // Too short, ignore
+
            double angleC1Old = atan2(oldC1y, oldC1x);
            double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
-           
            double angleC1New = atan2(newC1y, newC1x);
            
-           // Preserve relative angle: Angle(C2) - Angle(C1) should be constant
+           // Preserve relative angle: Angle(C2) - Angle(C1) constant
            double relAngle = angleC2Old - angleC1Old;
            double angleC2New = angleC1New + relAngle;
            
-           // Preserve relative scale: Len(C2) / Len(C1) should be constant
+           // Preserve relative scale
            double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
                                   m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
            double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
            double newLenC2 = newLen * scaleRatio;
            
-           // Update Coordinate1 explicitly
+           if (newLenC2 < 2.0) return; // Dependent axis too short, ignore
+
            m_scrToImg->coordinate1.x = newC1x;
            m_scrToImg->coordinate1.y = newC1y;
-
-           // Update Coordinate2 explicitly from angle and length
            m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
            m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
 
            emit coordinateSystemChanged();
            update();
        }
+    } else if (m_dragTarget == DragTarget::Axis2 && isClick && m_scrToImg) {
+       // Set Coordinate2 (Analogous to Axis1)
+       colorscreen::point_t clickImg = widgetToImage(event->position());
+       colorscreen::point_t center = m_scrToImg->center;
+
+       double newC2x = clickImg.x - center.x;
+       double newC2y = clickImg.y - center.y;
+
+       double oldC2x = m_pressParams.coordinate2.x;
+       double oldC2y = m_pressParams.coordinate2.y;
+
+       double oldLenC2Sq = oldC2x*oldC2x + oldC2y*oldC2y;
+       double newLenC2Sq = newC2x*newC2x + newC2y*newC2y;
+
+       if (oldLenC2Sq > 1e-12 && newLenC2Sq > 1e-12) {
+           double oldLenC2 = sqrt(oldLenC2Sq);
+           double newLenC2 = sqrt(newLenC2Sq);
+           
+           if (newLenC2 < 2.0) return; // Too short
+
+           double angleC1Old = atan2(m_pressParams.coordinate1.y, m_pressParams.coordinate1.x);
+           double angleC2Old = atan2(oldC2y, oldC2x);
+           double angleC2New = atan2(newC2y, newC2x);
+           
+           // Preserve relative angle: Angle(C1) = Angle(C2) - (Angle(C2Old) - Angle(C1Old))
+           // i.e. Angle(C2) - Angle(C1) = RelAngle constant.
+           double relAngle = angleC2Old - angleC1Old;
+           double angleC1New = angleC2New - relAngle;
+           
+           // Preserve relative scale
+           double oldLenC1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
+                                  m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
+           double scaleRatioNum = (oldLenC1 > 1e-9) ? oldLenC2 / oldLenC1 : 1.0;
+           // We want newLenC2 / newLenC1 = scaleRatioNum
+           // so newLenC1 = newLenC2 / scaleRatioNum
+           double newLenC1 = (scaleRatioNum > 1e-9) ? newLenC2 / scaleRatioNum : newLenC2;
+           
+           if (newLenC1 < 2.0) return; // Dependent axis too short
+
+           m_scrToImg->coordinate2.x = newC2x;
+           m_scrToImg->coordinate2.y = newC2y;
+           m_scrToImg->coordinate1.x = newLenC1 * cos(angleC1New);
+           m_scrToImg->coordinate1.y = newLenC1 * sin(angleC1New);
+
+           emit coordinateSystemChanged();
+           update();
+       }
     }
 
-    // Reset all drag flags
-    m_draggingCenter = false;
-    m_draggingAxes = false;
+    // Reset drag target
+    m_dragTarget = DragTarget::None;
     event->accept();
   }
 }
