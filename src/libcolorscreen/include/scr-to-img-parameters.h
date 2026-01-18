@@ -252,7 +252,7 @@ struct scr_to_img_parameters
     mesh_trans = other.mesh_trans;
   }
   bool
-  operator!= (scr_to_img_parameters &other) const
+  operator!= (const scr_to_img_parameters &other) const
   {
     return !(*this == other);
   }

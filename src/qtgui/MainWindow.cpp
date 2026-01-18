@@ -394,6 +394,17 @@ void MainWindow::setupUi() {
     nlBox->setChecked(m_scrToImgParams.mesh_trans != nullptr);
   }
 
+  // Sync Auto Optimize checkbox with GeometryPanel
+  QCheckBox *autoSolverBox = m_geometryPanel->findChild<QCheckBox *>("autoSolverBox");
+  if (autoSolverBox && m_autoOptimizeAction) {
+    // GeometryPanel -> Menu
+    connect(autoSolverBox, &QCheckBox::toggled, m_autoOptimizeAction, &QAction::setChecked);
+    // Menu -> GeometryPanel
+    connect(m_autoOptimizeAction, &QAction::toggled, autoSolverBox, &QCheckBox::setChecked);
+    // Initialize state
+    m_autoOptimizeAction->setChecked(autoSolverBox->isChecked());
+  }
+
   m_mainSplitter->addWidget(m_rightColumn);
 
   // Set initial sizes (approx 80% for image, 20% for right panel)
@@ -469,7 +480,7 @@ void MainWindow::createToolbar() {
   // Interaction Tools
   QActionGroup *toolGroup = new QActionGroup(this);
   
-  m_panAction = new QAction(QIcon::fromTheme("tool-pan"), "Pan", this);
+  m_panAction = new QAction(QIcon::fromTheme("hand"), "Pan", this);
   m_panAction->setActionGroup(toolGroup);
   m_panAction->setCheckable(true);
   m_panAction->setChecked(true);
@@ -517,6 +528,10 @@ void MainWindow::createToolbar() {
   connect(m_colorCheckBox, &QCheckBox::toggled, this,
           &MainWindow::onColorCheckBoxChanged);
   m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
+
+  // Connect mode selector
+  connect(m_modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &MainWindow::onModeChanged);
 
   updateModeMenu();
 }
@@ -761,6 +776,18 @@ void MainWindow::createMenus() {
   m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
   m_deleteSelectedAction->setShortcut(QKeySequence::Delete);
   connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+
+  m_registrationMenu->addSeparator();
+
+  m_optimizeGeometryAction = m_registrationMenu->addAction("&Optimize Geometry");
+  connect(m_optimizeGeometryAction, &QAction::triggered, this, [this]() {
+    onOptimizeGeometry(m_autoOptimizeAction->isChecked());
+  });
+
+  m_autoOptimizeAction = new QAction(tr("Auto &Optimize"), this);
+  m_autoOptimizeAction->setCheckable(true);
+  m_autoOptimizeAction->setChecked(false);
+  m_registrationMenu->addAction(m_autoOptimizeAction);
 
   m_registrationMenu->addSeparator();
 

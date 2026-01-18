@@ -144,6 +144,8 @@ private:
   QAction *m_selectAllAction;
   QAction *m_deselectAllAction;
   QAction *m_deleteSelectedAction;
+  QAction *m_optimizeGeometryAction;
+  QAction *m_autoOptimizeAction;
   QAction *m_optimizeAction;
   QAction *m_nonLinearAction;
   QAction

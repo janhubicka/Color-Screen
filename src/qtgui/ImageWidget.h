@@ -139,9 +139,14 @@ private:
   bool m_isDragging = false;
   InteractionMode m_interactionMode = PanMode;
   std::set<SelectedPoint> m_selectedPoints;
+  std::vector<colorscreen::point_t> m_simulatedPoints;
+  bool m_simulatedPointsDirty = true;
+  colorscreen::scr_to_img_parameters m_lastScrToImg;
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
   int m_draggedPointIndex = -1;
+
+  void updateSimulatedPoints();
   
   // Animations for when no image loaded
   ThamesAnimation *m_thamesAnim = nullptr;

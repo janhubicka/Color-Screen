@@ -138,6 +138,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_hasPendingRender = false;
 
   m_scan = scan;
+  m_simulatedPointsDirty = true;
 
   fitToView();
 
@@ -192,6 +193,12 @@ void ImageWidget::updateParameters(
         Q_ARG(colorscreen::render_type_parameters,
               m_renderType ? *m_renderType
                            : colorscreen::render_type_parameters()));
+  }
+
+  // Selective invalidation: only dirty if scrToImg parameters changed
+  if (scrToImg && *scrToImg != m_lastScrToImg) {
+    m_simulatedPointsDirty = true;
+    m_lastScrToImg = *scrToImg;
   }
 
   // Request Re-render
@@ -275,26 +282,51 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     p.drawImage(0, 0, m_pixmap);
 
     if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
-      colorscreen::scr_to_img map;
-      map.set_parameters(*m_scrToImg, *m_scan);
-
       p.setRenderHint(QPainter::Antialiasing);
+
+      if (m_simulatedPointsDirty) {
+        updateSimulatedPoints();
+      }
 
       colorscreen::point_t c1 = m_scrToImg->coordinate1;
       double dot_period = sqrt(c1.x * c1.x + c1.y * c1.y);
       if (dot_period < 0.1) dot_period = 10.0;
       double threshold = dot_period / 4.0;
+      double amp_scale = 200.0 / (dot_period / 2.0);
+
+      // Viewport culling: expand rect to include displacement arrows
+      // Displacement arrow amplification is 200.0 / (dot_period / 2.0).
+      // Max pixel length is 100.
+      double margin = 100.0 / m_scale + 20.0;
+      QRectF visibleRect(m_viewX - margin, m_viewY - margin, 
+                         width() / m_scale + 2 * margin, height() / m_scale + 2 * margin);
+
+      // Cache rotation for imageToWidget optimization
+      double rot = m_scrToImg->final_rotation;
+      int angle = (int)rot % 360;
+      if (angle < 0) angle += 360;
 
       for (size_t i = 0; i < m_solver->points.size(); ++i) {
-        const auto &pt = m_solver->points[i];
-        colorscreen::point_t xi = pt.img;
-        colorscreen::point_t scr_p = pt.scr;
+        const auto &xi = m_solver->points[i].img;
 
-        if (colorscreen::screen_with_vertical_strips_p(m_scrToImg->type)) {
-          colorscreen::point_t scr2 = map.to_scr(xi);
-          scr_p.y = scr2.y;
+        // Culling: rotate the point to the view's coordinate system
+        double xr_c = xi.x;
+        double yr_c = xi.y;
+
+        if (angle == 90) {
+          xr_c = xi.y;
+          yr_c = m_scan->width - xi.x;
+        } else if (angle == 180) {
+          xr_c = m_scan->width - xi.x;
+          yr_c = m_scan->height - xi.y;
+        } else if (angle == 270) {
+          xr_c = m_scan->height - xi.y;
+          yr_c = xi.x;
         }
-        colorscreen::point_t p_sim = map.to_img(scr_p);
+
+        if (!visibleRect.contains(xr_c, yr_c)) continue;
+
+        const auto &p_sim = m_simulatedPoints[i];
 
         // Calculate displacement magnitude in image space
         double dx_img = p_sim.x - xi.x;
@@ -302,15 +334,12 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         double dist_img = sqrt(dx_img * dx_img + dy_img * dy_img);
 
         // Heat map color calculation
-        // error_ratio = 1.0 at threshold (dot_period / 4)
         double error_ratio = dist_img / threshold;
-        
-        // Map 0.0 -> Green (120), 1.0 -> Yellow (60), 2.0+ -> Red (0)
         double hue = 120.0 - std::min(error_ratio, 2.0) * 60.0;
         if (hue < 0) hue = 0;
         QColor color = QColor::fromHslF(hue / 360.0, 1.0, 0.5);
 
-        // Widget coordinates using the new API
+        // Widget coordinates (start/simulated)
         QPointF start = imageToWidget(xi);
         QPointF simulated = imageToWidget(p_sim);
 
@@ -322,46 +351,55 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
             p.drawEllipse(start, 8, 8);
         }
 
-        // Draw intended location with black outline
+        // Draw intended location
         p.setPen(QPen(Qt::black, 4));
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(start, 4, 4);
         p.setPen(QPen(color, 2));
         p.drawEllipse(start, 4, 4);
 
-        // Displacement arrow amplification
-        double amp_scale = 200.0 / (dot_period / 2.0);
-        
-        // Calculate displacement in image space, then map to widget space for consistent scaling
+        // Displacement arrow math
         colorscreen::point_t xi_displaced = {
-            xi.x + (p_sim.x - xi.x) * amp_scale,
-            xi.y + (p_sim.y - xi.y) * amp_scale
+            xi.x + dx_img * amp_scale,
+            xi.y + dy_img * amp_scale
         };
         QPointF end = imageToWidget(xi_displaced);
 
         double dx_w = end.x() - start.x();
         double dy_w = end.y() - start.y();
+        double dist_w2 = dx_w * dx_w + dy_w * dy_w;
 
-        if (dx_w * dx_w + dy_w * dy_w > 1.0) {
-          double angle = std::atan2(dy_w, dx_w);
+        if (dist_w2 > 1.0) {
+          // Cap arrow length to 100 pixels
+          if (dist_w2 > 10000.0) {
+            double dist_w = sqrt(dist_w2);
+            dx_w *= 100.0 / dist_w;
+            dy_w *= 100.0 / dist_w;
+            end = QPointF(start.x() + dx_w, start.y() + dy_w);
+          }
+
+          double arrowAngle = std::atan2(dy_w, dx_w);
           double headLen = 8.0;
-          QPointF h1(end.x() - headLen * std::cos(angle - M_PI / 6),
-                     end.y() - headLen * std::sin(angle - M_PI / 6));
-          QPointF h2(end.x() - headLen * std::cos(angle + M_PI / 6),
-                     end.y() - headLen * std::sin(angle + M_PI / 6));
-          QVector<QPointF> head{h1, end, h2};
+          double cosA = std::cos(arrowAngle - M_PI / 6);
+          double sinA = std::sin(arrowAngle - M_PI / 6);
+          double cosB = std::cos(arrowAngle + M_PI / 6);
+          double sinB = std::sin(arrowAngle + M_PI / 6);
+          
+          QPointF h1(end.x() - headLen * cosA, end.y() - headLen * sinA);
+          QPointF h2(end.x() - headLen * cosB, end.y() - headLen * sinB);
+          QPointF head[] = {h1, end, h2};
 
-          // Draw displacement line with black outline
+          // Draw displacement line
           p.setPen(QPen(Qt::black, 5));
           p.drawLine(start, end);
-          p.drawPolyline(head);
+          p.drawPolyline(head, 3);
 
           p.setPen(QPen(color, 3));
           p.drawLine(start, end);
-          p.drawPolyline(head);
+          p.drawPolyline(head, 3);
         }
         
-        // Draw simulated location dot with black outline
+        // Draw simulated location dot
         p.setPen(Qt::NoPen);
         p.setBrush(Qt::black);
         p.drawEllipse(simulated, 3, 3);
@@ -475,6 +513,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       colorscreen::point_t imgPos = widgetToImage(event->position());
       if (m_solver && (size_t)m_draggedPointIndex < m_solver->points.size()) {
         m_solver->points[m_draggedPointIndex].img = imgPos;
+        m_simulatedPointsDirty = true;
         update();
       }
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
@@ -685,6 +724,7 @@ void ImageWidget::deleteSelectedPoints() {
   }
   
   m_selectedPoints.clear();
+  m_simulatedPointsDirty = true;
   emit selectionChanged();
   emit pointsChanged();
   update();
@@ -703,4 +743,28 @@ void ImageWidget::clearSelection() {
     emit selectionChanged();
     update();
   }
+}
+
+void ImageWidget::updateSimulatedPoints() {
+  if (!m_solver || !m_scan || !m_rparams || !m_scrToImg) return;
+  
+  m_simulatedPoints.resize(m_solver->points.size());
+  
+  colorscreen::scr_to_img map;
+  map.set_parameters(*m_scrToImg, *m_scan);
+  
+  bool isVerticalStrips = colorscreen::screen_with_vertical_strips_p(m_scrToImg->type);
+  
+  for (size_t i = 0; i < m_solver->points.size(); ++i) {
+    const auto &pt = m_solver->points[i];
+    colorscreen::point_t scr_p = pt.scr;
+
+    if (isVerticalStrips) {
+      colorscreen::point_t scr2 = map.to_scr(pt.img);
+      scr_p.y = scr2.y;
+    }
+    m_simulatedPoints[i] = map.to_img(scr_p);
+  }
+  
+  m_simulatedPointsDirty = false;
 }
