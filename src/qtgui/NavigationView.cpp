@@ -361,41 +361,49 @@ void NavigationView::paintEvent(QPaintEvent *event) {
 }
 
 void NavigationView::mousePressEvent(QMouseEvent *event) {
-  // If click, center view?
-  // Check if within image rect.
   if (m_imageRect.contains(event->pos())) {
     m_isDragging = true;
 
-    // Calculate new center
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
-
+    
     double imageX = clickX / m_previewScale;
     double imageY = clickY / m_previewScale;
-
-    // Set center of viewport to this
-    // ImageWidget expects top-left.
-    // width/2 height/2 of viewport
-    double hw = m_visibleRect.width() / 2.0;
-    double hh = m_visibleRect.height() / 2.0;
-
-    emit panChanged(imageX - hw, imageY - hh);
+    
+    // Check if click is inside current visible rect
+    if (m_visibleRect.contains(imageX, imageY)) {
+        // Grab logic: calculate offset from center
+        double centerX = m_visibleRect.center().x();
+        double centerY = m_visibleRect.center().y();
+        
+        m_dragOffset = QPointF(imageX - centerX, imageY - centerY);
+    } else {
+        // Jump logic: center on click, reset offset
+        m_dragOffset = QPointF(0, 0);
+        
+        double hw = m_visibleRect.width() / 2.0;
+        double hh = m_visibleRect.height() / 2.0;
+        emit panChanged(imageX - hw, imageY - hh);
+    }
   }
 }
 
 void NavigationView::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging) {
-    // map same way
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
 
     double imageX = clickX / m_previewScale;
     double imageY = clickY / m_previewScale;
 
+    // Apply offset
+    double targetCenterX = imageX - m_dragOffset.x();
+    double targetCenterY = imageY - m_dragOffset.y();
+
     double hw = m_visibleRect.width() / 2.0;
     double hh = m_visibleRect.height() / 2.0;
 
-    emit panChanged(imageX - hw, imageY - hh);
+    emit panChanged(targetCenterX - hw, targetCenterY - hh);
   }
 }
 

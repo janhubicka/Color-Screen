@@ -11,6 +11,8 @@
 #include <QWidget>
 #include <QRubberBand>
 #include <memory>
+#include <QElapsedTimer>
+#include <list>
 #include <set>
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
@@ -111,6 +113,7 @@ private slots:
 
 private:
   void requestRender();
+  void processRenderQueue();
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters *m_rparams = nullptr;
@@ -134,7 +137,7 @@ private:
 
   QImage m_pixmap; // The currently displayed rendered tile
 
-  // Current View State
+
   double m_scale = 1.0;
   double m_viewX = 0.0; // Top-left of the view in Image Coordinates
   double m_viewY = 0.0;
@@ -142,8 +145,25 @@ private:
 
   std::shared_ptr<colorscreen::progress_info> m_currentProgress;
 
-  // Single-thread rendering queue
-  bool m_renderInProgress = false;
+  // Rendering state
+  struct ActiveRender {
+      int reqId;
+      QElapsedTimer startTime;
+      std::shared_ptr<colorscreen::progress_info> progress;
+      
+      bool operator==(const ActiveRender& other) const { return reqId == other.reqId; }
+  };
+  
+  std::list<ActiveRender> m_activeRenders;
+  int m_requestCounter = 0;
+  int m_lastCompletedReqId = -1; // To prevent stale updates
+  
+  // Last successfully rendered state to compare against updates
+  double m_lastRenderedScale = 1.0;
+  double m_lastRenderedX = 0.0;
+  double m_lastRenderedY = 0.0;
+  
+  // Pending render request (if queue is full)
   bool m_hasPendingRender = false;
   double m_pendingViewX = 0.0;
   double m_pendingViewY = 0.0;

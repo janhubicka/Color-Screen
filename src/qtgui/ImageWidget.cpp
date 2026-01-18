@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QWheelEvent>
+#include <QTimer>
 #include <QtMath>
 
 // Ensure shared ptr can be passed via signals
@@ -136,7 +137,16 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_currentProgress.reset();
   }
 
-  m_renderInProgress = false;
+  // Clear any concurrent active renders to avoid deadlocks with new renderer
+  for (auto &render : m_activeRenders) {
+      if (render.progress) {
+          render.progress->cancel();
+          emit progressFinished(render.progress);
+      }
+  }
+  m_activeRenders.clear();
+  m_lastCompletedReqId = -1;
+
   m_hasPendingRender = false;
 
   m_scan = scan;
@@ -207,81 +217,29 @@ void ImageWidget::updateParameters(
   requestRender();
 }
 
-void ImageWidget::requestRender() {
-  if (!m_renderer || !m_scan)
-    return;
 
-  // If render is in progress, cancel it and queue this request as pending
-  if (m_renderInProgress) {
-    if (m_currentProgress) {
-      m_currentProgress->cancel();
-    }
-    // Store pending render parameters (only latest)
-    m_hasPendingRender = true;
-    m_pendingViewX = m_viewX;
-    m_pendingViewY = m_viewY;
-    m_pendingScale = m_scale;
-    return; // Don't start render yet, wait for current to finish
-  }
 
-  // No render in progress, start new one
-  m_renderInProgress = true;
-  m_hasPendingRender = false;
 
-  double xOff = m_viewX * m_scale;
-  double yOff = m_viewY * m_scale;
-
-  m_currentProgress = std::make_shared<colorscreen::progress_info>();
-  m_currentProgress->set_task("Rendering", 0);
-  emit progressStarted(m_currentProgress);
-
-  // Invoke render on worker thread
-  QMetaObject::invokeMethod(
-      m_renderer, "render", Qt::QueuedConnection,
-      Q_ARG(int, 0), // reqId not needed anymore
-      Q_ARG(double, xOff), Q_ARG(double, yOff), Q_ARG(double, m_scale),
-      Q_ARG(int, width()), Q_ARG(int, height()),
-      Q_ARG(colorscreen::render_parameters, *m_rparams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_currentProgress));
-}
-
-void ImageWidget::handleImageReady(int reqId, QImage image, double x, double y,
-                                   double scale, bool success) {
-  // This is always the current render completing (only one active at a time)
-  bool wasCancelled = false;
-  if (m_currentProgress) {
-    wasCancelled = m_currentProgress->cancelled();
-    emit progressFinished(m_currentProgress);
-    m_currentProgress.reset();
-  }
-
-  // Mark render as no longer in progress
-  m_renderInProgress = false;
-
-  if (wasCancelled) {
-    // Do nothing with image if cancelled
-  } else if (!success) {
-    // Show error message to user
-    QMessageBox::warning(
-        this, "Rendering Error",
-        "Failed to render image. The rendering process encountered an error.");
-  } else {
-    // Success - update the displayed image
-    m_pixmap = image;
-    update();
-  }
-
-  // Start pending render if one is queued
-  if (m_hasPendingRender) {
-    m_hasPendingRender = false;
-    requestRender();
-  }
-}
 
 void ImageWidget::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   if (!m_pixmap.isNull()) {
-    p.drawImage(0, 0, m_pixmap);
+    // Calculate offset and scale difference between the rendered image and current view
+    double scaleFactor = m_scale / m_lastRenderedScale;
+    
+    double xPos = (m_lastRenderedX - m_viewX) * m_scale;
+    double yPos = (m_lastRenderedY - m_viewY) * m_scale;
+    
+    // If scales differ significantly (during zoom), we stretch the image to fit 
+    // the current view until a new high-res render arrives.
+    // This provides smooth "continuous" zooming.
+    
+    double targetWidth = m_pixmap.width() * scaleFactor;
+    double targetHeight = m_pixmap.height() * scaleFactor;
+    
+    QRectF targetRect(xPos, yPos, targetWidth, targetHeight);
+    
+    p.drawImage(targetRect, m_pixmap, QRectF(0, 0, m_pixmap.width(), m_pixmap.height()));
 
     if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
       p.setRenderHint(QPainter::Antialiasing);
@@ -1230,3 +1188,130 @@ void ImageWidget::updateSimulatedPoints() {
   m_simulatedPointsDirty = false;
 }
 
+// Request a new render job (non-blocking)
+void ImageWidget::requestRender()
+{
+    // Capture pending view parameters
+    m_pendingViewX = m_viewX;
+    m_pendingViewY = m_viewY;
+    m_pendingScale = m_scale;
+    m_hasPendingRender = true;
+
+    processRenderQueue();
+}
+
+void ImageWidget::processRenderQueue()
+{
+    // 1. Check for slow running jobs (> 5000ms) and cancel them if we have pending work
+    if (m_hasPendingRender) {
+        for (auto &render : m_activeRenders) {
+            if (render.startTime.elapsed() > 5000) {
+                 if (render.progress && !render.progress->cancel_requested()) {
+                     render.progress->cancel();
+                     emit progressFinished(render.progress); // Notify UI immediately even if thread runs a bit longer
+                 }
+            }
+        }
+    }
+
+    // 2. Enforce max 2 concurrent jobs
+    // If we have 2 or more active renders, we cancel the LATEST one to make room for the new pending one.
+    // The OLDEST one (front) is kept alive to produce an intermediate frame.
+    
+    if (m_hasPendingRender && m_activeRenders.size() >= 2) {
+        // Cancel the latest one (back of the list) to make room
+        ActiveRender &latest = m_activeRenders.back();
+        
+        // Ensure we don't accidentally cancel the front (if size==2, back!=front).
+        // If size==1, we don't enter this block.
+        
+        if (latest.progress && !latest.progress->cancel_requested()) {
+             latest.progress->cancel();
+             emit progressFinished(latest.progress);
+        }
+        // We do NOT start the new render yet. We wait for cancellation to finish (handleImageReady).
+        return;
+    }
+    
+    // 3. Start new render if slot available and we have pending work
+    if (m_hasPendingRender && m_activeRenders.size() < 2) {
+        if (!m_renderer) {
+             // Cannot render yet. Keep pending true, don't start job.
+             return; 
+        }
+
+        m_hasPendingRender = false;
+
+        // Prepare Render
+        colorscreen::render_parameters params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+        colorscreen::render_parameters frameParams = m_rparams ? *m_rparams : colorscreen::render_parameters();
+
+        double xOffset = m_pendingViewX;
+        double yOffset = m_pendingViewY;
+        double scale = m_pendingScale;
+        int w = width();
+        int h = height();
+        
+        ActiveRender newRender;
+        newRender.reqId = ++m_requestCounter;
+        newRender.startTime.start();
+        newRender.progress = std::make_shared<colorscreen::progress_info>();
+
+        emit progressStarted(newRender.progress); // Hook up to UI
+        
+        // Add to list optimistically
+        m_activeRenders.push_back(newRender);
+        
+        // Trigger generic render
+        bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
+                                  Q_ARG(int, newRender.reqId),
+                                  Q_ARG(double, xOffset),
+                                  Q_ARG(double, yOffset),
+                                  Q_ARG(double, scale),
+                                  Q_ARG(int, w),
+                                  Q_ARG(int, h),
+                                  Q_ARG(colorscreen::render_parameters, frameParams),
+                                  Q_ARG(std::shared_ptr<colorscreen::progress_info>, newRender.progress));
+        
+        if (!result) {
+            // Remove the failed job so it doesn't block the queue
+            m_activeRenders.pop_back();
+        }
+    }
+}
+void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
+{
+    // Find remove from active queue
+    auto it = std::find_if(m_activeRenders.begin(), m_activeRenders.end(), [reqId](const ActiveRender& r){ return r.reqId == reqId; });
+    if(it != m_activeRenders.end()) {
+        if (it->progress) emit progressFinished(it->progress); // Pass shared_ptr directly
+        m_activeRenders.erase(it);
+    }
+    
+    // Only apply update if this request is newer than the last one displayed
+    // "Also when updating screen one needs to be sure that the later render did not upated it before."
+    if (success && reqId > m_lastCompletedReqId) {
+        m_lastCompletedReqId = reqId; // Mark as done
+
+        m_pixmap = image; // m_pixmap is QImage
+        m_lastRenderedScale = scale;
+        m_lastRenderedX = xOffset;
+        m_lastRenderedY = yOffset;
+        
+        // 2. Cancellation Rule: "If render finishes and older is running cancel old one."
+        // Check active renders. Any with reqId < m_lastCompletedReqId are stale.
+        for (auto &render : m_activeRenders) {
+            if (render.reqId < m_lastCompletedReqId) {
+                 if (render.progress && !render.progress->cancel_requested()) {
+                     render.progress->cancel();
+                     emit progressFinished(render.progress);
+                 }
+            }
+        }
+        
+        update(); // Trigger repaint
+    }
+
+    // Now that a slot opened up, process queue
+    processRenderQueue();
+}

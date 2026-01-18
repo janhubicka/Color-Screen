@@ -84,6 +84,7 @@ private:
     double m_minScale = 0.1; // From ImageWidget
     
     bool m_isDragging = false;
+    QPointF m_dragOffset;
     
     // UI Layout area for image (might differ from widget size if Aspect Ratio preserved)
     QRect m_imageRect;
