@@ -83,6 +83,7 @@ private slots:
   void onSelectAll();
   void onDeselectAll();
   void onDeleteSelected();
+  void onPointManipulationStarted();
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
 
@@ -178,6 +179,7 @@ private:
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_detect_parameters m_detectParams;
   colorscreen::scr_to_img_parameters m_scrToImgParams;
+  ParameterState m_undoSnapshot; // Added
   colorscreen::solver_parameters m_solverParams;
   colorscreen::render_type_parameters m_renderTypeParams; // New member
 

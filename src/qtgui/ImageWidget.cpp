@@ -427,6 +427,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       }
 
       if (hitIndex != -1) {
+        emit pointManipulationStarted();
         m_draggedPointIndex = hitIndex;
         SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
         if (ctrl) {
@@ -662,6 +663,8 @@ void ImageWidget::selectAll() {
 
 void ImageWidget::deleteSelectedPoints() {
   if (!m_solver || m_selectedPoints.empty()) return;
+  
+  emit pointManipulationStarted();
   
   std::vector<size_t> toDelete;
   for (const auto& sp : m_selectedPoints) {

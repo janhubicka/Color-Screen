@@ -384,6 +384,7 @@ void MainWindow::setupUi() {
   }
 
   // Auto solver trigger
+  connect(m_imageWidget, &ImageWidget::pointManipulationStarted, this, &MainWindow::onPointManipulationStarted);
   connect(m_imageWidget, &ImageWidget::pointsChanged, this, &MainWindow::maybeTriggerAutoSolver);
 
   // Nonlinear corrections checkbox
@@ -1841,7 +1842,17 @@ void MainWindow::updateRegistrationActions() {
   }
 }
 
+void MainWindow::onPointManipulationStarted() {
+  m_undoSnapshot = getCurrentState();
+}
+
 void MainWindow::maybeTriggerAutoSolver() {
+  ParameterState newState = getCurrentState();
+  if (newState != m_undoSnapshot) {
+    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState));
+    m_undoSnapshot = newState;
+  }
+
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
     size_t count = m_imageWidget->registrationPointCount();
     if (count >= 3) {
