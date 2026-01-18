@@ -503,6 +503,13 @@ void MainWindow::createToolbar() {
   m_addPointAction->setShortcut(QKeySequence("A"));
   m_toolbar->addAction(m_addPointAction);
 
+  m_setCenterAction = new QAction(QIcon::fromTheme("crosshairs"), "Set Center", this);
+  m_setCenterAction->setActionGroup(toolGroup);
+  m_setCenterAction->setCheckable(true);
+  m_setCenterAction->setToolTip("Set Screen Center (C)");
+  m_setCenterAction->setShortcut(QKeySequence("C"));
+  m_toolbar->addAction(m_setCenterAction);
+
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
@@ -518,10 +525,14 @@ void MainWindow::createToolbar() {
       }
     }
   });
+  connect(m_setCenterAction, &QAction::toggled, this, [this](bool checked) {
+    if (checked) m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+  });
   
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
+  connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
 
   m_toolbar->addSeparator();
 
@@ -1880,12 +1891,20 @@ void MainWindow::updateRegistrationActions() {
     m_deleteSelectedAction->setEnabled(hasSelection);
   }
   
-  // Disable Add Point tool when screen type is Random or no scan loaded
+  // Disable Add Point and Set Center tools when screen type is Random or no scan loaded
   if (m_addPointAction) {
     bool canAddPoints = m_scan && m_scrToImgParams.type != colorscreen::Random;
     m_addPointAction->setEnabled(canAddPoints);
     // If tool is active but we can't add points, switch to Pan mode
     if (!canAddPoints && m_addPointAction->isChecked()) {
+      m_panAction->setChecked(true);
+    }
+  }
+  if (m_setCenterAction) {
+    bool canSetCenter = m_scan && m_scrToImgParams.type != colorscreen::Random;
+    m_setCenterAction->setEnabled(canSetCenter);
+    // If tool is active but we can't set center, switch to Pan mode
+    if (!canSetCenter && m_setCenterAction->isChecked()) {
       m_panAction->setChecked(true);
     }
   }
@@ -1961,4 +1980,17 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     // Trigger auto solver if enabled
     maybeTriggerAutoSolver();
   }
+}
+
+void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
+  if (!m_scan) {
+    return;
+  }
+
+  // Set the screen center to the clicked position
+  m_scrToImgParams.center = imgPos;
+  
+  // Update the image widget with new parameters
+  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+  m_imageWidget->update();
 }

@@ -50,7 +50,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -83,6 +83,8 @@ signals:
   void selectionChanged();
   void pointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                   colorscreen::point_t color);
+  void setCenterRequested(colorscreen::point_t imgPos);
+  void coordinateSystemChanged();
   void pointManipulationStarted();
   void registrationPointMoved(size_t index, colorscreen::point_t newPos);
   void pointsChanged();
@@ -113,6 +115,13 @@ private:
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
   colorscreen::solver_parameters *m_solver = nullptr;
+  
+  // Coordinate system editing state
+  bool m_draggingCenter = false;
+  bool m_draggingAxes = false;
+  QPointF m_dragStartWidget;
+  colorscreen::point_t m_dragStartImg;
+  colorscreen::scr_to_img_parameters m_pressParams;
 
   bool m_showRegistrationPoints = false;
 

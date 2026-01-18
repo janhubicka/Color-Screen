@@ -41,6 +41,8 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
                                      : static_cast<QWidget*>(m_pagetAnim);
 
   setMouseTracking(false); // Only track when dragging
+  setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
+  setFocusPolicy(Qt::StrongFocus); // Ensure widget can receive all mouse events
   m_showRegistrationPoints = false;
 }
 
@@ -408,6 +410,186 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       }
     }
 
+    // Draw screen coordinate system when SetCenterMode is active
+    if (m_interactionMode == SetCenterMode && m_scrToImg) {
+      // Get color from first point location
+      int npoints = 0;
+      colorscreen::solver_parameters::point_location *points = 
+        colorscreen::solver_parameters::get_point_locations(m_scrToImg->type, &npoints);
+      
+      QColor dotColor = Qt::blue; // Default
+      if (points && npoints > 0) {
+        switch (points[0].color) {
+          case colorscreen::solver_parameters::red:
+            dotColor = Qt::red;
+            break;
+          case colorscreen::solver_parameters::green:
+            dotColor = Qt::green;
+            break;
+          case colorscreen::solver_parameters::blue:
+            dotColor = Qt::blue;
+            break;
+          default:
+            dotColor = Qt::blue;
+            break;
+        }
+      }
+      
+      QPointF centerWidget = imageToWidget(m_scrToImg->center);
+      
+      // Calculate viewport bounds in image coordinates
+      colorscreen::point_t topLeft = widgetToImage(QPointF(0, 0));
+      colorscreen::point_t bottomRight = widgetToImage(QPointF(width(), height()));
+      double minX = qMin(topLeft.x, bottomRight.x);
+      double maxX = qMax(topLeft.x, bottomRight.x);
+      double minY = qMin(topLeft.y, bottomRight.y);
+      double maxY = qMax(topLeft.y, bottomRight.y);
+      
+      // Draw X axis (coordinate1) - extend to viewport edges
+      colorscreen::point_t xDir = {m_scrToImg->coordinate1.x, m_scrToImg->coordinate1.y};
+      double xLen = sqrt(xDir.x * xDir.x + xDir.y * xDir.y);
+      if (xLen > 0) {
+        xDir.x /= xLen;
+        xDir.y /= xLen;
+        
+        // Find intersection with viewport
+        double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / xDir.x,
+                                 (minX - m_scrToImg->center.x) / xDir.x),
+                           qMax((maxY - m_scrToImg->center.y) / xDir.y,
+                                 (minY - m_scrToImg->center.y) / xDir.y));
+        double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / xDir.x,
+                                 (minX - m_scrToImg->center.x) / xDir.x),
+                           qMin((maxY - m_scrToImg->center.y) / xDir.y,
+                                 (minY - m_scrToImg->center.y) / xDir.y));
+        
+        colorscreen::point_t xStart = {m_scrToImg->center.x + xDir.x * tMin,
+                                        m_scrToImg->center.y + xDir.y * tMin};
+        colorscreen::point_t xEnd = {m_scrToImg->center.x + xDir.x * tMax,
+                                      m_scrToImg->center.y + xDir.y * tMax};
+        
+        QPointF xStartWidget = imageToWidget(xStart);
+        QPointF xEndWidget = imageToWidget(xEnd);
+        
+        // Calculate dash length based on coordinate1 vector length (not whole axis)
+        colorscreen::point_t coord1End = {
+          m_scrToImg->center.x + m_scrToImg->coordinate1.x,
+          m_scrToImg->center.y + m_scrToImg->coordinate1.y
+        };
+        QPointF centerWidget = imageToWidget(m_scrToImg->center);
+        QPointF coord1Widget = imageToWidget(coord1End);
+        double coord1LengthWidget = QLineF(centerWidget, coord1Widget).length();
+        double dashLengthPixels = qMax(9.0, coord1LengthWidget / 3.0);
+        double penWidth = 3.0;
+        double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
+        
+        // Calculate offset using coordinate1 (X-axis vector)
+        // Correct phase math: anchor pattern to center point
+        // Pattern at distance 'd' should be 0 (start of pattern).
+        // Qt uses (x/pen + offset). So d/pen + offset = 0 (mod period).
+        // offset = period - (d/pen % period).
+        double distToCenter = QLineF(xStartWidget, centerWidget).length();
+        double distInPenWidths = distToCenter / penWidth;
+        double period = dashLength * 2.0;
+        double centerOffset = period - fmod(distInPenWidths, period);
+        
+        // Draw axis with alternating black/white dashed pattern
+        QPen dashedPen(Qt::white, penWidth);
+        dashedPen.setStyle(Qt::CustomDashLine);
+        dashedPen.setDashPattern({dashLength, dashLength});
+        dashedPen.setDashOffset(centerOffset);
+        p.setPen(dashedPen);
+        p.drawLine(xStartWidget, xEndWidget);
+        
+        dashedPen.setColor(Qt::black);
+        dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
+        p.setPen(dashedPen);
+        p.drawLine(xStartWidget, xEndWidget);
+      }
+      
+      // Draw Y axis (coordinate2) - extend to viewport edges
+      colorscreen::point_t yDir = {m_scrToImg->coordinate2.x, m_scrToImg->coordinate2.y};
+      double yLen = sqrt(yDir.x * yDir.x + yDir.y * yDir.y);
+      if (yLen > 0) {
+        yDir.x /= yLen;
+        yDir.y /= yLen;
+        
+        // Find intersection with viewport
+        double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / yDir.x,
+                                 (minX - m_scrToImg->center.x) / yDir.x),
+                           qMax((maxY - m_scrToImg->center.y) / yDir.y,
+                                 (minY - m_scrToImg->center.y) / yDir.y));
+        double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / yDir.x,
+                                 (minX - m_scrToImg->center.x) / yDir.x),
+                           qMin((maxY - m_scrToImg->center.y) / yDir.y,
+                                 (minY - m_scrToImg->center.y) / yDir.y));
+        
+        colorscreen::point_t yStart = {m_scrToImg->center.x + yDir.x * tMin,
+                                        m_scrToImg->center.y + yDir.y * tMin};
+        colorscreen::point_t yEnd = {m_scrToImg->center.x + yDir.x * tMax,
+                                      m_scrToImg->center.y + yDir.y * tMax};
+        
+        QPointF yStartWidget = imageToWidget(yStart);
+        QPointF yEndWidget = imageToWidget(yEnd);
+        
+        // Calculate dash length based on coordinate2 vector length (not whole axis)
+        colorscreen::point_t coord2End = {
+          m_scrToImg->center.x + m_scrToImg->coordinate2.x,
+          m_scrToImg->center.y + m_scrToImg->coordinate2.y
+        };
+        QPointF centerWidget = imageToWidget(m_scrToImg->center);
+        QPointF coord2Widget = imageToWidget(coord2End);
+        double coord2LengthWidget = QLineF(centerWidget, coord2Widget).length();
+        double dashLengthPixels = qMax(9.0, coord2LengthWidget / 3.0);
+        double penWidth = 3.0;
+        double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
+        
+        // Calculate offset using coordinate2 (Y-axis vector)
+        // Correct phase math: anchor pattern to center point
+        centerWidget = imageToWidget(m_scrToImg->center);
+        double distToCenter = QLineF(yStartWidget, centerWidget).length();
+        double distInPenWidths = distToCenter / penWidth;
+        double period = dashLength * 2.0;
+        double centerOffset = period - fmod(distInPenWidths, period);
+        
+        // Draw axis with alternating black/white dashed pattern
+        QPen dashedPen(Qt::white, penWidth);
+        dashedPen.setStyle(Qt::CustomDashLine);
+        dashedPen.setDashPattern({dashLength, dashLength});
+        dashedPen.setDashOffset(centerOffset);
+        p.setPen(dashedPen);
+        p.drawLine(yStartWidget, yEndWidget);
+        
+        dashedPen.setColor(Qt::black);
+        dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
+        p.setPen(dashedPen);
+        p.drawLine(yStartWidget, yEndWidget);
+      }
+      
+      // Draw dots at center and axis endpoints (all same color)
+      colorscreen::point_t xAxisEnd = {
+        m_scrToImg->center.x + m_scrToImg->coordinate1.x,
+        m_scrToImg->center.y + m_scrToImg->coordinate1.y
+      };
+      colorscreen::point_t yAxisEnd = {
+        m_scrToImg->center.x + m_scrToImg->coordinate2.x,
+        m_scrToImg->center.y + m_scrToImg->coordinate2.y
+      };
+      
+      QPointF xWidget = imageToWidget(xAxisEnd);
+      QPointF yWidget = imageToWidget(yAxisEnd);
+      
+      // Draw center point
+      p.setPen(QPen(Qt::black, 2));
+      p.setBrush(dotColor);
+      p.drawEllipse(centerWidget, 6, 6);
+      
+      // Draw X axis endpoint
+      p.drawEllipse(xWidget, 6, 6);
+      
+      // Draw Y axis endpoint  
+      p.drawEllipse(yWidget, 6, 6);
+    }
+
     // Hide animations when we have an image
     if (m_thamesAnim && !m_thamesAnim->isHidden()) {
       m_thamesAnim->stopAnimation();
@@ -445,6 +627,34 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
 }
 
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
+  if (m_interactionMode == SetCenterMode) {
+    // Set center mode: left-click drags center, right-click/ctrl-click drags axes
+    if (event->button() == Qt::LeftButton && !(event->modifiers() & Qt::ControlModifier)) {
+      // Start dragging center
+      m_draggingCenter = true;
+      m_draggingAxes = false; 
+      m_dragStartWidget = event->position();
+      m_dragStartImg = widgetToImage(event->position());
+      if (m_scrToImg) {
+        m_pressParams = *m_scrToImg;
+      }
+    } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier))) {
+      // Start dragging axes
+      m_draggingAxes = true;
+      m_draggingCenter = false;
+      m_dragStartWidget = event->position();
+      m_dragStartImg = widgetToImage(event->position());
+      if (m_scrToImg) {
+        m_pressParams = *m_scrToImg;
+      }
+      
+      // Grab mouse to ensure we receive move/release events for right button (Windows/Linux quirks)
+      grabMouse();
+      event->accept();
+    }
+    return;
+  }
+
   if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode) {
       m_isDragging = true;
@@ -523,6 +733,46 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
+  } else if (m_interactionMode == SetCenterMode) {
+    if (m_draggingCenter && m_scrToImg) {
+      // Drag center: translate by offset
+      colorscreen::point_t currentImg = widgetToImage(event->position());
+      double xOffset = currentImg.x - m_dragStartImg.x;
+      double yOffset = currentImg.y - m_dragStartImg.y;
+      m_scrToImg->center.x = m_pressParams.center.x + xOffset;
+      m_scrToImg->center.y = m_pressParams.center.y + yOffset;
+      emit coordinateSystemChanged();
+      update();
+    } else if (m_draggingAxes && m_scrToImg) {
+      // Drag axes: rotate and scale based on GTK implementation
+      colorscreen::point_t currentImg = widgetToImage(event->position());
+      double x1 = m_dragStartImg.x - m_pressParams.center.x;
+      double y1 = m_dragStartImg.y - m_pressParams.center.y;
+      double x2 = currentImg.x - m_pressParams.center.x;  // Use press params center, not current
+      double y2 = currentImg.y - m_pressParams.center.y;
+      double scale = sqrt((x2 * x2) + (y2 * y2)) / sqrt((x1 * x1) + (y1 * y1));
+      double angle = atan2(y2, x2) - atan2(y1, x1);
+      
+      if (angle != 0.0) {
+        double cosAngle = cos(angle);
+        double sinAngle = sin(angle);
+        
+        // Rotate and scale coordinate1
+        m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
+                                     - m_pressParams.coordinate1.y * sinAngle) * scale;
+        m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
+                                     + m_pressParams.coordinate1.y * cosAngle) * scale;
+        
+        // Rotate and scale coordinate2
+        m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
+                                     - m_pressParams.coordinate2.y * sinAngle) * scale;
+        m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
+                                     + m_pressParams.coordinate2.y * cosAngle) * scale;
+        
+        emit coordinateSystemChanged();
+        update();
+      }
+    }
   }
 }
 
@@ -560,6 +810,29 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         }
       }
     }
+  }
+
+  // Handle SetCenterMode (for both Left and Right buttons)
+  if (m_interactionMode == SetCenterMode) {
+    if (m_draggingAxes) {
+      releaseMouse(); // Release the grab from right-click
+    }
+
+    // Handle click logic (only if it was a small movement)
+    if (event->button() == Qt::LeftButton && m_draggingCenter) {
+       QPointF dragDistance = event->position() - m_dragStartWidget;
+       if (dragDistance.manhattanLength() < 5 && m_scrToImg) {
+          // It was a click, not a drag. Set center to this specific point.
+          m_scrToImg->center = widgetToImage(event->position());
+          emit coordinateSystemChanged();
+          update();
+       }
+    }
+
+    // Reset all drag flags
+    m_draggingCenter = false;
+    m_draggingAxes = false;
+    event->accept();
   }
 }
 

@@ -85,6 +85,7 @@ private slots:
   void onDeleteSelected();
   void onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                     colorscreen::point_t color);
+  void onSetCenter(colorscreen::point_t imgPos);
   void onPointManipulationStarted();
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
@@ -144,6 +145,7 @@ private:
   QAction *m_panAction;
   QAction *m_selectAction;
   QAction *m_addPointAction;
+  QAction *m_setCenterAction;
   QAction *m_selectAllAction;
   QAction *m_deselectAllAction;
   QAction *m_deleteSelectedAction;
