@@ -546,6 +546,7 @@ void MainWindow::createToolbar() {
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
   connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
+  connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this, &MainWindow::onCoordinateSystemChanged);
 
   m_toolbar->addSeparator();
 
@@ -2014,8 +2015,8 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   // Set the screen center to the clicked position
   m_scrToImgParams.center = imgPos;
   
-  // Update the image widget with new parameters
-  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+  onCoordinateSystemChanged();
+  
   m_imageWidget->update();
 }
 
@@ -2054,5 +2055,22 @@ void MainWindow::onOptimizeCoordinates() {
       QMessageBox::information(this, "Optimization", "Coordinates optimized successfully.");
   } else {
       QMessageBox::warning(this, "Optimization", "Optimization failed: " + QString::fromStdString(ret.err));
+  }
+}
+
+void MainWindow::onCoordinateSystemChanged() {
+  if (!m_scan) return;
+  
+  // Navigation View always needs update because it uses FAST mode (which relies on ScrToImg) 
+  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+
+  // Main area: checks flag
+  // Using colorscreen::render_type_max to safe check
+  if (m_renderTypeParams.type < colorscreen::render_type_max) {
+      const auto &prop = colorscreen::render_type_properties[m_renderTypeParams.type];
+      if (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG) {
+          m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, 
+                                          &m_renderTypeParams, &m_solverParams);
+      }
   }
 }

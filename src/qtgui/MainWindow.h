@@ -209,6 +209,7 @@ private slots:
   void onPrevProgress();
   void onNextProgress();
   void onOptimizeCoordinates();
+  void onCoordinateSystemChanged();
 
   // Helper to update color checkbox state and visibility
   void updateColorCheckBoxState();
