@@ -279,6 +279,11 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 
       p.setRenderHint(QPainter::Antialiasing);
 
+      colorscreen::point_t c1 = m_scrToImg->coordinate1;
+      double dot_period = sqrt(c1.x * c1.x + c1.y * c1.y);
+      if (dot_period < 0.1) dot_period = 10.0;
+      double threshold = dot_period / 4.0;
+
       for (const auto &pt : m_solver->points) {
         colorscreen::point_t xi = pt.img;
         colorscreen::point_t scr_p = pt.scr;
@@ -289,25 +294,33 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         }
         colorscreen::point_t p_sim = map.to_img(scr_p);
 
+        // Calculate displacement magnitude in image space
+        double dx_img = p_sim.x - xi.x;
+        double dy_img = p_sim.y - xi.y;
+        double dist_img = sqrt(dx_img * dx_img + dy_img * dy_img);
+
+        // Heat map color calculation
+        // error_ratio = 1.0 at threshold (dot_period / 4)
+        double error_ratio = dist_img / threshold;
+        
+        // Map 0.0 -> Green (120), 1.0 -> Yellow (60), 2.0+ -> Red (0)
+        double hue = 120.0 - std::min(error_ratio, 2.0) * 60.0;
+        if (hue < 0) hue = 0;
+        QColor color = QColor::fromHslF(hue / 360.0, 1.0, 0.5);
+
         // Widget coordinates using the new API
         QPointF start = imageToWidget(xi);
         QPointF simulated = imageToWidget(p_sim);
 
-        colorscreen::rgbdata rgb = pt.get_rgb();
-        QColor color(rgb.red * 255, rgb.green * 255, rgb.blue * 255);
-
-        // Draw intended location
-        p.setPen(QPen(color, 2));
+        // Draw intended location with black outline
+        p.setPen(QPen(Qt::black, 4));
         p.setBrush(Qt::NoBrush);
-        double r = 4;
-        p.drawEllipse(start, r, r);
+        p.drawEllipse(start, 4, 4);
+        p.setPen(QPen(color, 2));
+        p.drawEllipse(start, 4, 4);
 
-        // Displacement arrow
-        colorscreen::point_t c1 = m_scrToImg->coordinate1;
-        double patch_diam = sqrt(c1.x * c1.x + c1.y * c1.y) / 2.0;
-        if (patch_diam < 0.1) patch_diam = 10.0;
-        
-        double amp_scale = 200.0 / patch_diam;
+        // Displacement arrow amplification
+        double amp_scale = 200.0 / (dot_period / 2.0);
         
         // Calculate displacement in image space, then map to widget space for consistent scaling
         colorscreen::point_t xi_displaced = {
@@ -316,26 +329,32 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         };
         QPointF end = imageToWidget(xi_displaced);
 
-        double dx = end.x() - start.x();
-        double dy = end.y() - start.y();
+        double dx_w = end.x() - start.x();
+        double dy_w = end.y() - start.y();
 
-        if (dx * dx + dy * dy > 1.0) {
-          // Draw displacement line
-          p.setPen(QPen(color, 3));
-          p.drawLine(start, end);
-
-          // Draw arrow head
-          double angle = std::atan2(dy, dx);
+        if (dx_w * dx_w + dy_w * dy_w > 1.0) {
+          double angle = std::atan2(dy_w, dx_w);
           double headLen = 8.0;
           QPointF h1(end.x() - headLen * std::cos(angle - M_PI / 6),
                      end.y() - headLen * std::sin(angle - M_PI / 6));
           QPointF h2(end.x() - headLen * std::cos(angle + M_PI / 6),
                      end.y() - headLen * std::sin(angle + M_PI / 6));
-          p.drawPolyline(QVector<QPointF>{h1, end, h2});
+          QVector<QPointF> head{h1, end, h2};
+
+          // Draw displacement line with black outline
+          p.setPen(QPen(Qt::black, 5));
+          p.drawLine(start, end);
+          p.drawPolyline(head);
+
+          p.setPen(QPen(color, 3));
+          p.drawLine(start, end);
+          p.drawPolyline(head);
         }
         
-        // Draw simulated location dot
+        // Draw simulated location dot with black outline
         p.setPen(Qt::NoPen);
+        p.setBrush(Qt::black);
+        p.drawEllipse(simulated, 3, 3);
         p.setBrush(color);
         p.drawEllipse(simulated, 2, 2);
       }
