@@ -789,8 +789,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       emit coordinateSystemChanged();
       update();
     } else if ((m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) && m_scrToImg) {
-      // Drag axes: rotate and scale generic logic
-      // This rotates the whole system based on angle change from start
+      // Drag axes: rotate and scale
       colorscreen::point_t currentImg = widgetToImage(event->position());
       double x1 = m_dragStartImg.x - m_pressParams.center.x;
       double y1 = m_dragStartImg.y - m_pressParams.center.y;
@@ -801,35 +800,68 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
       double currentDist = sqrt((x2 * x2) + (y2 * y2));
       double scale = (startDist > 1e-9) ? currentDist / startDist : 1.0;
       
-      // Enforce minimum length of 2.0 for both axes
+      // Enforce minimum length of 2.0
       double len1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
                          m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
       double len2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
                          m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
       
-      double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
-      double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
-      double minScale = std::max(minScale1, minScale2);
-      
-      if (scale < minScale) scale = minScale;
+      if (m_lockRelativeCoordinates) {
+          // Both axes scale together, use stricter limit
+          double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
+          double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
+          double minScale = std::max(minScale1, minScale2);
+          if (scale < minScale) scale = minScale;
+      } else {
+          // Independent scaling
+          if (m_dragTarget == DragTarget::Axis1) {
+              double minScale1 = (len1 > 1e-9) ? 2.0 / len1 : 0.0;
+              if (scale < minScale1) scale = minScale1;
+          } else {
+              double minScale2 = (len2 > 1e-9) ? 2.0 / len2 : 0.0;
+              if (scale < minScale2) scale = minScale2;
+          }
+      }
 
       double angle = atan2(y2, x2) - atan2(y1, x1);
       
-      if (angle != 0.0) {
+      if (angle != 0.0 || scale != 1.0) {
         double cosAngle = cos(angle);
         double sinAngle = sin(angle);
         
-        // Rotate and scale coordinate1
-        m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
-                                     - m_pressParams.coordinate1.y * sinAngle) * scale;
-        m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
-                                     + m_pressParams.coordinate1.y * cosAngle) * scale;
-        
-        // Rotate and scale coordinate2
-        m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
-                                     - m_pressParams.coordinate2.y * sinAngle) * scale;
-        m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
-                                     + m_pressParams.coordinate2.y * cosAngle) * scale;
+        if (m_lockRelativeCoordinates) {
+            // Standard behavior: Rotate/Scale BOTH axes
+            m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
+                                         - m_pressParams.coordinate1.y * sinAngle) * scale;
+            m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
+                                         + m_pressParams.coordinate1.y * cosAngle) * scale;
+            
+            m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
+                                         - m_pressParams.coordinate2.y * sinAngle) * scale;
+            m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
+                                         + m_pressParams.coordinate2.y * cosAngle) * scale;
+        } else {
+            // Independent behavior: Only affect the dragged axis
+            // While we calculate 'angle' and 'scale' based on the drag, we only apply the transformation
+            // to the dragged axis. The other axis should strictly remain at its CURRENT state (or initial state?).
+            // If we use m_pressParams, we are essentially 'resetting' the non-dragged axis to its initial state 
+            // if we were to assign it. But if we DON'T touch it, it remains as is. 
+            // Since we might have moved it in a previous step?
+            // Wait, m_scrToImg is the source of truth. If DragTarget::Axis1, we modify coordinate1.
+            // We should NOT touch coordinate2.
+            
+            if (m_dragTarget == DragTarget::Axis1) {
+                m_scrToImg->coordinate1.x = (m_pressParams.coordinate1.x * cosAngle 
+                                             - m_pressParams.coordinate1.y * sinAngle) * scale;
+                m_scrToImg->coordinate1.y = (m_pressParams.coordinate1.x * sinAngle 
+                                             + m_pressParams.coordinate1.y * cosAngle) * scale;
+            } else {
+                m_scrToImg->coordinate2.x = (m_pressParams.coordinate2.x * cosAngle 
+                                             - m_pressParams.coordinate2.y * sinAngle) * scale;
+                m_scrToImg->coordinate2.y = (m_pressParams.coordinate2.x * sinAngle 
+                                             + m_pressParams.coordinate2.y * cosAngle) * scale;
+            }
+        }
         
         emit coordinateSystemChanged();
         update();
@@ -897,89 +929,88 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
        double newC1x = clickImg.x - center.x;
        double newC1y = clickImg.y - center.y;
 
-       // Old coords from press params
-       double oldC1x = m_pressParams.coordinate1.x;
-       double oldC1y = m_pressParams.coordinate1.y;
-
-       double oldLenSq = oldC1x*oldC1x + oldC1y*oldC1y;
        double newLenSq = newC1x*newC1x + newC1y*newC1y;
 
-       if (oldLenSq > 1e-12 && newLenSq > 1e-12) {
-           double oldLen = sqrt(oldLenSq);
-           double newLen = sqrt(newLenSq);
-           
-           if (newLen < 2.0) return; // Too short, ignore
+       if (newLenSq > 4.0) {
+           if (m_lockRelativeCoordinates) {
+               // Update Coordinate1 and coordinate 2 to preserve relative
+               double oldC1x = m_pressParams.coordinate1.x;
+               double oldC1y = m_pressParams.coordinate1.y;
+               double oldLen = sqrt(oldC1x*oldC1x + oldC1y*oldC1y);
+               double newLen = sqrt(newLenSq);
+               
+               double angleC1Old = atan2(oldC1y, oldC1x);
+               double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
+               double angleC1New = atan2(newC1y, newC1x);
 
-           double angleC1Old = atan2(oldC1y, oldC1x);
-           double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
-           double angleC1New = atan2(newC1y, newC1x);
-           
-           // Preserve relative angle: Angle(C2) - Angle(C1) constant
-           double relAngle = angleC2Old - angleC1Old;
-           double angleC2New = angleC1New + relAngle;
-           
-           // Preserve relative scale
-           double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
-                                  m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
-           double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
-           double newLenC2 = newLen * scaleRatio;
-           
-           if (newLenC2 < 2.0) return; // Dependent axis too short, ignore
+               double relAngle = angleC2Old - angleC1Old;
+               double angleC2New = angleC1New + relAngle;
 
-           m_scrToImg->coordinate1.x = newC1x;
-           m_scrToImg->coordinate1.y = newC1y;
-           m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
-           m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
+               double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
+                                      m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
+               double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
+               double newLenC2 = newLen * scaleRatio;
 
-           emit coordinateSystemChanged();
-           update();
+               if (newLenC2 >= 2.0) {
+                   m_scrToImg->coordinate1.x = newC1x;
+                   m_scrToImg->coordinate1.y = newC1y;
+                   m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
+                   m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
+                   emit coordinateSystemChanged();
+                   update();
+               }
+           } else {
+               // Independent update
+               m_scrToImg->coordinate1.x = newC1x;
+               m_scrToImg->coordinate1.y = newC1y;
+               emit coordinateSystemChanged();
+               update();
+           }
        }
     } else if (m_dragTarget == DragTarget::Axis2 && isClick && m_scrToImg) {
-       // Set Coordinate2 (Analogous to Axis1)
+       // Set Coordinate2
        colorscreen::point_t clickImg = widgetToImage(event->position());
        colorscreen::point_t center = m_scrToImg->center;
 
        double newC2x = clickImg.x - center.x;
        double newC2y = clickImg.y - center.y;
 
-       double oldC2x = m_pressParams.coordinate2.x;
-       double oldC2y = m_pressParams.coordinate2.y;
-
-       double oldLenC2Sq = oldC2x*oldC2x + oldC2y*oldC2y;
        double newLenC2Sq = newC2x*newC2x + newC2y*newC2y;
 
-       if (oldLenC2Sq > 1e-12 && newLenC2Sq > 1e-12) {
-           double oldLenC2 = sqrt(oldLenC2Sq);
-           double newLenC2 = sqrt(newLenC2Sq);
-           
-           if (newLenC2 < 2.0) return; // Too short
-
-           double angleC1Old = atan2(m_pressParams.coordinate1.y, m_pressParams.coordinate1.x);
-           double angleC2Old = atan2(oldC2y, oldC2x);
-           double angleC2New = atan2(newC2y, newC2x);
-           
-           // Preserve relative angle: Angle(C1) = Angle(C2) - (Angle(C2Old) - Angle(C1Old))
-           // i.e. Angle(C2) - Angle(C1) = RelAngle constant.
-           double relAngle = angleC2Old - angleC1Old;
-           double angleC1New = angleC2New - relAngle;
-           
-           // Preserve relative scale
-           double oldLenC1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
-                                  m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
-           double scaleRatioNum = (oldLenC1 > 1e-9) ? oldLenC2 / oldLenC1 : 1.0;
-           // We want newLenC2 / newLenC1 = scaleRatioNum
-           // so newLenC1 = newLenC2 / scaleRatioNum
-           double newLenC1 = (scaleRatioNum > 1e-9) ? newLenC2 / scaleRatioNum : newLenC2;
-           
-           if (newLenC1 < 2.0) return; // Dependent axis too short
-
-           m_scrToImg->coordinate2.x = newC2x;
-           m_scrToImg->coordinate2.y = newC2y;
-           m_scrToImg->coordinate1.x = newLenC1 * cos(angleC1New);
-           m_scrToImg->coordinate1.y = newLenC1 * sin(angleC1New);
-
-           emit coordinateSystemChanged();
-           update();
+       if (newLenC2Sq > 4.0) {
+           if (m_lockRelativeCoordinates) {
+               double oldC2x = m_pressParams.coordinate2.x;
+               double oldC2y = m_pressParams.coordinate2.y;
+               double oldLenC2 = sqrt(oldC2x*oldC2x + oldC2y*oldC2y);
+               double newLenC2 = sqrt(newLenC2Sq);
+               
+               double angleC1Old = atan2(m_pressParams.coordinate1.y, m_pressParams.coordinate1.x);
+               double angleC2Old = atan2(oldC2y, oldC2x);
+               double angleC2New = atan2(newC2y, newC2x);
+               
+               double relAngle = angleC2Old - angleC1Old;
+               double angleC1New = angleC2New - relAngle;
+               
+               double oldLenC1 = sqrt(m_pressParams.coordinate1.x*m_pressParams.coordinate1.x + 
+                                      m_pressParams.coordinate1.y*m_pressParams.coordinate1.y);
+               double scaleRatioNum = (oldLenC1 > 1e-9) ? oldLenC2 / oldLenC1 : 1.0;
+               double newLenC1 = (scaleRatioNum > 1e-9) ? newLenC2 / scaleRatioNum : newLenC2;
+               
+               if (newLenC1 >= 2.0) {
+                   m_scrToImg->coordinate2.x = newC2x;
+                   m_scrToImg->coordinate2.y = newC2y;
+                   m_scrToImg->coordinate1.x = newLenC1 * cos(angleC1New);
+                   m_scrToImg->coordinate1.y = newLenC1 * sin(angleC1New);
+                   emit coordinateSystemChanged();
+                   update();
+               }
+           } else {
+               // Independent update
+               m_scrToImg->coordinate2.x = newC2x;
+               m_scrToImg->coordinate2.y = newC2y;
+               emit coordinateSystemChanged();
+               update();
+           }
        }
     }
 
@@ -1198,3 +1229,4 @@ void ImageWidget::updateSimulatedPoints() {
   
   m_simulatedPointsDirty = false;
 }
+

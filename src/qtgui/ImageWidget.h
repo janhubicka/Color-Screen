@@ -47,6 +47,9 @@ public:
 
   void setShowRegistrationPoints(bool show);
   void clearSelection();
+  
+  // Coordinate System options
+  void setLockRelativeCoordinates(bool lock) { m_lockRelativeCoordinates = lock; }
   void selectAll();
   void deleteSelectedPoints();
 
@@ -122,6 +125,7 @@ private:
   QPointF m_dragStartWidget;
   colorscreen::point_t m_dragStartImg;
   colorscreen::scr_to_img_parameters m_pressParams;
+  bool m_lockRelativeCoordinates = true;
 
   bool m_showRegistrationPoints = false;
 

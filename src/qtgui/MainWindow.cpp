@@ -154,7 +154,6 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setupUi() {
-  createMenus();
 
   m_mainSplitter = new QSplitter(Qt::Horizontal, this);
   setCentralWidget(m_mainSplitter);
@@ -162,6 +161,8 @@ void MainWindow::setupUi() {
   // Left: Image Widget
   m_imageWidget = new ImageWidget(this);
   m_mainSplitter->addWidget(m_imageWidget);
+  
+  createMenus();
 
   // Connect ImageWidget progress signals
   connect(m_imageWidget, &ImageWidget::progressStarted, this,
@@ -509,6 +510,10 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
   m_toolbar->addAction(m_setCenterAction);
+  
+  // Lock toggle (visible only when Set Center is active)
+  m_toolbar->addAction(m_lockRelativeCoordinatesAction);
+  m_lockRelativeCoordinatesAction->setVisible(false);
 
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
@@ -526,7 +531,10 @@ void MainWindow::createToolbar() {
     }
   });
   connect(m_setCenterAction, &QAction::toggled, this, [this](bool checked) {
-    if (checked) m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+    if (checked) {
+        m_imageWidget->setInteractionMode(ImageWidget::SetCenterMode);
+    }
+    m_lockRelativeCoordinatesAction->setVisible(checked);
   });
   
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
@@ -785,6 +793,12 @@ void MainWindow::createMenus() {
 
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");
+
+  m_lockRelativeCoordinatesAction = new QAction(QIcon::fromTheme("object-locked"), tr("Lock relative coordinates"), this);
+  m_lockRelativeCoordinatesAction->setCheckable(true);
+  m_lockRelativeCoordinatesAction->setChecked(true); // Default ON
+  connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget, &ImageWidget::setLockRelativeCoordinates);
+  m_registrationMenu->addAction(m_lockRelativeCoordinatesAction);
 
   m_registrationPointsAction = new QAction(tr("Show Registration &Points"), this);
   m_registrationPointsAction->setCheckable(true);

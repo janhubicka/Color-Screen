@@ -241,6 +241,8 @@ public:
 
   /* Try to adjust position of center of the patches (+- range)  */
   bool optimize_position;
+  /* Try adjusting coordinate1 (rotation/scale)  */
+  bool optimize_coordinate1;
   /* Try to optimize scanner mtf sigma (gaussian blur) (othervise fixed_mtf is used, if any).  */
   bool optimize_scanner_mtf_sigma;
   /* Try to optimize screen blur attribute (othervise fixed_defocus is used, if any).  */
@@ -1101,6 +1103,7 @@ public:
 
     /* First decide on what to optimize.  */
     optimize_position = flags & finetune_position;
+    optimize_coordinate1 = flags & finetune_coordinates;
     optimize_screen_blur = flags & finetune_screen_blur;
     optimize_scanner_mtf_sigma = flags & finetune_scanner_mtf_sigma;
     optimize_scanner_mtf_defocus = flags & finetune_scanner_mtf_defocus;

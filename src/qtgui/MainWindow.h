@@ -141,6 +141,7 @@ private:
   QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
   QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
+  QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
   QAction *m_registrationPointsAction; // Registration points toggle
   QAction *m_panAction;
   QAction *m_selectAction;

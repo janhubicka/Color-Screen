@@ -30,6 +30,7 @@ enum finetune_flags : uint64_t
   finetune_simulate_infrared = 1 << 16,
   finetune_sharpening = 1 << 17,
   finetune_scanner_mtf_channel_defocus = 1 << 18,
+  finetune_coordinates = 1 << 19
 };
 struct finetune_parameters
 {
@@ -83,6 +84,8 @@ struct finetune_result
   point_t solver_point_img_location;
   point_t solver_point_screen_location;
   enum solver_parameters::point_color solver_point_color;
+
+  point_t center, coodinate1, coordinate2;
 
   finetune_result ()
   : success (false), tile_pos {-1, -1}, badness (12345), uncertainity (12345),
