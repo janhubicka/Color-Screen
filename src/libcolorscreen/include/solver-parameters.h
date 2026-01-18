@@ -39,6 +39,14 @@ struct solver_parameters
   {
     point_t img, scr;
     enum point_color color;
+    bool operator== (const solver_point_t &other) const
+    {
+      return img == other.img && scr == other.scr && color == other.color;
+    }
+    bool operator!= (const solver_point_t &other) const
+    {
+      return !(*this == other);
+    }
 
     /* Translate point color to RGB.  */
     rgbdata
@@ -104,6 +112,18 @@ struct solver_parameters
   DLL_PUBLIC static point_location *get_point_locations (enum scr_type type,
                                                          int *n);
   DLL_PUBLIC void dump (FILE *out);
+  bool operator== (const solver_parameters &other) const
+  {
+    return optimize_lens == other.optimize_lens &&
+           optimize_tilt == other.optimize_tilt &&
+           weighted == other.weighted &&
+           center == other.center &&
+           points == other.points;
+  }
+  bool operator!= (const solver_parameters &other) const
+  {
+    return !(*this == other);
+  }
   /* Names of colors in enum point_color.  */
   DLL_PUBLIC static const char *const point_color_names[(int)max_point_color];
 };
