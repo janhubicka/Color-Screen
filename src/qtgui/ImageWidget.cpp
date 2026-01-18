@@ -819,13 +819,64 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
     }
 
     // Handle click logic (only if it was a small movement)
-    if (event->button() == Qt::LeftButton && m_draggingCenter) {
-       QPointF dragDistance = event->position() - m_dragStartWidget;
-       if (dragDistance.manhattanLength() < 5 && m_scrToImg) {
-          // It was a click, not a drag. Set center to this specific point.
-          m_scrToImg->center = widgetToImage(event->position());
-          emit coordinateSystemChanged();
-          update();
+    QPointF dragDistance = event->position() - m_dragStartWidget;
+    bool isClick = dragDistance.manhattanLength() < 5;
+
+    if (m_draggingCenter && isClick && m_scrToImg) {
+       // It was a click, not a drag. Set center to this specific point.
+       m_scrToImg->center = widgetToImage(event->position());
+       emit coordinateSystemChanged();
+       update();
+    } else if (m_draggingAxes && isClick && m_scrToImg) {
+       // Click with Right Button or Ctrl+Left -> Reposition Coordinate1
+       // Set coordinate1 so that center + coordinate1 = clicked point.
+       // Update coordinate2 to preserve relative angle and scale from the INITIAL state (m_pressParams).
+
+       colorscreen::point_t clickImg = widgetToImage(event->position());
+       colorscreen::point_t center = m_scrToImg->center; // Use current center
+
+       // New coordinate1 vector
+       double newC1x = clickImg.x - center.x;
+       double newC1y = clickImg.y - center.y;
+
+       // Old coordinate1 vector (from press params to preserve original relationship)
+       double oldC1x = m_pressParams.coordinate1.x;
+       double oldC1y = m_pressParams.coordinate1.y;
+
+       // Calculate scale and rotation from Old to New
+       double oldLenSq = oldC1x*oldC1x + oldC1y*oldC1y;
+       double newLenSq = newC1x*newC1x + newC1y*newC1y;
+
+       if (oldLenSq > 1e-12 && newLenSq > 1e-12) {
+           double oldLen = sqrt(oldLenSq);
+           double newLen = sqrt(newLenSq);
+           double scale = newLen / oldLen;
+
+           // Normalize vectors
+           double ux = oldC1x / oldLen;
+           double uy = oldC1y / oldLen;
+           double vx = newC1x / newLen;
+           double vy = newC1y / newLen;
+
+           // Rotation from u to v
+           // cos(theta) = dot(u, v)
+           // sin(theta) = cross(u, v) = ux*vy - uy*vx
+           double cosA = ux * vx + uy * vy;
+           double sinA = ux * vy - uy * vx;
+
+           // Update Coordinate1 explicitly
+           m_scrToImg->coordinate1.x = newC1x;
+           m_scrToImg->coordinate1.y = newC1y;
+
+           // Update Coordinate2 by rotating and scaling the ORIGINAL coordinate2
+           double oldC2x = m_pressParams.coordinate2.x;
+           double oldC2y = m_pressParams.coordinate2.y;
+
+           m_scrToImg->coordinate2.x = scale * (oldC2x * cosA - oldC2y * sinA);
+           m_scrToImg->coordinate2.y = scale * (oldC2x * sinA + oldC2y * cosA);
+
+           emit coordinateSystemChanged();
+           update();
        }
     }
 
