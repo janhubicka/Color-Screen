@@ -13,6 +13,8 @@ colorscreen_qt_SOURCES = \
     SharpnessPanel.cpp \
     ScreenPanel.cpp \
     GeometryPanel.cpp \
+    GeometrySolverWorker.cpp \
+    WorkerBase.cpp \
     ColorPanel.cpp \
     MTFChartWidget.cpp \
     SpectraChartWidget.cpp \
@@ -38,6 +40,8 @@ MOC_SOURCES = \
     moc_SharpnessPanel.cpp \
     moc_ScreenPanel.cpp \
     moc_GeometryPanel.cpp \
+    moc_GeometrySolverWorker.cpp \
+    moc_WorkerBase.cpp \
     moc_ColorPanel.cpp \
     moc_SmartSpinBox.cpp \
     moc_MTFChartWidget.cpp \
@@ -46,7 +50,7 @@ MOC_SOURCES = \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

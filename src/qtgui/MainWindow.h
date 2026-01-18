@@ -44,6 +44,7 @@ struct ProgressEntry {
 
 class ScreenPanel;
 class GeometryPanel;
+class GeometrySolverWorker;
 class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow {
@@ -74,6 +75,9 @@ private slots:
   void onGamutWarningToggled(bool checked);
   void onColorCheckBoxChanged(bool checked);  // Slot for color checkbox
   void onRegistrationPointsToggled(bool checked); // Slot for Registration Points toggle
+  void onOptimizeGeometry(bool autoChecked);      // Slot for Geometry Optimization
+  void onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result,
+                        bool success);
 
   // Recent Files
   // Recent Files
@@ -241,4 +245,9 @@ private:
   void loadRecoveryState();
   void clearRecoveryFiles();
   bool hasRecoveryFiles();
+  
+  // Solver Worker
+  GeometrySolverWorker *m_solverWorker;
+  QThread *m_solverThread;
+  std::shared_ptr<colorscreen::progress_info> m_solverProgress;
 };

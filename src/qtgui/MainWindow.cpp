@@ -5,6 +5,7 @@
 #include "NavigationView.h"
 #include "ScreenPanel.h"
 #include "GeometryPanel.h"
+#include "GeometrySolverWorker.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -132,9 +133,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
   // Initialize UI state
   updateUIFromState(getCurrentState());
+
+  // Initialize Solver Worker
+  m_solverThread = new QThread(this);
+  m_solverWorker = new GeometrySolverWorker(m_scan);
+  m_solverWorker->moveToThread(m_solverThread);
+  m_solverThread->start();
+
+  connect(m_solverWorker, &GeometrySolverWorker::finished, this, &MainWindow::onSolverFinished);
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+  if (m_solverThread) {
+    m_solverThread->quit();
+    m_solverThread->wait();
+  }
+}
 
 void MainWindow::setupUi() {
   createMenus();
@@ -328,6 +342,9 @@ void MainWindow::setupUi() {
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
+
+  // Link Geometry Panel signals
+  connect(m_geometryPanel, &GeometryPanel::optimizeRequested, this, &MainWindow::onOptimizeGeometry);
 
   // Synchronization for Registration Points visibility
   m_registrationPointsAction->setChecked(
@@ -1037,6 +1054,8 @@ void MainWindow::onImageLoaded() {
   // Update UI components that depend on loaded image
   updateModeMenu();
   if (m_scan) {
+    if (m_solverWorker)
+      m_solverWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
@@ -1514,6 +1533,38 @@ void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
 
 void MainWindow::onRegistrationPointsToggled(bool checked) {
   m_imageWidget->setShowRegistrationPoints(checked);
+}
+
+void MainWindow::onOptimizeGeometry(bool autoChecked) {
+  if (!m_scan || !m_solverWorker || m_solverProgress)
+    return;
+
+  // Create progress info
+  m_solverProgress = std::make_shared<colorscreen::progress_info>();
+  m_solverProgress->set_task("Optimizing geometry", 100);
+  addProgress(m_solverProgress);
+
+  // Request solve
+  QMetaObject::invokeMethod(m_solverWorker, "solve", Qt::QueuedConnection,
+                           Q_ARG(int, 0), // reqId
+                           Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+                           Q_ARG(colorscreen::solver_parameters, m_solverParams),
+                           Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_solverProgress));
+}
+
+void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success) {
+  if (m_solverProgress) {
+    removeProgress(m_solverProgress);
+    m_solverProgress.reset();
+  }
+
+  if (success) {
+    ParameterState newState = getCurrentState();
+    newState.scrToImg.merge_solver_solution(result);
+    changeParameters(newState);
+  } else {
+    QMessageBox::warning(this, "Optimization Failed", "The geometry solver failed to find a solution.");
+  }
 }
 
 void MainWindow::updateColorCheckBoxState() {
