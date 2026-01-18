@@ -2,7 +2,11 @@
 !include "FileFunc.nsh"
 
 Name "Color-Screen"
-OutFile "Color-Screen-Installer.exe"
+!ifdef OUTFILE
+  OutFile "${OUTFILE}"
+!else
+  OutFile "Color-Screen-Installer.exe"
+!endif
 InstallDir "$PROGRAMFILES64\Color-Screen"
 RequestExecutionLevel admin
 
