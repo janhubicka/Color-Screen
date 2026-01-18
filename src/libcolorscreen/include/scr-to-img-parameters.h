@@ -236,7 +236,8 @@ struct scr_to_img_parameters
            && final_ratio == other.final_ratio && tilt_x == other.tilt_x
            && tilt_y == other.tilt_y && type == other.type
            && scanner_type == other.scanner_type
-           && lens_correction == other.lens_correction;
+           && lens_correction == other.lens_correction
+	   && mesh_trans == other.mesh_trans;
   }
   void
   merge_solver_solution (const scr_to_img_parameters &other)
