@@ -60,7 +60,7 @@ moc_%.cpp: %.h
 	$(MOC) $< -o $@
 
 # Rule to generate resource file (RCC is set by configure)
-qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/arrow.svg icons/hand.svg
+qrc_resources.cpp: resources.qrc ../../images/icon.svg
 	$(RCC) $< -o $@
 
 # Cleanup generated files

@@ -46,6 +46,9 @@ public:
                    colorscreen::solver_parameters *solver = nullptr);
 
   void setShowRegistrationPoints(bool show);
+  void clearSelection();
+  void selectAll();
+  void deleteSelectedPoints();
 
   enum InteractionMode { PanMode, SelectMode };
   void setInteractionMode(InteractionMode mode);
@@ -78,13 +81,17 @@ signals:
   void registrationPointsVisibilityChanged(bool visible);
   void viewStateChanged(QRectF visibleRect, double scale);
   void selectionChanged();
+  void registrationPointMoved(size_t index, colorscreen::point_t newPos);
+  void pointsChanged();
 
 public:
   double getMinScale() const; // Returns scale that fits image to view
   double getZoom() const { return m_scale; }
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
+  size_t registrationPointCount() const {
+    return m_solver ? m_solver->points.size() : 0;
+  }
   const std::set<SelectedPoint>& selectedPoints() const { return m_selectedPoints; }
-  void clearSelection();
 
   // Coordinate mapping API
   QPointF imageToWidget(colorscreen::point_t p) const;
@@ -133,6 +140,7 @@ private:
   std::set<SelectedPoint> m_selectedPoints;
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
+  int m_draggedPointIndex = -1;
   
   // Animations for when no image loaded
   ThamesAnimation *m_thamesAnim = nullptr;

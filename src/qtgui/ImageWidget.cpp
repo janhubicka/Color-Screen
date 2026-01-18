@@ -427,13 +427,18 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
       }
 
       if (hitIndex != -1) {
+        m_draggedPointIndex = hitIndex;
         SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
         if (ctrl) {
           if (m_selectedPoints.count(sp)) m_selectedPoints.erase(sp);
           else m_selectedPoints.insert(sp);
         } else {
-          m_selectedPoints.clear();
-          m_selectedPoints.insert(sp);
+          // If already selected, don't clear (to allow dragging multiple if implemented later, 
+          // but for now we just drag one).
+          if (m_selectedPoints.count(sp) == 0) {
+            m_selectedPoints.clear();
+            m_selectedPoints.insert(sp);
+          }
         }
         emit selectionChanged();
         update();
@@ -464,8 +469,16 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
-  } else if (m_interactionMode == SelectMode && m_rubberBand && m_rubberBand->isVisible()) {
-    m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
+  } else if (m_interactionMode == SelectMode) {
+    if (m_draggedPointIndex != -1) {
+      colorscreen::point_t imgPos = widgetToImage(event->position());
+      if (m_solver && (size_t)m_draggedPointIndex < m_solver->points.size()) {
+        m_solver->points[m_draggedPointIndex].img = imgPos;
+        update();
+      }
+    } else if (m_rubberBand && m_rubberBand->isVisible()) {
+      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
+    }
   }
 }
 
@@ -473,29 +486,34 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode) {
       m_isDragging = false;
-    } else if (m_interactionMode == SelectMode && m_rubberBand && m_rubberBand->isVisible()) {
-      QRect rect = m_rubberBand->geometry();
-      m_rubberBand->hide();
-      
-      bool ctrl = event->modifiers() & Qt::ControlModifier;
-      bool changed = false;
+    } else if (m_interactionMode == SelectMode) {
+      if (m_draggedPointIndex != -1) {
+        m_draggedPointIndex = -1;
+        emit pointsChanged();
+      } else if (m_rubberBand && m_rubberBand->isVisible()) {
+        QRect rect = m_rubberBand->geometry();
+        m_rubberBand->hide();
+        
+        bool ctrl = event->modifiers() & Qt::ControlModifier;
+        bool changed = false;
 
-      if (m_showRegistrationPoints && m_solver) {
-        for (size_t i = 0; i < m_solver->points.size(); ++i) {
-          QPointF pos = imageToWidget(m_solver->points[i].img);
-          if (rect.contains(pos.toPoint())) {
-            SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
-            if (!m_selectedPoints.count(sp)) {
-              m_selectedPoints.insert(sp);
-              changed = true;
+        if (m_showRegistrationPoints && m_solver) {
+          for (size_t i = 0; i < m_solver->points.size(); ++i) {
+            QPointF pos = imageToWidget(m_solver->points[i].img);
+            if (rect.contains(pos.toPoint())) {
+              SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
+              if (!m_selectedPoints.count(sp)) {
+                m_selectedPoints.insert(sp);
+                changed = true;
+              }
             }
           }
         }
-      }
 
-      if (changed) {
-        emit selectionChanged();
-        update();
+        if (changed) {
+          emit selectionChanged();
+          update();
+        }
       }
     }
   }
@@ -625,6 +643,48 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
   }
   update();
   emit registrationPointsVisibilityChanged(show);
+}
+
+void ImageWidget::selectAll() {
+  if (!m_solver || m_solver->points.empty()) return;
+  
+  bool changed = false;
+  for (size_t i = 0; i < m_solver->points.size(); ++i) {
+    auto result = m_selectedPoints.insert({i, SelectedPoint::RegistrationPoint});
+    if (result.second) changed = true;
+  }
+  
+  if (changed) {
+    emit selectionChanged();
+    update();
+  }
+}
+
+void ImageWidget::deleteSelectedPoints() {
+  if (!m_solver || m_selectedPoints.empty()) return;
+  
+  std::vector<size_t> toDelete;
+  for (const auto& sp : m_selectedPoints) {
+    if (sp.type == SelectedPoint::RegistrationPoint) {
+      toDelete.push_back(sp.index);
+    }
+  }
+  
+  if (toDelete.empty()) return;
+  
+  // Sort descending to avoid index shifting during deletion
+  std::sort(toDelete.rbegin(), toDelete.rend());
+  
+  for (size_t idx : toDelete) {
+    if (idx < m_solver->points.size()) {
+      m_solver->points.erase(m_solver->points.begin() + idx);
+    }
+  }
+  
+  m_selectedPoints.clear();
+  emit selectionChanged();
+  emit pointsChanged();
+  update();
 }
 
 void ImageWidget::setInteractionMode(InteractionMode mode) {

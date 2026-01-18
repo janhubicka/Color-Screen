@@ -20,7 +20,9 @@ void GeometryPanel::setupUi() {
 
   QHBoxLayout *optLayout = new QHBoxLayout();
   QPushButton *optButton = new QPushButton("Optimize geometry");
+  optButton->setObjectName("optimizeButton");
   QCheckBox *autoBtn = new QCheckBox("Auto");
+  autoBtn->setObjectName("autoSolverBox");
   optLayout->addWidget(optButton);
   optLayout->addWidget(autoBtn);
   m_form->addRow(optLayout);
@@ -30,7 +32,7 @@ void GeometryPanel::setupUi() {
   });
 
   QCheckBox *nonLinearBox = new QCheckBox("Nonlinear corrections");
-  nonLinearBox->setObjectName("nonLinearBox");
+  nonLinearBox->setObjectName("nonlinearBox");
   m_form->addRow(nonLinearBox);
 
   connect(nonLinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
@@ -39,4 +41,9 @@ void GeometryPanel::setupUi() {
   showBox->setObjectName("showRegistrationPointsBox");
 
   updateUI();
+}
+
+bool GeometryPanel::isAutoEnabled() const {
+  QCheckBox *cb = findChild<QCheckBox *>("autoSolverBox");
+  return cb && cb->isChecked();
 }

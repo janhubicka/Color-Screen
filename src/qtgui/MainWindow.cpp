@@ -383,6 +383,9 @@ void MainWindow::setupUi() {
     regBox->setChecked(m_imageWidget->registrationPointsVisible());
   }
 
+  // Auto solver trigger
+  connect(m_imageWidget, &ImageWidget::pointsChanged, this, &MainWindow::maybeTriggerAutoSolver);
+
   // Nonlinear corrections checkbox
   QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
   if (nlBox) {
@@ -465,31 +468,30 @@ void MainWindow::createToolbar() {
   // Interaction Tools
   QActionGroup *toolGroup = new QActionGroup(this);
   
-  QIcon panIcon = QIcon::fromTheme("tool-pan", QIcon(":/icons/hand.svg"));
-  if (panIcon.isNull()) panIcon = QIcon(":/icons/hand.svg");
-  QAction *panAction = new QAction(panIcon, "Pan", this);
-  panAction->setActionGroup(toolGroup);
-  panAction->setCheckable(true);
-  panAction->setChecked(true);
-  panAction->setToolTip("Pan Tool (P)");
-  panAction->setShortcut(QKeySequence("P"));
-  m_toolbar->addAction(panAction);
+  m_panAction = new QAction(QIcon::fromTheme("tool-pan"), "Pan", this);
+  m_panAction->setActionGroup(toolGroup);
+  m_panAction->setCheckable(true);
+  m_panAction->setChecked(true);
+  m_panAction->setToolTip("Pan Tool (P)");
+  m_panAction->setShortcut(QKeySequence("P"));
+  m_toolbar->addAction(m_panAction);
 
-  QIcon selectIcon = QIcon::fromTheme("tool-pointer", QIcon(":/icons/arrow.svg"));
-  if (selectIcon.isNull()) selectIcon = QIcon(":/icons/arrow.svg");
-  QAction *selectAction = new QAction(selectIcon, "Select", this);
-  selectAction->setActionGroup(toolGroup);
-  selectAction->setCheckable(true);
-  selectAction->setToolTip("Select Tool (S)");
-  selectAction->setShortcut(QKeySequence("S"));
-  m_toolbar->addAction(selectAction);
+  m_selectAction = new QAction(QIcon::fromTheme("tool-pointer"), "Select", this);
+  m_selectAction->setActionGroup(toolGroup);
+  m_selectAction->setCheckable(true);
+  m_selectAction->setToolTip("Select Tool (S)");
+  m_selectAction->setShortcut(QKeySequence("S"));
+  m_toolbar->addAction(m_selectAction);
 
-  connect(panAction, &QAction::toggled, this, [this](bool checked) {
+  connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
-  connect(selectAction, &QAction::toggled, this, [this](bool checked) {
+  connect(m_selectAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
   });
+  
+  connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
+  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
 
   m_toolbar->addSeparator();
 
@@ -717,12 +719,6 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
-  // Registration Points Action
-  m_registrationPointsAction = new QAction(tr("Registration &Points"), this);
-  m_registrationPointsAction->setCheckable(true);
-  m_registrationPointsAction->setChecked(false);
-  m_viewMenu->addAction(m_registrationPointsAction);
-
   m_viewMenu->addSeparator();
 
   m_rotateLeftAction = m_viewMenu->addAction("Rotate &Left");
@@ -741,6 +737,34 @@ void MainWindow::createMenus() {
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
+
+  // Registration Menu
+  m_registrationMenu = menuBar()->addMenu("&Registration");
+
+  m_registrationPointsAction = new QAction(tr("Show Registration &Points"), this);
+  m_registrationPointsAction->setCheckable(true);
+  m_registrationPointsAction->setChecked(false);
+  
+  // Visibility toggle at the top
+  m_registrationMenu->addAction(m_registrationPointsAction);
+  m_registrationMenu->addSeparator();
+
+  m_selectAllAction = m_registrationMenu->addAction("Select &All");
+  m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
+  connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::onSelectAll);
+
+  m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
+  m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+  connect(m_deselectAllAction, &QAction::triggered, this, &MainWindow::onDeselectAll);
+
+  m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
+  m_deleteSelectedAction->setShortcut(QKeySequence::Delete);
+  connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+
+  m_registrationMenu->addSeparator();
+
+  // Connect toggle to update tool state
+  connect(m_registrationPointsAction, &QAction::toggled, this, &MainWindow::updateRegistrationActions);
 }
 
 void MainWindow::onOpenParameters() {
@@ -1118,6 +1142,7 @@ void MainWindow::onImageLoaded() {
 
   // Refresh param values too
   applyState(getCurrentState());
+  updateRegistrationActions();
 }
 
 // Recent Files Implementation
@@ -1781,4 +1806,47 @@ void MainWindow::clearRecoveryFiles() {
   
   QFile::remove(imagePath);
   QFile::remove(paramsPath);
+}
+void MainWindow::onSelectAll() {
+  m_imageWidget->selectAll();
+}
+
+void MainWindow::onDeselectAll() {
+  m_imageWidget->clearSelection();
+}
+
+void MainWindow::onDeleteSelected() {
+  m_imageWidget->deleteSelectedPoints();
+}
+
+void MainWindow::updateRegistrationActions() {
+  size_t count = m_imageWidget->registrationPointCount();
+  bool visible = m_imageWidget->registrationPointsVisible();
+
+  if (m_selectAction) {
+    m_selectAction->setEnabled(visible && count > 0);
+  }
+
+  // Update menu actions if they exist
+  if (m_selectAllAction) m_selectAllAction->setEnabled(visible && count > 0);
+  if (m_deselectAllAction) m_deselectAllAction->setEnabled(visible && !m_imageWidget->selectedPoints().empty());
+
+  // Update buttons in GeometryPanel
+  if (m_geometryPanel) {
+    QPushButton *optBtn = m_geometryPanel->findChild<QPushButton *>("optimizeButton");
+    if (optBtn) optBtn->setEnabled(count >= 3);
+
+    QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonlinearBox");
+    if (nlBox) nlBox->setEnabled(count >= 5);
+  }
+}
+
+void MainWindow::maybeTriggerAutoSolver() {
+  if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+    size_t count = m_imageWidget->registrationPointCount();
+    if (count >= 3) {
+      onOptimizeGeometry(true); // Trigger solver (auto=true)
+    }
+  }
+  updateRegistrationActions();
 }

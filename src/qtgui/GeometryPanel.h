@@ -14,6 +14,9 @@ signals:
   void optimizeRequested(bool autoChecked);
   void nonlinearToggled(bool checked);
 
+public:
+  bool isAutoEnabled() const;
+
 private:
   void setupUi();
 };

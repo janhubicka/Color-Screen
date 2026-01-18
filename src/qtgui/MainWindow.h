@@ -80,6 +80,11 @@ private slots:
       // Slot for Geometry Optimization
   void onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result,
                         bool success);
+  void onSelectAll();
+  void onDeselectAll();
+  void onDeleteSelected();
+  void updateRegistrationActions();
+  void maybeTriggerAutoSolver();
 
   // Recent Files
   // Recent Files
@@ -119,6 +124,7 @@ private:
   QMenu *m_viewMenu; // Added
   QMenu *m_modeMenu;
   QMenu *m_windowMenu;
+  QMenu *m_registrationMenu;
   QMenu *m_helpMenu;
 
   QAction *m_openAction;
@@ -132,6 +138,13 @@ private:
   QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
   QAction *m_registrationPointsAction; // Registration points toggle
+  QAction *m_panAction;
+  QAction *m_selectAction;
+  QAction *m_selectAllAction;
+  QAction *m_deselectAllAction;
+  QAction *m_deleteSelectedAction;
+  QAction *m_optimizeAction;
+  QAction *m_nonLinearAction;
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QMenu *m_recentFilesMenu;
