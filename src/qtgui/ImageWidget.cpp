@@ -588,6 +588,42 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       
       // Draw Y axis endpoint  
       p.drawEllipse(yWidget, 6, 6);
+
+      // Draw labels with outline and orthogonal placement
+      auto drawLabel = [&](QPointF endPos, QPointF center, QString text) {
+          QPointF dir = endPos - center;
+          double len = sqrt(dir.x()*dir.x() + dir.y()*dir.y());
+          if (len > 0) {
+              // Rotate 90 degrees (orthogonal)
+              // (x, y) -> (-y, x)
+              QPointF perp(-dir.y() / len, dir.x() / len);
+              
+              // Offset by 25 pixels orthogonal, plus a bit forward along axis to clear dot
+              QPointF labelPos = endPos + perp * 25.0 + (dir / len) * 10.0;
+              
+              QRectF r(labelPos.x() - 15, labelPos.y() - 15, 30, 30);
+              
+              // Draw black outline
+              p.setPen(Qt::black);
+              for (int dx = -1; dx <= 1; ++dx) {
+                  for (int dy = -1; dy <= 1; ++dy) {
+                      if (dx != 0 || dy != 0)
+                          p.drawText(r.translated(dx, dy), Qt::AlignCenter, text);
+                  }
+              }
+              // Draw yellow fill
+              p.setPen(Qt::yellow);
+              p.drawText(r, Qt::AlignCenter, text);
+          }
+      };
+
+      QFont f = p.font();
+      f.setBold(true);
+      f.setPointSize(14);
+      p.setFont(f);
+
+      drawLabel(xWidget, centerWidget, "X");
+      drawLabel(yWidget, centerWidget, "Y");
     }
 
     // Hide animations when we have an image
@@ -850,30 +886,30 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
        if (oldLenSq > 1e-12 && newLenSq > 1e-12) {
            double oldLen = sqrt(oldLenSq);
            double newLen = sqrt(newLenSq);
-           double scale = newLen / oldLen;
-
-           // Normalize vectors
-           double ux = oldC1x / oldLen;
-           double uy = oldC1y / oldLen;
-           double vx = newC1x / newLen;
-           double vy = newC1y / newLen;
-
-           // Rotation from u to v
-           // cos(theta) = dot(u, v)
-           // sin(theta) = cross(u, v) = ux*vy - uy*vx
-           double cosA = ux * vx + uy * vy;
-           double sinA = ux * vy - uy * vx;
-
+           
+           // Calculate angles
+           double angleC1Old = atan2(oldC1y, oldC1x);
+           double angleC2Old = atan2(m_pressParams.coordinate2.y, m_pressParams.coordinate2.x);
+           
+           double angleC1New = atan2(newC1y, newC1x);
+           
+           // Preserve relative angle: Angle(C2) - Angle(C1) should be constant
+           double relAngle = angleC2Old - angleC1Old;
+           double angleC2New = angleC1New + relAngle;
+           
+           // Preserve relative scale: Len(C2) / Len(C1) should be constant
+           double oldLenC2 = sqrt(m_pressParams.coordinate2.x*m_pressParams.coordinate2.x + 
+                                  m_pressParams.coordinate2.y*m_pressParams.coordinate2.y);
+           double scaleRatio = (oldLen > 1e-9) ? oldLenC2 / oldLen : 1.0;
+           double newLenC2 = newLen * scaleRatio;
+           
            // Update Coordinate1 explicitly
            m_scrToImg->coordinate1.x = newC1x;
            m_scrToImg->coordinate1.y = newC1y;
 
-           // Update Coordinate2 by rotating and scaling the ORIGINAL coordinate2
-           double oldC2x = m_pressParams.coordinate2.x;
-           double oldC2y = m_pressParams.coordinate2.y;
-
-           m_scrToImg->coordinate2.x = scale * (oldC2x * cosA - oldC2y * sinA);
-           m_scrToImg->coordinate2.y = scale * (oldC2x * sinA + oldC2y * cosA);
+           // Update Coordinate2 explicitly from angle and length
+           m_scrToImg->coordinate2.x = newLenC2 * cos(angleC2New);
+           m_scrToImg->coordinate2.y = newLenC2 * sin(angleC2New);
 
            emit coordinateSystemChanged();
            update();
