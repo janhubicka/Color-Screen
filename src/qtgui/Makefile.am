@@ -50,7 +50,7 @@ MOC_SOURCES = \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h colorscreen.rc
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -73,6 +73,15 @@ colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolors
 colorscreen_qt_LDADD = \
     $(top_builddir)/src/libcolorscreen/libcolorscreen.la \
     $(Qt6_LIBS)
+
+# Windows Resource File
+if HOST_WIN32
+colorscreen_qt_LDADD += colorscreen_res.o
+colorscreen_qt_LDFLAGS = -mwindows
+endif
+
+colorscreen_res.o: colorscreen.rc
+	$(WINDRES) $< -o $@
 
 # Ensure moc and rcc are run before compilation
 BUILT_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

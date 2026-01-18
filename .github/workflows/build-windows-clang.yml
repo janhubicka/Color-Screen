@@ -32,6 +32,11 @@ jobs:
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         CXXFLAGS="-O3 -ffast-math -Wall -flto ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
+    - name: generate icons
+      shell: msys2 {0}
+      run: |
+        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
+        cp os/windows/icon.ico src/qtgui/icon.ico
     - name: make
       shell: msys2 {0}
       run: make -j$(nproc)
@@ -85,7 +90,6 @@ jobs:
       run: |
         cp LICENSE /c/Color-Screen-install/
         cp README.md /c/Color-Screen-install/
-        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - uses: actions/upload-artifact@v4
       with:
