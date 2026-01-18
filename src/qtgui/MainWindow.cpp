@@ -4,6 +4,7 @@
 #include "ImageWidget.h"
 #include "NavigationView.h"
 #include "ScreenPanel.h"
+#include "GeometryPanel.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -302,22 +303,61 @@ void MainWindow::setupUi() {
             &ScreenPanel::detachPreviewRequested,
             &ScreenPanel::reattachPreview);
 
+  // Create Linearization Panel
   m_linearizationPanel = new LinearizationPanel(
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s) { changeParameters(s); },
       [this]() { return m_scan; }, this);
+
+  // Create Geometry Panel
+  m_geometryPanel =
+      new GeometryPanel([this]() { return getCurrentState(); },
+                        [this](const ParameterState &s) { changeParameters(s); },
+                        [this]() { return m_scan; }, this);
+
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
+  m_configTabs->addTab(m_geometryPanel, "Geometry");
   m_configTabs->addTab(m_colorPanel, "Color");
   rightSplitter->addWidget(m_configTabs);
 
-  // Register panels for updates (Order matters for tab order but not for
-  // updates necessarily)
+  // Register panels for updates
   m_panels.push_back(m_linearizationPanel);
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_screenPanel);
+  m_panels.push_back(m_geometryPanel);
   m_panels.push_back(m_colorPanel);
+
+  // Synchronization for Registration Points visibility
+  m_registrationPointsAction->setChecked(
+      m_imageWidget->registrationPointsVisible());
+  
+  // Link View menu -> ImageWidget
+  connect(m_registrationPointsAction, &QAction::toggled, m_imageWidget,
+          &ImageWidget::setShowRegistrationPoints);
+
+  // Link ImageWidget -> View menu (to keep it in sync if changed elsewhere)
+  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
+          m_registrationPointsAction, &QAction::setChecked);
+
+  // Link ImageWidget -> GeometryPanel checkbox
+  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
+          this, [this](bool visible) {
+    QCheckBox *cb = m_geometryPanel->findChild<QCheckBox*>("showRegistrationPointsBox");
+    if (cb) {
+        cb->blockSignals(true);
+        cb->setChecked(visible);
+        cb->blockSignals(false);
+    }
+  });
+
+  // Link GeometryPanel checkbox -> ImageWidget
+  QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox*>("showRegistrationPointsBox");
+  if (regBox) {
+      connect(regBox, &QCheckBox::toggled, m_imageWidget, &ImageWidget::setShowRegistrationPoints);
+      regBox->setChecked(m_imageWidget->registrationPointsVisible());
+  }
 
   m_mainSplitter->addWidget(m_rightColumn);
 
@@ -605,13 +645,11 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
-  // Control Points Action
-  m_controlPointsAction = new QAction(tr("Control &Points"), this);
-  m_controlPointsAction->setCheckable(true);
-  m_controlPointsAction->setChecked(false);
-  connect(m_controlPointsAction, &QAction::toggled, this,
-          &MainWindow::onControlPointsToggled);
-  m_viewMenu->addAction(m_controlPointsAction);
+  // Registration Points Action
+  m_registrationPointsAction = new QAction(tr("Registration &Points"), this);
+  m_registrationPointsAction->setCheckable(true);
+  m_registrationPointsAction->setChecked(false);
+  m_viewMenu->addAction(m_registrationPointsAction);
 
   m_viewMenu->addSeparator();
 
@@ -1474,8 +1512,8 @@ void MainWindow::onZoom100() {
 
 void MainWindow::onZoomFit() { m_imageWidget->fitToView(); }
 
-void MainWindow::onControlPointsToggled(bool checked) {
-  m_imageWidget->setShowControlPoints(checked);
+void MainWindow::onRegistrationPointsToggled(bool checked) {
+  m_imageWidget->setShowRegistrationPoints(checked);
 }
 
 void MainWindow::updateColorCheckBoxState() {

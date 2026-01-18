@@ -238,6 +238,15 @@ struct scr_to_img_parameters
            && scanner_type == other.scanner_type
            && lens_correction == other.lens_correction;
   }
+  void
+  merge_solver_solution (const scr_to_img_parameters &other) const
+  {
+    center = other.center;
+    coordinate1 = other.coordinate1;
+    coordinate2 = other.coordinate2;
+    projection_distance = other.projection_distance;
+    mesh_trans = other.mest_trans;
+  }
   bool
   operator!= (scr_to_img_parameters &other) const
   {

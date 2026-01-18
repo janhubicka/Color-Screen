@@ -41,6 +41,7 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
                                      : static_cast<QWidget*>(m_pagetAnim);
 
   setMouseTracking(false); // Only track when dragging
+  m_showRegistrationPoints = false;
 }
 
 double ImageWidget::getMinScale() const { return m_minScale; }
@@ -273,7 +274,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   if (!m_pixmap.isNull()) {
     p.drawImage(0, 0, m_pixmap);
 
-    if (m_showControlPoints && m_solver && m_scan && m_scrToImg) {
+    if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
       colorscreen::scr_to_img map;
       map.set_parameters(*m_scrToImg, *m_scan);
 
@@ -540,4 +541,12 @@ void ImageWidget::fitToView() {
   requestRender();
   emit viewStateChanged(
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+}
+
+void ImageWidget::setShowRegistrationPoints(bool show) {
+  if (m_showRegistrationPoints != show) {
+    m_showRegistrationPoints = show;
+    update();
+    emit registrationPointsVisibilityChanged(show);
+  }
 }

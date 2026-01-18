@@ -43,6 +43,7 @@ struct ProgressEntry {
 };
 
 class ScreenPanel;
+class GeometryPanel;
 class QUndoStack; // Forward decl
 
 class MainWindow : public QMainWindow {
@@ -72,7 +73,7 @@ private slots:
   void rotateRight();
   void onGamutWarningToggled(bool checked);
   void onColorCheckBoxChanged(bool checked);  // Slot for color checkbox
-  void onControlPointsToggled(bool checked); // Slot for Control Points toggle
+  void onRegistrationPointsToggled(bool checked); // Slot for Registration Points toggle
 
   // Recent Files
   // Recent Files
@@ -124,7 +125,7 @@ private:
   QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
   QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
-  QAction *m_controlPointsAction; // Control points toggle
+  QAction *m_registrationPointsAction; // Registration points toggle
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QMenu *m_recentFilesMenu;
@@ -217,6 +218,7 @@ private:
   LinearizationPanel *m_linearizationPanel;
   SharpnessPanel *m_sharpnessPanel;
   ScreenPanel *m_screenPanel;
+  GeometryPanel *m_geometryPanel;
   ColorPanel *m_colorPanel;
 
   // List of all panels for automated updates

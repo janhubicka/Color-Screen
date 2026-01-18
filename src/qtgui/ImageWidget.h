@@ -43,10 +43,7 @@ public:
                    colorscreen::render_type_parameters *renderType = nullptr,
                    colorscreen::solver_parameters *solver = nullptr);
 
-  void setShowControlPoints(bool show) {
-    m_showControlPoints = show;
-    update();
-  }
+  void setShowRegistrationPoints(bool show);
 
 public slots:
   void setZoom(double scale);
@@ -64,11 +61,13 @@ protected:
 signals:
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
   void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
+  void registrationPointsVisibilityChanged(bool visible);
   void viewStateChanged(QRectF visibleRect, double scale);
 
 public:
   double getMinScale() const; // Returns scale that fits image to view
   double getZoom() const { return m_scale; }
+  bool registrationPointsVisible() const { return m_showRegistrationPoints; }
 
   // Coordinate mapping API
   QPointF imageToWidget(colorscreen::point_t p) const;
@@ -88,7 +87,7 @@ private:
   colorscreen::render_type_parameters *m_renderType = nullptr;
   colorscreen::solver_parameters *m_solver = nullptr;
 
-  bool m_showControlPoints = false;
+  bool m_showRegistrationPoints = false;
 
   Renderer *m_renderer = nullptr;
   QThread *m_renderThread = nullptr;
