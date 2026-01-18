@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([colorscreen], [1.1], [hubicka@ucw.cz])
+AC_INIT([colorscreen], [2.0alpha], [hubicka@ucw.cz])
 AC_CONFIG_MACRO_DIRS([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall subdir-objects])

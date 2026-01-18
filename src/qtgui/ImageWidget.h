@@ -50,7 +50,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -81,6 +81,8 @@ signals:
   void registrationPointsVisibilityChanged(bool visible);
   void viewStateChanged(QRectF visibleRect, double scale);
   void selectionChanged();
+  void pointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
+                  colorscreen::point_t color);
   void pointManipulationStarted();
   void registrationPointMoved(size_t index, colorscreen::point_t newPos);
   void pointsChanged();

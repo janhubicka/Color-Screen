@@ -18,6 +18,8 @@
 #include "../libcolorscreen/include/stitch.h"
 #include "../libcolorscreen/include/tiff-writer.h"
 #include "../libcolorscreen/include/wratten.h"
+/* For PACKAGE_VERSION.  */
+#include "../libcolorscreen/config.h"
 
 using namespace colorscreen;
 
@@ -52,6 +54,7 @@ print_help (char *err = NULL)
   fprintf (stderr, "  Supported common args:\n");
   fprintf (stderr, "      --help                    print help\n");
   fprintf (stderr, "      --verbose                 enable verbose output\n");
+  fprintf (stderr, "      --version                 print version\n");
   fprintf (stderr, "      --threads=n               setnumber of threads\n");
   if (subhelp == help_render || subhelp == help_basic)
     {
@@ -636,10 +639,15 @@ parse_common_flags (int argc, char **argv, int *i)
       print_help ();
       return true;
     }
-  else if (!strcmp (argv[*i], "--verbose") || !strcmp (argv[*i], "-v"))
+  else if (!strcmp (argv[*i], "--verbose"))
     {
       verbose = true;
       return true;
+    }
+  else if (!strcmp (argv[*i], "--version") || !strcmp (argv[*i], "-v"))
+    {
+      printf ("Color-Screen version %s\nDeveloped by Jan Hubicka\nhttps://github.com/janhubicka/Color-Screen/wiki\n", PACKAGE_VERSION);
+      exit (1);
     }
   else if (!strcmp (argv[*i], "--verbose-tasks"))
     {

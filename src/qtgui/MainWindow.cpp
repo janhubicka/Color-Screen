@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "../libcolorscreen/include/base.h"
+#include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "ImageWidget.h"
 #include "NavigationView.h"
@@ -495,15 +496,32 @@ void MainWindow::createToolbar() {
   m_selectAction->setShortcut(QKeySequence("S"));
   m_toolbar->addAction(m_selectAction);
 
+  m_addPointAction = new QAction(QIcon::fromTheme("list-add"), "Add Point", this);
+  m_addPointAction->setActionGroup(toolGroup);
+  m_addPointAction->setCheckable(true);
+  m_addPointAction->setToolTip("Add Registration Point (A)");
+  m_addPointAction->setShortcut(QKeySequence("A"));
+  m_toolbar->addAction(m_addPointAction);
+
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
   connect(m_selectAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
   });
+  connect(m_addPointAction, &QAction::toggled, this, [this](bool checked) {
+    if (checked) {
+      m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+      // Auto-enable registration points visibility
+      if (!m_imageWidget->registrationPointsVisible()) {
+        m_imageWidget->setShowRegistrationPoints(true);
+      }
+    }
+  });
   
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
+  connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
 
   m_toolbar->addSeparator();
 
@@ -1848,16 +1866,38 @@ void MainWindow::onDeleteSelected() {
 }
 
 void MainWindow::updateRegistrationActions() {
-  size_t count = m_imageWidget->registrationPointCount();
-  bool visible = m_imageWidget->registrationPointsVisible();
-
-  if (m_selectAction) {
-    m_selectAction->setEnabled(visible && count > 0);
+  bool hasPoints = m_imageWidget && m_imageWidget->registrationPointsVisible() && m_imageWidget->registrationPointCount() > 0;
+  bool hasSelection = m_imageWidget && !m_imageWidget->selectedPoints().empty();
+  
+  // Disable selection actions if registration points aren't visible
+  if (m_selectAllAction) {
+    m_selectAllAction->setEnabled(hasPoints);
   }
-
-  // Update menu actions if they exist
-  if (m_selectAllAction) m_selectAllAction->setEnabled(visible && count > 0);
-  if (m_deselectAllAction) m_deselectAllAction->setEnabled(visible && !m_imageWidget->selectedPoints().empty());
+  if (m_deselectAllAction) {
+    m_deselectAllAction->setEnabled(hasSelection);
+  }
+  if (m_deleteSelectedAction) {
+    m_deleteSelectedAction->setEnabled(hasSelection);
+  }
+  
+  // Disable Add Point tool when screen type is Random or no scan loaded
+  if (m_addPointAction) {
+    bool canAddPoints = m_scan && m_scrToImgParams.type != colorscreen::Random;
+    m_addPointAction->setEnabled(canAddPoints);
+    // If tool is active but we can't add points, switch to Pan mode
+    if (!canAddPoints && m_addPointAction->isChecked()) {
+      m_panAction->setChecked(true);
+    }
+  }
+  
+  // Disable/enable optimize geometry and select all based on point count
+  size_t count = m_imageWidget ? m_imageWidget->registrationPointCount() : 0;
+  if (m_selectAllAction) {
+    m_selectAllAction->setEnabled(count > 0);
+  }
+  if (m_optimizeGeometryAction) {
+    m_optimizeGeometryAction->setEnabled(count >= 3);
+  }
 
   // Update buttons in GeometryPanel
   if (m_geometryPanel) {
@@ -1887,4 +1927,38 @@ void MainWindow::maybeTriggerAutoSolver() {
     }
   }
   updateRegistrationActions();
+}
+
+void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos, colorscreen::point_t color) {
+  if (!m_scan) {
+    return;
+  }
+
+  // Run finetune to get the accurate screen location and color
+  colorscreen::finetune_parameters fparam;
+  fparam.multitile = 3;
+  fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw | colorscreen::finetune_verbose | colorscreen::finetune_use_srip_widths;
+  
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  addProgress(progress);
+  
+  colorscreen::finetune_result res = colorscreen::finetune(m_rparams, m_scrToImgParams, *m_scan, 
+                                                            {{imgPos.x, imgPos.y}}, nullptr, fparam, progress.get());
+  
+  removeProgress(progress);
+  
+  if (res.success) {
+    // Snapshot state for undo
+    m_undoSnapshot = getCurrentState();
+    
+    // Add the point to solver parameters
+    m_solverParams.add_point(res.solver_point_img_location, res.solver_point_screen_location, res.solver_point_color);
+    
+    // Update the image widget
+    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+    m_imageWidget->update();
+    
+    // Trigger auto solver if enabled
+    maybeTriggerAutoSolver();
+  }
 }

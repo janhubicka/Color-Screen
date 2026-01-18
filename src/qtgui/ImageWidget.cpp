@@ -491,6 +491,10 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
         m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
         m_rubberBand->show();
       }
+    } else if (m_interactionMode == AddPointMode) {
+      // Add point mode: emit signal with click location
+      colorscreen::point_t imgPos = widgetToImage(event->position());
+      emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0}); // scrPos and color will be filled by finetune
     }
   }
 }
