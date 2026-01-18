@@ -285,7 +285,8 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       if (dot_period < 0.1) dot_period = 10.0;
       double threshold = dot_period / 4.0;
 
-      for (const auto &pt : m_solver->points) {
+      for (size_t i = 0; i < m_solver->points.size(); ++i) {
+        const auto &pt = m_solver->points[i];
         colorscreen::point_t xi = pt.img;
         colorscreen::point_t scr_p = pt.scr;
 
@@ -312,6 +313,14 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         // Widget coordinates using the new API
         QPointF start = imageToWidget(xi);
         QPointF simulated = imageToWidget(p_sim);
+
+        // Highlight selected points
+        bool isSelected = m_selectedPoints.count(SelectedPoint{i, SelectedPoint::RegistrationPoint});
+        if (isSelected) {
+            p.setPen(QPen(Qt::cyan, 6, Qt::SolidLine, Qt::RoundCap));
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(start, 8, 8);
+        }
 
         // Draw intended location with black outline
         p.setPen(QPen(Qt::black, 4));
@@ -399,13 +408,51 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
 
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    m_isDragging = true;
-    m_lastMousePos = event->pos();
+    if (m_interactionMode == PanMode) {
+      m_isDragging = true;
+      m_lastMousePos = event->pos();
+    } else if (m_interactionMode == SelectMode) {
+      bool ctrl = event->modifiers() & Qt::ControlModifier;
+      
+      // Hit-test points
+      int hitIndex = -1;
+      if (m_showRegistrationPoints && m_solver) {
+        for (size_t i = 0; i < m_solver->points.size(); ++i) {
+          QPointF pos = imageToWidget(m_solver->points[i].img);
+          if (QLineF(pos, event->position()).length() < 10) {
+            hitIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (hitIndex != -1) {
+        SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
+        if (ctrl) {
+          if (m_selectedPoints.count(sp)) m_selectedPoints.erase(sp);
+          else m_selectedPoints.insert(sp);
+        } else {
+          m_selectedPoints.clear();
+          m_selectedPoints.insert(sp);
+        }
+        emit selectionChanged();
+        update();
+      } else {
+        // Start rubber band
+        if (!ctrl) clearSelection();
+        m_rubberBandOrigin = event->pos();
+        if (!m_rubberBand) {
+          m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+        }
+        m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
+        m_rubberBand->show();
+      }
+    }
   }
 }
 
 void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
-  if (m_isDragging) {
+  if (m_interactionMode == PanMode && m_isDragging) {
     QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
 
@@ -417,12 +464,40 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
+  } else if (m_interactionMode == SelectMode && m_rubberBand && m_rubberBand->isVisible()) {
+    m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
   }
 }
 
 void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    m_isDragging = false;
+    if (m_interactionMode == PanMode) {
+      m_isDragging = false;
+    } else if (m_interactionMode == SelectMode && m_rubberBand && m_rubberBand->isVisible()) {
+      QRect rect = m_rubberBand->geometry();
+      m_rubberBand->hide();
+      
+      bool ctrl = event->modifiers() & Qt::ControlModifier;
+      bool changed = false;
+
+      if (m_showRegistrationPoints && m_solver) {
+        for (size_t i = 0; i < m_solver->points.size(); ++i) {
+          QPointF pos = imageToWidget(m_solver->points[i].img);
+          if (rect.contains(pos.toPoint())) {
+            SelectedPoint sp = {i, SelectedPoint::RegistrationPoint};
+            if (!m_selectedPoints.count(sp)) {
+              m_selectedPoints.insert(sp);
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        emit selectionChanged();
+        update();
+      }
+    }
   }
 }
 
@@ -544,9 +619,25 @@ void ImageWidget::fitToView() {
 }
 
 void ImageWidget::setShowRegistrationPoints(bool show) {
-  if (m_showRegistrationPoints != show) {
-    m_showRegistrationPoints = show;
+  m_showRegistrationPoints = show;
+  if (!show) {
+    clearSelection();
+  }
+  update();
+  emit registrationPointsVisibilityChanged(show);
+}
+
+void ImageWidget::setInteractionMode(InteractionMode mode) {
+  if (m_interactionMode == mode) return;
+  m_interactionMode = mode;
+  if (m_rubberBand) m_rubberBand->hide();
+  update();
+}
+
+void ImageWidget::clearSelection() {
+  if (!m_selectedPoints.empty()) {
+    m_selectedPoints.clear();
+    emit selectionChanged();
     update();
-    emit registrationPointsVisibilityChanged(show);
   }
 }

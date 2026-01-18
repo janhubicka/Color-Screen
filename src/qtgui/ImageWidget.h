@@ -9,7 +9,9 @@
 #include <QImage>
 #include <QThread>
 #include <QWidget>
+#include <QRubberBand>
 #include <memory>
+#include <set>
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
 
@@ -45,6 +47,18 @@ public:
 
   void setShowRegistrationPoints(bool show);
 
+  enum InteractionMode { PanMode, SelectMode };
+  void setInteractionMode(InteractionMode mode);
+
+  struct SelectedPoint {
+    size_t index;
+    enum Type { RegistrationPoint } type;
+    bool operator<(const SelectedPoint &other) const {
+      if (type != other.type) return type < other.type;
+      return index < other.index;
+    }
+  };
+
 public slots:
   void setZoom(double scale);
   void setPan(double x, double y);
@@ -63,11 +77,14 @@ signals:
   void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
   void registrationPointsVisibilityChanged(bool visible);
   void viewStateChanged(QRectF visibleRect, double scale);
+  void selectionChanged();
 
 public:
   double getMinScale() const; // Returns scale that fits image to view
   double getZoom() const { return m_scale; }
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
+  const std::set<SelectedPoint>& selectedPoints() const { return m_selectedPoints; }
+  void clearSelection();
 
   // Coordinate mapping API
   QPointF imageToWidget(colorscreen::point_t p) const;
@@ -112,6 +129,10 @@ private:
   // Interaction
   QPoint m_lastMousePos;
   bool m_isDragging = false;
+  InteractionMode m_interactionMode = PanMode;
+  std::set<SelectedPoint> m_selectedPoints;
+  QRubberBand *m_rubberBand = nullptr;
+  QPoint m_rubberBandOrigin;
   
   // Animations for when no image loaded
   ThamesAnimation *m_thamesAnim = nullptr;

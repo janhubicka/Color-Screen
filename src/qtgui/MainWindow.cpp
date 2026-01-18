@@ -32,6 +32,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QSplitter>
+#include <QActionGroup>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -373,9 +374,11 @@ void MainWindow::setupUi() {
     }
   });
 
-  // Link GeometryPanel checkbox  // Registration Points checkbox
+  // Link GeometryPanel checkbox -> ImageWidget
   QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
   if (regBox) {
+    connect(regBox, &QCheckBox::toggled, m_imageWidget,
+            &ImageWidget::setShowRegistrationPoints);
     QSignalBlocker blocker(regBox);
     regBox->setChecked(m_imageWidget->registrationPointsVisible());
   }
@@ -454,10 +457,47 @@ void MainWindow::createToolbar() {
   m_toolbar->addWidget(modeLabel);
 
   m_modeComboBox = new QComboBox(m_toolbar);
-  m_modeComboBox->setMinimumWidth(200);
-  connect(m_modeComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this,
-          &MainWindow::onModeChanged);
+  m_toolbar->addSeparator();
   m_toolbar->addWidget(m_modeComboBox);
+
+  m_toolbar->addSeparator();
+
+  // Interaction Tools
+  QActionGroup *toolGroup = new QActionGroup(this);
+  
+  QIcon panIcon = QIcon::fromTheme("tool-pan", QIcon(":/icons/hand.svg"));
+  if (panIcon.isNull()) panIcon = QIcon(":/icons/hand.svg");
+  QAction *panAction = new QAction(panIcon, "Pan", this);
+  panAction->setActionGroup(toolGroup);
+  panAction->setCheckable(true);
+  panAction->setChecked(true);
+  panAction->setToolTip("Pan Tool (P)");
+  panAction->setShortcut(QKeySequence("P"));
+  m_toolbar->addAction(panAction);
+
+  QIcon selectIcon = QIcon::fromTheme("tool-pointer", QIcon(":/icons/arrow.svg"));
+  if (selectIcon.isNull()) selectIcon = QIcon(":/icons/arrow.svg");
+  QAction *selectAction = new QAction(selectIcon, "Select", this);
+  selectAction->setActionGroup(toolGroup);
+  selectAction->setCheckable(true);
+  selectAction->setToolTip("Select Tool (S)");
+  selectAction->setShortcut(QKeySequence("S"));
+  m_toolbar->addAction(selectAction);
+
+  connect(panAction, &QAction::toggled, this, [this](bool checked) {
+    if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+  });
+  connect(selectAction, &QAction::toggled, this, [this](bool checked) {
+    if (checked) m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+  });
+
+  m_toolbar->addSeparator();
+
+  // Zoom controls
+  m_toolbar->addAction(m_zoomInAction);
+  m_toolbar->addAction(m_zoomOutAction);
+  m_toolbar->addAction(m_zoom100Action);
+  m_toolbar->addAction(m_zoomFitAction);
 
   m_toolbar->addSeparator();
   QAction *rotLeftAction = m_toolbar->addAction(
@@ -645,22 +685,26 @@ void MainWindow::createMenus() {
   m_viewMenu = menuBar()->addMenu("&View");
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
+  m_zoomInAction->setIcon(QIcon::fromTheme("zoom-in"));
   m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
+  m_zoomOutAction->setIcon(QIcon::fromTheme("zoom-out"));
   m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
   m_viewMenu->addAction(m_zoomOutAction);
 
   m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
+  m_zoom100Action->setIcon(QIcon::fromTheme("zoom-original"));
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
   m_viewMenu->addAction(m_zoom100Action);
 
   m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
+  m_zoomFitAction->setIcon(QIcon::fromTheme("zoom-fit-best"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
