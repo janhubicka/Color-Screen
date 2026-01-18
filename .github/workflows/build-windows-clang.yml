@@ -14,14 +14,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: clang64,  env: clang-x86_64 }
+          - { sys: clang64,  env: clang-x86_64, flags: "", suffix: "" }
+          - { sys: clang64,  env: clang-x86_64, flags: "-march=znver2", suffix: "-znver2" }
+          - { sys: clang64,  env: clang-x86_64, flags: "-march=znver4", suffix: "-znver4" }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg
+        install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -29,12 +31,13 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
-        CXXFLAGS="-O3 -ffast-math -Wall -flto" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
+        CXXFLAGS="-O3 -ffast-math -Wall -flto ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: make
       shell: msys2 {0}
       run: make -j$(nproc)
     - name: make check
       shell: msys2 {0}
+      if: matrix.suffix == ''
       run: make -j$(nproc) check
     - name: Find testsuite
       shell: msys2 {0}
@@ -44,7 +47,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: testsuite-${{matrix.sys}}
+        name: testsuite-${{matrix.sys}}${{matrix.suffix}}
         path: |
           testsuite/*.txt
           testsuite/*.log
@@ -77,7 +80,22 @@ jobs:
         cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/share/icons/
         rm -f /c/Color-Screen-install/share/icons/Adwaita/icon-theme.cache
         rm -f /c/Color-Screen-install/share/icons/hicolor/icon-theme.cache
+    - name: build installer
+      shell: msys2 {0}
+      run: |
+        cp LICENSE /c/Color-Screen-install/
+        cp README.md /c/Color-Screen-install/
+        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
+        makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - uses: actions/upload-artifact@v4
       with:
-        name: windows-binary-${{matrix.sys}}
+        name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
+        path: os/windows/Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-binary-${{matrix.sys}}${{matrix.suffix}}
         path: c:\Color-Screen-install\
+    - uses: actions/upload-artifact@v4
+      with:
+        name: portable-binary-${{matrix.sys}}${{matrix.suffix}}
+        path: c:\Color-Screen-install\bin
