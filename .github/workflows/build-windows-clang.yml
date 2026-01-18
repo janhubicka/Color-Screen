@@ -57,9 +57,15 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-    - name: make install
+    - name: make install-strip
       shell: msys2 {0}
       run: make install
+
+    - name: check dependencies
+      shell: msys2 {0}
+      run: |
+        objdump -p /c/Color-Screen-install/bin/colorscreen-qt.exe | grep "DLL Name" || true
+        ldd /c/Color-Screen-install/bin/colorscreen-qt.exe
  
     - name: print dlls dll
       shell: msys2 {0}
