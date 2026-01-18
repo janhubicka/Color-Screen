@@ -123,7 +123,6 @@ case "$host" in
        WIN_NO_UNDEFINED=""
        ;;
 esac
-esac
 AC_SUBST([WIN_NO_UNDEFINED])
 
 AM_CONDITIONAL([HOST_WIN32], [test -n "$WIN_NO_UNDEFINED"])
