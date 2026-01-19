@@ -35,10 +35,107 @@ void SubtitleOverlay::initThanksList() {
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "Bertrand Lavedrine",
-        "Muséum National d'Histoire Naturelle, Paris",
-        "For multiple consultations and motivating comments"
+        "Scott Wajon",
+        "State Library of New South Wales",
+        "For digitizing Frank Huley paget plates in infrared. Best Christmas present ever."
     });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Bruce York",
+        "State Library of New South Wales",
+        "For digitizing Frank Huley paget plates in infrared"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Geoffrey Barker",
+        "State Library of New South Wales",
+        "For digitizing Frank Huley paget plates in infrared"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Russell Perkings",
+        "State Library of New South Wales",
+        "For digitizing Frank Huley paget plates in infrared"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Lynn Brooks",
+        "Library of Congress",
+        "For collaboration on Prokudin-Gorskii exhibition and visiting our museum"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Micah Messenheimer",
+        "Library of Congress",
+        "For digitization of Finlaycolor plates from the Matson collection"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Phil Mitchell",
+        "Library of Congress",
+        "For consultations and digitization of Finlaycolor plates from the Matson collection"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Helena Zinkham",
+        "Library of Congress",
+        "For warm welcome and letting me to see Prokudin-Gorskii's negatives"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Thomas Rieger",
+        "Library of Congress",
+        "For digitization of Finlaycolor plates from the Matson collection"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Melichar Konečný",
+        "Charles University",
+        "For work in demosaicing algorithms"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Linda Kimrová",
+        "Charles University",
+        "For imlementing GUI and helping with digitization of Oscar Jordan plates"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Doug Peterson",
+        "Digital Transitions, Inc.",
+        "For joint adventure on stitching Dufaycolors"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Kirsten Carter",
+        "FDR Presidential Library & Museum",
+        "For letting us to digitize Oscar Jordan's negatives"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Matthew Hanson",
+        "FDR Presidential Library & Museum",
+        "For letting us to digitize Oscar Jordan's negatives"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "William Harris",
+        "FDR Presidential Library & Museum",
+        "For letting us to digitize Oscar Jordan's negatives"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Luisa Casella",
+        "",
+        "For discussions about permanence of Autochrome"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Victor Gerasimov",
+        "",
+        "For scans of Paget plates from Bulgaria"
+    });
+    
     
     // Add more here as requested later
 }
