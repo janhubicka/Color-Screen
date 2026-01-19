@@ -82,6 +82,7 @@ jobs:
         # Create qt.conf for portable usage
         echo "[Paths]" > /c/Color-Screen-install/bin/qt.conf
         echo "Prefix = ." >> /c/Color-Screen-install/bin/qt.conf
+        echo "Plugins = ." >> /c/Color-Screen-install/bin/qt.conf
     - name: copy icons
       shell: msys2 {0}
       run: |
