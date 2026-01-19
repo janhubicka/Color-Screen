@@ -176,6 +176,7 @@ render_parameters::get_dyes_matrix (bool *spectrum_based, bool *optimized, const
   xyz dye_whitepoint = srgb_white;
   *spectrum_based = false;
   *optimized = false;
+  printf ("%f %f %f %f %f %f\n", age.red, age.green, age.blue, dye_density.red, dye_density.green, dye_density.blue);
   switch (color_model)
     {
       /* No color adjustemnts: dyes are translated to sRGB.  */

@@ -83,6 +83,11 @@ jobs:
         cp /${{matrix.sys}}/share/qt6/plugins/imageformats/qsvg.dll /c/Color-Screen-install/bin/imageformats/ || true
         mkdir -p /c/Color-Screen-install/bin/iconengines
         cp /${{matrix.sys}}/share/qt6/plugins/iconengines/qsvgicon.dll /c/Color-Screen-install/bin/iconengines/ || true
+        # Copy Qt6Svg.dll as it's not automatically detected
+        cp /${{matrix.sys}}/bin/Qt6Svg.dll /c/Color-Screen-install/bin/ || true
+        # Create qt.conf for portable usage
+        echo "[Paths]" > /c/Color-Screen-install/bin/qt.conf
+        echo "Prefix = ." >> /c/Color-Screen-install/bin/qt.conf
     - name: copy icons
       shell: msys2 {0}
       run: |
