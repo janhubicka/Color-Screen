@@ -40,9 +40,9 @@ void GeometrySolverWorker::solve(
 	   if (!progress->cancelled ())
              qWarning() << "Geometry solver failed to compute mesh";
         }
+	else
+	  success = true;
       } else {
-	if (!progress->cancelled ())
-	  qWarning() << "Geometry solver failed";
         success = true;
         params.mesh_trans = nullptr;
       }

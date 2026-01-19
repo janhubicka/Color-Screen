@@ -3,6 +3,8 @@
 
 #include "ParameterPanel.h"
 
+class QCheckBox;
+
 class GeometryPanel : public ParameterPanel {
   Q_OBJECT
 public:
@@ -16,9 +18,11 @@ signals:
 
 public:
   bool isAutoEnabled() const;
+  bool isNonlinearEnabled() const;
 
 private:
   void setupUi();
+  QCheckBox *m_nonlinearBox = nullptr;
 };
 
 #endif // GEOMETRY_PANEL_H

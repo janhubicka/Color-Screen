@@ -1743,9 +1743,11 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   m_solverProgress->set_task("Optimizing geometry", 100);
   addProgress(m_solverProgress);
 
+
   // Check if nonlinear corrections are enabled
-  QCheckBox *nonlinearBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
-  bool computeMesh = nonlinearBox && nonlinearBox->isChecked();
+  bool computeMesh = m_geometryPanel->isNonlinearEnabled();
+  
+  // qDebug() << "MainWindow::onOptimizeGeometry - computedMesh:" << computeMesh;
 
   // Invoke solver in worker
   QMetaObject::invokeMethod(

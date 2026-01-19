@@ -31,11 +31,11 @@ void GeometryPanel::setupUi() {
       emit optimizeRequested(autoBtn->isChecked());
   });
 
-  QCheckBox *nonLinearBox = new QCheckBox("Nonlinear corrections");
-  nonLinearBox->setObjectName("nonlinearBox");
-  m_form->addRow(nonLinearBox);
+  m_nonlinearBox = new QCheckBox("Nonlinear corrections");
+  m_nonlinearBox->setObjectName("nonlinearBox");
+  m_form->addRow(m_nonlinearBox);
 
-  connect(nonLinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
+  connect(m_nonlinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
   
   // To make it easy for MainWindow to sync, let's give it an object name
   showBox->setObjectName("showRegistrationPointsBox");
@@ -46,4 +46,8 @@ void GeometryPanel::setupUi() {
 bool GeometryPanel::isAutoEnabled() const {
   QCheckBox *cb = findChild<QCheckBox *>("autoSolverBox");
   return cb && cb->isChecked();
+}
+
+bool GeometryPanel::isNonlinearEnabled() const {
+  return m_nonlinearBox && m_nonlinearBox->isChecked();
 }
