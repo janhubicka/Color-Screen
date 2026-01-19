@@ -12,11 +12,12 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Mark Jacobs",
         "Color photography expert, collector and enthusiast",
-        "For letting me to see his collection and discovering Finlay color photographs in Library of Congress"
+        //"For letting me to see his collection and discovering Finlay color photographs in Library of Congress"
+	"Without him this project would never happen"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "Gemni",
+        "Gemini",
         "Google",
         "For co-implementing the GUI"
     });
@@ -25,6 +26,12 @@ void SubtitleOverlay::initThanksList() {
         "Claude Sonnet",
         "Anthropic",
         "For co-implementing the GUI"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Bertrand Lavedrine",
+        "Muséum National d'Histoire Naturelle, Paris",
+        "For multiple consultations and motivating comments"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)

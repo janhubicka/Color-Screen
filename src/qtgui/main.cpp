@@ -11,7 +11,18 @@
 #include <QStyleFactory>
 #include <QSettings>
 
+
 int main(int argc, char *argv[]) {
+  // Check for debug flag early to enable plugin debugging
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--debug-qt") == 0) {
+      qputenv("QT_DEBUG_PLUGINS", "1");
+      // Also enable general debug output if not already
+      // qputenv("QT_LOGGING_RULES", "*=true"); 
+      break;
+    }
+  }
+
   QApplication app(argc, argv);
   QApplication::setOrganizationName("ColorScreen");
   QApplication::setOrganizationDomain("colorscreen.org");

@@ -54,7 +54,7 @@ void PagetAnimation::launchFirework() {
   };
   
   double spacing = 8.0; // Tight spacing during launch
-  double size = 7.0;    // Square size
+  double size = 20.0;    // Square size
   double rotation = 45.0 * M_PI / 180.0; // 45 degree rotation
   
   for (int row = 0; row < 5; ++row) {

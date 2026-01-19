@@ -139,8 +139,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_properties [rparam->color_model].name) < 0
-	  || fprintf (f, "dye_age: %f %f %d\n", rparam->age.red, rparam->age.green, rparam->age.blue) < 0
-	  || fprintf (f, "dye_density: %f %f %d\n", rparam->dye_density.red, rparam->dye_density.green, rparam->dye_density.blue) < 0
+	  || fprintf (f, "dye_age: %f %f %f\n", rparam->age.red, rparam->age.green, rparam->age.blue) < 0
+	  || fprintf (f, "dye_density: %f %f %f\n", rparam->dye_density.red, rparam->dye_density.green, rparam->dye_density.blue) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance].name) < 0
