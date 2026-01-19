@@ -233,7 +233,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     if (m_showRegistrationPoints && m_solver && m_scan && m_scrToImg) {
       p.setRenderHint(QPainter::Antialiasing);
 
-      if (m_simulatedPointsDirty) {
+      if (m_simulatedPointsDirty || m_simulatedPoints.size() != m_solver->points.size()) {
         updateSimulatedPoints();
       }
 
