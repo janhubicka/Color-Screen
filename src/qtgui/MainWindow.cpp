@@ -482,6 +482,44 @@ void MainWindow::setupUi() {
   createToolbar(); // Initialize toolbar
 }
 
+// Helper to manually load and recolor symbolic icons on Windows where auto-recoloring fails
+QIcon getSymbolicIcon(const QString &name) {
+#ifdef Q_OS_WIN
+  static QStringList subdirs = {"actions", "devices", "places", "status", "ui",
+                                "legacy", "categories", "apps", "mimetypes"};
+  QString appDir = QCoreApplication::applicationDirPath();
+  QStringList bases = {appDir + "/share/icons/Adwaita/symbolic",
+                       appDir + "/../share/icons/Adwaita/symbolic"};
+
+  for (const auto &base : bases) {
+    for (const auto &subdir : subdirs) {
+      QString path = base + "/" + subdir + "/" + name + ".svg";
+      if (!QFile::exists(path))
+        path = base + "/" + subdir + "/" + name + ".symbolic.svg";
+
+      if (QFile::exists(path)) {
+        QIcon icon;
+        // Generate multiple sizes for DPI
+        QList<int> sizes = {16, 24, 32, 48, 64};
+        for (int size : sizes) {
+          QPixmap pix(path);
+          if (!pix.isNull()) {
+             QPixmap scaled = pix.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+             QPainter p(&scaled);
+             p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+             p.fillRect(scaled.rect(), Qt::white);
+             p.end();
+             icon.addPixmap(scaled);
+          }
+        }
+        if (!icon.isNull()) return icon;
+      }
+    }
+  }
+#endif
+  return QIcon::fromTheme(name);
+}
+
 void MainWindow::createToolbar() {
   m_toolbar = addToolBar("Main Toolbar");
   m_toolbar->setMovable(false);
@@ -490,8 +528,12 @@ void MainWindow::createToolbar() {
   m_toolbar->addWidget(modeLabel);
 
   m_modeComboBox = new QComboBox(m_toolbar);
-  m_toolbar->addSeparator();
+  m_modeComboBox->setMinimumWidth(150);
   m_toolbar->addWidget(m_modeComboBox);
+  connect(m_modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &MainWindow::onModeChanged);
+
+
 
   m_toolbar->addSeparator();
 
