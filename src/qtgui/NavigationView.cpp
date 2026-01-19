@@ -123,10 +123,10 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
 
 void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
-    qDebug() << "NavigationView::onTriggerRender reqId:" << reqId << " renderer:" << m_renderer << " scan:" << m_scan.get();
+//    qDebug() << "NavigationView::onTriggerRender reqId:" << reqId << " renderer:" << m_renderer << " scan:" << m_scan.get();
     
     if (!m_renderer || !m_scan) {
-        qDebug() << "NavigationView::onTriggerRender - missing renderer or scan";
+//        qDebug() << "NavigationView::onTriggerRender - missing renderer or scan";
         m_renderQueue.reportFinished(reqId, false);
         return;
     }
@@ -142,7 +142,7 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     int imgW = m_scan->width;
     int imgH = m_scan->height;
     
-    qDebug() << "NavigationView view:" << w << "x" << h << " img:" << imgW << "x" << imgH;
+    // qDebug() << "NavigationView view:" << w << "x" << h << " img:" << imgW << "x" << imgH;
 
     double scale = 0.1;
 
@@ -160,7 +160,7 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     if (targetW <= 0) targetW = 1;
     if (targetH <= 0) targetH = 1;
     
-    qDebug() << "NavigationView scale:" << scale << " target:" << targetW << "x" << targetH;
+    // qDebug() << "NavigationView scale:" << scale << " target:" << targetW << "x" << targetH;
 
     // 2. set current progress so onImageReady can emit finished signal
     m_currentProgress = progress;
@@ -215,7 +215,7 @@ void NavigationView::resizeEvent(QResizeEvent *event) { m_renderQueue.requestRen
 void NavigationView::onImageReady(int reqId, QImage image, double x, double y,
                                   double scale, bool success) {
   
-  qDebug() << "NavigationView::onImageReady reqId:" << reqId << " success:" << success << " size:" << image.size();
+  // qDebug() << "NavigationView::onImageReady reqId:" << reqId << " success:" << success << " size:" << image.size();
   
   // This is always the current render completing (only one active at a time)
   if (m_currentProgress) {
