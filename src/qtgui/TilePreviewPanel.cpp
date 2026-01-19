@@ -82,8 +82,15 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
   m_updateTimer = new QTimer(this);
   m_updateTimer->setSingleShot(true);
   m_updateTimer->setInterval(30);
-  connect(m_updateTimer, &QTimer::timeout, this,
-          &TilePreviewPanel::performTileRender);
+  m_updateTimer->setInterval(30);
+  // Debounce -> Request Render in Queue
+  connect(m_updateTimer, &QTimer::timeout, this, [this](){
+      m_renderQueue.requestRender();
+  });
+  
+  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &TilePreviewPanel::onTriggerRender);
+  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &TilePreviewPanel::progressStarted);
+  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &TilePreviewPanel::progressFinished);
 
   // Initialize watcher
   m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
@@ -222,9 +229,11 @@ void TilePreviewPanel::setDebounceInterval(int msec) {
   m_updateTimer->setInterval(msec);
 }
 
-void TilePreviewPanel::performTileRender() {
-  if (m_tileLabels.empty())
+void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
+  if (m_tileLabels.empty()) {
+    m_renderQueue.reportFinished(reqId, true);
     return;
+  }
 
   ParameterState state = m_stateGetter();
   std::shared_ptr<colorscreen::image_data> scan = m_imageGetter();
@@ -232,6 +241,7 @@ void TilePreviewPanel::performTileRender() {
   if ((!scan && requiresScan()) || !isTileRenderingEnabled(state)) {
     for (auto l : m_tileLabels)
       l->clear();
+    m_renderQueue.reportFinished(reqId, true);
     return;
   }
 
@@ -276,7 +286,6 @@ void TilePreviewPanel::performTileRender() {
   bool needsUpdate = shouldUpdateTiles(state);
 
   // Also check if tileSize changed significantly or first run
-  // Also check if tileSize changed significantly or first run
   if (tileSize != m_lastRenderedTileSize) {
     needsUpdate = true;
     m_lastRenderedTileSize = tileSize;
@@ -287,57 +296,78 @@ void TilePreviewPanel::performTileRender() {
     needsUpdate = true;
   }
 
-  if (!needsUpdate)
+  if (!needsUpdate) {
+    m_renderQueue.reportFinished(reqId, true);
     return;
+  }
 
   onTileUpdateScheduled();
 
-  // Prepare types
-  std::vector<render_screen_tile_type> types;
-  for (const auto &p : getTileTypes())
-    types.push_back(p.first);
-
-  m_pendingRequest.state = state;
-  if (scan) {
-    m_pendingRequest.scanWidth = scan->width;
-    m_pendingRequest.scanHeight = scan->height;
-  } else {
-    m_pendingRequest.scanWidth = 0;
-    m_pendingRequest.scanHeight = 0;
+  // Prepare request
+  RenderRequest req;
+  req.state = state;
+  req.scan = scan;
+  req.tileTypes.clear();
+  for (auto &pair : getTileTypes()) {
+    req.tileTypes.push_back(pair.first);
   }
-  m_pendingRequest.tileSize = tileSize;
-  m_pendingRequest.pixelSize = pixel_size;
-  m_pendingRequest.scan = scan;
-  m_pendingRequest.tileTypes = types;
-  m_hasPendingRequest = true;
+  req.tileSize = tileSize;
+  if(scan) req.scanWidth = scan->width;
+  if(scan) req.scanHeight = scan->height;
+  req.pixelSize = pixel_size; // calculated earlier
 
-  if (m_tileWatcher->isRunning()) {
-    if (m_tileProgress)
-      m_tileProgress->cancel();
-    return;
-  }
+  // Start background render
+  QFuture<TileRenderResult> future = QtConcurrent::run(
+        renderTilesGeneric,
+        req.state,
+        req.scanWidth,
+        req.scanHeight,
+        reqId, // Pass reqId as generation
+        req.tileSize,
+        req.pixelSize,
+        req.tileTypes,
+        progress
+  );
 
-  startNextRender();
+  // Monitor it
+  // We create a new watcher for each job to support concurrency handled by queue
+  QFutureWatcher<TileRenderResult> *watcher = new QFutureWatcher<TileRenderResult>(this);
+  connect(watcher, &QFutureWatcher<TileRenderResult>::finished, this, [this, watcher, reqId](){
+      TileRenderResult result = watcher->result();
+
+      // Update UI if successful
+      if (result.success) {
+          if (result.tiles.size() == m_tileLabels.size()) {
+              for (size_t i = 0; i < m_tileLabels.size(); ++i) {
+                  const QImage& img = result.tiles[i];
+                  if (!img.isNull())
+                      m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
+              }
+          }
+      } else {
+          // Failed or cancelled
+          m_lastRenderedTileSize = 0; // Force retry
+      }
+
+      m_renderQueue.reportFinished(reqId, result.success);
+
+      watcher->deleteLater();
+  });
+
+  watcher->setFuture(future);
+}
+
+void TilePreviewPanel::performTileRender() {
+    // Deprecated/Unused - logic moved to onTriggerRender
+    // This method was previously called by m_updateTimer.
+    // Now m_updateTimer should trigger m_renderQueue.requestRender().
+    m_renderQueue.requestRender();
 }
 
 void TilePreviewPanel::startNextRender() {
-  if (!m_hasPendingRequest)
-    return;
-
-  RenderRequest req = m_pendingRequest;
-  m_hasPendingRequest = false;
-  m_tileGenerationCounter++;
-  int generation = m_tileGenerationCounter;
-
-  m_tileProgress = std::make_shared<progress_info>();
-
-  QFuture<TileRenderResult> future =
-      QtConcurrent::run([req, generation, progress = m_tileProgress]() {
-        return renderTilesGeneric(req.state, req.scanWidth, req.scanHeight,
-                                  generation, req.tileSize, req.pixelSize,
-                                  req.tileTypes, progress);
-      });
-  m_tileWatcher->setFuture(future);
+    // Deprecated/Unused
+    // This method was previously called by the m_tileWatcher's finished signal.
+    // The RenderQueue now manages subsequent renders.
 }
 
 void TilePreviewPanel::resizeEvent(QResizeEvent *event) {

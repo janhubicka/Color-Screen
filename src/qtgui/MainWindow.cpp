@@ -213,10 +213,21 @@ void MainWindow::setupUi() {
                       [this]() { return m_scan; }, this);
 
   // Create Color Panel (after Sharpness)
+  // Create Color Panel (after Sharpness)
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
                      [this](const ParameterState &s) { changeParameters(s); },
                      [this]() { return m_scan; }, this);
+
+  // Connect Progress Signals from Panels
+  connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
+  connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
+  
+  connect(m_screenPanel, &ScreenPanel::progressStarted, this, &MainWindow::addProgress);
+  connect(m_screenPanel, &ScreenPanel::progressFinished, this, &MainWindow::removeProgress);
+  
+  connect(m_colorPanel, &ColorPanel::progressStarted, this, &MainWindow::addProgress);
+  connect(m_colorPanel, &ColorPanel::progressFinished, this, &MainWindow::removeProgress);
 
   m_configTabs->setObjectName("ConfigTabs");
   m_mtfDock = new QDockWidget("MTF Chart", this);

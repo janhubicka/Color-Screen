@@ -4,6 +4,7 @@
 #include "ParameterPanel.h"
 
 class TilePreviewPanel;
+namespace colorscreen { struct progress_info; } // namespace colorscreen
 
 class ScreenPanel : public ParameterPanel {
   Q_OBJECT
@@ -16,6 +17,8 @@ public:
 
 signals:
   void detachPreviewRequested(QWidget *widget);
+  void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
+  void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
 
 private:
   void setupUi();

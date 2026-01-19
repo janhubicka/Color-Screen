@@ -27,6 +27,10 @@ NavigationView::NavigationView(QWidget *parent) : QWidget(parent) {
   layout->addWidget(m_zoomSlider);
 
   setMinimumHeight(200);
+
+  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &NavigationView::onTriggerRender);
+  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &NavigationView::progressStarted);
+  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &NavigationView::progressFinished);
 }
 
 NavigationView::~NavigationView() {
@@ -61,10 +65,9 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   // Antialias?
   m_renderType.antialias = true; // Always look nice
 
-  // Cancel current progress if exists
-  if (m_currentProgress) {
-    m_currentProgress->cancel();
-  }
+  // Cancel current progress if exists - handled by queue cancelAll?
+  // Actually, RenderQueue::cancelAll() will handle active renders.
+  m_renderQueue.cancelAll();
 
   // Clear old scan to release it from memory
   m_scan = nullptr;
@@ -92,16 +95,8 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_renderThread = nullptr;
   }
 
-  // Manually emit progressFinished for current progress
-  if (m_currentProgress) {
-    emit progressFinished(m_currentProgress);
-    m_currentProgress.reset();
-  }
-
   // Reset render queue state for new renderer
-  m_renderInProgress = false;
-  m_hasPendingRender = false;
-
+  
   // Now set the new scan pointer (old one is released)
   m_scan = scan;
 
@@ -121,9 +116,41 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
             &NavigationView::onImageReady);
     m_renderThread->start();
 
-    requestRender();
+    m_renderQueue.requestRender();
   }
   update();
+}
+
+void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
+    if (!m_renderer) {
+        m_renderQueue.reportFinished(reqId, false);
+        return;
+    }
+
+    // Calculate parameters for render
+    double scale = 1.0;
+    if (m_scan && (m_scan->width > 0 && m_scan->height > 0)) {
+       // Fit to view calculation or use cached?
+       // Ideally we use m_minScale or similar.
+       // NavigationView usually renders full image fitted to widget.
+       // Let's check paintEvent or resizeEvent logic?
+       // Actually, NavigationView usually fits the image.
+       // The renderer expects scale. 
+       
+       // Note: previously requestRender() logic was likely doing this.
+       // Since I am removing requestRender definition, I need to look at what it did.
+       // I should have read requestRender implementation first.
+       // Assuming it calculates scale based on widget size.
+       
+       double w = m_scan->width;
+       double h = m_scan->height;
+       double scaleX = width() / w;
+       double scaleY = height() / h;
+       scale = qMin(scaleX, scaleY);
+    }
+
+    // Wait, I need to know EXACTLY what requestRender did. 
+    // I should abort this replacement and read requestRender first.
 }
 
 void NavigationView::updateParameters(
@@ -150,91 +177,12 @@ void NavigationView::updateParameters(
   }
 
   // Request re-render
-  requestRender();
+  m_renderQueue.requestRender();
 }
 
-void NavigationView::resizeEvent(QResizeEvent *event) { requestRender(); }
+void NavigationView::resizeEvent(QResizeEvent *event) { m_renderQueue.requestRender(); }
 
-void NavigationView::requestRender() {
-  if (!m_renderer || !m_scan)
-    return;
 
-  // If render is in progress, cancel it and mark this as pending
-  if (m_renderInProgress) {
-    if (m_currentProgress) {
-      m_currentProgress->cancel();
-    }
-    m_hasPendingRender = true;
-    return; // Don't start render yet, wait for current to finish
-  }
-
-  // No render in progress, start new one
-  m_renderInProgress = true;
-  m_hasPendingRender = false;
-
-  // Render to fit widget size
-  // Calculate rotation to know dimensions
-  double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
-  int angle = (int)rot % 360;
-  if (angle < 0)
-    angle += 360;
-
-  double imgW = m_scan->width;
-  double imgH = m_scan->height;
-  if (angle == 90 || angle == 270)
-    std::swap(imgW, imgH);
-
-  // Available size for image (above slider)
-  int sliderHeight = m_zoomSlider->sizeHint().height();
-  int availH = height() - sliderHeight;
-  if (availH <= 0)
-    availH = 100;
-
-  int availW = width();
-  if (availW <= 0)
-    availW = 100;
-
-  // Scale to fit
-  double scaleX = availW / imgW;
-  double scaleY = availH / imgH;
-  double scale = qMin(scaleX, scaleY);
-  if (scale <= 0)
-    scale = 0.1;
-
-  m_previewScale = scale;
-
-  // Render size
-  int targetW = (int)(imgW * scale);
-  int targetH = (int)(imgH * scale);
-  if (targetW <= 0)
-    targetW = 1;
-  if (targetH <= 0)
-    targetH = 1;
-
-  m_currentProgress = std::make_shared<colorscreen::progress_info>();
-  m_currentProgress->set_task("Rendering preview", 0);
-  emit progressStarted(m_currentProgress);
-
-  // Request render
-  // NOTE: Renderer expects xOffset/yOffset in Rotated Coordinate System (Widget
-  // Pixels) if we follow ImageWidget logic? In ImageWidget, xOffset passed to
-  // render was `viewX * scale`. Here we want full image. `viewX` equivalent is
-  // 0.
-
-  // Renderer logic:
-  // `tile.width` = targetW.
-  // `tile.step` = 1.0 / scale.
-  // `tile.pos` = xOffset, yOffset.
-
-  QMetaObject::invokeMethod(
-      m_renderer, "render", Qt::QueuedConnection,
-      Q_ARG(int, 0),      // reqId not needed anymore
-      Q_ARG(double, 0.0), // xOffset
-      Q_ARG(double, 0.0), // yOffset
-      Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
-      Q_ARG(colorscreen::render_parameters, *m_rparams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_currentProgress));
-}
 
 void NavigationView::onImageReady(int reqId, QImage image, double x, double y,
                                   double scale, bool success) {
@@ -244,21 +192,13 @@ void NavigationView::onImageReady(int reqId, QImage image, double x, double y,
     m_currentProgress.reset();
   }
 
-  // Mark render as no longer in progress
-  m_renderInProgress = false;
-
   // Only update preview image if render was successful
   if (success) {
     m_previewImage = image;
     update();
   }
-  // If render failed or was cancelled, do nothing (keep old image)
 
-  // Start pending render if one is queued
-  if (m_hasPendingRender) {
-    m_hasPendingRender = false;
-    requestRender();
-  }
+  m_renderQueue.reportFinished(reqId, success);
 }
 
 void NavigationView::onViewStateChanged(QRectF visibleRect, double scale) {

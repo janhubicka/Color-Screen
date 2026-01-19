@@ -214,6 +214,9 @@ void ColorPanel::setupUi() {
     connect(correctedPreview, &TilePreviewPanel::detachTilesRequested, this,
             &ColorPanel::detachCorrectedTilesRequested);
 
+    connect(correctedPreview, &TilePreviewPanel::progressStarted, this, &ColorPanel::progressStarted);
+    connect(correctedPreview, &TilePreviewPanel::progressFinished, this, &ColorPanel::progressFinished);
+
     // We need to trigger updates when parent updates
     m_widgetStateUpdaters.push_back(
         [correctedPreview]() { correctedPreview->updateUI(); });

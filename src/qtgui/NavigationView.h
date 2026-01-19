@@ -9,6 +9,7 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "RenderQueue.h"
 
 class QSlider;
 class QThread;
@@ -53,11 +54,16 @@ private slots:
     void onImageReady(int reqId, QImage image, double x, double y, double scale, bool success);
 
 private:
-    void requestRender();
     void updateSliderRange();
 
     QSlider *m_zoomSlider;
     
+    RenderQueue m_renderQueue;
+    
+private slots:
+    void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
+    
+private:
     // Core Data (same as ImageWidget, but we own our Renderer)
     std::shared_ptr<colorscreen::image_data> m_scan;
     colorscreen::render_parameters *m_rparams = nullptr;

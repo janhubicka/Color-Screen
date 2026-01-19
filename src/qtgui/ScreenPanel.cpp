@@ -160,6 +160,9 @@ void ScreenPanel::setupUi() {
 
   connect(preview, &TilePreviewPanel::detachTilesRequested, this,
           &ScreenPanel::detachPreviewRequested);
+  
+  connect(preview, &TilePreviewPanel::progressStarted, this, &ScreenPanel::progressStarted);
+  connect(preview, &TilePreviewPanel::progressFinished, this, &ScreenPanel::progressFinished);
 
   m_widgetStateUpdaters.push_back([this, preview]() {
     preview->updateUI();

@@ -166,8 +166,8 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 colorscreen_qt_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
-	$(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) \
-	$(colorscreen_qt_LDFLAGS) $(LDFLAGS) -o $@
+	$(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -478,7 +478,6 @@ colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolors
 colorscreen_qt_LDADD =  \
 	$(top_builddir)/src/libcolorscreen/libcolorscreen.la \
 	$(Qt6_LIBS) $(am__append_1)
-@HOST_WIN32_TRUE@colorscreen_qt_LDFLAGS = -mwindows
 
 # Ensure moc and rcc are run before compilation
 BUILT_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -1543,6 +1542,7 @@ moc_%.cpp: %.h
 # Rule to generate resource file (RCC is set by configure)
 qrc_resources.cpp: resources.qrc ../../images/icon.svg
 	$(RCC) $< -o $@
+# colorscreen_qt_LDFLAGS = -mwindows
 
 colorscreen_res.o: colorscreen.rc
 	$(WINDRES) $< -o $@

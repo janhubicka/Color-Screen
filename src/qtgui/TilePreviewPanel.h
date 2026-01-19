@@ -3,6 +3,7 @@
 
 #include "../libcolorscreen/include/colorscreen.h"
 #include "ParameterPanel.h"
+#include "RenderQueue.h"
 #include <QFutureWatcher>
 #include <QImage>
 #include <QLabel>
@@ -41,6 +42,21 @@ protected:
   void showEvent(QShowEvent *event) override;
 
   void onParametersRefreshed(const ParameterState &state) override;
+  
+  void scheduleTileUpdate();
+  
+  // Call this to initialize the tiles UI
+  void setupTiles(const QString &title);
+
+  // Set the debounce interval (default 30ms)
+  void setDebounceInterval(int msec);
+  
+signals:
+  void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
+  void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
+
+private slots:
+  void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
 
   // Must be implemented by subclasses
   virtual std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
@@ -56,13 +72,9 @@ protected:
   virtual bool requiresScan() const { return true; }
 
   // Call this to initialize the tiles UI
-  void setupTiles(const QString &title);
-
   // Call this to trigger an update (debounced)
-  void scheduleTileUpdate();
-
-  // Set the debounce interval (default 30ms)
-  void setDebounceInterval(int msec);
+  void onTileRenderFinished();
+  // void scheduleTileUpdate(); // Moved to protected
 
   // Internal render function
   void performTileRender();
@@ -92,6 +104,8 @@ private:
   bool m_hasPendingRequest = false;
 
   int m_lastRenderedTileSize = 0;
+  
+  RenderQueue m_renderQueue;
 };
 
 #endif // TILE_PREVIEW_PANEL_H
