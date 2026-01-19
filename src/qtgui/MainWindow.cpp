@@ -1431,6 +1431,8 @@ void MainWindow::applyState(const ParameterState &state) {
   }
 
   updateUIFromState(state);
+  updateRegistrationActions();
+  updateModeMenu();
 }
 
 void MainWindow::updateUIFromState(const ParameterState &state) {
