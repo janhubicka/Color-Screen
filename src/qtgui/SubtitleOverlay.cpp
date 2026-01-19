@@ -14,6 +14,24 @@ void SubtitleOverlay::initThanksList() {
         "Color photography expert, collector and enthusiast",
         "For letting me to see his collection and discovering Finlay color photographs in Library of Congress"
     });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Gemni",
+        "Google",
+        "For co-implementing the GUI"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Claude Sonnet",
+        "Anthropic",
+        "For co-implementing the GUI"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Bertrand Lavedrine",
+        "Muséum National d'Histoire Naturelle, Paris",
+        "For multiple consultations and motivating comments"
+    });
     
     // Add more here as requested later
 }
@@ -39,7 +57,7 @@ void SubtitleOverlay::start(const QString &name, const QString &dates, const QSt
     // 1. Intro
     addMessage("Color-Screen 2.0", "Developed by Jan Hubička  2022-2026", "https://github.com/janhubicka/Color-Screen/wiki", 4.0);
     
-    addMessage("Graphical interface", "Vibe-coded in January 2026", "based on GUI by Linda Kimrová", 4.0);
+    addMessage("Graphical interface", "Vibe-coding experiment, January 2026", "based on Java GUI by Linda Kimrová", 4.0);
     // 2. Animation Details
     addMessage(name, dates, desc, 5.0);
     
