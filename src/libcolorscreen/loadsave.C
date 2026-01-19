@@ -139,6 +139,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "collection_threshold: %f\n", rparam->collection_threshold) < 0
 	  || fprintf (f, "screen_blur_radius: %f\n", rparam->screen_blur_radius) < 0
 	  || fprintf (f, "color_model: %s\n", render_parameters::color_model_properties [rparam->color_model].name) < 0
+	  || fprintf (f, "dye_age: %f %f %d\n", rparam->age.red, rparam->age.green, rparam->age.blue) < 0
+	  || fprintf (f, "dye_density: %f %f %d\n", rparam->dye_density.red, rparam->dye_density.green, rparam->dye_density.blue) < 0
 	  || fprintf (f, "backlight_temperature: %f\n", rparam->backlight_temperature) < 0
 	  || fprintf (f, "temperature: %f\n", rparam->temperature) < 0
 	  || fprintf (f, "dye_balance: %s\n", render_parameters::dye_balance_names [rparam->dye_balance].name) < 0
@@ -913,6 +915,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	    }
 	  if (rparam)
 	    rparam->color_model = (enum render_parameters::color_model_t) j;
+	}
+      else if (!strcmp (buf, "dye_age"))
+	{
+	  if (!read_rgb (f, rparam_check (age.red), rparam_check (age.green), rparam_check (age.blue)))
+	    {
+	      *error = "error parsing dye_age";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "dye_density"))
+	{
+	  if (!read_rgb (f, rparam_check (dye_density.red), rparam_check (dye_density.green), rparam_check (dye_density.blue)))
+	    {
+	      *error = "error parsing dye_density";
+	      return false;
+	    }
 	}
       else if (!strcmp (buf, "dye_balance"))
 	{

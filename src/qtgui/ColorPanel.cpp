@@ -182,7 +182,7 @@ void ColorPanel::setupUi() {
 
 
   addCorrelatedRGBParameter(
-      "dye age", -100.0, 200.0, 1.0, 0, "%",
+      "dye age", -10.0, 110.0, 1.0, 0, "%",
       [](const ParameterState &s) { return s.rparams.age * 100.0; },
       [](ParameterState &s, const colorscreen::rgbdata &v) {
         s.rparams.age = v / 100.0;

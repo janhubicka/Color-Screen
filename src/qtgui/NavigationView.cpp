@@ -413,3 +413,44 @@ void NavigationView::mouseMoveEvent(QMouseEvent *event) {
 void NavigationView::mouseReleaseEvent(QMouseEvent *event) {
   m_isDragging = false;
 }
+
+void NavigationView::wheelEvent(QWheelEvent *event) {
+  if (m_previewScale <= 0) return;
+
+  // Calculate zoom factor matching ImageWidget
+  double numDegrees = event->angleDelta().y() / 8.0;
+  double numSteps = numDegrees / 15.0;
+  double factor = qPow(1.1, numSteps);
+
+  // Mouse position in Image Coordinates
+  double mouseX = event->position().x() - m_imageRect.left();
+  double mouseY = event->position().y() - m_imageRect.top();
+  
+  double imageX = mouseX / m_previewScale;
+  double imageY = mouseY / m_previewScale;
+
+  // Current main view state
+  double oldScale = m_mainScale;
+  double newScale = oldScale * factor;
+
+  // Calculate new center to keep imageX fixed relative to viewport
+  // Math: NewCenter = Mouse + (OldCenter - Mouse) / factor
+  double oldCx = m_visibleRect.center().x();
+  double oldCy = m_visibleRect.center().y();
+  
+  double newCx = imageX + (oldCx - imageX) / factor;
+  double newCy = imageY + (oldCy - imageY) / factor;
+  
+  // New dimensions
+  double newW = m_visibleRect.width() / factor;
+  double newH = m_visibleRect.height() / factor;
+  
+  double newX = newCx - newW / 2.0;
+  double newY = newCy - newH / 2.0;
+
+  // Apply changes
+  // Note: We emit zoomChanged first, which will reset the view to be centered on the *current* center.
+  // Then we emit panChanged to move it to our desired target.
+  emit zoomChanged(newScale);
+  emit panChanged(newX, newY);
+}
