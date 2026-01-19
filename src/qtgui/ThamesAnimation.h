@@ -6,6 +6,7 @@
 #include <QPointF>
 #include <QColor>
 #include <random>
+#include "SubtitleOverlay.h"
 
 struct Ball {
   QPointF pos;
@@ -50,4 +51,6 @@ private:
   static constexpr double BALL_SPACING = 30.0;
   static constexpr double FRICTION = 0.995; // Slight energy loss
   static constexpr double MIN_VELOCITY = 0.1;
+
+  SubtitleOverlay m_subtitles;
 };

@@ -21,7 +21,8 @@ colorscreen_qt_SOURCES = \
     CIEChartWidget.cpp \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
-    TaskQueue.cpp
+    TaskQueue.cpp \
+    SubtitleOverlay.cpp
 
 if static_link
   AM_LDFLAGS = -static
@@ -52,7 +53,7 @@ MOC_SOURCES = \
     moc_PagetAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h TaskQueue.h colorscreen.rc
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

@@ -16,7 +16,9 @@ ThamesAnimation::ThamesAnimation(QWidget *parent)
   connect(m_triggerTimer, &QTimer::timeout, this, &ThamesAnimation::triggerRandomMovement);
   
   initializeGrid();
+  m_subtitles.start("Thames color screen", "1914-1920", "Invented by C.L. Finlay");
 }
+
 
 ThamesAnimation::~ThamesAnimation() = default;
 
@@ -64,6 +66,7 @@ void ThamesAnimation::initializeGrid() {
 void ThamesAnimation::updateAnimation() {
   updatePhysics(0.016); // ~16ms per frame
   checkCollisions();
+  m_subtitles.update(0.016);
   update(); // Trigger repaint
 }
 
@@ -179,24 +182,20 @@ void ThamesAnimation::triggerRandomMovement() {
 }
 
 void ThamesAnimation::paintEvent(QPaintEvent *event) {
-  QPainter painter(this);
-  painter.setRenderHint(QPainter::Antialiasing);
+  QPainter p(this);
+  p.setRenderHint(QPainter::Antialiasing);
   
   // Background - darker blue
-  painter.fillRect(rect(), QColor(50, 70, 110));
-  
-  // Draw balls
-  for (const Ball &ball : m_balls) {
-    // Skip off-screen balls (corner escapes)
-    if (ball.pos.x() < -ball.radius || ball.pos.x() > width() + ball.radius ||
-        ball.pos.y() < -ball.radius || ball.pos.y() > height() + ball.radius) {
-      continue;
-    }
-    
-    painter.setBrush(ball.color);
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(ball.pos, ball.radius, ball.radius);
+  p.fillRect(rect(), QColor(50, 70, 110));
+
+  for (const auto &ball : m_balls) {
+    p.setBrush(ball.color);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(ball.pos, ball.radius, ball.radius);
   }
+  
+  // Render subtitles
+  m_subtitles.paint(&p, rect());
 }
 
 void ThamesAnimation::resizeEvent(QResizeEvent *event) {

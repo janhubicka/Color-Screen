@@ -6,6 +6,7 @@
 #include <QPointF>
 #include <QColor>
 #include <random>
+#include "SubtitleOverlay.h"
 
 struct Particle {
   QPointF pos;
@@ -59,4 +60,6 @@ private:
   static constexpr double GRAVITY = 200.0;
   static constexpr double LAUNCH_SPEED = 600.0;  // Increased for higher flights
   static constexpr int PARTICLES_PER_CLUSTER = 4; // 2x2 Bayer pattern
+
+  SubtitleOverlay m_subtitles;
 };

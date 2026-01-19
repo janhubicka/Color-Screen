@@ -12,7 +12,10 @@ PagetAnimation::PagetAnimation(QWidget *parent)
   // Firework launch timer - every 4 seconds
   m_launchTimer = new QTimer(this);
   connect(m_launchTimer, &QTimer::timeout, this, &PagetAnimation::launchFirework);
+
+  m_subtitles.start("Paget color screen", "1914-1918", "Invented by Clare Finlay");
 }
+
 
 PagetAnimation::~PagetAnimation() = default;
 
@@ -159,6 +162,7 @@ void PagetAnimation::updateAnimation() {
     m_fireworks.end()
   );
   
+  m_subtitles.update(0.016);
   update(); // Trigger repaint
 }
 
@@ -197,4 +201,7 @@ void PagetAnimation::paintEvent(QPaintEvent *event) {
       painter.restore();
     }
   }
+  
+  // Render subtitles
+  m_subtitles.paint(&painter, rect());
 }

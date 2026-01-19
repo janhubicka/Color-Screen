@@ -54,6 +54,11 @@ set(SOURCES
     CIEChartWidget.cpp
     ThamesAnimation.cpp
     PagetAnimation.cpp
+    GeometryPanel.cpp
+    GeometrySolverWorker.cpp
+    WorkerBase.cpp
+    TaskQueue.cpp
+    SubtitleOverlay.cpp
 )
 
 set(HEADERS
@@ -72,6 +77,11 @@ set(HEADERS
     CIEChartWidget.h
     ThamesAnimation.h
     PagetAnimation.h
+    GeometryPanel.h
+    GeometrySolverWorker.h
+    WorkerBase.h
+    TaskQueue.h
+    SubtitleOverlay.h
     SmartSpinBox.h
 )
 
