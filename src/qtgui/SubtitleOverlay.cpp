@@ -37,8 +37,9 @@ void SubtitleOverlay::start(const QString &name, const QString &dates, const QSt
     m_opacity = 0.0;
 
     // 1. Intro
-    addMessage("Color-Screen 2.0", "Developed by Jan Hubicka 2022-2026", "", 4.0);
+    addMessage("Color-Screen 2.0", "Developed by Jan Hubička  2022-2026", "https://github.com/janhubicka/Color-Screen/wiki", 4.0);
     
+    addMessage("Graphical interface", "Vibe-coded in January 2026", "based on GUI by Linda Kimrová", 4.0);
     // 2. Animation Details
     addMessage(name, dates, desc, 5.0);
     
