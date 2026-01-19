@@ -128,6 +128,26 @@ AC_SUBST([WIN_NO_UNDEFINED])
 AM_CONDITIONAL([HOST_WIN32], [test -n "$WIN_NO_UNDEFINED"])
 AC_CHECK_TOOL([WINDRES], [windres])
 
+AC_MSG_CHECKING([if compiling with clang])
+AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([], [[
+#ifndef __clang__
+       not clang
+#endif
+]])],
+[is_clang=yes], [is_clang=no])
+AC_MSG_RESULT([$is_clang])
+
+GUI_LDFLAGS=""
+if test "x$is_clang" = "xno"; then
+   case "$host" in
+     *-*-mingw*)
+       GUI_LDFLAGS="-mwindows"
+       ;;
+   esac
+fi
+AC_SUBST([GUI_LDFLAGS])
+
 
 # Needed only for gtkgui
 AC_DEFUN([AC_LINK_EXPORT_DYNAMIC],

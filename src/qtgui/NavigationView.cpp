@@ -121,36 +121,64 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   update();
 }
 
+
 void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
-    if (!m_renderer) {
+    qDebug() << "NavigationView::onTriggerRender reqId:" << reqId << " renderer:" << m_renderer << " scan:" << m_scan.get();
+    
+    if (!m_renderer || !m_scan) {
+        qDebug() << "NavigationView::onTriggerRender - missing renderer or scan";
         m_renderQueue.reportFinished(reqId, false);
         return;
     }
 
-    // Calculate parameters for render
-    double scale = 1.0;
-    if (m_scan && (m_scan->width > 0 && m_scan->height > 0)) {
-       // Fit to view calculation or use cached?
-       // Ideally we use m_minScale or similar.
-       // NavigationView usually renders full image fitted to widget.
-       // Let's check paintEvent or resizeEvent logic?
-       // Actually, NavigationView usually fits the image.
-       // The renderer expects scale. 
-       
-       // Note: previously requestRender() logic was likely doing this.
-       // Since I am removing requestRender definition, I need to look at what it did.
-       // I should have read requestRender implementation first.
-       // Assuming it calculates scale based on widget size.
-       
-       double w = m_scan->width;
-       double h = m_scan->height;
-       double scaleX = width() / w;
-       double scaleY = height() / h;
-       scale = qMin(scaleX, scaleY);
+    // 1. Calculate available size
+    QRect viewRect = rect();
+    if (m_zoomSlider && m_zoomSlider->isVisible()) {
+        viewRect.setBottom(m_zoomSlider->geometry().top());
     }
 
-    // Wait, I need to know EXACTLY what requestRender did. 
-    // I should abort this replacement and read requestRender first.
+    int w = viewRect.width();
+    int h = viewRect.height();
+    int imgW = m_scan->width;
+    int imgH = m_scan->height;
+    
+    qDebug() << "NavigationView view:" << w << "x" << h << " img:" << imgW << "x" << imgH;
+
+    double scale = 0.1;
+
+    if (imgW > 0 && imgH > 0 && w > 0 && h > 0) {
+        double scaleX = (double)w / imgW;
+        double scaleY = (double)h / imgH;
+        scale = qMin(scaleX, scaleY);
+    }
+    
+    if (scale <= 0) scale = 0.1;
+    m_previewScale = scale; // Update member for mouse interaction
+
+    int targetW = (int)(imgW * scale);
+    int targetH = (int)(imgH * scale);
+    if (targetW <= 0) targetW = 1;
+    if (targetH <= 0) targetH = 1;
+    
+    qDebug() << "NavigationView scale:" << scale << " target:" << targetW << "x" << targetH;
+
+    // 2. set current progress so onImageReady can emit finished signal
+    m_currentProgress = progress;
+
+    // 3. Invoke renderer
+    bool result = QMetaObject::invokeMethod(
+      m_renderer, "render", Qt::QueuedConnection,
+      Q_ARG(int, reqId),      
+      Q_ARG(double, 0.0), // xOffset
+      Q_ARG(double, 0.0), // yOffset
+      Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
+      Q_ARG(colorscreen::render_parameters, *m_rparams),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+      
+    if (!result) {
+        qWarning() << "NavigationView::onTriggerRender - FAILED to invoke render method!";
+        m_renderQueue.reportFinished(reqId, false);
+    }
 }
 
 void NavigationView::updateParameters(
@@ -186,6 +214,9 @@ void NavigationView::resizeEvent(QResizeEvent *event) { m_renderQueue.requestRen
 
 void NavigationView::onImageReady(int reqId, QImage image, double x, double y,
                                   double scale, bool success) {
+  
+  qDebug() << "NavigationView::onImageReady reqId:" << reqId << " success:" << success << " size:" << image.size();
+  
   // This is always the current render completing (only one active at a time)
   if (m_currentProgress) {
     emit progressFinished(m_currentProgress);
@@ -263,27 +294,59 @@ void NavigationView::onSliderValueChanged(int value) {
 void NavigationView::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.fillRect(rect(), Qt::black);
+ 
+  // Determine dimensions to draw
+  int imgW = 0;
+  int imgH = 0;
+  
+  if (!m_previewImage.isNull()) {
+    imgW = m_previewImage.width();
+    imgH = m_previewImage.height();
+  } else if (m_scan && m_scan->width > 0 && m_scan->height > 0) {
+     // Fallback: calculate theoretical size
+     // We need to match the logic in logic onTriggerRender to ensure alignment
+     QRect viewRect = rect();
+     if (m_zoomSlider->isVisible())
+        viewRect.setBottom(m_zoomSlider->geometry().top());
+     
+     int w = viewRect.width();
+     int h = viewRect.height();
+     
+     double scaleX = (double)w / m_scan->width;
+     double scaleY = (double)h / m_scan->height;
+     double scale = qMin(scaleX, scaleY);
+     if (scale <= 0) scale = 0.1;
 
-  if (m_previewImage.isNull())
-    return;
+     // Update preview scale if it seems uninitialized
+     if (m_previewScale <= 0.0001) {
+         const_cast<NavigationView*>(this)->m_previewScale = scale;
+     }
+
+     imgW = (int)(m_scan->width * scale);
+     imgH = (int)(m_scan->height * scale);
+  } else {
+     // No image data at all
+     return;
+  }
 
   // Draw centered
-  // We calculated scale based on available size, but widget might have resized.
-  // Ideally we re-render or stick to corner.
-  // Using current m_previewImage width/height.
-
   QRect viewRect = rect();
   if (m_zoomSlider->isVisible())
     viewRect.setBottom(m_zoomSlider->geometry().top());
-
-  int imgW = m_previewImage.width();
-  int imgH = m_previewImage.height();
 
   int x = viewRect.left() + (viewRect.width() - imgW) / 2;
   int y = viewRect.top() + (viewRect.height() - imgH) / 2;
 
   m_imageRect = QRect(x, y, imgW, imgH);
-  p.drawImage(x, y, m_previewImage);
+  
+  if (!m_previewImage.isNull()) {
+     p.drawImage(x, y, m_previewImage);
+  } else {
+     // Draw placeholder for missing image
+     p.setPen(QPen(Qt::darkGray));
+     p.drawRect(m_imageRect);
+     p.drawText(m_imageRect, Qt::AlignCenter, "Rendering...");
+  }
 
   // Draw Viewport Rect
   // m_visibleRect is in Rotated Image Pixels.

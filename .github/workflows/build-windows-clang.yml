@@ -57,22 +57,10 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-    - name: make install
+    - name: make install-strip
       shell: msys2 {0}
-      run: make install
+      run: make install-strip
 
-    - name: strip executables
-      shell: msys2 {0}
-      run: |
-        llvm-strip /c/Color-Screen-install/bin/*.exe
-        llvm-strip /c/Color-Screen-install/bin/*.dll
-
-    - name: check dependencies
-      shell: msys2 {0}
-      run: |
-        objdump -p /c/Color-Screen-install/bin/colorscreen-qt.exe | grep "DLL Name" || true
-        ldd /c/Color-Screen-install/bin/colorscreen-qt.exe
- 
     - name: print dlls dll
       shell: msys2 {0}
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
@@ -92,11 +80,11 @@ jobs:
     - name: copy icons
       shell: msys2 {0}
       run: |
-        mkdir -p /c/Color-Screen-install/share/icons
-        cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/share/icons/
-        cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/share/icons/
-        rm -f /c/Color-Screen-install/share/icons/Adwaita/icon-theme.cache
-        rm -f /c/Color-Screen-install/share/icons/hicolor/icon-theme.cache
+        mkdir -p /c/Color-Screen-install/bin/share/icons
+        cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/bin/share/icons/
+        cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/bin/share/icons/
+        rm -f /c/Color-Screen-install/bin/share/icons/Adwaita/icon-theme.cache
+        rm -f /c/Color-Screen-install/bin/share/icons/hicolor/icon-theme.cache
     - name: build installer
       shell: msys2 {0}
       run: |

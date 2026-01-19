@@ -670,6 +670,7 @@ static_link_TRUE
 GTKGUI_BIN_LIBS
 GTKGUI_BIN_CFLAGS
 RDYNAMIC
+GUI_LDFLAGS
 WINDRES
 HOST_WIN32_FALSE
 HOST_WIN32_TRUE
@@ -22023,6 +22024,44 @@ esac
   fi
 else
   WINDRES="$ac_cv_prog_WINDRES"
+fi
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking if compiling with clang" >&5
+printf %s "checking if compiling with clang... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+#ifndef __clang__
+       not clang
+#endif
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_compile "$LINENO"
+then :
+  is_clang=yes
+else case e in #(
+  e) is_clang=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $is_clang" >&5
+printf "%s\n" "$is_clang" >&6; }
+
+GUI_LDFLAGS=""
+if test "x$is_clang" = "xno"; then
+   case "$host" in
+     *-*-mingw*)
+       GUI_LDFLAGS="-mwindows"
+       ;;
+   esac
 fi
 
 

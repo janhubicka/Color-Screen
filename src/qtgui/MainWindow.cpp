@@ -1314,6 +1314,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           } else {
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
+            
+            // If we have a valid screen type, default to formatted (interpolated) view
+            if (m_scrToImgParams.type != colorscreen::Random) {
+              m_renderTypeParams.type = colorscreen::render_type_interpolated;
+            }
           }
           fclose(f);
         }

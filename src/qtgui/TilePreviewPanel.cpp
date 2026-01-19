@@ -229,6 +229,10 @@ void TilePreviewPanel::setDebounceInterval(int msec) {
   m_updateTimer->setInterval(msec);
 }
 
+void TilePreviewPanel::onTileRenderFinished() {
+  scheduleTileUpdate();
+}
+
 void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
   if (m_tileLabels.empty()) {
     m_renderQueue.reportFinished(reqId, true);

@@ -162,7 +162,7 @@ get_new_screen (struct screen_params &p, progress_info *progress)
   //blurred->clamp ();
   return blurred;
 }
-static lru_cache<screen_params, screen, screen *, get_new_screen, 4>
+static lru_cache<screen_params, screen, screen *, get_new_screen, 20>
     screen_cache ("screen");
 
 struct screen_table_params

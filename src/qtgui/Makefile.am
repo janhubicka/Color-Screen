@@ -79,7 +79,7 @@ colorscreen_qt_LDADD = \
 # Windows Resource File
 if HOST_WIN32
 colorscreen_qt_LDADD += colorscreen_res.o
-# colorscreen_qt_LDFLAGS = -mwindows
+colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS)
 endif
 
 colorscreen_res.o: colorscreen.rc
