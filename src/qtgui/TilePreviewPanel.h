@@ -107,7 +107,6 @@ private:
 
   int m_lastRenderedTileSize = 0;
   TaskQueue m_renderQueue;
-  QMap<int, int> m_reqIdToTileIndex; // Map reqId -> tile index
 };
 
 #endif // TILE_PREVIEW_PANEL_H

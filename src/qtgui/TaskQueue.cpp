@@ -14,18 +14,18 @@ int TaskQueue::requestRender()
 {
     int newReqId = m_nextReqId++;
     
-    qDebug() << "TaskQueue::requestRender - Requesting ID:" << newReqId << " Queue Size:" << m_tasks.size();
-    if (m_pendingReqId.has_value()) {
-        qDebug() << "  Pending ID:" << m_pendingReqId.value();
-    }
-    for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
-        qDebug() << "  Active Task ID:" << it->reqId << " Running for:" << it->startTime.elapsed() << "ms";
-    }
+    // qDebug() << "TaskQueue::requestRender - Requesting ID:" << newReqId << " Queue Size:" << m_tasks.size();
+    // if (m_pendingReqId.has_value()) {
+    //    qDebug() << "  Pending ID:" << m_pendingReqId.value();
+    // }
+    // for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
+    //    qDebug() << "  Active Task ID:" << it->reqId << " Running for:" << it->startTime.elapsed() << "ms";
+    // }
 
     // 1. Cancel tasks running too long (> 5000ms)
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
         if (it->active && it->startTime.elapsed() > 5000) {
-            qDebug() << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling.";
+            // qDebug() << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling.";
             if (it->progress && !it->progress->cancel_requested()) {
                 it->progress->cancel();
                 // Emit finished immediately so we don't count it as active
@@ -49,7 +49,7 @@ int TaskQueue::requestRender()
             lastIt--; 
             
             if (lastIt->active && lastIt->progress && !lastIt->progress->cancel_requested()) {
-                qDebug() << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room.";
+                // qDebug() << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room.";
                 lastIt->progress->cancel();
                 // We do NOT remove it here. "New tasks should not start before the cancellation takes effect"
                 // We wait for reportFinished to clear it.
@@ -57,7 +57,7 @@ int TaskQueue::requestRender()
         }
 
         // Queue the new task
-        qDebug() << "  Queueing new task ID:" << newReqId;
+        // qDebug() << "  Queueing new task ID:" << newReqId;
         m_pendingReqId = newReqId;
         return newReqId;
     }
@@ -69,7 +69,7 @@ int TaskQueue::requestRender()
 
 void TaskQueue::startTask(int reqId)
 {
-    qDebug() << "TaskQueue::startTask - Starting ID:" << reqId;
+    // qDebug() << "TaskQueue::startTask - Starting ID:" << reqId;
     TaskInfo info;
     info.reqId = reqId;
     info.progress = std::make_shared<colorscreen::progress_info>();
@@ -84,7 +84,7 @@ void TaskQueue::startTask(int reqId)
 
 void TaskQueue::reportFinished(int reqId, bool success)
 {
-    qDebug() << "TaskQueue::reportFinished - Finished ID:" << reqId << " Success:" << success;
+    // qDebug() << "TaskQueue::reportFinished - Finished ID:" << reqId << " Success:" << success;
     auto it = m_tasks.find(reqId);
     if (it != m_tasks.end()) {
         emit progressFinished(it->progress);
@@ -95,7 +95,7 @@ void TaskQueue::reportFinished(int reqId, bool success)
     // (Older active tasks)
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
         if (it->reqId < reqId) {
-             qDebug() << "  Cancelling older task ID:" << it->reqId << " as newer task finished.";
+             // qDebug() << "  Cancelling older task ID:" << it->reqId << " as newer task finished.";
              if (it->progress) it->progress->cancel();
              emit progressFinished(it->progress); // Optimistic cleanup
              it = m_tasks.erase(it);
@@ -112,7 +112,7 @@ void TaskQueue::processPending()
     // If we have a pending task and a slot is free (size < 2)
     if (m_pendingReqId.has_value() && m_tasks.size() < 2) {
         int reqId = m_pendingReqId.value();
-        qDebug() << "TaskQueue::processPending - Starting pending task ID:" << reqId;
+        // qDebug() << "TaskQueue::processPending - Starting pending task ID:" << reqId;
         m_pendingReqId.reset();
         startTask(reqId);
     }
@@ -120,7 +120,7 @@ void TaskQueue::processPending()
 
 void TaskQueue::cancelAll()
 {
-    qDebug() << "TaskQueue::cancelAll - Cancelling all tasks.";
+    // qDebug() << "TaskQueue::cancelAll - Cancelling all tasks.";
     m_pendingReqId.reset();
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
         if (it->progress) {

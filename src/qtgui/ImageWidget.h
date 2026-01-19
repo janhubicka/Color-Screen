@@ -148,11 +148,6 @@ private:
   // Concurrent Rendering
   TaskQueue m_renderQueue; // Manages IDs and progress notifications
   
-  struct ActiveRender {
-    int reqId;
-    std::shared_ptr<colorscreen::progress_info> progress;
-  };
-  // std::list<ActiveRender> m_activeRenders; // List of currently active renders
   
 private slots:
   void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
