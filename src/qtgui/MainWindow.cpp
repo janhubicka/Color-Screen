@@ -144,6 +144,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   m_solverThread->start();
 
   connect(m_solverWorker, &GeometrySolverWorker::finished, this, &MainWindow::onSolverFinished);
+  
+  // Solver Queue connections
+  connect(&m_solverQueue, &RenderQueue::triggerRender, this, &MainWindow::onTriggerSolve);
+  connect(&m_solverQueue, &RenderQueue::progressStarted, this, &MainWindow::addProgress);
+  connect(&m_solverQueue, &RenderQueue::progressFinished, this, &MainWindow::removeProgress);
 }
 
 MainWindow::~MainWindow() {
@@ -1735,34 +1740,39 @@ void MainWindow::onRegistrationPointsToggled(bool checked) {
 }
 
 void MainWindow::onOptimizeGeometry(bool autoChecked) {
-  if (!m_scan || !m_solverWorker || m_solverProgress)
+  if (!m_scan || !m_solverWorker)
     return;
 
-  // Create progress info
-  m_solverProgress = std::make_shared<colorscreen::progress_info>();
-  m_solverProgress->set_task("Optimizing geometry", 100);
-  addProgress(m_solverProgress);
+  // Request new solve task
+  m_solverQueue.requestRender();
+}
 
+void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
+  if (!m_scan || !m_solverWorker) {
+    m_solverQueue.reportFinished(reqId, false);
+    return;
+  }
+  
+  // Update progress info
+  if (progress) {
+      progress->set_task("Optimizing geometry", 100);
+  }
 
   // Check if nonlinear corrections are enabled
   bool computeMesh = m_geometryPanel->isNonlinearEnabled();
   
-  // qDebug() << "MainWindow::onOptimizeGeometry - computedMesh:" << computeMesh;
-
   // Invoke solver in worker
   QMetaObject::invokeMethod(
-      m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, 0),
+      m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, reqId),
       Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
       Q_ARG(colorscreen::solver_parameters, m_solverParams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, m_solverProgress),
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
       Q_ARG(bool, computeMesh));
 }
 
 void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters result, bool success) {
-  if (m_solverProgress) {
-    removeProgress(m_solverProgress);
-    m_solverProgress.reset();
-  }
+  // Report back to queue
+  m_solverQueue.reportFinished(reqId, success);
 
   if (success) {
     ParameterState newState = getCurrentState();

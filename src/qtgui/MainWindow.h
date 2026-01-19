@@ -35,6 +35,7 @@ class QTimer;
 #include "LinearizationPanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
+#include "RenderQueue.h"
 #include <QElapsedTimer>
 
 struct ProgressEntry {
@@ -277,5 +278,11 @@ private:
   // Solver Worker
   GeometrySolverWorker *m_solverWorker;
   QThread *m_solverThread;
-  std::shared_ptr<colorscreen::progress_info> m_solverProgress;
+  // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
+  
+  // Solver Queue
+  RenderQueue m_solverQueue;
+  
+private slots:
+  void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
 };
