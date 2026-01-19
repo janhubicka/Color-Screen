@@ -28,9 +28,9 @@ NavigationView::NavigationView(QWidget *parent) : QWidget(parent) {
 
   setMinimumHeight(200);
 
-  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &NavigationView::onTriggerRender);
-  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &NavigationView::progressStarted);
-  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &NavigationView::progressFinished);
+  connect(&m_renderQueue, &TaskQueue::triggerRender, this, &NavigationView::onTriggerRender);
+  connect(&m_renderQueue, &TaskQueue::progressStarted, this, &NavigationView::progressStarted);
+  connect(&m_renderQueue, &TaskQueue::progressFinished, this, &NavigationView::progressFinished);
 }
 
 NavigationView::~NavigationView() {

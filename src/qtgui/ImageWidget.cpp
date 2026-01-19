@@ -46,9 +46,9 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
   setFocusPolicy(Qt::StrongFocus); // Ensure widget can receive all mouse events
   m_showRegistrationPoints = false;
 
-  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &ImageWidget::onTriggerRender);
-  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &ImageWidget::progressStarted);
-  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &ImageWidget::progressFinished);
+  connect(&m_renderQueue, &TaskQueue::triggerRender, this, &ImageWidget::onTriggerRender);
+  connect(&m_renderQueue, &TaskQueue::progressStarted, this, &ImageWidget::progressStarted);
+  connect(&m_renderQueue, &TaskQueue::progressFinished, this, &ImageWidget::progressFinished);
 }
 
 double ImageWidget::getMinScale() const { return m_minScale; }
@@ -110,9 +110,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   }
 
   // Cancel current progress if exists
-  if (m_currentProgress) {
-    m_currentProgress->cancel();
-  }
+  m_renderQueue.cancelAll();
 
   // Clear old scan to release it from memory
   m_scan = nullptr;
@@ -135,14 +133,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_renderThread = nullptr;
   }
 
-  // Manually emit progressFinished for current progress
-  if (m_currentProgress) {
-    emit progressFinished(m_currentProgress);
-    m_currentProgress.reset();
-  }
-
-  // Clear any concurrent active renders to avoid deadlocks with new renderer
-  m_renderQueue.cancelAll();
+  // m_renderQueue.cancelAll() handled above.
 
 
 

@@ -88,9 +88,9 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
       m_renderQueue.requestRender();
   });
   
-  connect(&m_renderQueue, &RenderQueue::triggerRender, this, &TilePreviewPanel::onTriggerRender);
-  connect(&m_renderQueue, &RenderQueue::progressStarted, this, &TilePreviewPanel::progressStarted);
-  connect(&m_renderQueue, &RenderQueue::progressFinished, this, &TilePreviewPanel::progressFinished);
+  connect(&m_renderQueue, &TaskQueue::triggerRender, this, &TilePreviewPanel::onTriggerRender);
+  connect(&m_renderQueue, &TaskQueue::progressStarted, this, &TilePreviewPanel::progressStarted);
+  connect(&m_renderQueue, &TaskQueue::progressFinished, this, &TilePreviewPanel::progressFinished);
 
   // Initialize watcher
   m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);

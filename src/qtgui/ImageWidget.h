@@ -1,27 +1,28 @@
 #pragma once
 
-#include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include "Renderer.h"
+#include "TaskQueue.h"
 #include <QImage>
 #include <QThread>
 #include <QWidget>
 #include <QRubberBand>
 #include <memory>
 #include <QElapsedTimer>
+#include "../libcolorscreen/include/progress-info.h"
 #include <list>
 #include <set>
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
-#include "RenderQueue.h"
-
 // Forward declarations
 namespace colorscreen {
 class image_data;
 struct render_parameters;
+struct progress_info; // Added forward declaration for progress_info
 } // namespace colorscreen
 class Renderer;
 
@@ -144,12 +145,19 @@ private:
   double m_viewY = 0.0;
   double m_minScale = 0.1; // Calculated 'fit' scale
 
-  std::shared_ptr<colorscreen::progress_info> m_currentProgress;
-
-  RenderQueue m_renderQueue;
+  // Concurrent Rendering
+  TaskQueue m_renderQueue; // Manages IDs and progress notifications
+  
+  struct ActiveRender {
+    int reqId;
+    std::shared_ptr<colorscreen::progress_info> progress;
+  };
+  // std::list<ActiveRender> m_activeRenders; // List of currently active renders
   
 private slots:
   void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
+
+private:
   
 private:
   // Last successfully rendered state to compare against updates

@@ -1,15 +1,17 @@
 #ifndef TILE_PREVIEW_PANEL_H
 #define TILE_PREVIEW_PANEL_H
 
+#include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/colorscreen.h"
 #include "ParameterPanel.h"
-#include "RenderQueue.h"
+#include "TaskQueue.h"
 #include <QFutureWatcher>
-#include <QImage>
+#include <QWidget>
 #include <QLabel>
 #include <QTimer>
 #include <memory>
 #include <vector>
+#include <QMap> // Added for QMap
 
 namespace colorscreen {
 struct progress_info;
@@ -104,8 +106,8 @@ private:
   bool m_hasPendingRequest = false;
 
   int m_lastRenderedTileSize = 0;
-  
-  RenderQueue m_renderQueue;
+  TaskQueue m_renderQueue;
+  QMap<int, int> m_reqIdToTileIndex; // Map reqId -> tile index
 };
 
 #endif // TILE_PREVIEW_PANEL_H

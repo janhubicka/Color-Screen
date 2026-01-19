@@ -131,7 +131,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-CIEChartWidget.$(OBJEXT) \
 	colorscreen_qt-ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
-	colorscreen_qt-RenderQueue.$(OBJEXT)
+	colorscreen_qt-TaskQueue.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
 	colorscreen_qt-moc_Renderer.$(OBJEXT) \
@@ -151,7 +151,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_CIEChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
-	colorscreen_qt-moc_RenderQueue.$(OBJEXT)
+	colorscreen_qt-moc_TaskQueue.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1) \
 	colorscreen_qt-qrc_resources.$(OBJEXT)
 colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
@@ -195,11 +195,11 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterState.Po \
-	./$(DEPDIR)/colorscreen_qt-RenderQueue.Po \
 	./$(DEPDIR)/colorscreen_qt-Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-TaskQueue.Po \
 	./$(DEPDIR)/colorscreen_qt-ThamesAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkerBase.Po \
@@ -215,12 +215,12 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_WorkerBase.Po \
@@ -435,7 +435,7 @@ colorscreen_qt_SOURCES = \
     CIEChartWidget.cpp \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
-    RenderQueue.cpp
+    TaskQueue.cpp
 
 @static_link_TRUE@AM_LDFLAGS = -static
 @static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
@@ -462,9 +462,9 @@ MOC_SOURCES = \
     moc_CIEChartWidget.cpp \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
-    moc_RenderQueue.cpp
+    moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h RenderQueue.h colorscreen.rc
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h TaskQueue.h colorscreen.rc
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -584,11 +584,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterState.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-RenderQueue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TaskQueue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ThamesAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkerBase.Po@am__quote@ # am--include-marker
@@ -604,12 +604,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_WorkerBase.Po@am__quote@ # am--include-marker
@@ -925,19 +925,19 @@ colorscreen_qt-PagetAnimation.obj: PagetAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-PagetAnimation.obj `if test -f 'PagetAnimation.cpp'; then $(CYGPATH_W) 'PagetAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/PagetAnimation.cpp'; fi`
 
-colorscreen_qt-RenderQueue.o: RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-RenderQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-RenderQueue.Tpo -c -o colorscreen_qt-RenderQueue.o `test -f 'RenderQueue.cpp' || echo '$(srcdir)/'`RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-RenderQueue.Tpo $(DEPDIR)/colorscreen_qt-RenderQueue.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='RenderQueue.cpp' object='colorscreen_qt-RenderQueue.o' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-TaskQueue.o: TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo -c -o colorscreen_qt-TaskQueue.o `test -f 'TaskQueue.cpp' || echo '$(srcdir)/'`TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-TaskQueue.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TaskQueue.cpp' object='colorscreen_qt-TaskQueue.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-RenderQueue.o `test -f 'RenderQueue.cpp' || echo '$(srcdir)/'`RenderQueue.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TaskQueue.o `test -f 'TaskQueue.cpp' || echo '$(srcdir)/'`TaskQueue.cpp
 
-colorscreen_qt-RenderQueue.obj: RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-RenderQueue.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-RenderQueue.Tpo -c -o colorscreen_qt-RenderQueue.obj `if test -f 'RenderQueue.cpp'; then $(CYGPATH_W) 'RenderQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/RenderQueue.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-RenderQueue.Tpo $(DEPDIR)/colorscreen_qt-RenderQueue.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='RenderQueue.cpp' object='colorscreen_qt-RenderQueue.obj' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-TaskQueue.obj: TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TaskQueue.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo -c -o colorscreen_qt-TaskQueue.obj `if test -f 'TaskQueue.cpp'; then $(CYGPATH_W) 'TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/TaskQueue.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-TaskQueue.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TaskQueue.cpp' object='colorscreen_qt-TaskQueue.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-RenderQueue.obj `if test -f 'RenderQueue.cpp'; then $(CYGPATH_W) 'RenderQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/RenderQueue.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TaskQueue.obj `if test -f 'TaskQueue.cpp'; then $(CYGPATH_W) 'TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/TaskQueue.cpp'; fi`
 
 colorscreen_qt-moc_MainWindow.o: moc_MainWindow.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_MainWindow.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_MainWindow.Tpo -c -o colorscreen_qt-moc_MainWindow.o `test -f 'moc_MainWindow.cpp' || echo '$(srcdir)/'`moc_MainWindow.cpp
@@ -1205,19 +1205,19 @@ colorscreen_qt-moc_PagetAnimation.obj: moc_PagetAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_PagetAnimation.obj `if test -f 'moc_PagetAnimation.cpp'; then $(CYGPATH_W) 'moc_PagetAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_PagetAnimation.cpp'; fi`
 
-colorscreen_qt-moc_RenderQueue.o: moc_RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_RenderQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Tpo -c -o colorscreen_qt-moc_RenderQueue.o `test -f 'moc_RenderQueue.cpp' || echo '$(srcdir)/'`moc_RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_RenderQueue.cpp' object='colorscreen_qt-moc_RenderQueue.o' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-moc_TaskQueue.o: moc_TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo -c -o colorscreen_qt-moc_TaskQueue.o `test -f 'moc_TaskQueue.cpp' || echo '$(srcdir)/'`moc_TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_TaskQueue.cpp' object='colorscreen_qt-moc_TaskQueue.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_RenderQueue.o `test -f 'moc_RenderQueue.cpp' || echo '$(srcdir)/'`moc_RenderQueue.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TaskQueue.o `test -f 'moc_TaskQueue.cpp' || echo '$(srcdir)/'`moc_TaskQueue.cpp
 
-colorscreen_qt-moc_RenderQueue.obj: moc_RenderQueue.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_RenderQueue.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Tpo -c -o colorscreen_qt-moc_RenderQueue.obj `if test -f 'moc_RenderQueue.cpp'; then $(CYGPATH_W) 'moc_RenderQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_RenderQueue.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_RenderQueue.cpp' object='colorscreen_qt-moc_RenderQueue.obj' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-moc_TaskQueue.obj: moc_TaskQueue.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TaskQueue.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo -c -o colorscreen_qt-moc_TaskQueue.obj `if test -f 'moc_TaskQueue.cpp'; then $(CYGPATH_W) 'moc_TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TaskQueue.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_TaskQueue.cpp' object='colorscreen_qt-moc_TaskQueue.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_RenderQueue.obj `if test -f 'moc_RenderQueue.cpp'; then $(CYGPATH_W) 'moc_RenderQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_RenderQueue.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_TaskQueue.obj `if test -f 'moc_TaskQueue.cpp'; then $(CYGPATH_W) 'moc_TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_TaskQueue.cpp'; fi`
 
 colorscreen_qt-qrc_resources.o: qrc_resources.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-qrc_resources.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-qrc_resources.Tpo -c -o colorscreen_qt-qrc_resources.o `test -f 'qrc_resources.cpp' || echo '$(srcdir)/'`qrc_resources.cpp
@@ -1383,11 +1383,11 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-RenderQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-TaskQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ThamesAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
@@ -1403,12 +1403,12 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_WorkerBase.Po
@@ -1470,11 +1470,11 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-RenderQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-SpectraChartWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-TaskQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ThamesAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
@@ -1490,12 +1490,12 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_NavigationView.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ParameterPanel.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_RenderQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_Renderer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ScreenPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SharpnessPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SmartSpinBox.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_SpectraChartWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ThamesAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_WorkerBase.Po

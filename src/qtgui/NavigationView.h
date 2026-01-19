@@ -9,11 +9,10 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
-#include "RenderQueue.h"
+#include "Renderer.h"
+#include "TaskQueue.h"
 
 class QSlider;
-class QThread;
-class Renderer;
 
 class NavigationView : public QWidget
 {
@@ -58,7 +57,8 @@ private:
 
     QSlider *m_zoomSlider;
     
-    RenderQueue m_renderQueue;
+    // Render Queue
+    TaskQueue m_renderQueue;
     
 private slots:
     void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
@@ -75,6 +75,8 @@ private:
     QThread *m_renderThread = nullptr;
     
     std::shared_ptr<colorscreen::progress_info> m_currentProgress;
+    
+    // Internal state
     
     // Single-thread rendering queue
     bool m_renderInProgress = false;

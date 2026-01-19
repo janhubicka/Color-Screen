@@ -146,9 +146,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   connect(m_solverWorker, &GeometrySolverWorker::finished, this, &MainWindow::onSolverFinished);
   
   // Solver Queue connections
-  connect(&m_solverQueue, &RenderQueue::triggerRender, this, &MainWindow::onTriggerSolve);
-  connect(&m_solverQueue, &RenderQueue::progressStarted, this, &MainWindow::addProgress);
-  connect(&m_solverQueue, &RenderQueue::progressFinished, this, &MainWindow::removeProgress);
+  connect(&m_solverQueue, &TaskQueue::triggerRender, this, &MainWindow::onTriggerSolve);
+  connect(&m_solverQueue, &TaskQueue::progressStarted, this, &MainWindow::addProgress);
+  connect(&m_solverQueue, &TaskQueue::progressFinished, this, &MainWindow::removeProgress);
 }
 
 MainWindow::~MainWindow() {
