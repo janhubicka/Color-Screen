@@ -18,7 +18,9 @@ int main(int argc, char *argv[]) {
     if (strcmp(argv[i], "--debug-qt") == 0) {
       qputenv("QT_DEBUG_PLUGINS", "1");
       // Also enable general debug output if not already
-      // qputenv("QT_LOGGING_RULES", "*=true"); 
+      qputenv("QT_LOGGING_RULES", "*=true"); 
+      // Hide options from QT
+      argc = 1;
       break;
     }
   }
