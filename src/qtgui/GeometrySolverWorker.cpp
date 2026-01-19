@@ -22,22 +22,28 @@ void GeometrySolverWorker::solve(
   bool success = false;
 
   try {
+    // Lens optimization is slow. Disable it for nonlinear tranfomrs
+    if (computeMesh)
+      solverParams.optimize_lens = false;
+    
     // colorscreen::solver modifies params in place and returns sum of squares of error
     colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
-    qDebug() << "Geometry solver finished with error squared:" << error_sq;
+    qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonliner " << computeMesh;
 
     if (progress && progress->cancelled()) {
       success = false;
     } else {
-      success = true;
       if (computeMesh) {
         params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
         if (!params.mesh_trans) {
-           qWarning() << "Geometry solver failed to compute mesh";
-           // We could still return true for its linear part, but user asked for nonlinear correction
-           // Let's keep success=true if linear part worked.
+           success = false;
+	   if (!progress->cancelled ())
+             qWarning() << "Geometry solver failed to compute mesh";
         }
       } else {
+	if (!progress->cancelled ())
+	  qWarning() << "Geometry solver failed";
+        success = true;
         params.mesh_trans = nullptr;
       }
     }
