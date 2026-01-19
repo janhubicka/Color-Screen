@@ -459,13 +459,15 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       rparam.green_strip_width, progress);
   if (!scr)
     return false;
+  /* For small renders do just one period of screen. For bigger do multiple.  */
+  int mult = tile.width > 100 ? 3 : 1;
   if (!avg)
     for (int y = 0; y < tile.height; y++)
       for (int x = 0; x < tile.width; x++)
         {
           rgbdata wd
-              = scr->interpolated_mult ({ x * (3 / ((coord_t)tile.width)),
-                                          y * (3 / ((coord_t)tile.height)) });
+              = scr->interpolated_mult ({ x * (mult / ((coord_t)tile.width)),
+                                          y * (mult / ((coord_t)tile.height)) });
           m.apply_to_rgb (wd.red, wd.green, wd.blue, &wd.red, &wd.green,
                           &wd.blue);
           // wd = (wd * 0.9) + (rgbdata){0.1,0.1,0.1};
