@@ -816,7 +816,7 @@ void MainWindow::createMenus() {
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");
 
-  m_lockRelativeCoordinatesAction = new QAction(QIcon::fromTheme("object-locked"), tr("Lock relative coordinates"), this);
+  m_lockRelativeCoordinatesAction = new QAction(QIcon::fromTheme("system-lock-screen-symbolic"), tr("Lock relative coordinates"), this);
   m_lockRelativeCoordinatesAction->setCheckable(true);
   m_lockRelativeCoordinatesAction->setChecked(true); // Default ON
   connect(m_lockRelativeCoordinatesAction, &QAction::toggled, m_imageWidget, &ImageWidget::setLockRelativeCoordinates);
