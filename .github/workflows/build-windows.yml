@@ -83,6 +83,8 @@ jobs:
         echo "[Paths]" > /c/Color-Screen-install/bin/qt.conf
         echo "Prefix = ." >> /c/Color-Screen-install/bin/qt.conf
         echo "Plugins = ." >> /c/Color-Screen-install/bin/qt.conf
+        # Copy Qt6Xml.dll just in case
+        cp /${{matrix.sys}}/bin/Qt6Xml.dll /c/Color-Screen-install/bin/ || true
     - name: copy icons
       shell: msys2 {0}
       run: |

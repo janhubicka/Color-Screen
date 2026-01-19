@@ -16,7 +16,7 @@ ThamesAnimation::ThamesAnimation(QWidget *parent)
   connect(m_triggerTimer, &QTimer::timeout, this, &ThamesAnimation::triggerRandomMovement);
   
   initializeGrid();
-  m_subtitles.start("Thames color screen", "1914-1920", "Invented by C.L. Finlay");
+  m_subtitles.start("Thames color screen", "1908–1910", "Invented by Clare Livingston Finlay");
 }
 
 

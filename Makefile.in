@@ -169,7 +169,7 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/build-aux/ar-lib \
 	$(top_srcdir)/build-aux/missing \
 	$(top_srcdir)/build-aux/tap-driver.sh \
 	$(top_srcdir)/src/libcolorscreen/include/colorscreen-config.h.in \
-	AUTHORS COPYING ChangeLog INSTALL NEWS README.md \
+	AUTHORS COPYING ChangeLog INSTALL NEWS README.md TODO \
 	build-aux/ar-lib build-aux/compile build-aux/config.guess \
 	build-aux/config.sub build-aux/depcomp build-aux/install-sh \
 	build-aux/ltmain.sh build-aux/missing

@@ -261,7 +261,7 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     
     // Header font
     QFont headerFont = painter->font();
-    headerFont.setPointSize(10);
+    headerFont.setPointSize(12);
     headerFont.setCapitalization(QFont::SmallCaps);
     headerFont.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
     QFontMetrics fmHeader(headerFont);
@@ -286,7 +286,7 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
         
         // Shadow/Outline
         painter->setPen(QColor(0, 0, 0, 180));
-        QRect shadowRect = textRect.translated(2, 2);
+        QRect shadowRect = textRect.translated(4, 4);
         painter->drawText(shadowRect, Qt::AlignCenter, text);
         
         // Text

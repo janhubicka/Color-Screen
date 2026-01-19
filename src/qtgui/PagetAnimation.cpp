@@ -13,7 +13,7 @@ PagetAnimation::PagetAnimation(QWidget *parent)
   m_launchTimer = new QTimer(this);
   connect(m_launchTimer, &QTimer::timeout, this, &PagetAnimation::launchFirework);
 
-  m_subtitles.start("Paget color screen", "1914-1918", "Invented by Clare Finlay");
+  m_subtitles.start("Paget color screen", "1913– c.a. 1922", "Invented by Clare Finlay and Geoffrey S. Whitefield");
 }
 
 
@@ -53,7 +53,7 @@ void PagetAnimation::launchFirework() {
     {QColor(50, 200, 50), QColor(50, 100, 220)}    // Green, Blue (was Blue, Green)
   };
   
-  double spacing = 8.0; // Tight spacing during launch
+  double spacing = 22.0; // Tight spacing during launch
   double size = 20.0;    // Square size
   double rotation = 45.0 * M_PI / 180.0; // 45 degree rotation
   

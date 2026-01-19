@@ -22056,13 +22056,13 @@ rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
 printf "%s\n" "$is_clang" >&6; }
 
 GUI_LDFLAGS=""
-if test "x$is_clang" = "xno"; then
-   case "$host" in
-     *-*-mingw*)
-       GUI_LDFLAGS="-mwindows"
-       ;;
-   esac
-fi
+#if test "x$is_clang" = "xno"; then
+   #case "$host" in
+     #*-*-mingw*)
+       #GUI_LDFLAGS="-mwindows"
+       #;;
+   #esac
+#fi
 
 
 
