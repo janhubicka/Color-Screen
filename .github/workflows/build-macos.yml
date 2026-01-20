@@ -110,36 +110,96 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
-    - name: Package CLI
+    - name: Package App Bundle
       run: |
-        mkdir Color-Screen-package
-        mkdir Color-Screen-package/libs
-        cp /tmp/Color-Screen-MacOS/bin/colorscreen /tmp/Color-Screen-MacOS/bin/colorscreen-gtk /tmp/Color-Screen-MacOS/bin/colorscreen-qt Color-Screen-package
-        cp /tmp/Color-Screen-MacOS/share/colorscreen/gtkgui.glade Color-Screen-package
-        dylibbundler -od -b -x Color-Screen-package/colorscreen -d Color-Screen-package/libs -p @executable_path/libs
-        dylibbundler -od -b -x Color-Screen-package/colorscreen-gtk -d Color-Screen-package/libs -p @executable_path/libs
-        dylibbundler -od -b -x Color-Screen-package/colorscreen-qt -d Color-Screen-package/libs -p @executable_path/libs
+        # Create App Structure
+        mkdir -p Color-Screen.app/Contents/MacOS
+        mkdir -p Color-Screen.app/Contents/Resources
         
-        # Bundle Qt Platform Plugin
-        QT6_PREFIX=$(brew --prefix qt6)
-        QCOCOA=$(find "$QT6_PREFIX" -name libqcocoa.dylib -type f | head -n 1)
-        if [ -n "$QCOCOA" ]; then
-           mkdir -p Color-Screen-package/platforms
-           cp "$QCOCOA" Color-Screen-package/platforms/
-           # Fixup the plugin library references
-           dylibbundler -of -b -x Color-Screen-package/platforms/libqcocoa.dylib -d Color-Screen-package/libs -p @executable_path/libs
-        else
-           echo "WARNING: libqcocoa.dylib not found!"
-        fi
+        # Copy Binaries
+        cp /tmp/Color-Screen-MacOS/bin/colorscreen-qt Color-Screen.app/Contents/MacOS/Color-Screen
+        cp /tmp/Color-Screen-MacOS/bin/colorscreen Color-Screen.app/Contents/MacOS/
+        
+        # Create Info.plist
+        cat > Color-Screen.app/Contents/Info.plist <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>Color-Screen</string>
+            <key>CFBundleIconFile</key>
+            <string>icon.icns</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.janhubicka.colorscreen</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleSignature</key>
+            <string>????</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.13</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+        </dict>
+        </plist>
+        EOF
+        
+        # Generate Icon
+        mkdir icon.iconset
+        sips -z 16 16     images/icon.svg --out icon.iconset/icon_16x16.png
+        sips -z 32 32     images/icon.svg --out icon.iconset/icon_16x16@2x.png
+        sips -z 32 32     images/icon.svg --out icon.iconset/icon_32x32.png
+        sips -z 64 64     images/icon.svg --out icon.iconset/icon_32x32@2x.png
+        sips -z 128 128   images/icon.svg --out icon.iconset/icon_128x128.png
+        sips -z 256 256   images/icon.svg --out icon.iconset/icon_128x128@2x.png
+        sips -z 512 512   images/icon.svg --out icon.iconset/icon_512x512.png
+        sips -z 1024 1024 images/icon.svg --out icon.iconset/icon_512x512@2x.png
+        iconutil -c icns icon.iconset
+        cp icon.icns Color-Screen.app/Contents/Resources/
+        
+        # Run macdeployqt
+        $(brew --prefix qt6)/bin/macdeployqt Color-Screen.app -verbose=2 -always-overwrite
+        
+        # Manually copy missing dylibs (similar to Windows)
+        # Assuming brew installs are in standard locations
+        cp /opt/homebrew/lib/libgsl.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libgslcblas.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libtiff.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libjpeg.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/liblcms2.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libraw.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libfftw3.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libomp.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libzip.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        
+        # Fix RPATHs for manually copied libs
+        # This is basic, might need recursive fixup script if deps have deps
+        for LIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
+            NAME=$(basename "$LIB")
+            install_name_tool -id "@executable_path/../Frameworks/$NAME" "$LIB"
+        done
+        
+        install_name_tool -change /opt/homebrew/lib/libgsl.27.dylib @executable_path/../Frameworks/libgsl.27.dylib Color-Screen.app/Contents/MacOS/Color-Screen
+        install_name_tool -change /opt/homebrew/lib/libgslcblas.0.dylib @executable_path/../Frameworks/libgslcblas.0.dylib Color-Screen.app/Contents/MacOS/Color-Screen
+        
+        # Deep Code Sign (Ad-Hoc)
+        codesign --deep --force --verify --verbose --sign "-" Color-Screen.app
+        
+        # Capture debug info
+        $(brew --prefix qt6)/bin/macdeployqt Color-Screen.app -verbose=2 > macdeployqt_debug.txt 2>&1 || true
+        
+        # Zip it
+        ditto -c -k --keepParent Color-Screen.app Color-Screen-macOS.zip
 
-        otool -L Color-Screen-package/colorscreen
-        otool -L Color-Screen-package/colorscreen-gtk
-        otool -L Color-Screen-package/colorscreen-qt
-        ditto -ck --rsrc --sequesterRsrc Color-Screen-package Color-Screen-package.zip
     - uses: actions/upload-artifact@v4
       with:
-        name: macOS-colorscreen-package
-        path: Color-Screen-package.zip
+        name: macdeployqt-debug
+        path: macdeployqt_debug.txt
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS-Color-Screen-App
+        path: Color-Screen-macOS.zip
     - name: make distclean
       run: make distclean
     - name: configure with checking
@@ -184,6 +244,11 @@ jobs:
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
       run: |
-        Color-Screen-package/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif  test.par
-        # Smoke test Qt binary (expected to fail connection to display but should load libs)
-        Color-Screen-package/colorscreen-qt --help || echo "Qt binary failed to launch (check logs for library errors)"
+        # CLI Test
+        Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
+        
+        # GUI Smoke Test (launch and quit)
+        # Note: Interactive UI tests on GHA runners are tricky, but open/kill works
+        open -n Color-Screen.app
+        sleep 10
+        osascript -e 'quit app "Color-Screen"'
