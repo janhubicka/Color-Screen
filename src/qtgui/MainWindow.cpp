@@ -616,11 +616,11 @@ void MainWindow::createToolbar() {
 
   m_toolbar->addSeparator();
   QAction *rotLeftAction = m_toolbar->addAction(
-      QIcon::fromTheme("object-rotate-left-symbolic"), "Rotate Left");
+      getSymbolicIcon("object-rotate-left-symbolic"), "Rotate Left");
   connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
 
   QAction *rotRightAction = m_toolbar->addAction(
-      QIcon::fromTheme("object-rotate-right-symbolic"), "Rotate Right");
+      getSymbolicIcon("object-rotate-right-symbolic"), "Rotate Right");
   connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
 
   m_toolbar->addSeparator();
@@ -804,19 +804,19 @@ void MainWindow::createMenus() {
   m_viewMenu = menuBar()->addMenu("&View");
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
-  m_zoomInAction->setIcon(QIcon::fromTheme("zoom-in-symbolic"));
+  m_zoomInAction->setIcon(getSymbolicIcon("zoom-in-symbolic"));
   m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
-  m_zoomOutAction->setIcon(QIcon::fromTheme("zoom-out-symbolic"));
+  m_zoomOutAction->setIcon(getSymbolicIcon("zoom-out-symbolic"));
   m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
   m_viewMenu->addAction(m_zoomOutAction);
 
   m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
-  m_zoom100Action->setIcon(QIcon::fromTheme("zoom-original-symbolic"));
+  m_zoom100Action->setIcon(getSymbolicIcon("zoom-original-symbolic"));
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
