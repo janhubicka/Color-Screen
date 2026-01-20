@@ -72,6 +72,8 @@ void JolyAnimation::spawnBoat() {
         newBoat.isPirate = false;
         newBoat.fireCooldown = 0.0;
         newBoat.tilt = 0;
+        newBoat.vy = 0; // Initial vertical velocity
+        newBoat.y = 0;  // Will be set in first update
         
         // 1 in 30 chance to be a pirate ship
         if (QRandomGenerator::global()->bounded(30) == 0) {
@@ -125,6 +127,10 @@ void JolyAnimation::spawnBoat() {
                 newBoat.speed = -(80 + QRandomGenerator::global()->bounded(60));
             }
         }
+
+        // Initialize Y to surface immediately to avoid drop-in
+        double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+        newBoat.y = newBoat.stripIndex * stripHeight;
         
         bool placed = false;
         for (auto &b : m_boats) {
@@ -171,6 +177,19 @@ void JolyAnimation::updateAnimation() {
   spawnParrot();
   
   double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+  
+  double frequency = 0.02; 
+  double delay = 20.0;
+  
+  double globalAmp = stripHeight * 0.8; 
+  double rampFactor = 1.0;
+  if (m_time < delay) {
+     rampFactor = 0.0;
+  } else if (m_time < delay + 2.0) {
+     rampFactor = (m_time - delay) * 0.5;
+  }
+  
+  const double GRAVITY = 800.0; // pixels / s^2
 
   // Update Boats
   for (int i = 0; i < (int)m_boats.size(); ++i) {
@@ -180,10 +199,47 @@ void JolyAnimation::updateAnimation() {
       if (b.sinking) {
           b.sinkProgress += dt * 0.15; 
           b.x += b.speed * dt * 0.3; 
+          b.y += 100 * dt; // Sink down absolute
           if (b.sinkProgress > 1.2) b.active = false;
       } else {
           b.x += b.speed * dt;
           if (b.x < -200 || b.x > width() + 200) b.active = false;
+
+          // Boat Physics 
+          // 1. Calculate water surface height and velocity at boat x
+          double perspectiveFactor = (double)(b.stripIndex + 1) / STRIP_COUNT;
+          double stripAmp = globalAmp * rampFactor * perspectiveFactor * m_strips[b.stripIndex].currentAmpFactor;
+          double phase = m_strips[b.stripIndex].phase;
+          double stripFreq = frequency * (0.9 + 0.2 * qCos(b.stripIndex * 0.5));
+          double stripSpeed = m_strips[b.stripIndex].currentSpeed;
+          
+          double angle = b.x * stripFreq + m_time * stripSpeed + phase;
+          double baseY = b.stripIndex * stripHeight;
+          double yWater = baseY + stripAmp * qSin(angle);
+          
+          // vyWater = derivative of yWater wrt time
+          // d(angle)/dt = stripSpeed
+          // vyWater = stripAmp * cos(angle) * stripSpeed
+          double vyWater = stripAmp * qCos(angle) * stripSpeed;
+          
+          // 2. Apply Gravity
+          b.vy += GRAVITY * dt;
+          b.y += b.vy * dt;
+          
+          // 3. Collision with water
+          if (b.y > yWater) {
+              b.y = yWater;
+              // If we slam into water, take its velocity, but ensure we don't just stick if it accelerates down fast?
+              // Simple kinematic: Stick to surface if moving down into it.
+              b.vy = vyWater;
+              
+              // Calculate tilt based on wave slope
+              double slope = stripAmp * stripFreq * qCos(angle);
+              b.tilt = qRadiansToDegrees(qAtan(slope));
+              b.tilt += 10.0 * qSin(m_time * 3.0 + b.x * 0.01);
+          } else {
+              // Airborne - keep tilt constant or damp it? Keep last tilt.
+          }
 
           // Pirate Logic
           if (b.isPirate) {
@@ -191,24 +247,19 @@ void JolyAnimation::updateAnimation() {
               if (b.fireCooldown <= 0) {
                   // Find target
                   int targetIdx = -1;
-                  double minDist = 400.0; // Increased range
+                  double minDist = 500.0; // Increased range
                   
-                  // Pirate base Y for range check
-                  double pirateY = b.stripIndex * stripHeight;
-
                   for (int j = 0; j < (int)m_boats.size(); ++j) {
                       if (i == j) continue;
                       if (!m_boats[j].active || m_boats[j].sinking || m_boats[j].isPirate) continue;
                       
-                      double targetY = m_boats[j].stripIndex * stripHeight;
+                      const auto &target = m_boats[j];
                       
-                      // Allow cross-strip shooting (difference in Y)
-                      double dx = b.x - m_boats[j].x;
-                      double dy = pirateY - targetY;
+                      // Allow cross-strip shooting
+                      double dx = b.x - target.x;
+                      double dy = b.y - target.y;
                       double dist = qSqrt(dx*dx + dy*dy);
                       
-                      // Only shoot if in front (or close)
-                      // Or just shoot anything nearby!
                       if (dist < minDist) {
                           minDist = dist;
                           targetIdx = j;
@@ -217,44 +268,46 @@ void JolyAnimation::updateAnimation() {
                   
                   if (targetIdx != -1) {
                       // Fire Canonball!
-                      b.fireCooldown = 1.5; // Reload time
+                      b.fireCooldown = 1.5 + QRandomGenerator::global()->generateDouble(); 
                       
                       Cannonball ball;
                       ball.active = true;
                       
-                      // Start position (approximate mast/deck height)
-                      double pirateRealY = pirateY + stripHeight * 0.5; // mid strip
                       ball.x = b.x;
-                      ball.y = pirateRealY - 20; // Slightly up (deck level)
+                      ball.y = b.y - 10; // Slightly up (deck level)
                       
-                      // Target calculation
                       const auto &target = m_boats[targetIdx];
-                      double targetRealY = (target.stripIndex * stripHeight) + stripHeight * 0.5;
                       
-                      // Aim slightly ahead? Or just direct.
-                      double dx = target.x - ball.x;
-                      double dy = targetRealY - ball.y;
-                      double dist = qSqrt(dx*dx + dy*dy);
+                      // Ballistic Aiming
+                      // Try to hit target in T seconds
+                      // T proportional to distance?
+                      double dist = minDist;
+                      double T = dist / 300.0; // Flight time guess, 300px/s avg horizontal speed
+                      if (T < 0.5) T = 0.5;
                       
-                      double speed = 400.0; // Cannonball speed
-                      ball.vx = (dx / dist) * speed;
-                      ball.vy = (dy / dist) * speed;
+                      // Predict target pos? Assume static for now or linear predict
+                      double predX = target.x + target.speed * T * 0.8;
+                      double predY = target.y; // Assume similar Y
+                      
+                      double dx = predX - ball.x;
+                      double dy = predY - ball.y;
+                      
+                      // x = vx * T  => vx = dx / T
+                      ball.vx = dx / T;
+                      
+                      // y = vy*T + 0.5*g*T^2 ==> vy = (y - 0.5*g*T^2)/T
+                      // dy = y_dest - y_start
+                      // dy = vy * T + 0.5 * g * T^2
+                      // vy = (dy - 0.5 * g * T^2) / T
+                      ball.vy = (dy - 0.5 * GRAVITY * T * T) / T;
                       
                       m_cannonballs.push_back(ball);
                   }
               }
           } else {
-              // Normal boat capsizing logic
+              // Sinking logic
               const auto &strip = m_strips[b.stripIndex];
-              double riskFactor = 0.0;
-              if (strip.currentAmpFactor > 0.9) {
-                  double diff = strip.currentAmpFactor - 0.9;
-                  riskFactor = diff * diff * 0.2;
-              }
-              double speedMult = strip.currentSpeed / 3.0;
-              double prob = (riskFactor * speedMult) / 7.0;
-              
-              if (QRandomGenerator::global()->generateDouble() < prob) {
+              if (strip.currentAmpFactor > 0.95 && QRandomGenerator::global()->bounded(1000) < 2) {
                   b.sinking = true;
               }
           }
@@ -268,10 +321,11 @@ void JolyAnimation::updateAnimation() {
           continue;
       }
       
+      it->vy += GRAVITY * dt; // Gravity
       it->x += it->vx * dt;
       it->y += it->vy * dt;
       
-      if (it->x < -200 || it->x > width() + 200 || it->y < -200 || it->y > height() + 200) {
+      if (it->x < -200 || it->x > width() + 200 || it->y > height() + 200) {
           it->active = false;
           ++it;
           continue;
@@ -281,12 +335,11 @@ void JolyAnimation::updateAnimation() {
       bool hit = false;
       for (auto &b : m_boats) {
           if (b.active && !b.sinking && !b.isPirate) {
-              double boatY = (b.stripIndex * stripHeight) + stripHeight * 0.5;
               double dx = it->x - b.x;
-              double dy = it->y - boatY;
+              double dy = it->y - (b.y - 10); // Hit centerish
               
-              // Hit radius approx 30px
-              if (dx*dx + dy*dy < 30*30) {
+              // Hit radius approx 25px
+              if (dx*dx + dy*dy < 25*25) {
                   b.sinking = true;
                   hit = true;
                   break; // Only sink one boat
@@ -315,16 +368,13 @@ void JolyAnimation::updateAnimation() {
 }
 
 void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, double amplitude, double frequency, double phase) {
-    double angle = boat.x * frequency + m_time * m_strips[boat.stripIndex].currentSpeed + phase;
-    double waveY = amplitude * qSin(angle);
-    double y = yBase + waveY;
-    
-    double slope = amplitude * frequency * qCos(angle);
-    double tiltAngle = qRadiansToDegrees(qAtan(slope));
-    
-    tiltAngle += 10.0 * qSin(m_time * 3.0 + boat.x * 0.01);
-    
+    // Only use boat.y for position, ignore wave calc here (done in update)
+    double y = boat.y;
+    double tiltAngle = boat.tilt;
+
     double sinkY = 0;
+    
+
     if (boat.sinking) {
         double targetTilt = (boat.speed > 0) ? 180 : -180;
         double tiltProgress = qMin(1.0, boat.sinkProgress * 2.0);

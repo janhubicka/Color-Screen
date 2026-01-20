@@ -37,6 +37,8 @@ private:
   struct BoatState {
       bool active;
       double x;
+      double y;   // Absolute Y position
+      double vy;  // Vertical velocity
       int stripIndex;
       double speed; // pixels per second
       double tilt;
