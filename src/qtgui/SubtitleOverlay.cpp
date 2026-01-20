@@ -209,6 +209,12 @@ void SubtitleOverlay::initThanksList() {
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
+        "Steve Greene",
+        "",
+        "For discussions on Oscar Jordan"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
         "Alan Griffiths",
         "",
         "For his work on Luminous-lint and other efforts to get people in this area connected"
@@ -233,13 +239,13 @@ void SubtitleOverlay::initThanksList() {
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "Volker Jansen"
+        "Volker Jansen",
         "Zeutschel GmbH",
         "For arranging vising in Zeutshel and digitizing many samples for us"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "Alexander Sander"
+        "Alexander Sander",
         "Zeutschel GmbH",
         "For arranging vising in Zeutshel and digitizing many samples for us"
     });
@@ -248,6 +254,24 @@ void SubtitleOverlay::initThanksList() {
         "Giorgio Trumpy",
         "",
         "For sharing his measurement of Dufaycolor dye and his wonderful research"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Gawain Weaver",
+        "",
+        "For consultations and sharing data on color screens"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Silvie Pénichon",
+        "Art institute in Chicago",
+        "For discussions on the early color and her wonderful book"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Jan Lovy",
+        "Professor",
+        "For going through incredibly difficult procedure to borrow Epson Perfection V850 scanner"
     });
     
     

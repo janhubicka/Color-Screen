@@ -66,7 +66,7 @@ void JolyAnimation::spawnBoat() {
     if (activeCount >= 15) return; 
     
     // Increased spawn rate
-    if (m_time > 30.0 && QRandomGenerator::global()->bounded(100) < 2) { 
+    if (m_time > 20.0 && QRandomGenerator::global()->bounded(100) < 2) { 
         BoatState newBoat;
         newBoat.active = true;
         newBoat.sinking = false;
@@ -78,7 +78,8 @@ void JolyAnimation::spawnBoat() {
         newBoat.y = 0;  // Will be set in first update
         
         // 1 in 30 chance to be a pirate ship
-        if (QRandomGenerator::global()->bounded(30) == 0) {
+        // Pirate ships start later (30s)
+        if (m_time > 30.0 && QRandomGenerator::global()->bounded(30) == 0) {
             newBoat.isPirate = true;
             newBoat.shapeType = 2; // Pirate ships usually look like Tall Ships
             
@@ -152,7 +153,7 @@ void JolyAnimation::spawnParrot() {
     if (m_parrot.active) return;
     
     // Random chance to spawn parrot
-    if (m_time > 15.0 && QRandomGenerator::global()->bounded(500) < 1) { // More frequent for checking
+    if (m_time > 60.0 && QRandomGenerator::global()->bounded(500) < 1) { // More frequent for checking
         m_parrot.active = true;
         m_parrot.wingPhase = 0;
         
@@ -182,9 +183,12 @@ void JolyAnimation::spawnParrot() {
 void JolyAnimation::spawnBottle() {
     int activeCount = 0;
     for (const auto &b : m_bottles) if (b.active) activeCount++;
+
+    for (const auto &b : m_bottles) if (b.active) activeCount++;
     if (activeCount >= 2) return;
     
-    if (QRandomGenerator::global()->bounded(200) == 0) { // Rare
+    // Bottles start appearing after 1m 30s (90s)
+    if (m_time > 90.0 && QRandomGenerator::global()->bounded(200) == 0) { // Rare
         BottleState b;
         b.active = true;
         
@@ -278,17 +282,26 @@ void JolyAnimation::updateAnimation() {
           
           // 3. Collision with water
           if (b.y > yWater) {
+              // Check for Hard Impact (e.g. falling from height or wave rising fast)
+              double impact = b.vy - vyWater;
+              if (impact > 450.0) { // Threshold for "trouble"
+                   if (!b.sinking) b.sinking = true;
+              }
+              
               b.y = yWater;
-              // If we slam into water, take its velocity, but ensure we don't just stick if it accelerates down fast?
-              // Simple kinematic: Stick to surface if moving down into it.
+              // If we slam into water, take its velocity
               b.vy = vyWater;
               
               // Calculate tilt based on wave slope
               double slope = stripAmp * stripFreq * qCos(angle);
-              b.tilt = qRadiansToDegrees(qAtan(slope));
-              b.tilt += 10.0 * qSin(m_time * 3.0 + b.x * 0.01);
+              double targetTilt = qRadiansToDegrees(qAtan(slope));
+              targetTilt += 10.0 * qSin(m_time * 3.0 + b.x * 0.01);
+              
+              // Smooth interpolation
+              b.tilt += (targetTilt - b.tilt) * 0.1;
           } else {
-              // Airborne - keep tilt constant or damp it? Keep last tilt.
+              // Airborne - keep tilt constant or damp it? 
+               b.tilt += (0 - b.tilt) * 0.02;
           }
 
           // Pirate Logic
@@ -355,11 +368,7 @@ void JolyAnimation::updateAnimation() {
                   }
               }
           } else {
-              // Sinking logic
-              const auto &strip = m_strips[b.stripIndex];
-              if (strip.currentAmpFactor > 0.95 && QRandomGenerator::global()->bounded(1000) < 2) {
-                  b.sinking = true;
-              }
+              // Sinking logic removed (replaced by hard physics impact)
           }
       }
   }
@@ -511,9 +520,17 @@ void JolyAnimation::updateAnimation() {
           b.y = yWater;
           b.vy = vyWater;
           
+          // Calculate tilt based on wave slope
           double slope = stripAmp * stripFreq * qCos(angle);
-          b.tilt = qRadiansToDegrees(qAtan(slope));
-          b.tilt += 15.0 * qSin(m_time * 2.0 + b.x * 0.05);
+          double targetTilt = qRadiansToDegrees(qAtan(slope));
+          targetTilt += 10.0 * qSin(m_time * 3.0 + b.x * 0.01);
+          
+          // Smooth interpolation
+          b.tilt += (targetTilt - b.tilt) * 0.1;
+      } else {
+          // Airborne - relax tilt back to 0? Or keep momentum? 
+          // Smoothly return to 0 if flying for long?
+          b.tilt += (0 - b.tilt) * 0.02;
       }
   }
   
