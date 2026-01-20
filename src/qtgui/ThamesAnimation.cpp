@@ -103,13 +103,24 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
   
   // Left/Right walls
   if (ball.pos.x() - ball.radius < 0) {
+    if (ball.pos.y() < margin || ball.pos.y() > height() - margin) {
+#if 0
+      // Corner escape - remove ball
+      
+      ball.velocity = QPointF(0, 0);
+      ball.pos.setX(width() + ball.radius * 2); // Move off screen
+#endif
+      return;
+    }
     ball.pos.setX(ball.radius);
     ball.velocity.setX(-ball.velocity.x() * 0.9); // Some energy loss
   } else if (ball.pos.x() + ball.radius > width()) {
     if (ball.pos.y() < margin || ball.pos.y() > height() - margin) {
+#if 0
       // Corner escape - remove ball
       ball.velocity = QPointF(0, 0);
       ball.pos.setX(width() + ball.radius * 2); // Move off screen
+#endif
       return;
     }
     ball.pos.setX(width() - ball.radius);
@@ -118,13 +129,23 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
   
   // Top/Bottom walls
   if (ball.pos.y() - ball.radius < 0) {
+    if (ball.pos.x() < margin || ball.pos.x() > width() - margin) {
+#if 0
+      // Corner escape
+      ball.velocity = QPointF(0, 0);
+      ball.pos.setY(height() + ball.radius * 2);
+#endif
+      return;
+    }
     ball.pos.setY(ball.radius);
     ball.velocity.setY(-ball.velocity.y() * 0.9);
   } else if (ball.pos.y() + ball.radius > height()) {
     if (ball.pos.x() < margin || ball.pos.x() > width() - margin) {
+#if 0
       // Corner escape
       ball.velocity = QPointF(0, 0);
       ball.pos.setY(height() + ball.radius * 2);
+#endif
       return;
     }
     ball.pos.setY(height() - ball.radius);
@@ -157,8 +178,8 @@ void ThamesAnimation::checkBallCollisions(Ball &ball1, Ball &ball2) {
     
     // Apply impulse (assuming equal mass)
     QPointF impulse = normal * velAlongNormal;
-    ball1.velocity += impulse * 0.9; // Some energy loss
-    ball2.velocity -= impulse * 0.9;
+    ball1.velocity += impulse * 0.97; // Some energy loss
+    ball2.velocity -= impulse * 0.97;
   }
 }
 
