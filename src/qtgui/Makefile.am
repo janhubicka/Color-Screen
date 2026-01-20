@@ -72,12 +72,11 @@ qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arro
 CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Compiler flags
-colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/ -I/usr/include/qt6/QtSvg -DQT_SVG_LIB
+colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/
 
 # Linker flags
 colorscreen_qt_LDADD = \
     $(top_builddir)/src/libcolorscreen/libcolorscreen.la \
-    -lQt6Svg \
     $(Qt6_LIBS)
 
 # Windows Resource File

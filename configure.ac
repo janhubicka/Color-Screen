@@ -209,7 +209,7 @@ AM_CONDITIONAL([RENDER_EXTRA], [test x"$enable_render_extra" == x"yes"])
 AC_ARG_ENABLE([qtgui],AS_HELP_STRING([--enable-qtgui],
 				     [enable Qt6 based gui interface]))
 if test x"$enable_qtgui" == x"yes"; then
-  PKG_CHECK_MODULES([Qt6], [Qt6Core Qt6Gui Qt6Widgets Qt6Concurrent])
+  PKG_CHECK_MODULES([Qt6], [Qt6Core Qt6Gui Qt6Widgets Qt6Concurrent Qt6Svg])
   
   # Search for moc in specific qt6 path first, then general names
   AC_PATH_PROGS(MOC, [moc-qt6 moc], [], [/usr/libexec/qt6:$PATH])
