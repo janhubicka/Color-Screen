@@ -374,20 +374,20 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
 
     const auto &msg = m_queue[m_currentIndex].msg;
 
-    painter->save();
-    painter->save();
-    // painter->setOpacity(m_opacity); // Removed global opacity, handling per-element
+    // Use a temporary pixmap to render the entire subtitle block *opaquely*
+    // then fade the whole image together.
+    QPixmap buffer(bounds.size());
+    buffer.fill(Qt::transparent);
     
-    // Calculates staggered opacity:
-    // Text fades in 0.0 -> 0.5 (reaches 1.0)
-    // Outline fades in 0.5 -> 1.0
-    double textAlphaVal = qMin(1.0, m_opacity * 1.5); // Text appears quickly
-    double outlineAlphaVal = qMax(0.0, (m_opacity - 0.4) * 1.66); // Outline lags behind
+    QPainter p(&buffer);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::TextAntialiasing);
     
-    if (textAlphaVal > 1.0) textAlphaVal = 1.0;
-    if (outlineAlphaVal > 1.0) outlineAlphaVal = 1.0;
-    
-    // Setup Fonts
+    // Draw relative to 0,0 since we will draw pixmap at bounds.topLeft()
+    // Make bounds local
+    QRect localBounds(0, 0, bounds.width(), bounds.height());
+
+    // Setup Fonts (Must be before lambda)
     QFont titleFont = painter->font();
     titleFont.setBold(true);
     titleFont.setPointSize(24);
@@ -416,6 +416,32 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     int hHeader = fmHeader.height();
     
     int spacing = 5;
+
+    auto drawTextWithShadow = [&](int y, const QString &text, const QFont &font) {
+        p.setFont(font);
+        QRect textRect(localBounds.left(), y, localBounds.width(), QFontMetrics(font).height());
+        
+        // 1. Heavy Outline (Opaque Black)
+        p.setPen(QColor(0, 0, 0, 255)); // Full alpha
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = -2; dy <= 2; dy++) {
+                if (dx == 0 && dy == 0) continue;
+                if (abs(dx) == 2 && abs(dy) == 2) continue; 
+                p.drawText(textRect.translated(dx, dy), Qt::AlignCenter, text);
+            }
+        }
+        
+        // 2. Soft Drop Shadow (Opaque Shadow Color)
+        p.setPen(QColor(0, 0, 0, 180));
+        p.drawText(textRect.translated(4, 4), Qt::AlignCenter, text);
+        
+        // 3. Main Text (Opaque White)
+        p.setPen(Qt::white);
+        p.drawText(textRect, Qt::AlignCenter, text);
+        
+        return textRect.bottom() + spacing;
+    };
+    
     int totalHeight = hTitle;
     if (!msg.header.isEmpty()) totalHeight += hHeader + spacing;
     if (!msg.line2.isEmpty()) totalHeight += hSub + spacing;
@@ -426,40 +452,7 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     int yPos = bounds.bottom() - bottomMargin - totalHeight;
     int centerX = bounds.center().x();
     
-    // Draw background (optional, similar to subtitles? Black with low alpha?)
-    // Let's do a subtle shadow/outline for readability on top of animation
-    auto drawTextWithShadow = [&](int y, const QString &text, const QFont &font) {
-        painter->setFont(font);
-        QRect textRect(bounds.left(), y, bounds.width(), QFontMetrics(font).height());
-        
-        // 1. Heavy Outline
-        if (outlineAlphaVal > 0.0) {
-            QColor outlineColor(0, 0, 0, (int)(220 * outlineAlphaVal));
-            painter->setPen(outlineColor);
-            for (int dx = -2; dx <= 2; dx++) {
-                for (int dy = -2; dy <= 2; dy++) {
-                    if (dx == 0 && dy == 0) continue;
-                    if (abs(dx) == 2 && abs(dy) == 2) continue; 
-                    painter->drawText(textRect.translated(dx, dy), Qt::AlignCenter, text);
-                }
-            }
-            // Soft Drop Shadow
-            QColor shadowColor(0, 0, 0, (int)(150 * outlineAlphaVal));
-            painter->setPen(shadowColor);
-            painter->drawText(textRect.translated(4, 4), Qt::AlignCenter, text);
-        }
-        
-        // 3. Main Text
-        if (textAlphaVal > 0.0) {
-            QColor textColor(255, 255, 255, (int)(255 * textAlphaVal));
-            painter->setPen(textColor);
-            painter->drawText(textRect, Qt::AlignCenter, text);
-        }
-        
-        return textRect.bottom() + spacing;
-    };
-    
-    int currentY = yPos;
+    int currentY = yPos - bounds.top(); // Relative Y
     
     if (!msg.header.isEmpty()) {
          currentY = drawTextWithShadow(currentY, msg.header, headerFont);
@@ -474,6 +467,12 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     if (!msg.line3.isEmpty()) {
         drawTextWithShadow(currentY, msg.line3, descFont);
     }
+    
+    p.end();
 
+    // Draw the buffered image with global opacity
+    painter->save();
+    painter->setOpacity(m_opacity);
+    painter->drawPixmap(bounds.topLeft(), buffer);
     painter->restore();
 }
