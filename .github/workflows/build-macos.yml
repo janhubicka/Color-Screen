@@ -110,6 +110,9 @@ jobs:
       with:
         name: macOS-binary
         path: /tmp/Color-Screen-MacOS.tar.gz
+    - name: Install imagemagick
+      run: brew install -v imagemagick
+
     - name: Package App Bundle
       run: |
         # Create App Structure
@@ -144,16 +147,16 @@ jobs:
         </plist>
         EOF
         
-        # Generate Icon
+        # Generate Icon using ImageMagick (sips does not support SVG)
         mkdir icon.iconset
-        sips -z 16 16     images/icon.svg --out icon.iconset/icon_16x16.png
-        sips -z 32 32     images/icon.svg --out icon.iconset/icon_16x16@2x.png
-        sips -z 32 32     images/icon.svg --out icon.iconset/icon_32x32.png
-        sips -z 64 64     images/icon.svg --out icon.iconset/icon_32x32@2x.png
-        sips -z 128 128   images/icon.svg --out icon.iconset/icon_128x128.png
-        sips -z 256 256   images/icon.svg --out icon.iconset/icon_128x128@2x.png
-        sips -z 512 512   images/icon.svg --out icon.iconset/icon_512x512.png
-        sips -z 1024 1024 images/icon.svg --out icon.iconset/icon_512x512@2x.png
+        magick -background none -resize 16x16     images/icon.svg icon.iconset/icon_16x16.png
+        magick -background none -resize 32x32     images/icon.svg icon.iconset/icon_16x16@2x.png
+        magick -background none -resize 32x32     images/icon.svg icon.iconset/icon_32x32.png
+        magick -background none -resize 64x64     images/icon.svg icon.iconset/icon_32x32@2x.png
+        magick -background none -resize 128x128   images/icon.svg icon.iconset/icon_128x128.png
+        magick -background none -resize 256x256   images/icon.svg icon.iconset/icon_128x128@2x.png
+        magick -background none -resize 512x512   images/icon.svg icon.iconset/icon_512x512.png
+        magick -background none -resize 1024x1024 images/icon.svg icon.iconset/icon_512x512@2x.png
         iconutil -c icns icon.iconset
         cp icon.icns Color-Screen.app/Contents/Resources/
         
