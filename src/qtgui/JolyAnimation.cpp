@@ -61,7 +61,7 @@ void JolyAnimation::spawnBoat() {
         if (b.active) activeCount++;
     }
     
-    if (activeCount >= 20) return; 
+    if (activeCount >= 15) return; 
     
     // Increased spawn rate
     if (m_time > 30.0 && QRandomGenerator::global()->bounded(100) < 2) { 
@@ -73,8 +73,8 @@ void JolyAnimation::spawnBoat() {
         newBoat.fireCooldown = 0.0;
         newBoat.tilt = 0;
         
-        // 1 in 10 chance to be a pirate ship
-        if (QRandomGenerator::global()->bounded(10) == 0) {
+        // 1 in 30 chance to be a pirate ship
+        if (QRandomGenerator::global()->bounded(30) == 0) {
             newBoat.isPirate = true;
             newBoat.shapeType = 2; // Pirate ships usually look like Tall Ships
             
@@ -144,7 +144,7 @@ void JolyAnimation::spawnParrot() {
     if (m_parrot.active) return;
     
     // Random chance to spawn parrot
-    if (m_time > 15.0 && QRandomGenerator::global()->bounded(800) < 1) {
+    if (m_time > 15.0 && QRandomGenerator::global()->bounded(8000) < 1) {
         m_parrot.active = true;
         m_parrot.wingPhase = 0;
         m_parrot.y = 50 + QRandomGenerator::global()->bounded(height() / 2); 
@@ -252,7 +252,7 @@ void JolyAnimation::updateAnimation() {
                   riskFactor = diff * diff * 0.2;
               }
               double speedMult = strip.currentSpeed / 3.0;
-              double prob = (riskFactor * speedMult) / 3.0;
+              double prob = (riskFactor * speedMult) / 7.0;
               
               if (QRandomGenerator::global()->generateDouble() < prob) {
                   b.sinking = true;
