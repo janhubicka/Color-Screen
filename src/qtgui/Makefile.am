@@ -55,7 +55,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -65,18 +65,19 @@ moc_%.cpp: %.h
 	$(MOC) $< -o $@
 
 # Rule to generate resource file (RCC is set by configure)
-qrc_resources.cpp: resources.qrc ../../images/icon.svg
+qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arrow.svg
 	$(RCC) $< -o $@
 
 # Cleanup generated files
 CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Compiler flags
-colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/
+colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/ -I/usr/include/qt6/QtSvg -DQT_SVG_LIB
 
 # Linker flags
 colorscreen_qt_LDADD = \
     $(top_builddir)/src/libcolorscreen/libcolorscreen.la \
+    -lQt6Svg \
     $(Qt6_LIBS)
 
 # Windows Resource File

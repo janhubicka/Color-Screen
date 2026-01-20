@@ -42,6 +42,7 @@
 #include <QUndoStack>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+#include <QSvgRenderer>
 
 // Undo/Redo Implementation
 
@@ -483,41 +484,66 @@ void MainWindow::setupUi() {
 }
 
 // Helper to manually load and recolor symbolic icons on Windows where auto-recoloring fails
+// Helper to manually load and recolor symbolic icons
 QIcon getSymbolicIcon(const QString &name) {
+  QString path;
+  
+  if (name.startsWith(":/")) {
+      path = name;
+  } else {
 #ifdef Q_OS_WIN
-  static QStringList subdirs = {"actions", "devices", "places", "status", "ui",
-                                "legacy", "categories", "apps", "mimetypes"};
-  QString appDir = QCoreApplication::applicationDirPath();
-  QStringList bases = {appDir + "/share/icons/Adwaita/symbolic",
-                       appDir + "/../share/icons/Adwaita/symbolic"};
-
-  for (const auto &base : bases) {
-    for (const auto &subdir : subdirs) {
-      QString path = base + "/" + subdir + "/" + name + ".svg";
-      if (!QFile::exists(path))
-        path = base + "/" + subdir + "/" + name + ".symbolic.svg";
-
-      if (QFile::exists(path)) {
-        QIcon icon;
-        // Generate multiple sizes for DPI
-        QList<int> sizes = {16, 24, 32, 48, 64};
-        for (int size : sizes) {
-          QPixmap pix(path);
-          if (!pix.isNull()) {
-             QPixmap scaled = pix.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-             QPainter p(&scaled);
-             p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-             p.fillRect(scaled.rect(), Qt::white);
-             p.end();
-             icon.addPixmap(scaled);
+      // Fallback logic for Windows specific paths if needed, 
+      // but mostly we should use resources or standard theme.
+      // Keeping existing logic for finding files if they are not resources.
+      static QStringList subdirs = {"actions", "devices", "places", "status", "ui",
+                                    "legacy", "categories", "apps", "mimetypes"};
+      QString appDir = QCoreApplication::applicationDirPath();
+      QStringList bases = {appDir + "/share/icons/Adwaita/symbolic",
+                           appDir + "/../share/icons/Adwaita/symbolic"};
+    
+      for (const auto &base : bases) {
+        for (const auto &subdir : subdirs) {
+          QString tryPath = base + "/" + subdir + "/" + name + ".svg";
+          if (QFile::exists(tryPath)) {
+             path = tryPath;
+             break;
+          }
+          tryPath = base + "/" + subdir + "/" + name + ".symbolic.svg";
+          if (QFile::exists(tryPath)) {
+             path = tryPath;
+             break;
           }
         }
-        if (!icon.isNull()) return icon;
+        if (!path.isEmpty()) break;
       }
-    }
-  }
 #endif
-  return QIcon::fromTheme(name);
+  }
+
+  if (!path.isEmpty()) {
+    QIcon icon;
+    QSvgRenderer renderer(path);
+    if (!renderer.isValid()) return QIcon::fromTheme(name);
+    
+    // Generate multiple sizes for DPI
+    QList<int> sizes = {16, 24, 32, 48, 64, 96, 128};
+    for (int size : sizes) {
+      QPixmap pix(size, size);
+      pix.fill(Qt::transparent);
+      
+      QPainter p(&pix);
+      renderer.render(&p);
+      
+      // Recolor to white
+      p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+      p.fillRect(pix.rect(), Qt::white);
+      p.end();
+      
+      icon.addPixmap(pix);
+    }
+    return icon;
+  }
+  
+  return QIcon::fromTheme(name); // Fallback to system theme
 }
 
 void MainWindow::createToolbar() {
@@ -540,7 +566,7 @@ void MainWindow::createToolbar() {
   // Interaction Tools
   QActionGroup *toolGroup = new QActionGroup(this);
   
-  m_panAction = new QAction(QIcon::fromTheme("input-mouse-symbolic"), "Pan", this);
+  m_panAction = new QAction(getSymbolicIcon(":/icons/hand.svg"), "Pan", this);
   m_panAction->setActionGroup(toolGroup);
   m_panAction->setCheckable(true);
   m_panAction->setChecked(true);
@@ -548,7 +574,7 @@ void MainWindow::createToolbar() {
   m_panAction->setShortcut(QKeySequence("P"));
   m_toolbar->addAction(m_panAction);
 
-  m_selectAction = new QAction(QIcon::fromTheme("object-select-symbolic"), "Select", this);
+  m_selectAction = new QAction(getSymbolicIcon(":/icons/arrow.svg"), "Select", this);
   m_selectAction->setActionGroup(toolGroup);
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
