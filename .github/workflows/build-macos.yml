@@ -163,6 +163,22 @@ jobs:
         # Run macdeployqt
         $(brew --prefix qt6)/bin/macdeployqt Color-Screen.app -verbose=2 -always-overwrite
         
+        # Copy libcolorscreen
+        cp /tmp/Color-Screen-MacOS/lib/libcolorscreen.*.dylib Color-Screen.app/Contents/Frameworks/
+        
+        # Fix libcolorscreen ID
+        for LIB in Color-Screen.app/Contents/Frameworks/libcolorscreen.*.dylib; do
+             NAME=$(basename "$LIB")
+             install_name_tool -id "@executable_path/../Frameworks/$NAME" "$LIB"
+        done
+        
+        # Fix libcolorscreen reference in executables
+        # We need to find what the exact path is currently to replace it
+        # It usually matches the install prefix
+        LIBCOLORSCREEN_REF="/tmp/Color-Screen-MacOS/lib/libcolorscreen.2.dylib"
+        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/Color-Screen
+        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/colorscreen-qt
+
         # Manually copy missing dylibs (similar to Windows)
         # Assuming brew installs are in standard locations
         cp /opt/homebrew/lib/libgsl.*.dylib Color-Screen.app/Contents/Frameworks/ || true
