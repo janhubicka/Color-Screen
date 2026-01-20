@@ -44,10 +44,7 @@ If you wish to develop colorscreen, additional packages are recommended
  - [autoconf-archive](https://www.gnu.org/s/autoconf-archive/Downloads.html)
  - [libtool](https://www.gnu.org/software/libtool/)
 
-To build a GTK2 based gui, GTK2 and Glade libraries are needed. Note that the
-GTK2 gui is deprecated and new Java based [Color-Screen
-GUI](https://gitlab.mff.cuni.cz/kimroval/Color-Screen-GUI) is being developed
-by Linda Kimrová
+To build a QT based gui, QT6 libraries are needed. 
 
 ### Building on Linux (and other UNIX-like systems)
 
@@ -57,7 +54,7 @@ On typical Linux distribution it is enough to do the following.
 	make
 	make install-strip
 
-To build the gui use use addition `--enable-gtkgui` option to the configure
+To build the gui use use addition `--enable-qtgui` option to the configure
 script.
 
 For better performance, if you are going to use the binary on the same CPU

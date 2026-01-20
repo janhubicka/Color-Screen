@@ -375,7 +375,17 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
     const auto &msg = m_queue[m_currentIndex].msg;
 
     painter->save();
-    painter->setOpacity(m_opacity);
+    painter->save();
+    // painter->setOpacity(m_opacity); // Removed global opacity, handling per-element
+    
+    // Calculates staggered opacity:
+    // Text fades in 0.0 -> 0.5 (reaches 1.0)
+    // Outline fades in 0.5 -> 1.0
+    double textAlphaVal = qMin(1.0, m_opacity * 1.5); // Text appears quickly
+    double outlineAlphaVal = qMax(0.0, (m_opacity - 0.4) * 1.66); // Outline lags behind
+    
+    if (textAlphaVal > 1.0) textAlphaVal = 1.0;
+    if (outlineAlphaVal > 1.0) outlineAlphaVal = 1.0;
     
     // Setup Fonts
     QFont titleFont = painter->font();
@@ -422,14 +432,29 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
         painter->setFont(font);
         QRect textRect(bounds.left(), y, bounds.width(), QFontMetrics(font).height());
         
-        // Shadow/Outline
-        painter->setPen(QColor(0, 0, 0, 180));
-        QRect shadowRect = textRect.translated(4, 4);
-        painter->drawText(shadowRect, Qt::AlignCenter, text);
+        // 1. Heavy Outline
+        if (outlineAlphaVal > 0.0) {
+            QColor outlineColor(0, 0, 0, (int)(220 * outlineAlphaVal));
+            painter->setPen(outlineColor);
+            for (int dx = -2; dx <= 2; dx++) {
+                for (int dy = -2; dy <= 2; dy++) {
+                    if (dx == 0 && dy == 0) continue;
+                    if (abs(dx) == 2 && abs(dy) == 2) continue; 
+                    painter->drawText(textRect.translated(dx, dy), Qt::AlignCenter, text);
+                }
+            }
+            // Soft Drop Shadow
+            QColor shadowColor(0, 0, 0, (int)(150 * outlineAlphaVal));
+            painter->setPen(shadowColor);
+            painter->drawText(textRect.translated(4, 4), Qt::AlignCenter, text);
+        }
         
-        // Text
-        painter->setPen(Qt::white);
-        painter->drawText(textRect, Qt::AlignCenter, text);
+        // 3. Main Text
+        if (textAlphaVal > 0.0) {
+            QColor textColor(255, 255, 255, (int)(255 * textAlphaVal));
+            painter->setPen(textColor);
+            painter->drawText(textRect, Qt::AlignCenter, text);
+        }
         
         return textRect.bottom() + spacing;
     };
