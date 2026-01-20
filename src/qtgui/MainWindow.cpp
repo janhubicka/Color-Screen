@@ -486,11 +486,13 @@ void MainWindow::setupUi() {
 // Helper to manually load and recolor symbolic icons on Windows where auto-recoloring fails
 // Helper to manually load and recolor symbolic icons
 QIcon getSymbolicIcon(const QString &name) {
-  QString path;
-  
+  // If it is a resource, use it directly (Qt handles SVG scaling properly)
+  // We assume resources are already correct color (white)
   if (name.startsWith(":/")) {
-      path = name;
-  } else {
+      return QIcon(name);
+  }
+
+  QString path;
 #ifdef Q_OS_WIN
       // Fallback logic for Windows specific paths if needed, 
       // but mostly we should use resources or standard theme.
@@ -517,7 +519,6 @@ QIcon getSymbolicIcon(const QString &name) {
         if (!path.isEmpty()) break;
       }
 #endif
-  }
 
   if (!path.isEmpty()) {
     QIcon icon;
