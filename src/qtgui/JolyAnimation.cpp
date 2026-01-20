@@ -12,7 +12,7 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   m_animTimer = new QTimer(this);
   connect(m_animTimer, &QTimer::timeout, this, &JolyAnimation::updateAnimation);
   
-  m_subtitles.start("Joly Colour Screen", "1896", "Patented Prof. John Joly, Dublin in 1894 used regular red, green and blue-violet lines");
+  m_subtitles.start("Joly Colour Screen", "1896", "Patented by Prof. John Joly of Dublin in 1894 using regular red, green, and blue-violet lines");
   
   // Initialize strips
   for (int i = 0; i < STRIP_COUNT; ++i) {

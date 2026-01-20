@@ -37,25 +37,25 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Scott Wajon",
         "State Library of New South Wales",
-        "For digitizing Frank Huley paget plates in infrared. Best Christmas present ever."
+        "For digitizing Frank Hurley Paget plates in infrared. Best Christmas present ever."
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Bruce York",
         "State Library of New South Wales",
-        "For digitizing Frank Huley paget plates in infrared"
+        "For digitizing Frank Hurley Paget plates in infrared"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Geoffrey Barker",
         "State Library of New South Wales",
-        "For digitizing Frank Huley paget plates in infrared"
+        "For digitizing Frank Hurley Paget plates in infrared"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "Russell Perkings",
+        "Russell Perkins",
         "State Library of New South Wales",
-        "For digitizing Frank Huley paget plates in infrared"
+        "For digitizing Frank Hurley Paget plates in infrared"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
@@ -79,7 +79,7 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Helena Zinkham",
         "Library of Congress",
-        "For warm welcome and letting me to see Prokudin-Gorskii's negatives"
+        "For warm welcome and letting me see Prokudin-Gorskii's negatives"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
@@ -97,7 +97,7 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Linda Kimrová",
         "Charles University",
-        "For imlementing GUI and helping with digitization of Oscar Jordan plates"
+        "For implementing GUI and helping with digitization of Oscar Jordan plates"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
@@ -120,13 +120,13 @@ void SubtitleOverlay::initThanksList() {
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Sara Manco",
-        "Naional Geographic Society",
+        "National Geographic Society",
         "For collaboration on stitching and color reconstructions of scans at the National Geographic Society."
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Julie McVey",
-        "Naional Geographic Society",
+        "National Geographic Society",
         "For collaboration on stitching and color reconstructions of scans at the National Geographic Society."
     });
     s_thanksList.append({
@@ -139,31 +139,31 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Dan Smith",
         "",
-        "For sharing his knowledge of Dufaycolor and other early color photogrpahs"
+        "For sharing his knowledge of Dufaycolor and other early color photographs"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
-        "High Tift",
+        "Hugh Tift",
         "",
-        "For sharing his knowledge of Dufaycolor and other early color photogrpahs"
+        "For sharing his knowledge of Dufaycolor and other early color photographs"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Kirsten Carter",
         "FDR Presidential Library & Museum",
-        "For letting us to digitize Oscar Jordan's negatives"
+        "For letting us digitize Oscar Jordan's negatives"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Matthew Hanson",
         "FDR Presidential Library & Museum",
-        "For letting us to digitize Oscar Jordan's negatives"
+        "For letting us digitize Oscar Jordan's negatives"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "William Harris",
         "FDR Presidential Library & Museum",
-        "For letting us to digitize Oscar Jordan's negatives"
+        "For letting us digitize Oscar Jordan's negatives"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
@@ -223,7 +223,7 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Robert Hirsh",
         "",
-        "For taking care of Mark Jacobs' collection, consumations and warm welcome in Buffalo"
+        "For taking care of Mark Jacobs' collection, consultations and warm welcome in Buffalo"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
@@ -241,13 +241,13 @@ void SubtitleOverlay::initThanksList() {
         "", // Header (filled at runtime or here)
         "Volker Jansen",
         "Zeutschel GmbH",
-        "For arranging vising in Zeutshel and digitizing many samples for us"
+        "For arranging a visit to Zeutschel and digitizing many samples for us"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
         "Alexander Sander",
         "Zeutschel GmbH",
-        "For arranging vising in Zeutshel and digitizing many samples for us"
+        "For arranging a visit to Zeutschel and digitizing many samples for us"
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)

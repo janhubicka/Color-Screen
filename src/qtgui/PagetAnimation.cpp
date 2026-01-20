@@ -13,7 +13,7 @@ PagetAnimation::PagetAnimation(QWidget *parent)
   m_launchTimer = new QTimer(this);
   connect(m_launchTimer, &QTimer::timeout, this, &PagetAnimation::launchFirework);
 
-  m_subtitles.start("Paget color screen", "1913– c.a. 1922", "Invented by Clare Finlay and Geoffrey S. Whitefield");
+  m_subtitles.start("Paget Colour Screen", "1913–ca. 1922", "Invented by Clare Finlay and Geoffrey S. Whitfield");
 }
 
 
