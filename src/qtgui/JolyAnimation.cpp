@@ -430,16 +430,25 @@ void JolyAnimation::drawParrot(QPainter &p) {
     QColor bodyColor(0, 255, 0); 
     QColor wingColor(50, 205, 50); 
     
-    QPen outlinePen(Qt::black, 2);
+    QPen outlinePen(Qt::black, 0);
     p.setPen(outlinePen);
     
     QPainterPath body;
-    body.moveTo(0, 0);
-    body.cubicTo(10, -10, 20, -5, 25, 0); 
-    body.cubicTo(30, 10, 10, 30, -10, 40); 
-    body.lineTo(-20, 50); 
-    body.lineTo(-15, 40);
-    body.cubicTo(-25, 20, -10, 10, 0, 0); 
+    // Head and body - Streamlined Horizontal Flight
+    body.moveTo(0, 0); 
+    // Head area (Forward)
+    body.cubicTo(10, -5, 25, 0, 30, 5); 
+    // Beak position ref: (30, 5) roughly
+    
+    // Belly (Bottom curve)
+    body.cubicTo(15, 15, -10, 15, -20, 10);
+    
+    // Tail (Extending back)
+    body.lineTo(-50, 5);
+    body.lineTo(-45, -5);
+    
+    // Back (Top curve)
+    body.cubicTo(-20, -10, -10, -10, 0, 0); 
     
     p.setBrush(bodyColor);
     p.drawPath(body);
@@ -461,10 +470,16 @@ void JolyAnimation::drawParrot(QPainter &p) {
     
     double flap = qSin(m_parrot.wingPhase);
     QPainterPath wing;
-    wing.moveTo(5, 10);
-    double tipY = 20 + flap * 20;
-    wing.quadTo(-10, tipY - 10, -20, tipY);
-    wing.quadTo(0, tipY - 5, 15, 15);
+    
+    // Attach wing closer to center of body shoulder
+    wing.moveTo(-5, 0);
+    
+    // Wing tip moves up/down
+    double tipY = 10 + flap * 35; 
+    
+    // Wider wing span
+    wing.quadTo(-15, tipY - 15, -45, tipY); 
+    wing.quadTo(-10, tipY + 5, 10, 10);
     
     p.setBrush(wingColor);
     p.drawPath(wing);
