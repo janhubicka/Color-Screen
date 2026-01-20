@@ -99,7 +99,7 @@ void ThamesAnimation::checkCollisions() {
 }
 
 void ThamesAnimation::checkWallCollisions(Ball &ball) {
-  double margin = ball.radius * 0.5; // Small margin for corner escape
+  double margin = ball.radius * 3; // Small margin for corner escape
   
   // Left/Right walls
   if (ball.pos.x() - ball.radius < 0) {

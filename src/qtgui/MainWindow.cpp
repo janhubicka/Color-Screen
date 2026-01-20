@@ -555,14 +555,14 @@ void MainWindow::createToolbar() {
   m_selectAction->setShortcut(QKeySequence("S"));
   m_toolbar->addAction(m_selectAction);
 
-  m_addPointAction = new QAction(QIcon::fromTheme("list-add-symbolic"), "Add Point", this);
+  m_addPointAction = new QAction(getSymbolicIcon("list-add-symbolic"), "Add Point", this);
   m_addPointAction->setActionGroup(toolGroup);
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
   m_toolbar->addAction(m_addPointAction);
 
-  m_setCenterAction = new QAction(QIcon::fromTheme("mark-location-symbolic"), "Screen coordinates", this);
+  m_setCenterAction = new QAction(getSymbolicIcon("mark-location-symbolic"), "Screen coordinates", this);
   m_setCenterAction->setActionGroup(toolGroup);
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
@@ -823,7 +823,7 @@ void MainWindow::createMenus() {
   m_viewMenu->addAction(m_zoom100Action);
 
   m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
-  m_zoomFitAction->setIcon(QIcon::fromTheme("zoom-fit-best-symbolic"));
+  m_zoomFitAction->setIcon(getSymbolicIcon("zoom-fit-best-symbolic"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);
