@@ -177,7 +177,7 @@ jobs:
         # It usually matches the install prefix
         LIBCOLORSCREEN_REF="/tmp/Color-Screen-MacOS/lib/libcolorscreen.2.dylib"
         install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/Color-Screen
-        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/colorscreen-qt
+        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/colorscreen
 
         # Manually copy missing dylibs (similar to Windows)
         # Assuming brew installs are in standard locations
