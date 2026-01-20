@@ -25,6 +25,7 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   
   // Initialize boat pool
   m_boats.reserve(10);
+  m_cannonballs.reserve(20);
   
   m_parrot.active = false;
 }
@@ -60,7 +61,7 @@ void JolyAnimation::spawnBoat() {
         if (b.active) activeCount++;
     }
     
-    if (activeCount >= 10) return; 
+    if (activeCount >= 20) return; 
     
     // Increased spawn rate
     if (m_time > 30.0 && QRandomGenerator::global()->bounded(100) < 2) { 
@@ -78,13 +79,10 @@ void JolyAnimation::spawnBoat() {
             newBoat.shapeType = 2; // Pirate ships usually look like Tall Ships
             
             // Pirate Logic: Hunt an existing boat!
-            // Find a target to chase
             int targetIdx = -1;
             for (int i = 0; i < (int)m_boats.size(); ++i) {
                 if (m_boats[i].active && !m_boats[i].sinking && !m_boats[i].isPirate) {
                     targetIdx = i;
-                    // Prefer finding one that is not too far along? 
-                    // Or just random valid target. Random is fine.
                     if (QRandomGenerator::global()->bounded(2) == 0) break;
                 }
             }
@@ -109,7 +107,7 @@ void JolyAnimation::spawnBoat() {
                 // No prey? Random patrol
                 newBoat.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 5);
                 bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
-                newBoat.speed = (leftToRight ? 1 : -1) * (120 + QRandomGenerator::global()->bounded(60)); // Fast patrol
+                newBoat.speed = (leftToRight ? 1 : -1) * (120 + QRandomGenerator::global()->bounded(60));
                 newBoat.x = leftToRight ? -150 : width() + 150;
             }
             
@@ -172,7 +170,9 @@ void JolyAnimation::updateAnimation() {
   spawnBoat();
   spawnParrot();
   
-  // First pass: Move boats and pirate logic
+  double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+
+  // Update Boats
   for (int i = 0; i < (int)m_boats.size(); ++i) {
       BoatState &b = m_boats[i];
       if (!b.active) continue;
@@ -191,13 +191,24 @@ void JolyAnimation::updateAnimation() {
               if (b.fireCooldown <= 0) {
                   // Find target
                   int targetIdx = -1;
-                  double minDist = 300.0; // Range
+                  double minDist = 400.0; // Increased range
                   
+                  // Pirate base Y for range check
+                  double pirateY = b.stripIndex * stripHeight;
+
                   for (int j = 0; j < (int)m_boats.size(); ++j) {
                       if (i == j) continue;
                       if (!m_boats[j].active || m_boats[j].sinking || m_boats[j].isPirate) continue;
                       
-                      double dist = qAbs(b.x - m_boats[j].x) + qAbs(b.stripIndex - m_boats[j].stripIndex) * 20;
+                      double targetY = m_boats[j].stripIndex * stripHeight;
+                      
+                      // Allow cross-strip shooting (difference in Y)
+                      double dx = b.x - m_boats[j].x;
+                      double dy = pirateY - targetY;
+                      double dist = qSqrt(dx*dx + dy*dy);
+                      
+                      // Only shoot if in front (or close)
+                      // Or just shoot anything nearby!
                       if (dist < minDist) {
                           minDist = dist;
                           targetIdx = j;
@@ -205,15 +216,35 @@ void JolyAnimation::updateAnimation() {
                   }
                   
                   if (targetIdx != -1) {
-                      // Fire!
-                      m_boats[targetIdx].sinking = true;
-                      b.fireCooldown = 2.0; // Reload time
+                      // Fire Canonball!
+                      b.fireCooldown = 1.5; // Reload time
                       
-                      // Optional: We could store a "muzzle flash" timer to draw it
+                      Cannonball ball;
+                      ball.active = true;
+                      
+                      // Start position (approximate mast/deck height)
+                      double pirateRealY = pirateY + stripHeight * 0.5; // mid strip
+                      ball.x = b.x;
+                      ball.y = pirateRealY - 20; // Slightly up (deck level)
+                      
+                      // Target calculation
+                      const auto &target = m_boats[targetIdx];
+                      double targetRealY = (target.stripIndex * stripHeight) + stripHeight * 0.5;
+                      
+                      // Aim slightly ahead? Or just direct.
+                      double dx = target.x - ball.x;
+                      double dy = targetRealY - ball.y;
+                      double dist = qSqrt(dx*dx + dy*dy);
+                      
+                      double speed = 400.0; // Cannonball speed
+                      ball.vx = (dx / dist) * speed;
+                      ball.vy = (dy / dist) * speed;
+                      
+                      m_cannonballs.push_back(ball);
                   }
               }
           } else {
-              // Normal boat physics capsize chance
+              // Normal boat capsizing logic
               const auto &strip = m_strips[b.stripIndex];
               double riskFactor = 0.0;
               if (strip.currentAmpFactor > 0.9) {
@@ -230,34 +261,69 @@ void JolyAnimation::updateAnimation() {
       }
   }
   
+  // Update Cannonballs
+  for (auto it = m_cannonballs.begin(); it != m_cannonballs.end();) {
+      if (!it->active) {
+          it = m_cannonballs.erase(it);
+          continue;
+      }
+      
+      it->x += it->vx * dt;
+      it->y += it->vy * dt;
+      
+      if (it->x < -200 || it->x > width() + 200 || it->y < -200 || it->y > height() + 200) {
+          it->active = false;
+          ++it;
+          continue;
+      }
+      
+      // Collision Check
+      bool hit = false;
+      for (auto &b : m_boats) {
+          if (b.active && !b.sinking && !b.isPirate) {
+              double boatY = (b.stripIndex * stripHeight) + stripHeight * 0.5;
+              double dx = it->x - b.x;
+              double dy = it->y - boatY;
+              
+              // Hit radius approx 30px
+              if (dx*dx + dy*dy < 30*30) {
+                  b.sinking = true;
+                  hit = true;
+                  break; // Only sink one boat
+              }
+          }
+      }
+      
+      if (hit) {
+          it->active = false; // Destroy ball on impact
+      }
+      ++it;
+  }
+  
   // Update parrot
   if (m_parrot.active) {
       m_parrot.x += m_parrot.speedX * dt;
       m_parrot.y += m_parrot.speedY * dt;
-      m_parrot.wingPhase += 15.0 * dt; // Flapping speed
+      m_parrot.wingPhase += 15.0 * dt; 
       
       if (m_parrot.x < -200 || m_parrot.x > width() + 200) {
           m_parrot.active = false;
       }
   }
   
-  update(); // Trigger repaint
+  update(); 
 }
 
 void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, double amplitude, double frequency, double phase) {
-    // Calculate y position on the wave
     double angle = boat.x * frequency + m_time * m_strips[boat.stripIndex].currentSpeed + phase;
     double waveY = amplitude * qSin(angle);
     double y = yBase + waveY;
     
-    // Calculate slope for tilt
     double slope = amplitude * frequency * qCos(angle);
     double tiltAngle = qRadiansToDegrees(qAtan(slope));
     
-    // Add chaos
     tiltAngle += 10.0 * qSin(m_time * 3.0 + boat.x * 0.01);
     
-    // Sinking effects
     double sinkY = 0;
     if (boat.sinking) {
         double targetTilt = (boat.speed > 0) ? 180 : -180;
@@ -269,13 +335,11 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
     p.save();
     p.translate(boat.x, y + sinkY);
     
-    // Perspective scaling
     double scale = 0.4 + 1.2 * ((double)boat.stripIndex / STRIP_COUNT);
     p.scale(scale, scale);
     
     p.rotate(tiltAngle);
     
-    // If moving left, flip horizontally
     if (boat.speed < 0) {
         p.scale(-1, 1);
     }
@@ -335,7 +399,7 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
     
     if (boat.isPirate) {
         p.setBrush(Qt::black);
-        p.setPen(QPen(Qt::white, 1)); // White outlines for visibility
+        p.setPen(QPen(Qt::black, 1)); 
     } else if (boat.sinking) {
        int gray = 255 - (int)(qMin(1.0, boat.sinkProgress) * 100);
        p.setBrush(QColor(gray, gray, gray));
@@ -361,19 +425,15 @@ void JolyAnimation::drawParrot(QPainter &p) {
         p.scale(-1, 1);
     }
     
-    // Scale down a bit
     p.scale(0.8, 0.8);
     
-    // Bright green body
-    QColor bodyColor(0, 255, 0); // Bright green
-    QColor wingColor(50, 205, 50); // Lime green
+    QColor bodyColor(0, 255, 0); 
+    QColor wingColor(50, 205, 50); 
     
-    // Black outline
     QPen outlinePen(Qt::black, 2);
     p.setPen(outlinePen);
     
     QPainterPath body;
-    // Head and body
     body.moveTo(0, 0);
     body.cubicTo(10, -10, 20, -5, 25, 0); 
     body.cubicTo(30, 10, 10, 30, -10, 40); 
@@ -384,7 +444,6 @@ void JolyAnimation::drawParrot(QPainter &p) {
     p.setBrush(bodyColor);
     p.drawPath(body);
     
-    // Red Beak
     QPainterPath beak;
     beak.moveTo(22, 2);
     beak.cubicTo(28, 2, 30, 8, 28, 12);
@@ -393,7 +452,6 @@ void JolyAnimation::drawParrot(QPainter &p) {
     p.setBrush(Qt::red);
     p.drawPath(beak);
     
-    // Eye
     p.setPen(Qt::NoPen);
     p.setBrush(Qt::white);
     p.drawEllipse(20, -2, 4, 4);
@@ -401,7 +459,6 @@ void JolyAnimation::drawParrot(QPainter &p) {
     p.drawEllipse(21, -1, 2, 2);
     p.setPen(outlinePen);
     
-    // Wings
     double flap = qSin(m_parrot.wingPhase);
     QPainterPath wing;
     wing.moveTo(5, 10);
@@ -415,11 +472,19 @@ void JolyAnimation::drawParrot(QPainter &p) {
     p.restore();
 }
 
+void JolyAnimation::drawCannonball(QPainter &p, const Cannonball &cb) {
+    p.save();
+    p.translate(cb.x, cb.y);
+    p.setBrush(Qt::black);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(-3, -3, 6, 6); // 6px ball
+    p.restore();
+}
+
 void JolyAnimation::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.setRenderHint(QPainter::Antialiasing);
   
-  // Background - dark
   p.fillRect(rect(), Qt::black);
 
   int w = width();
@@ -439,12 +504,11 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
   }
 
   for (int i = 0; i < STRIP_COUNT; ++i) {
-      // Determine color
       QColor color;
       switch (i % 3) {
-          case 0: color = QColor(220, 50, 50); break; // Red
-          case 1: color = QColor(50, 200, 50); break; // Green
-          case 2: color = QColor(50, 50, 220); break; // Blue
+          case 0: color = QColor(220, 50, 50); break; 
+          case 1: color = QColor(50, 200, 50); break; 
+          case 2: color = QColor(50, 50, 220); break; 
       }
 
       double perspectiveFactor = (double)(i + 1) / STRIP_COUNT;
@@ -459,14 +523,12 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       double baseX = 0;
       double baseY = i * stripHeight;
       
-      // Top Edge
       for (int x = 0; x <= w; x += 5) {
           double angle = x * stripFreq + m_time * stripSpeed + phase;
           double waveY = stripAmp * qSin(angle);
           stripPoly << QPointF(x, baseY + waveY);
       }
       
-      // Bottom Edge
       double bottomY = (i + 1.5) * stripHeight + stripAmp; 
       
       stripPoly << QPointF(w, bottomY);
@@ -476,7 +538,6 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       p.setPen(Qt::NoPen);
       p.drawPolygon(stripPoly);
       
-      // Add shading
       QLinearGradient gradient(0, baseY, 0, bottomY);
       gradient.setColorAt(0, Qt::transparent);
       gradient.setColorAt(0.5, QColor(0, 0, 0, 50)); 
@@ -486,7 +547,6 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       path.addPolygon(stripPoly);
       p.fillPath(path, gradient);
       
-      // Draw ANY boats that belong to this strip
       for (const auto &b : m_boats) {
           if (b.active && b.stripIndex == i) {
               drawBoat(p, b, baseY, stripAmp, stripFreq, phase);
@@ -494,10 +554,16 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       }
   }
   
-  // Draw Parrot on top of waves
+  // Draw Cannonballs (on top of all waves for visibility, or interleaved? 
+  // User asked for "visible cannon balls". On top is safest.)
+  for (const auto &cb : m_cannonballs) {
+      if (cb.active) {
+          drawCannonball(p, cb);
+      }
+  }
+
   drawParrot(p);
   
-  // Render subtitles
   m_subtitles.paint(&p, rect());
 }
 
