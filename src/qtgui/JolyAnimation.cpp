@@ -12,7 +12,7 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   m_animTimer = new QTimer(this);
   connect(m_animTimer, &QTimer::timeout, this, &JolyAnimation::updateAnimation);
   
-  m_subtitles.start("Joly Color Screen", "1896", "Prof. John Joly, Dublin");
+  m_subtitles.start("Joly Colour Screen", "1896", "Patented Prof. John Joly, Dublin in 1894 used regular red, green and blue-violet lines");
   
   // Initialize strips
   for (int i = 0; i < STRIP_COUNT; ++i) {
@@ -25,6 +25,8 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   
   // Initialize boat pool
   m_boats.reserve(10);
+  
+  m_parrot.active = false;
 }
 
 JolyAnimation::~JolyAnimation() = default;
@@ -58,27 +60,72 @@ void JolyAnimation::spawnBoat() {
         if (b.active) activeCount++;
     }
     
-    if (activeCount >= 10) return; // Increased max boats to 10
+    if (activeCount >= 10) return; 
     
-    // Increased spawn rate (1 in 100 chance per frame vs 1 in 300)
-    // Only spawn if animation has started properly (time > 30.0)
+    // Increased spawn rate
     if (m_time > 30.0 && QRandomGenerator::global()->bounded(100) < 2) { 
         BoatState newBoat;
         newBoat.active = true;
         newBoat.sinking = false;
         newBoat.sinkProgress = 0.0;
-        
-        newBoat.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 5);
-        newBoat.shapeType = QRandomGenerator::global()->bounded(3);
+        newBoat.isPirate = false;
+        newBoat.fireCooldown = 0.0;
         newBoat.tilt = 0;
         
-        bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
-        if (leftToRight) {
-            newBoat.x = -150;
-            newBoat.speed = 80 + QRandomGenerator::global()->bounded(60);
+        // 1 in 10 chance to be a pirate ship
+        if (QRandomGenerator::global()->bounded(10) == 0) {
+            newBoat.isPirate = true;
+            newBoat.shapeType = 2; // Pirate ships usually look like Tall Ships
+            
+            // Pirate Logic: Hunt an existing boat!
+            // Find a target to chase
+            int targetIdx = -1;
+            for (int i = 0; i < (int)m_boats.size(); ++i) {
+                if (m_boats[i].active && !m_boats[i].sinking && !m_boats[i].isPirate) {
+                    targetIdx = i;
+                    // Prefer finding one that is not too far along? 
+                    // Or just random valid target. Random is fine.
+                    if (QRandomGenerator::global()->bounded(2) == 0) break;
+                }
+            }
+            
+            if (targetIdx != -1) {
+                // Spawn on SAME strip to chase
+                const auto &target = m_boats[targetIdx];
+                newBoat.stripIndex = target.stripIndex;
+                
+                // Chase speed: faster than target
+                bool movingRight = target.speed > 0;
+                double speedMag = qAbs(target.speed) * 1.5; // 50% faster
+                
+                if (movingRight) {
+                    newBoat.speed = speedMag;
+                    newBoat.x = -150; // Spawn behind (left)
+                } else {
+                    newBoat.speed = -speedMag;
+                    newBoat.x = width() + 150; // Spawn behind (right)
+                }
+            } else {
+                // No prey? Random patrol
+                newBoat.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 5);
+                bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
+                newBoat.speed = (leftToRight ? 1 : -1) * (120 + QRandomGenerator::global()->bounded(60)); // Fast patrol
+                newBoat.x = leftToRight ? -150 : width() + 150;
+            }
+            
         } else {
-            newBoat.x = width() + 150;
-            newBoat.speed = -(80 + QRandomGenerator::global()->bounded(60));
+            // Normal Boat Spawn
+            newBoat.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 5);
+            newBoat.shapeType = QRandomGenerator::global()->bounded(3);
+            
+            bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
+            if (leftToRight) {
+                newBoat.x = -150;
+                newBoat.speed = 80 + QRandomGenerator::global()->bounded(60);
+            } else {
+                newBoat.x = width() + 150;
+                newBoat.speed = -(80 + QRandomGenerator::global()->bounded(60));
+            }
         }
         
         bool placed = false;
@@ -95,6 +142,27 @@ void JolyAnimation::spawnBoat() {
     }
 }
 
+void JolyAnimation::spawnParrot() {
+    if (m_parrot.active) return;
+    
+    // Random chance to spawn parrot
+    if (m_time > 15.0 && QRandomGenerator::global()->bounded(800) < 1) {
+        m_parrot.active = true;
+        m_parrot.wingPhase = 0;
+        m_parrot.y = 50 + QRandomGenerator::global()->bounded(height() / 2); 
+        
+        m_parrot.movingRight = QRandomGenerator::global()->bounded(2) == 0;
+        if (m_parrot.movingRight) {
+            m_parrot.x = -100;
+            m_parrot.speedX = 150 + QRandomGenerator::global()->bounded(100);
+        } else {
+            m_parrot.x = width() + 100;
+            m_parrot.speedX = -(150 + QRandomGenerator::global()->bounded(100));
+        }
+        m_parrot.speedY = (QRandomGenerator::global()->generateDouble() - 0.5) * 50; 
+    }
+}
+
 void JolyAnimation::updateAnimation() {
   double dt = 0.016;
   m_time += dt;
@@ -102,50 +170,74 @@ void JolyAnimation::updateAnimation() {
   
   updateWaveDynamics();
   spawnBoat();
+  spawnParrot();
   
-  for (auto &b : m_boats) {
-      if (b.active) {
-          if (b.sinking) {
-              b.sinkProgress += dt * 0.15; // Slow sinking (~6-7 seconds)
-              b.x += b.speed * dt * 0.3; // Forward motion continues but slower
-              
-              // Only deactivate when properly submerged
-              if (b.sinkProgress > 1.2) { 
-                  b.active = false;
+  // First pass: Move boats and pirate logic
+  for (int i = 0; i < (int)m_boats.size(); ++i) {
+      BoatState &b = m_boats[i];
+      if (!b.active) continue;
+
+      if (b.sinking) {
+          b.sinkProgress += dt * 0.15; 
+          b.x += b.speed * dt * 0.3; 
+          if (b.sinkProgress > 1.2) b.active = false;
+      } else {
+          b.x += b.speed * dt;
+          if (b.x < -200 || b.x > width() + 200) b.active = false;
+
+          // Pirate Logic
+          if (b.isPirate) {
+              b.fireCooldown -= dt;
+              if (b.fireCooldown <= 0) {
+                  // Find target
+                  int targetIdx = -1;
+                  double minDist = 300.0; // Range
+                  
+                  for (int j = 0; j < (int)m_boats.size(); ++j) {
+                      if (i == j) continue;
+                      if (!m_boats[j].active || m_boats[j].sinking || m_boats[j].isPirate) continue;
+                      
+                      double dist = qAbs(b.x - m_boats[j].x) + qAbs(b.stripIndex - m_boats[j].stripIndex) * 20;
+                      if (dist < minDist) {
+                          minDist = dist;
+                          targetIdx = j;
+                      }
+                  }
+                  
+                  if (targetIdx != -1) {
+                      // Fire!
+                      m_boats[targetIdx].sinking = true;
+                      b.fireCooldown = 2.0; // Reload time
+                      
+                      // Optional: We could store a "muzzle flash" timer to draw it
+                  }
               }
           } else {
-              b.x += b.speed * dt;
-              if (b.x < -200 || b.x > width() + 200) {
-                  b.active = false;
-              }
-              
-              // Risk of capsizing depends on wave "drama" (amplitude and speed)
+              // Normal boat physics capsize chance
               const auto &strip = m_strips[b.stripIndex];
-              
-              // Base risk depends on how "high" the waves are relative to calm state (0.8)
-              // Range of factor is approx 0.8 to 1.2
               double riskFactor = 0.0;
               if (strip.currentAmpFactor > 0.9) {
-                  // Exponential risk increase above threshold
-                  // At 1.2 (max), diff is 0.3. 0.3^2 = 0.09.
                   double diff = strip.currentAmpFactor - 0.9;
-                  riskFactor = diff * diff * 0.2; // 0.018 probability per frame at max
+                  riskFactor = diff * diff * 0.2;
               }
-              
-              // Speed mult multiplier: fast waves are more dangerous
-              // Speed varies approx 2.0 to 4.0. Base 3.0.
               double speedMult = strip.currentSpeed / 3.0;
-              
-              // Final probability per frame (at 60fps)
-              // reduced to 1/3 as per user request
               double prob = (riskFactor * speedMult) / 3.0;
               
-              // Use random check against probability
-              // generateDouble() returns 0..1
               if (QRandomGenerator::global()->generateDouble() < prob) {
                   b.sinking = true;
               }
           }
+      }
+  }
+  
+  // Update parrot
+  if (m_parrot.active) {
+      m_parrot.x += m_parrot.speedX * dt;
+      m_parrot.y += m_parrot.speedY * dt;
+      m_parrot.wingPhase += 15.0 * dt; // Flapping speed
+      
+      if (m_parrot.x < -200 || m_parrot.x > width() + 200) {
+          m_parrot.active = false;
       }
   }
   
@@ -168,17 +260,9 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
     // Sinking effects
     double sinkY = 0;
     if (boat.sinking) {
-        // Capsize: tilt towards 180 degrees
         double targetTilt = (boat.speed > 0) ? 180 : -180;
-        
-        // Tilt happens relatively fast in the beginning
         double tiltProgress = qMin(1.0, boat.sinkProgress * 2.0);
         tiltAngle = tiltAngle * (1.0 - tiltProgress) + targetTilt * tiltProgress;
-        
-        // Sink downwards
-        // Need to sink deep enough to be covered by next strip
-        // Strip height is roughly h/30 (e.g. 20-30px). Wave amp is ~20px.
-        // Sinking 80px should be plenty.
         sinkY = boat.sinkProgress * 80.0;
     }
     
@@ -249,19 +333,84 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
             break;
     }
     
-    if (boat.sinking) {
-       // Darken slightly as it sinks to simulate going underwater?
-       // Or simpler: just let geometry clip it.
-       // Let's use a slightly darker shade if sinking deep
+    if (boat.isPirate) {
+        p.setBrush(Qt::black);
+        p.setPen(QPen(Qt::white, 1)); // White outlines for visibility
+    } else if (boat.sinking) {
        int gray = 255 - (int)(qMin(1.0, boat.sinkProgress) * 100);
        p.setBrush(QColor(gray, gray, gray));
+       p.setPen(QPen(Qt::gray, 1));
     } else {
        p.setBrush(Qt::white);
+       p.setPen(QPen(Qt::gray, 1));
     }
     
-    p.setPen(QPen(Qt::gray, 1));
     p.drawPath(hull);
     p.drawPath(sail);
+    
+    p.restore();
+}
+
+void JolyAnimation::drawParrot(QPainter &p) {
+    if (!m_parrot.active) return;
+    
+    p.save();
+    p.translate(m_parrot.x, m_parrot.y);
+    
+    if (!m_parrot.movingRight) {
+        p.scale(-1, 1);
+    }
+    
+    // Scale down a bit
+    p.scale(0.8, 0.8);
+    
+    // Bright green body
+    QColor bodyColor(0, 255, 0); // Bright green
+    QColor wingColor(50, 205, 50); // Lime green
+    
+    // Black outline
+    QPen outlinePen(Qt::black, 2);
+    p.setPen(outlinePen);
+    
+    QPainterPath body;
+    // Head and body
+    body.moveTo(0, 0);
+    body.cubicTo(10, -10, 20, -5, 25, 0); 
+    body.cubicTo(30, 10, 10, 30, -10, 40); 
+    body.lineTo(-20, 50); 
+    body.lineTo(-15, 40);
+    body.cubicTo(-25, 20, -10, 10, 0, 0); 
+    
+    p.setBrush(bodyColor);
+    p.drawPath(body);
+    
+    // Red Beak
+    QPainterPath beak;
+    beak.moveTo(22, 2);
+    beak.cubicTo(28, 2, 30, 8, 28, 12);
+    beak.lineTo(22, 8);
+    beak.closeSubpath();
+    p.setBrush(Qt::red);
+    p.drawPath(beak);
+    
+    // Eye
+    p.setPen(Qt::NoPen);
+    p.setBrush(Qt::white);
+    p.drawEllipse(20, -2, 4, 4);
+    p.setBrush(Qt::black);
+    p.drawEllipse(21, -1, 2, 2);
+    p.setPen(outlinePen);
+    
+    // Wings
+    double flap = qSin(m_parrot.wingPhase);
+    QPainterPath wing;
+    wing.moveTo(5, 10);
+    double tipY = 20 + flap * 20;
+    wing.quadTo(-10, tipY - 10, -20, tipY);
+    wing.quadTo(0, tipY - 5, 15, 15);
+    
+    p.setBrush(wingColor);
+    p.drawPath(wing);
     
     p.restore();
 }
@@ -344,6 +493,9 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
           }
       }
   }
+  
+  // Draw Parrot on top of waves
+  drawParrot(p);
   
   // Render subtitles
   m_subtitles.paint(&p, rect());
