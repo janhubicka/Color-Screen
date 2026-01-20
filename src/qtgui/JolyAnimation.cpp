@@ -26,6 +26,8 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   // Initialize boat pool
   m_boats.reserve(10);
   m_cannonballs.reserve(20);
+  m_oranges.reserve(5);
+  m_bottles.reserve(5);
   
   m_parrot.active = false;
 }
@@ -150,10 +152,20 @@ void JolyAnimation::spawnParrot() {
     if (m_parrot.active) return;
     
     // Random chance to spawn parrot
-    if (m_time > 15.0 && QRandomGenerator::global()->bounded(8000) < 1) {
+    if (m_time > 15.0 && QRandomGenerator::global()->bounded(500) < 1) { // More frequent for checking
         m_parrot.active = true;
         m_parrot.wingPhase = 0;
-        m_parrot.y = 50 + QRandomGenerator::global()->bounded(height() / 2); 
+        
+        // Random strip depth
+        m_parrot.stripIndex = QRandomGenerator::global()->bounded(STRIP_COUNT);
+        
+        // Set Y higher up in sky generally, based on perspective
+        double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+        double horizonY = m_parrot.stripIndex * stripHeight;
+        m_parrot.y = horizonY - 50 - QRandomGenerator::global()->bounded(150); 
+        
+        m_parrot.hasOrange = QRandomGenerator::global()->bounded(2) == 0; // 50% chance
+        m_parrot.dropTimer = 2.0 + QRandomGenerator::global()->generateDouble() * 3.0;
         
         m_parrot.movingRight = QRandomGenerator::global()->bounded(2) == 0;
         if (m_parrot.movingRight) {
@@ -163,7 +175,44 @@ void JolyAnimation::spawnParrot() {
             m_parrot.x = width() + 100;
             m_parrot.speedX = -(150 + QRandomGenerator::global()->bounded(100));
         }
-        m_parrot.speedY = (QRandomGenerator::global()->generateDouble() - 0.5) * 50; 
+        m_parrot.speedY = (QRandomGenerator::global()->generateDouble() - 0.5) * 30; 
+    }
+}
+
+void JolyAnimation::spawnBottle() {
+    int activeCount = 0;
+    for (const auto &b : m_bottles) if (b.active) activeCount++;
+    if (activeCount >= 2) return;
+    
+    if (QRandomGenerator::global()->bounded(200) == 0) { // Rare
+        BottleState b;
+        b.active = true;
+        
+        // Lowest two strips (foreground)
+        b.stripIndex = STRIP_COUNT - 1 - QRandomGenerator::global()->bounded(2);
+        
+        bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
+        b.speed = (leftToRight ? 1.0 : -1.0) * (30 + QRandomGenerator::global()->bounded(40));
+        b.x = leftToRight ? -50 : width() + 50;
+        
+        b.phase = QRandomGenerator::global()->generateDouble() * 6.28;
+        b.tilt = 0;
+        b.vy = 0;
+        
+        // Initialize Y to surface
+        double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+        b.y = b.stripIndex * stripHeight;
+        
+        // Try to place in empty slot
+        bool placed = false;
+        for (auto &slot : m_bottles) {
+            if (!slot.active) {
+                slot = b;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) m_bottles.push_back(b);
     }
 }
 
@@ -175,6 +224,7 @@ void JolyAnimation::updateAnimation() {
   updateWaveDynamics();
   spawnBoat();
   spawnParrot();
+  spawnBottle();
   
   double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
   
@@ -359,8 +409,111 @@ void JolyAnimation::updateAnimation() {
       m_parrot.y += m_parrot.speedY * dt;
       m_parrot.wingPhase += 15.0 * dt; 
       
+      // Drop Orange
+      if (m_parrot.hasOrange) {
+          m_parrot.dropTimer -= dt;
+          if (m_parrot.dropTimer <= 0) {
+              m_parrot.hasOrange = false;
+              
+              OrangeState o;
+              o.active = true;
+              o.x = m_parrot.x;
+              o.y = m_parrot.y + 10; // Drop from below
+              o.vx = m_parrot.speedX; // Inherit velocity
+              o.vy = 0;
+              o.stripIndex = m_parrot.stripIndex;
+              o.onWater = false;
+              o.bobPhase = 0;
+              o.floatTime = 0;
+              
+              m_oranges.push_back(o);
+          }
+      }
+      
       if (m_parrot.x < -200 || m_parrot.x > width() + 200) {
           m_parrot.active = false;
+      }
+  }
+  
+  // Update Oranges
+  for (auto it = m_oranges.begin(); it != m_oranges.end();) {
+      if (!it->active) {
+          it = m_oranges.erase(it);
+          continue;
+      }
+      
+      it->vy += GRAVITY * dt;
+      it->x += it->vx * dt;
+      it->y += it->vy * dt;
+      
+      if (it->onWater) {
+          it->floatTime += dt;
+          if (it->floatTime > 5.0) {
+              it->active = false; // Sink/Disappear
+              it = m_oranges.erase(it);
+              continue;
+          }
+          it->vx *= 0.95; // Friction
+          
+           // Drift
+           const auto &strip = m_strips[it->stripIndex];
+           it->x += strip.currentSpeed * dt * 0.5;
+           it->bobPhase += dt * 5.0;
+      }
+
+      // Water Collision / Physics
+      double perspectiveFactor = (double)(it->stripIndex + 1) / STRIP_COUNT;
+      double stripAmp = globalAmp * rampFactor * perspectiveFactor * m_strips[it->stripIndex].currentAmpFactor;
+      double phase = m_strips[it->stripIndex].phase;
+      double stripFreq = frequency * (0.9 + 0.2 * qCos(it->stripIndex * 0.5));
+      double stripSpeed = m_strips[it->stripIndex].currentSpeed;
+      
+      double angle = it->x * stripFreq + m_time * stripSpeed + phase;
+      double baseY = it->stripIndex * stripHeight;
+      double yWater = baseY + stripAmp * qSin(angle);
+      double vyWater = stripAmp * qCos(angle) * stripSpeed;
+      
+      if (it->y > yWater) {
+          it->y = yWater;
+          it->onWater = true;
+          it->vy = vyWater;
+      } else {
+         // In air (or flying)
+      }
+      
+      if (it->x < -200 || it->x > width() + 200 || it->y > height() + 100) it->active = false;
+      
+      ++it;
+  }
+  
+  // Update Bottles
+  for (auto &b : m_bottles) {
+      if (!b.active) continue;
+      b.x += b.speed * dt;
+      if (b.x < -200 || b.x > width() + 200) b.active = false;
+      
+      // Bottle Physics (Flying)
+      double perspectiveFactor = (double)(b.stripIndex + 1) / STRIP_COUNT;
+      double stripAmp = globalAmp * rampFactor * perspectiveFactor * m_strips[b.stripIndex].currentAmpFactor;
+      double phase = m_strips[b.stripIndex].phase;
+      double stripFreq = frequency * (0.9 + 0.2 * qCos(b.stripIndex * 0.5));
+      double stripSpeed = m_strips[b.stripIndex].currentSpeed;
+      
+      double angle = b.x * stripFreq + m_time * stripSpeed + phase;
+      double baseY = b.stripIndex * stripHeight;
+      double yWater = baseY + stripAmp * qSin(angle);
+      double vyWater = stripAmp * qCos(angle) * stripSpeed;
+      
+      b.vy += GRAVITY * dt;
+      b.y += b.vy * dt;
+      
+      if (b.y > yWater) {
+          b.y = yWater;
+          b.vy = vyWater;
+          
+          double slope = stripAmp * stripFreq * qCos(angle);
+          b.tilt = qRadiansToDegrees(qAtan(slope));
+          b.tilt += 15.0 * qSin(m_time * 2.0 + b.x * 0.05);
       }
   }
   
@@ -386,6 +539,7 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
     p.translate(boat.x, y + sinkY);
     
     double scale = 0.4 + 1.2 * ((double)boat.stripIndex / STRIP_COUNT);
+    scale *= 1.2; // Increase size by 20% (vs original 1.5x)
     p.scale(scale, scale);
     
     p.rotate(tiltAngle);
@@ -456,7 +610,7 @@ void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, d
        p.setPen(QPen(Qt::gray, 1));
     } else {
        p.setBrush(Qt::white);
-       p.setPen(QPen(Qt::gray, 1));
+       p.setPen(Qt::NoPen);
     }
     
     p.drawPath(hull);
@@ -475,7 +629,10 @@ void JolyAnimation::drawParrot(QPainter &p) {
         p.scale(-1, 1);
     }
     
-    p.scale(0.8, 0.8);
+    // Depth Scaling based on stripIndex
+    double scale = 0.4 + 1.2 * ((double)m_parrot.stripIndex / STRIP_COUNT);
+    // Parrot default is big, so scale it down generally + depth scale
+    p.scale(scale * 0.8, scale * 0.8);
     
     QColor bodyColor(0, 255, 0); 
     QColor wingColor(50, 205, 50); 
@@ -533,6 +690,77 @@ void JolyAnimation::drawParrot(QPainter &p) {
     
     p.setBrush(wingColor);
     p.drawPath(wing);
+    
+    // Draw Held Orange
+    if (m_parrot.hasOrange) {
+        p.setBrush(QColor(255, 165, 0)); // Orange
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(-5, 12, 12, 12);
+    }
+    
+    p.restore();
+}
+
+void JolyAnimation::drawOrange(QPainter &p, const OrangeState &orange, double yBase, double amplitude, double frequency, double phase) {
+    double y = orange.y;
+    
+    // Use physics Y, add bobbing not wave calc
+    if (orange.onWater) {
+          y += 3.0 * qSin(orange.bobPhase); // Bobbing
+    }
+    
+    p.save();
+    p.translate(orange.x, y);
+    
+    double scale = 0.4 + 1.2 * ((double)orange.stripIndex / STRIP_COUNT);
+    p.scale(scale, scale);
+    
+    p.setBrush(QColor(255, 140, 0)); // Darker Orange
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(-6, -6, 12, 12);
+    
+    // Highlight
+    p.setBrush(QColor(255, 200, 50));
+    p.drawEllipse(-2, -3, 4, 3);
+    
+    p.restore();
+}
+
+void JolyAnimation::drawBottle(QPainter &p, const BottleState &bottle, double yBase, double amplitude, double frequency, double phase) {
+    double y = bottle.y;
+    double tiltAngle = bottle.tilt;
+
+    p.save();
+    p.translate(bottle.x, y); // Triangle at waterline
+    
+    double scale = 0.4 + 1.2 * ((double)bottle.stripIndex / STRIP_COUNT);
+    scale *= 0.25; // Quarter size
+    p.scale(scale, scale);
+    p.rotate(tiltAngle);
+    
+    // Bass Beer Bottle
+    // Brown glass
+    QColor glassColor(139, 69, 19); 
+    p.setBrush(glassColor);
+    p.setPen(Qt::NoPen);
+    
+    // Body
+    p.drawRect(-8, -15, 16, 25);
+    // Neck
+    p.drawRect(-4, -30, 8, 15);
+    // Cap
+    p.setBrush(Qt::black); // Foil/Cap
+    p.drawRect(-5, -32, 10, 4);
+    
+    // Label with Red Triangle
+    p.setBrush(QColor(240, 230, 200)); // Cream label
+    p.drawRect(-7, -10, 14, 14);
+    
+    // Red Triangle
+    QPolygonF triangle;
+    triangle << QPointF(0, -8) << QPointF(5, 0) << QPointF(-5, 0);
+    p.setBrush(Qt::red);
+    p.drawPolygon(triangle);
     
     p.restore();
 }
@@ -598,6 +826,13 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       
       stripPoly << QPointF(w, bottomY);
       stripPoly << QPointF(0, bottomY);
+
+      // Draw Bottles BEHIND the wave so they look submerged
+      for (const auto &bot : m_bottles) {
+          if (bot.active && bot.stripIndex == i) {
+              drawBottle(p, bot, baseY, stripAmp, stripFreq, phase);
+          }
+      }
       
       p.setBrush(color);
       p.setPen(Qt::NoPen);
@@ -617,6 +852,14 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
               drawBoat(p, b, baseY, stripAmp, stripFreq, phase);
           }
       }
+      
+      for (const auto &o : m_oranges) {
+          if (o.active && o.stripIndex == i) {
+              drawOrange(p, o, baseY, stripAmp, stripFreq, phase);
+          }
+      }
+      
+      // Parrot is now drawn last to fly over everything
   }
   
   // Draw Cannonballs (on top of all waves for visibility, or interleaved? 
