@@ -131,6 +131,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-CIEChartWidget.$(OBJEXT) \
 	colorscreen_qt-ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
+	colorscreen_qt-JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
@@ -152,6 +153,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_CIEChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_ThamesAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_PagetAnimation.$(OBJEXT) \
+	colorscreen_qt-moc_JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-moc_TaskQueue.$(OBJEXT)
 nodist_colorscreen_qt_OBJECTS = $(am__objects_1) \
 	colorscreen_qt-qrc_resources.$(OBJEXT)
@@ -189,6 +191,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
@@ -211,6 +214,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po \
@@ -437,6 +441,7 @@ colorscreen_qt_SOURCES = \
     CIEChartWidget.cpp \
     ThamesAnimation.cpp \
     PagetAnimation.cpp \
+    JolyAnimation.cpp \
     TaskQueue.cpp \
     SubtitleOverlay.cpp
 
@@ -465,9 +470,10 @@ MOC_SOURCES = \
     moc_CIEChartWidget.cpp \
     moc_ThamesAnimation.cpp \
     moc_PagetAnimation.cpp \
+    moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc
+EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -580,6 +586,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MainWindow.Po@am__quote@ # am--include-marker
@@ -602,6 +609,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po@am__quote@ # am--include-marker
@@ -929,6 +937,20 @@ colorscreen_qt-PagetAnimation.obj: PagetAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-PagetAnimation.obj `if test -f 'PagetAnimation.cpp'; then $(CYGPATH_W) 'PagetAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/PagetAnimation.cpp'; fi`
 
+colorscreen_qt-JolyAnimation.o: JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-JolyAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-JolyAnimation.Tpo -c -o colorscreen_qt-JolyAnimation.o `test -f 'JolyAnimation.cpp' || echo '$(srcdir)/'`JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-JolyAnimation.Tpo $(DEPDIR)/colorscreen_qt-JolyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='JolyAnimation.cpp' object='colorscreen_qt-JolyAnimation.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-JolyAnimation.o `test -f 'JolyAnimation.cpp' || echo '$(srcdir)/'`JolyAnimation.cpp
+
+colorscreen_qt-JolyAnimation.obj: JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-JolyAnimation.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-JolyAnimation.Tpo -c -o colorscreen_qt-JolyAnimation.obj `if test -f 'JolyAnimation.cpp'; then $(CYGPATH_W) 'JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/JolyAnimation.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-JolyAnimation.Tpo $(DEPDIR)/colorscreen_qt-JolyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='JolyAnimation.cpp' object='colorscreen_qt-JolyAnimation.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-JolyAnimation.obj `if test -f 'JolyAnimation.cpp'; then $(CYGPATH_W) 'JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/JolyAnimation.cpp'; fi`
+
 colorscreen_qt-TaskQueue.o: TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo -c -o colorscreen_qt-TaskQueue.o `test -f 'TaskQueue.cpp' || echo '$(srcdir)/'`TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-TaskQueue.Po
@@ -1223,6 +1245,20 @@ colorscreen_qt-moc_PagetAnimation.obj: moc_PagetAnimation.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_PagetAnimation.obj `if test -f 'moc_PagetAnimation.cpp'; then $(CYGPATH_W) 'moc_PagetAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_PagetAnimation.cpp'; fi`
 
+colorscreen_qt-moc_JolyAnimation.o: moc_JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_JolyAnimation.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Tpo -c -o colorscreen_qt-moc_JolyAnimation.o `test -f 'moc_JolyAnimation.cpp' || echo '$(srcdir)/'`moc_JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Tpo $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_JolyAnimation.cpp' object='colorscreen_qt-moc_JolyAnimation.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_JolyAnimation.o `test -f 'moc_JolyAnimation.cpp' || echo '$(srcdir)/'`moc_JolyAnimation.cpp
+
+colorscreen_qt-moc_JolyAnimation.obj: moc_JolyAnimation.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_JolyAnimation.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Tpo -c -o colorscreen_qt-moc_JolyAnimation.obj `if test -f 'moc_JolyAnimation.cpp'; then $(CYGPATH_W) 'moc_JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_JolyAnimation.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Tpo $(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_JolyAnimation.cpp' object='colorscreen_qt-moc_JolyAnimation.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_JolyAnimation.obj `if test -f 'moc_JolyAnimation.cpp'; then $(CYGPATH_W) 'moc_JolyAnimation.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_JolyAnimation.cpp'; fi`
+
 colorscreen_qt-moc_TaskQueue.o: moc_TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_TaskQueue.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo -c -o colorscreen_qt-moc_TaskQueue.o `test -f 'moc_TaskQueue.cpp' || echo '$(srcdir)/'`moc_TaskQueue.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Tpo $(DEPDIR)/colorscreen_qt-moc_TaskQueue.Po
@@ -1394,6 +1430,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
@@ -1416,6 +1453,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po
@@ -1482,6 +1520,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
@@ -1504,6 +1543,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_JolyAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_LinearizationPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_MainWindow.Po

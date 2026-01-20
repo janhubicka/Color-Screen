@@ -18,6 +18,7 @@
 #include <set>
 #include "ThamesAnimation.h"
 #include "PagetAnimation.h"
+#include "JolyAnimation.h"
 // Forward declarations
 namespace colorscreen {
 class image_data;
@@ -183,5 +184,6 @@ private:
   // Animations for when no image loaded
   ThamesAnimation *m_thamesAnim = nullptr;
   PagetAnimation *m_pagetAnim = nullptr;
+  JolyAnimation *m_jolyAnim = nullptr;
   QWidget *m_activeAnim = nullptr; // Points to whichever is active
 };

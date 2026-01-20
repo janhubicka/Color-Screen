@@ -37,9 +37,15 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
   m_pagetAnim->setGeometry(rect());
   m_pagetAnim->hide();
   
+  m_jolyAnim = new JolyAnimation(this);
+  m_jolyAnim->setGeometry(rect());
+  m_jolyAnim->hide();
+  
   // Randomly choose which animation to use
-  m_activeAnim = (QRandomGenerator::global()->bounded(2) == 0) ? static_cast<QWidget*>(m_thamesAnim) 
-                                     : static_cast<QWidget*>(m_pagetAnim);
+  int animChoice = QRandomGenerator::global()->bounded(3);
+  if (animChoice == 0) m_activeAnim = m_thamesAnim;
+  else if (animChoice == 1) m_activeAnim = m_pagetAnim;
+  else m_activeAnim = m_jolyAnim;
 
   setMouseTracking(false); // Only track when dragging
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
@@ -582,6 +588,10 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       m_pagetAnim->stopAnimation();
       m_pagetAnim->hide();
     }
+    if (m_jolyAnim && !m_jolyAnim->isHidden()) {
+      m_jolyAnim->stopAnimation();
+      m_jolyAnim->hide();
+    }
   } else {
     // Show active animation when no image
     if (m_activeAnim && m_activeAnim->isHidden()) {
@@ -593,13 +603,15 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         m_thamesAnim->startAnimation();
       } else if (m_activeAnim == m_pagetAnim) {
         m_pagetAnim->startAnimation();
+      } else if (m_activeAnim == m_jolyAnim) {
+        m_jolyAnim->startAnimation();
       }
     }
+  }
     
-    // Update geometry if needed
-    if (m_activeAnim) {
-      m_activeAnim->setGeometry(rect());
-    }
+  // Update geometry if needed
+  if (m_activeAnim) {
+    m_activeAnim->setGeometry(rect());
   }
 }
 
