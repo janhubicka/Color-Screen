@@ -147,16 +147,16 @@ jobs:
         </plist>
         EOF
         
-        # Generate Icon using ImageMagick (sips does not support SVG)
+        # Generate Icon
         mkdir icon.iconset
-        magick -background none -resize 16x16     images/icon.svg icon.iconset/icon_16x16.png
-        magick -background none -resize 32x32     images/icon.svg icon.iconset/icon_16x16@2x.png
-        magick -background none -resize 32x32     images/icon.svg icon.iconset/icon_32x32.png
-        magick -background none -resize 64x64     images/icon.svg icon.iconset/icon_32x32@2x.png
-        magick -background none -resize 128x128   images/icon.svg icon.iconset/icon_128x128.png
-        magick -background none -resize 256x256   images/icon.svg icon.iconset/icon_128x128@2x.png
-        magick -background none -resize 512x512   images/icon.svg icon.iconset/icon_512x512.png
-        magick -background none -resize 1024x1024 images/icon.svg icon.iconset/icon_512x512@2x.png
+        magick -background none images/icon.svg -resize 16x16     icon.iconset/icon_16x16.png
+        magick -background none images/icon.svg -resize 32x32     icon.iconset/icon_16x16@2x.png
+        magick -background none images/icon.svg -resize 32x32     icon.iconset/icon_32x32.png
+        magick -background none images/icon.svg -resize 64x64     icon.iconset/icon_32x32@2x.png
+        magick -background none images/icon.svg -resize 128x128   icon.iconset/icon_128x128.png
+        magick -background none images/icon.svg -resize 256x256   icon.iconset/icon_128x128@2x.png
+        magick -background none images/icon.svg -resize 512x512   icon.iconset/icon_512x512.png
+        magick -background none images/icon.svg -resize 1024x1024 icon.iconset/icon_512x512@2x.png
         iconutil -c icns icon.iconset
         cp icon.icns Color-Screen.app/Contents/Resources/
         
