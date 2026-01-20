@@ -107,6 +107,48 @@ void SubtitleOverlay::initThanksList() {
     });
     s_thanksList.append({
         "", // Header (filled at runtime or here)
+        "Kenzie Klaeser",
+        "Digital Transitions, Inc.",
+        "For joint adventure on stitching Dufaycolors"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Peter Siegel",
+        "Digital Transitions, Inc.",
+        "For joint adventure on stitching Dufaycolors"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Sara Manco",
+        "Naional Geographic Society",
+        "For collaboration on stitching and color reconstructions of scans at the National Geographic Society."
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Julie McVey",
+        "Naional Geographic Society",
+        "For collaboration on stitching and color reconstructions of scans at the National Geographic Society."
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Alice Plutino",
+        "Department of Media Studies, Universiteit van Amsterdam",
+        "For discussion on separating subtractive color processes"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Dan Smith",
+        "",
+        "For sharing his knowledge of Dufaycolor and other early color photogrpahs"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "High Tift",
+        "",
+        "For sharing his knowledge of Dufaycolor and other early color photogrpahs"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
         "Kirsten Carter",
         "FDR Presidential Library & Museum",
         "For letting us to digitize Oscar Jordan's negatives"
@@ -134,6 +176,78 @@ void SubtitleOverlay::initThanksList() {
         "Victor Gerasimov",
         "",
         "For scans of Paget plates from Bulgaria"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Janine Freeston",
+        "",
+        "For organizing Color Photography in the 19th Century and Early 20th Century: Sciences, Technologies, Empires"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Hanin Hannouch",
+        "Weltmuseum Wien",
+        "For organizing Color Photography in the 19th Century and Early 20th Century: Sciences, Technologies, Empires"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Heather Sonntag",
+        "",
+        "For taking care of Mark Jacobs' collection and arranging an exhibition"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Andy Kraushaar",
+        "",
+        "For taking care of Mark Jacobs' collection and digitizing Warner-Powrie plate"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Kendra Meyer",
+        "National Museum of Natural History",
+        "For discovering Paget plates at the National Museum of American History and scanning examples for us"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Alan Griffiths",
+        "",
+        "For his work on Luminous-lint and other efforts to get people in this area connected"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Robert Hirsh",
+        "",
+        "For taking care of Mark Jacobs' collection, consumations and warm welcome in Buffalo"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Ladislav Bezděk",
+        "Národní památkový ústav",
+        "For work on the first publication in book Živý Film"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Martin Frouz",
+        "Národní památkový ústav",
+        "For work on the first publication in book Živý Film"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Volker Jansen"
+        "Zeutschel GmbH",
+        "For arranging vising in Zeutshel and digitizing many samples for us"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Alexander Sander"
+        "Zeutschel GmbH",
+        "For arranging vising in Zeutshel and digitizing many samples for us"
+    });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Giorgio Trumpy",
+        "",
+        "For sharing his measurement of Dufaycolor dye and his wonderful research"
     });
     
     
