@@ -121,7 +121,37 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
           });
 }
 
-TilePreviewPanel::~TilePreviewPanel() = default;
+TilePreviewPanel::~TilePreviewPanel() {
+  // Stop any pending update timer and disconnect it
+  if (m_updateTimer) {
+      m_updateTimer->stop();
+      m_updateTimer->disconnect(this);
+      delete m_updateTimer;
+      m_updateTimer = nullptr;
+  }
+
+  // Disconnect queue first so it doesn't send signals to us during cancel
+  m_renderQueue.disconnect(this);
+  // Cancel any running or pending render tasks
+  m_renderQueue.cancelAll();
+  
+  // Disconnect all signals emitted by us
+  disconnect();
+
+  // Explicitly delete UI children created by this class
+  // This ensures they are destroyed while 'this' is still a TilePreviewPanel
+  if (m_tilesContainer) {
+      delete m_tilesContainer;
+      m_tilesContainer = nullptr;
+  }
+
+  // Delete the watcher
+  if (m_tileWatcher) {
+      m_tileWatcher->disconnect(this);
+      delete m_tileWatcher;
+      m_tileWatcher = nullptr;
+  }
+}
 
 void TilePreviewPanel::setupTiles(const QString &title) {
   auto types = getTileTypes();
