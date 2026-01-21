@@ -15,6 +15,8 @@ constexpr double ANIMATION_FPS = 60.0;                    // Animation frame rat
 constexpr double WAVE_STARTUP_DELAY = 20.0;               // Seconds before waves start moving
 constexpr double WAVE_RAMP_DURATION = 2.0;                // Seconds for waves to reach full amplitude
 constexpr double BOAT_SPAWN_START = 20.0;                 // Seconds before boats start appearing
+constexpr double DOLPHIN_SPAWN_START = 25.0;              // Seconds before dolphins appear
+constexpr double WHALE_SPAWN_START = 30.0;                // Seconds before whales appear
 constexpr double PIRATE_SPAWN_START = 30.0;               // Seconds before pirates appear
 constexpr double PARROT_SPAWN_START = 60.0;               // Seconds before parrots appear
 constexpr double BOTTLE_SPAWN_START = 90.0;               // Seconds before beer bottles appear
@@ -277,7 +279,7 @@ void JolyAnimation::spawnBottle() {
 }
 
 void JolyAnimation::spawnDolphin() {
-    if (m_time < WAVE_STARTUP_DELAY) return;
+    if (m_time < DOLPHIN_SPAWN_START) return;
     
     // Spawn randomness
     if (QRandomGenerator::global()->bounded(DOLPHIN_SPAWN_CHANCE) == 0) {
@@ -322,7 +324,7 @@ void JolyAnimation::spawnDolphin() {
 }
 
 void JolyAnimation::spawnWhale() {
-    if (m_time < WAVE_STARTUP_DELAY * 1.5) return;
+    if (m_time < WHALE_SPAWN_START) return;
     
     // Whales are rare
     if (QRandomGenerator::global()->bounded(WHALE_SPAWN_CHANCE) == 0) {
