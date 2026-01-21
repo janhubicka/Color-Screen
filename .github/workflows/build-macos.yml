@@ -197,6 +197,29 @@ jobs:
             install_name_tool -id "@executable_path/../Frameworks/$NAME" "$LIB"
         done
         
+        # Fix dependencies WITHIN the bundled frameworks (dylib -> dylib references)
+        # e.g. libgsl linking against libgslcblas or libcolorscreen linking against libgsl
+        # This is CRITICAL because the system libs will be uninstalled
+        for DYLIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
+             [ -f "$DYLIB" ] || continue
+             echo "Fixing inner dependencies for $(basename "$DYLIB")..."
+             
+             # Use otool to find dependencies in homebrew prefix
+             # We use process substitution to grep cleanly
+             otool -L "$DYLIB" | grep '/opt/homebrew/lib/' | awk '{print $1}' | while read -r DEP_PATH; do
+                 DEP_NAME=$(basename "$DEP_PATH")
+                 
+                 # Check if we have bundled this dependency
+                 if [ -f "Color-Screen.app/Contents/Frameworks/$DEP_NAME" ]; then
+                      echo "  Rewriting $DEP_NAME in $(basename "$DYLIB")..."
+                      # Use @loader_path because these are sibling libraries in the same directory
+                      install_name_tool -change "$DEP_PATH" "@loader_path/$DEP_NAME" "$DYLIB"
+                 else
+                      echo "  Warning: Inner dependency $DEP_NAME needed by $(basename "$DYLIB") not found in bundle!"
+                 fi
+             done
+        done
+
         # Comprehensively fix library references for BOTH executables
         # This ensures both GUI and CLI are fully self-contained
         for EXECUTABLE in Color-Screen.app/Contents/MacOS/Color-Screen Color-Screen.app/Contents/MacOS/colorscreen; do
