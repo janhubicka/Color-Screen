@@ -26,7 +26,7 @@ jobs:
         update: true
         install: >
           make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff 
-          mingw-w64-${{matrix.env}}-libomp
+          mingw-w64-${{matrix.env}}-llvm-openmp
           mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw 
           mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip 
           mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive 
