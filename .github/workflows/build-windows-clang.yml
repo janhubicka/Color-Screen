@@ -42,7 +42,7 @@ jobs:
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         # Note: -lomp is used, ensuring libomp is linked
-        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
+        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" CC=clang CXX=clang++ ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
     - name: generate icons
       shell: msys2 {0}
       run: |
