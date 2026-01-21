@@ -37,7 +37,7 @@ jobs:
     - name: Install fftw3
       run: sudo apt-get install -y libfftw3-dev
     - name: Install qt6-base-dev
-      run: sudo apt-get install -y qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n
+      run: sudo apt-get install -y qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev
 
     - name: configure
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui

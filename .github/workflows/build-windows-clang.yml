@@ -9,15 +9,15 @@ on:
 jobs:
   build:
 
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
 
     strategy:
       matrix:
         include:
-          - { sys: clang64,    env: clang-x86_64,  flags: "", suffix: "", conf: "" }
-          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver2", suffix: "-znver2", conf: "" }
-          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver4", suffix: "-znver4", conf: "" }
-          - { sys: clangarm64, env: clang-aarch64, flags: "", suffix: "-aarch64", conf: "--host=aarch64-w64-mingw32" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "", suffix: "", conf: "", runner: "windows-latest" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver2", suffix: "-znver2", conf: "", runner: "windows-latest" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver4", suffix: "-znver4", conf: "", runner: "windows-latest" }
+          - { sys: clangarm64, env: clang-aarch64, flags: "", suffix: "-aarch64", conf: "", runner: "windows-11-arm" }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -43,13 +43,14 @@ jobs:
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         # Note: -lomp is used, ensuring libomp is linked
-        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" CC=clang CXX=clang++ ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
+        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: config.log-${{matrix.sys}}${{matrix.suffix}}
         path: config.log
+
     - name: generate icons
       shell: msys2 {0}
       run: |
@@ -60,8 +61,8 @@ jobs:
       run: make -j$(nproc)
     - name: make check
       shell: msys2 {0}
-      # Skip check on aarch64 if running on x64 host without emulation (binaries won't run)
-      if: matrix.suffix == '' && matrix.sys != 'clangarm64'
+      # Skip if ussing enhanced ISA
+      if: matrix.suffix == ''
       run: make -j$(nproc) check
     - name: Find testsuite
       shell: msys2 {0}
