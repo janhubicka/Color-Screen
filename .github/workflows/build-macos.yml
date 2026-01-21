@@ -302,6 +302,9 @@ jobs:
       run: rm -fr /tmp/Color-Screen-MacOS
     - name: Verify that colorscreen still runs
       run: |
+        # Check debugger availability
+        lldb --version
+
         # CLI Version Test (Simpler first test)
         echo "Running colorscreen --version with lldb..."
         lldb --batch -o "run" -o "bt" -o "quit" -- Color-Screen.app/Contents/MacOS/colorscreen --version
