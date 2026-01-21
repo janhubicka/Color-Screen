@@ -26,6 +26,7 @@ jobs:
         update: true
         install: >
           make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff 
+          mingw-w64-${{matrix.env}}-libomp
           mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw 
           mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip 
           mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive 
@@ -43,6 +44,12 @@ jobs:
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         # Note: -lomp is used, ensuring libomp is linked
         CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" CC=clang CXX=clang++ ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
+    - name: Upload config.log
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: config.log-${{matrix.sys}}${{matrix.suffix}}
+        path: config.log
     - name: generate icons
       shell: msys2 {0}
       run: |
