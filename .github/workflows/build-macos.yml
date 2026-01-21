@@ -221,6 +221,12 @@ jobs:
              done
         done
 
+        # Bundle Adwaita icons (if available)
+        mkdir -p Color-Screen.app/Contents/share/icons
+        if [ -d "/tmp/Color-Screen-MacOS/share/icons" ]; then
+             cp -r /tmp/Color-Screen-MacOS/share/icons/* Color-Screen.app/Contents/share/icons/ || true
+        fi
+
         # Comprehensively fix library references for BOTH executables
         # This ensures both GUI and CLI are fully self-contained
         for EXECUTABLE in Color-Screen.app/Contents/MacOS/Color-Screen Color-Screen.app/Contents/MacOS/colorscreen; do
@@ -315,11 +321,16 @@ jobs:
         lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
         
         # GUI Smoke Test (launch and quit)
-        # Note: Interactive UI tests on GHA runners are tricky.
-        # We run the binary directly to catch any dyld/startup crashes.
-        # We use a timeout or expect it to exit if arguments are handled.
+        # Run with debug-qt to check plugins/icons, pass image file
+        # Redirect output to file for artifact
+        echo "Running Color-Screen GUI binary check with --debug-qt..."
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
         
-        echo "Running Color-Screen GUI binary check..."
-        # Just check if it links and runs. It might fail to open a window on headless,
-        # but we want to ensure no segfaults/dyld errors.
-        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --version
+        cat gui_launch_debug.txt
+
+    - name: Upload GUI Launch Debug
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: gui_launch_debug
+        path: gui_launch_debug.txt

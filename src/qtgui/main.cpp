@@ -19,8 +19,6 @@ int main(int argc, char *argv[]) {
       qputenv("QT_DEBUG_PLUGINS", "1");
       // Also enable general debug output if not already
       qputenv("QT_LOGGING_RULES", "*=true"); 
-      // Hide options from QT
-      argc = 1;
       break;
     }
   }
@@ -43,11 +41,15 @@ int main(int argc, char *argv[]) {
   parser.setApplicationDescription("ColorScreen Qt GUI");
   parser.addHelpOption();
   parser.addVersionOption();
+  
+  QCommandLineOption debugOption("debug-qt", "Enable Qt plugin debugging");
+  parser.addOption(debugOption);
+  
   parser.addPositionalArgument("image", "Image file to open.");
   parser.process(app);
 
   // Set icon search paths and theme
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
   QStringList paths = QIcon::themeSearchPaths();
   QString appDir = QCoreApplication::applicationDirPath();
   // Add ../share/icons relative to bin/
