@@ -1641,6 +1641,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     return;
   }
   
+  // Cancel all active processes
+  for (const auto &progress : m_activeProgresses) {
+      if (progress.info) {
+          progress.info->cancel();
+      }
+  }
+
   // Clean up recovery files on normal exit
   clearRecoveryFiles();
   
