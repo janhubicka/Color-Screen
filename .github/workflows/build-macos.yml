@@ -206,7 +206,8 @@ jobs:
              
              # Use otool to find dependencies in homebrew prefix
              # We use process substitution to grep cleanly
-             otool -L "$DYLIB" | grep '/opt/homebrew/lib/' | awk '{print $1}' | while read -r DEP_PATH; do
+             # We grep for /opt/homebrew/ to catch both /lib/ and /opt/ (keg-only) paths
+             otool -L "$DYLIB" | grep '/opt/homebrew/' | awk '{print $1}' | while read -r DEP_PATH; do
                  DEP_NAME=$(basename "$DEP_PATH")
                  
                  # Check if we have bundled this dependency
@@ -225,7 +226,7 @@ jobs:
         for EXECUTABLE in Color-Screen.app/Contents/MacOS/Color-Screen Color-Screen.app/Contents/MacOS/colorscreen; do
             echo "Fixing dependencies for $EXECUTABLE..."
             
-            # Discover all dependencies pointing to /opt/homebrew/lib/
+            # Discover all dependencies pointing to /opt/homebrew/
             # Use process substitution to avoid subshell issues
             while IFS= read -r DYLIB_PATH; do
                 DYLIB_NAME=$(basename "$DYLIB_PATH")
@@ -237,7 +238,7 @@ jobs:
                 else
                     echo "  Warning: $DYLIB_NAME not found in Frameworks/"
                 fi
-            done < <(otool -L "$EXECUTABLE" | grep '/opt/homebrew/lib/' | awk '{print $1}')
+            done < <(otool -L "$EXECUTABLE" | grep '/opt/homebrew/' | awk '{print $1}')
         done
         
         # Deep Code Sign (Ad-Hoc)
