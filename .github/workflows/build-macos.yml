@@ -321,10 +321,11 @@ jobs:
         lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
         
         # GUI Smoke Test (launch and quit)
-        # Run with debug-qt to check plugins/icons, pass image file
+        # Run with debug-qt to check plugins/icons, pass image file, AND smoke-test to auto-quit
         # Redirect output to file for artifact
-        echo "Running Color-Screen GUI binary check with --debug-qt..."
-        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
+        # Use absolute path for the image to avoid "File not found" dialogs blocking the app
+        echo "Running Color-Screen GUI binary check with --debug-qt --smoke-test..."
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt --smoke-test "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
         
         cat gui_launch_debug.txt
 

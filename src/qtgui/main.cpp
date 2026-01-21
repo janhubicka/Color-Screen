@@ -7,6 +7,7 @@
 #include <QDirIterator>
 #include <QIcon>
 #include <QImageReader>
+#include <QTimer>
 
 #include <QStyleFactory>
 #include <QSettings>
@@ -45,8 +46,16 @@ int main(int argc, char *argv[]) {
   QCommandLineOption debugOption("debug-qt", "Enable Qt plugin debugging");
   parser.addOption(debugOption);
   
+  QCommandLineOption smokeTestOption("smoke-test", "Run for 5 seconds and exit (for CI smoke testing)");
+  parser.addOption(smokeTestOption);
+  
   parser.addPositionalArgument("image", "Image file to open.");
   parser.process(app);
+
+  if (parser.isSet(smokeTestOption)) {
+      qDebug() << "Smoke Test Mode: Will exit in 5 seconds...";
+      QTimer::singleShot(5000, &app, &QCoreApplication::quit);
+  }
 
   // Set icon search paths and theme
 #if defined(Q_OS_WIN) || defined(Q_OS_MAC)
