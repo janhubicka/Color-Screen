@@ -64,7 +64,7 @@ constexpr double DOLPHIN_JUMP_VELOCITY = -180.0;  // Initial Dy (stronger jump)
 
 
 JolyAnimation::JolyAnimation(QWidget *parent)
-    : QWidget(parent), m_time(0.0), m_bounciness(0.0) {
+    : QWidget(parent), m_physicsAccumulator(0.0), m_time(0.0), m_bounciness(0.0) {
   
   // Animation timer - 60 FPS
   m_animTimer = new QTimer(this);
@@ -93,6 +93,7 @@ JolyAnimation::JolyAnimation(QWidget *parent)
 JolyAnimation::~JolyAnimation() = default;
 
 void JolyAnimation::startAnimation() {
+  m_elapsedTimer.start();
   m_animTimer->start(16); // ~60 FPS
 }
 
@@ -367,7 +368,26 @@ void JolyAnimation::spawnWhale() {
 }
 
 void JolyAnimation::updateAnimation() {
-  double dt = 0.016;
+  double dt = 0.016; // Fixed physics step
+
+  // Add elapsed time to accumulator
+  if (m_elapsedTimer.isValid()) {
+      double elapsed = m_elapsedTimer.restart() / 1000.0;
+      // Cap max elapsed time to prevent spiral of death if rendering freezes
+      if (elapsed > 0.1) elapsed = 0.1;
+      m_physicsAccumulator += elapsed;
+  }
+
+  // Consume accumulated time in fixed steps
+  while (m_physicsAccumulator >= dt) {
+      stepAnimation(dt);
+      m_physicsAccumulator -= dt;
+  }
+  
+  update(); 
+}
+
+void JolyAnimation::stepAnimation(double dt) {
   m_time += dt;
   m_subtitles.update(dt);
   
@@ -825,8 +845,6 @@ void JolyAnimation::updateAnimation() {
   spawnBottle();
   spawnDolphin();
   spawnWhale();
-  
-  update(); 
 }
 
 void JolyAnimation::drawBoat(QPainter &p, const BoatState &boat, double yBase, double amplitude, double frequency, double phase) {

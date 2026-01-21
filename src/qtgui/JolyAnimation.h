@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QTimer>
+#include <QElapsedTimer>
 #include "SubtitleOverlay.h"
 
 class JolyAnimation : public QWidget {
@@ -22,6 +23,8 @@ private slots:
 
 private:
   QTimer *m_animTimer;
+  QElapsedTimer m_elapsedTimer;
+  double m_physicsAccumulator;
   double m_time;
   double m_bounciness; // 0.0 to 1.0, increases over time for dramatic physics
   
@@ -117,6 +120,8 @@ private:
   std::vector<Dolphin> m_dolphins;
   std::vector<Whale> m_whales;
   ParrotState m_parrot;
+  
+  void stepAnimation(double dt);
   
   void updateWaveDynamics();
   void spawnBoat();
