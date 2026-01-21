@@ -89,4 +89,4 @@ colorscreen_res.o: colorscreen.rc
 	$(WINDRES) $< -o $@
 
 # Ensure moc and rcc are run before compilation
-BUILT_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
+

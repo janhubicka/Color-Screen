@@ -489,11 +489,7 @@ colorscreen_qt_LDADD =  \
 	$(top_builddir)/src/libcolorscreen/libcolorscreen.la \
 	$(Qt6_LIBS) $(am__append_1)
 @HOST_WIN32_TRUE@colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS)
-
-# Ensure moc and rcc are run before compilation
-BUILT_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
-all: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) all-am
+all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .cpp .lo .o .obj
@@ -1379,17 +1375,14 @@ distdir-am: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-check: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) check-am
+check: check-am
 all-am: Makefile $(PROGRAMS)
 installdirs:
 	for dir in "$(DESTDIR)$(bindir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) install-am
-install-exec: $(BUILT_SOURCES)
-	$(MAKE) $(AM_MAKEFLAGS) install-exec-am
+install: install-am
+install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
 
@@ -1419,7 +1412,6 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-	-$(am__rm_f) $(BUILT_SOURCES)
 clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
@@ -1578,7 +1570,7 @@ ps-am:
 
 uninstall-am: uninstall-binPROGRAMS
 
-.MAKE: all check install install-am install-exec install-strip
+.MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
 	clean-binPROGRAMS clean-generic clean-libtool cscopelist-am \
@@ -1607,6 +1599,8 @@ qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arro
 
 colorscreen_res.o: colorscreen.rc
 	$(WINDRES) $< -o $@
+
+# Ensure moc and rcc are run before compilation
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
