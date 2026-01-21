@@ -192,14 +192,29 @@ jobs:
         cp /opt/homebrew/lib/libzip.*.dylib Color-Screen.app/Contents/Frameworks/ || true
         
         # Fix RPATHs for manually copied libs
-        # This is basic, might need recursive fixup script if deps have deps
         for LIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
             NAME=$(basename "$LIB")
             install_name_tool -id "@executable_path/../Frameworks/$NAME" "$LIB"
         done
         
-        install_name_tool -change /opt/homebrew/lib/libgsl.27.dylib @executable_path/../Frameworks/libgsl.27.dylib Color-Screen.app/Contents/MacOS/Color-Screen
-        install_name_tool -change /opt/homebrew/lib/libgslcblas.0.dylib @executable_path/../Frameworks/libgslcblas.0.dylib Color-Screen.app/Contents/MacOS/Color-Screen
+        # Comprehensively fix library references for BOTH executables
+        # This ensures both GUI and CLI are fully self-contained
+        for EXECUTABLE in Color-Screen.app/Contents/MacOS/Color-Screen Color-Screen.app/Contents/MacOS/colorscreen; do
+            echo "Fixing dependencies for $EXECUTABLE..."
+            
+            # Discover all dependencies pointing to /opt/homebrew/lib/
+            otool -L "$EXECUTABLE" | grep '/opt/homebrew/lib/' | awk '{print $1}' | while read -r DYLIB_PATH; do
+                DYLIB_NAME=$(basename "$DYLIB_PATH")
+                
+                # Check if we have this library bundled
+                if [ -f "Color-Screen.app/Contents/Frameworks/$DYLIB_NAME" ]; then
+                    echo "  Rewriting $DYLIB_NAME..."
+                    install_name_tool -change "$DYLIB_PATH" "@executable_path/../Frameworks/$DYLIB_NAME" "$EXECUTABLE"
+                else
+                    echo "  Warning: $DYLIB_NAME not found in Frameworks/"
+                fi
+            done
+        done
         
         # Deep Code Sign (Ad-Hoc)
         codesign --deep --force --verify --verbose --sign "-" Color-Screen.app
