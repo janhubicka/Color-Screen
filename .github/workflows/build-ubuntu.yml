@@ -42,9 +42,9 @@ jobs:
     - name: configure
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui
     - name: make
-      run: make
+      run: make -j$(nproc)
     - name: make check
-      run: make check
+      run: make -j$(nproc) check
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
@@ -55,18 +55,18 @@ jobs:
           testsuite/*.log
           testsuite/*.par
     - name: make distcheck
-      run: make distcheck
+      run: make -j$(nproc) distcheck
     - uses: actions/upload-artifact@v4
       with:
         name: source-tarball
         path: colorscreen-*.tar.gz
     - name: make distclean
-      run: make distclean
+      run: make -j$(nproc) distclean
     - name: configure with checking
       run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
-      run: make
-    - name: make check (checking enabled)
+      run: make -j$(nproc) 
+    - name: make -j$(nproc) check (checking enabled)
       run: make check
     - name: Upload Test Results (checking enabled)
       uses: actions/upload-artifact@v4
