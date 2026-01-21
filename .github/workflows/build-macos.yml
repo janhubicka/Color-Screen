@@ -250,8 +250,7 @@ jobs:
         # Deep Code Sign (Ad-Hoc)
         codesign --deep --force --verify --verbose --sign "-" Color-Screen.app
         
-        # Capture debug info
-        $(brew --prefix qt6)/bin/macdeployqt Color-Screen.app -verbose=2 > macdeployqt_debug.txt 2>&1 || true
+
         
         # Zip it
         ditto -c -k --keepParent Color-Screen.app Color-Screen-macOS.zip
