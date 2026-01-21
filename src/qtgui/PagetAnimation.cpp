@@ -37,7 +37,7 @@ constexpr double PARTICLE_FADE_RATE = 0.008;              // Fade rate per frame
 
 
 PagetAnimation::PagetAnimation(QWidget *parent)
-    : QWidget(parent), m_rng(std::random_device{}()) {
+    : QWidget(parent), m_rng(std::random_device{}()), m_physicsAccumulator(0.0) {
   
   // Animation timer - 60 FPS
   m_animTimer = new QTimer(this);
@@ -56,6 +56,7 @@ PagetAnimation::~PagetAnimation() = default;
 void PagetAnimation::startAnimation() {
   m_time = 0.0;
   m_fireworks.clear();
+  m_elapsedTimer.start();
   m_animTimer->start(16); // ~60 FPS
   m_launchTimer->start(LAUNCH_INTERVAL_MS);
 }
@@ -153,7 +154,27 @@ void PagetAnimation::explodeFirework(Firework &fw) {
 }
 
 void PagetAnimation::updateAnimation() {
-  m_time += 0.016; // 16ms
+  double dt = 0.016; // Fixed physics step
+
+  // Add elapsed time to accumulator
+  if (m_elapsedTimer.isValid()) {
+      double elapsed = m_elapsedTimer.restart() / 1000.0;
+      // Cap max elapsed time to prevent spiral of death if rendering freezes
+      if (elapsed > 0.1) elapsed = 0.1;
+      m_physicsAccumulator += elapsed;
+  }
+
+  // Consume accumulated time in fixed steps
+  while (m_physicsAccumulator >= dt) {
+      stepAnimation(dt);
+      m_physicsAccumulator -= dt;
+  }
+  
+  update(); // Trigger repaint
+}
+
+void PagetAnimation::stepAnimation(double dt) {
+  m_time += dt;
   
   // Update all fireworks
   for (Firework &fw : m_fireworks) {
@@ -162,8 +183,8 @@ void PagetAnimation::updateAnimation() {
       if (!fw.particles.isEmpty()) {
         // Update all particles with same physics
         for (Particle &p : fw.particles) {
-          p.velocity.setY(p.velocity.y() + GRAVITY * 0.016);
-          p.pos += p.velocity * 0.016;
+          p.velocity.setY(p.velocity.y() + GRAVITY * dt);
+          p.pos += p.velocity * dt;
         }
         
         // Check first particle to see if we should explode
@@ -176,8 +197,8 @@ void PagetAnimation::updateAnimation() {
     } else {
       // Update explosion particles
       for (Particle &p : fw.particles) {
-        p.velocity.setY(p.velocity.y() + GRAVITY * 0.016);
-        p.pos += p.velocity * 0.016;
+        p.velocity.setY(p.velocity.y() + GRAVITY * dt);
+        p.pos += p.velocity * dt;
         p.life -= PARTICLE_FADE_RATE;
       }
     }
@@ -196,8 +217,7 @@ void PagetAnimation::updateAnimation() {
     m_fireworks.end()
   );
   
-  m_subtitles.update(0.016);
-  update(); // Trigger repaint
+  m_subtitles.update(dt);
 }
 
 void PagetAnimation::paintEvent(QPaintEvent *event) {

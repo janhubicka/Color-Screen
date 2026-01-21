@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QPointF>
 #include <QColor>
+#include <QElapsedTimer>
 #include <random>
 #include "SubtitleOverlay.h"
 
@@ -36,6 +37,8 @@ private slots:
   void triggerRandomMovement();
 
 private:
+  void stepAnimation(double dt);
+  
   void initializeGrid();
   void updatePhysics(double dt);
   void checkCollisions();
@@ -44,6 +47,8 @@ private:
 
   QTimer *m_animTimer;
   QTimer *m_triggerTimer;
+  QElapsedTimer m_elapsedTimer;
+  double m_physicsAccumulator;
   QVector<Ball> m_balls;
   
   std::mt19937 m_rng;

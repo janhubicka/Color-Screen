@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QPointF>
 #include <QColor>
+#include <QElapsedTimer>
 #include <random>
 #include "SubtitleOverlay.h"
 
@@ -47,11 +48,14 @@ private slots:
   void launchFirework();
 
 private:
+  void stepAnimation(double dt);
   void explodeFirework(Firework &fw);
   void updateParticles();
   
   QTimer *m_animTimer;
   QTimer *m_launchTimer;
+  QElapsedTimer m_elapsedTimer;
+  double m_physicsAccumulator;
   QVector<Firework> m_fireworks;
   
   std::mt19937 m_rng;
