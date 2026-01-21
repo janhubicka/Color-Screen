@@ -23,6 +23,7 @@ private slots:
 private:
   QTimer *m_animTimer;
   double m_time;
+  double m_bounciness; // 0.0 to 1.0, increases over time for dramatic physics
   
   static constexpr int STRIP_COUNT = 30;
   

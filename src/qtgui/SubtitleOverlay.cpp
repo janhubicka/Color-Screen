@@ -376,7 +376,10 @@ void SubtitleOverlay::paint(QPainter *painter, const QRect &bounds) {
 
     // Use a temporary pixmap to render the entire subtitle block *opaquely*
     // then fade the whole image together.
-    QPixmap buffer(bounds.size());
+    // Scale by device pixel ratio for crisp rendering on high-DPI displays
+    qreal dpr = painter->device()->devicePixelRatio();
+    QPixmap buffer(bounds.size() * dpr);
+    buffer.setDevicePixelRatio(dpr);
     buffer.fill(Qt::transparent);
     
     QPainter p(&buffer);

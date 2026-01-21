@@ -6,7 +6,7 @@
 #include <QRandomGenerator>
 
 JolyAnimation::JolyAnimation(QWidget *parent)
-    : QWidget(parent), m_time(0.0) {
+    : QWidget(parent), m_time(0.0), m_bounciness(0.0) {
   
   // Animation timer - 60 FPS
   m_animTimer = new QTimer(this);
@@ -243,6 +243,9 @@ void JolyAnimation::updateAnimation() {
      rampFactor = (m_time - delay) * 0.5;
   }
   
+  // Gradually increase bounciness over time for more dramatic physics
+  m_bounciness = std::min(1.0, m_time / 120.0); // 0 to 1 over 2 minutes
+  
   const double GRAVITY = 800.0; // pixels / s^2
 
   // Update Boats
@@ -282,15 +285,24 @@ void JolyAnimation::updateAnimation() {
           
           // 3. Collision with water
           if (b.y > yWater) {
-              // Check for Hard Impact (e.g. falling from height or wave rising fast)
+              // Check for impact velocity
               double impact = b.vy - vyWater;
-              if (impact > 450.0) { // Threshold for "trouble"
+              
+              // Apply bounce if moving fast relative to water
+              if (impact > 200.0) { // Lower threshold for bounce
+                  // Bounce force proportional to impact and bounciness
+                  b.vy = vyWater - impact * m_bounciness * 0.5;
+              } else {
+                  // Normal surface tracking
+                  b.vy = vyWater;
+              }
+              
+              // Hard impact still causes sinking
+              if (impact > 450.0) {
                    if (!b.sinking) b.sinking = true;
               }
               
               b.y = yWater;
-              // If we slam into water, take its velocity
-              b.vy = vyWater;
               
               // Calculate tilt based on wave slope
               double slope = stripAmp * stripFreq * qCos(angle);
@@ -482,10 +494,19 @@ void JolyAnimation::updateAnimation() {
       double yWater = baseY + stripAmp * qSin(angle);
       double vyWater = stripAmp * qCos(angle) * stripSpeed;
       
+      
       if (it->y > yWater) {
+          double impact = it->vy - vyWater;
+          
+          // Apply bounce if moving fast relative to water
+          if (impact > 200.0) {
+              it->vy = vyWater - impact * m_bounciness * 0.5;
+          } else {
+              it->vy = vyWater;
+          }
+          
           it->y = yWater;
           it->onWater = true;
-          it->vy = vyWater;
       } else {
          // In air (or flying)
       }
@@ -516,9 +537,18 @@ void JolyAnimation::updateAnimation() {
       b.vy += GRAVITY * dt;
       b.y += b.vy * dt;
       
+      
       if (b.y > yWater) {
+          double impact = b.vy - vyWater;
+          
+          // Apply bounce if moving fast relative to water
+          if (impact > 200.0) {
+              b.vy = vyWater - impact * m_bounciness * 0.5;
+          } else {
+              b.vy = vyWater;
+          }
+          
           b.y = yWater;
-          b.vy = vyWater;
           
           // Calculate tilt based on wave slope
           double slope = stripAmp * stripFreq * qCos(angle);
@@ -751,7 +781,7 @@ void JolyAnimation::drawBottle(QPainter &p, const BottleState &bottle, double yB
     p.translate(bottle.x, y); // Triangle at waterline
     
     double scale = 0.4 + 1.2 * ((double)bottle.stripIndex / STRIP_COUNT);
-    scale *= 0.25; // Quarter size
+    scale *= 0.30; // 20% larger than original 0.25
     p.scale(scale, scale);
     p.rotate(tiltAngle);
     
@@ -851,6 +881,13 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
           }
       }
       
+      // Draw Oranges BEHIND the wave so they appear submerged
+      for (const auto &o : m_oranges) {
+          if (o.active && o.stripIndex == i) {
+              drawOrange(p, o, baseY, stripAmp, stripFreq, phase);
+          }
+      }
+      
       p.setBrush(color);
       p.setPen(Qt::NoPen);
       p.drawPolygon(stripPoly);
@@ -867,12 +904,6 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       for (const auto &b : m_boats) {
           if (b.active && b.stripIndex == i) {
               drawBoat(p, b, baseY, stripAmp, stripFreq, phase);
-          }
-      }
-      
-      for (const auto &o : m_oranges) {
-          if (o.active && o.stripIndex == i) {
-              drawOrange(p, o, baseY, stripAmp, stripFreq, phase);
           }
       }
       
