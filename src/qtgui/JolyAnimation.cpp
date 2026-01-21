@@ -23,7 +23,7 @@ constexpr double BOTTLE_SPAWN_START = 90.0;               // Seconds before beer
 constexpr double BOUNCINESS_RAMP_DURATION = 120.0;        // Seconds to reach maximum bounce (2 minutes)
 
 // --- Physics Parameters ---
-constexpr double GRAVITY = 800.0;                         // Gravity in pixels/s² (affects falling objects)
+constexpr double GRAVITY = 400.0;                         // Gravity in pixels/s² (affects falling objects)
 constexpr double BOUNCE_THRESHOLD = 200.0;                // Min impact velocity (px/s) to trigger bounce
 constexpr double BOUNCE_FORCE = 0.5;                      // Bounce force multiplier (0.0 = no bounce, 1.0 = full reflection)
 constexpr double HARD_IMPACT_THRESHOLD = 450.0;           // Impact velocity that sinks boats (px/s)
@@ -58,7 +58,7 @@ constexpr int WHALE_SPAWN_CHANCE = 300; // Much more frequent (was 300)
 // --- Advanced Animation Params ---
 constexpr double WHALE_SURFACE_OFFSET = 15.0;     // Target height (smaller = higher out of water)
 constexpr double WHALE_SUBMERGED_OFFSET = 50.0;   // Start depth
-constexpr double DOLPHIN_JUMP_VELOCITY = -180.0;  // Initial Dy (stronger jump)
+constexpr double DOLPHIN_JUMP_VELOCITY = -90.0;  // Initial Dy (stronger jump)
 
 // ============================================================================
 
@@ -75,7 +75,7 @@ JolyAnimation::JolyAnimation(QWidget *parent)
   // Initialize strips
   for (int i = 0; i < STRIP_COUNT; ++i) {
       m_strips[i].phase = i * 0.5 + (i * i * 0.05);
-      m_strips[i].currentSpeed = 3.0 * (0.8 + 0.4 * qSin(i * 0.32));
+      m_strips[i].currentSpeed = 1.5 * (0.8 + 0.4 * qSin(i * 0.32));
       m_strips[i].targetSpeed = m_strips[i].currentSpeed;
       m_strips[i].currentAmpFactor = 1.0;
       m_strips[i].targetAmpFactor = 1.0;
@@ -105,7 +105,7 @@ void JolyAnimation::updateWaveDynamics() {
     // Randomly update targets
     if (QRandomGenerator::global()->bounded(100) < 2) { 
         int idx = QRandomGenerator::global()->bounded(STRIP_COUNT);
-        m_strips[idx].targetSpeed = 3.0 * (0.5 + QRandomGenerator::global()->generateDouble());
+        m_strips[idx].targetSpeed = 1.5 * (0.5 + QRandomGenerator::global()->generateDouble());
         m_strips[idx].targetAmpFactor = 0.8 + 0.4 * QRandomGenerator::global()->generateDouble();
     }
     
@@ -171,7 +171,7 @@ void JolyAnimation::spawnBoat() {
                 // No prey? Random patrol
                 newBoat.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 5);
                 bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
-                newBoat.speed = (leftToRight ? 1 : -1) * (120 + QRandomGenerator::global()->bounded(60));
+                newBoat.speed = (leftToRight ? 1 : -1) * (60 + QRandomGenerator::global()->bounded(30));
                 newBoat.x = leftToRight ? -150 : width() + 150;
             }
             
@@ -183,10 +183,10 @@ void JolyAnimation::spawnBoat() {
             bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
             if (leftToRight) {
                 newBoat.x = -150;
-                newBoat.speed = 80 + QRandomGenerator::global()->bounded(60);
+                newBoat.speed = 40 + QRandomGenerator::global()->bounded(30);
             } else {
                 newBoat.x = width() + 150;
-                newBoat.speed = -(80 + QRandomGenerator::global()->bounded(60));
+                newBoat.speed = -(40 + QRandomGenerator::global()->bounded(30));
             }
         }
 
@@ -230,12 +230,12 @@ void JolyAnimation::spawnParrot() {
         m_parrot.movingRight = QRandomGenerator::global()->bounded(2) == 0;
         if (m_parrot.movingRight) {
             m_parrot.x = -100;
-            m_parrot.speedX = 150 + QRandomGenerator::global()->bounded(100);
+            m_parrot.speedX = 75 + QRandomGenerator::global()->bounded(50);
         } else {
             m_parrot.x = width() + 100;
-            m_parrot.speedX = -(150 + QRandomGenerator::global()->bounded(100));
+            m_parrot.speedX = -(75 + QRandomGenerator::global()->bounded(50));
         }
-        m_parrot.speedY = (QRandomGenerator::global()->generateDouble() - 0.5) * 30; 
+        m_parrot.speedY = (QRandomGenerator::global()->generateDouble() - 0.5) * 15; 
     }
 }
 
@@ -255,7 +255,7 @@ void JolyAnimation::spawnBottle() {
         b.stripIndex = STRIP_COUNT - 1 - QRandomGenerator::global()->bounded(2);
         
         bool leftToRight = QRandomGenerator::global()->bounded(2) == 0;
-        b.speed = (leftToRight ? 1.0 : -1.0) * (30 + QRandomGenerator::global()->bounded(40));
+        b.speed = (leftToRight ? 1.0 : -1.0) * (15 + QRandomGenerator::global()->bounded(20));
         b.x = leftToRight ? -50 : width() + 50;
         
         b.phase = QRandomGenerator::global()->generateDouble() * 6.28;
@@ -302,10 +302,10 @@ void JolyAnimation::spawnDolphin() {
         // Jump velocity
         // Determine jump direction (left-to-right or right-to-left)
         bool jumpRight = QRandomGenerator::global()->bounded(2) == 0;
-        double speedX = 50.0 + QRandomGenerator::global()->bounded(40); 
+        double speedX = 25.0 + QRandomGenerator::global()->bounded(20); 
         
         d.vx = jumpRight ? speedX : -speedX;
-        d.vy = DOLPHIN_JUMP_VELOCITY - QRandomGenerator::global()->bounded(60); 
+        d.vy = DOLPHIN_JUMP_VELOCITY - QRandomGenerator::global()->bounded(30); 
         
         // Longer jump duration adjustment (gravity effect remains same, but init velocity is higher)
         // With higher Vy, they will stay in air longer naturally.
@@ -520,7 +520,7 @@ void JolyAnimation::stepAnimation(double dt) {
                       // Try to hit target in T seconds
                       // T proportional to distance?
                       double dist = minDist;
-                      double T = dist / 300.0; // Flight time guess, 300px/s avg horizontal speed
+                      double T = dist / 150.0; // Flight time guess, 300px/s avg horizontal speed
                       if (T < 0.5) T = 0.5;
                       
                       // Predict target pos? Assume static for now or linear predict
@@ -1221,7 +1221,7 @@ void JolyAnimation::drawWhale(QPainter &p, const Whale &w, double yBase, double 
                 
                 // Random properties based on seed (using sin/cos as pseudo-random)
                 // Boosted height by ~30% (80->110 base)
-                double speed = 110.0 + 50.0 * qSin(seed * 123.4);
+                double speed = 55.0 + 25.0 * qSin(seed * 123.4);
                 double angleEmit = -M_PI_2 + (qCos(seed * 43.2) * 0.4); // Upward cone (-90 deg +/- spread ~25deg)
                 double size = 2.0 + 2.0 * qAbs(qSin(seed * 9.9));
                 
@@ -1238,7 +1238,7 @@ void JolyAnimation::drawWhale(QPainter &p, const Whale &w, double yBase, double 
                 if (globalT < 0) continue;
                 
                 // Physics: Projectile motion
-                double g = 200.0; // Gravity
+                double g = 100.0; // Gravity
                 
                 double px = 20 + vx * t * 0.4; // Scale horizontal spread slightly
                 double py = -10 + vy * t + 0.5 * g * t * t;
