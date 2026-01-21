@@ -203,7 +203,8 @@ jobs:
             echo "Fixing dependencies for $EXECUTABLE..."
             
             # Discover all dependencies pointing to /opt/homebrew/lib/
-            otool -L "$EXECUTABLE" | grep '/opt/homebrew/lib/' | awk '{print $1}' | while read -r DYLIB_PATH; do
+            # Use process substitution to avoid subshell issues
+            while IFS= read -r DYLIB_PATH; do
                 DYLIB_NAME=$(basename "$DYLIB_PATH")
                 
                 # Check if we have this library bundled
@@ -213,7 +214,7 @@ jobs:
                 else
                     echo "  Warning: $DYLIB_NAME not found in Frameworks/"
                 fi
-            done
+            done < <(otool -L "$EXECUTABLE" | grep '/opt/homebrew/lib/' | awk '{print $1}')
         done
         
         # Deep Code Sign (Ad-Hoc)
