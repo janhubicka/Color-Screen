@@ -14,10 +14,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: mingw64, env: x86_64, flags: "", suffix: "" }
-          - { sys: ucrt64,  env: ucrt-x86_64, flags: "", suffix: "" }
-          - { sys: ucrt64,  env: ucrt-x86_64, flags: "-march=znver2", suffix: "-znver2" }
-          - { sys: ucrt64,  env: ucrt-x86_64, flags: "-march=znver4", suffix: "-znver4" }
+          - { sys: mingw64,     env: x86_64,         flags: "", suffix: "" }
+          - { sys: ucrt64,      env: ucrt-x86_64,    flags: "", suffix: "" }
+          - { sys: ucrt64,      env: ucrt-x86_64,    flags: "-march=znver2", suffix: "-znver2" }
+          - { sys: ucrt64,      env: ucrt-x86_64,    flags: "-march=znver4", suffix: "-znver4" }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2

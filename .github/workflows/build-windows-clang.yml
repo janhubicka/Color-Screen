@@ -14,9 +14,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: clang64,  env: clang-x86_64, flags: "", suffix: "" }
-          - { sys: clang64,  env: clang-x86_64, flags: "-march=znver2", suffix: "-znver2" }
-          - { sys: clang64,  env: clang-x86_64, flags: "-march=znver4", suffix: "-znver4" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "", suffix: "" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver2", suffix: "-znver2" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver4", suffix: "-znver4" }
+          - { sys: clangarm64, env: clang-aarch64, flags: "", suffix: "-aarch64" }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -31,6 +32,7 @@ jobs:
       shell: msys2 {0}
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
+        # Note: -lomp is used, ensuring libomp is linked
         CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
     - name: generate icons
       shell: msys2 {0}
@@ -42,7 +44,8 @@ jobs:
       run: make -j$(nproc)
     - name: make check
       shell: msys2 {0}
-      if: matrix.suffix == ''
+      # Skip check on aarch64 if running on x64 host without emulation (binaries won't run)
+      if: matrix.suffix == '' && matrix.sys != 'clangarm64'
       run: make -j$(nproc) check
     - name: Find testsuite
       shell: msys2 {0}
@@ -72,7 +75,8 @@ jobs:
       run: ldd /c/Color-Screen-install/bin/libcolorscreen*dll
     - name: copy dlls
       shell: msys2 {0}
-      run: cp /clang64/bin/libc++.dll /clang64/bin/libomp.dll /clang64/bin/libtiff*.dll /clang64/bin/libzip.dll /clang64/bin/libturbojpeg.dll /clang64/bin/libraw*.dll /clang64/bin/libwinpthread*.dll /clang64/bin/liblcms2*.dll /clang64/bin/libgsl*.dll /clang64/bin/zlib1.dll /clang64/bin/libzstd.dll /clang64/bin/liblzma*.dll /clang64/bin/libLerc.dll /clang64/bin/libwebp*.dll /clang64/bin/libjbig*.dll /clang64/bin/libjpeg*.dll /clang64/bin/libdeflate.dll /clang64/bin/libbz2*.dll /clang64/bin/libgslcblas*.dll /clang64/bin/libsharpyuv*.dll /clang64/bin/libunwind.dll /clang64/bin/libbrotlidec.dll /clang64/bin/libbrotlicommon.dll /clang64/bin/libglib-2.0-0.dll /clang64/bin/libintl-8.dll /clang64/bin/libiconv-2.dll /clang64/bin/libpcre2-8-0.dll /clang64/bin/libgraphite2.dll /${{matrix.sys}}/bin/libfftw3-*.dll /${{matrix.sys}}/bin/libb2-*.dll /${{matrix.sys}}/bin/libdouble-conversion*.dll /${{matrix.sys}}/bin/libicuin*.dll /${{matrix.sys}}/bin/libicuuc*.dll /${{matrix.sys}}/bin/libmd4c*.dll /${{matrix.sys}}/bin/libicudt*.dll /${{matrix.sys}}/bin/libpcre2-16-*.dll /${{matrix.sys}}/bin/libpng16-*.dll /${{matrix.sys}}/bin/libharfbuzz-*.dll /${{matrix.sys}}/bin/libfreetype-*.dll /c/Color-Screen-install/bin
+      # Use dynamic Path ${{matrix.sys}} instead of hardcoded clang64
+      run: cp /${{matrix.sys}}/bin/libc++.dll /${{matrix.sys}}/bin/libomp.dll /${{matrix.sys}}/bin/libtiff*.dll /${{matrix.sys}}/bin/libzip.dll /${{matrix.sys}}/bin/libturbojpeg.dll /${{matrix.sys}}/bin/libraw*.dll /${{matrix.sys}}/bin/libwinpthread*.dll /${{matrix.sys}}/bin/liblcms2*.dll /${{matrix.sys}}/bin/libgsl*.dll /${{matrix.sys}}/bin/zlib1.dll /${{matrix.sys}}/bin/libzstd.dll /${{matrix.sys}}/bin/liblzma*.dll /${{matrix.sys}}/bin/libLerc.dll /${{matrix.sys}}/bin/libwebp*.dll /${{matrix.sys}}/bin/libjbig*.dll /${{matrix.sys}}/bin/libjpeg*.dll /${{matrix.sys}}/bin/libdeflate.dll /${{matrix.sys}}/bin/libbz2*.dll /${{matrix.sys}}/bin/libgslcblas*.dll /${{matrix.sys}}/bin/libsharpyuv*.dll /${{matrix.sys}}/bin/libunwind.dll /${{matrix.sys}}/bin/libbrotlidec.dll /${{matrix.sys}}/bin/libbrotlicommon.dll /${{matrix.sys}}/bin/libglib-2.0-0.dll /${{matrix.sys}}/bin/libintl-8.dll /${{matrix.sys}}/bin/libiconv-2.dll /${{matrix.sys}}/bin/libpcre2-8-0.dll /${{matrix.sys}}/bin/libgraphite2.dll /${{matrix.sys}}/bin/libfftw3-*.dll /${{matrix.sys}}/bin/libb2-*.dll /${{matrix.sys}}/bin/libdouble-conversion*.dll /${{matrix.sys}}/bin/libicuin*.dll /${{matrix.sys}}/bin/libicuuc*.dll /${{matrix.sys}}/bin/libmd4c*.dll /${{matrix.sys}}/bin/libicudt*.dll /${{matrix.sys}}/bin/libpcre2-16-*.dll /${{matrix.sys}}/bin/libpng16-*.dll /${{matrix.sys}}/bin/libharfbuzz-*.dll /${{matrix.sys}}/bin/libfreetype-*.dll /c/Color-Screen-install/bin
     - name: deploy qt
       shell: msys2 {0}
       run: |
