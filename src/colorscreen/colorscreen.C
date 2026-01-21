@@ -647,7 +647,7 @@ parse_common_flags (int argc, char **argv, int *i)
   else if (!strcmp (argv[*i], "--version") || !strcmp (argv[*i], "-v"))
     {
       printf ("Color-Screen version %s\nDeveloped by Jan Hubicka\nhttps://github.com/janhubicka/Color-Screen/wiki\n", PACKAGE_VERSION);
-      exit (1);
+      exit (0);
     }
   else if (!strcmp (argv[*i], "--verbose-tasks"))
     {
