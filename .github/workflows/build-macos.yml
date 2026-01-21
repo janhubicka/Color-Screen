@@ -315,7 +315,11 @@ jobs:
         lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
         
         # GUI Smoke Test (launch and quit)
-        # Note: Interactive UI tests on GHA runners are tricky, but open/kill works
-        open -n Color-Screen.app
-        sleep 10
-        osascript -e 'quit app "Color-Screen"'
+        # Note: Interactive UI tests on GHA runners are tricky.
+        # We run the binary directly to catch any dyld/startup crashes.
+        # We use a timeout or expect it to exit if arguments are handled.
+        
+        echo "Running Color-Screen GUI binary check..."
+        # Just check if it links and runs. It might fail to open a window on headless,
+        # but we want to ensure no segfaults/dyld errors.
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --version

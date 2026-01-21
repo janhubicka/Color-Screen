@@ -46,7 +46,17 @@ constexpr double PARROT_DROP_DELAY_MAX = 5.0;             // Max seconds before 
 
 // --- Visual Scaling ---
 constexpr double BOAT_SIZE_MULTIPLIER = 1.5;              // Boat size (1.0 = original, 1.5 = 50% larger)
-constexpr double BOTTLE_SIZE_MULTIPLIER = 0.30;           // Bottle size (0.25 = quarter, 0.30 = 20% larger)
+constexpr double BOTTLE_SIZE_MULTIPLIER = 0.30;           // Bottle size 
+constexpr double DOLPHIN_SIZE = 14.0; // Small 
+constexpr double WHALE_SIZE = 110.0;
+
+constexpr int DOLPHIN_SPAWN_CHANCE = 200; // Frequent but not swarming
+constexpr int WHALE_SPAWN_CHANCE = 300; // Much more frequent (was 300)
+
+// --- Advanced Animation Params ---
+constexpr double WHALE_SURFACE_OFFSET = 15.0;     // Target height (smaller = higher out of water)
+constexpr double WHALE_SUBMERGED_OFFSET = 50.0;   // Start depth
+constexpr double DOLPHIN_JUMP_VELOCITY = -180.0;  // Initial Dy (stronger jump)
 
 // ============================================================================
 
@@ -266,15 +276,100 @@ void JolyAnimation::spawnBottle() {
     }
 }
 
+void JolyAnimation::spawnDolphin() {
+    if (m_time < WAVE_STARTUP_DELAY) return;
+    
+    // Spawn randomness
+    if (QRandomGenerator::global()->bounded(DOLPHIN_SPAWN_CHANCE) == 0) {
+        Dolphin d;
+        d.active = true;
+        // Mid to foreground strips (index 5 to 25)
+        d.stripIndex = 5 + QRandomGenerator::global()->bounded(STRIP_COUNT - 8); 
+        d.size = DOLPHIN_SIZE * (0.8 + 0.4 * QRandomGenerator::global()->generateDouble()); // Slight size variation
+        
+        double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+        double yBase = d.stripIndex * stripHeight;
+        
+        // Random horizontal position, keeping some margin from edges
+        d.x = 100 + QRandomGenerator::global()->bounded(width() - 200);
+        d.y = yBase + 10; // Start closer to surface so they are visible immediately
+        d.startX = d.x;
+        d.startY = d.y;
+        
+        // Jump velocity
+        // Determine jump direction (left-to-right or right-to-left)
+        bool jumpRight = QRandomGenerator::global()->bounded(2) == 0;
+        double speedX = 50.0 + QRandomGenerator::global()->bounded(40); 
+        
+        d.vx = jumpRight ? speedX : -speedX;
+        d.vy = DOLPHIN_JUMP_VELOCITY - QRandomGenerator::global()->bounded(60); 
+        
+        // Longer jump duration adjustment (gravity effect remains same, but init velocity is higher)
+        // With higher Vy, they will stay in air longer naturally.
+        
+        d.angle = jumpRight ? -45.0 : 45.0; // Initial nose-up angle
+        
+        bool placed = false;
+        for (auto &existing : m_dolphins) {
+            if (!existing.active) {
+                existing = d;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) m_dolphins.push_back(d);
+    }
+}
+
+void JolyAnimation::spawnWhale() {
+    if (m_time < WAVE_STARTUP_DELAY * 1.5) return;
+    
+    // Whales are rare
+    if (QRandomGenerator::global()->bounded(WHALE_SPAWN_CHANCE) == 0) {
+        // Limit active whales to avoid overcrowding (max 1 usually)
+        int activeCount = 0;
+        for (const auto &w : m_whales) if (w.active) activeCount++;
+        if (activeCount >= 1) return;
+        
+        Whale w;
+        w.active = true;
+        w.timer = 0;
+        w.size = WHALE_SIZE * (0.9 + 0.2 * QRandomGenerator::global()->generateDouble());
+        
+        // Background to mid strips (deeper water feel)
+        w.stripIndex = 3 + QRandomGenerator::global()->bounded(STRIP_COUNT / 2);
+        
+        w.x = 200 + QRandomGenerator::global()->bounded(width() - 400);
+        
+        // Disable breaching for now
+        w.isBreaching = false; 
+        
+        // Initialize Y based on behavior (handled in update/draw)
+        double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+        w.y = w.stripIndex * stripHeight + WHALE_SUBMERGED_OFFSET; // Start submerged to match animation
+        
+        
+        bool placed = false;
+        // Try to reuse inactive slots
+        for (auto &existing : m_whales) {
+            if (!existing.active) {
+                existing = w;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            m_whales.push_back(w);
+        }
+    }
+}
+
 void JolyAnimation::updateAnimation() {
   double dt = 0.016;
   m_time += dt;
   m_subtitles.update(dt);
   
   updateWaveDynamics();
-  spawnBoat();
-  spawnParrot();
-  spawnBottle();
   
   double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
   
@@ -609,6 +704,125 @@ void JolyAnimation::updateAnimation() {
           b.tilt += (0 - b.tilt) * 0.02;
       }
   }
+
+  // Update Dolphins
+  for (auto it = m_dolphins.begin(); it != m_dolphins.end();) {
+      if (!it->active) {
+          it = m_dolphins.erase(it);
+          continue;
+      }
+      
+      it->vy += GRAVITY * dt;
+      it->x += it->vx * dt;
+      it->y += it->vy * dt;
+      
+      // Calculate angle based on velocity vector
+      if (qAbs(it->vx) > 0.1 || qAbs(it->vy) > 0.1) {
+          it->angle = qRadiansToDegrees(qAtan2(it->vy, qAbs(it->vx)));
+          if (it->vx < 0) it->angle = -it->angle; 
+      }
+      
+      // Check for re-entry into water
+      double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
+      double yBase = it->stripIndex * stripHeight;
+      // Simple water level approximation sufficient for splash check
+      double waveY = yBase + 10; 
+      
+      // If falling and hits water
+      if (it->vy > 0 && it->y > waveY) {
+          it->active = false; // Splash! Gone.
+      }
+      
+      if (it->x < -200 || it->x > width() + 200) {
+          it->active = false;
+      }
+      
+      if (!it->active) {
+          it = m_dolphins.erase(it);
+      } else {
+          ++it;
+      }
+  }
+
+  // Update Whales
+  for (auto it = m_whales.begin(); it != m_whales.end();) {
+      if (!it->active) {
+          it = m_whales.erase(it);
+          continue;
+      }
+      
+      it->timer += dt;
+      
+      // Whale Physics (Bobbing/Drifting)
+      const auto &strip = m_strips[it->stripIndex];
+      // Drift with wave
+      it->x += strip.currentSpeed * dt * 0.5;
+       
+      // Calculate wave interaction for Y and Angle
+       double perspectiveFactor = (double)(it->stripIndex + 1) / STRIP_COUNT;
+       double globalAmp = 20.0; // Hardcoded approximation of globalAmp in draw
+       double rampFactor = std::min(m_time / 10.0, 1.0); 
+       double stripAmp = globalAmp * rampFactor * perspectiveFactor * strip.currentAmpFactor;
+       
+       double phase = strip.phase;
+       double frequency = 0.02; // Hardcoded freq
+       double stripFreq = frequency * (0.9 + 0.2 * qCos(it->stripIndex * 0.5));
+       double stripSpeed = strip.currentSpeed;
+       
+       double stripHeight = static_cast<double>(height()) / STRIP_COUNT; 
+       double angle = it->x * stripFreq + m_time * stripSpeed + phase;
+       // Rise/Sink Animation Logic
+       // Timer 0->1: Rise (Submerged -> Surface)
+       // Timer 1->4: Surface
+       // Timer 4->5: Sink (Surface -> Submerged)
+       
+       double diff = WHALE_SUBMERGED_OFFSET - WHALE_SURFACE_OFFSET;
+       double animOffset = diff; // Default full submerged
+       
+       if (it->timer < 1.0) {
+           double t = it->timer; // 0 to 1
+           animOffset = diff * (1.0 - qSin(t * M_PI_2)); // Smooth rise
+       } else if (it->timer < 4.0) {
+           animOffset = 0.0; // Surfaced
+       } else if (it->timer < 5.0) {
+           double t = it->timer - 4.0; // 0 to 1
+           animOffset = diff * qSin(t * M_PI_2); // Smooth sink
+       }
+       
+       double baseY = it->stripIndex * stripHeight + WHALE_SURFACE_OFFSET + animOffset;
+       
+       it->y = baseY + stripAmp * qSin(angle);
+       
+       // Calculate tilt
+       double slope = stripAmp * stripFreq * qCos(angle);
+       // Smoothly interpolate angle? Or direct?
+       // Boats act directly on slope? No, m_bottles uses direct slope.
+       // Let's just set angle directly for flow
+       // Reuse 'isBreaching' as 'facingLeft' flag? No, let's use drift direction
+       bool facingLeft = (stripSpeed < 0);
+       
+       // Tilt based on wave slope
+       double waveTilt = qRadiansToDegrees(qAtan(slope));
+       // Whales are long, maybe average 2 points? Simple slope is fine.
+       it->angle = waveTilt * 0.5; // Dampen tilt
+       if (facingLeft) it->angle = -it->angle; // Adjust for flip
+       
+      // Animation lifecycle
+      double maxTime = it->isBreaching ? 4.0 : 5.0; // Breach faster (was 6.0)
+      
+      if (it->timer > maxTime) {
+          it->active = false;
+          it = m_whales.erase(it);
+          continue;
+      }
+      ++it;
+  }
+  
+  spawnBoat();
+  spawnParrot();
+  spawnBottle();
+  spawnDolphin();
+  spawnWhale();
   
   update(); 
 }
@@ -867,6 +1081,160 @@ void JolyAnimation::drawCannonball(QPainter &p, const Cannonball &cb) {
     p.restore();
 }
 
+// SVG-inspired Dolphin Drawing
+void JolyAnimation::drawDolphin(QPainter &p, const Dolphin &d) {
+    p.save();
+    p.translate(d.x, d.y);
+    
+    // Scale based on distance (strip index)
+    double distanceScale = 0.5 + 0.8 * ((double)d.stripIndex / STRIP_COUNT);
+    
+    // Apply global size settings (normalize path ~45px to DOLPHIN_SIZE)
+    double sizeScale = DOLPHIN_SIZE / 45.0;
+    
+    double totalScale = distanceScale * sizeScale;
+    p.scale(totalScale, totalScale);
+    
+    // Horizontal Flip if moving left
+    if (d.vx < 0) {
+        p.scale(-1.0, 1.0);
+        p.rotate(-d.angle); // Rotate in opposite direction of travel? 
+        // d.angle is usually calculated absolute? 
+        // In update: angle = atan2(vy, abs(vx)).
+        // If vx < 0, angle was inverted. 
+        // Let's rely on standard rotation:
+        // If we flip X, positive rotation becomes negative visual rotation. 
+        // If d.angle represents nose pitch:
+        // Up-right: +45. Up-left: +45 (but flipped X) -> looks like Up-left.
+        // Let's keep rotate(d.angle) and see.
+    } else {
+        p.rotate(d.angle);
+    }
+    
+    // White paper look
+    p.setBrush(Qt::white);
+    p.setPen(Qt::NoPen);
+    
+    QPainterPath path;
+    
+    // SVG approximation:
+    // Tail start (left)
+    path.moveTo(-28, 5); 
+    
+    // Curved back to dorsal fin
+    path.cubicTo(-15, -15, -5, -20, 5, -18); 
+    
+    // Dorsal fin (curved back)
+    path.lineTo(2, -28); // Tip of fin
+    path.quadTo(5, -20, 15, -15); // Back of fin down to body
+    
+    // Back to head/melon
+    path.cubicTo(25, -12, 35, -5, 38, 0); // Melon/Forehead
+    
+    // Beak
+    path.lineTo(45, 2); // Tip of beak
+    path.lineTo(38, 5); // Bottom of beak
+    
+    // Throat/Belly
+    path.cubicTo(30, 4, 10, 6, -20, 5); // Slimmer belly
+    
+    // Connection to tail flukes
+    path.lineTo(-28, 5);
+    
+    // Tail Flukes
+    path.moveTo(-25, 6);
+    // path.lighter(110); // slightly different connector? No, keep simple
+    path.lineTo(-35, -2); // Top fluke tip
+    path.lineTo(-32, 6);  // Center notch
+    path.lineTo(-35, 14); // Bottom fluke tip
+    path.lineTo(-25, 7);
+    
+    p.drawPath(path);
+    
+    // Pectoral Fin (separate shape)
+    QPainterPath flipper;
+    flipper.moveTo(15, 5);
+    flipper.cubicTo(18, 15, 10, 18, 5, 12);
+    flipper.lineTo(15, 5);
+    p.drawPath(flipper);
+    
+    p.restore();
+}
+
+void JolyAnimation::drawWhale(QPainter &p, const Whale &w, double yBase, double phase) {
+    p.save();
+    p.translate(w.x, w.y);
+    
+    double distanceScale = 0.5 + 0.7 * ((double)w.stripIndex / STRIP_COUNT);
+    p.scale(distanceScale, distanceScale);
+    
+    // Horizontal Flip if drifting left
+    if (w.stripIndex < STRIP_COUNT && m_strips[w.stripIndex].currentSpeed < 0) {
+        p.scale(-1.0, 1.0);
+    }
+    
+    p.rotate(w.angle); // Tilt with wave
+
+    // White paper look
+    p.setBrush(Qt::white);
+    p.setPen(Qt::NoPen);
+    
+    if (w.isBreaching) {
+        // ... (Breach disabled in logic, but keeping rendering code)
+    } else {
+        // Spouting Whale (Surface)
+        
+        // Whale Body (Simplified rounded shape)
+        // Body (just upper back visible)
+        p.drawChord(-60, -20, 120, 60, 30 * 16, 120 * 16);
+        
+        // Spout (Particles) - Fireworks/Fountain Effect
+        if (w.timer > 1.0 && w.timer < 5.0) { // Longer duration
+            p.setBrush(Qt::white);
+            
+            double spoutStartTime = 1.0;
+            double simTime = w.timer - spoutStartTime;
+            
+            // Generate particles
+            for (int i = 0; i < 40; ++i) { 
+                double seed = i * 1.337; // Fixed seed per particle
+                
+                // Random properties based on seed (using sin/cos as pseudo-random)
+                // Boosted height by ~30% (80->110 base)
+                double speed = 110.0 + 50.0 * qSin(seed * 123.4);
+                double angleEmit = -M_PI_2 + (qCos(seed * 43.2) * 0.4); // Upward cone (-90 deg +/- spread ~25deg)
+                double size = 2.0 + 2.0 * qAbs(qSin(seed * 9.9));
+                
+                double vx = speed * qCos(angleEmit);
+                double vy = speed * qSin(angleEmit);
+                
+                // Continuous fountain emission
+                double cycleLen = 1.5; // Particle lives 1.5s
+                double timeOffset = i * (cycleLen / 40.0); // Stagger emission
+                double t = fmod(simTime + timeOffset, cycleLen);
+                
+                // Don't show if before start time (wrap around logic handles valid stream)
+                double globalT = simTime + timeOffset;
+                if (globalT < 0) continue;
+                
+                // Physics: Projectile motion
+                double g = 200.0; // Gravity
+                
+                double px = 20 + vx * t * 0.4; // Scale horizontal spread slightly
+                double py = -10 + vy * t + 0.5 * g * t * t;
+                
+                // Fade out/shrink at end
+                double s = size * (1.0 - t/cycleLen);
+                
+                if (s > 0 && py > -150) // Clip if too high?
+                    p.drawEllipse(QPointF(px, py), s, s);
+            }
+        }
+    }
+    
+    p.restore();
+}
+
 void JolyAnimation::paintEvent(QPaintEvent *event) {
   QPainter p(this);
   p.setRenderHint(QPainter::Antialiasing);
@@ -889,7 +1257,28 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
      rampFactor = (m_time - delay) * 0.5;
   }
 
+  // Draw Parrot (if behind all strips? No, parrot flies over everything)
+  // Let's draw parrot last for "foreground" flight.
+  
+  // Draw strips back-to-front
   for (int i = 0; i < STRIP_COUNT; ++i) {
+      double yBase = i * stripHeight;
+      double amplitude = globalAmp * rampFactor * m_strips[i].currentAmpFactor;
+      double ph = m_strips[i].phase;
+      double stripFreq = frequency * (0.9 + 0.2 * qCos(i * 0.5));
+      
+      // 1. Draw Whales & Dolphins (Before wave, so they can dive BEHIND/INTO it)
+      for (const auto &whale : m_whales) {
+          if (whale.active && whale.stripIndex == i) {
+             drawWhale(p, whale, yBase, ph);
+          }
+      }
+      for (const auto &d : m_dolphins) {
+          if (d.active && d.stripIndex == i) {
+              drawDolphin(p, d);
+          }
+      }
+
       QColor color;
       switch (i % 3) {
           case 0: color = QColor(220, 50, 50); break; 
@@ -898,62 +1287,60 @@ void JolyAnimation::paintEvent(QPaintEvent *event) {
       }
 
       double perspectiveFactor = (double)(i + 1) / STRIP_COUNT;
-      double stripAmp = globalAmp * rampFactor * perspectiveFactor * m_strips[i].currentAmpFactor;
-      
-      double phase = m_strips[i].phase;
-      double stripFreq = frequency * (0.9 + 0.2 * qCos(i * 0.5));
-      double stripSpeed = m_strips[i].currentSpeed;
+      // Note: Re-using logic from original implementation for amplitude w/ perspective
+      double stripAmp = globalAmp * rampFactor * perspectiveFactor * m_strips[i].currentAmpFactor; 
+      // Overwrite simplistic 'amplitude' with correct one
+      amplitude = stripAmp; 
 
+      p.setPen(Qt::NoPen);
+      p.setBrush(color);
+      
       QPolygonF stripPoly;
-      
-      double baseX = 0;
-      double baseY = i * stripHeight;
-      
+      // Build polygon for gradient fill
       for (int x = 0; x <= w; x += 5) {
-          double angle = x * stripFreq + m_time * stripSpeed + phase;
-          double waveY = stripAmp * qSin(angle);
-          stripPoly << QPointF(x, baseY + waveY);
+          double angle = x * stripFreq + m_time * m_strips[i].currentSpeed + ph;
+          double waveY = amplitude * qSin(angle);
+          stripPoly << QPointF(x, yBase + waveY);
       }
-      
-      double bottomY = (i + 1.5) * stripHeight + stripAmp; 
-      
+      double bottomY = (i + 1.5) * stripHeight + amplitude; 
       stripPoly << QPointF(w, bottomY);
       stripPoly << QPointF(0, bottomY);
-
-      // Draw Bottles BEHIND the wave so they look submerged
-      for (const auto &bot : m_bottles) {
-          if (bot.active && bot.stripIndex == i) {
-              drawBottle(p, bot, baseY, stripAmp, stripFreq, phase);
-          }
-      }
       
-      // Draw Oranges BEHIND the wave so they appear submerged
-      for (const auto &o : m_oranges) {
-          if (o.active && o.stripIndex == i) {
-              drawOrange(p, o, baseY, stripAmp, stripFreq, phase);
-          }
-      }
+      QPainterPath path;
+      path.addPolygon(stripPoly);
       
-      p.setBrush(color);
-      p.setPen(Qt::NoPen);
-      p.drawPolygon(stripPoly);
-      
-      QLinearGradient gradient(0, baseY, 0, bottomY);
+      // Gradient fill (original style)
+      QLinearGradient gradient(0, yBase, 0, bottomY);
       gradient.setColorAt(0, Qt::transparent);
       gradient.setColorAt(0.5, QColor(0, 0, 0, 50)); 
       gradient.setColorAt(1, QColor(0, 0, 0, 150)); 
       
-      QPainterPath path;
-      path.addPolygon(stripPoly);
+      p.setBrush(color);
+      p.drawPolygon(stripPoly);
       p.fillPath(path, gradient);
       
-      for (const auto &b : m_boats) {
+      // 3. Draw Objects ON/IN this strip
+      
+      // Bottles
+      for (const auto &b : m_bottles) {
           if (b.active && b.stripIndex == i) {
-              drawBoat(p, b, baseY, stripAmp, stripFreq, phase);
+             drawBottle(p, b, yBase, amplitude, stripFreq, ph);
           }
       }
       
-      // Parrot is now drawn last to fly over everything
+      // Oranges
+      for (const auto &o : m_oranges) {
+          if (o.active && o.stripIndex == i) {
+              drawOrange(p, o, yBase, amplitude, stripFreq, ph);
+          }
+      }
+
+      // Boats
+      for (const auto &boat : m_boats) {
+          if (boat.active && boat.stripIndex == i) { // Draw if on this strip
+              drawBoat(p, boat, yBase, amplitude, stripFreq, ph);
+          }
+      }
   }
   
   // Draw Cannonballs (on top of all waves for visibility, or interleaved? 

@@ -86,6 +86,26 @@ private:
       double x, y;
       double vx, vy;
   };
+  
+  struct Dolphin {
+      bool active;
+      double x, y; // Absolute coordinates
+      double startX, startY; // Jump start point
+      double vx, vy; // Velocity
+      int stripIndex; // Associated wave strip
+      double size;
+      double angle; // Rotation angle
+  };
+
+  struct Whale {
+      bool active;
+      double x, y;
+      int stripIndex;
+      double timer; // Animation timer
+      bool isBreaching; // True = breach, False = spout
+      double angle;     // Tilt angle for wave interaction
+      double size;
+  };
 
   SubtitleOverlay m_subtitles;
 
@@ -94,15 +114,22 @@ private:
   std::vector<Cannonball> m_cannonballs;
   std::vector<OrangeState> m_oranges;
   std::vector<BottleState> m_bottles;
+  std::vector<Dolphin> m_dolphins;
+  std::vector<Whale> m_whales;
   ParrotState m_parrot;
   
   void updateWaveDynamics();
   void spawnBoat();
   void spawnParrot();
   void spawnBottle();
+  void spawnDolphin();
+  void spawnWhale();
+  
   void drawBoat(QPainter &p, const BoatState &boat, double yBase, double amplitude, double frequency, double phase);
   void drawParrot(QPainter &p);
   void drawCannonball(QPainter &p, const Cannonball &cb);
   void drawOrange(QPainter &p, const OrangeState &orange, double yBase, double amplitude, double frequency, double phase);
   void drawBottle(QPainter &p, const BottleState &bottle, double yBase, double amplitude, double frequency, double phase);
+  void drawDolphin(QPainter &p, const Dolphin &dolphin);
+  void drawWhale(QPainter &p, const Whale &whale, double yBase, double phase);
 };
