@@ -154,6 +154,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 MainWindow::~MainWindow() {
+  // Hide window first to avoid invalid accessibility/focus events during destruction
+  // This is a known workaround for MacOS crashes on exit (QTBUG-71850)
+  hide();
+
   if (m_solverThread) {
     m_solverThread->quit();
     m_solverThread->wait();
@@ -163,6 +167,7 @@ MainWindow::~MainWindow() {
   // This ensures they are destroyed BEFORE members like m_rparams or m_scan.
   // We delete the main splitter which contains the panels.
   if (m_mainSplitter) {
+      m_mainSplitter->setParent(nullptr); // Detach first
       delete m_mainSplitter;
       m_mainSplitter = nullptr; 
   }
