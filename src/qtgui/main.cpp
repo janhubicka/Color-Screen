@@ -8,6 +8,9 @@
 #include <QIcon>
 #include <QImageReader>
 #include <QTimer>
+#include <QImageReader>
+#include <QTimer>
+#include "progress-info.h"
 
 #include <QStyleFactory>
 #include <QSettings>
@@ -49,8 +52,15 @@ int main(int argc, char *argv[]) {
   QCommandLineOption smokeTestOption("smoke-test", "Run for 5 seconds and exit (for CI smoke testing)");
   parser.addOption(smokeTestOption);
   
+  QCommandLineOption timeReportOption("time-report", "Enable internal time reporting of tasks");
+  parser.addOption(timeReportOption);
+  
   parser.addPositionalArgument("image", "Image file to open.");
   parser.process(app);
+
+  if (parser.isSet(timeReportOption)) {
+      colorscreen::time_report = true;
+  }
 
   if (parser.isSet(smokeTestOption)) {
       qDebug() << "Smoke Test Mode: Will exit in 5 seconds...";

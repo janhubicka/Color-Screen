@@ -4,9 +4,92 @@
 #include <sys/time.h>
 #include <cstring>
 #include <cstdlib>
+#include <map>
+#include <string>
+#include <mutex>
+#include <iomanip>
 #include "include/progress-info.h"
 namespace colorscreen
 {
+bool time_report = false;
+
+static std::map<std::string, std::pair<double, double>> monitor_map;
+static std::mutex monitor_mutex;
+
+static double
+get_thread_cpu_time ()
+{
+#if defined(__linux__) || defined(__APPLE__)
+  struct timespec ts;
+#ifdef CLOCK_THREAD_CPUTIME_ID
+  clock_gettime (CLOCK_THREAD_CPUTIME_ID, &ts);
+#else
+  clock_gettime (CLOCK_PROCESS_CPUTIME_ID, &ts);
+#endif
+  return ts.tv_sec + ts.tv_nsec / 1e9;
+#else
+  return (double)clock () / CLOCKS_PER_SEC;
+#endif
+}
+
+class TimeReporter
+{
+public:
+  ~TimeReporter ()
+  {
+    if (time_report)
+      {
+        printf("\nTime report:\n");
+        printf("------------------------------------------------------------------------------------------------\n");
+        printf("%-40s | %10s | %6s | %10s | %6s\n", "Task", "Wall Time", "%", "CPU Time", "%");
+        printf("------------------------------------------------------------------------------------------------\n");
+        
+        double total_wall = 0;
+        double total_cpu = 0;
+
+        /* Calculate totals first for percentage */
+         
+        for (auto &i : monitor_map) {
+             total_wall += i.second.first;
+             total_cpu += i.second.second;
+        }
+
+        /* Filter and print */
+           
+        for (auto &i : monitor_map)
+          {
+             double wall = i.second.first;
+             double cpu = i.second.second;
+             double wall_perc = (total_wall > 0) ? (wall / total_wall * 100.0) : 0;
+             
+             if (wall_perc >= 1.0) 
+             {
+                 printf("%-40s | %10.3fs | %5.1f%% | %10.3fs | %5.1f%%\n", 
+                        i.first.c_str(), wall, wall_perc, cpu, (total_cpu > 0) ? (cpu/total_cpu*100.0) : 0);
+             }
+          }
+        printf("------------------------------------------------------------------------------------------------\n");
+        printf("%-40s | %10.3fs | %6s | %10.3fs | %6s\n", "TOTAL CHECKPOINTS", total_wall, "100%", total_cpu, "100%");
+        printf("------------------------------------------------------------------------------------------------\n");
+      }
+  }
+};
+
+static TimeReporter time_reporter;
+
+static void
+record_time (const char *task, const progress_info::TimePoint &start)
+{
+  struct timeval end;
+  gettimeofday (&end, NULL);
+  double diff = end.tv_sec - start.wall.tv_sec + (end.tv_usec - start.wall.tv_usec) / 1000000.0;
+  double cpu_diff = get_thread_cpu_time () - start.cpu;
+  
+  std::lock_guard<std::mutex> lock (monitor_mutex);
+  monitor_map[task].first += diff;
+  monitor_map[task].second += cpu_diff;
+}
+
 progress_info::progress_info ()
 : m_record_time (false), m_task (NULL), m_max (0), m_current (0), m_cancel (0), m_cancelled (0), m_lock (PTHREAD_MUTEX_INITIALIZER)
 {
@@ -38,11 +121,17 @@ progress_info::set_task_1 (const char *name, int64_t max)
       uint64_t current = m_current;
       printf ("\ntask %s: finished with %" PRIu64 " steps\n", t, current);
     }
+
+  if (m_task && time_report)
+    record_time (m_task, m_start_time);
   m_current = 0;
   m_max = max;
   m_task = name;
-  if (m_record_time)
-    gettimeofday (&m_time, NULL);
+  if (m_record_time || time_report)
+   {
+    gettimeofday (&m_start_time.wall, NULL);
+    m_start_time.cpu = get_thread_cpu_time ();
+   }
   if (debug)
     printf ("\ntask %s: %" PRIu64 " steps\n", name, max);
 }
@@ -66,8 +155,9 @@ progress_info::push ()
   int ret = stack.size ();
   assert (ret >= 0);
   stack.push_back ({ m_max, m_current, m_task });
-  if (m_record_time)
-    time_stack.push_back (m_time);
+
+  if (m_record_time || time_report)
+    time_stack.push_back (m_start_time);
   m_task = NULL;
   m_current = 0;
   m_max = 1;
@@ -85,11 +175,13 @@ progress_info::pop (int expected)
   task t = stack.back ();
   m_current = t.current;
   m_max = t.max;
+  if (m_task && time_report)
+    record_time (m_task, m_start_time);
   m_task = t.task;
   stack.pop_back ();
-  if (m_record_time)
+  if (m_record_time || time_report)
     {
-      m_time = time_stack.back ();
+      m_start_time = time_stack.back ();
       time_stack.pop_back ();
     }
   assert (expected == -1 || (int)stack.size () == expected);
@@ -231,9 +323,9 @@ file_progress_info::pause_stdout ()
 }
 
 static int 
-print_task (FILE *f, std::vector<progress_info::status> &status, timeval *start_time)
+print_task (FILE *f, std::vector<progress_info::status> &status, const struct timeval *start_time)
 {
-  int len;
+  int len = 0;
   for (size_t i = 0; i < status.size () - 1; i++)
     len += fprintf (f, "  ");
   auto s = status [status.size () - 1];
@@ -330,7 +422,7 @@ file_progress_info::set_task (const char *name, uint64_t max)
       if (s.size ())
 	{
 	  pause_stdout ();
-	  print_task (m_file, s, &m_time);
+	  print_task (m_file, s, &m_start_time.wall);
 	  paused = true;
 	}
     }
@@ -359,7 +451,7 @@ file_progress_info::wait (const char *name)
       if (s.size ())
 	{
 	  pause_stdout ();
-	  print_task (m_file, s, &m_time);
+	  print_task (m_file, s, &m_start_time.wall);
 	  paused = true;
 	}
     }
@@ -377,7 +469,7 @@ file_progress_info::pop (int expected)
       if (s.size ())
 	{
 	  pause_stdout ();
-	  print_task (m_file, s, &m_time);
+	  print_task (m_file, s, &m_start_time.wall);
 	  paused = true;
 	}
     }

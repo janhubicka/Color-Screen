@@ -13,6 +13,7 @@ namespace colorscreen
 {
 /* Class to communicate progress info from rendering kernels.  It can also be
    used to cancel computation in the middle.  */
+extern DLL_PUBLIC bool time_report;
 class DLL_PUBLIC progress_info
 {
 public:
@@ -41,6 +42,11 @@ public:
     {
       return o.task == task && o.progress == progress;
     }
+  };
+
+  struct TimePoint {
+    struct timeval wall;
+    double cpu;
   };
 
   /* Return stack of nested tasks and their progress.  */
@@ -110,7 +116,8 @@ protected:
   bool m_record_time;
   std::atomic<const char *> m_task;
   std::atomic_int64_t m_max;
-  struct timeval m_time;
+
+  TimePoint m_start_time;
 private:
   void set_task_1 (const char *name, int64_t max);
   static const bool debug = false;
@@ -123,7 +130,7 @@ private:
     const char *task;
   };
   std::vector<task> stack;
-  std::vector<struct timeval> time_stack;
+  std::vector<TimePoint> time_stack;
   pthread_mutex_t m_lock;
 };
 

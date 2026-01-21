@@ -56,6 +56,7 @@ print_help (char *err = NULL)
   fprintf (stderr, "      --verbose                 enable verbose output\n");
   fprintf (stderr, "      --version                 print version\n");
   fprintf (stderr, "      --threads=n               setnumber of threads\n");
+  fprintf (stderr, "      --time-report             report time spent in tasks\n");
   if (subhelp == help_render || subhelp == help_basic)
     {
       fprintf (stderr, "  render <scan> <pareters> <output> [<args>]\n");
@@ -663,6 +664,11 @@ parse_common_flags (int argc, char **argv, int *i)
         fprintf (stderr, "Warning: libcolorscreen is compiled without OpenMP "
                          "requires for multithreading\n");
 #endif
+      return true;
+    }
+  else if (!strcmp (argv[*i], "--time-report"))
+    {
+      colorscreen::time_report = true;
       return true;
     }
   return false;
