@@ -616,6 +616,21 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 }
 
 void ImageWidget::resizeEvent(QResizeEvent *event) {
+  QSize oldSize = event->oldSize();
+  QSize newSize = event->size();
+  
+  // Only adjust if we have a valid old size with non-zero dimensions
+  if (oldSize.isValid() && oldSize.width() > 0 && oldSize.height() > 0 && 
+      oldSize != newSize && m_scale > 0) {
+    // Calculate the center point of the current view in image coordinates
+    double centerX = m_viewX + (oldSize.width() / m_scale) / 2.0;
+    double centerY = m_viewY + (oldSize.height() / m_scale) / 2.0;
+    
+    // Recalculate view position to keep the center point stable (without changing zoom)
+    m_viewX = centerX - (newSize.width() / m_scale) / 2.0;
+    m_viewY = centerY - (newSize.height() / m_scale) / 2.0;
+  }
+  
   requestRender();
   emit viewStateChanged(
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
@@ -1002,6 +1017,16 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   requestRender();
   emit viewStateChanged(
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+}
+
+void ImageWidget::keyPressEvent(QKeyEvent *event) {
+  // Handle fullscreen exit keys
+  if (isFullScreen() && (event->key() == Qt::Key_Escape || event->key() == Qt::Key_F11)) {
+    emit exitFullscreenRequested();
+    event->accept();
+    return;
+  }
+  QWidget::keyPressEvent(event);
 }
 
 QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {

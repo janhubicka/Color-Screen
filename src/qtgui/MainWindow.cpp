@@ -41,6 +41,7 @@
 #include <QUndoCommand>
 #include <QUndoStack>
 #include <QVBoxLayout>
+#include <QWindow>
 #include <QtConcurrent>
 #include <QSvgRenderer>
 
@@ -393,6 +394,9 @@ void MainWindow::setupUi() {
     }
   });
 
+  // Connect fullscreen exit signal
+  connect(m_imageWidget, &ImageWidget::exitFullscreenRequested, this, &MainWindow::toggleFullscreen);
+
   // Link GeometryPanel checkbox -> ImageWidget
   QCheckBox *regBox = m_geometryPanel->findChild<QCheckBox *>("showRegistrationPointsBox");
   if (regBox) {
@@ -686,6 +690,48 @@ void MainWindow::rotateRight() {
                              &m_detectParams);
 }
 
+void MainWindow::toggleFullscreen() {
+  if (m_imageWidget->isFullScreen()) {
+    // Exit fullscreen
+    m_imageWidget->setParent(m_mainSplitter);
+    m_imageWidget->showNormal();
+    m_fullscreenAction->setChecked(false);
+    
+    // Re-add to splitter (insert at index 0, before right column)
+    m_mainSplitter->insertWidget(0, m_imageWidget);
+    m_imageWidget->show();
+    
+    // Restore splitter sizes after a short delay to ensure layout is complete
+    if (!m_splitterSizesBeforeFullscreen.isEmpty() && 
+        m_splitterSizesBeforeFullscreen.size() == 2) {
+      QList<int> savedSizes = m_splitterSizesBeforeFullscreen;
+      
+      QTimer::singleShot(10, this, [this, savedSizes]() {
+        m_mainSplitter->setSizes(savedSizes);
+      });
+      m_splitterSizesBeforeFullscreen.clear();
+    }
+  } else {
+    // Save current splitter sizes BEFORE removing the widget
+    m_splitterSizesBeforeFullscreen = m_mainSplitter->sizes();
+    
+    // Enter fullscreen on the same screen as the main window
+    m_imageWidget->setParent(nullptr);
+    
+    // Get the screen where the main window is located
+    QScreen *targetScreen = screen();
+    if (targetScreen) {
+      // Move the widget to the target screen before going fullscreen
+      m_imageWidget->setGeometry(targetScreen->geometry());
+    }
+    
+    m_imageWidget->showFullScreen();
+    m_imageWidget->setFocus(); // Set focus so key events work
+    m_imageWidget->activateWindow(); // Also activate the window
+    m_fullscreenAction->setChecked(true);
+  }
+}
+
 void MainWindow::onColorCheckBoxChanged(bool checked) {
   // Update the color field in render_type_parameters
   m_renderTypeParams.color = checked;
@@ -881,6 +927,13 @@ void MainWindow::createMenus() {
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
+
+  m_viewMenu->addSeparator();
+
+  m_fullscreenAction = m_viewMenu->addAction("&Fullscreen");
+  m_fullscreenAction->setCheckable(true);
+  m_fullscreenAction->setShortcut(Qt::Key_F11);
+  connect(m_fullscreenAction, &QAction::triggered, this, &MainWindow::toggleFullscreen);
 
   // Registration Menu
   m_registrationMenu = menuBar()->addMenu("&Registration");

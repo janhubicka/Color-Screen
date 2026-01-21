@@ -82,6 +82,7 @@ protected:
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
+  void keyPressEvent(QKeyEvent *event) override;
 
 signals:
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
@@ -96,6 +97,7 @@ signals:
   void pointManipulationStarted();
   void registrationPointMoved(size_t index, colorscreen::point_t newPos);
   void pointsChanged();
+  void exitFullscreenRequested();
 
 public:
   double getMinScale() const; // Returns scale that fits image to view

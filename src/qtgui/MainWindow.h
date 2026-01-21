@@ -73,6 +73,7 @@ private slots:
   void onModeChanged(int index); // Slot for mode change
   void rotateLeft();
   void rotateRight();
+  void toggleFullscreen();
   void onGamutWarningToggled(bool checked);
   void onColorCheckBoxChanged(bool checked);  // Slot for color checkbox
   void onRegistrationPointsToggled(bool checked); // Slot for Registration Points toggle
@@ -142,6 +143,7 @@ private:
   QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
   QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
+  QAction *m_fullscreenAction;   // Fullscreen toggle
   QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
   QAction *m_optimizeCoordinatesAction; // Optimize coordinates button
   QAction *m_registrationPointsAction; // Registration points toggle
@@ -168,6 +170,7 @@ private:
   QStringList m_recentParams;
 
   QSplitter *m_mainSplitter;
+  QList<int> m_splitterSizesBeforeFullscreen; // Save splitter state before fullscreen
 
   // Left side
   ImageWidget *m_imageWidget;
