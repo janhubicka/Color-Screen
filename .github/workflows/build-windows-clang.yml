@@ -24,7 +24,16 @@ jobs:
       with:
         msystem: ${{matrix.sys}}
         update: true
-        install: make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg mingw-w64-${{matrix.env}}-nsis mingw-w64-${{matrix.env}}-imagemagick
+        install: >
+          make mingw-w64-${{matrix.env}}-clang mingw-w64-${{matrix.env}}-libtiff 
+          mingw-w64-${{matrix.env}}-libjpeg-turbo git mingw-w64-${{matrix.env}}-libraw 
+          mingw-w64-${{matrix.env}}-lcms2  mingw-w64-${{matrix.env}}-libzip 
+          mingw-w64-${{matrix.env}}-gsl diffutils autoconf-archive 
+          mingw-w64-${{matrix.env}}-autotools  mingw-w64-${{matrix.env}}-fftw 
+          mingw-w64-${{matrix.env}}-qt6-base mingw-w64-${{matrix.env}}-qt6-tools 
+          mingw-w64-${{matrix.env}}-adwaita-icon-theme mingw-w64-${{matrix.env}}-qt6-svg 
+          mingw-w64-${{matrix.env}}-imagemagick
+          ${{ matrix.sys != 'clangarm64' && format('mingw-w64-{0}-nsis', matrix.env) || '' }}
     - name: update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -101,11 +110,13 @@ jobs:
         cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/bin/share/icons/
     - name: build installer
       shell: msys2 {0}
+      if: matrix.sys != 'clangarm64'
       run: |
         cp LICENSE /c/Color-Screen-install/
         cp README.md /c/Color-Screen-install/
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - uses: actions/upload-artifact@v4
+      if: matrix.sys != 'clangarm64'
       with:
         name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
         path: os/windows/Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe
