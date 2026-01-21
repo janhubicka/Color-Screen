@@ -5,6 +5,52 @@
 #include <QtMath>
 #include <QRandomGenerator>
 
+// ============================================================================
+// ANIMATION CONTROL CONSTANTS
+// ============================================================================
+// Adjust these values to tune the animation behavior
+
+// --- Timing Parameters ---
+constexpr double ANIMATION_FPS = 60.0;                    // Animation frame rate
+constexpr double WAVE_STARTUP_DELAY = 20.0;               // Seconds before waves start moving
+constexpr double WAVE_RAMP_DURATION = 2.0;                // Seconds for waves to reach full amplitude
+constexpr double BOAT_SPAWN_START = 20.0;                 // Seconds before boats start appearing
+constexpr double PIRATE_SPAWN_START = 30.0;               // Seconds before pirates appear
+constexpr double PARROT_SPAWN_START = 60.0;               // Seconds before parrots appear
+constexpr double BOTTLE_SPAWN_START = 90.0;               // Seconds before beer bottles appear
+constexpr double BOUNCINESS_RAMP_DURATION = 120.0;        // Seconds to reach maximum bounce (2 minutes)
+
+// --- Physics Parameters ---
+constexpr double GRAVITY = 800.0;                         // Gravity in pixels/s² (affects falling objects)
+constexpr double BOUNCE_THRESHOLD = 200.0;                // Min impact velocity (px/s) to trigger bounce
+constexpr double BOUNCE_FORCE = 0.5;                      // Bounce force multiplier (0.0 = no bounce, 1.0 = full reflection)
+constexpr double HARD_IMPACT_THRESHOLD = 450.0;           // Impact velocity that sinks boats (px/s)
+constexpr double WAVE_FREQUENCY = 0.02;                   // Base wave frequency (affects wavelength)
+constexpr double WAVE_AMPLITUDE_FACTOR = 0.8;             // Wave height as fraction of strip height
+
+// --- Spawn Rates & Limits ---
+constexpr int MAX_BOATS = 10;                             // Maximum simultaneous boats
+constexpr int BOAT_SPAWN_CHANCE = 30;                     // 1 in N chance per frame to spawn boat
+constexpr int PARROT_SPAWN_CHANCE = 300;                  // 1 in N chance per frame to spawn parrot
+constexpr int BOTTLE_SPAWN_CHANCE = 200;                  // 1 in N chance per frame to spawn bottle
+constexpr int MAX_BOTTLES = 2;                            // Maximum simultaneous bottles
+constexpr int MAX_CANNONBALLS = 20;                       // Maximum simultaneous cannonballs
+
+// --- Object Behavior ---
+constexpr double ORANGE_FLOAT_TIME = 5.0;                 // Seconds oranges float before sinking
+constexpr double PIRATE_FIRE_COOLDOWN_MIN = 1.5;          // Min seconds between pirate shots
+constexpr double PIRATE_FIRE_COOLDOWN_MAX = 2.5;          // Max seconds between pirate shots
+constexpr double PIRATE_FIRE_RANGE = 500.0;               // Max distance pirates can shoot (pixels)
+constexpr double PARROT_DROP_DELAY_MIN = 2.0;             // Min seconds before parrot drops orange
+constexpr double PARROT_DROP_DELAY_MAX = 5.0;             // Max seconds before parrot drops orange
+
+// --- Visual Scaling ---
+constexpr double BOAT_SIZE_MULTIPLIER = 1.5;              // Boat size (1.0 = original, 1.5 = 50% larger)
+constexpr double BOTTLE_SIZE_MULTIPLIER = 0.30;           // Bottle size (0.25 = quarter, 0.30 = 20% larger)
+
+// ============================================================================
+
+
 JolyAnimation::JolyAnimation(QWidget *parent)
     : QWidget(parent), m_time(0.0), m_bounciness(0.0) {
   
@@ -66,7 +112,7 @@ void JolyAnimation::spawnBoat() {
     if (activeCount >= 15) return; 
     
     // Increased spawn rate
-    if (m_time > 20.0 && QRandomGenerator::global()->bounded(100) < 2) { 
+    if (m_time > BOAT_SPAWN_START && QRandomGenerator::global()->bounded(BOAT_SPAWN_CHANCE) == 0) { 
         BoatState newBoat;
         newBoat.active = true;
         newBoat.sinking = false;
@@ -79,7 +125,7 @@ void JolyAnimation::spawnBoat() {
         
         // 1 in 30 chance to be a pirate ship
         // Pirate ships start later (30s)
-        if (m_time > 30.0 && QRandomGenerator::global()->bounded(30) == 0) {
+        if (m_time > PIRATE_SPAWN_START && QRandomGenerator::global()->bounded(BOAT_SPAWN_CHANCE) == 0) {
             newBoat.isPirate = true;
             newBoat.shapeType = 2; // Pirate ships usually look like Tall Ships
             
@@ -153,7 +199,7 @@ void JolyAnimation::spawnParrot() {
     if (m_parrot.active) return;
     
     // Random chance to spawn parrot
-    if (m_time > 60.0 && QRandomGenerator::global()->bounded(500) < 1) { // More frequent for checking
+    if (m_time > PARROT_SPAWN_START && QRandomGenerator::global()->bounded(PARROT_SPAWN_CHANCE) < 1) { // More frequent for checking
         m_parrot.active = true;
         m_parrot.wingPhase = 0;
         
@@ -166,7 +212,7 @@ void JolyAnimation::spawnParrot() {
         m_parrot.y = horizonY - 50 - QRandomGenerator::global()->bounded(150); 
         
         m_parrot.hasOrange = QRandomGenerator::global()->bounded(2) == 0; // 50% chance
-        m_parrot.dropTimer = 2.0 + QRandomGenerator::global()->generateDouble() * 3.0;
+        m_parrot.dropTimer = PARROT_DROP_DELAY_MIN + (PARROT_DROP_DELAY_MAX - PARROT_DROP_DELAY_MIN) * QRandomGenerator::global()->generateDouble();
         
         m_parrot.movingRight = QRandomGenerator::global()->bounded(2) == 0;
         if (m_parrot.movingRight) {
@@ -188,7 +234,7 @@ void JolyAnimation::spawnBottle() {
     if (activeCount >= 2) return;
     
     // Bottles start appearing after 1m 30s (90s)
-    if (m_time > 90.0 && QRandomGenerator::global()->bounded(200) == 0) { // Rare
+    if (m_time > BOTTLE_SPAWN_START && QRandomGenerator::global()->bounded(BOTTLE_SPAWN_CHANCE) == 0) { // Rare
         BottleState b;
         b.active = true;
         
@@ -232,21 +278,21 @@ void JolyAnimation::updateAnimation() {
   
   double stripHeight = static_cast<double>(height()) / STRIP_COUNT;
   
-  double frequency = 0.02; 
-  double delay = 20.0;
+  double frequency = WAVE_FREQUENCY; 
+  double delay = WAVE_STARTUP_DELAY;
   
-  double globalAmp = stripHeight * 0.8; 
+  double globalAmp = stripHeight * WAVE_AMPLITUDE_FACTOR; 
   double rampFactor = 1.0;
   if (m_time < delay) {
      rampFactor = 0.0;
-  } else if (m_time < delay + 2.0) {
-     rampFactor = (m_time - delay) * 0.5;
+  } else if (m_time < delay + WAVE_RAMP_DURATION) {
+     rampFactor = (m_time - delay) / WAVE_RAMP_DURATION;
   }
   
   // Gradually increase bounciness over time for more dramatic physics
-  m_bounciness = std::min(1.0, m_time / 120.0); // 0 to 1 over 2 minutes
+  m_bounciness = std::min(1.0, m_time / BOUNCINESS_RAMP_DURATION);
   
-  const double GRAVITY = 800.0; // pixels / s^2
+
 
   // Update Boats
   for (int i = 0; i < (int)m_boats.size(); ++i) {
@@ -289,16 +335,16 @@ void JolyAnimation::updateAnimation() {
               double impact = b.vy - vyWater;
               
               // Apply bounce if moving fast relative to water
-              if (impact > 200.0) { // Lower threshold for bounce
+              if (impact > BOUNCE_THRESHOLD) {
                   // Bounce force proportional to impact and bounciness
-                  b.vy = vyWater - impact * m_bounciness * 0.5;
+                  b.vy = vyWater - impact * m_bounciness * BOUNCE_FORCE;
               } else {
                   // Normal surface tracking
                   b.vy = vyWater;
               }
               
               // Hard impact still causes sinking
-              if (impact > 450.0) {
+              if (impact > HARD_IMPACT_THRESHOLD) {
                    if (!b.sinking) b.sinking = true;
               }
               
@@ -322,7 +368,7 @@ void JolyAnimation::updateAnimation() {
               if (b.fireCooldown <= 0) {
                   // Find target
                   int targetIdx = -1;
-                  double minDist = 500.0; // Increased range
+                  double minDist = PIRATE_FIRE_RANGE;
                   
                   for (int j = 0; j < (int)m_boats.size(); ++j) {
                       if (i == j) continue;
@@ -343,7 +389,7 @@ void JolyAnimation::updateAnimation() {
                   
                   if (targetIdx != -1) {
                       // Fire Canonball!
-                      b.fireCooldown = 1.5 + QRandomGenerator::global()->generateDouble(); 
+                      b.fireCooldown = PIRATE_FIRE_COOLDOWN_MIN + (PIRATE_FIRE_COOLDOWN_MAX - PIRATE_FIRE_COOLDOWN_MIN) * QRandomGenerator::global()->generateDouble(); 
                       
                       Cannonball ball;
                       ball.active = true;
@@ -469,7 +515,7 @@ void JolyAnimation::updateAnimation() {
       
       if (it->onWater) {
           it->floatTime += dt;
-          if (it->floatTime > 5.0) {
+          if (it->floatTime > ORANGE_FLOAT_TIME) {
               it->active = false; // Sink/Disappear
               it = m_oranges.erase(it);
               continue;
@@ -499,8 +545,8 @@ void JolyAnimation::updateAnimation() {
           double impact = it->vy - vyWater;
           
           // Apply bounce if moving fast relative to water
-          if (impact > 200.0) {
-              it->vy = vyWater - impact * m_bounciness * 0.5;
+          if (impact > BOUNCE_THRESHOLD) {
+              it->vy = vyWater - impact * m_bounciness * BOUNCE_FORCE;
           } else {
               it->vy = vyWater;
           }
@@ -542,8 +588,8 @@ void JolyAnimation::updateAnimation() {
           double impact = b.vy - vyWater;
           
           // Apply bounce if moving fast relative to water
-          if (impact > 200.0) {
-              b.vy = vyWater - impact * m_bounciness * 0.5;
+          if (impact > BOUNCE_THRESHOLD) {
+              b.vy = vyWater - impact * m_bounciness * BOUNCE_FORCE;
           } else {
               b.vy = vyWater;
           }
@@ -781,7 +827,7 @@ void JolyAnimation::drawBottle(QPainter &p, const BottleState &bottle, double yB
     p.translate(bottle.x, y); // Triangle at waterline
     
     double scale = 0.4 + 1.2 * ((double)bottle.stripIndex / STRIP_COUNT);
-    scale *= 0.30; // 20% larger than original 0.25
+    scale *= BOTTLE_SIZE_MULTIPLIER;
     p.scale(scale, scale);
     p.rotate(tiltAngle);
     

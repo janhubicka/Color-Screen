@@ -4,6 +4,36 @@
 #include <cmath>
 #include <random>
 
+// ============================================================================
+// ANIMATION CONTROL CONSTANTS
+// ============================================================================
+// Adjust these values to tune the ball collision animation behavior
+
+// --- Timing Parameters ---
+constexpr int ANIMATION_FPS = 60;                         // Animation frame rate (ms)
+constexpr int TRIGGER_INTERVAL_MS = 10000;                // Milliseconds between random movement triggers
+
+// --- Grid Layout ---
+constexpr double BALL_SPACING = 50.0;                     // Distance between ball centers in grid
+
+// --- Physics Parameters ---
+constexpr double FRICTION = 0.98;                         // Velocity multiplier per frame (0.98 = 2% loss)
+constexpr double MIN_VELOCITY = 0.1;                      // Minimum velocity before stopping (px/s)
+constexpr double WALL_BOUNCE_DAMPING = 0.9;               // Energy retention on wall collision (90%)
+constexpr double BALL_BOUNCE_DAMPING = 0.97;              // Energy retention on ball collision (97%)
+
+// --- Random Movement ---
+constexpr int RANDOM_BALLS_MIN = 1;                       // Min number of balls to move per trigger
+constexpr int RANDOM_BALLS_MAX = 3;                       // Max number of balls to move per trigger
+constexpr double RANDOM_VELOCITY_MIN = -100.0;            // Min random velocity impulse (px/s)
+constexpr double RANDOM_VELOCITY_MAX = 100.0;             // Max random velocity impulse (px/s)
+
+// --- Visual Parameters ---
+constexpr double BALL_RADIUS_FACTOR = 0.45;               // Ball radius as fraction of spacing
+
+// ============================================================================
+
+
 ThamesAnimation::ThamesAnimation(QWidget *parent)
     : QWidget(parent), m_rng(std::random_device{}()) {
   
@@ -24,7 +54,7 @@ ThamesAnimation::~ThamesAnimation() = default;
 
 void ThamesAnimation::startAnimation() {
   m_animTimer->start(16); // ~60 FPS
-  m_triggerTimer->start(10000); // 10 seconds
+  m_triggerTimer->start(TRIGGER_INTERVAL_MS);
 }
 
 void ThamesAnimation::stopAnimation() {
@@ -48,7 +78,7 @@ void ThamesAnimation::initializeGrid() {
   double offsetX = (w - (cols - 1) * BALL_SPACING) / 2.0;
   double offsetY = (h - (rows - 1) * BALL_SPACING) / 2.0;
   
-  double radius = BALL_SPACING * 0.45;
+  double radius = BALL_SPACING * BALL_RADIUS_FACTOR;
   
   // Create checkerboard pattern
   for (int row = 0; row < rows; ++row) {
@@ -113,7 +143,7 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
       return;
     }
     ball.pos.setX(ball.radius);
-    ball.velocity.setX(-ball.velocity.x() * 0.9); // Some energy loss
+    ball.velocity.setX(-ball.velocity.x() * WALL_BOUNCE_DAMPING);
   } else if (ball.pos.x() + ball.radius > width()) {
     if (ball.pos.y() < margin || ball.pos.y() > height() - margin) {
 #if 0
@@ -124,7 +154,7 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
       return;
     }
     ball.pos.setX(width() - ball.radius);
-    ball.velocity.setX(-ball.velocity.x() * 0.9);
+    ball.velocity.setX(-ball.velocity.x() * WALL_BOUNCE_DAMPING);
   }
   
   // Top/Bottom walls
@@ -138,7 +168,7 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
       return;
     }
     ball.pos.setY(ball.radius);
-    ball.velocity.setY(-ball.velocity.y() * 0.9);
+    ball.velocity.setY(-ball.velocity.y() * WALL_BOUNCE_DAMPING);
   } else if (ball.pos.y() + ball.radius > height()) {
     if (ball.pos.x() < margin || ball.pos.x() > width() - margin) {
 #if 0
@@ -149,7 +179,7 @@ void ThamesAnimation::checkWallCollisions(Ball &ball) {
       return;
     }
     ball.pos.setY(height() - ball.radius);
-    ball.velocity.setY(-ball.velocity.y() * 0.9);
+    ball.velocity.setY(-ball.velocity.y() * WALL_BOUNCE_DAMPING);
   }
 }
 
@@ -178,17 +208,17 @@ void ThamesAnimation::checkBallCollisions(Ball &ball1, Ball &ball2) {
     
     // Apply impulse (assuming equal mass)
     QPointF impulse = normal * velAlongNormal;
-    ball1.velocity += impulse * 0.97; // Some energy loss
-    ball2.velocity -= impulse * 0.97;
+    ball1.velocity += impulse * BALL_BOUNCE_DAMPING;
+    ball2.velocity -= impulse * BALL_BOUNCE_DAMPING;
   }
 }
 
 void ThamesAnimation::triggerRandomMovement() {
   if (m_balls.isEmpty()) return;
   
-  std::uniform_int_distribution<> countDist(1, 3);
+  std::uniform_int_distribution<> countDist(RANDOM_BALLS_MIN, RANDOM_BALLS_MAX);
   std::uniform_int_distribution<> indexDist(0, m_balls.size() - 1);
-  std::uniform_real_distribution<> velDist(-100.0, 100.0);
+  std::uniform_real_distribution<> velDist(RANDOM_VELOCITY_MIN, RANDOM_VELOCITY_MAX);
   
   int numBalls = countDist(m_rng);
   

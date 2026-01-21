@@ -2,6 +2,40 @@
 #include <QPainter>
 #include <cmath>
 
+// ============================================================================
+// ANIMATION CONTROL CONSTANTS
+// ============================================================================
+// Adjust these values to tune the fireworks animation behavior
+
+// --- Timing Parameters ---
+constexpr int ANIMATION_FPS = 60;                         // Animation frame rate
+constexpr int LAUNCH_INTERVAL_MS = 4000;                  // Milliseconds between firework launches
+
+// --- Physics Parameters ---
+constexpr double GRAVITY = 400.0;                         // Gravity in pixels/s² (affects falling particles)
+constexpr double LAUNCH_SPEED = 600.0;                    // Initial upward velocity of rockets (px/s)
+constexpr double EXPLOSION_SPEED_BASE = 100.0;            // Base outward speed after explosion (px/s)
+constexpr double EXPLOSION_FUZZ = 30.0;                   // Random velocity variation in explosion (±px/s)
+
+// --- Launch Parameters ---
+constexpr double LAUNCH_ANGLE_MIN = -15.0;                // Min launch angle deviation (degrees)
+constexpr double LAUNCH_ANGLE_MAX = 15.0;                 // Max launch angle deviation (degrees)
+constexpr double TARGET_HEIGHT_MIN = 0.1;                 // Min target height (fraction of screen height)
+constexpr double TARGET_HEIGHT_MAX = 0.85;                // Max target height (fraction of screen height)
+constexpr double LAUNCH_X_MIN = 0.2;                      // Min launch X position (fraction of screen width)
+constexpr double LAUNCH_X_MAX = 0.8;                      // Max launch X position (fraction of screen width)
+constexpr double EXPLOSION_DELAY = 50.0;                  // Pixels past target before explosion
+
+// --- Visual Parameters ---
+constexpr double PARTICLE_SIZE = 20.0;                    // Square size in pixels
+constexpr double PARTICLE_SPACING = 22.0;                 // Spacing between particles during launch
+constexpr double PARTICLE_ROTATION = 45.0;                // Rotation angle in degrees
+constexpr int GRID_SIZE = 5;                              // 5×5 grid of particles per firework
+constexpr double PARTICLE_FADE_RATE = 0.008;              // Fade rate per frame (life -= rate)
+
+// ============================================================================
+
+
 PagetAnimation::PagetAnimation(QWidget *parent)
     : QWidget(parent), m_rng(std::random_device{}()) {
   
@@ -23,7 +57,7 @@ void PagetAnimation::startAnimation() {
   m_time = 0.0;
   m_fireworks.clear();
   m_animTimer->start(16); // ~60 FPS
-  m_launchTimer->start(4000); // 4 seconds
+  m_launchTimer->start(LAUNCH_INTERVAL_MS);
 }
 
 void PagetAnimation::stopAnimation() {
@@ -35,9 +69,9 @@ void PagetAnimation::stopAnimation() {
 void PagetAnimation::launchFirework() {
   if (width() < 100 || height() < 100) return;
   
-  std::uniform_real_distribution<> xDist(width() * 0.2, width() * 0.8);
-  std::uniform_real_distribution<> yDist(height() * 0.1, height() * 0.85); // Wide height range - low to very high
-  std::uniform_real_distribution<> angleDist(-15.0, 15.0); // Random launch angle in degrees
+  std::uniform_real_distribution<> xDist(width() * LAUNCH_X_MIN, width() * LAUNCH_X_MAX);
+  std::uniform_real_distribution<> yDist(height() * TARGET_HEIGHT_MIN, height() * TARGET_HEIGHT_MAX);
+  std::uniform_real_distribution<> angleDist(LAUNCH_ANGLE_MIN, LAUNCH_ANGLE_MAX);
   
   QPointF launchPos(xDist(m_rng), height()); // Bottom of screen
   QPointF targetPos(xDist(m_rng), yDist(m_rng)); // Random height
@@ -53,12 +87,12 @@ void PagetAnimation::launchFirework() {
     {QColor(50, 200, 50), QColor(50, 100, 220)}    // Green, Blue (was Blue, Green)
   };
   
-  double spacing = 22.0; // Tight spacing during launch
-  double size = 20.0;    // Square size
-  double rotation = 45.0 * M_PI / 180.0; // 45 degree rotation
+  double spacing = PARTICLE_SPACING;
+  double size = PARTICLE_SIZE;
+  double rotation = PARTICLE_ROTATION * M_PI / 180.0;
   
-  for (int row = 0; row < 5; ++row) {
-    for (int col = 0; col < 5; ++col) {
+  for (int row = 0; row < GRID_SIZE; ++row) {
+    for (int col = 0; col < GRID_SIZE; ++col) {
       double offsetX = (col - 2.0) * spacing;  // Center around 0
       double offsetY = (row - 2.0) * spacing;
       
@@ -94,7 +128,7 @@ void PagetAnimation::explodeFirework(Firework &fw) {
   center /= fw.particles.size();
   
   // Keep the original 25 particles and give them outward velocities
-  std::uniform_real_distribution<> fuzzDist(-30.0, 30.0); // Random fuzz
+  std::uniform_real_distribution<> fuzzDist(-EXPLOSION_FUZZ, EXPLOSION_FUZZ);
   
   for (Particle &p : fw.particles) {
     // Calculate direction from center to particle
@@ -108,7 +142,7 @@ void PagetAnimation::explodeFirework(Firework &fw) {
     }
     
     // Base outward speed with random fuzz
-    double speed = 100.0 + fuzzDist(m_rng);
+    double speed = EXPLOSION_SPEED_BASE + fuzzDist(m_rng);
     
     // Set velocity: outward from center with fuzz
     p.velocity = QPointF(
@@ -135,7 +169,7 @@ void PagetAnimation::updateAnimation() {
         // Check first particle to see if we should explode
         // Wait until rocket has fallen ~50 pixels past its peak before exploding
         Particle &first = fw.particles.first();
-        if (first.velocity.y() > 0 && first.pos.y() > fw.targetPos.y() + 50) {
+        if (first.velocity.y() > 0 && first.pos.y() > fw.targetPos.y() + EXPLOSION_DELAY) {
           explodeFirework(fw);
         }
       }
@@ -144,7 +178,7 @@ void PagetAnimation::updateAnimation() {
       for (Particle &p : fw.particles) {
         p.velocity.setY(p.velocity.y() + GRAVITY * 0.016);
         p.pos += p.velocity * 0.016;
-        p.life -= 0.008; // Fade out
+        p.life -= PARTICLE_FADE_RATE;
       }
     }
   }
