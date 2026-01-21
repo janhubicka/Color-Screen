@@ -300,18 +300,18 @@ jobs:
       run: brew uninstall  gsl
     - name: Remove install directory
       run: rm -fr /tmp/Color-Screen-MacOS
-    - name: Verify that colorscreen still runs
+    - name: Verify application
       run: |
-        # Check debugger availability
         lldb --version
-
-        # CLI Version Test (Simpler first test)
-        echo "Running colorscreen --version with lldb..."
-        lldb --batch -o "run" -o "bt" -o "quit" -- Color-Screen.app/Contents/MacOS/colorscreen --version
+        # Use lldb in batch mode:
+        # -o commands run on startup (run the app)
+        # -k commands run ONLY on crash (print backtrace, then exit with error)
+        # -o "exit 0" runs if the app exits normally, ensuring clean exit
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/colorscreen --version
         
         # CLI Functionality Test
         echo "Running colorscreen autodetect with lldb..."
-        lldb --batch -o "run" -o "bt" -o "quit" -- Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/colorscreen autodetect testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif test.par
         
         # GUI Smoke Test (launch and quit)
         # Note: Interactive UI tests on GHA runners are tricky, but open/kill works
