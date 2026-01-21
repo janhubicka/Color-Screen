@@ -14,10 +14,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: clang64,    env: clang-x86_64,  flags: "", suffix: "" }
-          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver2", suffix: "-znver2" }
-          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver4", suffix: "-znver4" }
-          - { sys: clangarm64, env: clang-aarch64, flags: "", suffix: "-aarch64" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "", suffix: "", conf: "" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver2", suffix: "-znver2", conf: "" }
+          - { sys: clang64,    env: clang-x86_64,  flags: "-march=znver4", suffix: "-znver4", conf: "" }
+          - { sys: clangarm64, env: clang-aarch64, flags: "", suffix: "-aarch64", conf: "--host=aarch64-w64-mingw32" }
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -42,7 +42,7 @@ jobs:
       run: |
         export PATH="/${{matrix.sys}}/share/qt6/bin:$PATH"
         # Note: -lomp is used, ensuring libomp is linked
-        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install #--disable-static-link
+        CXXFLAGS="-O3 -ffast-math -Wall  ${{matrix.flags}}" CFLAGS="$CXXFLAGS" LDFLAGS="-Wl,--stack,16777216 -lomp -lpthread" ./configure --enable-qtgui --prefix=/c/Color-Screen-install ${{matrix.conf}} #--disable-static-link
     - name: generate icons
       shell: msys2 {0}
       run: |
