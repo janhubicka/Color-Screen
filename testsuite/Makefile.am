@@ -20,4 +20,4 @@ TESTS                   = unittests.test \
 			  render-original.test
 
 distclean-local:
-	-rm -rf ./out-*
+	-rm -rf ./out-* ./out2-*
