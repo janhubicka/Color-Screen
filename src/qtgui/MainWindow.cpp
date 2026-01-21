@@ -158,6 +158,22 @@ MainWindow::~MainWindow() {
     m_solverThread->quit();
     m_solverThread->wait();
   }
+  
+  // Explicitly delete UI components that might access member variables (callbacks)
+  // This ensures they are destroyed BEFORE members like m_rparams or m_scan.
+  // We delete the main splitter which contains the panels.
+  if (m_mainSplitter) {
+      delete m_mainSplitter;
+      m_mainSplitter = nullptr; 
+  }
+
+  // Also manually delete docks as they might hold detached panels
+  if (m_mtfDock) delete m_mtfDock;
+  if (m_spectraDock) delete m_spectraDock;
+  if (m_tilesDock) delete m_tilesDock;
+  if (m_colorTilesDock) delete m_colorTilesDock;
+  if (m_correctedColorTilesDock) delete m_correctedColorTilesDock;
+  if (m_screenPreviewDock) delete m_screenPreviewDock;
 }
 
 void MainWindow::setupUi() {
