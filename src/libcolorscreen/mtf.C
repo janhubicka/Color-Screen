@@ -974,6 +974,7 @@ mtf::precompute_psf (progress_info *progress, const char *filename, const char *
       m_lock.unlock ();
       return false;
     }
+  m_precomputed_psf = true;
   m_lock.unlock ();
   return true;
 }

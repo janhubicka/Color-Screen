@@ -86,8 +86,7 @@ create_profile (const char *desc, xyz r, xyz g, xyz b, xyz wp, luminosity_t gamm
   *buffer = malloc (len);
   if (buffer)
     cmsSaveProfileToMem (prof, *buffer, &len);
-  //cmsFreeProfile (prof);
-  //TODO: Leak
+  cmsCloseProfile (prof);
   cmsFreeToneCurve (trc);
   return len;
 }
@@ -112,4 +111,5 @@ create_linear_srgb_profile (void **buffer, xyz whitepoint)
 {
   return create_profile ("Colorscreen linear sRGB", {0.4124564, 0.2126729, 0.0193339}, {0.3575761, 0.7151522, 0.1191920}, {0.1804375, 0.0721750, 0.9503041}, whitepoint, 1, buffer);
 }
+
 }
