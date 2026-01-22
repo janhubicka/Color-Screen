@@ -611,14 +611,14 @@ void MainWindow::createToolbar() {
   m_selectAction->setShortcut(QKeySequence("S"));
   m_toolbar->addAction(m_selectAction);
 
-  m_addPointAction = new QAction(getSymbolicIcon("list-add-symbolic"), "Add Point", this);
+  m_addPointAction = new QAction(getSymbolicIcon(":/icons/plus.svg"), "Add Point", this);
   m_addPointAction->setActionGroup(toolGroup);
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
   m_toolbar->addAction(m_addPointAction);
 
-  m_setCenterAction = new QAction(getSymbolicIcon("mark-location-symbolic"), "Screen coordinates", this);
+  m_setCenterAction = new QAction(getSymbolicIcon(":/icons/crosshair.svg"), "Screen coordinates", this);
   m_setCenterAction->setActionGroup(toolGroup);
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
@@ -672,11 +672,11 @@ void MainWindow::createToolbar() {
 
   m_toolbar->addSeparator();
   QAction *rotLeftAction = m_toolbar->addAction(
-      getSymbolicIcon("object-rotate-left-symbolic"), "Rotate Left");
+      getSymbolicIcon(":/icons/rotate-left.svg"), "Rotate Left");
   connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
 
   QAction *rotRightAction = m_toolbar->addAction(
-      getSymbolicIcon("object-rotate-right-symbolic"), "Rotate Right");
+      getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
   connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
 
   m_toolbar->addSeparator();
@@ -902,26 +902,26 @@ void MainWindow::createMenus() {
   m_viewMenu = menuBar()->addMenu("&View");
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
-  m_zoomInAction->setIcon(getSymbolicIcon("zoom-in-symbolic"));
+  m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
   m_zoomInAction->setShortcut(QKeySequence::ZoomIn); // Ctrl++
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
-  m_zoomOutAction->setIcon(getSymbolicIcon("zoom-out-symbolic"));
+  m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
   m_zoomOutAction->setShortcut(QKeySequence::ZoomOut); // Ctrl+-
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOut);
   m_viewMenu->addAction(m_zoomOutAction);
 
   m_zoom100Action = new QAction(tr("Zoom &1:1"), this);
-  m_zoom100Action->setIcon(getSymbolicIcon("zoom-original-symbolic"));
+  m_zoom100Action->setIcon(getSymbolicIcon(":/icons/zoom-100.svg"));
   m_zoom100Action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
   m_zoom100Action->setStatusTip(tr("Zoom to 100%"));
   connect(m_zoom100Action, &QAction::triggered, this, &MainWindow::onZoom100);
   m_viewMenu->addAction(m_zoom100Action);
 
   m_zoomFitAction = new QAction(tr("Fit to &Screen"), this);
-  m_zoomFitAction->setIcon(getSymbolicIcon("zoom-fit-best-symbolic"));
+  m_zoomFitAction->setIcon(getSymbolicIcon(":/icons/zoom-fit.svg"));
   m_zoomFitAction->setShortcut(Qt::CTRL | Qt::Key_0);
   connect(m_zoomFitAction, &QAction::triggered, this, &MainWindow::onZoomFit);
   m_viewMenu->addAction(m_zoomFitAction);

@@ -3,5 +3,13 @@
     <file>../../images/icon.svg</file>
     <file>icons/hand.svg</file>
     <file>icons/arrow.svg</file>
+    <file>icons/plus.svg</file>
+    <file>icons/crosshair.svg</file>
+    <file>icons/rotate-left.svg</file>
+    <file>icons/rotate-right.svg</file>
+    <file>icons/zoom-in.svg</file>
+    <file>icons/zoom-out.svg</file>
+    <file>icons/zoom-100.svg</file>
+    <file>icons/zoom-fit.svg</file>
   </qresource>
 </RCC>
