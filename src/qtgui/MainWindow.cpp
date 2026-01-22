@@ -183,6 +183,10 @@ MainWindow::~MainWindow() {
   if (m_colorTilesDock) delete m_colorTilesDock;
   if (m_correctedColorTilesDock) delete m_correctedColorTilesDock;
   if (m_screenPreviewDock) delete m_screenPreviewDock;
+  if (m_deformationDock) delete m_deformationDock;
+  if (m_lensDock) delete m_lensDock;
+  if (m_perspectiveDock) delete m_perspectiveDock;
+  if (m_nonlinearDock) delete m_nonlinearDock;
 }
 
 void MainWindow::setupUi() {
@@ -304,6 +308,21 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::RightDockWidgetArea, m_deformationDock);
   m_deformationDock->hide();
 
+  m_lensDock = new QDockWidget("Lens Correction", this);
+  m_lensDock->setObjectName("LensDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_lensDock);
+  m_lensDock->hide();
+
+  m_perspectiveDock = new QDockWidget("Perspective", this);
+  m_perspectiveDock->setObjectName("PerspectiveDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_perspectiveDock);
+  m_perspectiveDock->hide();
+
+  m_nonlinearDock = new QDockWidget("Nonlinear transformation", this);
+  m_nonlinearDock->setObjectName("NonlinearDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_nonlinearDock);
+  m_nonlinearDock->hide();
+
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
     std::function<void()> m_onClose;
@@ -388,6 +407,18 @@ void MainWindow::setupUi() {
   setupDock(m_deformationDock, m_geometryPanel,
             &GeometryPanel::detachDeformationChartRequested,
             &GeometryPanel::reattachDeformationChart);
+
+  setupDock(m_lensDock, m_geometryPanel,
+            &GeometryPanel::detachLensChartRequested,
+            &GeometryPanel::reattachLensChart);
+
+  setupDock(m_perspectiveDock, m_geometryPanel,
+            &GeometryPanel::detachPerspectiveChartRequested,
+            &GeometryPanel::reattachPerspectiveChart);
+
+  setupDock(m_nonlinearDock, m_geometryPanel,
+            &GeometryPanel::detachNonlinearChartRequested,
+            &GeometryPanel::reattachNonlinearChart);
 
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");

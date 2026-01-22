@@ -63,7 +63,30 @@ void GeometryPanel::setupUi() {
   hmLayout->addWidget(m_heatmapToleranceSlider);
   m_form->addRow(hmLayout);
 
-  // Deformation Chart
+  auto setupChart = [this](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
+                           const QString& title, auto detachSignal) {
+      chart = new DeformationChartWidget();
+      QWidget *wrapper = new QWidget();
+      QVBoxLayout *wl = new QVBoxLayout(wrapper);
+      wl->setContentsMargins(0, 0, 0, 0);
+      wl->addWidget(chart);
+      
+      QWidget *detachable = createDetachableSection(title, wrapper, [this, wrapper, detachSignal](){
+          emit (this->*detachSignal)(wrapper);
+      });
+      
+      QWidget *container = new QWidget();
+      containerLayout = new QVBoxLayout(container);
+      containerLayout->setContentsMargins(0,0,0,0);
+      containerLayout->addWidget(detachable);
+      m_form->addRow(container);
+  };
+
+  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction", &GeometryPanel::detachLensChartRequested);
+  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective", &GeometryPanel::detachPerspectiveChartRequested);
+  setupChart(m_nonlinearChart, m_nonlinearChartContainer, "Nonlinear transformation", &GeometryPanel::detachNonlinearChartRequested);
+
+  // Existing Deformation Chart
   m_deformationChart = new DeformationChartWidget();
 
   // Wrapper for chart
@@ -107,30 +130,72 @@ void GeometryPanel::updateDeformationChart() {
   ParameterState state = m_stateGetter();
   
   // Sync tolerance from slider
+  double tol = 0.5;
   if (m_heatmapToleranceSlider) {
-      m_deformationChart->setHeatmapTolerance(m_heatmapToleranceSlider->value() / 1000.0);
+      tol = m_heatmapToleranceSlider->value() / 1000.0;
   }
+  if (m_deformationChart) m_deformationChart->setHeatmapTolerance(tol);
+  if (m_lensChart) m_lensChart->setHeatmapTolerance(tol);
+  if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(tol);
+  if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(tol);
+  
+  // Update visibility based on content
+  bool showLens = !state.scrToImg.lens_correction.is_noop();
+  bool showPerspective = (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
+  bool showNonlinear = (state.scrToImg.mesh_trans != nullptr);
+  bool showFinal = (state.scrToImg.type != colorscreen::Random);
+
+  // Using parentWidget() of the layout to get the container widget added to the form
+  if (m_lensChartContainer && m_lensChartContainer->parentWidget())
+      m_lensChartContainer->parentWidget()->setVisible(showLens);
+  
+  if (m_perspectiveChartContainer && m_perspectiveChartContainer->parentWidget())
+      m_perspectiveChartContainer->parentWidget()->setVisible(showPerspective);
+
+  if (m_nonlinearChartContainer && m_nonlinearChartContainer->parentWidget())
+      m_nonlinearChartContainer->parentWidget()->setVisible(showNonlinear);
+      
+  if (m_chartContainer && m_chartContainer->parentWidget())
+      m_chartContainer->parentWidget()->setVisible(showFinal);
   
   // Get scan image
   auto scan = m_imageGetter();
   if (!scan || scan->width <= 0 || scan->height <= 0) {
-    m_deformationChart->clear();
+    if(m_deformationChart) m_deformationChart->clear();
+    if(m_lensChart) m_lensChart->clear();
+    if(m_perspectiveChart) m_perspectiveChart->clear();
+    if(m_nonlinearChart) m_nonlinearChart->clear();
     return;
   }
+  int w = scan->width;
+  int h = scan->height;
 
   // Create undeformed parameters by copying center and coordinates from current params
-  colorscreen::scr_to_img_parameters undeformed;
-  undeformed.center = state.scrToImg.center;
-  undeformed.coordinate1 = state.scrToImg.coordinate1;
-  undeformed.coordinate2 = state.scrToImg.coordinate2;
+  colorscreen::scr_to_img_parameters p0;
+  p0.center = state.scrToImg.center;
+  p0.coordinate1 = state.scrToImg.coordinate1;
+  p0.coordinate2 = state.scrToImg.coordinate2;
+
+  // 1. Lens Chart: Compare Undef -> Undef+Lens
+  colorscreen::scr_to_img_parameters p1 = p0;
+  p1.lens_correction = state.scrToImg.lens_correction;
+  if (m_lensChart) m_lensChart->setDeformationData(p1, p0, w, h);
+
+  // 2. Perspective Chart: Compare p1 -> p1+Perspective
+  colorscreen::scr_to_img_parameters p2 = p1;
+  p2.tilt_x = state.scrToImg.tilt_x;
+  p2.tilt_y = state.scrToImg.tilt_y;
+  p2.projection_distance = state.scrToImg.projection_distance;
+  if (m_perspectiveChart) m_perspectiveChart->setDeformationData(p2, p1, w, h);
+
+  // 3. Nonlinear Chart: Compare p2 -> p2+Mesh
+  colorscreen::scr_to_img_parameters p3 = p2;
+  p3.mesh_trans = state.scrToImg.mesh_trans;
+  if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3, p2, w, h);
   
-  // Set the deformation data
-  m_deformationChart->setDeformationData(
-      state.scrToImg,  // deformed (current parameters)
-      undeformed,      // undeformed (linear only)
-      scan->width,
-      scan->height
-  );
+  // 4. Final: Compare p0 -> Final (all)
+  if (m_deformationChart)
+    m_deformationChart->setDeformationData(state.scrToImg, p0, w, h);
 }
 
 void GeometryPanel::reattachDeformationChart(QWidget *widget) {
@@ -141,4 +206,22 @@ void GeometryPanel::reattachDeformationChart(QWidget *widget) {
         [this, widget](){ emit detachDeformationChartRequested(widget); });
     
     m_chartContainer->addWidget(detachable);
+}
+
+void GeometryPanel::reattachLensChart(QWidget *widget) {
+    if (!widget) return;
+    QWidget *detachable = createDetachableSection("Lens Correction", widget, [this, widget](){ emit detachLensChartRequested(widget); });
+    m_lensChartContainer->addWidget(detachable);
+}
+
+void GeometryPanel::reattachPerspectiveChart(QWidget *widget) {
+    if (!widget) return;
+    QWidget *detachable = createDetachableSection("Perspective", widget, [this, widget](){ emit detachPerspectiveChartRequested(widget); });
+    m_perspectiveChartContainer->addWidget(detachable);
+}
+
+void GeometryPanel::reattachNonlinearChart(QWidget *widget) {
+    if (!widget) return;
+    QWidget *detachable = createDetachableSection("Nonlinear transformation", widget, [this, widget](){ emit detachNonlinearChartRequested(widget); });
+    m_nonlinearChartContainer->addWidget(detachable);
 }

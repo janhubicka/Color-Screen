@@ -156,7 +156,7 @@ void ScreenPanel::setupUi() {
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
   m_previewPanel = preview;
-  preview->init("");
+  preview->init("Screen Preview");
 
   connect(preview, &TilePreviewPanel::detachTilesRequested, this,
           &ScreenPanel::detachPreviewRequested);
