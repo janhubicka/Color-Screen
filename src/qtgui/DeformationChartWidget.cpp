@@ -26,7 +26,7 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
     QHBoxLayout *sliderLayout = new QHBoxLayout();
     m_sliderLabel = new QLabel("Exaggerate: 1.0x");
     m_exaggerateSlider = new QSlider(Qt::Horizontal);
-    m_exaggerateSlider->setRange(0, 1000); // 0-1000 for fine control
+    m_exaggerateSlider->setRange(0, 10000); // 0-10000 for fine control with large range
     m_exaggerateSlider->setValue(0); // 0 = 1.0x (no exaggeration)
     m_exaggerateSlider->setEnabled(true);
     
@@ -56,6 +56,7 @@ void DeformationChartWidget::setDeformationData(
     m_scanWidth = scanWidth;
     m_scanHeight = scanHeight;
     m_hasData = (scanWidth > 0 && scanHeight > 0);
+    updateGeometry(); // Trigger layout update
     update();
 }
 
@@ -70,24 +71,21 @@ void DeformationChartWidget::clear()
     m_hasData = false;
     m_scanWidth = 0;
     m_scanHeight = 0;
+    updateGeometry();
     update();
 }
 
 QSize DeformationChartWidget::sizeHint() const
 {
     if (m_hasData && m_scanWidth > 0 && m_scanHeight > 0) {
-        // Use scan aspect ratio
-        double aspectRatio = getAspectRatio();
-        int width = 500;
-        int chartHeight = static_cast<int>(width / aspectRatio);
-        return QSize(width, chartHeight + 50); // +50 for slider
+        return QSize(400, heightForWidth(400));
     }
-    return QSize(500, 350);
+    return QSize(400, 350);
 }
 
 QSize DeformationChartWidget::minimumSizeHint() const
 {
-    return QSize(300, 250);
+    return QSize(200, 200);
 }
 
 bool DeformationChartWidget::hasHeightForWidth() const
@@ -97,13 +95,32 @@ bool DeformationChartWidget::hasHeightForWidth() const
 
 int DeformationChartWidget::heightForWidth(int width) const
 {
-    if (m_hasData && m_scanWidth > 0 && m_scanHeight > 0) {
-        double aspectRatio = getAspectRatio();
-        int chartHeight = static_cast<int>(width / aspectRatio);
-        return chartHeight + 50; // +50 for slider
-    }
-    return width; // Default to square
+    if (!m_hasData || m_scanWidth <= 0 || m_scanHeight <= 0) 
+        return 350;
+        
+    // Calculate desired height based on aspect ratio
+    // w_chart / h_chart = w_scan / h_scan
+    
+    // Account for margins and slider height
+    const int sliderHeight = 50;
+    const int verticalMargins = 20;
+    const int horizontalMargins = 20;
+    
+    int availableWidth = width - horizontalMargins;
+    if (availableWidth <= 0) availableWidth = 10;
+    
+    double aspectRatio = getAspectRatio();
+    int desiredContentHeight = static_cast<int>(availableWidth / aspectRatio);
+    
+    // Cap height to ensure portrait images don't explode the GUI
+    // 600px is a reasonable maximum for a side panel chart
+    if (desiredContentHeight > 600) desiredContentHeight = 600;
+    if (desiredContentHeight < 100) desiredContentHeight = 100;
+    
+    return desiredContentHeight + sliderHeight + verticalMargins;
 }
+
+
 
 double DeformationChartWidget::getAspectRatio() const
 {
@@ -120,13 +137,11 @@ float DeformationChartWidget::getExaggerationFactor() const
     
     int sliderValue = m_exaggerateSlider->value();
     
-    // Logarithmic scale: 0-1000 slider maps to 1.0-100.0 exaggeration
-    // This makes it move slowly at first (fine control near 1.0)
-    // Formula: factor = 1.0 * (100.0 / 1.0) ^ (sliderValue / 1000.0)
-    //        = 100.0 ^ (sliderValue / 1000.0)
+    // Logarithmic scale: 0-10000 slider maps to 1.0-10000.0 exaggeration
+    // Formula: factor = 10000.0 ^ (sliderValue / 10000.0)
     
-    float normalizedValue = sliderValue / 1000.0f; // 0.0 to 1.0
-    float factor = std::pow(100.0f, normalizedValue); // 1.0 to 100.0
+    float normalizedValue = sliderValue / 10000.0f; // 0.0 to 1.0
+    float factor = std::pow(10000.0f, normalizedValue); // 1.0 to 10000.0
     
     return factor;
 }
@@ -152,12 +167,32 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     const int marginTop = 10;
     const int marginBottom = sliderHeight + 10;
     
-    QRect chartRect(marginLeft, marginTop,
+    QRect availableRect(marginLeft, marginTop,
                    width() - marginLeft - marginRight,
                    height() - marginTop - marginBottom);
     
-    if (chartRect.width() < 10 || chartRect.height() < 10)
+    if (availableRect.width() < 10 || availableRect.height() < 10)
         return;
+
+    // Enforce aspect ratio within availableRect
+    double scanAspect = (double)m_scanWidth / (double)m_scanHeight;
+    double widgetAspect = (double)availableRect.width() / (double)availableRect.height();
+    
+    QRect chartRect = availableRect;
+    
+    if (widgetAspect > scanAspect) {
+        // Widget is too wide, limit width based on height
+        int newWidth = static_cast<int>(availableRect.height() * scanAspect);
+        int offset = (availableRect.width() - newWidth) / 2;
+        chartRect.setLeft(availableRect.left() + offset);
+        chartRect.setWidth(newWidth);
+    } else {
+        // Widget is too tall, limit height based on width
+        int newHeight = static_cast<int>(availableRect.width() / scanAspect);
+        int offset = (availableRect.height() - newHeight) / 2;
+        chartRect.setTop(availableRect.top() + offset);
+        chartRect.setHeight(newHeight);
+    }
     
     // Draw border
     painter.setPen(QPen(palette().text().color(), 1));
@@ -172,12 +207,15 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     
     // Calculate grid size (approximately 10 pixels)
     const int gridPixelSize = 10;
+    // Use the drawn chart rect for grid calculation
     int gridCols = chartRect.width() / gridPixelSize;
     int gridRows = chartRect.height() / gridPixelSize;
     
     if (gridCols < 2) gridCols = 2;
     if (gridRows < 2) gridRows = 2;
     
+    float exaggeration = getExaggerationFactor();
+
     // Draw chessboard
     for (int row = 0; row < gridRows; row++) {
         for (int col = 0; col < gridCols; col++) {
@@ -201,32 +239,34 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
             colorscreen::point_t p01 = chartToScan(x0, y1);
             colorscreen::point_t p11 = chartToScan(x1, y1);
             
-            // Apply deformation: undeformed -> scr -> deformed
-            // Then exaggerate the deformation if slider is set
-            float exaggeration = getExaggerationFactor();
-            
-            auto applyDeformation = [&](colorscreen::point_t undeformed_point) -> colorscreen::point_t {
+            // Function to compute true deformation (un-exaggerated)
+            auto computeTrueDeformation = [&](colorscreen::point_t undeformed_point) -> colorscreen::point_t {
                 colorscreen::point_t scr = undeformed_map.to_scr(undeformed_point);
-                colorscreen::point_t deformed_point = deformed_map.to_img(scr);
-                
-                // Exaggerate the deformation
-                if (exaggeration > 1.0f) {
-                    // Compute displacement vector
-                    double dx = deformed_point.x - undeformed_point.x;
-                    double dy = deformed_point.y - undeformed_point.y;
-                    
-                    // Scale displacement by exaggeration factor
-                    deformed_point.x = undeformed_point.x + dx * exaggeration;
-                    deformed_point.y = undeformed_point.y + dy * exaggeration;
-                }
-                
-                return deformed_point;
+                return deformed_map.to_img(scr);
             };
-            
-            colorscreen::point_t d00 = applyDeformation(p00);
-            colorscreen::point_t d10 = applyDeformation(p10);
-            colorscreen::point_t d01 = applyDeformation(p01);
-            colorscreen::point_t d11 = applyDeformation(p11);
+
+            // Calculate true deformed positions for color (heatmap from original displacement)
+            colorscreen::point_t true_d00 = computeTrueDeformation(p00);
+            colorscreen::point_t true_d10 = computeTrueDeformation(p10);
+            colorscreen::point_t true_d01 = computeTrueDeformation(p01);
+            colorscreen::point_t true_d11 = computeTrueDeformation(p11);
+
+            // Function to exaggerate deformation
+            auto exaggeratePoint = [&](colorscreen::point_t orig, colorscreen::point_t deformed) -> colorscreen::point_t {
+                 if (exaggeration <= 1.0f) return deformed;
+                 double dx = deformed.x - orig.x;
+                 double dy = deformed.y - orig.y;
+                 colorscreen::point_t p;
+                 p.x = orig.x + dx * exaggeration;
+                 p.y = orig.y + dy * exaggeration;
+                 return p;
+            };
+
+            // Calculate exaggerated positions for geometry
+            colorscreen::point_t d00 = exaggeratePoint(p00, true_d00);
+            colorscreen::point_t d10 = exaggeratePoint(p10, true_d10);
+            colorscreen::point_t d01 = exaggeratePoint(p01, true_d01);
+            colorscreen::point_t d11 = exaggeratePoint(p11, true_d11);
             
             // Convert deformed points back to chart coordinates
             auto scanToChart = [&](colorscreen::point_t p) -> QPointF {
@@ -266,10 +306,11 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
                     return getHeatMapColor(dist, m_heatmapTolerance);
                 };
                 
-                QColor c00 = getDisplacementColor(p00, d00);
-                QColor c10 = getDisplacementColor(p10, d10);
-                QColor c11 = getDisplacementColor(p11, d11);
-                QColor c01 = getDisplacementColor(p01, d01);
+                // Use true_dXY (un-exaggerated) for color calculation
+                QColor c00 = getDisplacementColor(p00, true_d00);
+                QColor c10 = getDisplacementColor(p10, true_d10);
+                QColor c11 = getDisplacementColor(p11, true_d11);
+                QColor c01 = getDisplacementColor(p01, true_d01);
                 
                 // Draw the deformed quadrilateral with gradients
                 // To approximate general 4-corner gradients with QPainter, 

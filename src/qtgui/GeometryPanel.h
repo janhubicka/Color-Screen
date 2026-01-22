@@ -16,16 +16,19 @@ public:
 signals:
   void optimizeRequested(bool autoChecked);
   void nonlinearToggled(bool checked);
+  void detachDeformationChartRequested(QWidget *widget);
 
 public:
   bool isAutoEnabled() const;
   bool isNonlinearEnabled() const;
   void updateDeformationChart();
+  void reattachDeformationChart(QWidget *widget);
 
 private:
   void setupUi();
   QCheckBox *m_nonlinearBox = nullptr;
   DeformationChartWidget *m_deformationChart = nullptr;
+  QVBoxLayout *m_chartContainer = nullptr;
   QSlider *m_heatmapToleranceSlider = nullptr;
 };
 

@@ -1,5 +1,6 @@
 #include "ParameterState.h"
 #include <vector>
+#include <QtGlobal>
 
 // ParameterState equality
 bool ParameterState::operator==(const ParameterState &other) const

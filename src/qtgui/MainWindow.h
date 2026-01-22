@@ -271,6 +271,7 @@ private:
   QDockWidget *m_colorTilesDock;
   QDockWidget *m_correctedColorTilesDock;
   QDockWidget *m_screenPreviewDock;
+  QDockWidget *m_deformationDock;
 
   // Current parameters file path
   QString m_currentParamsFile;

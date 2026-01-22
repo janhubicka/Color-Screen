@@ -298,6 +298,12 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::RightDockWidgetArea, m_spectraDock);
   m_spectraDock->hide(); // Initially hidden
 
+  // Deformation Chart Dock
+  m_deformationDock = new QDockWidget("Deformation Visualization", this);
+  m_deformationDock->setObjectName("DeformationDock");
+  addDockWidget(Qt::RightDockWidgetArea, m_deformationDock);
+  m_deformationDock->hide();
+
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
     std::function<void()> m_onClose;
@@ -324,6 +330,7 @@ void MainWindow::setupUi() {
       if (!w)
         return;
       dock->setWidget(w);
+      w->show(); // Ensure widget is visible
       dock->setFloating(true);
       dock->show();
       if (w->sizeHint().isValid())
@@ -363,6 +370,8 @@ void MainWindow::setupUi() {
   setupDock(m_screenPreviewDock, m_screenPanel,
             &ScreenPanel::detachPreviewRequested,
             &ScreenPanel::reattachPreview);
+            
+
 
   // Create Linearization Panel
   m_linearizationPanel = new LinearizationPanel(
@@ -375,6 +384,10 @@ void MainWindow::setupUi() {
       new GeometryPanel([this]() { return getCurrentState(); },
                         [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                         [this]() { return m_scan; }, this);
+
+  setupDock(m_deformationDock, m_geometryPanel,
+            &GeometryPanel::detachDeformationChartRequested,
+            &GeometryPanel::reattachDeformationChart);
 
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
@@ -578,6 +591,7 @@ QIcon getSymbolicIcon(const QString &name) {
 
 void MainWindow::createToolbar() {
   m_toolbar = addToolBar("Main Toolbar");
+  m_toolbar->setObjectName("MainToolbar"); // Fix state saving warning
   m_toolbar->setMovable(false);
 
   QLabel *modeLabel = new QLabel("Mode: ", m_toolbar);
