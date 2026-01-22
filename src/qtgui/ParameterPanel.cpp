@@ -644,16 +644,32 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
   connect(arrowBtn, &QToolButton::toggled, [arrowBtn, groupForm](bool checked) {
     arrowBtn->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
 
+    auto setVisibleRecursive = [](QLayoutItem *item, bool visible) {
+        auto recurse = [](auto self, QLayoutItem *itm, bool vis) -> void {
+            if (!itm) return;
+            if (itm->widget()) {
+                itm->widget()->setVisible(vis);
+            } else if (itm->layout()) {
+                QLayout *subLayout = itm->layout();
+                for (int j = 0; j < subLayout->count(); ++j) {
+                    self(self, subLayout->itemAt(j), vis);
+                }
+            }
+        };
+        recurse(recurse, item, visible);
+    };
+
     // Hide all widgets in the form layout
     for (int i = 0; i < groupForm->rowCount(); ++i) {
       QLayoutItem *labelItem = groupForm->itemAt(i, QFormLayout::LabelRole);
       QLayoutItem *fieldItem = groupForm->itemAt(i, QFormLayout::FieldRole);
+      // Check SpanningRole as well just in case, though usually FieldRole covers it in 2-arg addRow
+      QLayoutItem *spanningItem = groupForm->itemAt(i, QFormLayout::SpanningRole);
 
-      if (labelItem && labelItem->widget()) {
-        labelItem->widget()->setVisible(checked);
-      }
-      if (fieldItem && fieldItem->widget()) {
-        fieldItem->widget()->setVisible(checked);
+      setVisibleRecursive(labelItem, checked);
+      setVisibleRecursive(fieldItem, checked);
+      if (spanningItem && spanningItem != fieldItem && spanningItem != labelItem) {
+          setVisibleRecursive(spanningItem, checked);
       }
     }
   });

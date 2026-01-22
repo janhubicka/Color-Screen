@@ -18,11 +18,37 @@ GeometryPanel::~GeometryPanel() = default;
 void GeometryPanel::setupUi() {
   m_layout->setContentsMargins(0, 0, 0, 0);
 
+  auto addToPanel = [this](auto* item) {
+      if (m_currentGroupForm) m_currentGroupForm->addRow(item);
+      else m_form->addRow(item);
+  };
+
   addSeparator("Registration points");
 
   QCheckBox *showBox = new QCheckBox("Show registration points");
-  m_form->addRow(showBox);
+  addToPanel(showBox);
   
+  // Heatmap tolerance (manual slider, not in ParameterState)
+  // Removed separator "Heatmap Settings" to keep it under Registration Points
+  m_heatmapToleranceSlider = new QSlider(Qt::Horizontal);
+  m_heatmapToleranceSlider->setRange(0, 1000); // 0.0 to 1.0 mapped to 0-1000
+  m_heatmapToleranceSlider->setValue(500); // Default 0.5
+  m_heatmapToleranceSlider->setToolTip("Adjust heatmap color sensitivity (0.0 to 1.0)");
+  connect(m_heatmapToleranceSlider, &QSlider::valueChanged, this, [this](int value) {
+      double tol = value / 1000.0;
+      if (m_deformationChart) m_deformationChart->setHeatmapTolerance(tol);
+      if (m_lensChart) m_lensChart->setHeatmapTolerance(tol);
+      if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(tol);
+      if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(tol);
+  });
+
+  QHBoxLayout *hmLayout = new QHBoxLayout();
+  hmLayout->addWidget(new QLabel("Heatmap tolerance:"));
+  hmLayout->addWidget(m_heatmapToleranceSlider);
+  addToPanel(hmLayout);
+
+  addSeparator("Optimization");
+
   QHBoxLayout *optLayout = new QHBoxLayout();
   QPushButton *optButton = new QPushButton("Optimize geometry");
   optButton->setObjectName("optimizeButton");
@@ -30,7 +56,7 @@ void GeometryPanel::setupUi() {
   autoBtn->setObjectName("autoSolverBox");
   optLayout->addWidget(optButton);
   optLayout->addWidget(autoBtn);
-  m_form->addRow(optLayout);
+  addToPanel(optLayout);
 
   connect(optButton, &QPushButton::clicked, this, [this, autoBtn]() {
       emit optimizeRequested(autoBtn->isChecked());
@@ -38,7 +64,7 @@ void GeometryPanel::setupUi() {
 
   m_nonlinearBox = new QCheckBox("Nonlinear corrections");
   m_nonlinearBox->setObjectName("nonlinearBox");
-  m_form->addRow(m_nonlinearBox);
+  addToPanel(m_nonlinearBox);
 
   connect(m_nonlinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
   
@@ -46,24 +72,14 @@ void GeometryPanel::setupUi() {
   showBox->setObjectName("showRegistrationPointsBox");
 
   // Heatmap tolerance (using addSliderParameter via state)
-  // Heatmap tolerance (manual slider, not in ParameterState)
-  addSeparator("Heatmap Settings");
-  m_heatmapToleranceSlider = new QSlider(Qt::Horizontal);
-  m_heatmapToleranceSlider->setRange(0, 1000); // 0.0 to 1.0 mapped to 0-1000
-  m_heatmapToleranceSlider->setValue(500); // Default 0.5
-  m_heatmapToleranceSlider->setToolTip("Adjust heatmap color sensitivity (0.0 to 1.0)");
-  connect(m_heatmapToleranceSlider, &QSlider::valueChanged, this, [this](int value) {
-      if (m_deformationChart) {
-          m_deformationChart->setHeatmapTolerance(value / 1000.0);
-      }
+
+
+  QToolButton* visBtn = addSeparator("Visualization");
+  connect(visBtn, &QToolButton::toggled, this, [this](bool checked){
+      if (checked) updateDeformationChart();
   });
-
-  QHBoxLayout *hmLayout = new QHBoxLayout();
-  hmLayout->addWidget(new QLabel("Heatmap tolerance:"));
-  hmLayout->addWidget(m_heatmapToleranceSlider);
-  m_form->addRow(hmLayout);
-
-  auto setupChart = [this](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
+  
+  auto setupChart = [this, addToPanel](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
                            const QString& title, auto detachSignal) {
       chart = new DeformationChartWidget();
       QWidget *wrapper = new QWidget();
@@ -79,7 +95,7 @@ void GeometryPanel::setupUi() {
       containerLayout = new QVBoxLayout(container);
       containerLayout->setContentsMargins(0,0,0,0);
       containerLayout->addWidget(detachable);
-      m_form->addRow(container);
+      addToPanel(container);
   };
 
   setupChart(m_lensChart, m_lensChartContainer, "Lens Correction", &GeometryPanel::detachLensChartRequested);
@@ -108,7 +124,9 @@ void GeometryPanel::setupUi() {
   m_chartContainer->setContentsMargins(0, 0, 0, 0);
   m_chartContainer->addWidget(detachable);
   
-  m_form->addRow(container);
+
+  
+  addToPanel(container);
 
   updateUI();
 }
@@ -139,11 +157,15 @@ void GeometryPanel::updateDeformationChart() {
   if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(tol);
   if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(tol);
   
+  // Get scan image
+  auto scan = m_imageGetter();
+  bool hasScan = (scan && scan->width > 0 && scan->height > 0);
+
   // Update visibility based on content
-  bool showLens = !state.scrToImg.lens_correction.is_noop();
-  bool showPerspective = (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
-  bool showNonlinear = (state.scrToImg.mesh_trans != nullptr);
-  bool showFinal = (state.scrToImg.type != colorscreen::Random);
+  bool showLens = hasScan && !state.scrToImg.lens_correction.is_noop();
+  bool showPerspective = hasScan && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
+  bool showNonlinear = hasScan && (state.scrToImg.mesh_trans != nullptr);
+  bool showFinal = hasScan && (state.scrToImg.type != colorscreen::Random);
 
   // Using parentWidget() of the layout to get the container widget added to the form
   if (m_lensChartContainer && m_lensChartContainer->parentWidget())
@@ -158,9 +180,7 @@ void GeometryPanel::updateDeformationChart() {
   if (m_chartContainer && m_chartContainer->parentWidget())
       m_chartContainer->parentWidget()->setVisible(showFinal);
   
-  // Get scan image
-  auto scan = m_imageGetter();
-  if (!scan || scan->width <= 0 || scan->height <= 0) {
+  if (!hasScan) {
     if(m_deformationChart) m_deformationChart->clear();
     if(m_lensChart) m_lensChart->clear();
     if(m_perspectiveChart) m_perspectiveChart->clear();
