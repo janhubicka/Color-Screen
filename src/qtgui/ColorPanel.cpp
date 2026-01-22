@@ -71,6 +71,13 @@ void ColorPanel::reattachCorrectedTiles(QWidget *widget) {
 void ColorPanel::setupUi() {
   addSeparator("Adjustments in process color space");
 
+  // dark point
+  addSliderParameter(
+      "Black", 0, 1, 1, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.dark_point; },
+      [](ParameterState &s, double v) { s.rparams.dark_point = v; }, 3.0,
+      nullptr, true);
+
   // Presaturation
   addSliderParameter(
       "Presaturation", 0, 100, 1, 2, "", "",

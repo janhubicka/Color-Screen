@@ -27,5 +27,13 @@ void LinearizationPanel::setupUi()
         quickSelects,
         nullptr
     );
+  /* Only makes effect with backlight correction on; handle it later.  */
+#if 0
+  addSliderParameter(
+      "Scanner/camera black point", 0, 1, 1, 2, "", "",
+      [](const ParameterState &s) { return s.rparams.backlight_correction_black; },
+      [](ParameterState &s, double v) { s.rparams.backlight_correction_black = v; }, 3.0,
+      nullptr, true);
+#endif
 }
 
