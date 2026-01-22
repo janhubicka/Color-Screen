@@ -1648,6 +1648,11 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     nlBox->setChecked(state.scrToImg.mesh_trans != nullptr);
   }
   
+  // Update deformation chart
+  if (m_geometryPanel) {
+    m_geometryPanel->updateDeformationChart();
+  }
+  
   updateRegistrationGroupVisibility();
 }
 

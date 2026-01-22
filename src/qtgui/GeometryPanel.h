@@ -4,6 +4,7 @@
 #include "ParameterPanel.h"
 
 class QCheckBox;
+class DeformationChartWidget;
 
 class GeometryPanel : public ParameterPanel {
   Q_OBJECT
@@ -19,10 +20,13 @@ signals:
 public:
   bool isAutoEnabled() const;
   bool isNonlinearEnabled() const;
+  void updateDeformationChart();
 
 private:
   void setupUi();
   QCheckBox *m_nonlinearBox = nullptr;
+  DeformationChartWidget *m_deformationChart = nullptr;
+  QSlider *m_heatmapToleranceSlider = nullptr;
 };
 
 #endif // GEOMETRY_PANEL_H

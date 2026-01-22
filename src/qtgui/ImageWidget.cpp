@@ -1,4 +1,5 @@
 #include "ImageWidget.h"
+#include "ColorUtils.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -289,10 +290,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         double dist_img = sqrt(dx_img * dx_img + dy_img * dy_img);
 
         // Heat map color calculation
-        double error_ratio = dist_img / threshold;
-        double hue = 120.0 - std::min(error_ratio, 2.0) * 60.0;
-        if (hue < 0) hue = 0;
-        QColor color = QColor::fromHslF(hue / 360.0, 1.0, 0.5);
+        QColor color = getHeatMapColor(dist_img, threshold);
 
         // Widget coordinates (start/simulated)
         QPointF start = imageToWidget(xi);
