@@ -166,7 +166,7 @@ public:
 
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max) final;
   DLL_PUBLIC virtual void wait (const char *name) final;
-  DLL_PUBLIC virtual void pop (int expected = -1) final;
+  DLL_PUBLIC virtual void pop (int expected = -1, bool safe = false) final;
 
   /* Used internally.  */
   pthread_mutex_t m_exit_lock;

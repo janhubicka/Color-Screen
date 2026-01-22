@@ -467,7 +467,7 @@ file_progress_info::wait (const char *name)
     resume_stdout ();
 }
 void
-file_progress_info::pop (int expected)
+file_progress_info::pop (int expected, bool safe)
 {
   bool paused = false;
   if (m_task && m_print_all_tasks && m_max >= 0)
