@@ -26,10 +26,10 @@ public:
   get_status (const char **t, float *s)
   {
     *t = m_task;
-    if (m_max)
+    if (m_max > 1)
       *s = 100.0 * m_current / m_max;
     else
-      *s = 0;
+      *s = -1;
   }
   struct status
   {
