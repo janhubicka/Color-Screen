@@ -35,6 +35,8 @@ jobs:
       run: brew install -v fftw
     - name: Install qt6
       run: brew install -v qt6
+    - name: Install adwaita-icon-theme
+      run: brew install -v adwaita-icon-theme
     - name: Link qt6
       run: brew link qt6 --force
 
@@ -224,7 +226,11 @@ jobs:
         # Bundle Adwaita icons (if available)
         # Bundle Adwaita icons (if available)
         mkdir -p Color-Screen.app/Contents/share/icons
-        if [ -d "/opt/homebrew/share/icons/Adwaita" ]; then
+        ADWAITA_PREFIX=$(brew --prefix adwaita-icon-theme)
+        if [ -d "$ADWAITA_PREFIX/share/icons/Adwaita" ]; then
+             echo "Copying Adwaita icons from $ADWAITA_PREFIX/share/icons/Adwaita"
+             cp -r "$ADWAITA_PREFIX/share/icons/Adwaita" Color-Screen.app/Contents/share/icons/ || true
+        elif [ -d "/opt/homebrew/share/icons/Adwaita" ]; then
              cp -r /opt/homebrew/share/icons/Adwaita Color-Screen.app/Contents/share/icons/ || true
         elif [ -d "/usr/local/share/icons/Adwaita" ]; then
              cp -r /usr/local/share/icons/Adwaita Color-Screen.app/Contents/share/icons/ || true
@@ -328,11 +334,10 @@ jobs:
         # Use absolute path for the image to avoid "File not found" dialogs blocking the app
         echo "Running Color-Screen GUI binary check with --debug-qt --smoke-test..."
         (
-          sleep 3; screencapture -x shot_03s.png; ps aux | grep Color-Screen > shot_03s_ps.txt;
-          sleep 5; screencapture -x shot_08s.png; ps aux | grep Color-Screen > shot_08s_ps.txt;
-          sleep 5; screencapture -x shot_13s.png; ps aux | grep Color-Screen > shot_13s_ps.txt;
+          sleep 13; screencapture -x shot_13s.png; ps aux | grep Color-Screen > shot_13s_ps.txt;
+          sleep 5; screencapture -x shot_18s.png; ps aux | grep Color-Screen > shot_18s_ps.txt;
         ) &
-        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt --smoke-test 15000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt --smoke-test 20000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
         
         cat gui_launch_debug.txt
 
