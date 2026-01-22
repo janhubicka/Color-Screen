@@ -91,9 +91,11 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = colorscreen-qt$(EXEEXT)
+@static_link_TRUE@am__append_1 = -DLIBCOLORSCREEN -static
+@static_link_TRUE@am__append_2 = -static
 
 # Windows Resource File
-@HOST_WIN32_TRUE@am__append_1 = colorscreen_res.o
+@HOST_WIN32_TRUE@am__append_3 = colorscreen_res.o
 subdir = src/qtgui
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -162,7 +164,7 @@ colorscreen_qt_OBJECTS = $(am_colorscreen_qt_OBJECTS) \
 am__DEPENDENCIES_1 =
 colorscreen_qt_DEPENDENCIES =  \
 	$(top_builddir)/src/libcolorscreen/libcolorscreen.la \
-	$(am__DEPENDENCIES_1) $(am__append_1)
+	$(am__DEPENDENCIES_1) $(am__append_3)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -445,8 +447,6 @@ colorscreen_qt_SOURCES = \
     TaskQueue.cpp \
     SubtitleOverlay.cpp
 
-@static_link_TRUE@AM_LDFLAGS = -static
-@static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT
@@ -482,13 +482,14 @@ nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
 CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Compiler flags
-colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/
+colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) \
+	-I$(top_srcdir)/src/libcolorscreen/include/ $(am__append_1)
+colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS) $(am__append_2)
 
 # Linker flags
 colorscreen_qt_LDADD =  \
 	$(top_builddir)/src/libcolorscreen/libcolorscreen.la \
-	$(Qt6_LIBS) $(am__append_1)
-@HOST_WIN32_TRUE@colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS)
+	$(Qt6_LIBS) $(am__append_3)
 all: all-am
 
 .SUFFIXES:

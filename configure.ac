@@ -140,11 +140,11 @@ AC_MSG_RESULT([$is_clang])
 
 GUI_LDFLAGS=""
 #if test "x$is_clang" = "xno"; then
-   #case "$host" in
-     #*-*-mingw*)
-       #GUI_LDFLAGS="-mwindows"
-       #;;
-   #esac
+   case "$host" in
+     *-*-mingw*)
+       GUI_LDFLAGS="-mwindows"
+       ;;
+   esac
 #fi
 AC_SUBST([GUI_LDFLAGS])
 

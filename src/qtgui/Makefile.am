@@ -25,10 +25,7 @@ colorscreen_qt_SOURCES = \
     TaskQueue.cpp \
     SubtitleOverlay.cpp
 
-if static_link
-  AM_LDFLAGS = -static
-  AM_CXXFLAGS = -DLIBCOLORSCREEN -static
-endif
+
 
 # MOC Generation
 # We need to explicitly run moc on headers that have Q_OBJECT
@@ -73,6 +70,11 @@ CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp
 
 # Compiler flags
 colorscreen_qt_CXXFLAGS = -std=c++17 $(Qt6_CFLAGS) -I$(top_srcdir)/src/libcolorscreen/include/
+colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS)
+if static_link
+  colorscreen_qt_CXXFLAGS += -DLIBCOLORSCREEN -static
+  colorscreen_qt_LDFLAGS += -static
+endif
 
 # Linker flags
 colorscreen_qt_LDADD = \
@@ -82,7 +84,6 @@ colorscreen_qt_LDADD = \
 # Windows Resource File
 if HOST_WIN32
 colorscreen_qt_LDADD += colorscreen_res.o
-colorscreen_qt_LDFLAGS = $(GUI_LDFLAGS)
 endif
 
 colorscreen_res.o: colorscreen.rc

@@ -161,6 +161,9 @@ MainWindow::~MainWindow() {
   if (m_solverThread) {
     m_solverThread->quit();
     m_solverThread->wait();
+    // Delete the worker that was moved to the thread
+    delete m_solverWorker;
+    m_solverWorker = nullptr;
   }
   
   // Explicitly delete UI components that might access member variables (callbacks)
