@@ -91,10 +91,10 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     colorscreen::render_type_parameters rtparams = m_renderType;
     int stack = -2;
     
-    if (progress && taskName) {
+    if (progress) {
        progress->set_task(taskName, 1);
-       stack = progress->push();
     }
+    colorscreen::sub_task task (progress.get ());
 
     try {
         colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
@@ -106,10 +106,6 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         }
     } catch (const std::exception& e) {
         success = false;
-    }
-
-    if (progress && taskName) {
-        progress->pop(stack);
     }
     
     // Rotate if needed

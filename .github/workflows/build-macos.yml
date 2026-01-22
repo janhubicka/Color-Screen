@@ -175,11 +175,18 @@ jobs:
         done
         
         # Fix libcolorscreen reference in executables
-        # We need to find what the exact path is currently to replace it
-        # It usually matches the install prefix
-        LIBCOLORSCREEN_REF="/tmp/Color-Screen-MacOS/lib/libcolorscreen.2.dylib"
-        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/Color-Screen
-        install_name_tool -change "$LIBCOLORSCREEN_REF" "@executable_path/../Frameworks/libcolorscreen.2.dylib" Color-Screen.app/Contents/MacOS/colorscreen
+        # We find the exact path embedded in the binary to replace it reliably
+        for EXECUTABLE in Color-Screen.app/Contents/MacOS/Color-Screen Color-Screen.app/Contents/MacOS/colorscreen; do
+            echo "Fixing libcolorscreen for $EXECUTABLE..."
+            # Find the line containing libcolorscreen
+            LIBSCREEN_PATH=$(otool -L "$EXECUTABLE" | grep "libcolorscreen" | awk '{print $1}')
+            if [ -n "$LIBSCREEN_PATH" ]; then
+                echo "  Found reference: $LIBSCREEN_PATH"
+                install_name_tool -change "$LIBSCREEN_PATH" "@executable_path/../Frameworks/libcolorscreen.2.dylib" "$EXECUTABLE"
+            else
+                echo "  WARNING: libcolorscreen reference not found in $EXECUTABLE"
+            fi
+        done
 
         # Manually copy missing dylibs (similar to Windows)
         # Assuming brew installs are in standard locations
