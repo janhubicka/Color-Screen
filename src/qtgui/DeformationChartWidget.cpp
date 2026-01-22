@@ -42,7 +42,6 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
     
     mainLayout->addLayout(sliderLayout);
     
-    setMinimumHeight(200);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 }
 
@@ -111,12 +110,16 @@ int DeformationChartWidget::heightForWidth(int width) const
     
     double aspectRatio = getAspectRatio();
     int desiredContentHeight = static_cast<int>(availableWidth / aspectRatio);
-    
-    // Cap height to ensure portrait images don't explode the GUI
-    // 300px is a reasonable maximum for a side panel chart
-    int maxContentHeight = 300;
+
+    // Limit height for portrait images to prevent excessive vertical space usage.
+    // However, user requested "space needed", so we shouldn't compress it too much unless necessary.
+    // A good heuristic for docks is "don't be taller than you are wide" (square limit).
+    // So we use 'availableWidth' as a soft limit, but allow a bit more for slider.
+    int maxContentHeight = availableWidth; 
     if (desiredContentHeight > maxContentHeight) desiredContentHeight = maxContentHeight;
-    if (desiredContentHeight < 100) desiredContentHeight = 100;
+    
+    // Ensure at least some visibility
+    if (desiredContentHeight < 50) desiredContentHeight = 50;
     
     return desiredContentHeight + sliderHeight + verticalMargins;
 }

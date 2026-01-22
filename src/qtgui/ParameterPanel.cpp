@@ -677,6 +677,12 @@ ParameterPanel::createDetachableSection(const QString &title, QWidget *content,
   QHBoxLayout *headerLayout = new QHBoxLayout(header);
   headerLayout->setContentsMargins(0, 0, 0, 0);
 
+  QLabel *label = new QLabel(title);
+  QFont f = label->font();
+  f.setBold(true);
+  label->setFont(f);
+  headerLayout->addWidget(label);
+
   headerLayout->addStretch(1);
 
   QPushButton *detachBtn =
