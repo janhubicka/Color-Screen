@@ -27,7 +27,7 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
     m_sliderLabel = new QLabel("Exaggerate: 1.0x");
     m_exaggerateSlider = new QSlider(Qt::Horizontal);
     m_exaggerateSlider->setRange(0, 10000); // 0-10000 for fine control with large range
-    m_exaggerateSlider->setValue(0); // 0 = 1.0x (no exaggeration)
+    m_exaggerateSlider->setValue(5000); // 5000 = 100x (sqrt of range)
     m_exaggerateSlider->setEnabled(true);
     
     // Connect slider to update label and trigger repaint

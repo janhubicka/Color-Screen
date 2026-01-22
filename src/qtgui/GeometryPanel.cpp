@@ -25,8 +25,19 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Registration points");
 
+  std::map<int, QString> pretty_scanner_type_names = {
+      {colorscreen::fixed_lens, "Fixed Lens"},
+      {colorscreen::fixed_lens_sensor_move_horisontally, "Fixed Lens (Sensor moves horizontally)"},
+      {colorscreen::fixed_lens_sensor_move_vertically, "Fixed Lens (Sensor moves vertically)"},
+      {colorscreen::lens_move_horisontally, "Lens moves horizontally"},
+      {colorscreen::lens_move_vertically, "Lens moves vertically"}
+  };
+
   QCheckBox *showBox = new QCheckBox("Show registration points");
   addToPanel(showBox);
+  
+  // To make it easy for MainWindow to sync, let's give it an object name
+  showBox->setObjectName("showRegistrationPointsBox");
   
   // Heatmap tolerance (manual slider, not in ParameterState)
   // Removed separator "Heatmap Settings" to keep it under Registration Points
@@ -58,17 +69,27 @@ void GeometryPanel::setupUi() {
   optLayout->addWidget(autoBtn);
   addToPanel(optLayout);
 
+  connect(autoBtn, &QCheckBox::toggled, this, [this](bool checked){
+      if (checked) emit optimizeRequested(true);
+  });
+
+  auto triggerIfAuto = [this, autoBtn]() {
+      if (autoBtn->isChecked()) emit optimizeRequested(true);
+  };
+
   connect(optButton, &QPushButton::clicked, this, [this, autoBtn]() {
       emit optimizeRequested(autoBtn->isChecked());
   });
 
-  addCheckboxParameter("Optimize lens correction",
+  QCheckBox *lensCb = addCheckboxParameter("Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },
       [](ParameterState &s, bool v){ s.solver.optimize_lens = v; });
+  connect(lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
-  addCheckboxParameter("Optimize tilt",
+  QCheckBox *tiltCb = addCheckboxParameter("Optimize tilt",
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
       [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; });
+  connect(tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   QCheckBox *nlCb = addCheckboxParameter("Nonlinear corrections",
       [this](const ParameterState &s){
@@ -79,12 +100,10 @@ void GeometryPanel::setupUi() {
       });
   nlCb->setObjectName("nonlinearBox");
   connect(nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
-  
-  // To make it easy for MainWindow to sync, let's give it an object name
-  showBox->setObjectName("showRegistrationPointsBox");
 
-  // Heatmap tolerance (using addSliderParameter via state)
-
+  addEnumParameter("Scanner/camera geometry", pretty_scanner_type_names,
+      [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
+      [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; });
 
   QToolButton* visBtn = addSeparator("Visualization");
   connect(visBtn, &QToolButton::toggled, this, [this](bool checked){
