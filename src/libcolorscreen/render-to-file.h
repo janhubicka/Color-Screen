@@ -327,14 +327,12 @@ produce_file (render_to_file_params &rfparams,
   render.compute_final_range ();
   render.set_render_type (rtparam);
   if (progress)
-    {
-      progress->set_task ("precomputing", 1);
-      progress->push ();
-    }
-  if (!render.precompute_all (progress))
-    return "Precomputation failed (out of memory)";
-  if (progress)
-    progress->pop ();
+    progress->set_task ("precomputing", 1);
+  {
+    sub_task task (progress);
+    if (!render.precompute_all (progress))
+      return "Precomputation failed (out of memory)";
+  }
 
   // TODO: For HDR output we want to linearize the ICC profile.
   return produce_file<T, sample_data_final, sample_data_scr> (rfparams, sparam, img, render, black, progress);
