@@ -403,7 +403,7 @@ void ParameterPanel::addEnumTooltips(QComboBox *combo, const colorscreen::proper
   }
 }
 
-void ParameterPanel::addCheckboxParameter(
+QCheckBox *ParameterPanel::addCheckboxParameter(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
     std::function<bool(const ParameterState &)> enabledCheck) {
@@ -446,6 +446,7 @@ void ParameterPanel::addCheckboxParameter(
       container->setVisible(visible);
     });
   }
+  return checkbox;
 }
 
 void ParameterPanel::addCorrelatedRGBParameter(

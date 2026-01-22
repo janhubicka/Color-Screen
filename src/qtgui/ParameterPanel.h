@@ -18,6 +18,7 @@ class image_data;
 class QVBoxLayout;
 class QFormLayout;
 class QGroupBox;
+class QCheckBox;
 
 class ParameterPanel : public QWidget {
   Q_OBJECT
@@ -81,7 +82,7 @@ protected:
     return addEnumParameter(label, Names, Max, getter, setter, enabledCheck);
   }
 
-  void addCheckboxParameter(
+  QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);

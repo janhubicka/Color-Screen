@@ -62,11 +62,23 @@ void GeometryPanel::setupUi() {
       emit optimizeRequested(autoBtn->isChecked());
   });
 
-  m_nonlinearBox = new QCheckBox("Nonlinear corrections");
-  m_nonlinearBox->setObjectName("nonlinearBox");
-  addToPanel(m_nonlinearBox);
+  addCheckboxParameter("Optimize lens correction",
+      [](const ParameterState &s){ return s.solver.optimize_lens; },
+      [](ParameterState &s, bool v){ s.solver.optimize_lens = v; });
 
-  connect(m_nonlinearBox, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
+  addCheckboxParameter("Optimize tilt",
+      [](const ParameterState &s){ return s.solver.optimize_tilt; },
+      [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; });
+
+  QCheckBox *nlCb = addCheckboxParameter("Nonlinear corrections",
+      [this](const ParameterState &s){
+          return m_nonlinearEnabled || (s.scrToImg.mesh_trans != nullptr);
+      },
+      [this](ParameterState &, bool v){
+          m_nonlinearEnabled = v;
+      });
+  nlCb->setObjectName("nonlinearBox");
+  connect(nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
   
   // To make it easy for MainWindow to sync, let's give it an object name
   showBox->setObjectName("showRegistrationPointsBox");
@@ -137,7 +149,9 @@ bool GeometryPanel::isAutoEnabled() const {
 }
 
 bool GeometryPanel::isNonlinearEnabled() const {
-  return m_nonlinearBox && m_nonlinearBox->isChecked();
+  if (m_nonlinearEnabled) return true;
+  ParameterState s = m_stateGetter();
+  return s.scrToImg.mesh_trans != nullptr;
 }
 
 void GeometryPanel::updateDeformationChart() {

@@ -32,7 +32,7 @@ public:
 
 private:
   void setupUi();
-  QCheckBox *m_nonlinearBox = nullptr;
+  bool m_nonlinearEnabled = false;
   DeformationChartWidget *m_deformationChart = nullptr;
   DeformationChartWidget *m_lensChart = nullptr;
   DeformationChartWidget *m_perspectiveChart = nullptr;
