@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
   QCommandLineOption debugOption("debug-qt", "Enable Qt plugin debugging");
   parser.addOption(debugOption);
   
-  QCommandLineOption smokeTestOption("smoke-test", "Run for 5 seconds and exit (for CI smoke testing)");
+  QCommandLineOption smokeTestOption("smoke-test", "Run for N ms and exit (for CI smoke testing)", "ms", "5000");
   parser.addOption(smokeTestOption);
   
   QCommandLineOption timeReportOption("time-report", "Enable internal time reporting of tasks");
@@ -63,8 +63,10 @@ int main(int argc, char *argv[]) {
   }
 
   if (parser.isSet(smokeTestOption)) {
-      qDebug() << "Smoke Test Mode: Will exit in 5 seconds...";
-      QTimer::singleShot(5000, &app, &QCoreApplication::quit);
+      int duration = parser.value(smokeTestOption).toInt();
+      if (duration <= 0) duration = 5000;
+      qDebug() << "Smoke Test Mode: Will exit in" << duration << "ms...";
+      QTimer::singleShot(duration, &app, &QCoreApplication::quit);
   }
 
   // Set icon search paths and theme

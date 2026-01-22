@@ -324,8 +324,8 @@ jobs:
         # Redirect output to file for artifact
         # Use absolute path for the image to avoid "File not found" dialogs blocking the app
         echo "Running Color-Screen GUI binary check with --debug-qt --smoke-test..."
-        (sleep 3; screencapture -x gui_screenshot.png) &
-        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt --smoke-test "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
+        (sleep 10; screencapture -x gui_screenshot.png) &
+        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- ./Color-Screen.app/Contents/MacOS/Color-Screen --debug-qt --smoke-test 15000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
         
         cat gui_launch_debug.txt
 
