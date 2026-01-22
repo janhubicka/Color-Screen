@@ -60,8 +60,21 @@ jobs:
       with:
         name: source-tarball
         path: colorscreen-*.tar.gz
-    - name: make distclean
-      run: make -j$(nproc) distclean
+
+    - name: Package DEB
+      run: |
+        # Create temp install dir
+        mkdir -p /tmp/install
+        # Configure with prefix
+        ./configure --prefix=/usr --enable-gtkgui --enable-qtgui
+        # Install to temp dir
+        make install DESTDIR=/tmp/install
+        # Run packaging script
+        ./os/linux/package_deb.sh /tmp/install 2.0alpha amd64
+    - uses: actions/upload-artifact@v4
+      with:
+        name: colorscreen-deb-amd64
+        path: colorscreen_*.deb
     - name: configure with checking
       run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
@@ -77,3 +90,33 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
+
+
+  model-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: uraimo/run-on-arch-action@v2
+      name: Build and Package on AArch64
+      id: build
+      with:
+        arch: aarch64
+        distro: ubuntu22.04
+        # Not using custom dockerfile, installing deps manually inside container
+        install: |
+          apt-get update -q -y
+          apt-get install -q -y git build-essential autoconf automake libtool pkg-config libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev
+        run: |
+          # Configure
+          CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --prefix=/usr --enable-gtkgui --enable-qtgui
+          # Make
+          make -j$(nproc)
+          # Install to temp dir
+          mkdir -p /tmp/install
+          make install DESTDIR=/tmp/install
+          # Package
+          ./os/linux/package_deb.sh /tmp/install 2.0alpha arm64
+    - uses: actions/upload-artifact@v4
+      with:
+        name: colorscreen-deb-arm64
+        path: colorscreen_*.deb
