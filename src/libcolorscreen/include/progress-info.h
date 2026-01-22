@@ -102,9 +102,9 @@ public:
   }
 
   /* Enter nested tasks; return stack depth.  */
-  DLL_PUBLIC int push ();
+  DLL_PUBLIC int push (bool safe = false);
   /* EXPECTED is return value of push used for sanity checking.  */
-  DLL_PUBLIC virtual void pop (int expected = -1);
+  DLL_PUBLIC virtual void pop (int expected = -1, bool safe = false);
 
   /* This needs to be used around standard output so it does not get
      mixed randomly with progress reports.  */
@@ -141,14 +141,14 @@ public:
   {
     m_progress = p;
     if (p)
-      m_stack = m_progress->push ();
+      m_stack = m_progress->push (true);
     else
       m_stack = 0;
   }
   ~sub_task ()
   {
     if (m_progress)
-      m_progress->pop (m_stack);
+      m_progress->pop (m_stack, true);
   }
 private:
   int m_stack;

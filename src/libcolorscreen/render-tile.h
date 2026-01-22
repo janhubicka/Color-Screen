@@ -39,20 +39,14 @@ bool render_img_normal(render_type_parameters rtparam,
   render.set_render_type (rtparam);
   int stack = 0;
   if (progress)
-    {
-      progress->set_task ("precomputing", 1);
-      stack = progress->push ();
-    }
-  if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				    (width + xoffset) * step,
-				    (height + yoffset) * step, progress))
-    {
-      if (progress)
-	progress->pop (stack);
+    progress->set_task ("precomputing", 1);
+  {
+    sub_task task (progress);
+    if (!render.precompute_img_range (xoffset * step, yoffset * step,
+				      (width + xoffset) * step,
+				      (height + yoffset) * step, progress))
       return false;
-    }
-  if (progress)
-    progress->pop (stack);
+  }
   if (progress)
     progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset) if (width * (size_t)height > render.openmp_size ())
@@ -85,16 +79,14 @@ bool render_img_downscale(render_type_parameters rtparam,
   T render (param, img, rparam, 255);
   render.set_render_type (rtparam);
   if (progress)
-    {
-      progress->set_task ("precomputing", 1);
-      progress->push ();
-    }
-  if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				    (width + xoffset) * step,
-				    (height + yoffset) * step, progress))
-    return false;
-  if (progress)
-    progress->pop ();
+    progress->set_task ("precomputing", 1);
+  {
+    sub_task task (progress);
+    if (!render.precompute_img_range (xoffset * step, yoffset * step,
+				      (width + xoffset) * step,
+				      (height + yoffset) * step, progress))
+      return false;
+  }
   rgbdata *data = (rgbdata *)malloc (sizeof (rgbdata) * width * height);
   if (!data)
     return false;
@@ -130,16 +122,14 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
   T render (param, img, rparam, 255);
   render.set_render_type (rtparam);
   if (progress)
-    {
-      progress->set_task ("precomputing", 1);
-      progress->push ();
-    }
-  if (!render.precompute_img_range (xoffset * step, yoffset * step,
-				    (width + xoffset) * step,
-				    (height + yoffset) * step, progress))
-    return false;
-  if (progress)
-    progress->pop ();
+    progress->set_task ("precomputing", 1);
+  {
+    sub_task task (progress);
+    if (!render.precompute_img_range (xoffset * step, yoffset * step,
+				      (width + xoffset) * step,
+				      (height + yoffset) * step, progress))
+      return false;
+  }
   luminosity_t *data = (luminosity_t *)malloc (sizeof (luminosity_t) * width * height);
   if (!data)
     return false;
@@ -327,15 +317,11 @@ void render_stitched(RP &rtparam, P &outer_param,
 	  {
 	    render_parameters rparam2 = rparam;
 	    rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
-	    if (progress)
-	      progress->push ();
-	    renders[iy * stitch.params.width + ix]  = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
-	    openmp_size = renders[iy * (size_t)stitch.params.width + ix]->openmp_size ();
-	    if (progress)
-	      {
-		progress->pop ();
-		progress->inc_progress ();
-	      }
+	    {
+	      sub_task task (progress);
+	      renders[iy * stitch.params.width + ix]  = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
+	      openmp_size = renders[iy * (size_t)stitch.params.width + ix]->openmp_size ();
+	    }
 	  }
   }
   if (progress)
@@ -379,11 +365,10 @@ void render_stitched(RP &rtparam, P &outer_param,
 			{
 			  render_parameters rparam2 = rparam;
 			  rparam.get_tile_adjustment (&stitch, ix, iy).apply (&rparam2);
-			  if (progress)
-			    progress->push ();
-			  renders[iy * stitch.params.width + ix] = lastrender = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
-			  if (progress)
-			    progress->pop ();
+			  sub_task task (progress);
+			    {
+			      renders[iy * stitch.params.width + ix] = lastrender = init_render (rtparam, rparam2, *img.stitch->images[iy][ix].img, img.stitch->images[iy][ix].param, outer_param, progress);
+			    }
 			}
 		    }
 		    if (hack)

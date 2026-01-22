@@ -147,11 +147,15 @@ progress_info::wait (const char *name)
 {
   set_task_1 (name, -1);
 }
+/* Parameter SAFE indicates if push happens from set_task.
+   Accessing push/pop directly may lead to stack desynchronization.  */
 int
-progress_info::push ()
+progress_info::push (bool safe)
 {
   if (pthread_mutex_lock (&m_lock) != 0)
     perror ("lock");
+  //if (!safe)
+    //printf ("Unsafe push\n");
   int ret = stack.size ();
   assert (ret >= 0);
   stack.push_back ({ m_max, m_current, m_task });
@@ -165,12 +169,15 @@ progress_info::push ()
   return ret;
 }
 
-/* EXPECTED is return value of push used for sanity checking.  */
+/* EXPECTED is return value of push used for sanity checking.
+   Parameter SAFE indicates if push happens from set_task.  */
 void
-progress_info::pop (int expected)
+progress_info::pop (int expected, bool safe)
 {
   if (pthread_mutex_lock (&m_lock) != 0)
     perror ("lock");
+  //if (!safe)
+    //printf ("Unsafe pop\n");
   assert (stack.size () > 0);
   task t = stack.back ();
   m_current = t.current;
