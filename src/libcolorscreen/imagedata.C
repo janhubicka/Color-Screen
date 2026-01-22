@@ -1006,14 +1006,11 @@ stitch_image_data_loader::load_part (int *permille, const char **error,
   stitch_image &simg = m_img->stitch->images[y][x];
   if (!simg.img)
     {
-      if (progress)
-        progress->push ();
+      sub_task task (progress);
       if (progress)
         progress->set_task ("loading image header", 1);
       if (!simg.init_loader (error, progress))
         return false;
-      if (progress)
-        progress->pop ();
       *permille = 1000 * m_curr_img / (m_max_img + 1);
       if (!simg.img->allocate ())
         {
@@ -1024,15 +1021,14 @@ stitch_image_data_loader::load_part (int *permille, const char **error,
       return true;
     }
   int permille2;
-  if (progress)
-    progress->push ();
-  if (!simg.load_part (&permille2, error, progress))
-    {
-      simg.img = NULL;
-      return false;
-    }
-  if (progress)
-    progress->pop ();
+  {
+    sub_task task (progress);
+    if (!simg.load_part (&permille2, error, progress))
+      {
+	simg.img = NULL;
+	return false;
+      }
+  }
   *permille
       = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
   if (permille2 == 1000)

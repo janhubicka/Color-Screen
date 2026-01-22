@@ -178,13 +178,13 @@ progress_info::pop (int expected)
   if (m_task && time_report)
     record_time (m_task, m_start_time);
   m_task = t.task;
+  assert (expected == -1 || (int)stack.size () - 1 == expected);
   stack.pop_back ();
   if (m_record_time || time_report)
     {
       m_start_time = time_stack.back ();
       time_stack.pop_back ();
     }
-  assert (expected == -1 || (int)stack.size () == expected);
   pthread_mutex_unlock (&m_lock);
 }
 static void *
@@ -243,7 +243,7 @@ progress_info::get_status ()
     }
   pthread_mutex_unlock (&m_lock);
   if (task != NULL)
-    ret.push_back ({ task, max ? (float)100.0 * current / max : 0 });
+    ret.push_back ({ task, max > 1 ? (float)100.0 * current / max : -1 });
   return ret;
 }
 file_progress_info::file_progress_info (FILE *f, bool display, bool print_all_tasks)

@@ -489,13 +489,12 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
           if (used[y * img.stitch->params.width + x])
             {
               int stack = 0;
-              if (progress)
-                stack = progress->push ();
-              optimize_color_model_colors_collect (
-                  param, img, x, y, proportions, my_rparam, points,
-                  colors.data (), targets.data (), progress);
-              if (progress)
-                progress->pop (stack);
+	      {
+		sub_task task (progress);
+		optimize_color_model_colors_collect (
+		    param, img, x, y, proportions, my_rparam, points,
+		    colors.data (), targets.data (), progress);
+	      }
               if (progress)
                 progress->inc_progress ();
             }

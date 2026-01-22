@@ -1310,15 +1310,40 @@ void MainWindow::onProgressTimer() {
       m_progressContainer->setVisible(true);
     }
 
-    const char *tName = "";
-    float percent = 0;
-    task->info->get_status(&tName, &percent);
+    std::vector<colorscreen::progress_info::status> statusStack =
+        task->info->get_status();
 
-    m_statusLabel->setText(QString::fromUtf8(tName));
-    if (percent >= 0) {
-      m_progressBar->setValue((int)percent);
+    if (statusStack.empty()) {
+       m_statusLabel->setText("no progress info (yet)");
+       m_progressBar->setValue(0);
+       m_progressBar->setRange(0, 0);
     } else {
-      m_progressBar->setValue(0);
+      QStringList tasks;
+      float percent = -1;
+
+      for (const auto &s : statusStack) {
+        if (s.task && s.task[0]) {
+           QString taskName = QString::fromUtf8(s.task);
+           if (s.progress >= 0 && &s != &statusStack.back()) {
+               taskName += QString(" (%1%)").arg((int)s.progress);
+           }
+           tasks.append(taskName);
+        }
+        // Use the progress of the most specific task that has progress
+        if (s.progress >= 0) {
+           percent = s.progress;
+        }
+      }
+
+      m_statusLabel->setText(tasks.join(" > "));
+
+      if (percent >= 0) {
+        m_progressBar->setRange(0, 100);
+        m_progressBar->setValue((int)percent);
+      } else {
+        // Indeterminate progress (animated busy indicator)
+        m_progressBar->setRange(0, 0); 
+      }
     }
   }
 }

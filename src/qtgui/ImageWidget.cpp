@@ -1252,7 +1252,8 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
                               Q_ARG(int, w),
                               Q_ARG(int, h),
                               Q_ARG(colorscreen::render_parameters, frameParams),
-                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
+                              Q_ARG(const char*, "Rendering image"));
     
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);

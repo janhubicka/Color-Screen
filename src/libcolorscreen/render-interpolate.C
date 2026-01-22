@@ -781,34 +781,29 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
           render_parameters my_rparam = rparam;
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
-          if (progress)
-            stack = progress->push ();
-          if (!analyze_patches (
-                  [&] (coord_t tsx, coord_t tsy, rgbdata c)
-                    {
-                      int ttx, tty;
-                      point_t src
-                          = stitch.images[ty][tx].img_scr_to_common_scr (
-                              { tsx, tsy });
-                      point_t pfin
-                          = stitch.common_scr_to_img.scr_to_final (src);
-                      if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
-                          || pfin.y > ymax
-                          || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
-                                                   &ttx, &tty, true)
-                          || ttx != tx || tty != ty)
-                        return true;
-                      return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
-                    },
-                  "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-                  true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
-            {
-              if (progress)
-                progress->pop (stack);
-              return false;
-            }
-          if (progress)
-            progress->pop (stack);
+	  {
+	    sub_task task (progress);
+	    if (!analyze_patches (
+		    [&] (coord_t tsx, coord_t tsy, rgbdata c)
+		      {
+			int ttx, tty;
+			point_t src
+			    = stitch.images[ty][tx].img_scr_to_common_scr (
+				{ tsx, tsy });
+			point_t pfin
+			    = stitch.common_scr_to_img.scr_to_final (src);
+			if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
+			    || pfin.y > ymax
+			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+						     &ttx, &tty, true)
+			    || ttx != tx || tty != ty)
+			  return true;
+			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, c);
+		      },
+		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
+		    true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+	      return false;
+	  }
           if (progress)
             progress->inc_progress ();
         }
@@ -867,39 +862,34 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
           render_parameters my_rparam = rparam;
           rparam.get_tile_adjustment (&stitch, tx, ty).apply (&my_rparam);
           int stack = 0;
-          if (progress)
-            stack = progress->push ();
-          if (!analyze_rgb_patches (
-                  [&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g,
-                       rgbdata b)
-                    {
-                      int ttx, tty;
-                      point_t src
-                          = stitch.images[ty][tx].img_scr_to_common_scr (
-                              { tsx, tsy });
-                      point_t pfin
-                          = stitch.common_scr_to_img.scr_to_final (src);
-                      // printf ("tile %i %i tilescreen %f %f screen %f %f
-                      // final %f %f range %i:%i %i:%i\n",tx,ty,
-                      // tsx,tsy,src.x,src.y,fx,fy,xmin,xmax,ymin,ymax);
-                      if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
-                          || pfin.y > ymax
-                          || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
-                                                   &ttx, &tty, true)
-                          || ttx != tx || tty != ty)
-                        return true;
-                      return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r,
-                                      g, b);
-                    },
-                  "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
-                  true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
-            {
-              if (progress)
-                progress->pop (stack);
-              return false;
-            }
-          if (progress)
-            progress->pop (stack);
+	  {
+	    sub_task task (progress);
+	    if (!analyze_rgb_patches (
+		    [&] (coord_t tsx, coord_t tsy, rgbdata r, rgbdata g,
+			 rgbdata b)
+		      {
+			int ttx, tty;
+			point_t src
+			    = stitch.images[ty][tx].img_scr_to_common_scr (
+				{ tsx, tsy });
+			point_t pfin
+			    = stitch.common_scr_to_img.scr_to_final (src);
+			// printf ("tile %i %i tilescreen %f %f screen %f %f
+			// final %f %f range %i:%i %i:%i\n",tx,ty,
+			// tsx,tsy,src.x,src.y,fx,fy,xmin,xmax,ymin,ymax);
+			if (pfin.x < xmin || pfin.y < ymin || pfin.x > xmax
+			    || pfin.y > ymax
+			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+						     &ttx, &tty, true)
+			    || ttx != tx || tty != ty)
+			  return true;
+			return analyze (pfin.x - img.xmin, pfin.y - img.ymin, r,
+					g, b);
+		      },
+		    "analyzing tile", tile, rparam, stitch.images[ty][tx].param,
+		    true, r.xmin, r.xmax, r.ymin, r.ymax, progress))
+	      return false;
+	  }
           if (progress)
             progress->inc_progress ();
         }

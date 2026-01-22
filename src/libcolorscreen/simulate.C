@@ -53,8 +53,7 @@ render_simulated_screen (simulated_screen &img,
   //printf ("Simulating %f\n", p.sharpen.scanner_mtf_scale);
   if (progress)
     progress->set_task ("simulating scan of the screen filter", 1);
-  if (progress)
-    stack = progress->push ();
+  sub_task task (progress);
 
   if (!p.sharpen.deconvolution_p ())
     sharpen<rgbdata, simulated_screen_pixel, get_pixel_data *, int,
@@ -100,8 +99,6 @@ render_simulated_screen (simulated_screen &img,
             }
         }
     }
-  if (progress)
-    progress->pop (stack);
 }
 
 simulated_screen *

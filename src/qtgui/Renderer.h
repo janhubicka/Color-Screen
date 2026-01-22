@@ -29,7 +29,8 @@ public slots:
     // We accept render_parameters by value here to capture state for this render frame
     void render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
                 colorscreen::render_parameters frameParams, 
-                std::shared_ptr<colorscreen::progress_info> progress);
+                std::shared_ptr<colorscreen::progress_info> progress,
+                const char* taskName = nullptr);
     
     // Update internal parameter copies (for non-blocking parameter updates)
     void updateParameters(const colorscreen::render_parameters &rparams,

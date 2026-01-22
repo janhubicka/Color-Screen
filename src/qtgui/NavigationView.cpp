@@ -173,7 +173,8 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
       Q_ARG(double, 0.0), // yOffset
       Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
       Q_ARG(colorscreen::render_parameters, *m_rparams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
+      Q_ARG(const char*, "Rendering navigation"));
       
     if (!result) {
         qWarning() << "NavigationView::onTriggerRender - FAILED to invoke render method!";

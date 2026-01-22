@@ -188,11 +188,8 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
   if (params.width == 1 && params.height == 1)
     {
       int stack = 0;
-      if (progress)
-	stack = progress->push ();
+      sub_task task (progress);
       bool ret = analyze (dsparam, 0, 0, progress);
-      if (progress)
-        progress->pop (stack);
       return ret;
     }
   for (int y = 0; y < params.height; y++)
@@ -206,8 +203,8 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 	  coord_t xs;
 	  coord_t ys;
 	  int stack = 0;
-	  if (progress)
-	    stack = progress->push ();
+
+	  sub_task task (progress);
 	  analyze (dsparam, 0, y - 1, progress);
 	  analyze (dsparam, 0, y, progress);
 	  if (!images[y - 1][0].get_analyzer ().
@@ -245,25 +242,18 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 	      print_panorama_map (stdout);
 	      progress->resume_stdout ();
 	    }
-	  if (progress)
-	    {
-	      progress->pop (stack);
-	      if (progress->cancel_requested ())
+	  if (progress && (progress->cancel_requested ()))
 		return false;
-	    }
 	}
       for (int x = 0; x < params.width - 1; x++)
 	{
 	  coord_t xs;
 	  coord_t ys;
 	  int stack = 0;
-	  if (progress)
-	    stack = progress->push ();
+	  sub_task task (progress);
 	  if (!analyze (dsparam, x, y, progress)
 	      || !analyze (dsparam, x + 1, y, progress))
 	    {
-	      if (progress)
-		progress->pop (stack);
 	      return false;
 	    }
 	  if (!images[y][x].get_analyzer ().
@@ -282,8 +272,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 		       images[y][x + 1].filename.c_str ());
 	      if (report_file)
 		print_status (report_file);
-	      if (progress)
-		progress->pop (stack);
 	      progress->resume_stdout ();
 	      return false;
 	    }
@@ -314,8 +302,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 			   images[y][x + 1].filename.c_str ());
 		  if (report_file)
 		    print_status (report_file);
-		  if (progress)
-		    progress->pop (stack);
 		  progress->resume_stdout ();
 		  return false;
 		}
@@ -378,7 +364,6 @@ stitch_project::analyze_images (detect_regular_screen_params *dsparam, progress_
 	    fflush (report_file);
 	  if (progress)
 	    {
-	      progress->pop (stack);
 	      progress->inc_progress ();
 	      if (progress->cancel_requested ())
 		return false;
@@ -612,13 +597,10 @@ stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rf
 	      fname2 = adjusted_filename (images[y][x].filename, render_type_properties[rtparam.type].name,".tif",-1,-1);
 	    rfparams2.filename = fname2.c_str ();
 
-	    if (progress)
-	      progress->push ();
+	    sub_task task (progress);
 
 	    if (!images[y][x].write_tile (rparam, rfparams2.xpos, rfparams2.ypos, rfparams2, rtparam, error, progress))
 	      return false;
-	    if (progress)
-	      progress->pop ();
 	  }
 	if (progress)
 	  progress->inc_progress ();

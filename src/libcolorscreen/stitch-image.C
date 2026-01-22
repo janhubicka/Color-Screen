@@ -231,44 +231,38 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     found = true;
   if (!found)
     return false;
-  if (progress)
-    stack = progress->push ();
-  const char *error;
-  if (!load_img (&error, progress))
-    {
-      if (progress)
-        progress->pop (stack);
-      return false;
-    }
-  if (!other.load_img (&error, progress))
-    {
-      if (progress)
-        progress->pop (stack);
-      release_img ();
-      return false;
-    }
+  {
+    sub_task task (progress);
+    const char *error;
+    if (!load_img (&error, progress))
+      {
+	return false;
+      }
+    if (!other.load_img (&error, progress))
+      {
+	release_img ();
+	return false;
+      }
+  }
   render_parameters def;
   render_img render (param, *img, def, 65535);
-  if (!render.precompute_all (progress))
-    {
-      if (progress)
-        progress->pop (stack);
-      release_img ();
-      other.release_img ();
-      return false;
-    }
-  render_img render2 (other.param, *other.img, def, 65535);
-  if (!render2.precompute_all (progress))
-    {
-      if (progress)
-        progress->pop (stack);
-      release_img ();
-      other.release_img ();
-      return false;
-    }
+  {
+    sub_task task (progress);
+    if (!render.precompute_all (progress))
+      {
+	release_img ();
+	other.release_img ();
+	return false;
+      }
+    render_img render2 (other.param, *other.img, def, 65535);
+    if (!render2.precompute_all (progress))
+      {
+	release_img ();
+	other.release_img ();
+	return false;
+      }
+  }
 
-  if (progress)
-    progress->pop (stack);
   int rxmin = INT_MAX, rxmax = INT_MIN, rymin = INT_MAX, rymax = INT_MIN;
   progress->set_task ("determining overlap range", 1);
   for (int y = 0; y < img_height; y += 10)
@@ -301,6 +295,7 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
   p.width = rwidth;
   p.height = rheight;
   p.depth = 16;
+  const char *error;
   tiff_writer out (p, &error);
   if (error)
     {
@@ -1363,8 +1358,7 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 	    if (!render1)
 	      {
 		int stack = 0;
-		if (progress)
-		  stack = progress->push ();
+		sub_task task (progress);
 		if (load_img (error, progress)
 		    && other.load_img (error, progress))
 		  {
@@ -1384,8 +1378,6 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
 			render2 = 0;
 		      }
 		  }
-		if (progress)
-		  progress->pop (stack);
 	      }
 	    if (!render2)
 	      break;

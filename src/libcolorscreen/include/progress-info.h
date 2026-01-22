@@ -134,6 +134,27 @@ private:
   pthread_mutex_t m_lock;
 };
 
+class sub_task
+{
+public:
+  sub_task (progress_info *p)
+  {
+    m_progress = p;
+    if (p)
+      m_stack = m_progress->push ();
+    else
+      m_stack = 0;
+  }
+  ~sub_task ()
+  {
+    if (m_progress)
+      m_progress->pop (m_stack);
+  }
+private:
+  int m_stack;
+  progress_info *m_progress;
+};
+
 class DLL_PUBLIC file_progress_info : public progress_info
 {
 public:

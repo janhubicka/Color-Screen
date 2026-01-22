@@ -37,17 +37,22 @@ bool render_img_normal(render_type_parameters rtparam,
 {
   T render (param, img, rparam, 255);
   render.set_render_type (rtparam);
+  int stack = 0;
   if (progress)
     {
       progress->set_task ("precomputing", 1);
-      progress->push ();
+      stack = progress->push ();
     }
   if (!render.precompute_img_range (xoffset * step, yoffset * step,
 				    (width + xoffset) * step,
 				    (height + yoffset) * step, progress))
-    return false;
+    {
+      if (progress)
+	progress->pop (stack);
+      return false;
+    }
   if (progress)
-    progress->pop ();
+    progress->pop (stack);
   if (progress)
     progress->set_task ("rendering", height);
 #pragma omp parallel for default(none) shared(progress,pixels,render,pixelbytes,rowstride,height, width,step,yoffset,xoffset) if (width * (size_t)height > render.openmp_size ())

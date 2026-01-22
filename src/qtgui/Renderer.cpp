@@ -32,13 +32,13 @@ void Renderer::updateParameters(const colorscreen::render_parameters &rparams,
 
 void Renderer::render(int reqId, double xOffset, double yOffset, double scale, int width, int height, 
                       colorscreen::render_parameters frameParams,
-                      std::shared_ptr<colorscreen::progress_info> progress)
+                      std::shared_ptr<colorscreen::progress_info> progress,
+                      const char* taskName) // Changed to const char*
 {
     if (!m_scan || (!m_scan->data && !m_scan->rgbdata)) {
         emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
         return;
     }
-    
     
     // Use passed params (which should be current from GUI thread)
     m_rparams = frameParams; 
@@ -89,7 +89,13 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     // Call the actual rendering function
     bool success = false;
     colorscreen::render_type_parameters rtparams = m_renderType;
+    int stack = -2;
     
+    if (progress && taskName) {
+       progress->set_task(taskName, 1);
+       stack = progress->push();
+    }
+
     try {
         colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
         
@@ -100,6 +106,10 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
         }
     } catch (const std::exception& e) {
         success = false;
+    }
+
+    if (progress && taskName) {
+        progress->pop(stack);
     }
     
     // Rotate if needed
