@@ -227,7 +227,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	  rfparams.icc_profile_len = sRGB_icc_len;
 	  rparam.output_gamma = -1;
         }
-      else
+      else if (!free_profile)
         {
           icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/);
 	  free_profile = true;
