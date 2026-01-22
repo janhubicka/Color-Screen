@@ -22,6 +22,7 @@ void GeometrySolverWorker::solve(
   bool success = false;
 
   try {
+    colorscreen::sub_task task (progress.get ());
     // Lens optimization is slow. Disable it for nonlinear tranfomrs
     if (computeMesh)
       solverParams.optimize_lens = false;

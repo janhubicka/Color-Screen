@@ -1503,7 +1503,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   }
 
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Loading image", 0);
+  progress->set_task("Opening image", 0);
   addProgress(progress);
 
   std::shared_ptr<colorscreen::image_data> tempScan =
@@ -1552,6 +1552,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   QFuture<std::pair<bool, QString>> future =
       QtConcurrent::run([tempScan, fileName, progress, demosaic]() {
         const char *error = nullptr;
+	colorscreen::sub_task task (progress.get ());
         bool res = tempScan->load(fileName.toUtf8().constData(), true, &error,
                                   progress.get(), demosaic);
         QString errStr;
