@@ -273,6 +273,12 @@ void SubtitleOverlay::initThanksList() {
         "Professor",
         "For going through incredibly difficult procedure to borrow Epson Perfection V850 scanner"
     });
+    s_thanksList.append({
+        "", // Header (filled at runtime or here)
+        "Štěpán Vodseďálek",
+        "Charles University",
+        "For testing macOS build of the GUI"
+    });
     
     
     // Add more here as requested later

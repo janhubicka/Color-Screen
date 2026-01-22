@@ -589,11 +589,16 @@ void MainWindow::createToolbar() {
   connect(m_modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &MainWindow::onModeChanged);
 
-
+  // Color checkbox (moved here, right after Mode)
+  m_colorCheckBox = new QCheckBox("Color", m_toolbar);
+  m_colorCheckBox->setEnabled(false);
+  connect(m_colorCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::onColorCheckBoxChanged);
+  m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
 
   m_toolbar->addSeparator();
 
-  // Interaction Tools
+  // Interaction Tools - Pan in View group
   QActionGroup *toolGroup = new QActionGroup(this);
   
   m_panAction = new QAction(getSymbolicIcon(":/icons/hand.svg"), "Pan", this);
@@ -604,12 +609,32 @@ void MainWindow::createToolbar() {
   m_panAction->setShortcut(QKeySequence("P"));
   m_toolbar->addAction(m_panAction);
 
+  // Zoom controls
+  m_toolbar->addAction(m_zoomInAction);
+  m_toolbar->addAction(m_zoomOutAction);
+  m_toolbar->addAction(m_zoom100Action);
+  m_toolbar->addAction(m_zoomFitAction);
+
+  // Rotation
+  QAction *rotLeftAction = m_toolbar->addAction(
+      getSymbolicIcon(":/icons/rotate-left.svg"), "Rotate Left");
+  connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
+
+  QAction *rotRightAction = m_toolbar->addAction(
+      getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
+  connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
+
+  // === REGISTRATION GROUP ===
+  QAction *regSeparator = m_toolbar->addSeparator();
+  m_registrationActions.append(regSeparator);
+
   m_selectAction = new QAction(getSymbolicIcon(":/icons/arrow.svg"), "Select", this);
   m_selectAction->setActionGroup(toolGroup);
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
   m_selectAction->setShortcut(QKeySequence("S"));
   m_toolbar->addAction(m_selectAction);
+  m_registrationActions.append(m_selectAction);
 
   m_addPointAction = new QAction(getSymbolicIcon(":/icons/plus.svg"), "Add Point", this);
   m_addPointAction->setActionGroup(toolGroup);
@@ -617,6 +642,7 @@ void MainWindow::createToolbar() {
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
   m_toolbar->addAction(m_addPointAction);
+  m_registrationActions.append(m_addPointAction);
 
   m_setCenterAction = new QAction(getSymbolicIcon(":/icons/crosshair.svg"), "Screen coordinates", this);
   m_setCenterAction->setActionGroup(toolGroup);
@@ -624,20 +650,29 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
   m_toolbar->addAction(m_setCenterAction);
+  m_registrationActions.append(m_setCenterAction);
   
   // Lock toggle (visible only when Set Center is active)
   m_toolbar->addAction(m_lockRelativeCoordinatesAction);
   m_lockRelativeCoordinatesAction->setVisible(false);
+  m_registrationActions.append(m_lockRelativeCoordinatesAction);
 
   // Optimize button (visible only when Set Center is active)
   m_toolbar->addAction(m_optimizeCoordinatesAction);
   m_optimizeCoordinatesAction->setVisible(false);
+  m_registrationActions.append(m_optimizeCoordinatesAction);
 
   connect(m_panAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) m_imageWidget->setInteractionMode(ImageWidget::PanMode);
   });
   connect(m_selectAction, &QAction::toggled, this, [this](bool checked) {
-    if (checked) m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+    if (checked) {
+      m_imageWidget->setInteractionMode(ImageWidget::SelectMode);
+      // Auto-enable registration points visibility
+      if (!m_imageWidget->registrationPointsVisible()) {
+        m_imageWidget->setShowRegistrationPoints(true);
+      }
+    }
   });
   connect(m_addPointAction, &QAction::toggled, this, [this](bool checked) {
     if (checked) {
@@ -662,33 +697,8 @@ void MainWindow::createToolbar() {
   connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
   connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this, &MainWindow::onCoordinateSystemChanged);
 
-  m_toolbar->addSeparator();
-
-  // Zoom controls
-  m_toolbar->addAction(m_zoomInAction);
-  m_toolbar->addAction(m_zoomOutAction);
-  m_toolbar->addAction(m_zoom100Action);
-  m_toolbar->addAction(m_zoomFitAction);
-
-  m_toolbar->addSeparator();
-  QAction *rotLeftAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-left.svg"), "Rotate Left");
-  connect(rotLeftAction, &QAction::triggered, this, &MainWindow::rotateLeft);
-
-  QAction *rotRightAction = m_toolbar->addAction(
-      getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
-  connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
-
-  m_toolbar->addSeparator();
-  m_colorCheckBox = new QCheckBox("Color", m_toolbar);
-  m_colorCheckBox->setEnabled(false); // Initially disabled
-  connect(m_colorCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::onColorCheckBoxChanged);
-  m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
-
-  // Connect mode selector
-  connect(m_modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-          this, &MainWindow::onModeChanged);
+  // Initially hide registration group
+  updateRegistrationGroupVisibility();
 
   updateModeMenu();
 }
@@ -1413,6 +1423,7 @@ void MainWindow::onImageLoaded() {
   // Refresh param values too
   applyState(getCurrentState());
   updateRegistrationActions();
+  updateRegistrationGroupVisibility();
 }
 
 // Recent Files Implementation
@@ -1636,6 +1647,8 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     QSignalBlocker blocker(nlBox);
     nlBox->setChecked(state.scrToImg.mesh_trans != nullptr);
   }
+  
+  updateRegistrationGroupVisibility();
 }
 
 ParameterState MainWindow::getCurrentState() const {
@@ -2013,6 +2026,24 @@ void MainWindow::updateColorCheckBoxState() {
     m_colorCheckBox->setChecked(m_renderTypeParams.color);
   }
   m_colorCheckBox->blockSignals(false);
+}
+
+void MainWindow::updateRegistrationGroupVisibility() {
+  // Show registration group only if:
+  // 1. Image is loaded
+  // 2. Screen type is not Random
+  bool shouldShow = m_scan && (m_scrToImgParams.type != colorscreen::Random);
+  
+  for (QAction *action : m_registrationActions) {
+    action->setVisible(shouldShow);
+  }
+  
+  // If hiding and a registration tool is active, switch to Pan
+  if (!shouldShow && (m_selectAction->isChecked() || 
+                      m_addPointAction->isChecked() || 
+                      m_setCenterAction->isChecked())) {
+    m_panAction->setChecked(true);
+  }
 }
 
 void MainWindow::onGamutWarningToggled(bool checked) {

@@ -160,6 +160,7 @@ private:
   QAction *m_nonLinearAction;
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
+  QList<QAction*> m_registrationActions; // Track registration group actions for visibility
   QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
   QList<QAction *> m_recentFileActions;
@@ -217,6 +218,9 @@ private slots:
 
   // Helper to update color checkbox state and visibility
   void updateColorCheckBoxState();
+  
+  // Helper to update registration group visibility
+  void updateRegistrationGroupVisibility();
 
 private:
   // Status Bar Widgets
