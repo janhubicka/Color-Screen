@@ -90,6 +90,21 @@ struct solver_parameters
     points.push_back ({ img, screen, color });
     return n_points ();
   }
+  DLL_PUBLIC_EXP int
+  add_or_modify_point (point_t img, point_t screen, enum point_color color)
+  {
+    for (int n = 0; n < n_points (); n++)
+      if (points[n].scr.almost_eq (screen, 0.5))
+        {
+	  points[n].img = img;
+	  points[n].scr = screen;
+	  points[n].color = color;
+	  return n;
+        }
+      else
+        points.push_back ({ img, screen, color });
+    return n_points ();
+  }
 
   DLL_PUBLIC_EXP void
   remove_point (int n)
