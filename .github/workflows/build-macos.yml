@@ -222,9 +222,12 @@ jobs:
         done
 
         # Bundle Adwaita icons (if available)
+        # Bundle Adwaita icons (if available)
         mkdir -p Color-Screen.app/Contents/share/icons
-        if [ -d "/tmp/Color-Screen-MacOS/share/icons" ]; then
-             cp -r /tmp/Color-Screen-MacOS/share/icons/* Color-Screen.app/Contents/share/icons/ || true
+        if [ -d "/opt/homebrew/share/icons/Adwaita" ]; then
+             cp -r /opt/homebrew/share/icons/Adwaita Color-Screen.app/Contents/share/icons/ || true
+        elif [ -d "/usr/local/share/icons/Adwaita" ]; then
+             cp -r /usr/local/share/icons/Adwaita Color-Screen.app/Contents/share/icons/ || true
         fi
 
         # Comprehensively fix library references for BOTH executables
