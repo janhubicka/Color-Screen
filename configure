@@ -22057,11 +22057,11 @@ printf "%s\n" "$is_clang" >&6; }
 
 GUI_LDFLAGS=""
 #if test "x$is_clang" = "xno"; then
-   #case "$host" in
-     #*-*-mingw*)
-       #GUI_LDFLAGS="-mwindows"
-       #;;
-   #esac
+   case "$host" in
+     *-*-mingw*)
+       GUI_LDFLAGS="-mwindows"
+       ;;
+   esac
 #fi
 
 
