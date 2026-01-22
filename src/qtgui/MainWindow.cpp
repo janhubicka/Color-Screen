@@ -50,9 +50,10 @@
 class ChangeParametersCommand : public QUndoCommand {
 public:
   ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
-                          const ParameterState &newState)
+                          const ParameterState &newState,
+                          const QString &description = QString())
       : m_window(window), m_oldState(oldState), m_newState(newState) {
-    setText("Change Parameters");
+    setText(description.isEmpty() ? "Change Parameters" : description);
     m_timestamp = QDateTime::currentMSecsSinceEpoch();
   }
 
@@ -234,20 +235,20 @@ void MainWindow::setupUi() {
   // Create Sharpness Panel
   m_sharpnessPanel = new SharpnessPanel(
       [this]() { return getCurrentState(); },
-      [this](const ParameterState &s) { changeParameters(s); },
+      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
       [this]() { return m_scan; }, this);
 
   // Create Screen Panel
   m_screenPanel =
       new ScreenPanel([this]() { return getCurrentState(); },
-                      [this](const ParameterState &s) { changeParameters(s); },
+                      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                       [this]() { return m_scan; }, this);
 
   // Create Color Panel (after Sharpness)
   // Create Color Panel (after Sharpness)
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
-                     [this](const ParameterState &s) { changeParameters(s); },
+                     [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                      [this]() { return m_scan; }, this);
 
   // Connect Progress Signals from Panels
@@ -366,13 +367,13 @@ void MainWindow::setupUi() {
   // Create Linearization Panel
   m_linearizationPanel = new LinearizationPanel(
       [this]() { return getCurrentState(); },
-      [this](const ParameterState &s) { changeParameters(s); },
+      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
       [this]() { return m_scan; }, this);
 
   // Create Geometry Panel
   m_geometryPanel =
       new GeometryPanel([this]() { return getCurrentState(); },
-                        [this](const ParameterState &s) { changeParameters(s); },
+                        [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
                         [this]() { return m_scan; }, this);
 
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
@@ -1630,12 +1631,12 @@ ParameterState MainWindow::getCurrentState() const {
   return state;
 }
 
-void MainWindow::changeParameters(const ParameterState &newState) {
+void MainWindow::changeParameters(const ParameterState &newState, const QString &description) {
   ParameterState currentState = getCurrentState();
   if (currentState == newState)
     return;
 
-  m_undoStack->push(new ChangeParametersCommand(this, currentState, newState));
+  m_undoStack->push(new ChangeParametersCommand(this, currentState, newState, description));
 }
 
 // Helper to check for unsaved changes and prompt to save
@@ -1909,7 +1910,7 @@ void MainWindow::onNonlinearToggled(bool checked) {
     if (m_scrToImgParams.mesh_trans) {
       ParameterState newState = getCurrentState();
       newState.scrToImg.mesh_trans = nullptr;
-      changeParameters(newState);
+      changeParameters(newState, "Disable Nonlinear Corrections");
     }
   }
 }
@@ -1958,7 +1959,7 @@ void MainWindow::onSolverFinished(int reqId, colorscreen::scr_to_img_parameters 
   if (success) {
     ParameterState newState = getCurrentState();
     newState.scrToImg.merge_solver_solution(result);
-    changeParameters(newState);
+    changeParameters(newState, "Optimize Geometry");
   } else {
     QMessageBox::warning(this, "Optimization Failed", "The geometry solver failed to find a solution.");
   }
@@ -2168,7 +2169,7 @@ void MainWindow::onPointManipulationStarted() {
 void MainWindow::maybeTriggerAutoSolver() {
   ParameterState newState = getCurrentState();
   if (newState != m_undoSnapshot) {
-    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState));
+    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState, "Move Registration Point"));
     m_undoSnapshot = newState;
   }
 
@@ -2258,7 +2259,7 @@ void MainWindow::onOptimizeCoordinates() {
       m_scrToImgParams.coordinate2 = ret.coordinate2;
       
       // Update UI
-      changeParameters(getCurrentState());
+      changeParameters(getCurrentState(), "Optimize Coordinates");
       m_imageWidget->update();
       
       QMessageBox::information(this, "Optimization", "Coordinates optimized successfully.");

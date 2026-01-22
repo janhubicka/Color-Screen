@@ -401,7 +401,7 @@ bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
   return true;
 }
 
-void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier) {
-  ParameterPanel::applyChange(modifier);
+void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier, const QString &description) {
+  ParameterPanel::applyChange(modifier, description);
   scheduleTileUpdate();
 }

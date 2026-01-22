@@ -63,10 +63,10 @@ void ParameterPanel::updateUI() {
 }
 
 void ParameterPanel::applyChange(
-    std::function<void(ParameterState &)> modifier) {
+    std::function<void(ParameterState &)> modifier, const QString &description) {
   ParameterState state = m_stateGetter();
   modifier(state);
-  m_stateSetter(state);
+  m_stateSetter(state, description);
 }
 
 void ParameterPanel::addDoubleParameter(
@@ -110,8 +110,8 @@ void ParameterPanel::addDoubleParameter(
 
   // Connect changes: UI -> State
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, setter](double val) {
-            applyChange([setter, val](ParameterState &s) { setter(s, val); });
+          [this, setter, label](double val) {
+            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
           });
 
   // Updater: State -> UI
@@ -265,14 +265,14 @@ void ParameterPanel::addSliderParameter(
 
   // Synchronization
   connect(slider, &QSlider::valueChanged, this,
-          [this, spin, sliderToValue, setter](int val) {
+          [this, spin, sliderToValue, setter, label](int val) {
             double dVal = sliderToValue(val);
             spin->blockSignals(true);
             spin->setValue(dVal);
             spin->blockSignals(false);
 
             // Trigger update
-            applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); });
+            applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); }, label);
           });
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -284,8 +284,8 @@ void ParameterPanel::addSliderParameter(
 
   // Change
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, setter](double val) {
-            applyChange([setter, val](ParameterState &s) { setter(s, val); });
+          [this, setter, label](double val) {
+            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
           });
 
   // Updater: State -> UI
@@ -343,9 +343,9 @@ QComboBox *ParameterPanel::addEnumParameter(
 
   // Connect changes: UI -> State
   connect(combo, QOverload<int>::of(&QComboBox::activated), this,
-          [this, combo, setter](int index) {
+          [this, combo, setter, label](int index) {
             int val = combo->itemData(index).toInt();
-            applyChange([setter, val](ParameterState &s) { setter(s, val); });
+            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
           });
 
   // Updater: State -> UI
@@ -426,8 +426,8 @@ void ParameterPanel::addCheckboxParameter(
   }
 
   // Connect changes: UI -> State
-  connect(checkbox, &QCheckBox::toggled, this, [this, setter](bool checked) {
-    applyChange([setter, checked](ParameterState &s) { setter(s, checked); });
+  connect(checkbox, &QCheckBox::toggled, this, [this, setter, label](bool checked) {
+    applyChange([setter, checked](ParameterState &s) { setter(s, checked); }, label);
   });
 
   // Updater: State -> UI
@@ -515,7 +515,7 @@ void ParameterPanel::addCorrelatedRGBParameter(
 
   // Interaction Logic
   auto handleValueChange = [this, channels, linkCheck, getter, setter,
-                            scale](int changedIdx, double newVal) {
+                            scale, label](int changedIdx, double newVal) {
     ParameterState s = m_stateGetter();
     colorscreen::rgbdata current = getter(s);
     double oldVal = current[changedIdx];
@@ -532,7 +532,7 @@ void ParameterPanel::addCorrelatedRGBParameter(
       }
     }
 
-    applyChange([setter, next](ParameterState &state) { setter(state, next); });
+    applyChange([setter, next](ParameterState &state) { setter(state, next); }, label);
 
     // Optimistic UI update for linked sliders
     if (linkCheck->isChecked()) {

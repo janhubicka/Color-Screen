@@ -23,7 +23,7 @@ class ParameterPanel : public QWidget {
   Q_OBJECT
 public:
   using StateGetter = std::function<ParameterState()>;
-  using StateSetter = std::function<void(const ParameterState &)>;
+  using StateSetter = std::function<void(const ParameterState &, const QString &)>;
   using ImageGetter = std::function<std::shared_ptr<colorscreen::image_data>()>;
 
   explicit ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -100,7 +100,7 @@ protected:
                                    std::function<void()> onDetach);
 
 protected:
-  virtual void applyChange(std::function<void(ParameterState &)> modifier);
+  virtual void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString());
   QFormLayout *m_currentGroupForm = nullptr;
 
   StateGetter m_stateGetter;

@@ -38,7 +38,7 @@ protected:
 private:
   void setupUi();
   void updateSpectraChart();
-  void applyChange(std::function<void(ParameterState &)> modifier) override;
+  void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
 
   // Cached parameters for change detection
   colorscreen::render_parameters m_lastRParams;

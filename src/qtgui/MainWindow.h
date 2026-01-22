@@ -244,7 +244,7 @@ private:
 
   // Undo/Redo
   QUndoStack *m_undoStack;
-  void changeParameters(const ParameterState &newState);
+  void changeParameters(const ParameterState &newState, const QString &description = QString());
   ParameterState getCurrentState() const;
   void updateUIFromState(const ParameterState &state);
 
