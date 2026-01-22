@@ -8,37 +8,26 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    
+    runs-on: ${{ matrix.runner }}
     
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
+    
     steps:
     - uses: actions/checkout@v4
     - name: Update
       run: sudo apt-get update
-    - name: Install libtiff
-      run: sudo apt-get install -y libtiff-dev
-    - name: Install libjpeg-turbo
-      run: sudo apt-get install -y libturbojpeg0-dev
-    - name: Install libzip
-      run: sudo apt-get install -y libzip-dev
-    - name: Install libgsl
-      run: sudo apt-get install -y libgsl-dev
-    - name: Install libraw
-      run: sudo apt-get install -y libraw-dev
-    - name: Install liblcms2
-      run: sudo apt-get install -y liblcms2-dev
-    - name: Install gtk2
-      run: sudo apt-get install -y libgtk2.0-dev
-    - name: Install fftw3
-      run: sudo apt-get install -y libfftw3-dev
-    - name: Install qt6-base-dev
-      run: sudo apt-get install -y qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev
-
+    - name: Install dependencies
+      run: sudo apt-get install -y libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev build-essential
+    
     - name: configure
       run: CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --enable-gtkgui --enable-qtgui
     - name: make
@@ -49,74 +38,55 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: testsuite
+        name: testsuite-${{ matrix.arch }}
         path: |
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-    - name: make distcheck
-      run: make -j$(nproc) distcheck
-    - uses: actions/upload-artifact@v4
-      with:
-        name: source-tarball
-        path: colorscreen-*.tar.gz
-
+    
     - name: Package DEB
       run: |
         # Create temp install dir
         mkdir -p /tmp/install
-        # Configure with prefix
-        ./configure --prefix=/usr --enable-gtkgui --enable-qtgui
         # Install to temp dir
         make install DESTDIR=/tmp/install
         # Run packaging script
-        ./os/linux/package_deb.sh /tmp/install 2.0alpha amd64
+        ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
     - uses: actions/upload-artifact@v4
       with:
-        name: colorscreen-deb-amd64
+        name: colorscreen-deb-${{ matrix.arch }}
         path: colorscreen_*.deb
+
+    # Only run distcheck and checking build on amd64 to save time/resources on ARM runners
+    - name: make distcheck
+      if: matrix.arch == 'amd64'
+      run: make -j$(nproc) distcheck
+    
+    - uses: actions/upload-artifact@v4
+      if: matrix.arch == 'amd64'
+      with:
+        name: source-tarball
+        path: colorscreen-*.tar.gz
+
+    - name: make distclean
+      if: matrix.arch == 'amd64'
+      run: make -j$(nproc) distclean
+    
     - name: configure with checking
+      if: matrix.arch == 'amd64'
       run: CXXFLAGS="-Ofast  -march=native -fsanitize=address,undefined" CFLAGS="$CXXFLAGS" ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
     - name: make (checking enabled)
+      if: matrix.arch == 'amd64'
       run: make -j$(nproc) 
     - name: make -j$(nproc) check (checking enabled)
+      if: matrix.arch == 'amd64'
       run: make check
     - name: Upload Test Results (checking enabled)
+      if: matrix.arch == 'amd64' && always()
       uses: actions/upload-artifact@v4
-      if: always()
       with:
         name: testsuite-checking
         path: |
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
-
-
-  model-aarch64:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: uraimo/run-on-arch-action@v2
-      name: Build and Package on AArch64
-      id: build
-      with:
-        arch: aarch64
-        distro: ubuntu22.04
-        # Not using custom dockerfile, installing deps manually inside container
-        install: |
-          apt-get update -q -y
-          apt-get install -q -y git build-essential autoconf automake libtool pkg-config libtiff-dev libturbojpeg0-dev libzip-dev libgsl-dev libraw-dev liblcms2-dev libgtk2.0-dev libfftw3-dev qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-translations-l10n libqt6svg6-dev
-        run: |
-          # Configure
-          CXXFLAGS="-Ofast -flto" CFLAGS="$CXXFLAGS" ./configure --prefix=/usr --enable-gtkgui --enable-qtgui
-          # Make
-          make -j$(nproc)
-          # Install to temp dir
-          mkdir -p /tmp/install
-          make install DESTDIR=/tmp/install
-          # Package
-          ./os/linux/package_deb.sh /tmp/install 2.0alpha arm64
-    - uses: actions/upload-artifact@v4
-      with:
-        name: colorscreen-deb-arm64
-        path: colorscreen_*.deb
