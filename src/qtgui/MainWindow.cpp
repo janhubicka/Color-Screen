@@ -1088,8 +1088,8 @@ void MainWindow::onOpenParameters() {
 }
 
 void MainWindow::onSaveParameters() {
-  // If we don't have a current file, fall back to Save As
-  if (m_currentParamsFile.isEmpty()) {
+  // If we don't have a current file OR it's a weak suggestion, fall back to Save As
+  if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak) {
     onSaveParametersAs();
     return;
   }
@@ -1156,6 +1156,7 @@ void MainWindow::onSaveParametersAs() {
   
   // Update current file path and add to recent
   m_currentParamsFile = fileName;
+  m_currentParamsFileIsWeak = false; // Now it's a real file, not a suggestion
   addToRecentParams(fileName);
   
   statusBar()->showMessage(QString("Parameters saved to %1").arg(fileName), 3000);
@@ -1492,6 +1493,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             m_prevScrToImgParams = m_scrToImgParams;
             m_prevDetectParams = m_detectParams;
             
+            // Track the loaded parameter file
+            m_currentParamsFile = parFile;
+            m_currentParamsFileIsWeak = false; // This is a real file, not a suggestion
+            addToRecentParams(parFile);
+            
             // If we have a valid screen type, default to formatted (interpolated) view
             if (m_scrToImgParams.type != colorscreen::Random) {
               m_renderTypeParams.type = colorscreen::render_type_interpolated;
@@ -1499,7 +1505,17 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
           fclose(f);
         }
+      } else {
+        // User declined to load parameters - suggest filename
+        QFileInfo fileInfo(fileName);
+        m_currentParamsFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+        m_currentParamsFileIsWeak = true;
       }
+    } else {
+      // No parameter file exists - suggest filename
+      QFileInfo fileInfo(fileName);
+      m_currentParamsFile = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+      m_currentParamsFileIsWeak = true;
     }
   }
 
@@ -2048,6 +2064,16 @@ void MainWindow::saveRecoveryState() {
                           &m_rparams, &m_solverParams);
     fclose(f);
   }
+  
+  // Save parameter file path and weak flag
+  QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
+  QFile metaFile(paramsMetaPath);
+  if (metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    QTextStream out(&metaFile);
+    out << m_currentParamsFile << "\n";
+    out << (m_currentParamsFileIsWeak ? "1" : "0") << "\n";
+    metaFile.close();
+  }
 }
 
 void MainWindow::loadRecoveryState() {
@@ -2077,6 +2103,17 @@ void MainWindow::loadRecoveryState() {
                             QString("Error loading parameters: %1").arg(error));
       }
     }
+  }
+  
+  // Load parameter file path and weak flag
+  QString paramsMetaPath = m_recoveryDir + "/recovery_params_meta.txt";
+  QFile metaFile(paramsMetaPath);
+  if (metaFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QTextStream in(&metaFile);
+    m_currentParamsFile = in.readLine().trimmed();
+    QString weakFlag = in.readLine().trimmed();
+    m_currentParamsFileIsWeak = (weakFlag == "1");
+    metaFile.close();
   }
 
   // Load image if path was saved

@@ -270,6 +270,7 @@ private:
 
   // Current parameters file path
   QString m_currentParamsFile;
+  bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
 
   // Crash recovery
   QString m_recoveryDir;
