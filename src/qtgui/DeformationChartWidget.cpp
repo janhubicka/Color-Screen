@@ -113,8 +113,9 @@ int DeformationChartWidget::heightForWidth(int width) const
     int desiredContentHeight = static_cast<int>(availableWidth / aspectRatio);
     
     // Cap height to ensure portrait images don't explode the GUI
-    // 600px is a reasonable maximum for a side panel chart
-    if (desiredContentHeight > 600) desiredContentHeight = 600;
+    // 300px is a reasonable maximum for a side panel chart
+    int maxContentHeight = 300;
+    if (desiredContentHeight > maxContentHeight) desiredContentHeight = maxContentHeight;
     if (desiredContentHeight < 100) desiredContentHeight = 100;
     
     return desiredContentHeight + sliderHeight + verticalMargins;
