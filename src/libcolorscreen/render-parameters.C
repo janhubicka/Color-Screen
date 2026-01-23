@@ -1285,6 +1285,8 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   backlight_correction = rparam.backlight_correction;
   backlight_correction_black = rparam.backlight_correction_black;
   gamma = rparam.gamma;
+  scan_rotation = rparam.scan_rotation;
+  scan_mirror = rparam.scan_mirror;
   invert = rparam.invert;
   scan_exposure = rparam.scan_exposure;
   ignore_infrared = rparam.ignore_infrared;

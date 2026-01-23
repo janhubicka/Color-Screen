@@ -306,6 +306,11 @@ struct render_parameters
    */
   luminosity_t gamma;
 
+  /* Rotation of scan (in multiples of 90) to be used by UI nad file output.  */
+  int scan_rotation;
+  /* If set mirror the image horisontally.  */
+  bool scan_mirror;
+
   /* TODO; Invert is applied before backlight correction which is wrong.  */
   std::shared_ptr <backlight_correction_parameters> backlight_correction;
   luminosity_t backlight_correction_black;
@@ -625,6 +630,8 @@ struct render_parameters
 	   && gamma == other.gamma && film_gamma == other.film_gamma
            && target_film_gamma == other.target_film_gamma
            && output_gamma == other.output_gamma
+	   && scan_rotation == other.scan_rotation
+	   && scan_mirror == other.scan_mirror
 	   && sharpen.equal_p (other.sharpen)
            && presaturation == other.presaturation
 	   && gammut_warning == other.gammut_warning

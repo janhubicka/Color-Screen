@@ -299,10 +299,10 @@ public:
       vals[0] = 10;
     if (n == 2)
       {
-        if (vals[1] < 0)
-          vals[1] = 0;
-        if (vals[1] > 1)
-          vals[1] = 1;
+        if (vals[1] < -10)
+          vals[1] = -10;
+        if (vals[1] > 10)
+          vals[1] = 10;
       }
     for (int i = n; i < n + 3; i++)
       {
@@ -326,6 +326,7 @@ public:
       m_param.lens_correction.center = { 0, vals[0] };
     else if (m_param.scanner_type == lens_move_vertically)
       m_param.lens_correction.center = { vals[0], 0 };
+    m_param.lens_correction.kr[0] = 1;
     m_param.lens_correction.kr[1] = vals[n] * (1 / scale_kr);
     m_param.lens_correction.kr[2] = vals[n + 1] * (1 / scale_kr);
     m_param.lens_correction.kr[3] = vals[n + 2] * (1 / scale_kr);
@@ -398,6 +399,7 @@ solver (scr_to_img_parameters *param, image_data &img_data,
         param->lens_correction.center = { 0, s.start[0] };
       else if (param->scanner_type == lens_move_vertically)
         param->lens_correction.center = { s.start[0], 0 };
+      param->lens_correction.kr[0] = 1;
       param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[2]
           = s.start[n + 1] * (1 / lens_solver::scale_kr);
