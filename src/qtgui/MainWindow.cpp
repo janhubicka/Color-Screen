@@ -2,6 +2,8 @@
 #include "FinetuneWorker.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/finetune.h"
+#include "../libcolorscreen/include/histogram.h"
+#include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "ImageWidget.h"
 #include "NavigationView.h"
@@ -1043,8 +1045,12 @@ void MainWindow::createMenus() {
   connect(m_deselectAllAction, &QAction::triggered, this, &MainWindow::onDeselectAll);
 
   m_deleteSelectedAction = m_registrationMenu->addAction("&Remove Selected Points");
-  m_deleteSelectedAction->setShortcut(QKeySequence::Delete);
+  m_deleteSelectedAction->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   connect(m_deleteSelectedAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+
+  m_pruneMisplacedAction = m_registrationMenu->addAction("&Prune Misplaced Points");
+  m_pruneMisplacedAction->setShortcuts({QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
+  connect(m_pruneMisplacedAction, &QAction::triggered, this, &MainWindow::onPruneMisplaced);
 
   m_registrationMenu->addSeparator();
 
@@ -2220,6 +2226,114 @@ void MainWindow::onDeleteSelected() {
   m_imageWidget->deleteSelectedPoints();
 }
 
+void MainWindow::onPruneMisplaced() {
+  if (!m_scan || !m_imageWidget) {
+    return;
+  }
+  
+  const auto &selectedPoints = m_imageWidget->selectedPoints();
+  if (selectedPoints.empty()) {
+    return;
+  }
+  
+  // Create map for current geometry
+  colorscreen::scr_to_img map;
+  map.set_parameters(m_scrToImgParams, *m_scan);
+  
+  // Build histogram of distances
+  colorscreen::histogram hist;
+  
+  // First pass: pre-account all distances
+  for (const auto &sp : selectedPoints) {
+    if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
+        sp.index < m_solverParams.points.size()) {
+      const auto &point = m_solverParams.points[sp.index];
+      
+      colorscreen::coord_t dist;
+      if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
+        colorscreen::point_t predicted = map.to_img(point.scr);
+        dist = predicted.dist_from(point.img);
+      } else {
+        colorscreen::point_t predicted = map.to_scr(point.img);
+        dist = fabs(predicted.x - point.scr.x);
+      }
+      hist.pre_account(dist);
+    }
+  }
+  
+  hist.finalize_range(65536);
+  
+  // Second pass: account distances
+  for (const auto &sp : selectedPoints) {
+    if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
+        sp.index < m_solverParams.points.size()) {
+      const auto &point = m_solverParams.points[sp.index];
+      
+      colorscreen::coord_t dist;
+      if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
+        colorscreen::point_t predicted = map.to_img(point.scr);
+        dist = predicted.dist_from(point.img);
+      } else {
+        colorscreen::point_t predicted = map.to_scr(point.img);
+        dist = fabs(predicted.x - point.scr.x);
+      }
+      hist.account(dist);
+    }
+  }
+  
+  hist.finalize();
+  colorscreen::coord_t threshold = hist.find_max(0.1);
+  
+  // Remove points exceeding threshold
+  ParameterState oldState = getCurrentState();
+  
+  // Collect indices to remove (in reverse order to avoid index shifting issues)
+  std::vector<size_t> indicesToRemove;
+  for (const auto &sp : selectedPoints) {
+    if (sp.type == ImageWidget::SelectedPoint::RegistrationPoint &&
+        sp.index < m_solverParams.points.size()) {
+      const auto &point = m_solverParams.points[sp.index];
+      
+      colorscreen::coord_t dist;
+      if (!colorscreen::screen_with_vertical_strips_p(m_scrToImgParams.type)) {
+        colorscreen::point_t predicted = map.to_img(point.scr);
+        dist = predicted.dist_from(point.img);
+      } else {
+        colorscreen::point_t predicted = map.to_scr(point.img);
+        dist = fabs(predicted.x - point.scr.x);
+      }
+      
+      if (dist > threshold) {
+        indicesToRemove.push_back(sp.index);
+      }
+    }
+  }
+  
+  // Sort in descending order and remove
+  std::sort(indicesToRemove.begin(), indicesToRemove.end(), std::greater<size_t>());
+  for (size_t idx : indicesToRemove) {
+    m_solverParams.remove_point(idx);
+  }
+  
+  // Update UI
+  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+  m_imageWidget->clearSelection();
+  m_imageWidget->update();
+  
+  // Create undo command
+  ParameterState newState = getCurrentState();
+  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Prune misplaced points"));
+  
+  // Trigger auto solver if enabled
+  if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+    size_t count = m_imageWidget->registrationPointCount();
+    if (count >= 3) {
+      onOptimizeGeometry(true);
+    }
+  }
+  updateRegistrationActions();
+}
+
 void MainWindow::updateRegistrationActions() {
   bool hasPoints = m_imageWidget && m_imageWidget->registrationPointsVisible() && m_imageWidget->registrationPointCount() > 0;
   bool hasSelection = m_imageWidget && !m_imageWidget->selectedPoints().empty();
@@ -2233,6 +2347,9 @@ void MainWindow::updateRegistrationActions() {
   }
   if (m_deleteSelectedAction) {
     m_deleteSelectedAction->setEnabled(hasSelection);
+  }
+  if (m_pruneMisplacedAction) {
+    m_pruneMisplacedAction->setEnabled(hasSelection);
   }
   
   // Disable Add Point and Set Center tools when screen type is Random or no scan loaded

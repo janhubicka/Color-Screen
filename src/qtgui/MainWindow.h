@@ -85,6 +85,7 @@ private slots:
   void onSelectAll();
   void onDeselectAll();
   void onDeleteSelected();
+  void onPruneMisplaced();
   void onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                     colorscreen::point_t color);
   void onAreaSelected(QRect area);
@@ -157,6 +158,7 @@ private:
   QAction *m_selectAllAction;
   QAction *m_deselectAllAction;
   QAction *m_deleteSelectedAction;
+  QAction *m_pruneMisplacedAction;
   QAction *m_optimizeGeometryAction;
   QAction *m_autoOptimizeAction;
   QAction *m_optimizeAction;
