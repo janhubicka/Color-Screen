@@ -2486,7 +2486,7 @@ void MainWindow::onAreaSelected(QRect area) {
   addProgress(progress);
   
   // Create worker and thread
-  FinetuneWorker *worker = new FinetuneWorker(&m_solverParams, m_rparams, m_scrToImgParams,
+  FinetuneWorker *worker = new FinetuneWorker(m_solverParams, m_rparams, m_scrToImgParams,
                                               m_scan, xmin, ymin, xmax, ymax, progress);
   QThread *thread = new QThread();
   worker->moveToThread(thread);

@@ -15,7 +15,7 @@ class image_data;
 class FinetuneWorker : public QObject {
   Q_OBJECT
 public:
-  FinetuneWorker(colorscreen::solver_parameters *solver,
+  FinetuneWorker(colorscreen::solver_parameters solverParams,
                  colorscreen::render_parameters rparams,
                  colorscreen::scr_to_img_parameters scrToImg,
                  std::shared_ptr<colorscreen::image_data> scan,
@@ -30,7 +30,7 @@ signals:
   void pointsReady(std::vector<colorscreen::solver_parameters::solver_point_t> points);
 
 private:
-  colorscreen::solver_parameters *m_solver;
+  colorscreen::solver_parameters m_solverParams;
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_to_img_parameters m_scrToImg;
   std::shared_ptr<colorscreen::image_data> m_scan;
