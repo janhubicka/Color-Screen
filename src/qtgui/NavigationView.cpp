@@ -62,8 +62,6 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_renderType.type = colorscreen::render_type_original;
     m_renderType.color = true;
   }
-  // Antialias?
-  m_renderType.antialias = true; // Always look nice
 
   // Cancel current progress if exists - handled by queue cancelAll?
   // Actually, RenderQueue::cancelAll() will handle active renders.
@@ -191,8 +189,15 @@ void NavigationView::updateParameters(
   m_scrToImg = scrToImg;
   m_scrDetect = scrDetect;
 
+  // Recalculate render type based on new screen type
+  if (m_scrToImg && m_scrToImg->type != colorscreen::Random) {
+    m_renderType.type = colorscreen::render_type_fast;
+  } else {
+    m_renderType.type = colorscreen::render_type_original;
+    m_renderType.color = true;
+  }
+
   // Update renderer's cached parameters if it exists
-  // Note: NavigationView always uses its own m_renderType with antialias=true
   if (m_renderer) {
     QMetaObject::invokeMethod(
         m_renderer, "updateParameters", Qt::QueuedConnection,

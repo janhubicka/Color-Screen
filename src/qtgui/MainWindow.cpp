@@ -2610,30 +2610,26 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   // Ask user about color model
   bool updateColorModel = false;
-  if (m_rparams.color_model == colorscreen::render_parameters::color_model_none) {
-    // Auto-update if no color model is set
-    updateColorModel = true;
-  } else {
-    // Ask user
-    QString currentDye = QString::fromUtf8(
-        colorscreen::render_parameters::color_model_properties[m_rparams.color_model].name);
-    
-    // Determine what the auto color model would be
-    colorscreen::render_parameters tempParams = m_rparams;
-    tempParams.auto_color_model(result.param.type);
-    QString detectedDye = QString::fromUtf8(
-        colorscreen::render_parameters::color_model_properties[tempParams.color_model].name);
-    
-    if (currentDye != detectedDye) {
-      QMessageBox msgBox(this);
-      msgBox.setWindowTitle("Screen Detection");
-      msgBox.setText("Screen type detected successfully.");
-      msgBox.setInformativeText(QString("Change color model (Dyes) from %1 to %2?")
-                                .arg(currentDye).arg(detectedDye));
-      msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-      msgBox.setDefaultButton(QMessageBox::Yes);
-      updateColorModel = (msgBox.exec() == QMessageBox::Yes);
-    }
+  
+  // Determine what the auto color model would be
+  colorscreen::render_parameters tempParams = m_rparams;
+  tempParams.auto_color_model(result.param.type);
+  
+  // Always ask if detected dye differs from current
+  QString currentDye = QString::fromUtf8(
+      colorscreen::render_parameters::color_model_properties[m_rparams.color_model].name);
+  QString detectedDye = QString::fromUtf8(
+      colorscreen::render_parameters::color_model_properties[tempParams.color_model].name);
+  
+  if (currentDye != detectedDye) {
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Screen Detection");
+    msgBox.setText("Screen type detected successfully.");
+    msgBox.setInformativeText(QString("Change color model (Dyes) from %1 to %2?")
+                              .arg(currentDye).arg(detectedDye));
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::Yes);
+    updateColorModel = (msgBox.exec() == QMessageBox::Yes);
   }
   
   // Create undo snapshot before making changes
@@ -2650,6 +2646,9 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   // Copy the modified solver points from the worker's local copy
   m_solverParams.points = solverParams.points;
+  
+  // Change render type to interpolated after successful autodetection
+  m_renderTypeParams.type = colorscreen::render_type_interpolated;
   
   // Update UI
   m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
