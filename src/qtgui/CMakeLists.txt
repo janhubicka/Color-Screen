@@ -56,6 +56,7 @@ set(SOURCES
     PagetAnimation.cpp
     GeometryPanel.cpp
     GeometrySolverWorker.cpp
+    FinetuneWorker.cpp
     WorkerBase.cpp
     TaskQueue.cpp
     SubtitleOverlay.cpp
@@ -79,6 +80,7 @@ set(HEADERS
     PagetAnimation.h
     GeometryPanel.h
     GeometrySolverWorker.h
+    FinetuneWorker.h
     WorkerBase.h
     TaskQueue.h
     SubtitleOverlay.h

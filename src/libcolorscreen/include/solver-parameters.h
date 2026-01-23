@@ -101,8 +101,7 @@ struct solver_parameters
 	  points[n].color = color;
 	  return n;
         }
-      else
-        points.push_back ({ img, screen, color });
+    points.push_back ({ img, screen, color });
     return n_points ();
   }
 

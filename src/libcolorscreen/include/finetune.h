@@ -8,6 +8,7 @@ namespace colorscreen
 class screen;
 struct render_parameters;
 struct scr_to_img_parameters;
+struct scr_detect_parameters;
 class image_data;
 enum finetune_flags : uint64_t
 {

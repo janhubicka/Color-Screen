@@ -93,6 +93,7 @@ signals:
   void pointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                   colorscreen::point_t color);
   void setCenterRequested(colorscreen::point_t imgPos);
+  void areaSelected(QRect area);
   void coordinateSystemChanged();
   void pointManipulationStarted();
   void registrationPointMoved(size_t index, colorscreen::point_t newPos);

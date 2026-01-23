@@ -87,6 +87,9 @@ private slots:
   void onDeleteSelected();
   void onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                     colorscreen::point_t color);
+  void onAreaSelected(QRect area);
+  void onFinetuneFinished(bool success, std::vector<colorscreen::solver_parameters::solver_point_t> points,
+                          QThread *thread, std::shared_ptr<colorscreen::progress_info> progress);
   void onSetCenter(colorscreen::point_t imgPos);
   void onPointManipulationStarted();
   void updateRegistrationActions();
@@ -294,6 +297,9 @@ private:
   
   // Solver Queue
   TaskQueue m_solverQueue;
+  
+  // Finetune threads (allow multiple concurrent)
+  std::vector<QThread*> m_finetuneThreads;
   
 private slots:
   void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress);

@@ -719,9 +719,13 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
         m_rubberBand->show();
       }
     } else if (m_interactionMode == AddPointMode) {
-      // Add point mode: emit signal with click location
-      colorscreen::point_t imgPos = widgetToImage(event->position());
-      emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0}); // scrPos and color will be filled by finetune
+      // Start rubber band for area selection
+      m_rubberBandOrigin = event->pos();
+      if (!m_rubberBand) {
+        m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+      }
+      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
+      m_rubberBand->show();
     }
   }
 }
@@ -748,6 +752,10 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
         update();
       }
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
+      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
+    }
+  } else if (m_interactionMode == AddPointMode) {
+    if (m_rubberBand && m_rubberBand->isVisible()) {
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
   } else if (m_interactionMode == SetCenterMode) {
@@ -873,6 +881,24 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
         if (changed) {
           emit selectionChanged();
           update();
+        }
+      }
+    } else if (m_interactionMode == AddPointMode) {
+      if (m_rubberBand && m_rubberBand->isVisible()) {
+        QRect rect = m_rubberBand->geometry();
+        m_rubberBand->hide();
+        
+        // Check if this was a small movement (single click) or area selection
+        QPoint dragDistance = event->pos() - m_rubberBandOrigin;
+        bool isClick = dragDistance.manhattanLength() < 5;
+        
+        if (isClick) {
+          // Single point click - emit pointAdded signal
+          colorscreen::point_t imgPos = widgetToImage(event->position());
+          emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0});
+        } else {
+          // Area selection - emit areaSelected signal
+          emit areaSelected(rect);
         }
       }
     }

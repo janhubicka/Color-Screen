@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "FinetuneWorker.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -739,6 +740,7 @@ void MainWindow::createToolbar() {
   connect(m_imageWidget, &ImageWidget::selectionChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged, this, &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded);
+  connect(m_imageWidget, &ImageWidget::areaSelected, this, &MainWindow::onAreaSelected);
   connect(m_imageWidget, &ImageWidget::setCenterRequested, this, &MainWindow::onSetCenter);
   connect(m_imageWidget, &ImageWidget::coordinateSystemChanged, this, &MainWindow::onCoordinateSystemChanged);
 
@@ -2277,7 +2279,7 @@ void MainWindow::onPointManipulationStarted() {
 void MainWindow::maybeTriggerAutoSolver() {
   ParameterState newState = getCurrentState();
   if (newState != m_undoSnapshot) {
-    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState, "Move Registration Point"));
+    m_undoStack->push(new ChangeParametersCommand(this, m_undoSnapshot, newState, "Move registration point"));
     m_undoSnapshot = newState;
   }
 
@@ -2310,7 +2312,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   
   if (res.success) {
     // Snapshot state for undo
-    m_undoSnapshot = getCurrentState();
+    ParameterState oldState = getCurrentState();
     
     // Add the point to solver parameters
     m_solverParams.add_point(res.solver_point_img_location, res.solver_point_screen_location, res.solver_point_color);
@@ -2319,8 +2321,122 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
     m_imageWidget->update();
     
+    // Create undo command with correct description
+    ParameterState newState = getCurrentState();
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Add registration point"));
+    
     // Trigger auto solver if enabled
-    maybeTriggerAutoSolver();
+    if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+      size_t count = m_imageWidget->registrationPointCount();
+      if (count >= 3) {
+        onOptimizeGeometry(true);
+      }
+    }
+    updateRegistrationActions();
+  }
+}
+
+void MainWindow::onAreaSelected(QRect area) {
+  if (!m_scan) {
+    return;
+  }
+  
+  // Convert widget coordinates to image coordinates
+  // Get the four corners and find min/max
+  colorscreen::point_t topLeft = m_imageWidget->widgetToImage(area.topLeft());
+  colorscreen::point_t topRight = m_imageWidget->widgetToImage(area.topRight());
+  colorscreen::point_t bottomLeft = m_imageWidget->widgetToImage(area.bottomLeft());
+  colorscreen::point_t bottomRight = m_imageWidget->widgetToImage(area.bottomRight());
+  
+  // Find bounding box in image coordinates
+  int xmin = std::min({topLeft.x, topRight.x, bottomLeft.x, bottomRight.x});
+  int xmax = std::max({topLeft.x, topRight.x, bottomLeft.x, bottomRight.x});
+  int ymin = std::min({topLeft.y, topRight.y, bottomLeft.y, bottomRight.y});
+  int ymax = std::max({topLeft.y, topRight.y, bottomLeft.y, bottomRight.y});
+  
+  // Clamp to image bounds
+  xmin = std::max(0, xmin);
+  ymin = std::max(0, ymin);
+  xmax = std::min((int)m_scan->width - 1, xmax);
+  ymax = std::min((int)m_scan->height - 1, ymax);
+  
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Finding registration points", 100);
+  addProgress(progress);
+  
+  // Create worker and thread
+  FinetuneWorker *worker = new FinetuneWorker(&m_solverParams, m_rparams, m_scrToImgParams,
+                                              m_scan, xmin, ymin, xmax, ymax, progress);
+  QThread *thread = new QThread();
+  worker->moveToThread(thread);
+  
+  // Connect signals
+  connect(thread, &QThread::started, worker, &FinetuneWorker::run);
+  connect(worker, &FinetuneWorker::finished, thread, &QThread::quit);
+  connect(worker, &FinetuneWorker::finished, worker, &QObject::deleteLater);
+  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+  
+  // Connect to our slot to handle results
+  connect(worker, &FinetuneWorker::pointsReady, this,
+          [this, thread, progress](std::vector<colorscreen::solver_parameters::solver_point_t> points) {
+            onFinetuneFinished(true, points, thread, progress);
+          });
+  connect(worker, &FinetuneWorker::finished, this,
+          [this, thread, progress](bool success) {
+            if (!success) {
+              onFinetuneFinished(false, {}, thread, progress);
+            }
+          });
+  
+  // Track thread
+  m_finetuneThreads.push_back(thread);
+  
+  // Start thread
+  thread->start();
+}
+
+void MainWindow::onFinetuneFinished(bool success, std::vector<colorscreen::solver_parameters::solver_point_t> points,
+                                    QThread *thread, std::shared_ptr<colorscreen::progress_info> progress) {
+  // Remove progress
+  removeProgress(progress);
+  
+  // Remove thread from tracking
+  auto it = std::find(m_finetuneThreads.begin(), m_finetuneThreads.end(), thread);
+  if (it != m_finetuneThreads.end()) {
+    m_finetuneThreads.erase(it);
+  }
+  
+  // Check if cancelled
+  if (progress && progress->cancelled()) {
+    return;
+  }
+  
+  // Add points if successful
+  if (success && !points.empty()) {
+    ParameterState oldState = getCurrentState();
+    
+    // Add all points using add_or_modify_point
+    for (const auto &point : points) {
+      m_solverParams.add_or_modify_point(point.img, point.scr, point.color);
+    }
+    
+    // Update UI
+    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+    m_imageWidget->update();
+    
+    // Create undo command
+    ParameterState newState = getCurrentState();
+    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Add registration points"));
+    
+    // Trigger auto solver if enabled
+    if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+      size_t count = m_imageWidget->registrationPointCount();
+      if (count >= 3) {
+        onOptimizeGeometry(true);
+      }
+    }
+    updateRegistrationActions();
   }
 }
 
