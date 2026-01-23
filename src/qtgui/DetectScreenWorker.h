@@ -19,7 +19,8 @@ public:
                      colorscreen::solver_parameters solverParams,
                      colorscreen::scr_to_img_parameters scrToImgParams,
                      std::shared_ptr<colorscreen::image_data> scan,
-                     std::shared_ptr<colorscreen::progress_info> progress);
+                     std::shared_ptr<colorscreen::progress_info> progress,
+                     colorscreen::luminosity_t gamma);
 
 public slots:
   void detect();
@@ -33,4 +34,5 @@ private:
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   std::shared_ptr<colorscreen::image_data> m_scan;
   std::shared_ptr<colorscreen::progress_info> m_progress;
+  colorscreen::luminosity_t m_gamma;
 };

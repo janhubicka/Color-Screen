@@ -73,32 +73,32 @@ void ColorPanel::setupUi() {
 
   // dark point
   addSliderParameter(
-      "Black", 0, 1, 1, 2, "", "",
+      "Black", 0, 1, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.dark_point; },
       [](ParameterState &s, double v) { s.rparams.dark_point = v; }, 3.0,
-      nullptr, true);
+      nullptr, false);
 
   // Presaturation
   addSliderParameter(
       "Presaturation", 0, 100, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.presaturation; },
-      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 4.0);
+      [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 1.0);
 
   // White Balance
   addSliderParameter(
       "White balance red", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.red; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 4.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 1.0);
 
   addSliderParameter(
       "White balance green", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.green; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 4.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 1.0);
 
   addSliderParameter(
       "White balance blue", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
-      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 4.0);
+      [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 1.0);
 
   m_currentGroupForm = nullptr; // End Adjustments section
 

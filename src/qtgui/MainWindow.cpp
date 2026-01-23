@@ -2580,7 +2580,7 @@ void MainWindow::onAutodetectScreen() {
   
   // Create worker and thread
   DetectScreenWorker *worker = new DetectScreenWorker(
-      m_detectParams, m_solverParams, m_scrToImgParams, m_scan, progress);
+      m_detectParams, m_solverParams, m_scrToImgParams, m_scan, progress, m_rparams.gamma);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
   

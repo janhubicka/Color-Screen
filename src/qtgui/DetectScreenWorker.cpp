@@ -6,9 +6,10 @@ DetectScreenWorker::DetectScreenWorker(
     colorscreen::solver_parameters solverParams,
     colorscreen::scr_to_img_parameters scrToImgParams,
     std::shared_ptr<colorscreen::image_data> scan,
-    std::shared_ptr<colorscreen::progress_info> progress)
+    std::shared_ptr<colorscreen::progress_info> progress,
+    colorscreen::luminosity_t gamma)
     : m_detectParams(detectParams), m_solverParams(solverParams),
-      m_scrToImgParams(scrToImgParams), m_scan(scan), m_progress(progress) {
+      m_scrToImgParams(scrToImgParams), m_scan(scan), m_progress(progress), m_gamma(gamma) {
 }
 
 void DetectScreenWorker::detect() {
@@ -18,7 +19,7 @@ void DetectScreenWorker::detect() {
   // Setup detection parameters (based on gtkgui.C:755)
   colorscreen::detect_regular_screen_params dsparams;
   dsparams.return_screen_map = true;
-  dsparams.gamma = 0; // Will be set from render_parameters if needed
+  dsparams.gamma = m_gamma;
   dsparams.scr_type = m_scrToImgParams.type;
   dsparams.scanner_type = m_scrToImgParams.scanner_type;
   
