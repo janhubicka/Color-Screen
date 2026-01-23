@@ -257,13 +257,7 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
 
             // Function to exaggerate deformation
             auto exaggeratePoint = [&](colorscreen::point_t orig, colorscreen::point_t deformed) -> colorscreen::point_t {
-                 if (exaggeration <= 1.0f) return deformed;
-                 double dx = deformed.x - orig.x;
-                 double dy = deformed.y - orig.y;
-                 colorscreen::point_t p;
-                 p.x = orig.x + dx * exaggeration;
-                 p.y = orig.y + dy * exaggeration;
-                 return p;
+                 return orig + (deformed - orig) * exaggeration;
             };
 
             // Calculate exaggerated positions for geometry
@@ -299,14 +293,8 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
                 
                 // Determine colors for corners based on displacement in screen coordinates
                 auto getDisplacementColor = [&](colorscreen::point_t original, colorscreen::point_t deformed) -> QColor {
-                    colorscreen::point_t scr_orig = undeformed_map.to_scr(original);
-                    colorscreen::point_t scr_deformed = undeformed_map.to_scr(deformed);
-                    
                     // Displacement in screen coordinates
-                    double dx = scr_deformed.x - scr_orig.x;
-                    double dy = scr_deformed.y - scr_orig.y;
-                    double dist = std::sqrt(dx*dx + dy*dy);
-                    
+                    double dist = (undeformed_map.to_scr(original) - undeformed_map.to_scr(deformed)).length ();
                     return getHeatMapColor(dist, m_heatmapTolerance);
                 };
                 

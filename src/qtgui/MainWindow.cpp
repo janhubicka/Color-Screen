@@ -1085,12 +1085,19 @@ void MainWindow::onOpenParameters() {
 
   const char *error = nullptr;
 
+
   // Store previous state for comparison
-  colorscreen::scr_to_img_parameters oldScrToImg = m_scrToImgParams;
-  colorscreen::scr_detect_parameters oldDetect = m_detectParams;
-  // render_parameters comparison?
-  // The user said: "Pass scr_to_img_parameters and scr_detect_parameters to
-  // renderers. They can be compared by ==."
+  ParameterState old = {m_rparams, m_scrToImgParams, m_detectParams, m_solverParams};
+
+  // load_csp merges parameters in; reset first.
+  colorscreen::scr_to_img_parameters emptyScrToImg;
+  m_scrToImgParams = emptyScrToImg;
+  colorscreen::scr_detect_parameters emptyScrDetect;
+  m_detectParams = emptyScrDetect;
+  colorscreen::render_parameters emptyRparams;
+  m_rparams = emptyRparams;
+  colorscreen::solver_parameters emptySolver;
+  m_solverParams = emptySolver;
 
   if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
                              &m_solverParams, &error)) {
@@ -1098,20 +1105,16 @@ void MainWindow::onOpenParameters() {
     QString errStr =
         error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
     QMessageBox::critical(this, "Error Loading Parameters", errStr);
+    m_scrToImgParams = old.scrToImg;
+    m_detectParams = old.detect;
+    m_rparams = old.rparams;
+    m_solverParams = old.solver;
     return;
   }
   fclose(f);
 
-  // Update Renderer if needed
-  // Check if parameters changed
-  bool changed = false;
-  if (!(oldScrToImg == m_scrToImgParams))
-    changed = true;
-  if (!(oldDetect == m_detectParams))
-    changed = true;
-  // We should also check m_rparams but user emphasized the others.
-  // Let's assume ANY successful load might warrant a refresh or update.
-  // But specific comparison requested for re-render.
+  ParameterState new_params = {m_rparams, m_scrToImgParams, m_detectParams, m_solverParams};
+  bool changed = old != new_params;
 
   if (changed) {
     if (m_scan) {
@@ -1119,19 +1122,6 @@ void MainWindow::onOpenParameters() {
       m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                               &m_detectParams, &m_renderTypeParams,
                               &m_solverParams);
-    }
-  } else {
-    // Just update params... actually setImage logic uses values.
-    // If we want to support run-time tuning without re-creating renderer, we'd
-    // need setters in Renderer. But for Open Parameters (file load),
-    // re-creating renderer is fine. Even if not changed, we might want to
-    // update rparams? Let's just update if we have a scan.
-    if (m_scan) {
-      m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                              &m_detectParams, &m_renderTypeParams,
-                              &m_solverParams);
-      m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                 &m_detectParams); // Update nav too
     }
   }
   m_undoStack->clear();
