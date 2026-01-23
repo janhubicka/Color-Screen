@@ -135,9 +135,6 @@ TilePreviewPanel::~TilePreviewPanel() {
   // Cancel any running or pending render tasks
   m_renderQueue.cancelAll();
   
-  // Disconnect all signals emitted by us
-  disconnect();
-
   // Explicitly delete UI children created by this class
   // This ensures they are destroyed while 'this' is still a TilePreviewPanel
   if (m_tilesContainer) {
