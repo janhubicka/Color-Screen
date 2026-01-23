@@ -19,6 +19,7 @@ signals:
   void detachPreviewRequested(QWidget *widget);
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
   void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
+  void autodetectRequested();
 
 private:
   void setupUi();

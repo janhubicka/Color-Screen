@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "FinetuneWorker.h"
+#include "DetectScreenWorker.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
@@ -28,6 +29,7 @@
 #include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -264,6 +266,7 @@ void MainWindow::setupUi() {
   
   connect(m_screenPanel, &ScreenPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_screenPanel, &ScreenPanel::progressFinished, this, &MainWindow::removeProgress);
+  connect(m_screenPanel, &ScreenPanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
   
   connect(m_colorPanel, &ColorPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_colorPanel, &ColorPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -2555,6 +2558,116 @@ void MainWindow::onFinetuneFinished(bool success, std::vector<colorscreen::solve
     }
     updateRegistrationActions();
   }
+}
+
+void MainWindow::onAutodetectScreen() {
+  if (!m_scan) {
+    return;
+  }
+  
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Detecting screen", 100);
+  addProgress(progress);
+  
+  // Create worker and thread
+  DetectScreenWorker *worker = new DetectScreenWorker(
+      m_detectParams, m_solverParams, m_scrToImgParams, m_scan, progress);
+  QThread *thread = new QThread();
+  worker->moveToThread(thread);
+  
+  // Connect signals
+  connect(thread, &QThread::started, worker, &DetectScreenWorker::detect);
+  connect(worker, &DetectScreenWorker::finished, thread, &QThread::quit);
+  connect(worker, &DetectScreenWorker::finished, worker, &QObject::deleteLater);
+  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+  
+  // Connect to our slot to handle results
+  connect(worker, &DetectScreenWorker::finished, this,
+          [this, progress](bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams) {
+            onDetectScreenFinished(success, result, solverParams);
+            removeProgress(progress);
+          });
+  
+  // Store thread reference
+  m_detectScreenThread = thread;
+  
+  // Start thread
+  thread->start();
+}
+
+void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams) {
+  // Clean up thread reference
+  m_detectScreenThread = nullptr;
+  
+  if (!success || !result.success) {
+    QMessageBox::warning(this, "Screen Detection", "Screen detection failed.");
+    return;
+  }
+  
+  // Store detected mesh for later restoration
+  m_detectedMesh = result.mesh_trans;
+  
+  // Ask user about color model
+  bool updateColorModel = false;
+  if (m_rparams.color_model == colorscreen::render_parameters::color_model_none) {
+    // Auto-update if no color model is set
+    updateColorModel = true;
+  } else {
+    // Ask user
+    QString currentDye = QString::fromUtf8(
+        colorscreen::render_parameters::color_model_properties[m_rparams.color_model].name);
+    
+    // Determine what the auto color model would be
+    colorscreen::render_parameters tempParams = m_rparams;
+    tempParams.auto_color_model(result.param.type);
+    QString detectedDye = QString::fromUtf8(
+        colorscreen::render_parameters::color_model_properties[tempParams.color_model].name);
+    
+    if (currentDye != detectedDye) {
+      QMessageBox msgBox(this);
+      msgBox.setWindowTitle("Screen Detection");
+      msgBox.setText("Screen type detected successfully.");
+      msgBox.setInformativeText(QString("Change color model (Dyes) from %1 to %2?")
+                                .arg(currentDye).arg(detectedDye));
+      msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+      msgBox.setDefaultButton(QMessageBox::Yes);
+      updateColorModel = (msgBox.exec() == QMessageBox::Yes);
+    }
+  }
+  
+  // Create undo snapshot before making changes
+  ParameterState oldState = getCurrentState();
+  
+  // Update parameters
+  m_scrToImgParams.type = result.param.type;
+  m_scrToImgParams.mesh_trans = result.mesh_trans;
+  
+  // Update color model if requested
+  if (updateColorModel) {
+    m_rparams.auto_color_model(result.param.type);
+  }
+  
+  // Copy the modified solver points from the worker's local copy
+  m_solverParams.points = solverParams.points;
+  
+  // Update UI
+  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams, &m_renderTypeParams, &m_solverParams);
+  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams, &m_detectParams);
+  updateUIFromState(getCurrentState());
+  updateRegistrationActions();
+  updateModeMenu();
+  
+  // Always trigger geometry solver with computeMesh=false to preserve detected mesh
+  // The solver will update center, coordinates, lens parameters, etc.
+  if (m_solverParams.points.size() >= 3) {
+    // Request solver with special handling to preserve mesh
+    m_solverQueue.requestRender();
+  }
+  
+  // Create undo command
+  ParameterState newState = getCurrentState();
+  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState, "Autodetect screen"));
 }
 
 

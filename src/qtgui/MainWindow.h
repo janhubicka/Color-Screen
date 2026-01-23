@@ -220,6 +220,8 @@ private slots:
   void onNextProgress();
   void onOptimizeCoordinates();
   void onCoordinateSystemChanged();
+  void onAutodetectScreen();
+  void onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
 
   // Helper to update color checkbox state and visibility
   void updateColorCheckBoxState();
@@ -296,6 +298,10 @@ private:
   GeometrySolverWorker *m_solverWorker;
   QThread *m_solverThread;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
+  
+  // Detect Screen Worker
+  QThread *m_detectScreenThread = nullptr;
+  std::shared_ptr<colorscreen::mesh> m_detectedMesh; // Store mesh from autodetection
   
   // Solver Queue
   TaskQueue m_solverQueue;

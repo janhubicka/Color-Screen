@@ -9,6 +9,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QPixmap>
+#include <QPushButton>
 #include <QStyleOptionComboBox>
 #include <QStylePainter>
 #include <map>
@@ -149,6 +150,23 @@ void ScreenPanel::setupUi() {
       screenCombo->setCurrentIndex(idx);
       screenCombo->blockSignals(false);
     }
+  });
+
+  // Autodetect Regular Screen Button
+  QPushButton *autodetectButton = new QPushButton("Autodetect regular screen");
+  connect(autodetectButton, &QPushButton::clicked, this, &ScreenPanel::autodetectRequested);
+  
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow("", autodetectButton);
+  } else {
+    m_form->addRow("", autodetectButton);
+  }
+  
+  // Widget state updater to enable/disable button based on RGB availability
+  m_widgetStateUpdaters.push_back([this, autodetectButton]() {
+    auto img = m_imageGetter();
+    bool hasRgb = img && img->has_rgb();
+    autodetectButton->setEnabled(hasRgb);
   });
 
   addSeparator("Regular screen");
