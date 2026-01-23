@@ -1157,6 +1157,15 @@ image_data::parse_icc_profile (progress_info *progress)
         progress->resume_stdout ();
       return false;
     }
+  if (!cmsIsMatrixShaper (hInProfile))
+    {
+      if (progress)
+        progress->pause_stdout ();
+      fprintf (stderr, "Not a matrix ICC profile (do not use LUT profiles with mosaiced photos)!\n");
+      if (progress)
+        progress->resume_stdout ();
+      return false;
+    }
   if (cmsGetColorSpace (hInProfile) != cmsSigRgbData)
     {
       if (progress)

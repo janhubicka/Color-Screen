@@ -1830,6 +1830,14 @@ void MainWindow::restoreWindowState() {
     fixDockVisibility(m_tilesDock);
     fixDockVisibility(m_colorTilesDock);
     fixDockVisibility(m_correctedColorTilesDock);
+    
+    // Add missing chart docks
+    fixDockVisibility(m_spectraDock);
+    fixDockVisibility(m_deformationDock);
+    fixDockVisibility(m_lensDock);
+    fixDockVisibility(m_perspectiveDock);
+    fixDockVisibility(m_nonlinearDock);
+    fixDockVisibility(m_screenPreviewDock);
   } else {
     // Default size and position
     resize(1200, 800);
