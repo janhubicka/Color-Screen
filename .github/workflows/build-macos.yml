@@ -351,7 +351,9 @@ jobs:
           sleep 13; screencapture -x shot_13s.png; ps aux | grep Color-Screen > shot_13s_ps.txt;
           sleep 5; screencapture -x shot_18s.png; ps aux | grep Color-Screen > shot_18s_ps.txt;
         ) &
-        lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- "$APP_PATH/Contents/MacOS/Color-Screen" --debug-qt --smoke-test 20000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
+        #No lldb to make startup faster
+        #lldb --batch -o "run" -k "bt" -k "exit 1" -o "exit 0" -- 
+        "$APP_PATH/Contents/MacOS/Color-Screen" --debug-qt --smoke-test 20000 "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" > gui_launch_debug.txt 2>&1 || { cat gui_launch_debug.txt; exit 1; }
         
         cat gui_launch_debug.txt
 
