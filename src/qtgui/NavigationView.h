@@ -34,6 +34,8 @@ public:
 public slots:
     void onViewStateChanged(QRectF visibleRect, double scale); // Connected to ImageWidget
     void setMinScale(double scale);
+    double getMinScale() const { return m_minScale; }
+    double getZoom() const { return m_mainScale; }
 
 signals:
     void zoomChanged(double scale);

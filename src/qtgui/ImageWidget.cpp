@@ -1084,13 +1084,13 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   if (!m_scan || !m_scrToImg)
     return {p.x(), p.y()};
 
-  // 1. Undo Offset & Scale (View -> Transformed)
+  // 1. Undo Offset & Scale (View -> Transformed-Crop)
   double xr = p.x() / m_scale + m_viewX;
   double yr = p.y() / m_scale + m_viewY;
 
-  // 2. Use Transformer (Transformed -> Scan)
+  // 2. Use Transformer (Transformed-Crop -> Scan)
   CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-  return transformer.transformedToScan({xr, yr});
+  return transformer.transformedToScanCrop({xr, yr});
 }
 
 QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
@@ -1099,7 +1099,7 @@ QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
 
   // 1. Transformer (Scan -> Transformed)
   CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-  colorscreen::point_t tr = transformer.scanToTransformed(p);
+  colorscreen::point_t tr = transformer.scanToTransformedCrop(p);
 
   // 2. Apply View Offset & Scale (Transformed -> View)
   return QPointF((tr.x - m_viewX) * m_scale, (tr.y - m_viewY) * m_scale);
@@ -1123,6 +1123,18 @@ void ImageWidget::rotateRight() {
     requestRender();
 }
 
+void ImageWidget::centerOn(colorscreen::point_t imgPos) {
+  if (!m_scan || !m_rparams) return;
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  colorscreen::point_t tr = transformer.scanToTransformedCrop(imgPos);
+  
+  m_viewX = tr.x - (width() / m_scale) / 2.0;
+  m_viewY = tr.y - (height() / m_scale) / 2.0;
+  
+  requestRender();
+  emit viewStateChanged(QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
+}
+
 void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     if (!m_scan) return;
     
@@ -1136,7 +1148,7 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     CoordinateTransformer oldTrans(m_scan.get(), oldParams);
     
     // Map to Scan
-    colorscreen::point_t scanPt = oldTrans.transformedToScan({centerX_tr, centerY_tr});
+    colorscreen::point_t scanPt = oldTrans.transformedToScanCrop({centerX_tr, centerY_tr});
     
     // Create params for NEW
     colorscreen::render_parameters newParams = *m_rparams;
@@ -1144,7 +1156,7 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     CoordinateTransformer newTrans(m_scan.get(), newParams);
     
     // Map to Transformed (New)
-    colorscreen::point_t newCenter_tr = newTrans.scanToTransformed(scanPt);
+    colorscreen::point_t newCenter_tr = newTrans.scanToTransformedCrop(scanPt);
     
     // Set new viewX/Y to maintain center
     m_viewX = newCenter_tr.x - (width() / m_scale) / 2.0;
@@ -1152,8 +1164,8 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
 
     // Update m_minScale for the NEW orientation fit
     // This ensures subsequent resize events use the correct reference.
-    double scaleX = (double)width() / newTrans.getTransformedSize().width();
-    double scaleY = (double)height() / newTrans.getTransformedSize().height();
+    double scaleX = (double)width() / newTrans.getTransformedCropSize().width();
+    double scaleY = (double)height() / newTrans.getTransformedCropSize().height();
     m_minScale = qMin(scaleX, scaleY);
 }
 
@@ -1165,7 +1177,7 @@ void ImageWidget::fitToView() {
   double h = height();
 
   CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-  QSize transformedSize = transformer.getTransformedSize();
+  QSize transformedSize = transformer.getTransformedCropSize();
   double imgW = transformedSize.width();
   double imgH = transformedSize.height();
 

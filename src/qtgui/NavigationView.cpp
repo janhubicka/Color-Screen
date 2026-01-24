@@ -139,11 +139,13 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     int w = viewRect.width();
     int h = viewRect.height();
     
-    // Use CoordinateTransformer to get effective dimensions
+    // Use CoordinateTransformer to get effective dimensions (relative to crop)
     CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-    QSize transformedSize = transformer.getTransformedSize();
+    QSize transformedSize = transformer.getTransformedCropSize();
     int imgW = transformedSize.width();
     int imgH = transformedSize.height();
+    
+    colorscreen::int_image_area crop = transformer.getCrop();
     
     double scale = 0.1;
 
@@ -165,12 +167,12 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     // 2. set current progress so onImageReady can emit finished signal
     m_currentProgress = progress;
 
-    // 3. Invoke renderer
+    // 3. Invoke renderer (relative to crop)
     bool result = QMetaObject::invokeMethod(
       m_renderer, "render", Qt::QueuedConnection,
       Q_ARG(int, reqId),      
-      Q_ARG(double, 0.0), // xOffset
-      Q_ARG(double, 0.0), // yOffset
+      Q_ARG(double, 0.0), // xOffset in transformed-crop space
+      Q_ARG(double, 0.0), // yOffset in transformed-crop space
       Q_ARG(double, scale), Q_ARG(int, targetW), Q_ARG(int, targetH),
       Q_ARG(colorscreen::render_parameters, *m_rparams),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
@@ -320,7 +322,7 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      int h = viewRect.height();
      
      CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-     QSize transformedSize = transformer.getTransformedSize();
+     QSize transformedSize = transformer.getTransformedCropSize();
      int scanW = transformedSize.width();
      int scanH = transformedSize.height();
      
@@ -358,11 +360,15 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      p.drawText(m_imageRect, Qt::AlignCenter, "Rendering...");
   }
 
-  // Draw Viewport Rect
-  double vx = m_visibleRect.x() * m_previewScale;
-  double vy = m_visibleRect.y() * m_previewScale;
-  double vw = m_visibleRect.width() * m_previewScale;
-  double vh = m_visibleRect.height() * m_previewScale;
+  // Draw Viewport Rect (relative to crop)
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  colorscreen::point_t tl_sh = transformer.scanToTransformedCrop({m_visibleRect.left(), m_visibleRect.top()});
+  colorscreen::point_t br_sh = transformer.scanToTransformedCrop({m_visibleRect.right(), m_visibleRect.bottom()});
+
+  double vx = tl_sh.x * m_previewScale;
+  double vy = tl_sh.y * m_previewScale;
+  double vw = (br_sh.x - tl_sh.x) * m_previewScale;
+  double vh = (br_sh.y - tl_sh.y) * m_previewScale;
 
   QRectF rect(x + vx, y + vy, vw, vh);
   p.setPen(QPen(Qt::red, 2));
@@ -377,8 +383,11 @@ void NavigationView::mousePressEvent(QMouseEvent *event) {
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
     
-    double imageX = clickX / m_previewScale;
-    double imageY = clickY / m_previewScale;
+    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    colorscreen::point_t scanPt = transformer.transformedToScanCrop({clickX / m_previewScale, clickY / m_previewScale});
+    
+    double imageX = scanPt.x;
+    double imageY = scanPt.y;
     
     if (m_visibleRect.contains(imageX, imageY)) {
         // Grab logic
@@ -400,8 +409,11 @@ void NavigationView::mouseMoveEvent(QMouseEvent *event) {
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
 
-    double imageX = clickX / m_previewScale;
-    double imageY = clickY / m_previewScale;
+    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    colorscreen::point_t scanPt = transformer.transformedToScanCrop({clickX / m_previewScale, clickY / m_previewScale});
+
+    double imageX = scanPt.x;
+    double imageY = scanPt.y;
 
     // Apply offset
     double targetCenterX = imageX - m_dragOffset.x();
@@ -430,8 +442,11 @@ void NavigationView::wheelEvent(QWheelEvent *event) {
   double mouseX = event->position().x() - m_imageRect.left();
   double mouseY = event->position().y() - m_imageRect.top();
   
-  double imageX = mouseX / m_previewScale;
-  double imageY = mouseY / m_previewScale;
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  colorscreen::point_t scanPt = transformer.transformedToScanCrop({mouseX / m_previewScale, mouseY / m_previewScale});
+  
+  double imageX = scanPt.x;
+  double imageY = scanPt.y;
 
   // Current main view state
   double oldScale = m_mainScale;

@@ -74,6 +74,7 @@ public:
 public slots:
   void setZoom(double scale);
   void setPan(double x, double y);
+  void centerOn(colorscreen::point_t imgPos);
   void setLastSize(QSize s) { m_lastSize = s; }
   void fitToView(); // New slot
   void rotateLeft();

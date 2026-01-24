@@ -2512,6 +2512,17 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
 
 void MainWindow::onCropRequested() {
   if (!m_scan) return;
+
+  // Preserve center across crop state change
+  colorscreen::point_t center = m_imageWidget->widgetToImage(m_imageWidget->rect().center());
+
+  ParameterState state = getCurrentState();
+  if (state.rparams.scan_crop.set) {
+      state.rparams.scan_crop.set = false;
+      changeParameters(state, "Clear crop for re-cropping");
+      m_imageWidget->centerOn(center);
+  }
+
   m_imageWidget->setInteractionMode(ImageWidget::CropMode);
   statusBar()->showMessage("Select crop");
 }
@@ -2550,6 +2561,9 @@ void MainWindow::onAreaSelected(QRect area) {
   if (imgArea.width() <= 0 || imgArea.height() <= 0) return;
 
   if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
+      // Preserve center
+      colorscreen::point_t center = m_imageWidget->widgetToImage(m_imageWidget->rect().center());
+
       ParameterState state = getCurrentState();
       state.rparams.scan_crop.x = imgArea.x();
       state.rparams.scan_crop.y = imgArea.y();
@@ -2563,6 +2577,9 @@ void MainWindow::onAreaSelected(QRect area) {
 
       changeParameters(state, "Set Crop Area");
       
+      // Keep center
+      m_imageWidget->centerOn(center);
+
       m_imageWidget->setInteractionMode(ImageWidget::PanMode);
       statusBar()->clearMessage();
       return;

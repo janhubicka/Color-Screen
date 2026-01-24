@@ -18,6 +18,7 @@ public:
                            const colorscreen::scr_to_img_parameters &undeformed,
                            int scanWidth, int scanHeight, bool mirror, int rotation);
     void setHeatmapTolerance(double tolerance);
+    double getHeatmapTolerance() const { return m_heatmapTolerance; }
     void clear();
     
     QSize sizeHint() const override;

@@ -8,6 +8,9 @@ class CoordinateTransformer {
 public:
     CoordinateTransformer(const colorscreen::image_data* scan, const colorscreen::render_parameters& params);
 
+    // Get the effective scan crop area
+    colorscreen::int_image_area getCrop() const;
+
     // Scan (Image) Coordinate -> Transformed (Screen/View normalized) Coordinate
     // Returns coordinates in the range [0, transformedSize]
     colorscreen::point_t scanToTransformed(colorscreen::point_t scanPt) const;
@@ -15,8 +18,13 @@ public:
     // Transformed (Screen/View normalized) Coordinate -> Scan (Image) Coordinate
     colorscreen::point_t transformedToScan(colorscreen::point_t transformedPt) const;
 
-    // Get the dimensions of the transformed image
+    // Versions that work relative to the CROP if set
+    colorscreen::point_t scanToTransformedCrop(colorscreen::point_t scanPt) const;
+    colorscreen::point_t transformedToScanCrop(colorscreen::point_t transformedPt) const;
+
+    // Get the dimensions of the transformed image (relative to crop if set)
     QSize getTransformedSize() const;
+    QSize getTransformedCropSize() const;
 
     // Get scan dimensions
     QSize getScanSize() const;
@@ -26,4 +34,5 @@ private:
     int m_scanHeight = 0;
     bool m_mirror = false;
     int m_rotation = 0; // 0, 1, 2, 3 corresponding to 0, 90, 180, 270 degrees
+    colorscreen::int_optional_image_area m_scanCrop;
 };

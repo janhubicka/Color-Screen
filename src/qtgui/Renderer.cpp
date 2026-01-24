@@ -43,39 +43,60 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     m_rparams = frameParams; 
 
     CoordinateTransformer transformer(m_scan.get(), m_rparams);
-    
-    // View coordinates (xOffset, yOffset, width, height) are in TRANSORMED space relative to Viewport
-    colorscreen::point_t p0 = transformer.transformedToScan({xOffset, yOffset});
-    colorscreen::point_t p1 = transformer.transformedToScan({xOffset + (double)width / scale, yOffset + (double)height / scale});
-    
-    // The rendered scan rect is the bounding box of these points
+    QSize transformedSize = transformer.getTransformedCropSize();
+
+    // View coordinates (xOffset, yOffset, width, height) are in TRANSORMED space relative to the Crop
+    // We want to intersect requested rect with [0,0, transformedSize]
+    QRectF visibleRect(0, 0, transformedSize.width(), transformedSize.height());
+    QRectF requestRect(xOffset, yOffset, (double)width / scale, (double)height / scale);
+    QRectF intersection = requestRect.intersected(visibleRect);
+
+    if (intersection.isEmpty()) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
+        return;
+    }
+
+    // Determine the part of the source image to render in absolute units (scale handled by Renderer)
+    colorscreen::point_t p0 = transformer.transformedToScanCrop({intersection.left(), intersection.top()});
+    colorscreen::point_t p1 = transformer.transformedToScanCrop({intersection.right(), intersection.bottom()});
+
     double sx_unit = std::min(p0.x, p1.x);
     double sy_unit = std::min(p0.y, p1.y);
-    
+
+    // Physical pixels for the intersection part
+    int tw = (int)std::round(intersection.width() * scale);
+    int th = (int)std::round(intersection.height() * scale);
+
+    if (tw <= 0) tw = 1;
+    if (th <= 0) th = 1;
+
     // Scan dimensions for buffer creation logic (swapped if 90/270 rot)
     int angleIdx = (int)(m_rparams.scan_rotation) % 4;
     if (angleIdx < 0) angleIdx += 4;
     bool mirror = m_rparams.scan_mirror;
 
-    int tw = width;
-    int th = height;
-    
+    int renderW = tw;
+    int renderH = th;
     if (angleIdx == 1 || angleIdx == 3) {
-        std::swap(tw, th);
+        std::swap(renderW, renderH);
     }
-    
+
     colorscreen::tile_parameters tile;
     tile.pos.x = sx_unit * scale;
     tile.pos.y = sy_unit * scale;
     tile.step = 1.0 / scale;
-    tile.width = tw;
-    tile.height = th;
+    tile.width = renderW;
+    tile.height = renderH;
 
     // Buffer
-    QImage image(tw, th, QImage::Format_RGB888);
+    QImage image(renderW, renderH, QImage::Format_RGB888);
     tile.pixels = image.bits();
     tile.rowstride = image.bytesPerLine();
     tile.pixelbytes = 3; // RGB888
+
+    // Updated result offsets
+    double outX = intersection.left();
+    double outY = intersection.top();
 
     // Call the actual rendering function
     bool success = false;
@@ -121,7 +142,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
     }
     
     if (success) {
-        emit imageReady(reqId, image, xOffset, yOffset, scale, true);
+        emit imageReady(reqId, image, outX, outY, scale, true);
     } else {
         emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
     }
