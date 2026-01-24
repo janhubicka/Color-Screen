@@ -111,6 +111,7 @@ public:
   int flip;
   std::string camera_model;
   std::string lens;
+  std::string software;
   DLL_PUBLIC void load_exif (const char *name);
 private:
   std::unique_ptr <image_data_loader> loader;

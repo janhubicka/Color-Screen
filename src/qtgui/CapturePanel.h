@@ -28,15 +28,22 @@ signals:
 private:
     void setupUi();
     class QLabel *m_imageResolutionValue = nullptr;
+    class QPushButton *m_useImageResBtn = nullptr;
     class QLabel *m_screenResolutionValue = nullptr;
+    class QPushButton *m_useScreenResBtn = nullptr;
     class QLabel *m_detectedGammaValue = nullptr;
+    class QPushButton *m_useDetectedGammaBtn = nullptr;
     class QLabel *m_cameraModelValue = nullptr;
     class QLabel *m_lensValue = nullptr;
     class QLabel *m_fStopValue = nullptr;
+    class QPushButton *m_useFStopBtn = nullptr;
     class QLabel *m_focalLengthValue = nullptr;
     class QLabel *m_focalLength35mmValue = nullptr;
     class QLabel *m_focalPlaneResValue = nullptr;
+    class QPushButton *m_useFocalPlaneResBtn = nullptr;
     class QLabel *m_pixelPitchValue = nullptr;
+    class QPushButton *m_usePixelPitchBtn = nullptr;
+    class QLabel *m_softwareValue = nullptr;
     class QLabel *m_sensorFillFactorValue = nullptr;
 };
 

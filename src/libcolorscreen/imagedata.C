@@ -1548,6 +1548,13 @@ image_data::load_exif (const char *name)
       if (it != exifData.end () && it->count ())
         lens = it->value ().toString ();
 
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Software"));
+      if (it != exifData.end () && it->count ())
+        software = it->value ().toString ();
+
+      if (software.find ("VueScan") != std::string::npos && maxval == 65535)
+        gamma = 1.0;
+
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Orientation"));
       if (it != exifData.end () && it->count ())
         {

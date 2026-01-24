@@ -551,7 +551,9 @@ scr_to_img_parameters::estimate_dpi (coord_t pixel_size) const
     case Paget:
     case Finlay:
 	/* Screen size scanned by Epson scanner at 1800 DPI.  */
-	return 1800 * ((1/sqrt (13.357325*13.357325 + 0.203263 * 0.203263)) / pixel_size);
+	/*return 1800 * ((1/sqrt (13.357325*13.357325 + 0.203263 * 0.203263)) / pixel_size);*/
+	/* Screen size scanned by Epson scanner at 2400 DPI.  */
+	return 2400 * ((1/sqrt (19.776270*19.776270 + -0.119933*-0.119933)) / pixel_size);
     case Dufay:
 	/* Screen size scanned by Nikon scanner at 4000 DPI.  */
 	return 4000 * ((1/sqrt (3.045845*3.045845 + 7.194771*7.194771)) / pixel_size);

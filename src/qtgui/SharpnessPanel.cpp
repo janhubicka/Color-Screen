@@ -97,28 +97,6 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.scanner_mtf.sigma = v;
       });
 
-  // Nominal f-stop
-  // Range 0.0 - 20.0 (0.0 = unknown)
-  addSliderParameter(
-      "nominal f-stop", 0.0, 20.0, 1000.0, 3, "", "unknown",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.f_stop;
-      },
-      [](ParameterState &s, double v) {
-        s.rparams.sharpen.scanner_mtf.f_stop = v;
-      });
-
-  // Sensor pixel pitch
-  // Range 0.0 - 20.0 (0.0 = unknown)
-  addSliderParameter(
-      "Sensor pixel pitch", 0.0, 20.0, 1000.0, 3, "μm", "unknown",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.pixel_pitch;
-      },
-      [](ParameterState &s, double v) {
-        s.rparams.sharpen.scanner_mtf.pixel_pitch = v;
-      });
-
   // Wavelength
   // Range 0.0 - 1200.0 (0.0 = unknown)
   addSliderParameter(
@@ -128,17 +106,6 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.wavelength = v;
-      });
-
-  // Sensor fill factor
-  // Range 0.0 - 8.0 (0.0 = unknown)
-  addSliderParameter(
-      "Sensor fill factor", 0.0, 8.0, 1000.0, 3, "", "unknown",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.sensor_fill_factor;
-      },
-      [](ParameterState &s, double v) {
-        s.rparams.sharpen.scanner_mtf.sensor_fill_factor = v;
       });
 
   // Defocus
