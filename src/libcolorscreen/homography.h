@@ -26,7 +26,8 @@ trans_4d_matrix get_matrix_ransac (std::vector <solver_parameters::solver_point_
                                    bool final_run = false);
 trans_4d_matrix get_matrix (std::vector <solver_parameters::solver_point_t> &points,
                             int flags, scanner_type type, scr_to_img *map,
-                            point_t wcenter, coord_t *chisq_ret = NULL);
+                            point_t wcenter, coord_t *chisq_ret = NULL,
+			    std::vector <point_t> *transformed = NULL);
 };
 }
 #endif

@@ -8,6 +8,7 @@
 #include "include/screen-map.h"
 #include "solver.h"
 #include "nmsimplex.h"
+#include "gsl-solver.h"
 #include "homography.h"
 namespace colorscreen
 {
@@ -299,7 +300,7 @@ public:
       vals[0] = 10;
     if (n == 2)
       {
-        if (vals[1] < -1)
+        if (vals[1] < -10)
           vals[1] = -1;
         if (vals[1] > 1)
           vals[1] = 1;
@@ -312,8 +313,8 @@ public:
           vals[i] = 0.1 * scale_kr;
       }
   }
-  coord_t
-  objfunc (coord_t *vals)
+  void
+  solve (const coord_t *vals, coord_t *chisq, std::vector <point_t> *transformed)
   {
     static const coord_t bad_val = 100000000;
     m_param.center = { (coord_t)0, (coord_t)0 };
@@ -337,7 +338,9 @@ public:
                 m_param.lens_correction.center.y,
                 m_param.lens_correction.kr[0], m_param.lens_correction.kr[1],
                 m_param.lens_correction.kr[2], m_param.lens_correction.kr[3]);
-        return bad_val;
+	if (chisq)
+	  *chisq = bad_val;
+        return;
       }
     m_param.lens_correction.normalize ();
     scr_to_img map;
@@ -350,14 +353,46 @@ public:
     /* Do not use ransac here, since it is not smooth and will confuse solver.  */
     homography::get_matrix (m_sparam.points, 
 		    (screen_with_vertical_strips_p (m_param.type) ? homography::solve_vertical_strips : 0)
-		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi);
-    if (!(chi >= 0 && chi < bad_val))
-      {
-        printf ("Bad chi %f\n", chi);
-        return bad_val;
-      }
-    return chi;
+		    | homography::solve_rotation, m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
+    if (chisq)
+    {
+      if (!(chi >= 0 && chi < bad_val))
+	{
+	  printf ("Bad chi %f\n", chi);
+	  *chisq = bad_val;
+	}
+      else
+	*chisq = chi;
+    }
   }
+  coord_t
+  objfunc (coord_t *vals)
+  {
+    coord_t chisq;
+    solve (vals, &chisq, NULL);
+    return chisq;
+  }
+  /* TODO: Joly has only half of them.  */
+  int
+  num_observations ()
+  {
+    return m_sparam.points.size () * 2;
+  }
+  void
+  residuals(const coord_t *vals, coord_t *f_vec)
+  {
+    std::vector<point_t> transformed (m_sparam.points.size ());
+    coord_t chisq;
+    solve (vals, &chisq, &transformed);
+    for (int i = 0; i < m_sparam.points.size (); i++)
+    {
+      f_vec[2 * i] = fabs (transformed[i].x - m_sparam.points[i].scr.x);
+      f_vec[2 * i + 1] = fabs (transformed[i].y - m_sparam.points[i].scr.y);
+      //printf ("%f %f %f %f\n",transformed[i].x, transformed[i].y, m_sparam.points[i].scr.x, m_sparam.points[i].scr.y);
+    }
+    //printf ("%g %g %g %g %g error sq %.10g\n",vals[0], vals[1], vals[2], vals[3], vals[4], chisq);
+  }
+
 };
 }
 
@@ -390,8 +425,14 @@ solver (scr_to_img_parameters *param, image_data &img_data,
   if (optimize_lens)
     {
       lens_solver s (*param, img_data, sparam, progress);
-      simplex<coord_t, lens_solver> (s, "optimizing lens correction",
-                                     progress);
+      bool use_simplex = true;
+      bool use_multifit = true;
+      if (use_simplex)
+	simplex<coord_t, lens_solver> (s, "optimizing lens correction",
+				       progress);
+      if (use_multifit)
+	gsl_multifit<coord_t, lens_solver> (s, "optimizing lens correction pass 2",
+				       progress);
       int n = s.num_coordinates ();
       if (is_fixed_lens (param->scanner_type))
         param->lens_correction.center = { s.start[0], s.start[1] };

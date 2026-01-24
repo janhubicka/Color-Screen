@@ -359,15 +359,19 @@ solution_to_matrix (gsl_vector *v, int flags, enum scanner_type type,
 }
 
 static double
-screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography)
+screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t> &points, trans_4d_matrix homography, std::vector <point_t> *transformed = NULL)
 {
   double chisq = 0;
+  int i = 0;
   /* For vertical strips compute difference only in X direction.  */
   if (!(flags & homography::solve_vertical_strips))
     for (auto point : points)
       {
 	point_t t;
 	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
+	if (transformed)
+	  (*transformed)[i]=t;
+	i++;
 	coord_t dist = point.scr.dist_sq2_from (t);
 	if (dist > 10000)
 	  dist = 10000;
@@ -379,6 +383,9 @@ screen_compute_chisq (int flags, std::vector <solver_parameters::solver_point_t>
 	point_t t;
 	homography.inverse_perspective_transform (point.img.x, point.img.y, t.x, t.y);
 	coord_t dist = (point.scr.x - t.x) * (point.scr.x - t.x);
+	if (transformed)
+	  (*transformed)[i]={t.x, point.scr.y};
+	i++;
 	if (dist > 10000)
 	  dist = 10000;
 	chisq += dist;
@@ -745,7 +752,8 @@ get_matrix_ransac (std::vector <solver_parameters::solver_point_t> &points, int 
 trans_4d_matrix
 get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
             enum scanner_type scanner_type, scr_to_img *map, point_t wcenter,
-            coord_t *chisq_ret)
+            coord_t *chisq_ret,
+	    std::vector <point_t> *transformed)
 {
   int nvariables = equation_variables (flags);
   int n = points.size ();
@@ -917,7 +925,7 @@ get_matrix (std::vector <solver_parameters::solver_point_t> &points, int flags,
       = solution_to_matrix (c, flags, scanner_type, false, ts, td);
   /* Use screen so we do not get biass with lens correction.  */
   if (chisq_ret)
-    *chisq_ret = screen_compute_chisq (flags, tpoints, ret);
+    *chisq_ret = screen_compute_chisq (flags, tpoints, ret, transformed);
   return ret;
 }
 
