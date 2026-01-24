@@ -57,6 +57,10 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   connect(&m_renderQueue, &TaskQueue::triggerRender, this, &ImageWidget::onTriggerRender);
   connect(&m_renderQueue, &TaskQueue::progressStarted, this, &ImageWidget::progressStarted);
   connect(&m_renderQueue, &TaskQueue::progressFinished, this, &ImageWidget::progressFinished);
+
+  m_refreshTimer = new QTimer(this);
+  m_refreshTimer->setInterval(33); // ~30 FPS
+  connect(m_refreshTimer, &QTimer::timeout, this, [this]() { update(); });
 }
 
 double ImageWidget::getMinScale() const { return m_minScale; }
@@ -1321,6 +1325,10 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);
+    } else {
+        if (!m_refreshTimer->isActive()) {
+            m_refreshTimer->start();
+        }
     }
 }
 void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
@@ -1360,5 +1368,9 @@ void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, doub
         m_lastRenderedX = xOffset;
         m_lastRenderedY = yOffset;
         update(); 
+    }
+
+    if (!m_renderQueue.hasActiveTasks()) {
+        m_refreshTimer->stop();
     }
 }

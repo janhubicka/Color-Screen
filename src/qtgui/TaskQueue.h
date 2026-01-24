@@ -26,6 +26,9 @@ public:
   // Cancels all pending and active tasks.
   void cancelAll();
 
+  // Returns true if there are any active or pending tasks.
+  bool hasActiveTasks() const;
+
 signals:
   // Emitted when the queue decides to start a task.
   void triggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress);

@@ -11,6 +11,7 @@
 #include <QThread>
 #include <QWidget>
 #include <QRubberBand>
+#include <QTimer>
 #include <memory>
 #include <QElapsedTimer>
 #include "../libcolorscreen/include/progress-info.h"
@@ -196,4 +197,5 @@ private:
   PagetAnimation *m_pagetAnim = nullptr;
   JolyAnimation *m_jolyAnim = nullptr;
   QWidget *m_activeAnim = nullptr; // Points to whichever is active
+  QTimer *m_refreshTimer = nullptr;
 };

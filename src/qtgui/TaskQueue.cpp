@@ -130,3 +130,7 @@ void TaskQueue::cancelAll()
     }
     m_tasks.clear();
 }
+
+bool TaskQueue::hasActiveTasks() const {
+  return !m_tasks.isEmpty() || m_pendingReqId.has_value();
+}
