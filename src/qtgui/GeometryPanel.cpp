@@ -224,12 +224,10 @@ void GeometryPanel::updateDeformationChart() {
   colorscreen::int_image_area crop = state.rparams.get_scan_crop(scan->width, scan->height);
   int w = crop.width;
   int h = crop.height;
-
-  auto shiftParams = [&](colorscreen::scr_to_img_parameters p) {
-      p.center.x -= crop.x;
-      p.center.y -= crop.y;
-      return p;
-  };
+  int ox = crop.x;
+  int oy = crop.y;
+  int fw = scan->width;
+  int fh = scan->height;
 
   // Create undeformed parameters by copying center and coordinates from current params
   colorscreen::scr_to_img_parameters p0;
@@ -240,33 +238,26 @@ void GeometryPanel::updateDeformationChart() {
   bool mirror = state.rparams.scan_mirror;
   int rotation = state.rparams.scan_rotation;
 
-  // Shift all
-  colorscreen::scr_to_img_parameters p0_sh = shiftParams(p0);
-  colorscreen::scr_to_img_parameters cur_sh = shiftParams(state.scrToImg);
-
-  // 1. Lens Chart
+  // 1. Lens Chart: Undeformed vs Lens
   colorscreen::scr_to_img_parameters p1 = p0;
   p1.lens_correction = state.scrToImg.lens_correction;
-  colorscreen::scr_to_img_parameters p1_sh = shiftParams(p1);
-  if (m_lensChart) m_lensChart->setDeformationData(p1_sh, p0_sh, w, h, mirror, rotation);
+  if (m_lensChart) m_lensChart->setDeformationData(p1, p0, w, h, mirror, rotation, ox, oy, fw, fh);
 
-  // 2. Perspective Chart
+  // 2. Perspective Chart: Lens vs Perspective
   colorscreen::scr_to_img_parameters p2 = p1;
   p2.tilt_x = state.scrToImg.tilt_x;
   p2.tilt_y = state.scrToImg.tilt_y;
   p2.projection_distance = state.scrToImg.projection_distance;
-  colorscreen::scr_to_img_parameters p2_sh = shiftParams(p2);
-  if (m_perspectiveChart) m_perspectiveChart->setDeformationData(p2_sh, p1_sh, w, h, mirror, rotation);
+  if (m_perspectiveChart) m_perspectiveChart->setDeformationData(p2, p1, w, h, mirror, rotation, ox, oy, fw, fh);
 
-  // 3. Nonlinear Chart
+  // 3. Nonlinear Chart: Perspective vs Nonlinear
   colorscreen::scr_to_img_parameters p3 = p2;
   p3.mesh_trans = state.scrToImg.mesh_trans;
-  colorscreen::scr_to_img_parameters p3_sh = shiftParams(p3);
-  if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3_sh, p2_sh, w, h, mirror, rotation);
+  if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3, p2, w, h, mirror, rotation, ox, oy, fw, fh);
   
-  // 4. Final
+  // 4. Final: Undeformed vs Current
   if (m_deformationChart)
-    m_deformationChart->setDeformationData(cur_sh, p0_sh, w, h, mirror, rotation);
+    m_deformationChart->setDeformationData(state.scrToImg, p0, w, h, mirror, rotation, ox, oy, fw, fh);
 }
 
 void GeometryPanel::reattachDeformationChart(QWidget *widget) {

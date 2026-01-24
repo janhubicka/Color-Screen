@@ -49,15 +49,20 @@ DeformationChartWidget::DeformationChartWidget(QWidget *parent)
 void DeformationChartWidget::setDeformationData(
     const colorscreen::scr_to_img_parameters &deformed,
     const colorscreen::scr_to_img_parameters &undeformed,
-    int scanWidth, int scanHeight, bool mirror, int rotation)
+    int viewWidth, int viewHeight, bool mirror, int rotation,
+    int offsetX, int offsetY, int fullWidth, int fullHeight)
 {
     m_deformedParams = deformed;
     m_undeformedParams = undeformed;
-    m_scanWidth = scanWidth;
-    m_scanHeight = scanHeight;
+    m_scanWidth = viewWidth;
+    m_scanHeight = viewHeight;
     m_mirror = mirror;
     m_rotation = rotation;
-    m_hasData = (scanWidth > 0 && scanHeight > 0);
+    m_offsetX = offsetX;
+    m_offsetY = offsetY;
+    m_fullScanWidth = (fullWidth > 0) ? fullWidth : viewWidth;
+    m_fullScanHeight = (fullHeight > 0) ? fullHeight : viewHeight;
+    m_hasData = (viewWidth > 0 && viewHeight > 0);
     updateGeometry(); // Trigger layout update
     update();
 }
@@ -73,6 +78,8 @@ void DeformationChartWidget::clear()
     m_hasData = false;
     m_scanWidth = 0;
     m_scanHeight = 0;
+    m_offsetX = 0;
+    m_offsetY = 0;
     updateGeometry();
     update();
 }
@@ -227,12 +234,12 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     painter.setPen(QPen(palette().text().color(), 1));
     painter.drawRect(chartRect);
     
-    // Initialize scr_to_img instances
+    // Initialize scr_to_img instances using FULL proportions
     colorscreen::scr_to_img deformed_map;
     colorscreen::scr_to_img undeformed_map;
     
-    deformed_map.set_parameters(m_deformedParams, m_scanWidth, m_scanHeight);
-    undeformed_map.set_parameters(m_undeformedParams, m_scanWidth, m_scanHeight);
+    deformed_map.set_parameters(m_deformedParams, m_fullScanWidth, m_fullScanHeight);
+    undeformed_map.set_parameters(m_undeformedParams, m_fullScanWidth, m_fullScanHeight);
     
     // Calculate grid size (approximately 10 pixels)
     const int gridPixelSize = 10;
@@ -254,12 +261,14 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
          double tx = u * transformedSize.width();
          double ty = v * transformedSize.height();
          
-         return transformer.transformedToScan({tx, ty});
+         colorscreen::point_t local = transformer.transformedToScan({tx, ty});
+         return { local.x + m_offsetX, local.y + m_offsetY };
     };
 
     // Helper: Map Scan Point -> Chart Point
     auto scanToChart = [&](colorscreen::point_t sPt) -> QPointF {
-         colorscreen::point_t tr = transformer.scanToTransformed(sPt);
+         colorscreen::point_t local = { sPt.x - m_offsetX, sPt.y - m_offsetY };
+         colorscreen::point_t tr = transformer.scanToTransformed(local);
          
          // Normalize relative to transformed size
          double u = tr.x / transformedSize.width();

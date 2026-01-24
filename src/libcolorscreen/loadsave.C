@@ -94,6 +94,7 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
 	  || fprintf (f, "scan_rotation: %i\n", rparam->scan_rotation * 90) < 0
 	  || fprintf (f, "scan_mirror: %s\n", bool_names [(int)rparam->scan_mirror]) < 0
+	  || fprintf (f, "scan_crop: %s %i %i %i %i\n", bool_names [(int)rparam->scan_crop.set], rparam->scan_crop.x, rparam->scan_crop.y, rparam->scan_crop.width, rparam->scan_crop.height) < 0
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
@@ -1005,6 +1006,34 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!parse_bool (f, rparam_check (scan_mirror)))
 	    {
 	      *error = "error parsing scan_mirror";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scan_crop"))
+	{
+	  if (!parse_bool (f, rparam_check (scan_mirror)))
+	    {
+	      *error = "error parsing scan_crop";
+	      return false;
+	    }
+	  if (!read_int (f, rparam_check (scan_crop.x)))
+	    {
+	      *error = "error parsing scan_crop";
+	      return false;
+	    }
+	  if (!read_int (f, rparam_check (scan_crop.y)))
+	    {
+	      *error = "error parsing scan_crop";
+	      return false;
+	    }
+	  if (!read_int (f, rparam_check (scan_crop.width)))
+	    {
+	      *error = "error parsing scan_crop";
+	      return false;
+	    }
+	  if (!read_int (f, rparam_check (scan_crop.height)))
+	    {
+	      *error = "error parsing scan_crop";
 	      return false;
 	    }
 	}

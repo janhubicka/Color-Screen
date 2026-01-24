@@ -30,6 +30,9 @@ public:
   void reattachPerspectiveChart(QWidget *widget);
   void reattachNonlinearChart(QWidget *widget);
 
+protected:
+  void onParametersRefreshed(const ParameterState &state) override { updateDeformationChart(); }
+
 private:
   void setupUi();
   bool m_nonlinearEnabled = false;
