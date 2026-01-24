@@ -34,5 +34,5 @@ private:
     int m_scanHeight = 0;
     bool m_mirror = false;
     int m_rotation = 0; // 0, 1, 2, 3 corresponding to 0, 90, 180, 270 degrees
-    colorscreen::int_optional_image_area m_scanCrop;
+    colorscreen::int_image_area m_scanCrop;
 };

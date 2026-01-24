@@ -5,6 +5,7 @@
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
+#include <string>
 namespace colorscreen
 {
 
@@ -106,6 +107,10 @@ public:
   luminosity_t pixel_pitch;
   luminosity_t sensor_fill_factor;
   demosaicing_t demosaiced_by;
+  int rotation;
+  int flip;
+  std::string camera_model;
+  std::string lens;
 private:
   std::unique_ptr <image_data_loader> loader;
   /* True of the data is owned by the structure.  */

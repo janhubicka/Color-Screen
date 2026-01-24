@@ -168,7 +168,7 @@ image_data::image_data ()
       whitepoint{ 0.312700492, 0.329000939, 1.0 }, lcc (NULL), gamma (-2),
       f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
       focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
-      demosaiced_by (demosaic_max), own (false)
+      rotation (-1), flip (-1), demosaiced_by (demosaic_max), own (false)
 {
 }
 
@@ -773,6 +773,9 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
     m_img->demosaiced_by = image_data::demosaic_max;
   m_img->f_stop = RawProcessor.imgdata.other.aperture;
   m_img->focal_length = RawProcessor.imgdata.other.focal_len;
+  m_img->camera_model = RawProcessor.imgdata.idata.model;
+  m_img->lens = RawProcessor.imgdata.lens.Lens;
+  m_img->focal_length_in_35mm = RawProcessor.imgdata.lens.FocalLengthIn35mmFormat;
   if (RawProcessor.imgdata.idata.colors != 1
       && RawProcessor.imgdata.idata.colors != 3)
     {

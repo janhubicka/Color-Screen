@@ -317,7 +317,7 @@ public:
   }
 
   image_area_base<T>
-  intersect (image_area_base other)
+  intersect (image_area_base other) const
   {
     image_area_base<T> ret (x, y, width, height);
     if (x < other.x)
@@ -826,7 +826,7 @@ struct render_parameters
                                 const image_data *img, transmission_data *transmission_data = NULL) const;
 
   int_image_area
-  get_scan_crop (int img_width, int img_height)
+  get_scan_crop (int img_width, int img_height) const
   {
     int_image_area img (0, 0, img_width, img_height);
     if (!scan_crop.set)

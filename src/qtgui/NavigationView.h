@@ -99,4 +99,8 @@ private:
     
     // UI Layout area for image (might differ from widget size if Aspect Ratio preserved)
     QRect m_imageRect;
+
+    colorscreen::int_optional_image_area m_lastScanCrop;
+    int m_lastRotation = 0;
+    bool m_lastMirror = false;
 };

@@ -158,6 +158,11 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
   m_scan = scan;
   m_simulatedPointsDirty = true;
+  if (m_rparams) {
+      m_lastScanCrop = m_rparams->scan_crop;
+      m_lastRotation = m_rparams->scan_rotation;
+      m_lastMirror = m_rparams->scan_mirror;
+  }
 
   fitToView();
 
@@ -218,6 +223,16 @@ void ImageWidget::updateParameters(
   if (scrToImg && *scrToImg != m_lastScrToImg) {
     m_simulatedPointsDirty = true;
     m_lastScrToImg = *scrToImg;
+  }
+
+  // Auto-fit if crop or orientation changed
+  if (rparams && (!(rparams->scan_crop == m_lastScanCrop) ||
+                   rparams->scan_rotation != m_lastRotation ||
+                   rparams->scan_mirror != m_lastMirror)) {
+    m_lastScanCrop = rparams->scan_crop;
+    m_lastRotation = rparams->scan_rotation;
+    m_lastMirror = rparams->scan_mirror;
+    fitToView();
   }
 
   // Request Re-render

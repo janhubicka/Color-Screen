@@ -100,6 +100,10 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_scan = scan;
 
   if (m_scan && m_rparams) {
+    m_lastScanCrop = m_rparams->scan_crop;
+    m_lastRotation = m_rparams->scan_rotation;
+    m_lastMirror = m_rparams->scan_mirror;
+
     m_renderThread = new QThread(this);
     static colorscreen::scr_to_img_parameters defaultScrToImg;
     static colorscreen::scr_detect_parameters defaultScrDetect;
@@ -212,6 +216,16 @@ void NavigationView::updateParameters(
               m_scrDetect ? *m_scrDetect
                           : colorscreen::scr_detect_parameters()),
         Q_ARG(colorscreen::render_type_parameters, m_renderType));
+  }
+
+  // Check if crop or orientation changed to clear preview
+  if (m_rparams && (!(m_rparams->scan_crop == m_lastScanCrop) ||
+                    m_rparams->scan_rotation != m_lastRotation ||
+                    m_rparams->scan_mirror != m_lastMirror)) {
+    m_previewImage = QImage();
+    m_lastScanCrop = m_rparams->scan_crop;
+    m_lastRotation = m_rparams->scan_rotation;
+    m_lastMirror = m_rparams->scan_mirror;
   }
 
   // Request re-render

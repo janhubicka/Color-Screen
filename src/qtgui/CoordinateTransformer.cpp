@@ -9,31 +9,12 @@ CoordinateTransformer::CoordinateTransformer(const colorscreen::image_data* scan
     m_mirror = params.scan_mirror;
     m_rotation = (int)params.scan_rotation % 4;
     if (m_rotation < 0) m_rotation += 4;
-    m_scanCrop = params.scan_crop;
+    
+    m_scanCrop = params.get_scan_crop(m_scanWidth, m_scanHeight);
 }
 
 colorscreen::int_image_area CoordinateTransformer::getCrop() const {
-    colorscreen::int_image_area fullRect(0, 0, m_scanWidth, m_scanHeight);
-    if (!m_scanCrop.set) return fullRect;
-    
-    // We need to const_cast or trust rparams if we had them.
-    // Actually, get_scan_crop is in render_parameters. 
-    // Let's implement intersection logic here to avoid needing to store full rparams.
-    colorscreen::int_image_area crop(m_scanCrop.x, m_scanCrop.y, m_scanCrop.width, m_scanCrop.height);
-    
-    // Intersect manually to avoid dependency loop if needed, but it's already in base.h/render-parameters.h
-    // Let's use the intersect logic from render_parameters::get_scan_crop
-    
-    colorscreen::int_image_area ret = crop;
-    if (ret.x < fullRect.x) { ret.width -= fullRect.x - ret.x; ret.x = fullRect.x; }
-    if (ret.y < fullRect.y) { ret.height -= fullRect.y - ret.y; ret.y = fullRect.y; }
-    if (ret.x + ret.width > fullRect.x + fullRect.width) ret.width = fullRect.x + fullRect.width - ret.x;
-    if (ret.y + ret.height > fullRect.y + fullRect.height) ret.height = fullRect.y + fullRect.height - ret.y;
-    ret.width = std::max(ret.width, 0);
-    ret.height = std::max(ret.height, 0);
-    
-    if (ret.width <= 0 || ret.height <= 0) return fullRect;
-    return ret;
+    return m_scanCrop;
 }
 
 QSize CoordinateTransformer::getScanSize() const {

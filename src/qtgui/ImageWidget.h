@@ -196,6 +196,9 @@ private:
   std::vector<colorscreen::point_t> m_simulatedPoints;
   bool m_simulatedPointsDirty = true;
   colorscreen::scr_to_img_parameters m_lastScrToImg;
+  colorscreen::int_optional_image_area m_lastScanCrop;
+  int m_lastRotation = 0;
+  bool m_lastMirror = false;
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
   int m_draggedPointIndex = -1;
