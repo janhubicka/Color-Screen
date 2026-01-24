@@ -379,23 +379,20 @@ void NavigationView::mousePressEvent(QMouseEvent *event) {
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
     
-    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-    colorscreen::point_t scanPt = transformer.transformedToScanCrop({clickX / m_previewScale, clickY / m_previewScale});
+    // Local coordinate relative to cropped preview
+    double tx = clickX / m_previewScale;
+    double ty = clickY / m_previewScale;
     
-    double imageX = scanPt.x;
-    double imageY = scanPt.y;
-    
-    if (m_visibleRect.contains(imageX, imageY)) {
-        // Grab logic
-        double centerX = m_visibleRect.center().x();
-        double centerY = m_visibleRect.center().y();
-        m_dragOffset = QPointF(imageX - centerX, imageY - centerY);
+    m_isDragging = true;
+    if (m_visibleRect.contains(tx, ty)) {
+        // Grab logic (relative to center)
+        m_dragOffset = QPointF(tx - m_visibleRect.center().x(), 
+                               ty - m_visibleRect.center().y());
     } else {
-        // Jump logic
+        // Jump logic (center on click)
         m_dragOffset = QPointF(0, 0);
-        double hw = m_visibleRect.width() / 2.0;
-        double hh = m_visibleRect.height() / 2.0;
-        emit panChanged(imageX - hw, imageY - hh);
+        emit panChanged(tx - m_visibleRect.width() / 2.0, 
+                        ty - m_visibleRect.height() / 2.0);
     }
   }
 }
@@ -405,20 +402,15 @@ void NavigationView::mouseMoveEvent(QMouseEvent *event) {
     double clickX = event->pos().x() - m_imageRect.left();
     double clickY = event->pos().y() - m_imageRect.top();
 
-    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-    colorscreen::point_t scanPt = transformer.transformedToScanCrop({clickX / m_previewScale, clickY / m_previewScale});
+    double tx = clickX / m_previewScale;
+    double ty = clickY / m_previewScale;
 
-    double imageX = scanPt.x;
-    double imageY = scanPt.y;
+    // Apply offset to find target center
+    double targetCenterX = tx - m_dragOffset.x();
+    double targetCenterY = ty - m_dragOffset.y();
 
-    // Apply offset
-    double targetCenterX = imageX - m_dragOffset.x();
-    double targetCenterY = imageY - m_dragOffset.y();
-
-    double hw = m_visibleRect.width() / 2.0;
-    double hh = m_visibleRect.height() / 2.0;
-
-    emit panChanged(targetCenterX - hw, targetCenterY - hh);
+    emit panChanged(targetCenterX - m_visibleRect.width() / 2.0, 
+                    targetCenterY - m_visibleRect.height() / 2.0);
   }
 }
 
