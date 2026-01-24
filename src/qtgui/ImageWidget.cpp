@@ -1055,40 +1055,67 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   if (!m_scan || !m_scrToImg)
     return {p.x(), p.y()};
 
-  // 1. Calculate physical dimensions of the view in SCAN units
-  double full_w = m_scan->width;
-  double full_h = m_scan->height;
+  // 1. Normalize view coordinate (0..1 relative to *view*)
+  // But wait, we need to map View -> Image.
+  // View (pixels) -> View (scaled) -> Apply View Offset -> Normalized Scan Coords (Un-rotated, Un-mirrored)
+
+  // Current View -> Image construction logic in paintEvent/imageToWidget:
+  // Image -> Normalize -> Mirror -> Rotate -> Scale -> Translate(View)
+
+  // Reverse:
+  // Translate(View) -> Scale -> Un-Rotate -> Un-Mirror -> Denormalize
+
+  // A. Translate & Scale Back to "Rotated & Mirrored" Normalized Space (u_view, v_view or u_rot, v_rot)
+  // The 'full_w' and 'full_h' in imageToWidget depend on rotation.
+  
+  // Let's look at imageToWidget logic:
+  // 1. px, py (Normalized Image)
+  // 2. Mirror: px = 1.0 - px
+  // 3. Rotate to u, v
+  // 4. Denormalize to xr, yr using full_w, full_h (swapped if needed)
+  // 5. Offset: (xr - viewX) * scale
+
+  // So, reversing:
+  
+  // 1. Undo Offset & Scale
+  double xr = p.x() / m_scale + m_viewX;
+  double yr = p.y() / m_scale + m_viewY;
   
   int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
   if (angleIdx < 0) angleIdx += 4;
 
+  double full_w = m_scan->width;
+  double full_h = m_scan->height;
+  
+  // If rotation swaps dimensions effectively for the view:
   if (angleIdx == 1 || angleIdx == 3) {
       std::swap(full_w, full_h);
   }
 
-  // 2. Normalize view coordinate (0..1)
-  double vx = p.x() / m_scale + m_viewX;
-  double vy = p.y() / m_scale + m_viewY;
-  
-  double u = vx / full_w;
-  double v = vy / full_h;
+  // 2. Normalize to "Rotated Space" u, v
+  double u = xr / full_w;
+  double v = yr / full_h;
 
-  // 3. Un-Rotate
-  double sx = 0, sy = 0;
-  if (angleIdx == 0) {
-    sx = u * m_scan->width; sy = v * m_scan->height;
-  } else if (angleIdx == 1) { // 90 CW: View (0,0) -> Scan (0, H)
-    sx = v * m_scan->width; sy = (1.0 - u) * m_scan->height;
-  } else if (angleIdx == 2) { // 180: View (0,0) -> Scan (W, H)
-    sx = (1.0 - u) * m_scan->width; sy = (1.0 - v) * m_scan->height;
-  } else if (angleIdx == 3) { // 270 CW: View (0,0) -> Scan (W, 0)
-    sx = (1.0 - v) * m_scan->width; sy = u * m_scan->height;
-  }
+  // 3. Un-Rotate to "Mirrored Space" (px_m, py_m)
+  // imageToWidget Rotation:
+  // 0: u=px, v=py
+  // 1: u=1-py, v=px
+  // 2: u=1-px, v=1-py
+  // 3: u=py, v=1-px
+  
+  double px = 0, py = 0;
+  if (angleIdx == 0) { px = u; py = v; }
+  else if (angleIdx == 1) { px = v; py = 1.0 - u; }      // u=1-y -> y=1-u
+  else if (angleIdx == 2) { px = 1.0 - u; py = 1.0 - v; }
+  else if (angleIdx == 3) { px = 1.0 - v; py = u; }      // v=1-x -> x=1-v
 
   // 4. Un-Mirror
-  if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
+  if (m_rparams && m_rparams->scan_mirror) {
+      px = 1.0 - px;
+  }
 
-  return {sx, sy};
+  // 5. Denormalize to Image Space
+  return { px * m_scan->width, py * m_scan->height };
 }
 
 QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
