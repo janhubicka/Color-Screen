@@ -21,6 +21,10 @@ signals:
   void detachPerspectiveChartRequested(QWidget *widget);
   void detachNonlinearChartRequested(QWidget *widget);
 
+  void heatmapToleranceChanged(double tol);
+  void exaggerateChanged(double ex);
+  void maxArrowLengthChanged(double len);
+
 public:
   bool isAutoEnabled() const;
   bool isNonlinearEnabled() const;

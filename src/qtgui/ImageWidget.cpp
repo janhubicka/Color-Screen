@@ -224,6 +224,27 @@ void ImageWidget::updateParameters(
   requestRender();
 }
 
+void ImageWidget::setHeatmapTolerance(double tol) {
+  if (qAbs(m_heatmapTolerance - tol) > 1e-6) {
+    m_heatmapTolerance = tol;
+    update();
+  }
+}
+
+void ImageWidget::setExaggerate(double ex) {
+  if (qAbs(m_exaggerate - ex) > 1e-6) {
+    m_exaggerate = ex;
+    update();
+  }
+}
+
+void ImageWidget::setMaxArrowLength(double len) {
+  if (qAbs(m_maxArrowLength - len) > 1e-6) {
+    m_maxArrowLength = len;
+    update();
+  }
+}
+
 
 
 
@@ -258,13 +279,13 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       colorscreen::point_t c1 = m_scrToImg->coordinate1;
       double dot_period = sqrt(c1.x * c1.x + c1.y * c1.y);
       if (dot_period < 0.1) dot_period = 10.0;
-      double threshold = dot_period / 4.0;
-      double amp_scale = 200.0 / (dot_period / 2.0);
+      double threshold = dot_period * m_heatmapTolerance;
+      double amp_scale = m_exaggerate / (dot_period / 2.0);
 
       // Viewport culling: expand rect to include displacement arrows
-      // Displacement arrow amplification is 200.0 / (dot_period / 2.0).
-      // Max pixel length is 100.
-      double margin = 100.0 / m_scale + 20.0;
+      // Displacement arrow amplification is m_exaggerate / (dot_period / 2.0).
+      // Max pixel length is m_maxArrowLength.
+      double margin = m_maxArrowLength / m_scale + 20.0;
       QRectF visibleRect(m_viewX - margin, m_viewY - margin, 
                          width() / m_scale + 2 * margin, height() / m_scale + 2 * margin);
 
@@ -274,7 +295,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 
         QPointF p_widget = imageToWidget(xi);
         
-        double marginPixels = 100.0 + 20.0 * m_scale;
+        double marginPixels = m_maxArrowLength + 20.0 * m_scale;
         
         if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
             p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
@@ -327,11 +348,11 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
         double dist_w2 = dx_w * dx_w + dy_w * dy_w;
 
         if (dist_w2 > 1.0) {
-          // Cap arrow length to 100 pixels
-          if (dist_w2 > 10000.0) {
+          // Cap arrow length to m_maxArrowLength pixels
+          if (dist_w2 > m_maxArrowLength * m_maxArrowLength) {
             double dist_w = sqrt(dist_w2);
-            dx_w *= 100.0 / dist_w;
-            dy_w *= 100.0 / dist_w;
+            dx_w *= m_maxArrowLength / dist_w;
+            dy_w *= m_maxArrowLength / dist_w;
             end = QPointF(start.x() + dx_w, start.y() + dy_w);
           }
 

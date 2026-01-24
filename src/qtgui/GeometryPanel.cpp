@@ -40,24 +40,24 @@ void GeometryPanel::setupUi() {
   // To make it easy for MainWindow to sync, let's give it an object name
   showBox->setObjectName("showRegistrationPointsBox");
   
-  // Heatmap tolerance (manual slider, not in ParameterState)
-  // Removed separator "Heatmap Settings" to keep it under Registration Points
-  m_heatmapToleranceSlider = new QSlider(Qt::Horizontal);
-  m_heatmapToleranceSlider->setRange(0, 1000); // 0.0 to 1.0 mapped to 0-1000
-  m_heatmapToleranceSlider->setValue(500); // Default 0.5
-  m_heatmapToleranceSlider->setToolTip("Adjust heatmap color sensitivity (0.0 to 1.0)");
-  connect(m_heatmapToleranceSlider, &QSlider::valueChanged, this, [this](int value) {
-      double tol = value / 1000.0;
-      if (m_deformationChart) m_deformationChart->setHeatmapTolerance(tol);
-      if (m_lensChart) m_lensChart->setHeatmapTolerance(tol);
-      if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(tol);
-      if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(tol);
-  });
+  addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,
+            [this](double v) {
+                emit exaggerateChanged(v);
+            }, 1.0, true);
 
-  QHBoxLayout *hmLayout = new QHBoxLayout();
-  hmLayout->addWidget(new QLabel("Heatmap tolerance:"));
-  hmLayout->addWidget(m_heatmapToleranceSlider);
-  addToPanel(hmLayout);
+  addSlider("Max arrow length", 1.0, 1000.0, 1.0, 0, "px", "", 100.0,
+            [this](double v) {
+                emit maxArrowLengthChanged(v);
+            });
+
+  addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.5,
+            [this](double v) {
+                if (m_deformationChart) m_deformationChart->setHeatmapTolerance(v);
+                if (m_lensChart) m_lensChart->setHeatmapTolerance(v);
+                if (m_perspectiveChart) m_perspectiveChart->setHeatmapTolerance(v);
+                if (m_nonlinearChart) m_nonlinearChart->setHeatmapTolerance(v);
+                emit heatmapToleranceChanged(v);
+            });
 
   addSeparator("Optimization");
 

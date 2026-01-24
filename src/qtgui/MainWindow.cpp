@@ -448,6 +448,11 @@ void MainWindow::setupUi() {
   connect(m_geometryPanel, &GeometryPanel::nonlinearToggled, this,
           &MainWindow::onNonlinearToggled);
 
+  // Connect visualization sliders
+  connect(m_geometryPanel, &GeometryPanel::heatmapToleranceChanged, m_imageWidget, &ImageWidget::setHeatmapTolerance);
+  connect(m_geometryPanel, &GeometryPanel::exaggerateChanged, m_imageWidget, &ImageWidget::setExaggerate);
+  connect(m_geometryPanel, &GeometryPanel::maxArrowLengthChanged, m_imageWidget, &ImageWidget::setMaxArrowLength);
+
   // Synchronization for Registration Points visibility
   m_registrationPointsAction->setChecked(
       m_imageWidget->registrationPointsVisible());

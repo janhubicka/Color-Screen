@@ -60,6 +60,16 @@ protected:
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       bool logarithmic = false);
 
+  /*
+    Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
+  */
+  void addSlider(
+      const QString &label, double min, double max, double scale, int decimals,
+      const QString &suffix, const QString &specialValueText,
+      double initialValue,
+      std::function<void(double)> onChanged, double gamma = 1.0,
+      bool logarithmic = false);
+
   QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,
       std::function<int(const ParameterState &)> getter,

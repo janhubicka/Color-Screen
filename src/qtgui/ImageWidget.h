@@ -81,6 +81,10 @@ public slots:
   void rotateRight();
   void pivotViewport(int oldRotIdx, int newRotIdx);
 
+  void setHeatmapTolerance(double tol);
+  void setExaggerate(double ex);
+  void setMaxArrowLength(double len);
+
 private:
 
 protected:
@@ -158,6 +162,10 @@ private:
   double m_viewY = 0.0;
   double m_minScale = 0.1; // Calculated 'fit' scale
   QSize m_lastSize; // Last known widget size for robust resizing
+
+  double m_heatmapTolerance = 0.5;
+  double m_exaggerate = 200.0;
+  double m_maxArrowLength = 100.0;
 
   // Concurrent Rendering
   TaskQueue m_renderQueue; // Manages IDs and progress notifications
