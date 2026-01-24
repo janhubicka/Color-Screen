@@ -81,16 +81,6 @@ void SharpnessPanel::setupUi() {
         return s.rparams.sharpen.scanner_mtf.size() > 2;
       });
 
-  // Scan DPI
-  // Range 0.0 - 10000.0 (0.0 = unknown)
-  addSliderParameter(
-      "Scan DPI", 0.0, 10000.0, 10.0, 1, "dpi", "unknown",
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.scan_dpi;
-      },
-      [](ParameterState &s, double v) {
-        s.rparams.sharpen.scanner_mtf.scan_dpi = v;
-      });
 
   // Gaussian blur (Sigma)
   // Range 0.0 - 20.0, Pixels.

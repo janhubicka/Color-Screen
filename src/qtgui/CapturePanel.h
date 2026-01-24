@@ -27,6 +27,9 @@ signals:
 
 private:
     void setupUi();
+    class QLabel *m_imageResolutionValue = nullptr;
+    class QLabel *m_screenResolutionValue = nullptr;
+    class QLabel *m_detectedGammaValue = nullptr;
 };
 
 #endif // CAPTURE_PANEL_H
