@@ -97,6 +97,15 @@ public:
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
   luminosity_t gamma;
+  /* Data about camera setup, all -2 if unknown. */
+  luminosity_t f_stop;
+  luminosity_t focal_plane_x_resolution;
+  luminosity_t focal_plane_y_resolution;
+  luminosity_t focal_length;
+  luminosity_t focal_length_in_35mm;
+  luminosity_t pixel_pitch;
+  luminosity_t sensor_fill_factor;
+  demosaicing_t demosaiced_by;
 private:
   std::unique_ptr <image_data_loader> loader;
   /* True of the data is owned by the structure.  */

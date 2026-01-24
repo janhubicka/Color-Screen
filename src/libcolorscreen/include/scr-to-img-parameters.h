@@ -318,6 +318,8 @@ struct scr_to_img_parameters
     // return atan2(det, dot) * 180 / M_PI;
     return acos (dot / (get_xlen () * get_ylen ())) * (180 / M_PI);
   }
+  coord_t
+  estimate_dpi (coord_t pixel_size) const;
 };
 }
 #endif

@@ -166,7 +166,9 @@ image_data::image_data ()
       primary_green{ 0.3000, 0.6000, 0.7152 },
       primary_blue{ 0.1500, 0.0600, 0.0722 },
       whitepoint{ 0.312700492, 0.329000939, 1.0 }, lcc (NULL), gamma (-2),
-      own (false)
+      f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
+      focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
+      demosaiced_by (demosaic_max), own (false)
 {
 }
 
@@ -705,23 +707,29 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       break;
     case image_data::demosaic_VNG:
       RawProcessor.imgdata.params.user_qual = 1;
+      m_img->demosaiced_by = image_data::demosaic_VNG;
       break;
     case image_data::demosaic_PPG:
       RawProcessor.imgdata.params.user_qual = 2;
+      m_img->demosaiced_by = image_data::demosaic_PPG;
       break;
     /* AHD seems to go well on demosaicing photo of Paget screen.  */
     case image_data::demosaic_default:
     case image_data::demosaic_AHD:
       RawProcessor.imgdata.params.user_qual = 3;
+      m_img->demosaiced_by = image_data::demosaic_AHD;
       break;
     case image_data::demosaic_DCB:
       RawProcessor.imgdata.params.user_qual = 4;
+      m_img->demosaiced_by = image_data::demosaic_DCB;
       break;
     case image_data::demosaic_DHT:
       RawProcessor.imgdata.params.user_qual = 11;
+      m_img->demosaiced_by = image_data::demosaic_DHT;
       break;
     case image_data::demosaic_AAHD:
       RawProcessor.imgdata.params.user_qual = 12;
+      m_img->demosaiced_by = image_data::demosaic_AAHD;
       break;
     case image_data::demosaic_max:
       abort ();
@@ -731,7 +739,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   RawProcessor.imgdata.params.use_camera_matrix = 0;
   RawProcessor.imgdata.rawparams.max_raw_memory_mb = 10000;
   if (demosaic == image_data::demosaic_half)
-    RawProcessor.imgdata.params.half_size = 1;
+    {
+      RawProcessor.imgdata.params.half_size = 1;
+      m_img->demosaiced_by = image_data::demosaic_half;
+    }
   RawProcessor.imgdata.params.no_auto_bright = 1;
   RawProcessor.imgdata.params.fbdd_noiserd = 0;
 
@@ -740,6 +751,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
          || demosaic == image_data::demosaic_monochromatic_bayer_corrected);
   bayer_correction
       = demosaic == image_data::demosaic_monochromatic_bayer_corrected;
+  if (monochromatic)
+    m_img->demosaiced_by = demosaic;
   /* TODO figure out threshold.  */
   RawProcessor.imgdata.params.threshold = 0;
   if (demosaic == image_data::demosaic_none || monochromatic)
@@ -756,6 +769,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  if (!RawProcessor.imgdata.idata.filters)
+    m_img->demosaiced_by = image_data::demosaic_max;
+  m_img->f_stop = RawProcessor.imgdata.other.aperture;
+  m_img->focal_length = RawProcessor.imgdata.other.focal_len;
   if (RawProcessor.imgdata.idata.colors != 1
       && RawProcessor.imgdata.idata.colors != 3)
     {

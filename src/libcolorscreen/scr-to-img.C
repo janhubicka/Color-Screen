@@ -9,8 +9,13 @@
 namespace colorscreen
 {
 std::atomic_ulong scr_to_img::m_nwarnings;
+
+const render_parameters::capture_type_property render_parameters::capture_properties[] = {
+};
 namespace
 {
+
+
 
 class rotation_distance_matrix : public matrix4x4<coord_t>
 {
@@ -535,5 +540,24 @@ scr_to_img::dump (FILE *f)
   if (m_param.mesh_trans)
     fprintf (f, "have mesh trans\n");
   save_csp (f, &m_param, NULL, NULL, NULL);
+}
+
+/* Estimate DPI for given pixel size.  */
+coord_t
+scr_to_img_parameters::estimate_dpi (coord_t pixel_size) const
+{
+    switch (type)
+    {
+    case Paget:
+    case Finlay:
+	/* Screen size scanned by Epson scanner at 1800 DPI.  */
+	return 1800 * ((1/sqrt (13.357325*13.357325 + 0.203263 * 0.203263)) / pixel_size);
+    case Dufay:
+	/* Screen size scanned by Nikon scanner at 4000 DPI.  */
+	return 4000 * ((1/sqrt (3.045845*3.045845 + 7.194771*7.194771)) / pixel_size);
+    default:
+	return -1;
+	break;
+    }
 }
 }

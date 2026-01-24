@@ -366,6 +366,32 @@ typedef optional_image_area_base<int> int_optional_image_area;
 /* Parameters of rendering algorithms.  */
 struct render_parameters
 {
+  enum capture_type
+  {
+    capture_unknown,
+    capture_transparency_with_screen,
+    capture_transparency_with_screen_and_infrared,
+    capture_negative_with_screen,
+    capture_negative_with_screen_and_infrared,
+    capture_transparency,
+    capture_negative,
+    capture_max
+  };
+  class capture_type_property
+  {
+  public:
+    const char *name;
+    const char *pretty_name;
+    int flags;
+    enum flag
+    {
+      SUPPORTS_SCR_DETECT = 1,
+      HAS_IR = 2,
+      MAYBE_MONOCHROMATIC_DEMOSAIC = 4
+    };
+  };
+  DLL_PUBLIC static const capture_type_property capture_properties[capture_max];
+  capture_type capture_type;
   /* Demosaicing algorithm.  Not actually used for rendering, only passed
      to image_data::load.  */
   image_data::demosaicing_t demosaic;
@@ -809,6 +835,50 @@ struct render_parameters
     if (intersection.empty_p ())
       return img;
     return intersection;
+  }
+
+  static enum capture_type
+  get_capture_type (enum capture_type capture_type, image_data *scan)
+  {
+    if (!scan)
+      return capture_unknown;
+    switch (capture_type)
+      {
+	case capture_unknown:
+	case capture_transparency:
+	case capture_negative:
+	  return capture_unknown;
+	  break;
+	case capture_transparency_with_screen:
+	  if (!scan->has_rgb ())
+	    return capture_transparency;
+	  return capture_transparency_with_screen;
+	  break;
+	case capture_negative_with_screen:
+	  if (!scan->has_rgb ())
+	    return capture_negative;
+	  return capture_negative_with_screen;
+	  break;
+	case capture_transparency_with_screen_and_infrared:
+	  if (!scan->has_rgb ())
+	    return capture_transparency;
+	  if (!scan->has_grayscale_or_ir ())
+	    return capture_transparency_with_screen;
+	  return capture_transparency_with_screen_and_infrared;
+	  break;
+	case capture_negative_with_screen_and_infrared:
+	  if (!scan->has_rgb ())
+	    return capture_negative;
+	  if (!scan->has_grayscale_or_ir ())
+	    return capture_negative_with_screen;
+	  return capture_negative_with_screen_and_infrared;
+	  break;
+      }
+  }
+  enum capture_type
+  get_capture_type (image_data *scan)
+  {
+    return get_capture_type (capture_type, scan);
   }
 
 private:
