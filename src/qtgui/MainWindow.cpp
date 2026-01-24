@@ -807,7 +807,10 @@ void MainWindow::onMirrorHorizontally(bool checked) {
 
 void MainWindow::toggleFullscreen() {
   if (m_imageWidget->isFullScreen()) {
-    // Exit fullscreen
+    // Exit fullscreen: Block adaptive resize during reparenting glitches
+    QSize fullscreenSize = m_imageWidget->size();
+    m_imageWidget->setLastSize(QSize()); 
+    
     m_imageWidget->setParent(m_mainSplitter);
     m_imageWidget->showNormal();
     m_fullscreenAction->setChecked(false);
@@ -816,12 +819,14 @@ void MainWindow::toggleFullscreen() {
     m_mainSplitter->insertWidget(0, m_imageWidget);
     m_imageWidget->show();
     
-    // Restore splitter sizes after a short delay to ensure layout is complete
+    // Restore splitter sizes after a short delay
+    // We use the fullscreen size as the reference for the final jump
     if (!m_splitterSizesBeforeFullscreen.isEmpty() && 
         m_splitterSizesBeforeFullscreen.size() == 2) {
       QList<int> savedSizes = m_splitterSizesBeforeFullscreen;
       
-      QTimer::singleShot(10, this, [this, savedSizes]() {
+      QTimer::singleShot(10, this, [this, fullscreenSize, savedSizes]() {
+        m_imageWidget->setLastSize(fullscreenSize);
         m_mainSplitter->setSizes(savedSizes);
       });
       m_splitterSizesBeforeFullscreen.clear();
@@ -830,6 +835,10 @@ void MainWindow::toggleFullscreen() {
     // Save current splitter sizes BEFORE removing the widget
     m_splitterSizesBeforeFullscreen = m_mainSplitter->sizes();
     
+    // Capture current size and block intermediate resizes
+    QSize baseSize = m_imageWidget->size();
+    m_imageWidget->setLastSize(QSize());
+
     // Enter fullscreen on the same screen as the main window
     m_imageWidget->setParent(nullptr);
     
@@ -840,6 +849,9 @@ void MainWindow::toggleFullscreen() {
       m_imageWidget->setGeometry(targetScreen->geometry());
     }
     
+    // Set reference size just before the big resize
+    m_imageWidget->setLastSize(baseSize);
+
     m_imageWidget->showFullScreen();
     m_imageWidget->setFocus(); // Set focus so key events work
     m_imageWidget->activateWindow(); // Also activate the window

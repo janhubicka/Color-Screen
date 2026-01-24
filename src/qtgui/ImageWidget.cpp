@@ -62,17 +62,23 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
 double ImageWidget::getMinScale() const { return m_minScale; }
 
 void ImageWidget::setZoom(double scale) {
-  if (qAbs(scale - m_scale) > 0.000001) {
+  if (qAbs(scale - m_scale) > 0.000001 && scale > 1e-9) {
     // Keep center? For now just zoom.
     // Ideally zoom around center of view.
-    double centerX = m_viewX + (width() / m_scale) / 2.0;
-    double centerY = m_viewY + (height() / m_scale) / 2.0;
+    double w = width();
+    double h = height();
+    if (w > 0 && h > 0 && m_scale > 1e-9) {
+        double centerX = m_viewX + (w / m_scale) / 2.0;
+        double centerY = m_viewY + (h / m_scale) / 2.0;
 
-    m_scale = scale;
+        m_scale = scale;
 
-    // New view top-left
-    m_viewX = centerX - (width() / m_scale) / 2.0;
-    m_viewY = centerY - (height() / m_scale) / 2.0;
+        // New view top-left
+        m_viewX = centerX - (w / m_scale) / 2.0;
+        m_viewY = centerY - (h / m_scale) / 2.0;
+    } else {
+        m_scale = scale;
+    }
 
     requestRender();
     emit viewStateChanged(
@@ -612,7 +618,8 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
   QSize newSize = event->size();
   
   if (oldSize.isValid() && oldSize.width() > 0 && oldSize.height() > 0 && 
-      oldSize != newSize && m_scale > 0 && m_scan) {
+      newSize.width() > 0 && newSize.height() > 0 &&
+      oldSize != newSize && m_scale > 1e-9 && m_scan) {
     
     // 1. Calculate current center in image coordinates
     double centerX = m_viewX + (oldSize.width() / m_scale) / 2.0;
@@ -630,9 +637,10 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
       double newMinScale = qMin(scaleX, scaleY);
       
       // 3. Adjust m_scale to maintain relative zoom level
-      if (m_minScale > 0) {
+      if (m_minScale > 1e-9) {
           m_scale *= (newMinScale / m_minScale);
       }
+      if (m_scale < 1e-9) m_scale = newMinScale; // fallback
       m_minScale = newMinScale;
     }
     

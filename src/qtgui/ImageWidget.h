@@ -73,6 +73,7 @@ public:
 public slots:
   void setZoom(double scale);
   void setPan(double x, double y);
+  void setLastSize(QSize s) { m_lastSize = s; }
   void fitToView(); // New slot
   void rotateLeft();
   void rotateRight();
