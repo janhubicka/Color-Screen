@@ -30,6 +30,14 @@ private:
     class QLabel *m_imageResolutionValue = nullptr;
     class QLabel *m_screenResolutionValue = nullptr;
     class QLabel *m_detectedGammaValue = nullptr;
+    class QLabel *m_cameraModelValue = nullptr;
+    class QLabel *m_lensValue = nullptr;
+    class QLabel *m_fStopValue = nullptr;
+    class QLabel *m_focalLengthValue = nullptr;
+    class QLabel *m_focalLength35mmValue = nullptr;
+    class QLabel *m_focalPlaneResValue = nullptr;
+    class QLabel *m_pixelPitchValue = nullptr;
+    class QLabel *m_sensorFillFactorValue = nullptr;
 };
 
 #endif // CAPTURE_PANEL_H

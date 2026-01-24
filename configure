@@ -675,6 +675,8 @@ WINDRES
 HOST_WIN32_FALSE
 HOST_WIN32_TRUE
 WIN_NO_UNDEFINED
+EXIV2_LIBS
+EXIV2_CFLAGS
 OPENMP_CXXFLAGS
 HAVE_CXX17
 PKG_CONFIG_LIBDIR
@@ -857,6 +859,8 @@ CXXCPP
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
+EXIV2_CFLAGS
+EXIV2_LIBS
 GTKGUI_BIN_CFLAGS
 GTKGUI_BIN_LIBS
 Qt6_CFLAGS
@@ -1549,6 +1553,9 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
+  EXIV2_CFLAGS
+              C compiler flags for EXIV2, overriding pkg-config
+  EXIV2_LIBS  linker flags for EXIV2, overriding pkg-config
   GTKGUI_BIN_CFLAGS
               C compiler flags for GTKGUI_BIN, overriding pkg-config
   GTKGUI_BIN_LIBS
@@ -21890,6 +21897,98 @@ else case e in #(
   e)  echo " * * * try option --with-liblcms2=PATH" ;;
 esac
 fi
+
+fi
+
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for exiv2" >&5
+printf %s "checking for exiv2... " >&6; }
+
+if test -n "$EXIV2_CFLAGS"; then
+    pkg_cv_EXIV2_CFLAGS="$EXIV2_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"exiv2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "exiv2") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_EXIV2_CFLAGS=`$PKG_CONFIG --cflags "exiv2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$EXIV2_LIBS"; then
+    pkg_cv_EXIV2_LIBS="$EXIV2_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"exiv2\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "exiv2") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_EXIV2_LIBS=`$PKG_CONFIG --libs "exiv2" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+                EXIV2_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "exiv2" 2>&1`
+        else
+                EXIV2_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "exiv2" 2>&1`
+        fi
+        # Put the nasty error message in config.log where it belongs
+        echo "$EXIV2_PKG_ERRORS" >&5
+
+        as_fn_error $? "Package requirements (exiv2) were not met:
+
+$EXIV2_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables EXIV2_CFLAGS
+and EXIV2_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+        { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in '$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in '$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables EXIV2_CFLAGS
+and EXIV2_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See 'config.log' for more details" "$LINENO" 5; }
+else
+        EXIV2_CFLAGS=$pkg_cv_EXIV2_CFLAGS
+        EXIV2_LIBS=$pkg_cv_EXIV2_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
 
 fi
 

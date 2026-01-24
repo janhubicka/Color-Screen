@@ -105,6 +105,8 @@ AC_SEARCH_LIBS(cmsCreateRGBProfile,[lcms2],[check_liblcms2_h="lcms2.h"],
  [ echo " * * * try option --with-liblcms2=PATH"])
 fi
 
+PKG_CHECK_MODULES([EXIV2], [exiv2])
+
 fi
 
 # Windows DLL require -no-undefined libtool argument.  Using it on other

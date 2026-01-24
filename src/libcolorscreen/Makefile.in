@@ -137,7 +137,8 @@ am__uninstall_files_from_dir = { \
   }
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libcolorscreen_la_LIBADD =
+am__DEPENDENCIES_1 =
+libcolorscreen_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_libcolorscreen_la_OBJECTS = libcolorscreen_la-render.lo \
 	libcolorscreen_la-render-to-scr.lo \
 	libcolorscreen_la-render-fast.lo \
@@ -347,6 +348,8 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
+EXIV2_CFLAGS = @EXIV2_CFLAGS@
+EXIV2_LIBS = @EXIV2_LIBS@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 GREP = @GREP@
@@ -466,7 +469,8 @@ EXTRA_DIST = lru-cache.h analyze-base-worker.h gaussian-blur.h icc-srgb.h  rende
 @RENDER_EXTRA_TRUE@nodist_libcolorscreen_la_SOURCES = render-extra/render-extra.C
 # -no-undefined is needed in order to build DLL on Windows.
 libcolorscreen_la_LDFLAGS = -version-info 2:0:0 $(WIN_NO_UNDEFINED)
-libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN
+libcolorscreen_la_CXXFLAGS = -fvisibility=hidden -DLIBCOLORSCREEN $(EXIV2_CFLAGS)
+libcolorscreen_la_LIBADD = $(EXIV2_LIBS)
 @static_link_TRUE@unittests_LDFLAGS = -static
 @static_link_TRUE@unittests_CXXFLAGS = -static
 unittests_LDADD = libcolorscreen.la 

@@ -55,6 +55,38 @@ void CapturePanel::setupUi()
     m_screenResolutionValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_form->addRow("Resolution from screen", m_screenResolutionValue);
 
+    m_cameraModelValue = new QLabel();
+    m_cameraModelValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Camera model", m_cameraModelValue);
+
+    m_lensValue = new QLabel();
+    m_lensValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Lens", m_lensValue);
+
+    m_fStopValue = new QLabel();
+    m_fStopValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("F-stop", m_fStopValue);
+
+    m_focalLengthValue = new QLabel();
+    m_focalLengthValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Focal length", m_focalLengthValue);
+
+    m_focalLength35mmValue = new QLabel();
+    m_focalLength35mmValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Focal length (35mm)", m_focalLength35mmValue);
+
+    m_focalPlaneResValue = new QLabel();
+    m_focalPlaneResValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Focal plane res", m_focalPlaneResValue);
+
+    m_pixelPitchValue = new QLabel();
+    m_pixelPitchValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Pixel pitch", m_pixelPitchValue);
+
+    m_sensorFillFactorValue = new QLabel();
+    m_sensorFillFactorValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_form->addRow("Sensor fill factor", m_sensorFillFactorValue);
+
     auto updateInfoLabels = [this](const ParameterState &state) {
         auto img = m_imageGetter();
         
@@ -107,6 +139,43 @@ void CapturePanel::setupUi()
         m_detectedGammaValue->setVisible(showGamma);
         if (auto lab = m_form->labelForField(m_detectedGammaValue))
             lab->setVisible(showGamma);
+
+        auto updateOptionalLabel = [&](QLabel* label, bool condition, const QString& text) {
+            label->setText(text);
+            label->setVisible(condition);
+            if (auto lab = m_form->labelForField(label))
+                lab->setVisible(condition);
+        };
+
+        if (img) {
+            updateOptionalLabel(m_cameraModelValue, !img->camera_model.empty(), QString::fromStdString(img->camera_model));
+            updateOptionalLabel(m_lensValue, !img->lens.empty(), QString::fromStdString(img->lens));
+            updateOptionalLabel(m_fStopValue, img->f_stop != -2, QString("f/%1").arg(img->f_stop, 0, 'f', 1));
+            updateOptionalLabel(m_focalLengthValue, img->focal_length != -2, QString("%1 mm").arg(img->focal_length, 0, 'f', 1));
+            updateOptionalLabel(m_focalLength35mmValue, img->focal_length_in_35mm != -2, QString("%1 mm").arg(img->focal_length_in_35mm, 0, 'f', 1));
+            
+            bool showFocalPlane = img->focal_plane_x_resolution != -2 && img->focal_plane_y_resolution != -2;
+            QString fpText;
+            if (showFocalPlane) {
+                if (std::abs(img->focal_plane_x_resolution - img->focal_plane_y_resolution) < 1e-6)
+                    fpText = QString("%1").arg(img->focal_plane_x_resolution, 0, 'f', 1);
+                else
+                    fpText = QString("%1x%2").arg(img->focal_plane_x_resolution, 0, 'f', 1).arg(img->focal_plane_y_resolution, 0, 'f', 1);
+            }
+            updateOptionalLabel(m_focalPlaneResValue, showFocalPlane, fpText);
+            
+            updateOptionalLabel(m_pixelPitchValue, img->pixel_pitch != -2, QString("%1 µm").arg(img->pixel_pitch, 0, 'f', 2));
+            updateOptionalLabel(m_sensorFillFactorValue, img->sensor_fill_factor != -2, QString("%1%").arg(img->sensor_fill_factor * 100.0, 0, 'f', 1));
+        } else {
+            updateOptionalLabel(m_cameraModelValue, false, "");
+            updateOptionalLabel(m_lensValue, false, "");
+            updateOptionalLabel(m_fStopValue, false, "");
+            updateOptionalLabel(m_focalLengthValue, false, "");
+            updateOptionalLabel(m_focalLength35mmValue, false, "");
+            updateOptionalLabel(m_focalPlaneResValue, false, "");
+            updateOptionalLabel(m_pixelPitchValue, false, "");
+            updateOptionalLabel(m_sensorFillFactorValue, false, "");
+        }
     };
 
     m_paramUpdaters.push_back(updateInfoLabels);

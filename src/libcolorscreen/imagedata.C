@@ -14,6 +14,7 @@
 #include <tiffio.h>
 #include <turbojpeg.h>
 #include <zip.h>
+#include <exiv2/exiv2.hpp>
 
 #define HAVE_LIBRAW
 
@@ -365,6 +366,7 @@ tiff_image_data_loader::init_loader (const char *name, const char **error,
       return false;
     }
   m_row = 0;
+  m_img->load_exif (name);
   return true;
 }
 
@@ -545,6 +547,7 @@ jpg_image_data_loader::init_loader (const char *name, const char **error,
   m_tj_instance = NULL;
   grayscale = !rgb;
   m_img->maxval = 255;
+  m_img->load_exif (name);
   return true;
 }
 
@@ -1491,6 +1494,98 @@ image_data::save_tiff (const char *filename, progress_info *progress)
         progress->inc_progress ();
     }
   return true;
+}
+
+
+void
+image_data::load_exif (const char *name)
+{
+  try
+    {
+      Exiv2::Image::UniquePtr image = Exiv2::ImageFactory::open (name);
+      if (image.get () == 0)
+        return;
+      image->readMetadata ();
+
+      Exiv2::ExifData &exifData = image->exifData ();
+      if (exifData.empty ())
+return;
+
+      Exiv2::ExifData::const_iterator it;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FNumber"));
+      if (it != exifData.end () && it->count ())
+f_stop = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalPlaneXResolution"));
+      if (it != exifData.end () && it->count ())
+focal_plane_x_resolution = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalPlaneYResolution"));
+      if (it != exifData.end () && it->count ())
+focal_plane_y_resolution = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalLength"));
+      if (it != exifData.end () && it->count ())
+focal_length = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.FocalLengthIn35mmFilm"));
+      if (it != exifData.end () && it->count ())
+focal_length_in_35mm = it->toInt64 ();
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Model"));
+      if (it != exifData.end () && it->count ())
+camera_model = it->value ().toString ();
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.LensModel"));
+      if (it != exifData.end () && it->count ())
+lens = it->value ().toString ();
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Orientation"));
+      if (it != exifData.end () && it->count ())
+{
+  long orientation = it->toInt64 ();
+  switch (orientation)
+    {
+    case 1:
+      rotation = 0;
+      flip = 0;
+      break;
+    case 2:
+      rotation = 0;
+      flip = 1;
+      break;
+    case 3:
+      rotation = 2;
+      flip = 0;
+      break;
+    case 4:
+      rotation = 2;
+      flip = 1;
+      break;
+    case 5:
+      rotation = 3;
+      flip = 1;
+      break;
+    case 6:
+      rotation = 1;
+      flip = 0;
+      break;
+    case 7:
+      rotation = 1;
+      flip = 1;
+      break;
+    case 8:
+      rotation = 3;
+      flip = 0;
+      break;
+    }
+}
+    }
+  catch (Exiv2::Error &e)
+    {
+      // No metadata or file not found...
+    }
 }
 
 }
