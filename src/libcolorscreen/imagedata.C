@@ -855,7 +855,7 @@ raw_image_data_loader::load_part (int *permille, const char **error,
                                   progress_info *)
 {
   histogram rhistogram, bhistogram;
-  const luminosity_t range = 0.2;
+  const luminosity_t range = 5;
 
   /* Supress mosaic pattern.  We only want to find good scaling factor.  */
   if (monochromatic)
