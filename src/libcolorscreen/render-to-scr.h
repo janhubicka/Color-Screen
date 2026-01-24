@@ -253,6 +253,8 @@ public:
   sample_pixel_img (coord_t x, coord_t y) const
   {
     rgbdata ret;
+    if (x < 0 || x >= m_img.width || y < 0 || y >= m_img.height)
+      return ret;
     if (!m_color)
       ret.red = ret.green = ret.blue = fast_get_img_pixel (x, y);
     else if (!m_profiled)
