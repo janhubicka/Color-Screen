@@ -1200,6 +1200,7 @@ image_data::parse_icc_profile (progress_info *progress)
       fprintf (stderr, "Not a matrix ICC profile (do not use LUT profiles with mosaiced photos)!\n");
       if (progress)
         progress->resume_stdout ();
+      cmsCloseProfile (hInProfile);
       return false;
     }
   if (cmsGetColorSpace (hInProfile) != cmsSigRgbData)
