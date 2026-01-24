@@ -92,6 +92,8 @@ save_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
     {
       if (fprintf (f, "demosaic: %s\n", image_data::demosaic_names[(int)rparam->demosaic].name) < 0
 	  || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
+	  || fprintf (f, "scan_rotation: %i\n", rparam->scan_rotation * 90) < 0
+	  || fprintf (f, "scan_mirror: %s\n", bool_names [(int)rparam->scan_mirror]) < 0
 	  || fprintf (f, "film_gamma: %f\n", rparam->film_gamma) < 0
 	  || fprintf (f, "target_film_gamma: %f\n", rparam->target_film_gamma) < 0
 	  || fprintf (f, "white_balance: %f %f %f\n", rparam->white_balance.red, rparam->white_balance.green, rparam->white_balance.blue) < 0
@@ -794,6 +796,16 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	      return false;
 	    }
 	}
+      else if (!strcmp (buf, "scan_rotation"))
+	{
+	  if (!read_int (f, rparam_check (scan_rotation)))
+	    {
+	      *error = "error parsing richardson_lucy_iterations";
+	      return false;
+	    }
+	  if (rparam)
+	    rparam->scan_rotation /= 90;
+	}
       else if (!strcmp (buf, "richardson_lucy_iterations"))
 	{
 	  if (!read_int (f, rparam_check (sharpen.richardson_lucy_iterations)))
@@ -985,6 +997,14 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	  if (!read_luminosity (f, rparam_check (dark_point)))
 	    {
 	      *error = "error parsing dark_point";
+	      return false;
+	    }
+	}
+      else if (!strcmp (buf, "scan_mirror"))
+	{
+	  if (!parse_bool (f, rparam_check (scan_mirror)))
+	    {
+	      *error = "error parsing scan_mirror";
 	      return false;
 	    }
 	}

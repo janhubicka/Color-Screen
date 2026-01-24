@@ -86,6 +86,7 @@ private slots:
   void onDeselectAll();
   void onDeleteSelected();
   void onPruneMisplaced();
+  void onCropRequested();
   void onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,
                     colorscreen::point_t color);
   void onAreaSelected(QRect area);
@@ -111,6 +112,7 @@ private:
 
   void setupUi();
   void createMenus();
+  QRect getImageArea(QRect area);
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
   void updateModeMenu(); // Updates combo box items

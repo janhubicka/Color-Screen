@@ -427,6 +427,7 @@ void MainWindow::setupUi() {
             &GeometryPanel::reattachNonlinearChart);
 
   m_configTabs->addTab(m_linearizationPanel, "Linearization");
+  connect(m_linearizationPanel, &LinearizationPanel::cropRequested, this, &MainWindow::onCropRequested);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
@@ -2509,29 +2510,63 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
   }
 }
 
-void MainWindow::onAreaSelected(QRect area) {
-  if (!m_scan) {
-    return;
-  }
-  
+void MainWindow::onCropRequested() {
+  if (!m_scan) return;
+  m_imageWidget->setInteractionMode(ImageWidget::CropMode);
+  statusBar()->showMessage("Select crop");
+}
+
+QRect MainWindow::getImageArea(QRect area) {
+  if (!m_scan) return QRect();
+
   // Convert widget coordinates to image coordinates
   // Get the four corners and find min/max
-  colorscreen::point_t topLeft = m_imageWidget->widgetToImage(area.topLeft());
-  colorscreen::point_t topRight = m_imageWidget->widgetToImage(area.topRight());
-  colorscreen::point_t bottomLeft = m_imageWidget->widgetToImage(area.bottomLeft());
-  colorscreen::point_t bottomRight = m_imageWidget->widgetToImage(area.bottomRight());
+  colorscreen::point_t p1 = m_imageWidget->widgetToImage(area.topLeft());
+  colorscreen::point_t p2 = m_imageWidget->widgetToImage(area.topRight());
+  colorscreen::point_t p3 = m_imageWidget->widgetToImage(area.bottomLeft());
+  colorscreen::point_t p4 = m_imageWidget->widgetToImage(area.bottomRight());
   
   // Find bounding box in image coordinates
-  int xmin = std::min({topLeft.x, topRight.x, bottomLeft.x, bottomRight.x});
-  int xmax = std::max({topLeft.x, topRight.x, bottomLeft.x, bottomRight.x});
-  int ymin = std::min({topLeft.y, topRight.y, bottomLeft.y, bottomRight.y});
-  int ymax = std::max({topLeft.y, topRight.y, bottomLeft.y, bottomRight.y});
+  int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
+  int xmax = std::max({p1.x, p2.x, p3.x, p4.x});
+  int ymin = std::min({p1.y, p2.y, p3.y, p4.y});
+  int ymax = std::max({p1.y, p2.y, p3.y, p4.y});
   
   // Clamp to image bounds
   xmin = std::max(0, xmin);
   ymin = std::max(0, ymin);
   xmax = std::min((int)m_scan->width - 1, xmax);
   ymax = std::min((int)m_scan->height - 1, ymax);
+
+  return QRect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1);
+}
+
+void MainWindow::onAreaSelected(QRect area) {
+  if (!m_scan) {
+    return;
+  }
+
+  QRect imgArea = getImageArea(area);
+  if (imgArea.width() <= 0 || imgArea.height() <= 0) return;
+
+  if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
+      ParameterState state = getCurrentState();
+      state.rparams.scan_crop.x = imgArea.x();
+      state.rparams.scan_crop.y = imgArea.y();
+      state.rparams.scan_crop.width = imgArea.width();
+      state.rparams.scan_crop.height = imgArea.height();
+      state.rparams.scan_crop.set = true;
+
+      printf("Result for crop: x=%d, y=%d, width=%d, height=%d, set=%d\n", 
+             imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height(), (int)state.rparams.scan_crop.set);
+      fflush(stdout);
+
+      changeParameters(state, "Set Crop Area");
+      
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+      statusBar()->clearMessage();
+      return;
+  }
   
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
@@ -2540,7 +2575,7 @@ void MainWindow::onAreaSelected(QRect area) {
   
   // Create worker and thread
   FinetuneWorker *worker = new FinetuneWorker(m_solverParams, m_rparams, m_scrToImgParams,
-                                              m_scan, xmin, ymin, xmax, ymax, progress);
+                                              m_scan, imgArea.left(), imgArea.top(), imgArea.right(), imgArea.bottom(), progress);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
   

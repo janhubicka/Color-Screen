@@ -13,14 +13,14 @@
 // --- Timing Parameters ---
 constexpr double ANIMATION_FPS = 60.0;                    // Animation frame rate
 constexpr double WAVE_STARTUP_DELAY = 20.0;               // Seconds before waves start moving
-constexpr double WAVE_RAMP_DURATION = 2.0;                // Seconds for waves to reach full amplitude
+constexpr double WAVE_RAMP_DURATION = 100.0;                // Seconds for waves to reach full amplitude
 constexpr double BOAT_SPAWN_START = 20.0;                 // Seconds before boats start appearing
 constexpr double DOLPHIN_SPAWN_START = 25.0;              // Seconds before dolphins appear
-constexpr double WHALE_SPAWN_START = 30.0;                // Seconds before whales appear
+constexpr double WHALE_SPAWN_START = 90.0;                // Seconds before whales appear
 constexpr double PIRATE_SPAWN_START = 30.0;               // Seconds before pirates appear
 constexpr double PARROT_SPAWN_START = 60.0;               // Seconds before parrots appear
-constexpr double BOTTLE_SPAWN_START = 90.0;               // Seconds before beer bottles appear
-constexpr double BOUNCINESS_RAMP_DURATION = 120.0;        // Seconds to reach maximum bounce (2 minutes)
+constexpr double BOTTLE_SPAWN_START = 120.0;               // Seconds before beer bottles appear
+constexpr double BOUNCINESS_RAMP_DURATION = 300.0;        // Seconds to reach maximum bounce (2 minutes)
 
 // --- Physics Parameters ---
 constexpr double GRAVITY = 400.0;                         // Gravity in pixels/s² (affects falling objects)
@@ -48,8 +48,8 @@ constexpr double PARROT_DROP_DELAY_MAX = 5.0;             // Max seconds before 
 
 // --- Visual Scaling ---
 constexpr double BOAT_SIZE_MULTIPLIER = 1.5;              // Boat size (1.0 = original, 1.5 = 50% larger)
-constexpr double BOTTLE_SIZE_MULTIPLIER = 0.30;           // Bottle size 
-constexpr double DOLPHIN_SIZE = 14.0; // Small 
+constexpr double BOTTLE_SIZE_MULTIPLIER = 0.80;           // Bottle size 
+constexpr double DOLPHIN_SIZE = 20.0; // Small 
 constexpr double WHALE_SIZE = 110.0;
 
 constexpr int DOLPHIN_SPAWN_CHANCE = 200; // Frequent but not swarming

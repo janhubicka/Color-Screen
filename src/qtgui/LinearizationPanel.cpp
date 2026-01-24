@@ -1,4 +1,6 @@
 #include "LinearizationPanel.h"
+#include <QPushButton>
+#include <QVBoxLayout>
 
 LinearizationPanel::LinearizationPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
@@ -35,5 +37,9 @@ void LinearizationPanel::setupUi()
       [](ParameterState &s, double v) { s.rparams.backlight_correction_black = v; }, 3.0,
       nullptr, true);
 #endif
+    
+    QPushButton *cropButton = new QPushButton("Crop", this);
+    connect(cropButton, &QPushButton::clicked, this, &LinearizationPanel::cropRequested);
+    m_layout->addWidget(cropButton);
 }
 

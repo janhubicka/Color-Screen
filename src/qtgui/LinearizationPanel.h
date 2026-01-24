@@ -22,6 +22,9 @@ public:
     explicit LinearizationPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent = nullptr);
     ~LinearizationPanel() override;
 
+signals:
+    void cropRequested();
+
 private:
     void setupUi();
 };

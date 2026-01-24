@@ -59,7 +59,7 @@ public:
   void selectAll();
   void deleteSelectedPoints();
 
-  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode };
+  enum InteractionMode { PanMode, SelectMode, AddPointMode, SetCenterMode, CropMode };
   void setInteractionMode(InteractionMode mode);
 
   struct SelectedPoint {
@@ -110,6 +110,7 @@ signals:
 public:
   double getMinScale() const; // Returns scale that fits image to view
   double getZoom() const { return m_scale; }
+  InteractionMode interactionMode() const { return m_interactionMode; }
   bool registrationPointsVisible() const { return m_showRegistrationPoints; }
   size_t registrationPointCount() const {
     return m_solver ? m_solver->points.size() : 0;

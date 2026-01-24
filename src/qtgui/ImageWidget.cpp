@@ -743,7 +743,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
         m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
         m_rubberBand->show();
       }
-    } else if (m_interactionMode == AddPointMode) {
+    } else if (m_interactionMode == AddPointMode || m_interactionMode == CropMode) {
       // Start rubber band for area selection
       m_rubberBandOrigin = event->pos();
       if (!m_rubberBand) {
@@ -768,8 +768,8 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
-  } else if (m_interactionMode == SelectMode) {
-    if (m_draggedPointIndex != -1) {
+  } else if (m_interactionMode == SelectMode || m_interactionMode == AddPointMode || m_interactionMode == CropMode) {
+    if (m_interactionMode == SelectMode && m_draggedPointIndex != -1) {
       colorscreen::point_t imgPos = widgetToImage(event->position());
       if (m_solver && (size_t)m_draggedPointIndex < m_solver->points.size()) {
         m_solver->points[m_draggedPointIndex].img = imgPos;
@@ -777,10 +777,6 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
         update();
       }
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
-      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
-    }
-  } else if (m_interactionMode == AddPointMode) {
-    if (m_rubberBand && m_rubberBand->isVisible()) {
       m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
   } else if (m_interactionMode == SetCenterMode) {
@@ -925,6 +921,12 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
           // Area selection - emit areaSelected signal
           emit areaSelected(rect);
         }
+      }
+    } else if (m_interactionMode == CropMode) {
+      if (m_rubberBand && m_rubberBand->isVisible()) {
+        QRect rect = m_rubberBand->geometry();
+        m_rubberBand->hide();
+        emit areaSelected(rect);
       }
     }
   }

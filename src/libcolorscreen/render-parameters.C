@@ -1287,6 +1287,7 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   gamma = rparam.gamma;
   scan_rotation = rparam.scan_rotation;
   scan_mirror = rparam.scan_mirror;
+  scan_crop = rparam.scan_crop;
   invert = rparam.invert;
   scan_exposure = rparam.scan_exposure;
   ignore_infrared = rparam.ignore_infrared;
