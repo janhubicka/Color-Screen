@@ -299,10 +299,10 @@ public:
       vals[0] = 10;
     if (n == 2)
       {
-        if (vals[1] < -10)
-          vals[1] = -10;
-        if (vals[1] > 10)
-          vals[1] = 10;
+        if (vals[1] < -1)
+          vals[1] = -1;
+        if (vals[1] > 1)
+          vals[1] = 1;
       }
     for (int i = n; i < n + 3; i++)
       {
