@@ -45,7 +45,11 @@ void GeometrySolverWorker::solve(
 	  success = true;
       } else {
         success = true;
-        params.mesh_trans = nullptr;
+	// Do not clear mesh_trans.  When nonlinear tranformations are disabled,
+	// UI will clear mesh_trans.  When screen detection is finished, we compute
+	// mesh_trans but then invoke solver with !computeMesh to fill in approximate
+	// scrToImg map to get goemetry previews working well.
+        // params.mesh_trans = nullptr;
       }
     }
   } catch (const std::exception &e) {

@@ -111,6 +111,7 @@ private:
 
   void setupUi();
   void createMenus();
+  void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
   void updateModeMenu(); // Updates combo box items
 
@@ -144,8 +145,7 @@ private:
   QAction *m_zoomOutAction;      // Added
   QAction *m_zoom100Action;      // Added
   QAction *m_zoomFitAction;      // Added
-  QAction *m_rotateLeftAction;   // Added (to be explicitly exposed)
-  QAction *m_rotateRightAction;  // Added (to be explicitly exposed)
+
   QAction *m_gamutWarningAction; // Added Gamut Warning toggle
   QAction *m_fullscreenAction;   // Fullscreen toggle
   QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
@@ -163,6 +163,9 @@ private:
   QAction *m_autoOptimizeAction;
   QAction *m_optimizeAction;
   QAction *m_nonLinearAction;
+  QAction *m_rotateLeftAction;
+  QAction *m_rotateRightAction;
+  QAction *m_mirrorAction; // Added
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QList<QAction*> m_registrationActions; // Track registration group actions for visibility
@@ -222,6 +225,7 @@ private slots:
   void onCoordinateSystemChanged();
   void onAutodetectScreen();
   void onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
+  void onMirrorHorizontally(bool checked);
 
   // Helper to update color checkbox state and visibility
   void updateColorCheckBoxState();

@@ -74,6 +74,11 @@ public slots:
   void setZoom(double scale);
   void setPan(double x, double y);
   void fitToView(); // New slot
+  void rotateLeft();
+  void rotateRight();
+  void pivotViewport(int oldRotIdx, int newRotIdx);
+
+private:
 
 protected:
   void paintEvent(QPaintEvent *event) override;

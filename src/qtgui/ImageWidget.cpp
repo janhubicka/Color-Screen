@@ -257,30 +257,23 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
       QRectF visibleRect(m_viewX - margin, m_viewY - margin, 
                          width() / m_scale + 2 * margin, height() / m_scale + 2 * margin);
 
-      // Cache rotation for imageToWidget optimization
-      double rot = m_scrToImg->final_rotation;
-      int angle = (int)rot % 360;
-      if (angle < 0) angle += 360;
 
       for (size_t i = 0; i < m_solver->points.size(); ++i) {
         const auto &xi = m_solver->points[i].img;
 
-        // Culling: rotate the point to the view's coordinate system
-        double xr_c = xi.x;
-        double yr_c = xi.y;
-
-        if (angle == 90) {
-          xr_c = xi.y;
-          yr_c = m_scan->width - xi.x;
-        } else if (angle == 180) {
-          xr_c = m_scan->width - xi.x;
-          yr_c = m_scan->height - xi.y;
-        } else if (angle == 270) {
-          xr_c = m_scan->height - xi.y;
-          yr_c = xi.x;
+        QPointF p_widget = imageToWidget(xi);
+        
+        double marginPixels = 100.0 + 20.0 * m_scale;
+        
+        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
+            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
+            continue;
         }
 
-        if (!visibleRect.contains(xr_c, yr_c)) continue;
+        if (p_widget.x() < -marginPixels || p_widget.x() > width() + marginPixels ||
+            p_widget.y() < -marginPixels || p_widget.y() > height() + marginPixels) {
+            continue;
+        }
 
         const auto &p_sim = m_simulatedPoints[i];
 
@@ -735,8 +728,13 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
 
+    // For 90/270 + mirror, the coordinate mapping inverts the X direction
+    int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
+    if (angleIdx < 0) angleIdx += 4;
+    bool invertX = m_rparams && m_rparams->scan_mirror && (angleIdx == 1 || angleIdx == 3);
+    
     // Move view opposite to drag
-    m_viewX -= delta.x() / m_scale;
+    m_viewX -= (invertX ? -delta.x() : delta.x()) / m_scale;
     m_viewY -= delta.y() / m_scale;
 
     requestRender();
@@ -1053,56 +1051,151 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
   QWidget::keyPressEvent(event);
 }
 
-QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
-  if (!m_scan || !m_scrToImg)
-    return QPointF(p.x, p.y);
-
-  double rot = m_scrToImg->final_rotation;
-  int angle = (int)rot % 360;
-  if (angle < 0) angle += 360;
-
-  double xr = p.x;
-  double yr = p.y;
-  double w = m_scan->width;
-  double h = m_scan->height;
-
-  if (angle == 90) {
-    xr = p.y;
-    yr = w - p.x;
-  } else if (angle == 180) {
-    xr = w - p.x;
-    yr = h - p.y;
-  } else if (angle == 270) {
-    xr = h - p.y;
-    yr = p.x;
-  }
-
-  return QPointF((xr - m_viewX) * m_scale, (yr - m_viewY) * m_scale);
-}
-
 colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   if (!m_scan || !m_scrToImg)
     return {p.x(), p.y()};
 
-  double xr = p.x() / m_scale + m_viewX;
-  double yr = p.y() / m_scale + m_viewY;
+  // 1. Calculate physical dimensions of the view in SCAN units
+  double full_w = m_scan->width;
+  double full_h = m_scan->height;
+  
+  int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
+  if (angleIdx < 0) angleIdx += 4;
 
-  double rot = m_scrToImg->final_rotation;
-  int angle = (int)rot % 360;
-  if (angle < 0) angle += 360;
-
-  double w = m_scan->width;
-  double h = m_scan->height;
-
-  if (angle == 90) {
-    return {w - yr, xr};
-  } else if (angle == 180) {
-    return {w - xr, h - yr};
-  } else if (angle == 270) {
-    return {yr, h - xr};
+  if (angleIdx == 1 || angleIdx == 3) {
+      std::swap(full_w, full_h);
   }
 
-  return {xr, yr};
+  // 2. Normalize view coordinate (0..1)
+  double vx = p.x() / m_scale + m_viewX;
+  double vy = p.y() / m_scale + m_viewY;
+  
+  double u = vx / full_w;
+  double v = vy / full_h;
+
+  // 3. Un-Rotate
+  double sx = 0, sy = 0;
+  if (angleIdx == 0) {
+    sx = u * m_scan->width; sy = v * m_scan->height;
+  } else if (angleIdx == 1) { // 90 CW: View (0,0) -> Scan (0, H)
+    sx = v * m_scan->width; sy = (1.0 - u) * m_scan->height;
+  } else if (angleIdx == 2) { // 180: View (0,0) -> Scan (W, H)
+    sx = (1.0 - u) * m_scan->width; sy = (1.0 - v) * m_scan->height;
+  } else if (angleIdx == 3) { // 270 CW: View (0,0) -> Scan (W, 0)
+    sx = (1.0 - v) * m_scan->width; sy = u * m_scan->height;
+  }
+
+  // 4. Un-Mirror
+  if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
+
+  return {sx, sy};
+}
+
+QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
+  if (!m_scan || !m_scrToImg)
+    return QPointF(p.x, p.y);
+
+  // 1. Normalize Scan Coordinate (0..1)
+  double px = p.x / m_scan->width;
+  double py = p.y / m_scan->height;
+  double u = 0, v = 0;
+
+  int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
+  if (angleIdx < 0) angleIdx += 4;
+
+  // 2. Mirror (Forward)
+  if (m_rparams && m_rparams->scan_mirror) px = 1.0 - px;
+  
+  // 3. Rotate (Forward)
+  if (angleIdx == 0) { u = px; v = py; }
+  else if (angleIdx == 1) { u = 1.0 - py; v = px; } // 90 CW
+  else if (angleIdx == 2) { u = 1.0 - px; v = 1.0 - py; } // 180
+  else if (angleIdx == 3) { u = py; v = 1.0 - px; } // 270 CW
+
+
+  // 4. Denormalize to View dimensions
+  double full_w = m_scan->width;
+  double full_h = m_scan->height;
+  if (angleIdx == 1 || angleIdx == 3) {
+      std::swap(full_w, full_h);
+  }
+
+  double xr = u * full_w;
+  double yr = v * full_h;
+
+  return QPointF((xr - m_viewX) * m_scale, (yr - m_viewY) * m_scale);
+}
+
+void ImageWidget::rotateLeft() {
+    if (!m_rparams) return;
+    int oldRot = (int)m_rparams->scan_rotation;
+    int newRot = (oldRot - 1 + 4) % 4;
+    pivotViewport(oldRot, newRot);
+    m_rparams->scan_rotation = newRot;
+    requestRender();
+}
+
+void ImageWidget::rotateRight() {
+    if (!m_rparams) return;
+    int oldRot = (int)m_rparams->scan_rotation;
+    int newRot = (oldRot + 1) % 4;
+    pivotViewport(oldRot, newRot);
+    m_rparams->scan_rotation = newRot;
+    requestRender();
+}
+
+void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
+    if (!m_scan) return;
+    
+    // Viewport center in current viewport coordinates (pixels)
+    double cx_view = m_viewX + (width() / m_scale) / 2.0;
+    double cy_view = m_viewY + (height() / m_scale) / 2.0;
+    
+    // Map center back to scan coordinates using OLD rotation
+    auto unravel = [&](double vx, double vy, int rotIdx) -> colorscreen::point_t {
+        double w = m_scan->width;
+        double h = m_scan->height;
+        double effW = (rotIdx % 2 == 1) ? h : w;
+        double effH = (rotIdx % 2 == 1) ? w : h;
+        double u = vx / effW;
+        double v = vy / effH;
+        
+        // Un-Mirror
+        if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
+        
+        if (rotIdx == 0) return { u*w, v*h };
+        if (rotIdx == 1) return { v*w, (1.0-u)*h };
+        if (rotIdx == 2) return { (1.0-u)*w, (1.0-v)*h };
+        if (rotIdx == 3) return { (1.0-v)*w, u*h };
+        return { vx, vy };
+    };
+
+    // Map scan center back to viewport coordinates using NEW rotation
+    auto ravel = [&](colorscreen::point_t p, int rotIdx) -> QPointF {
+        double w = m_scan->width;
+        double h = m_scan->height;
+        double u, v;
+        double px = p.x / w;
+        double py = p.y / h;
+
+        if (rotIdx == 0) { u = px; v = py; }
+        else if (rotIdx == 1) { u = 1.0 - py; v = px; }
+        else if (rotIdx == 2) { u = 1.0 - px; v = 1.0 - py; }
+        else if (rotIdx == 3) { u = py; v = 1.0 - px; }
+
+        if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
+
+        double effW = (rotIdx % 2 == 1) ? h : w;
+        double effH = (rotIdx % 2 == 1) ? w : h;
+        return { u * effW, v * effH };
+    };
+
+    colorscreen::point_t scanPt = unravel(cx_view, cy_view, oldRotIdx);
+    QPointF newCenter_view = ravel(scanPt, newRotIdx);
+    
+    // Set new viewX/Y to maintain center
+    m_viewX = newCenter_view.x() - (width() / m_scale) / 2.0;
+    m_viewY = newCenter_view.y() - (height() / m_scale) / 2.0;
 }
 
 void ImageWidget::fitToView() {
@@ -1113,8 +1206,7 @@ void ImageWidget::fitToView() {
   double h = height();
 
   // Handle rotation for scale calculation
-  double rot = m_scrToImg ? m_scrToImg->final_rotation : 0.0;
-  int angle = (int)rot % 360;
+  int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
   if (angle < 0) angle += 360;
 
   double imgW = m_scan->width;

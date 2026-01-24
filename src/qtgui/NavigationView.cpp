@@ -140,8 +140,13 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     int imgW = m_scan->width;
     int imgH = m_scan->height;
     
-    // qDebug() << "NavigationView view:" << w << "x" << h << " img:" << imgW << "x" << imgH;
-
+    int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
+    if (angle < 0) angle += 360;
+    
+    if (angle == 90 || angle == 270) {
+        std::swap(imgW, imgH);
+    }
+    
     double scale = 0.1;
 
     if (imgW > 0 && imgH > 0 && w > 0 && h > 0) {
@@ -153,12 +158,11 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     if (scale <= 0) scale = 0.1;
     m_previewScale = scale; // Update member for mouse interaction
 
+    // Correct target size calculation based on ROTATED dimensions
     int targetW = (int)(imgW * scale);
     int targetH = (int)(imgH * scale);
     if (targetW <= 0) targetW = 1;
     if (targetH <= 0) targetH = 1;
-    
-    // qDebug() << "NavigationView scale:" << scale << " target:" << targetW << "x" << targetH;
 
     // 2. set current progress so onImageReady can emit finished signal
     m_currentProgress = progress;
@@ -310,7 +314,6 @@ void NavigationView::paintEvent(QPaintEvent *event) {
     imgH = m_previewImage.height();
   } else if (m_scan && m_scan->width > 0 && m_scan->height > 0) {
      // Fallback: calculate theoretical size
-     // We need to match the logic in logic onTriggerRender to ensure alignment
      QRect viewRect = rect();
      if (m_zoomSlider->isVisible())
         viewRect.setBottom(m_zoomSlider->geometry().top());
@@ -318,18 +321,25 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      int w = viewRect.width();
      int h = viewRect.height();
      
-     double scaleX = (double)w / m_scan->width;
-     double scaleY = (double)h / m_scan->height;
+     int scanW = m_scan->width;
+     int scanH = m_scan->height;
+     int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
+     if (angle < 0) angle += 360;
+     
+     // Correctly swap dimensions for rotated preview
+     if (angle == 90 || angle == 270) std::swap(scanW, scanH);
+
+     double scaleX = (double)w / scanW;
+     double scaleY = (double)h / scanH;
      double scale = qMin(scaleX, scaleY);
      if (scale <= 0) scale = 0.1;
 
-     // Update preview scale if it seems uninitialized
      if (m_previewScale <= 0.0001) {
          const_cast<NavigationView*>(this)->m_previewScale = scale;
      }
 
-     imgW = (int)(m_scan->width * scale);
-     imgH = (int)(m_scan->height * scale);
+     imgW = (int)(scanW * scale);
+     imgH = (int)(scanH * scale);
   } else {
      // No image data at all
      return;
@@ -348,16 +358,12 @@ void NavigationView::paintEvent(QPaintEvent *event) {
   if (!m_previewImage.isNull()) {
      p.drawImage(x, y, m_previewImage);
   } else {
-     // Draw placeholder for missing image
      p.setPen(QPen(Qt::darkGray));
      p.drawRect(m_imageRect);
      p.drawText(m_imageRect, Qt::AlignCenter, "Rendering...");
   }
 
   // Draw Viewport Rect
-  // m_visibleRect is in Rotated Image Pixels.
-  // m_previewScale is PreviewPixels / RotatedImagePixels.
-  // viewport in preview:
   double vx = m_visibleRect.x() * m_previewScale;
   double vy = m_visibleRect.y() * m_previewScale;
   double vw = m_visibleRect.width() * m_previewScale;
@@ -379,17 +385,14 @@ void NavigationView::mousePressEvent(QMouseEvent *event) {
     double imageX = clickX / m_previewScale;
     double imageY = clickY / m_previewScale;
     
-    // Check if click is inside current visible rect
     if (m_visibleRect.contains(imageX, imageY)) {
-        // Grab logic: calculate offset from center
+        // Grab logic
         double centerX = m_visibleRect.center().x();
         double centerY = m_visibleRect.center().y();
-        
         m_dragOffset = QPointF(imageX - centerX, imageY - centerY);
     } else {
-        // Jump logic: center on click, reset offset
+        // Jump logic
         m_dragOffset = QPointF(0, 0);
-        
         double hw = m_visibleRect.width() / 2.0;
         double hh = m_visibleRect.height() / 2.0;
         emit panChanged(imageX - hw, imageY - hh);

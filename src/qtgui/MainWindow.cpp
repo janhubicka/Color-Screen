@@ -674,6 +674,10 @@ void MainWindow::createToolbar() {
   QAction *rotRightAction = m_toolbar->addAction(
       getSymbolicIcon(":/icons/rotate-right.svg"), "Rotate Right");
   connect(rotRightAction, &QAction::triggered, this, &MainWindow::rotateRight);
+  
+  if (m_mirrorAction) {
+      m_toolbar->addAction(m_mirrorAction);
+  }
 
   // === REGISTRATION GROUP ===
   QAction *regSeparator = m_toolbar->addSeparator();
@@ -758,23 +762,47 @@ void MainWindow::createToolbar() {
 void MainWindow::rotateLeft() {
   if (!m_scan)
     return;
-  m_scrToImgParams.final_rotation -= 90.0;
-  m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                          &m_detectParams, &m_renderTypeParams,
-                          &m_solverParams);
-  m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                             &m_detectParams);
+  
+  // Get current state and modify rotation
+  ParameterState newState = getCurrentState();
+  int oldRot = (int)newState.rparams.scan_rotation;
+  int newRot = (oldRot - 1 + 4) % 4;
+  newState.rparams.scan_rotation = newRot;
+  
+  // Pivot viewport before applying state
+  if (m_imageWidget) {
+    m_imageWidget->pivotViewport(oldRot, newRot);
+  }
+  
+  changeParameters(newState, "Rotate Left");
 }
 
 void MainWindow::rotateRight() {
   if (!m_scan)
     return;
-  m_scrToImgParams.final_rotation += 90.0;
-  m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                          &m_detectParams, &m_renderTypeParams,
-                          &m_solverParams);
-  m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                             &m_detectParams);
+    
+  // Get current state and modify rotation
+  ParameterState newState = getCurrentState();
+  int oldRot = (int)newState.rparams.scan_rotation;
+  int newRot = (oldRot + 1) % 4;
+  newState.rparams.scan_rotation = newRot;
+  
+  // Pivot viewport before applying state
+  if (m_imageWidget) {
+    m_imageWidget->pivotViewport(oldRot, newRot);
+  }
+
+  changeParameters(newState, "Rotate Right");
+}
+
+void MainWindow::onMirrorHorizontally(bool checked) {
+  if (!m_scan)
+    return;
+    
+  ParameterState newState = getCurrentState();
+  newState.rparams.scan_mirror = checked;
+  
+  changeParameters(newState, "Mirror Horizontally");
 }
 
 void MainWindow::toggleFullscreen() {
@@ -1014,6 +1042,10 @@ void MainWindow::createMenus() {
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
+          
+  m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon("object-flip-horizontal"), "Mirror \u0026Horizontally");
+  m_mirrorAction->setCheckable(true);
+  connect(m_mirrorAction, &QAction::triggered, this, &MainWindow::onMirrorHorizontally);
 
   m_viewMenu->addSeparator();
 
@@ -1655,8 +1687,6 @@ void MainWindow::saveRecentFiles() {
 void MainWindow::applyState(const ParameterState &state) {
   // User requested rotation is not part of parameters.
   // Preserve current rotation when applying state.
-  double currentRot = m_scrToImgParams.final_rotation;
-
   m_rparams = state.rparams;
   m_scrToImgParams = state.scrToImg;
   m_detectParams = state.detect;
@@ -1664,8 +1694,6 @@ void MainWindow::applyState(const ParameterState &state) {
                                  // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
-
-  m_scrToImgParams.final_rotation = currentRot;
 
   // Update widgets - use updateParameters to avoid blocking
   if (m_scan) {
@@ -1686,7 +1714,12 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
     if (panel)
       panel->updateUI();
   }
+  // Sync mirror action
+  if (m_mirrorAction) {
+    m_mirrorAction->setChecked(state.rparams.scan_mirror);
+  }
 
+  // Sync nonlinear checkbox in GeometryPanel
   // Sync nonlinear checkbox in GeometryPanel
   QCheckBox *nlBox = m_geometryPanel->findChild<QCheckBox *>("nonLinearBox");
   if (nlBox) {

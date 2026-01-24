@@ -227,28 +227,33 @@ void GeometryPanel::updateDeformationChart() {
   colorscreen::scr_to_img_parameters p0;
   p0.center = state.scrToImg.center;
   p0.coordinate1 = state.scrToImg.coordinate1;
+
   p0.coordinate2 = state.scrToImg.coordinate2;
+
+  
+  bool mirror = state.rparams.scan_mirror;
+  int rotation = state.rparams.scan_rotation;
 
   // 1. Lens Chart: Compare Undef -> Undef+Lens
   colorscreen::scr_to_img_parameters p1 = p0;
   p1.lens_correction = state.scrToImg.lens_correction;
-  if (m_lensChart) m_lensChart->setDeformationData(p1, p0, w, h);
+  if (m_lensChart) m_lensChart->setDeformationData(p1, p0, w, h, mirror, rotation);
 
   // 2. Perspective Chart: Compare p1 -> p1+Perspective
   colorscreen::scr_to_img_parameters p2 = p1;
   p2.tilt_x = state.scrToImg.tilt_x;
   p2.tilt_y = state.scrToImg.tilt_y;
   p2.projection_distance = state.scrToImg.projection_distance;
-  if (m_perspectiveChart) m_perspectiveChart->setDeformationData(p2, p1, w, h);
+  if (m_perspectiveChart) m_perspectiveChart->setDeformationData(p2, p1, w, h, mirror, rotation);
 
   // 3. Nonlinear Chart: Compare p2 -> p2+Mesh
   colorscreen::scr_to_img_parameters p3 = p2;
   p3.mesh_trans = state.scrToImg.mesh_trans;
-  if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3, p2, w, h);
+  if (m_nonlinearChart) m_nonlinearChart->setDeformationData(p3, p2, w, h, mirror, rotation);
   
   // 4. Final: Compare p0 -> Final (all)
   if (m_deformationChart)
-    m_deformationChart->setDeformationData(state.scrToImg, p0, w, h);
+    m_deformationChart->setDeformationData(state.scrToImg, p0, w, h, mirror, rotation);
 }
 
 void GeometryPanel::reattachDeformationChart(QWidget *widget) {

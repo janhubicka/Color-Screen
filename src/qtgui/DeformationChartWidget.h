@@ -16,7 +16,7 @@ public:
     
     void setDeformationData(const colorscreen::scr_to_img_parameters &deformed,
                            const colorscreen::scr_to_img_parameters &undeformed,
-                           int scanWidth, int scanHeight);
+                           int scanWidth, int scanHeight, bool mirror, int rotation);
     void setHeatmapTolerance(double tolerance);
     void clear();
     
@@ -34,6 +34,8 @@ private:
     colorscreen::scr_to_img_parameters m_undeformedParams;
     int m_scanWidth = 0;
     int m_scanHeight = 0;
+    bool m_mirror = false;
+    int m_rotation = 0; // 0, 1, 2, 3 (for 0, 90, 180, 270)
     bool m_hasData = false;
     double m_heatmapTolerance = 0.1; // Default tolerance
     
