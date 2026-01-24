@@ -20,6 +20,10 @@ void DetectScreenWorker::detect() {
   colorscreen::detect_regular_screen_params dsparams;
   dsparams.return_screen_map = true;
   dsparams.gamma = m_gamma;
+  // Do not abort later in check whether we forgot to set gamma.
+  // Configuration is not consistent, but lets do something.
+  if (!dsparams.gamma && !m_scan->to_linear[0].size ())
+    dsparams.gamma = -1;
   dsparams.scr_type = m_scrToImgParams.type;
   dsparams.scanner_type = m_scrToImgParams.scanner_type;
   
