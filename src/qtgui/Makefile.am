@@ -7,7 +7,7 @@ colorscreen_qt_SOURCES = \
     Renderer.cpp \
     NavigationView.cpp \
     ParameterState.cpp \
-    LinearizationPanel.cpp \
+    CapturePanel.cpp \
     ParameterPanel.cpp \
     TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
@@ -38,7 +38,7 @@ MOC_SOURCES = \
     moc_ImageWidget.cpp \
     moc_Renderer.cpp \
     moc_NavigationView.cpp \
-    moc_LinearizationPanel.cpp \
+    moc_CapturePanel.cpp \
     moc_ParameterPanel.cpp \
     moc_TilePreviewPanel.cpp \
     moc_SharpnessPanel.cpp \
@@ -59,7 +59,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h LinearizationPanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

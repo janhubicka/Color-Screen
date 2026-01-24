@@ -1,16 +1,16 @@
-#include "LinearizationPanel.h"
+#include "CapturePanel.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 
-LinearizationPanel::LinearizationPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
+CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
 {
     setupUi();
 }
 
-LinearizationPanel::~LinearizationPanel() = default;
+CapturePanel::~CapturePanel() = default;
 
-void LinearizationPanel::setupUi()
+void CapturePanel::setupUi()
 {
     // Gamma logic
     std::map<double, QString> gammas;
@@ -39,7 +39,10 @@ void LinearizationPanel::setupUi()
 #endif
     
     QPushButton *cropButton = new QPushButton("Crop", this);
-    connect(cropButton, &QPushButton::clicked, this, &LinearizationPanel::cropRequested);
+    connect(cropButton, &QPushButton::clicked, this, &CapturePanel::cropRequested);
     m_layout->addWidget(cropButton);
+    
+    // Add stretch after the button to keep it at the top
+    m_layout->addStretch();
 }
 

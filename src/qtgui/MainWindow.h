@@ -31,8 +31,8 @@ class QPushButton;
 class QTimer;
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
+#include "CapturePanel.h"
 #include "ColorPanel.h"
-#include "LinearizationPanel.h"
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
@@ -265,10 +265,8 @@ private:
   ParameterState getCurrentState() const;
   void updateUIFromState(const ParameterState &state);
 
-  // Linearization Panel
-  // Linearization Panel
-  // Linearization Panel
-  LinearizationPanel *m_linearizationPanel;
+  // Digital Capture Panel
+  CapturePanel *m_capturePanel;
   SharpnessPanel *m_sharpnessPanel;
   ScreenPanel *m_screenPanel;
   GeometryPanel *m_geometryPanel;

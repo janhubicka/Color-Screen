@@ -398,8 +398,8 @@ void MainWindow::setupUi() {
             
 
 
-  // Create Linearization Panel
-  m_linearizationPanel = new LinearizationPanel(
+  // Create Digital Capture Panel
+  m_capturePanel = new CapturePanel(
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
       [this]() { return m_scan; }, this);
@@ -426,8 +426,8 @@ void MainWindow::setupUi() {
             &GeometryPanel::detachNonlinearChartRequested,
             &GeometryPanel::reattachNonlinearChart);
 
-  m_configTabs->addTab(m_linearizationPanel, "Linearization");
-  connect(m_linearizationPanel, &LinearizationPanel::cropRequested, this, &MainWindow::onCropRequested);
+  m_configTabs->addTab(m_capturePanel, "Digital capture");
+  connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
@@ -435,7 +435,7 @@ void MainWindow::setupUi() {
   rightSplitter->addWidget(m_configTabs);
 
   // Register panels for updates
-  m_panels.push_back(m_linearizationPanel);
+  m_panels.push_back(m_capturePanel);
   m_panels.push_back(m_sharpnessPanel);
   m_panels.push_back(m_screenPanel);
   m_panels.push_back(m_geometryPanel);
@@ -2570,10 +2570,6 @@ void MainWindow::onAreaSelected(QRect area) {
       state.rparams.scan_crop.width = imgArea.width();
       state.rparams.scan_crop.height = imgArea.height();
       state.rparams.scan_crop.set = true;
-
-      printf("Result for crop: x=%d, y=%d, width=%d, height=%d, set=%d\n", 
-             imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height(), (int)state.rparams.scan_crop.set);
-      fflush(stdout);
 
       changeParameters(state, "Set Crop Area");
       

@@ -360,15 +360,11 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      p.drawText(m_imageRect, Qt::AlignCenter, "Rendering...");
   }
 
-  // Draw Viewport Rect (relative to crop)
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-  colorscreen::point_t tl_sh = transformer.scanToTransformedCrop({m_visibleRect.left(), m_visibleRect.top()});
-  colorscreen::point_t br_sh = transformer.scanToTransformedCrop({m_visibleRect.right(), m_visibleRect.bottom()});
-
-  double vx = tl_sh.x * m_previewScale;
-  double vy = tl_sh.y * m_previewScale;
-  double vw = (br_sh.x - tl_sh.x) * m_previewScale;
-  double vh = (br_sh.y - tl_sh.y) * m_previewScale;
+  // Draw Viewport Rect (m_visibleRect is already in Transformed-Crop space)
+  double vx = m_visibleRect.left() * m_previewScale;
+  double vy = m_visibleRect.top() * m_previewScale;
+  double vw = m_visibleRect.width() * m_previewScale;
+  double vh = m_visibleRect.height() * m_previewScale;
 
   QRectF rect(x + vx, y + vy, vw, vh);
   p.setPen(QPen(Qt::red, 2));

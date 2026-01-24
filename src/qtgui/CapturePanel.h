@@ -1,5 +1,5 @@
-#ifndef LINEARIZATION_PANEL_H
-#define LINEARIZATION_PANEL_H
+#ifndef CAPTURE_PANEL_H
+#define CAPTURE_PANEL_H
 
 #include <QWidget>
 #include <vector>
@@ -15,12 +15,12 @@ namespace colorscreen {
 
 #include "ParameterPanel.h"
 
-class LinearizationPanel : public ParameterPanel
+class CapturePanel : public ParameterPanel
 {
     Q_OBJECT
 public:
-    explicit LinearizationPanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent = nullptr);
-    ~LinearizationPanel() override;
+    explicit CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent = nullptr);
+    ~CapturePanel() override;
 
 signals:
     void cropRequested();
@@ -29,4 +29,4 @@ private:
     void setupUi();
 };
 
-#endif // LINEARIZATION_PANEL_H
+#endif // CAPTURE_PANEL_H

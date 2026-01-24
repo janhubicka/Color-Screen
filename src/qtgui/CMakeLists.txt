@@ -43,7 +43,7 @@ set(SOURCES
     NavigationView.cpp
     Renderer.cpp
     ParameterState.cpp
-    LinearizationPanel.cpp
+    CapturePanel.cpp
     ParameterPanel.cpp
     TilePreviewPanel.cpp
     SharpnessPanel.cpp
@@ -70,7 +70,7 @@ set(HEADERS
     ImageWidget.h
     Renderer.h
     NavigationView.h
-    LinearizationPanel.h
+    CapturePanel.h
     ParameterPanel.h
     TilePreviewPanel.h
     SharpnessPanel.h
