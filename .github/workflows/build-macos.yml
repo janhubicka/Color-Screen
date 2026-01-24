@@ -35,6 +35,8 @@ jobs:
       run: brew install -v fftw
     - name: Install qt6
       run: brew install -v qt6
+    - name: Install exiv2
+      run: brew install -v exiv2
     - name: Install adwaita-icon-theme
       run: brew install -v adwaita-icon-theme
     - name: Link qt6
@@ -83,7 +85,7 @@ jobs:
         echo "Final PATH=$PATH"
         echo "MOC=$MOC"
 
-        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libjasper.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libzstd.a /opt/homebrew/lib/liblzma.a /opt/homebrew/lib/libgslcblas.a /opt/homebrew/lib/libgsl.a /opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a /opt/homebrew/lib/liblcms2.a /opt/homebrew/lib/libfftw3.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp $(pwd)/libzip*/lib/libzip.a" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --disable-static-link --disable-dependencies MOC="$MOC"
+        CXXFLAGS="-Ofast -flto -I/opt/homebrew/include -I/opt/homebrew/opt/libomp/include -Xclang=-fopenmp" LDFLAGS="/opt/homebrew/lib/libexiv2.a /opt/homebrew/lib/libexpat.a /opt/homebrew/lib/libjasper.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libzstd.a /opt/homebrew/lib/liblzma.a /opt/homebrew/lib/libgslcblas.a /opt/homebrew/lib/libgsl.a /opt/homebrew/lib/libtiff.a /opt/homebrew/lib/libturbojpeg.a /opt/homebrew/lib/liblcms2.a /opt/homebrew/lib/libfftw3.a -L/opt/homebrew/lib -L/opt/homebrew/opt/libomp/lib -lomp $(pwd)/libzip*/lib/libzip.a" CXX=clang++ CC=clang ./configure --disable-openmp --prefix=/tmp/Color-Screen-MacOS --enable-gtkgui --enable-qtgui --disable-static-link --disable-dependencies MOC="$MOC"
     - name: Upload config.log
       uses: actions/upload-artifact@v4
       if: always()
@@ -199,6 +201,8 @@ jobs:
         cp /opt/homebrew/lib/libfftw3.*.dylib Color-Screen.app/Contents/Frameworks/ || true
         cp /opt/homebrew/lib/libomp.dylib Color-Screen.app/Contents/Frameworks/ || true
         cp /opt/homebrew/lib/libzip.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libexiv2.*.dylib Color-Screen.app/Contents/Frameworks/ || true
+        cp /opt/homebrew/lib/libexpat.*.dylib Color-Screen.app/Contents/Frameworks/ || true
         
         # Fix RPATHs for manually copied libs
         for LIB in Color-Screen.app/Contents/Frameworks/*.dylib; do
