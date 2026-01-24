@@ -19,6 +19,7 @@ class QVBoxLayout;
 class QFormLayout;
 class QGroupBox;
 class QCheckBox;
+class QPushButton;
 
 class ParameterPanel : public QWidget {
   Q_OBJECT
@@ -85,6 +86,10 @@ protected:
   QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
+  QPushButton *addButtonParameter(
+      const QString &label, const QString &text, std::function<void()> onClicked,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
   void addCorrelatedRGBParameter(

@@ -185,34 +185,29 @@ void SharpnessPanel::setupUi() {
         return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
       });
 
+  // Add "Autodetect regular screen" button
+  addButtonParameter("", "Autodetect regular screen", 
+      [this]() { emit autodetectRequested(); },
+      [this](const ParameterState &) {
+          auto img = m_imageGetter();
+          return img && img->has_rgb();
+      });
+
   // Add "Match measured data" button (visible only if measured data exists)
-  QPushButton *matchButton = new QPushButton("Match measured data");
-  if (m_currentGroupForm)
-    m_currentGroupForm->addRow(matchButton);
-  else
-    m_form->addRow(matchButton);
-
-  // Wire up the button
-  connect(matchButton, &QPushButton::clicked, this, [this]() {
-    applyChange([](ParameterState &s) {
-      const char *error = nullptr;
-      double result = s.rparams.sharpen.scanner_mtf.estimate_parameters(
-          s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error, false);
-      if (error) {
-        // Handle error if needed
-      }
+  addButtonParameter("", "Match measured data", 
+    [this]() {
+      applyChange([](ParameterState &s) {
+        const char *error = nullptr;
+        s.rparams.sharpen.scanner_mtf.estimate_parameters(
+            s.rparams.sharpen.scanner_mtf, nullptr, nullptr, &error, false);
+      });
+    },
+    [this, separatorToggle](const ParameterState &s) {
+       bool visible = s.rparams.sharpen.scanner_mtf.size() > 0;
+       if (separatorToggle && !separatorToggle->isChecked())
+         visible = false;
+       return visible;
     });
-  });
-
-  // Update button visibility (only visible if measured data exists)
-  // Update button visibility (only visible if measured data exists)
-  m_widgetStateUpdaters.push_back([matchButton, this, separatorToggle]() {
-    ParameterState s = m_stateGetter();
-    bool visible = s.rparams.sharpen.scanner_mtf.size() > 0;
-    if (separatorToggle && !separatorToggle->isChecked())
-      visible = false;
-    matchButton->setVisible(visible);
-  });
 
   // MTF Scale
   // Range 0.0 - 2.0 (0.0 = no MTF)

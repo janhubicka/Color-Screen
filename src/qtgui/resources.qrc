@@ -11,5 +11,6 @@
     <file>icons/zoom-out.svg</file>
     <file>icons/zoom-100.svg</file>
     <file>icons/zoom-fit.svg</file>
+    <file>icons/mirror.svg</file>
   </qresource>
 </RCC>

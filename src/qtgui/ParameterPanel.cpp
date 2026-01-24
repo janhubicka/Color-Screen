@@ -449,6 +449,36 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
   return checkbox;
 }
 
+QPushButton *ParameterPanel::addButtonParameter(
+    const QString &label, const QString &text, std::function<void()> onClicked,
+    std::function<bool(const ParameterState &)> enabledCheck) {
+  QPushButton *button = new QPushButton(text);
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow(label, button);
+  } else {
+    m_form->addRow(label, button);
+  }
+
+  // Connect clicks
+  connect(button, &QPushButton::clicked, this, [onClicked]() {
+    if (onClicked)
+      onClicked();
+  });
+
+  // Enable/Visibility Update
+  if (enabledCheck) {
+    m_widgetStateUpdaters.push_back([this, button, enabledCheck]() {
+      ParameterState state = m_stateGetter();
+      bool en = enabledCheck(state);
+      button->setEnabled(en);
+      QWidget *labelWidget = m_form->labelForField(button);
+      if (labelWidget)
+        labelWidget->setEnabled(en);
+    });
+  }
+  return button;
+}
+
 void ParameterPanel::addCorrelatedRGBParameter(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix,

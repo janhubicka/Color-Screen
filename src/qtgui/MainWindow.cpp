@@ -263,6 +263,7 @@ void MainWindow::setupUi() {
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
+  connect(m_sharpnessPanel, &SharpnessPanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
   
   connect(m_screenPanel, &ScreenPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_screenPanel, &ScreenPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -1056,7 +1057,7 @@ void MainWindow::createMenus() {
   connect(m_rotateRightAction, &QAction::triggered, this,
           &MainWindow::rotateRight);
           
-  m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon("object-flip-horizontal"), "Mirror \u0026Horizontally");
+  m_mirrorAction = m_viewMenu->addAction(getSymbolicIcon(":/icons/mirror.svg"), "Mirror \u0026Horizontally");
   m_mirrorAction->setCheckable(true);
   connect(m_mirrorAction, &QAction::triggered, this, &MainWindow::onMirrorHorizontally);
 

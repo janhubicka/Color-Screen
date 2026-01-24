@@ -61,14 +61,14 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Optimization");
 
-  QHBoxLayout *optLayout = new QHBoxLayout();
-  QPushButton *optButton = new QPushButton("Optimize geometry");
-  optButton->setObjectName("optimizeButton");
-  QCheckBox *autoBtn = new QCheckBox("Auto");
+  QCheckBox *autoBtn = addCheckboxParameter("Auto optimize",
+      [this](const ParameterState &){ return isAutoEnabled(); },
+      [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ });
   autoBtn->setObjectName("autoSolverBox");
-  optLayout->addWidget(optButton);
-  optLayout->addWidget(autoBtn);
-  addToPanel(optLayout);
+
+  addButtonParameter("Optimization", "Optimize geometry", [this, autoBtn]() {
+      emit optimizeRequested(autoBtn->isChecked());
+  });
 
   connect(autoBtn, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
@@ -77,10 +77,6 @@ void GeometryPanel::setupUi() {
   auto triggerIfAuto = [this, autoBtn]() {
       if (autoBtn->isChecked()) emit optimizeRequested(true);
   };
-
-  connect(optButton, &QPushButton::clicked, this, [this, autoBtn]() {
-      emit optimizeRequested(autoBtn->isChecked());
-  });
 
   QCheckBox *lensCb = addCheckboxParameter("Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },

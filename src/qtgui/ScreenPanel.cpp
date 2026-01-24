@@ -153,21 +153,12 @@ void ScreenPanel::setupUi() {
   });
 
   // Autodetect Regular Screen Button
-  QPushButton *autodetectButton = new QPushButton("Autodetect regular screen");
-  connect(autodetectButton, &QPushButton::clicked, this, &ScreenPanel::autodetectRequested);
-  
-  if (m_currentGroupForm) {
-    m_currentGroupForm->addRow("", autodetectButton);
-  } else {
-    m_form->addRow("", autodetectButton);
-  }
-  
-  // Widget state updater to enable/disable button based on RGB availability
-  m_widgetStateUpdaters.push_back([this, autodetectButton]() {
-    auto img = m_imageGetter();
-    bool hasRgb = img && img->has_rgb();
-    autodetectButton->setEnabled(hasRgb);
-  });
+  addButtonParameter("", "Autodetect regular screen", 
+      [this]() { emit autodetectRequested(); },
+      [this](const ParameterState &) {
+          auto img = m_imageGetter();
+          return img && img->has_rgb();
+      });
 
   addSeparator("Regular screen");
 

@@ -59,7 +59,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -69,8 +69,8 @@ moc_%.cpp: %.h
 	$(MOC) $< -o $@
 
 # Rule to generate resource file (RCC is set by configure)
-qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arrow.svg icons/arrow.svg  icons/plus.svg   icons/rotate-right.svg  icons/zoom-fit.svg icons/zoom-out.svg icons/crosshair.svg  icons/rotate-left.svg  icons/zoom-100.svg      icons/zoom-in.svg
-	$(RCC) $< -o $@
+qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arrow.svg icons/arrow.svg  icons/plus.svg   icons/rotate-right.svg  icons/zoom-fit.svg icons/zoom-out.svg icons/crosshair.svg  icons/rotate-left.svg  icons/zoom-100.svg      icons/zoom-in.svg icons/mirror.svg
+	$(RCC) $< -o $@ 
 
 # Cleanup generated files
 CLEANFILES = $(MOC_SOURCES) qrc_resources.cpp

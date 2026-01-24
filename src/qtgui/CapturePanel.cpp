@@ -38,10 +38,8 @@ void CapturePanel::setupUi()
       nullptr, true);
 #endif
     
-    QPushButton *cropButton = new QPushButton("Crop", this);
-    connect(cropButton, &QPushButton::clicked, this, &CapturePanel::cropRequested);
-    m_layout->addWidget(cropButton);
-    
+    addButtonParameter("", "Crop", [this]() { emit cropRequested(); });
+
     // Add stretch after the button to keep it at the top
     m_layout->addStretch();
 }
