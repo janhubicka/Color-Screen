@@ -242,7 +242,8 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       if (status == GSL_SUCCESS)
 	{
 	  double r_norm = gsl_blas_dnrm2 (w->f);
-	  printf ("Finished after %d iterations: |f(x)| = %.10g\n", iter, r_norm);
+	  if (c.verbose ())
+	    printf ("Finished after %d iterations: |f(x)| = %.10g\n", iter, r_norm);
 	}
 
       for (int i = 0; i < p; i++)
@@ -254,9 +255,7 @@ gsl_multifit (C &c, const char *task = NULL, progress_info *progress = NULL,
       final_chisq = norm * norm;
     }
   else if (c.verbose ())
-    {
-      fprintf (stderr, "GSL multifit initialization failed: %s\n", gsl_strerror (status));
-    }
+    fprintf (stderr, "GSL multifit initialization failed: %s\n", gsl_strerror (status));
 
   gsl_vector_free (x);
   gsl_multifit_nlinear_free (w);

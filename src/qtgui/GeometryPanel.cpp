@@ -40,15 +40,24 @@ void GeometryPanel::setupUi() {
   // To make it easy for MainWindow to sync, let's give it an object name
   showBox->setObjectName("showRegistrationPointsBox");
   
-  addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,
+  m_exaggerateSliderContainer = addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,
             [this](double v) {
                 emit exaggerateChanged(v);
             }, 1.0, true);
 
-  addSlider("Max arrow length", 1.0, 1000.0, 1.0, 0, "px", "", 100.0,
+  m_maxArrowLengthSliderContainer = addSlider("Max arrow length", 1.0, 1000.0, 1.0, 0, "px", "", 100.0,
             [this](double v) {
                 emit maxArrowLengthChanged(v);
             });
+
+  connect(showBox, &QCheckBox::toggled, this, [this](bool checked){
+      if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(checked);
+      if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(checked);
+  });
+
+  // Initial state sync
+  m_exaggerateSliderContainer->setEnabled(showBox->isChecked());
+  m_maxArrowLengthSliderContainer->setEnabled(showBox->isChecked());
 
   addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.5,
             [this](double v) {

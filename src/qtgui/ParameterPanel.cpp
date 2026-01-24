@@ -322,7 +322,7 @@ void ParameterPanel::addSliderParameter(
   }
 }
 
-void ParameterPanel::addSlider(
+QWidget* ParameterPanel::addSlider(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix, const QString &specialValueText,
     double initialValue,
@@ -445,6 +445,8 @@ void ParameterPanel::addSlider(
   // Initial Value
   spin->setValue(initialValue);
   slider->setValue(valueToSlider(initialValue));
+
+  return container;
 }
 
 QComboBox *ParameterPanel::addEnumParameter(

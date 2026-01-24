@@ -63,7 +63,7 @@ protected:
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
   */
-  void addSlider(
+  QWidget* addSlider(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix, const QString &specialValueText,
       double initialValue,

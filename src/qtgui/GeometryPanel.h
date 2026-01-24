@@ -50,6 +50,8 @@ private:
   QVBoxLayout *m_perspectiveChartContainer = nullptr;
   QVBoxLayout *m_nonlinearChartContainer = nullptr;
   QSlider *m_heatmapToleranceSlider = nullptr;
+  QWidget *m_exaggerateSliderContainer = nullptr;
+  QWidget *m_maxArrowLengthSliderContainer = nullptr;
 };
 
 #endif // GEOMETRY_PANEL_H
