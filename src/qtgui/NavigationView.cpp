@@ -1,5 +1,6 @@
 #include "NavigationView.h"
 #include "Renderer.h"
+#include "CoordinateTransformer.h"
 #include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
@@ -137,15 +138,12 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
 
     int w = viewRect.width();
     int h = viewRect.height();
-    int imgW = m_scan->width;
-    int imgH = m_scan->height;
     
-    int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
-    if (angle < 0) angle += 360;
-    
-    if (angle == 90 || angle == 270) {
-        std::swap(imgW, imgH);
-    }
+    // Use CoordinateTransformer to get effective dimensions
+    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    QSize transformedSize = transformer.getTransformedSize();
+    int imgW = transformedSize.width();
+    int imgH = transformedSize.height();
     
     double scale = 0.1;
 
@@ -321,14 +319,11 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      int w = viewRect.width();
      int h = viewRect.height();
      
-     int scanW = m_scan->width;
-     int scanH = m_scan->height;
-     int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
-     if (angle < 0) angle += 360;
+     CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+     QSize transformedSize = transformer.getTransformedSize();
+     int scanW = transformedSize.width();
+     int scanH = transformedSize.height();
      
-     // Correctly swap dimensions for rotated preview
-     if (angle == 90 || angle == 270) std::swap(scanW, scanH);
-
      double scaleX = (double)w / scanW;
      double scaleY = (double)h / scanH;
      double scale = qMin(scaleX, scaleY);

@@ -1,5 +1,6 @@
 #include "ImageWidget.h"
 #include "ColorUtils.h"
+#include "CoordinateTransformer.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -728,13 +729,8 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
 
-    // For 90/270 + mirror, the coordinate mapping inverts the X direction
-    int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
-    if (angleIdx < 0) angleIdx += 4;
-    bool invertX = m_rparams && m_rparams->scan_mirror && (angleIdx == 1 || angleIdx == 3);
-    
-    // Move view opposite to drag
-    m_viewX -= (invertX ? -delta.x() : delta.x()) / m_scale;
+    // Move view opposite to drag (m_viewX/Y are in transformed space already)
+    m_viewX -= delta.x() / m_scale;
     m_viewY -= delta.y() / m_scale;
 
     requestRender();
@@ -1055,102 +1051,25 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   if (!m_scan || !m_scrToImg)
     return {p.x(), p.y()};
 
-  // 1. Normalize view coordinate (0..1 relative to *view*)
-  // But wait, we need to map View -> Image.
-  // View (pixels) -> View (scaled) -> Apply View Offset -> Normalized Scan Coords (Un-rotated, Un-mirrored)
-
-  // Current View -> Image construction logic in paintEvent/imageToWidget:
-  // Image -> Normalize -> Mirror -> Rotate -> Scale -> Translate(View)
-
-  // Reverse:
-  // Translate(View) -> Scale -> Un-Rotate -> Un-Mirror -> Denormalize
-
-  // A. Translate & Scale Back to "Rotated & Mirrored" Normalized Space (u_view, v_view or u_rot, v_rot)
-  // The 'full_w' and 'full_h' in imageToWidget depend on rotation.
-  
-  // Let's look at imageToWidget logic:
-  // 1. px, py (Normalized Image)
-  // 2. Mirror: px = 1.0 - px
-  // 3. Rotate to u, v
-  // 4. Denormalize to xr, yr using full_w, full_h (swapped if needed)
-  // 5. Offset: (xr - viewX) * scale
-
-  // So, reversing:
-  
-  // 1. Undo Offset & Scale
+  // 1. Undo Offset & Scale (View -> Transformed)
   double xr = p.x() / m_scale + m_viewX;
   double yr = p.y() / m_scale + m_viewY;
-  
-  int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
-  if (angleIdx < 0) angleIdx += 4;
 
-  double full_w = m_scan->width;
-  double full_h = m_scan->height;
-  
-  // If rotation swaps dimensions effectively for the view:
-  if (angleIdx == 1 || angleIdx == 3) {
-      std::swap(full_w, full_h);
-  }
-
-  // 2. Normalize to "Rotated Space" u, v
-  double u = xr / full_w;
-  double v = yr / full_h;
-
-  // 3. Un-Rotate to "Mirrored Space" (px_m, py_m)
-  // imageToWidget Rotation:
-  // 0: u=px, v=py
-  // 1: u=1-py, v=px
-  // 2: u=1-px, v=1-py
-  // 3: u=py, v=1-px
-  
-  double px = 0, py = 0;
-  if (angleIdx == 0) { px = u; py = v; }
-  else if (angleIdx == 1) { px = v; py = 1.0 - u; }      // u=1-y -> y=1-u
-  else if (angleIdx == 2) { px = 1.0 - u; py = 1.0 - v; }
-  else if (angleIdx == 3) { px = 1.0 - v; py = u; }      // v=1-x -> x=1-v
-
-  // 4. Un-Mirror
-  if (m_rparams && m_rparams->scan_mirror) {
-      px = 1.0 - px;
-  }
-
-  // 5. Denormalize to Image Space
-  return { px * m_scan->width, py * m_scan->height };
+  // 2. Use Transformer (Transformed -> Scan)
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  return transformer.transformedToScan({xr, yr});
 }
 
 QPointF ImageWidget::imageToWidget(colorscreen::point_t p) const {
   if (!m_scan || !m_scrToImg)
     return QPointF(p.x, p.y);
 
-  // 1. Normalize Scan Coordinate (0..1)
-  double px = p.x / m_scan->width;
-  double py = p.y / m_scan->height;
-  double u = 0, v = 0;
+  // 1. Transformer (Scan -> Transformed)
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  colorscreen::point_t tr = transformer.scanToTransformed(p);
 
-  int angleIdx = m_rparams ? (int)(m_rparams->scan_rotation) % 4 : 0;
-  if (angleIdx < 0) angleIdx += 4;
-
-  // 2. Mirror (Forward)
-  if (m_rparams && m_rparams->scan_mirror) px = 1.0 - px;
-  
-  // 3. Rotate (Forward)
-  if (angleIdx == 0) { u = px; v = py; }
-  else if (angleIdx == 1) { u = 1.0 - py; v = px; } // 90 CW
-  else if (angleIdx == 2) { u = 1.0 - px; v = 1.0 - py; } // 180
-  else if (angleIdx == 3) { u = py; v = 1.0 - px; } // 270 CW
-
-
-  // 4. Denormalize to View dimensions
-  double full_w = m_scan->width;
-  double full_h = m_scan->height;
-  if (angleIdx == 1 || angleIdx == 3) {
-      std::swap(full_w, full_h);
-  }
-
-  double xr = u * full_w;
-  double yr = v * full_h;
-
-  return QPointF((xr - m_viewX) * m_scale, (yr - m_viewY) * m_scale);
+  // 2. Apply View Offset & Scale (Transformed -> View)
+  return QPointF((tr.x - m_viewX) * m_scale, (tr.y - m_viewY) * m_scale);
 }
 
 void ImageWidget::rotateLeft() {
@@ -1174,55 +1093,29 @@ void ImageWidget::rotateRight() {
 void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     if (!m_scan) return;
     
-    // Viewport center in current viewport coordinates (pixels)
-    double cx_view = m_viewX + (width() / m_scale) / 2.0;
-    double cy_view = m_viewY + (height() / m_scale) / 2.0;
+    // Viewport center in current transformed coordinates (relative to image)
+    double centerX_tr = m_viewX + (width() / m_scale) / 2.0;
+    double centerY_tr = m_viewY + (height() / m_scale) / 2.0;
+
+    // We use CoordinateTransformer twice: once with OLD rotation, once with NEW
+    colorscreen::render_parameters oldParams = *m_rparams;
+    oldParams.scan_rotation = oldRotIdx;
+    CoordinateTransformer oldTrans(m_scan.get(), oldParams);
     
-    // Map center back to scan coordinates using OLD rotation
-    auto unravel = [&](double vx, double vy, int rotIdx) -> colorscreen::point_t {
-        double w = m_scan->width;
-        double h = m_scan->height;
-        double effW = (rotIdx % 2 == 1) ? h : w;
-        double effH = (rotIdx % 2 == 1) ? w : h;
-        double u = vx / effW;
-        double v = vy / effH;
-        
-        // Un-Mirror
-        if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
-        
-        if (rotIdx == 0) return { u*w, v*h };
-        if (rotIdx == 1) return { v*w, (1.0-u)*h };
-        if (rotIdx == 2) return { (1.0-u)*w, (1.0-v)*h };
-        if (rotIdx == 3) return { (1.0-v)*w, u*h };
-        return { vx, vy };
-    };
-
-    // Map scan center back to viewport coordinates using NEW rotation
-    auto ravel = [&](colorscreen::point_t p, int rotIdx) -> QPointF {
-        double w = m_scan->width;
-        double h = m_scan->height;
-        double u, v;
-        double px = p.x / w;
-        double py = p.y / h;
-
-        if (rotIdx == 0) { u = px; v = py; }
-        else if (rotIdx == 1) { u = 1.0 - py; v = px; }
-        else if (rotIdx == 2) { u = 1.0 - px; v = 1.0 - py; }
-        else if (rotIdx == 3) { u = py; v = 1.0 - px; }
-
-        if (m_rparams && m_rparams->scan_mirror) u = 1.0 - u;
-
-        double effW = (rotIdx % 2 == 1) ? h : w;
-        double effH = (rotIdx % 2 == 1) ? w : h;
-        return { u * effW, v * effH };
-    };
-
-    colorscreen::point_t scanPt = unravel(cx_view, cy_view, oldRotIdx);
-    QPointF newCenter_view = ravel(scanPt, newRotIdx);
+    // Map to Scan
+    colorscreen::point_t scanPt = oldTrans.transformedToScan({centerX_tr, centerY_tr});
+    
+    // Create params for NEW
+    colorscreen::render_parameters newParams = *m_rparams;
+    newParams.scan_rotation = newRotIdx;
+    CoordinateTransformer newTrans(m_scan.get(), newParams);
+    
+    // Map to Transformed (New)
+    colorscreen::point_t newCenter_tr = newTrans.scanToTransformed(scanPt);
     
     // Set new viewX/Y to maintain center
-    m_viewX = newCenter_view.x() - (width() / m_scale) / 2.0;
-    m_viewY = newCenter_view.y() - (height() / m_scale) / 2.0;
+    m_viewX = newCenter_tr.x - (width() / m_scale) / 2.0;
+    m_viewY = newCenter_tr.y - (height() / m_scale) / 2.0;
 }
 
 void ImageWidget::fitToView() {
@@ -1232,16 +1125,10 @@ void ImageWidget::fitToView() {
   double w = width();
   double h = height();
 
-  // Handle rotation for scale calculation
-  int angle = m_rparams ? (m_rparams->scan_rotation * 90) % 360 : 0;
-  if (angle < 0) angle += 360;
-
-  double imgW = m_scan->width;
-  double imgH = m_scan->height;
-
-  if (angle == 90 || angle == 270) {
-    std::swap(imgW, imgH);
-  }
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+  QSize transformedSize = transformer.getTransformedSize();
+  double imgW = transformedSize.width();
+  double imgH = transformedSize.height();
 
   if (w > 0 && h > 0 && imgW > 0 && imgH > 0) {
     double scaleX = w / imgW;

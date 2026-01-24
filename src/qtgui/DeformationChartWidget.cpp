@@ -1,5 +1,6 @@
 #include "DeformationChartWidget.h"
 #include "ColorUtils.h"
+#include "CoordinateTransformer.h"
 #include "../libcolorscreen/include/color.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include <QVBoxLayout>
@@ -191,16 +192,18 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     if (availableRect.width() < 10 || availableRect.height() < 10)
         return;
 
-    // Enforce aspect ratio within availableRect
-    // Use scan_rotation
-    int angle = (m_rotation * 90) % 360;
-    if (angle < 0) angle += 360;
+    // Use CoordinateTransformer for dimensions
+    colorscreen::image_data fakeScan;
+    fakeScan.width = m_scanWidth;
+    fakeScan.height = m_scanHeight;
+    colorscreen::render_parameters fakeParams;
+    fakeParams.scan_mirror = m_mirror;
+    fakeParams.scan_rotation = m_rotation;
     
-    double scanAspect;
-    if (angle == 90 || angle == 270)
-        scanAspect = (double)m_scanHeight / (double)m_scanWidth;
-    else
-        scanAspect = (double)m_scanWidth / (double)m_scanHeight;
+    CoordinateTransformer transformer(&fakeScan, fakeParams);
+    QSize transformedSize = transformer.getTransformedSize();
+    
+    double scanAspect = (double)transformedSize.width() / (double)transformedSize.height();
         
     double widgetAspect = (double)availableRect.width() / (double)availableRect.height();
     
@@ -242,61 +245,45 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     
     float exaggeration = getExaggerationFactor();
 
+    // Helper: Map Chart Point (pixel in chartRect) -> Scan Point (via Transformer)
+    auto chartToScan = [&](QPointF cPt) -> colorscreen::point_t {
+         // Normalized Transformed Coordinate
+         double u = (cPt.x() - chartRect.left()) / chartRect.width();
+         double v = (cPt.y() - chartRect.top()) / chartRect.height();
+         
+         double tx = u * transformedSize.width();
+         double ty = v * transformedSize.height();
+         
+         return transformer.transformedToScan({tx, ty});
+    };
+
+    // Helper: Map Scan Point -> Chart Point
+    auto scanToChart = [&](colorscreen::point_t sPt) -> QPointF {
+         colorscreen::point_t tr = transformer.scanToTransformed(sPt);
+         
+         // Normalize relative to transformed size
+         double u = tr.x / transformedSize.width();
+         double v = tr.y / transformedSize.height();
+         
+         return QPointF(chartRect.left() + u * chartRect.width(),
+                        chartRect.top() + v * chartRect.height());
+    };
+
     // Draw chessboard
+    // We iterate over the CHART grid (visual grid) and map back to scan coordinates to find deformation
     for (int row = 0; row < gridRows; row++) {
         for (int col = 0; col < gridCols; col++) {
             // Get the four corners of this tile in chart coordinates
-            double x0 = col * chartRect.width() / (double)gridCols;
-            double y0 = row * chartRect.height() / (double)gridRows;
-            double x1 = (col + 1) * chartRect.width() / (double)gridCols;
-            double y1 = (row + 1) * chartRect.height() / (double)gridRows;
+            double x0 = chartRect.left() + col * chartRect.width() / (double)gridCols;
+            double y0 = chartRect.top() + row * chartRect.height() / (double)gridRows;
+            double x1 = chartRect.left() + (col + 1) * chartRect.width() / (double)gridCols;
+            double y1 = chartRect.top() + (row + 1) * chartRect.height() / (double)gridRows;
             
-            // Mark x1, y1 as used (wait, I used them below).
-            // Ah, I copy-pasted the loop logic but I seem to have removed usage of x1, y1 in the new implementation?
-            // Let's check the code I wrote.
-            
-            // Re-implement the loop body carefully to use x1/y1 and calculate p00 etc. properly.
-            // My previous edit replaced lines 253-328+. 
-            // The compiler warning says unused variables.
-            // If I replaced the code that USED them, I need to remove the definitions or fix usage.
-            
-            // Re-applying cleaner logic:
-            
-            // Convert chart coordinates to scan coordinates
-            auto chartToScan = [&](double cx, double cy) -> colorscreen::point_t {
-                double u = cx / chartRect.width();
-                double v = cy / chartRect.height();
-                
-                // 1. Un-Mirror
-                if (m_mirror) u = 1.0 - u;
-                
-                // 2. Un-Rotate (Map View u,v to Scan x,y)
-                double sx = 0, sy = 0;
-                int angleIdx = m_rotation % 4;
-                if (angleIdx < 0) angleIdx += 4;
-                
-                if (angleIdx == 0) { // 0
-                    sx = u * m_scanWidth;
-                    sy = v * m_scanHeight;
-                } else if (angleIdx == 1) { // 90 CW
-                    sx = v * m_scanWidth;
-                    sy = (1.0 - u) * m_scanHeight;
-                } else if (angleIdx == 2) { // 180
-                    sx = (1.0 - u) * m_scanWidth;
-                    sy = (1.0 - v) * m_scanHeight;
-                } else if (angleIdx == 3) { // 270 CW
-                    sx = (1.0 - v) * m_scanWidth;
-                    sy = u * m_scanHeight;
-                }
-                
-                return {sx, sy};
-            };
-            
-            // Get the four corners in scan coordinates using x0, y0, x1, y1
-            colorscreen::point_t p00 = chartToScan(x0, y0);
-            colorscreen::point_t p10 = chartToScan(x1, y0);
-            colorscreen::point_t p01 = chartToScan(x0, y1);
-            colorscreen::point_t p11 = chartToScan(x1, y1);
+            // Get the four corners in scan coordinates
+            colorscreen::point_t p00 = chartToScan(QPointF(x0, y0));
+            colorscreen::point_t p10 = chartToScan(QPointF(x1, y0));
+            colorscreen::point_t p01 = chartToScan(QPointF(x0, y1));
+            colorscreen::point_t p11 = chartToScan(QPointF(x1, y1));
             
             // Function to compute true deformation (un-exaggerated)
             auto computeTrueDeformation = [&](colorscreen::point_t undeformed_point) -> colorscreen::point_t {
@@ -320,42 +307,6 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
             colorscreen::point_t d10 = exaggeratePoint(p10, true_d10);
             colorscreen::point_t d01 = exaggeratePoint(p01, true_d01);
             colorscreen::point_t d11 = exaggeratePoint(p11, true_d11);
-            
-            // Convert deformed points back to chart coordinates
-            auto scanToChart = [&](colorscreen::point_t p) -> QPointF {
-                double u = 0, v = 0;
-                double px = p.x / m_scanWidth;
-                double py = p.y / m_scanHeight;
-                
-                int angleIdx = m_rotation % 4;
-                if (angleIdx < 0) angleIdx += 4;
-                
-                // Rotate (Forward: Scan x,y to View u,v)
-                if (angleIdx == 0) {
-                    u = px;
-                    v = py;
-                } else if (angleIdx == 1) { // 90
-                    // sx = v * W -> v = sx / W = px
-                    // sy = (1-u) * H -> u = 1 - sy/H = 1 - py
-                    u = 1.0 - py;
-                    v = px;
-                } else if (angleIdx == 2) { // 180
-                    u = 1.0 - px;
-                    v = 1.0 - py;
-                } else if (angleIdx == 3) { // 270
-                    // sx = (1-v) * W -> v = 1 - px
-                    // sy = u * H -> u = py
-                    u = py;
-                    v = 1.0 - px;
-                }
-                
-                // Mirror (Forward)
-                if (m_mirror) u = 1.0 - u;
-                
-                double cx = u * chartRect.width();
-                double cy = v * chartRect.height();
-                return QPointF(chartRect.left() + cx, chartRect.top() + cy);
-            };
             
             QPointF q00 = scanToChart(d00);
             QPointF q10 = scanToChart(d10);
@@ -425,27 +376,18 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     painter.setPen(QPen(palette().mid().color(), 1));
     for (int row = 0; row <= gridRows; row++) {
         for (int col = 0; col <= gridCols; col++) {
-            double x = col * chartRect.width() / (double)gridCols;
-            double y = row * chartRect.height() / (double)gridRows;
+            double x = chartRect.left() + col * chartRect.width() / (double)gridCols;
+            double y = chartRect.top() + row * chartRect.height() / (double)gridRows;
             
-            double relX = x / chartRect.width();
-            if (m_mirror) relX = 1.0 - relX;
+            // Map chart point to scan point to get "undeformed" scan coord
+            colorscreen::point_t p = chartToScan(QPointF(x, y));
             
-            colorscreen::point_t p = {
-                relX * m_scanWidth,
-                (y / chartRect.height()) * m_scanHeight
-            };
-            
+            // Map undeformed scan -> screen -> deformed image
             colorscreen::point_t scr = undeformed_map.to_scr(p);
             colorscreen::point_t deformed = deformed_map.to_img(scr);
             
-            double deformedRelX = deformed.x / m_scanWidth;
-            if (m_mirror) deformedRelX = 1.0 - deformedRelX;
-            
-            double cx = deformedRelX * chartRect.width();
-            double cy = (deformed.y / m_scanHeight) * chartRect.height();
-            
-            QPointF chartPoint(chartRect.left() + cx, chartRect.top() + cy);
+            // Map deformed scan -> chart
+            QPointF chartPoint = scanToChart(deformed);
             
             // Draw small point
             painter.drawEllipse(chartPoint, 1, 1);

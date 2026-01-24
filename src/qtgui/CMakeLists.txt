@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Svg)
 find_package(OpenMP)
 
 # Dependencies based on configure.ac
@@ -60,7 +60,9 @@ set(SOURCES
     FinetuneWorker.cpp
     WorkerBase.cpp
     TaskQueue.cpp
+    TaskQueue.cpp
     SubtitleOverlay.cpp
+    CoordinateTransformer.cpp
 )
 
 set(HEADERS
@@ -99,6 +101,7 @@ target_link_libraries(colorscreen-qt PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Concurrent
+    Qt6::Svg
     ${LIBCOLORSCREEN_BUILD_DIR}/.libs/libcolorscreen.a
     ${GSL_LIBRARIES}
     ${TIFF_LIBRARIES}

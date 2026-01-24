@@ -26,7 +26,8 @@ colorscreen_qt_SOURCES = \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
     TaskQueue.cpp \
-    SubtitleOverlay.cpp
+    SubtitleOverlay.cpp \
+    CoordinateTransformer.cpp
 
 
 
