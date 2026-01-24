@@ -48,6 +48,13 @@ void CapturePanel::setupUi()
         }
     };
 
+    auto onUseMirror = [this]() {
+        auto img = m_imageGetter();
+        if (img && img->mirror != -1) {
+            applyChange([img](ParameterState &s) { s.rparams.scan_mirror = (img->mirror != 0); }, "Use EXIF mirroring");
+        }
+    };
+
     auto addValueWithUseButton = [&](const QString &label, QLabel **valueLabel, QPushButton **useBtn, std::function<void()> onUse) {
         QWidget *container = new QWidget();
         QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -163,6 +170,37 @@ void CapturePanel::setupUi()
     m_focalLength35mmValue = new QLabel();
     m_focalLength35mmValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_form->addRow("Focal length (35mm)", m_focalLength35mmValue);
+
+    // 12b. Mirroring (Label) + Use
+    addValueWithUseButton("Mirroring", &m_mirrorValue, &m_useMirrorBtn, [this, onUseMirror]() { onUseMirror(); });
+
+    // 12c. Sensor presets (Dropdown)
+    QComboBox *presets = new QComboBox();
+    presets->addItem("Presets...", 0.0);
+    presets->addItem("PhaseOne 53.4mm", 53.4);
+    presets->addItem("PhaseOne 53.7mm", 53.7);
+    presets->addItem("Full Frame (36mm)", 36.0);
+    presets->addItem("APS-H (28.3mm)", 28.3);
+    presets->addItem("APS-C (23.0mm)", 23.0);
+    presets->addItem("Micro Four Thirds (17.3mm)", 17.3);
+    presets->addItem("1-inch (13.2mm)", 13.2);
+    presets->addItem("1/1.7-inch (7.6mm)", 7.6);
+    presets->addItem("1/2.5-inch (5.76mm)", 5.76);
+    
+    connect(presets, &QComboBox::activated, this, [this, presets](int index) {
+        double val = presets->itemData(index).toDouble();
+        if (val > 0) {
+            auto img = m_imageGetter();
+            if (img && img->width > 0) {
+                double pitch = (val * 1000.0) / img->width;
+                applyChange([pitch](ParameterState &s) {
+                    s.rparams.sharpen.scanner_mtf.pixel_pitch = pitch;
+                }, "Sensor width preset");
+            }
+        }
+        presets->setCurrentIndex(0);
+    });
+    m_form->addRow("Sensor presets", presets);
 
     // 13. Sensor width (Slider)
     // We need to store this widget to update it
@@ -314,6 +352,14 @@ void CapturePanel::setupUi()
         }
         setVisibleRow(m_pixelPitchValue->parentWidget(), showPixelPitchExif);
 
+        // 12b. Mirroring
+        bool showMirrorExif = img && img->mirror != -1;
+        if (showMirrorExif) {
+            m_mirrorValue->setText(img->mirror ? "Mirrored" : "Not mirrored");
+            m_useMirrorBtn->setVisible((img->mirror != 0) != state.rparams.scan_mirror);
+        }
+        setVisibleRow(m_mirrorValue->parentWidget(), showMirrorExif);
+
         // Sensor width slider update (linked)
         if (img && img->width > 0) {
             double width_mm = (state.rparams.sharpen.scanner_mtf.pixel_pitch * img->width) / 1000.0;
@@ -346,10 +392,7 @@ void CapturePanel::setupUi()
       nullptr, true);
 #endif
     
-    addButtonParameter("", "Crop", [this]() { emit cropRequested(); });
-
-    // Add stretch after the button to keep it at the top
-    m_layout->addStretch();
+    addButtonParameter("Crop image", "Change crop", [this]() { emit cropRequested(); });
     
     // Initial update
     updateInfoLabels(m_stateGetter());

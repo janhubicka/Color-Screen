@@ -108,7 +108,7 @@ public:
   luminosity_t sensor_fill_factor;
   demosaicing_t demosaiced_by;
   int rotation;
-  int flip;
+  int mirror;
   std::string camera_model;
   std::string lens;
   std::string software;

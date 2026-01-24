@@ -169,7 +169,7 @@ image_data::image_data ()
       whitepoint{ 0.312700492, 0.329000939, 1.0 }, lcc (NULL), gamma (-2),
       f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
       focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
-      rotation (-1), flip (-1), demosaiced_by (demosaic_max), own (false)
+      rotation (-1), mirror (-1), demosaiced_by (demosaic_max), own (false)
 {
 }
 
@@ -1563,35 +1563,35 @@ image_data::load_exif (const char *name)
             {
             case 1:
               rotation = 0;
-              flip = 0;
+              mirror = 0;
               break;
             case 2:
               rotation = 0;
-              flip = 1;
+              mirror = 1;
               break;
             case 3:
               rotation = 2;
-              flip = 0;
+              mirror = 0;
               break;
             case 4:
               rotation = 2;
-              flip = 1;
+              mirror = 1;
               break;
             case 5:
               rotation = 3;
-              flip = 1;
+              mirror = 1;
               break;
             case 6:
               rotation = 1;
-              flip = 0;
+              mirror = 0;
               break;
             case 7:
               rotation = 1;
-              flip = 1;
+              mirror = 1;
               break;
             case 8:
               rotation = 3;
-              flip = 0;
+              mirror = 0;
               break;
             }
         }

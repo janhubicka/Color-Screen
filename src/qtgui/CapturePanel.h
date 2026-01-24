@@ -43,6 +43,8 @@ private:
     class QPushButton *m_useFocalPlaneResBtn = nullptr;
     class QLabel *m_pixelPitchValue = nullptr;
     class QPushButton *m_usePixelPitchBtn = nullptr;
+    class QLabel *m_mirrorValue = nullptr;
+    class QPushButton *m_useMirrorBtn = nullptr;
     class QLabel *m_softwareValue = nullptr;
     class QLabel *m_sensorFillFactorValue = nullptr;
 };
