@@ -20,7 +20,7 @@
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
 
-ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent) {
+ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   qRegisterMetaType<std::shared_ptr<colorscreen::progress_info>>();
   qRegisterMetaType<colorscreen::render_parameters>();
 
@@ -608,21 +608,40 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 }
 
 void ImageWidget::resizeEvent(QResizeEvent *event) {
-  QSize oldSize = event->oldSize();
+  QSize oldSize = m_lastSize;
   QSize newSize = event->size();
   
-  // Only adjust if we have a valid old size with non-zero dimensions
   if (oldSize.isValid() && oldSize.width() > 0 && oldSize.height() > 0 && 
-      oldSize != newSize && m_scale > 0) {
-    // Calculate the center point of the current view in image coordinates
+      oldSize != newSize && m_scale > 0 && m_scan) {
+    
+    // 1. Calculate current center in image coordinates
     double centerX = m_viewX + (oldSize.width() / m_scale) / 2.0;
     double centerY = m_viewY + (oldSize.height() / m_scale) / 2.0;
     
-    // Recalculate view position to keep the center point stable (without changing zoom)
+    // 2. Calculate new fit scale (m_minScale)
+    CoordinateTransformer transformer(m_scan.get(), *m_rparams);
+    QSize transformedSize = transformer.getTransformedSize();
+    double imgW = transformedSize.width();
+    double imgH = transformedSize.height();
+    
+    if (imgW > 0 && imgH > 0) {
+      double scaleX = (double)newSize.width() / imgW;
+      double scaleY = (double)newSize.height() / imgH;
+      double newMinScale = qMin(scaleX, scaleY);
+      
+      // 3. Adjust m_scale to maintain relative zoom level
+      if (m_minScale > 0) {
+          m_scale *= (newMinScale / m_minScale);
+      }
+      m_minScale = newMinScale;
+    }
+    
+    // 4. Recalculate view position to keep the center point stable
     m_viewX = centerX - (newSize.width() / m_scale) / 2.0;
     m_viewY = centerY - (newSize.height() / m_scale) / 2.0;
   }
   
+  m_lastSize = newSize; // Update for next event
   requestRender();
   emit viewStateChanged(
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
@@ -1116,6 +1135,12 @@ void ImageWidget::pivotViewport(int oldRotIdx, int newRotIdx) {
     // Set new viewX/Y to maintain center
     m_viewX = newCenter_tr.x - (width() / m_scale) / 2.0;
     m_viewY = newCenter_tr.y - (height() / m_scale) / 2.0;
+
+    // Update m_minScale for the NEW orientation fit
+    // This ensures subsequent resize events use the correct reference.
+    double scaleX = (double)width() / newTrans.getTransformedSize().width();
+    double scaleY = (double)height() / newTrans.getTransformedSize().height();
+    m_minScale = qMin(scaleX, scaleY);
 }
 
 void ImageWidget::fitToView() {
@@ -1145,6 +1170,7 @@ void ImageWidget::fitToView() {
   // Center view
   m_viewX = (imgW - w / m_scale) / 2.0;
   m_viewY = (imgH - h / m_scale) / 2.0;
+  m_lastSize = size(); 
 
   requestRender();
   emit viewStateChanged(

@@ -153,6 +153,7 @@ private:
   double m_viewX = 0.0; // Top-left of the view in Image Coordinates
   double m_viewY = 0.0;
   double m_minScale = 0.1; // Calculated 'fit' scale
+  QSize m_lastSize; // Last known widget size for robust resizing
 
   // Concurrent Rendering
   TaskQueue m_renderQueue; // Manages IDs and progress notifications
