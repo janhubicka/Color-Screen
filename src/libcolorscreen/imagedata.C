@@ -864,6 +864,41 @@ raw_image_data_loader::load_part (int *permille, const char **error,
 
       if (bayer_correction)
         {
+	  luminosity_t grsum = 0, rsum = 0, gbsum = 0, bsum = 0;
+	  /* Pass 1: find approximate ratio */
+          for (int y = 0; y < m_img->height; y++)
+            for (int x = 0; x < m_img->width - 1; x++)
+	      {
+		int i = y * m_img->width + x;
+		int g = RawProcessor.imgdata.image[i][1];
+		if (g > 0 && g < 65535 - 256)
+		{
+		  int r = RawProcessor.imgdata.image[i + 1][0];
+		  if (r > 0 && r < 65535 - 256)
+		    grsum += g, rsum += r;
+		  int b = RawProcessor.imgdata.image[i + 1][2];
+		  if (b > 0 && b < 65535 - 256)
+		    gbsum += g, bsum += b;
+		}
+	      }
+          if (!grsum || !gbsum)
+            {
+              *error = "image is too overexposed or completely dark in green channel";
+              return false;
+            }
+          if (!bsum)
+            {
+              *error = "image has no data in blue channel";
+              return false;
+            }
+          if (!rsum)
+            {
+              *error = "image has no data in red channel";
+              return false;
+            }
+	  luminosity_t rratio = rsum / grsum;
+	  luminosity_t bratio = bsum / gbsum;
+	  fprintf (stderr, "rratio %f bratio %f\n", rratio, bratio);
           rhistogram.set_range (1 - range, 1 + range, 65535 * 4);
           bhistogram.set_range (1 - range, 1 + range, 65535 * 4);
           for (int y = 0; y < m_img->height; y++)
@@ -879,14 +914,14 @@ raw_image_data_loader::load_part (int *permille, const char **error,
                     int r = RawProcessor.imgdata.image[i + 1][0];
                     if (r > 256 && r < 65535 - 256)
                       {
-                        luminosity_t ratio = g / (luminosity_t)r;
+                        luminosity_t ratio = g * rratio / (luminosity_t)r;
                         if (ratio > 1 - range && ratio < 1 + range)
                           rhistogram.account (ratio);
                       }
                     int b = RawProcessor.imgdata.image[i + 1][2];
                     if (b > 256 && b < 65535 - 256)
                       {
-                        luminosity_t ratio = g / (luminosity_t)b;
+                        luminosity_t ratio = g * bratio / (luminosity_t)b;
                         if (ratio > 1 - range && ratio < 1 + range)
                           bhistogram.account (ratio);
                       }
@@ -897,11 +932,12 @@ raw_image_data_loader::load_part (int *permille, const char **error,
           if (rhistogram.num_samples () < 1024
               || bhistogram.num_samples () < 1024)
             {
-              *error = "not enough samples to remove mosaic";
+              *error = "not enough samples to remove mosaic (image is too dark or overexposed)";
               return false;
             }
-          bscale = bhistogram.find_avg (0.2, 0.2);
-          rscale = rhistogram.find_avg (0.2, 0.2);
+          bscale = bhistogram.find_avg (0.2, 0.2) / bratio;
+          rscale = rhistogram.find_avg (0.2, 0.2) / rratio;
+	  fprintf (stderr, "rscale %f bscale %f\n", rscale, bscale);
         }
 #pragma omp parallel for default(none)                                        \
     shared(m_img, RawProcessor, bscale, rscale)

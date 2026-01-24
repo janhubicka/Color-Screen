@@ -1011,7 +1011,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam, 
 	}
       else if (!strcmp (buf, "scan_crop"))
 	{
-	  if (!parse_bool (f, rparam_check (scan_mirror)))
+	  if (!parse_bool (f, rparam_check (scan_crop.set)))
 	    {
 	      *error = "error parsing scan_crop";
 	      return false;
