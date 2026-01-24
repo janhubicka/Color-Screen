@@ -314,7 +314,7 @@ gsl_simplex (C &c, const char *task = NULL, progress_info *progress = NULL,
     }
 
   gsl_error_handler_t *old_handler = gsl_set_error_handler_off ();
-  const gsl_multimin_fminimizer_type *MT = gsl_multimin_fminimizer_nmsimplex2rand;
+  const gsl_multimin_fminimizer_type *MT = gsl_multimin_fminimizer_nmsimplex2;
   gsl_multimin_fminimizer *s = gsl_multimin_fminimizer_alloc (MT, n);
 
   if (!s)

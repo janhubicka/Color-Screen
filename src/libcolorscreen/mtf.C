@@ -2,6 +2,7 @@
 #include "lru-cache.h"
 #include "mtf.h"
 #include "nmsimplex.h"
+#include "gsl-solver.h"
 #include <cmath>
 #include <complex>
 #include <memory>
@@ -261,7 +262,7 @@ public:
   luminosity_t
   epsilon ()
   {
-    return 0.00000001;
+    return 0.0001;
   }
   bool
   verbose ()
@@ -289,14 +290,14 @@ public:
                                            (luminosity_t)0, (luminosity_t)1);
   }
   luminosity_t
-  get_fill_factor (luminosity_t *vals)
+  get_fill_factor (const luminosity_t *vals)
   {
     if (fill_factor_index < 0)
       return m_params.sensor_fill_factor;
     return vals[fill_factor_index];
   }
   luminosity_t
-  get_wavelength (luminosity_t *vals)
+  get_wavelength (const luminosity_t *vals)
   {
     if (wavelength_index < 0)
       return m_params.wavelength;
@@ -304,28 +305,28 @@ public:
            + nanometers_min;
   }
   luminosity_t
-  get_sigma (luminosity_t *vals)
+  get_sigma (const luminosity_t *vals)
   {
     if (sigma_index < 0)
       return m_params.sigma;
     return vals[sigma_index];
   }
   luminosity_t
-  get_defocus (luminosity_t *vals)
+  get_defocus (const luminosity_t *vals)
   {
     if (!difraction || blur_index < 0)
       return m_params.defocus;
     return vals[blur_index] * m_params.pixel_pitch * (1.0 / 1000);
   }
   luminosity_t
-  get_blur_diameter (luminosity_t *vals)
+  get_blur_diameter (const luminosity_t *vals)
   {
     if (difraction || blur_index < 0)
       return m_params.blur_diameter;
     return vals[blur_index];
   }
   luminosity_t
-  objfunc (luminosity_t *vals)
+  objfunc (const luminosity_t *vals, luminosity_t *f_vec = NULL)
   {
     luminosity_t sum = 0;
     mtf_parameters p = m_params;
@@ -349,10 +350,22 @@ public:
         luminosity_t contrast = m_measured_params.get_contrast (i);
         luminosity_t contrast2 = p.system_mtf (freq) * 100;
         sum += (contrast - contrast2) * (contrast - contrast2);
+	if (f_vec)
+	  f_vec[i] = contrast - contrast2;
         if (be_verbose)
           debug_data (freq, contrast, contrast2);
       }
     return sum;
+  }
+  int
+  num_observations ()
+  {
+    return m_measured_params.size ();
+  }
+  void
+  residuals (const luminosity_t *vals, luminosity_t *f_vec)
+  {
+    objfunc (vals, f_vec);
   }
   const mtf_parameters &m_measured_params;
   mtf_parameters m_params;
@@ -1110,7 +1123,9 @@ mtf_parameters::estimate_parameters (const mtf_parameters &par,
 
   use_measured_mtf = false;
   mtf_solver s (*this, par, progress);
-  simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
+  //simplex<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
+                                     //progress);
+  gsl_multifit<luminosity_t, mtf_solver> (s, "optimizing lens parameters",
                                      progress);
   wavelength = s.get_wavelength (s.start);
   sigma = s.get_sigma (s.start);

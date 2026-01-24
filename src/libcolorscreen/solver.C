@@ -386,8 +386,8 @@ public:
     solve (vals, &chisq, &transformed);
     for (int i = 0; i < m_sparam.points.size (); i++)
     {
-      f_vec[2 * i] = fabs (transformed[i].x - m_sparam.points[i].scr.x);
-      f_vec[2 * i + 1] = fabs (transformed[i].y - m_sparam.points[i].scr.y);
+      f_vec[2 * i] = transformed[i].x - m_sparam.points[i].scr.x;
+      f_vec[2 * i + 1] = transformed[i].y - m_sparam.points[i].scr.y;
       //printf ("%f %f %f %f\n",transformed[i].x, transformed[i].y, m_sparam.points[i].scr.x, m_sparam.points[i].scr.y);
     }
     //printf ("%g %g %g %g %g error sq %.10g\n",vals[0], vals[1], vals[2], vals[3], vals[4], chisq);
