@@ -1592,6 +1592,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         FILE *f = fopen(parFile.toUtf8().constData(), "r");
         if (f) {
           const char *error = nullptr;
+	  // load_csp merges parameters in; reset first.
+	  colorscreen::scr_to_img_parameters emptyScrToImg;
+	  m_scrToImgParams = emptyScrToImg;
+	  colorscreen::scr_detect_parameters emptyScrDetect;
+	  m_detectParams = emptyScrDetect;
+	  colorscreen::render_parameters emptyRparams;
+	  m_rparams = emptyRparams;
+	  colorscreen::solver_parameters emptySolver;
+	  m_solverParams = emptySolver;
           if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
                                      &m_rparams, &m_solverParams, &error)) {
             QMessageBox::warning(this, "Error Loading Parameters",
@@ -1965,6 +1974,15 @@ void MainWindow::openRecentParams() {
     colorscreen::scr_to_img_parameters oldScrToImg = m_scrToImgParams;
     colorscreen::scr_detect_parameters oldDetect = m_detectParams;
 
+    // load_csp merges parameters in; reset first.
+    colorscreen::scr_to_img_parameters emptyScrToImg;
+    m_scrToImgParams = emptyScrToImg;
+    colorscreen::scr_detect_parameters emptyScrDetect;
+    m_detectParams = emptyScrDetect;
+    colorscreen::render_parameters emptyRparams;
+    m_rparams = emptyRparams;
+    colorscreen::solver_parameters emptySolver;
+    m_solverParams = emptySolver;
     if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
                                &m_rparams, &m_solverParams, &error)) {
       fclose(f);
