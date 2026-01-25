@@ -2194,11 +2194,11 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   if (!m_scan || !m_solverWorker)
     return;
 
-  // Request new solve task
-  m_solverQueue.requestRender();
+  // Request new solve task with mesh computation enabled
+  m_solverQueue.requestRender(true);
 }
 
-void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
+void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
   if (!m_scan || !m_solverWorker) {
     m_solverQueue.reportFinished(reqId, false);
     return;
@@ -2209,9 +2209,8 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
       progress->set_task("Optimizing geometry", 1);
   }
   colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
-
-  // Check if nonlinear corrections are enabled
-  bool computeMesh = m_geometryPanel->isNonlinearEnabled();
+  
+  bool computeMesh = userData.isValid() ? userData.toBool() : m_geometryPanel->isNonlinearEnabled();
   
   // Invoke solver in worker
   QMetaObject::invokeMethod(
@@ -2887,7 +2886,8 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   // Update parameters
   m_scrToImgParams.type = result.param.type;
-  m_scrToImgParams.mesh_trans = result.mesh_trans;
+  if (result.mesh_trans)
+    m_scrToImgParams.mesh_trans = result.mesh_trans;
   
   // Update color model if requested
   if (updateColorModel) {
@@ -2909,10 +2909,8 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   // Always trigger geometry solver with computeMesh=false to preserve detected mesh
   // The solver will update center, coordinates, lens parameters, etc.
-  if (m_solverParams.points.size() >= 3) {
-    // Request solver with special handling to preserve mesh
-    m_solverQueue.requestRender();
-  }
+    // Request solver with explicit mesh computation disabled to preserve detected pattern
+    m_solverQueue.requestRender(false);
   
   // Create undo command
   ParameterState newState = getCurrentState();

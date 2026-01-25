@@ -11,7 +11,7 @@ TaskQueue::~TaskQueue()
     cancelAll();
 }
 
-int TaskQueue::requestRender()
+int TaskQueue::requestRender(const QVariant &userData)
 {
     int newReqId = m_nextReqId++;
     
@@ -45,15 +45,16 @@ int TaskQueue::requestRender()
 
         qCDebug(lcRenderSync) << "  Queueing new task ID:" << newReqId;
         m_pendingReqId = newReqId;
+        m_pendingUserData = userData;
         return newReqId;
     }
 
     // 3. Start immediately if slot available
-    startTask(newReqId);
+    startTask(newReqId, userData);
     return newReqId;
 }
 
-void TaskQueue::startTask(int reqId)
+void TaskQueue::startTask(int reqId, const QVariant &userData)
 {
     qCDebug(lcRenderSync) << "TaskQueue::startTask - Starting ID:" << reqId;
     TaskInfo info;
@@ -61,11 +62,12 @@ void TaskQueue::startTask(int reqId)
     info.progress = std::make_shared<colorscreen::progress_info>();
     info.startTime.start();
     info.active = true;
+    info.userData = userData;
     
     m_tasks[reqId] = info;
     
     emit progressStarted(info.progress);
-    emit triggerRender(reqId, info.progress);
+    emit triggerRender(reqId, info.progress, userData);
 }
 
 void TaskQueue::reportFinished(int reqId, bool success)
@@ -98,9 +100,11 @@ void TaskQueue::processPending()
     // If we have a pending task and a slot is free (size < 2)
     if (m_pendingReqId.has_value() && m_tasks.size() < 2) {
         int reqId = m_pendingReqId.value();
+        QVariant userData = m_pendingUserData;
         qCDebug(lcRenderSync) << "TaskQueue::processPending - Starting pending task ID:" << reqId;
         m_pendingReqId.reset();
-        startTask(reqId);
+        m_pendingUserData = QVariant();
+        startTask(reqId, userData);
     }
 }
 
@@ -108,6 +112,7 @@ void TaskQueue::cancelAll()
 {
     // qDebug() << "TaskQueue::cancelAll - Cancelling all tasks.";
     m_pendingReqId.reset();
+    m_pendingUserData = QVariant();
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
         if (it->progress) {
              it->progress->cancel();

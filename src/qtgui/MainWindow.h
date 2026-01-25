@@ -323,5 +323,5 @@ private:
   std::vector<QThread*> m_finetuneThreads;
   
 private slots:
-  void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress);
+  void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
 };

@@ -19,6 +19,11 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
   TileRenderResult result;
   result.generation = generation;
   result.success = false;
+  if (progress) {
+     progress->set_task("Tile preview", 1);
+  }
+
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
 
   // Create tile parameters
   tile_parameters tile;
