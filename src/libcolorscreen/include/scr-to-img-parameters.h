@@ -63,7 +63,13 @@ screen_with_varying_strips_p (enum scr_type t)
   return dufay_like_screen_p (t) || screen_with_vertical_strips_p (t);
 }
 
-DLL_PUBLIC extern const property_t scr_names[max_scr_type];
+struct scr_type_property_t {
+  const char *name;
+  const char *pretty_name;
+  const char *help;
+  coord_t frequency;
+};
+DLL_PUBLIC extern const scr_type_property_t scr_names[max_scr_type];
 pure_attr DLL_PUBLIC rgbdata patch_proportions (enum scr_type t,
                                                 const render_parameters *);
 

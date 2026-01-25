@@ -553,7 +553,7 @@ parse_scanner_type (const char *model)
 static enum scr_type
 parse_scr_type (const char *model)
 {
-  return parse_enum_property<scr_type, property_t, scr_names, (int)max_scr_type> (
+  return parse_enum_property<scr_type, scr_type_property_t, scr_names, (int)max_scr_type> (
       model, "Unkonwn screen type:%s\n");
 }
 

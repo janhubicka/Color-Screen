@@ -193,7 +193,7 @@ void CapturePanel::setupUi()
         });
 
     // 10. F-stop (Label) + Use
-    addValueWithUseButton("F-stop", &m_fStopValue, &m_useFStopBtn, [this, onUseFStop]() { onUseFStop(); });
+    addValueWithUseButton("Exif F-stop", &m_fStopValue, &m_useFStopBtn, [this, onUseFStop]() { onUseFStop(); });
 
     // 11. Focal length (Label)
     m_focalLengthValue = new QLabel();

@@ -10,10 +10,11 @@ MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
 
 void MTFChartWidget::setMTFData(
     const colorscreen::mtf_parameters::computed_mtf &data,
-    bool canSimulateDifraction) {
+    bool canSimulateDifraction, double scanDpi) {
   m_data = data;
   m_hasData = !data.system_mtf.empty();
   m_canSimulateDifraction = canSimulateDifraction;
+  m_scanDpi = scanDpi;
   update();
 }
 
@@ -35,13 +36,13 @@ void MTFChartWidget::clear() {
 
 QSize MTFChartWidget::sizeHint() const {
   // Golden ratio: width:height = 1.61:1
-  // For 500px width -> height = 500/1.61 + margins = 310 + 125 = 435
-  return QSize(500, 435);
+  // For 500px width -> height = 500/1.61 + margins = 310 + 175 = 485
+  return QSize(500, 485);
 }
 
 QSize MTFChartWidget::minimumSizeHint() const {
   // Minimum for golden ratio
-  return QSize(300, 310);
+  return QSize(300, 360);
 }
 
 bool MTFChartWidget::hasHeightForWidth() const { return true; }
@@ -49,9 +50,9 @@ bool MTFChartWidget::hasHeightForWidth() const { return true; }
 int MTFChartWidget::heightForWidth(int width) const {
   // Maintain golden ratio: width:height = 1.61:1
   // Chart area height = width / 1.61
-  // Total height = chart height + margins (top 20 + bottom 105)
+  // Total height = chart height + margins (top 20 + bottom 155)
   int chartHeight = static_cast<int>(width / 1.61);
-  return chartHeight + 125; // 20 (top) + 105 (bottom)
+  return chartHeight + 155; // 20 (top) + 135 (bottom)
 }
 
 void MTFChartWidget::paintEvent(QPaintEvent *event) {
@@ -71,7 +72,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   const int marginLeft = 60;
   const int marginRight = 20;
   const int marginTop = 20;
-  const int marginBottom = 105; // More space for label + legend
+  const int marginBottom = 155; // More space for label + legend + MTF50
 
   QRect chartRect(marginLeft, marginTop, width() - marginLeft - marginRight,
                   height() - marginTop - marginBottom);
@@ -139,6 +140,25 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   painter.setPen(palette().text().color());
   painter.drawText(QRect(0, chartRect.bottom() + 25, width(), 15),
                    Qt::AlignCenter, "Pixel frequency");
+
+  if (m_scanDpi > 0) {
+    // Draw cycles per mm axis (lp/mm)
+    // 1 pixel frequency = 1 cycle / 2 pixels
+    // lp/mm = (pixel_freq) * (DPI / 25.4) / 2
+    double lp_mm_max = (m_scanDpi / 25.4) / 2.0;
+
+    for (int i = 0; i <= 10; i++) {
+        int x = chartRect.left() + (chartRect.width() * i / 10);
+        painter.drawLine(x, chartRect.bottom() + 20, x, chartRect.bottom() + 25);
+        
+        double lp_mm = (i / 10.0) * lp_mm_max;
+        QString label = QString::number(lp_mm, 'f', 1);
+        QRect textRect(x - 20, chartRect.bottom() + 45, 40, 20);
+        painter.drawText(textRect, Qt::AlignCenter, label);
+    }
+    painter.drawText(QRect(0, chartRect.bottom() + 65, width(), 15),
+                     Qt::AlignCenter, "Cycles per millimeter (lp/mm)");
+  }
 
   painter.save();
   painter.translate(15, height() / 2);
@@ -231,8 +251,35 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
     }
   }
 
+  // Draw MTF50 information
+  double mtf50_freq = -1;
+  if (!m_data.system_mtf.empty()) {
+      for (size_t i = 0; i < m_data.system_mtf.size() - 1; ++i) {
+          if (m_data.system_mtf[i] >= 0.5 && m_data.system_mtf[i+1] < 0.5) {
+              // Linear interpolation
+              double f0 = i / (double)(m_data.system_mtf.size() - 1);
+              double f1 = (i + 1) / (double)(m_data.system_mtf.size() - 1);
+              double v0 = m_data.system_mtf[i];
+              double v1 = m_data.system_mtf[i+1];
+              mtf50_freq = f0 + (0.5 - v0) * (f1 - f0) / (v1 - v0);
+              break;
+          }
+      }
+  }
+
+  int infoY = chartRect.bottom() + (m_scanDpi > 0 ? 85 : 45);
+  if (mtf50_freq >= 0) {
+      QString mtf50Text = QString("MTF50: %1 px freq").arg(mtf50_freq, 0, 'f', 3);
+      if (m_scanDpi > 0) {
+          double lp_mm = mtf50_freq * (m_scanDpi / 25.4) / 2.0;
+          mtf50Text += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
+      }
+      painter.setPen(palette().text().color());
+      painter.drawText(QRect(marginLeft, infoY, chartRect.width(), 20), Qt::AlignLeft | Qt::AlignVCenter, mtf50Text);
+  }
+
   // Draw legend below "Pixel frequency" label
-  int legendY = chartRect.bottom() + 45; // Below the axis label
+  int legendY = infoY + 25; // Below the info label
   int legendX = chartRect.left();
   int itemWidth = 120;
   int lineHeight = 20;

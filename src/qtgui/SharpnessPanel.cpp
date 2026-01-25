@@ -269,7 +269,8 @@ void SharpnessPanel::updateMTFChart() {
   // Pass simulation flag to chart
   bool canSimulateDifraction =
       state.rparams.sharpen.scanner_mtf.simulate_difraction_p();
-  m_mtfChart->setMTFData(curves, canSimulateDifraction);
+  m_mtfChart->setMTFData(curves, canSimulateDifraction,
+                         state.rparams.sharpen.scanner_mtf.scan_dpi);
 
   // Extract measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;

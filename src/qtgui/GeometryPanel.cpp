@@ -59,7 +59,7 @@ void GeometryPanel::setupUi() {
   m_exaggerateSliderContainer->setEnabled(showBox->isChecked());
   m_maxArrowLengthSliderContainer->setEnabled(showBox->isChecked());
 
-  addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.5,
+  addSlider("Heatmap tolerance", 0.0, 1.0, 1000.0, 3, "", "", 0.1,
             [this](double v) {
                 if (m_deformationChart) m_deformationChart->setHeatmapTolerance(v);
                 if (m_lensChart) m_lensChart->setHeatmapTolerance(v);

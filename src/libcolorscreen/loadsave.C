@@ -7,17 +7,17 @@
 namespace colorscreen
 {
 
-const property_t scr_names[max_scr_type]  = {
-  { "Random", "Random", "" },
-  { "Paget", "Paget", "" },
-  { "Thames", "Thames", "" },
-  { "Finlay", "Finlay", "" },
-  { "Dufay", "Dufay", "" },
-  { "Dioptichrome-B", "Dioptichrome-B", "" },
-  { "ImprovedDioptichrome-B", "ImprovedDioptichrome-B", "" },
-  { "Warner-Powrie", "Warner-Powrie", "" },
-  { "Joly", "Joly", "" },
-  { "Omnicolore", "Omnicolore", "" },
+const scr_type_property_t scr_names[max_scr_type]  = {
+  { "Random", "Random", "", 0 },
+  { "Paget", "Paget", "", 3.0 / 2.0 / 1.414},
+  { "Thames", "Thames", "", 3.0 / 2.0 / 1.414  },
+  { "Finlay", "Finlay", "", 3.0 / 2.0 / 1.414},
+  { "Dufay", "Dufay", "", 1 },
+  { "Dioptichrome-B", "Dioptichrome-B", "", 1 },
+  { "ImprovedDioptichrome-B", "ImprovedDioptichrome-B", "", 1 },
+  { "Warner-Powrie", "Warner-Powrie", "", 3.0 / 2 },
+  { "Joly", "Joly", "", 3.0 / 2 },
+  { "Omnicolore", "Omnicolore", "", 3.0 / 2 },
 };
 
 const property_t scanner_type_names[max_scanner_type]  = {
