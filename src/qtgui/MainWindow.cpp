@@ -46,6 +46,8 @@
 #include <QUndoCommand>
 #include <QUndoStack>
 #include <QVBoxLayout>
+#include <QFrame>
+#include <QSizeGrip>
 #include <QWindow>
 #include <QtConcurrent>
 #include <QSvgRenderer>
@@ -360,20 +362,59 @@ void MainWindow::setupUi() {
     connect(panel, detachSignal, this, [dock](QWidget *w) {
       if (!w)
         return;
-      dock->setWidget(w);
+      
+      // Wrap widget in a frame to provide better resize borders
+      QFrame *wrapper = new QFrame();
+      wrapper->setObjectName("DetachedWrapper");
+      wrapper->setFrameStyle(QFrame::Box | QFrame::Plain);
+      wrapper->setLineWidth(1);
+      // Modern sleek border
+      wrapper->setStyleSheet(
+          "QFrame#DetachedWrapper { border: 1px solid #555; background: Palette(Window); }");
+      
+      QVBoxLayout *wLayout = new QVBoxLayout(wrapper);
+      wLayout->setContentsMargins(2, 2, 2, 2);
+      wLayout->setSpacing(0);
+      wLayout->addWidget(w);
+      
+      // Add a size grip for easier resizing
+      QHBoxLayout *gripLayout = new QHBoxLayout();
+      gripLayout->addStretch(1);
+      QSizeGrip *grip = new QSizeGrip(wrapper);
+      gripLayout->addWidget(grip);
+      wLayout->addLayout(gripLayout);
+
+      dock->setWidget(wrapper);
       w->show(); // Ensure widget is visible
       dock->setFloating(true);
       dock->show();
-      if (w->sizeHint().isValid())
-        dock->resize(w->sizeHint());
+      
+      // Use size hint of the original widget + some margins
+      if (w->sizeHint().isValid()) {
+          QSize s = w->sizeHint();
+          dock->resize(s.width() + 10, s.height() + 30);
+      }
     });
 
     // Connect Close/Reattach via Event Filter
     dock->installEventFilter(
         new DockCloseEventFilter(dock, [dock, panel, reattachMethod]() {
           if (dock->widget()) {
-            (panel->*reattachMethod)(dock->widget());
+            // Find the original widget inside the wrapper
+            QWidget *wrapper = dock->widget();
+            QWidget *originalWidget = nullptr;
+            if (wrapper->layout() && wrapper->layout()->count() > 0) {
+                QLayoutItem *item = wrapper->layout()->itemAt(0);
+                if (item && item->widget()) {
+                    originalWidget = item->widget();
+                }
+            }
+
+            if (originalWidget) {
+              (panel->*reattachMethod)(originalWidget);
+            }
             dock->setWidget(nullptr);
+            wrapper->deleteLater();
           }
         }));
   };
