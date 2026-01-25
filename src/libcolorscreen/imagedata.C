@@ -1545,7 +1545,11 @@ image_data::load_exif (const char *name)
       it = exifData.findKey (
           Exiv2::ExifKey ("Exif.Photo.FocalLengthIn35mmFilm"));
       if (it != exifData.end () && it->count ())
+#if EXIV2_TEST_VERSION(0,27,99)
         focal_length_in_35mm = it->toInt64 ();
+#else
+        focal_length_in_35mm = it->toLong ();
+#endif
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Model"));
       if (it != exifData.end () && it->count ())
@@ -1566,7 +1570,11 @@ image_data::load_exif (const char *name)
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.ResolutionUnit"));
       if (it != exifData.end () && it->count ())
         {
+#if EXIV2_TEST_VERSION(0,27,99)
           long unit = it->toInt64 ();
+#else
+          long unit = it->toLong ();
+#endif
           if (unit == 3) // Centimeter
             {
               xdpi *= 2.54;
@@ -1584,7 +1592,11 @@ image_data::load_exif (const char *name)
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Orientation"));
       if (it != exifData.end () && it->count ())
         {
+#if EXIV2_TEST_VERSION(0,27,99)
           long orientation = it->toInt64 ();
+#else
+          long orientation = it->toLong ();
+#endif
           switch (orientation)
             {
             case 1:
