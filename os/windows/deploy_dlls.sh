@@ -22,70 +22,49 @@ if [ ! -d "$TARGET_DIR_UNIX" ]; then
     exit 1
 fi
 
-# Multi-pass recursive deployment
-while true; do
-    added_any=0
-    # Collect all binaries to check (EXE and DLL)
-    # Use find to get full paths
-    binaries=$(find "$TARGET_DIR_UNIX" -maxdepth 1 -name "*.exe" -o -name "*.dll")
-    
-    for bin in $binaries; do
-        # echo "Checking $bin..."
-        # Extract dependencies that reside in the MSYS2 prefix
-        # ldd output: "  libcurl-4.dll => /mingw64/bin/libcurl-4.dll (0x0...)"
-        # We use sed to extract the path between '=> ' and ' ('
-        ldd "$bin" | grep " => $PREFIX" | sed -e 's/.* => \(.*\) (0x.*/\1/' | while read -r dep_path; do
-            if [ -n "$dep_path" ]; then
-                dep_name=$(basename "$dep_path")
-                if [ ! -f "$TARGET_DIR_UNIX/$dep_name" ]; then
-                    echo "  Copying $dep_name (requested by $(basename "$bin"))"
-                    cp "$dep_path" "$TARGET_DIR_UNIX/"
-                    added_any=$((added_any + 1))
-                fi
-            fi
-        done
-        # Note: the pipe to while loop runs in a subshell, so added_any update won't persist
-        # We need a different way to track adding.
-    done
-    
-    # Check if any DLLs were actually added in this pass
-    # Let's count files in TARGET_DIR before and after
-    # Or use a temporary file to signal
-    
-    # Better approach for the loop:
-    # Just run it a few times or use a more clever bash way.
-    # Actually, let's use a temporary file to communicate count.
-    
-    added_count=$(find "$TARGET_DIR_UNIX" -maxdepth 1 -name "*.dll" | wc -l)
-    # ... logic above would need to be rewritten to avoid subshell issue ...
-    break # placeholder for now, let's refine
-done
+# Robust multi-pass recursive deployment
+MAX_PASSES=15
+pass=0
 
-# Refined version without subshell issue
-echo "Starting deployment loop..."
-while true; do
-    count_before=$(find "$TARGET_DIR_UNIX" -maxdepth 1 -name "*.dll" -o -name "*.exe" | wc -l)
+echo "Starting deployment passes (max $MAX_PASSES)..."
+while [ $pass -lt $MAX_PASSES ]; do
+    pass=$((pass + 1))
+    echo "Pass $pass..."
+    added_in_pass=0
     
-    # Process all binaries
-    for bin in $(find "$TARGET_DIR_UNIX" -maxdepth 1 -name "*.exe" -o -name "*.dll"); do
-        # Extract deps and copy them
-        # We use a process substitution to avoid subshell for the 'added' variable if we used one
+    # Collect current binaries to check
+    # We use a temporary file to store the list of binaries to avoid subshell issues with loops
+    bin_list=$(mktemp)
+    find "$TARGET_DIR_UNIX" -maxdepth 1 \( -name "*.exe" -o -name "*.dll" \) > "$bin_list"
+    
+    while read -r bin; do
+        [ -z "$bin" ] && continue
+        
+        # Extract dependencies that reside in the prefix
+        # We use process substitution to keep 'added_in_pass' in the current shell
         while read -r dep_path; do
             if [ -n "$dep_path" ] && [ -f "$dep_path" ]; then
                 dep_name=$(basename "$dep_path")
                 if [ ! -f "$TARGET_DIR_UNIX/$dep_name" ]; then
-                    echo "  Adding $dep_name (dependency of $(basename "$bin"))"
+                    echo "  Copying $dep_name (requested by $(basename "$bin"))"
                     cp "$dep_path" "$TARGET_DIR_UNIX/"
+                    added_in_pass=$((added_in_pass + 1))
                 fi
             fi
-        done < <(ldd "$bin" | grep " => $PREFIX" | sed -e 's/.* => \(.*\) (0x.*/\1/')
-    done
+        done < <(ldd "$bin" 2>/dev/null | grep " => $PREFIX" | sed -e 's/.* => \(.*\) (0x.*/\1/')
+    done < "$bin_list"
     
-    count_after=$(find "$TARGET_DIR_UNIX" -maxdepth 1 -name "*.dll" -o -name "*.exe" | wc -l)
-    if [ "$count_after" -eq "$count_before" ]; then
+    rm -f "$bin_list"
+    
+    if [ "$added_in_pass" -eq 0 ]; then
+        echo "No more dependencies added. Deployment stabilized."
         break
     fi
-    echo "  Added $((count_after - count_before)) files, scanning again..."
+    echo "  Added $added_in_pass files this pass."
 done
+
+if [ $pass -eq $MAX_PASSES ]; then
+    echo "Warning: Reached maximum number of passes ($MAX_PASSES). There might be circular dependencies or other issues."
+fi
 
 echo "DLL deployment complete."
