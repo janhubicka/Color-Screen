@@ -59,6 +59,7 @@ public:
   /* Unique id of the image (used for caching).  */
   uint64_t id;
   coord_t xdpi, ydpi;
+  coord_t exif_xdpi, exif_ydpi;
   stitch_project *stitch;
 
   /* Begining of the viewport of stitched object.  */

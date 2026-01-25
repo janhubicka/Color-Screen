@@ -27,6 +27,7 @@ signals:
     void cropRequested();
   void flatFieldRequested();
   void detachBacklightRequested(QWidget *w);
+  void autodetectRequested();
 
 public:
   void reattachBacklight(QWidget *w);
@@ -39,6 +40,8 @@ private:
     class QPushButton *m_reloadDemosaicBtn = nullptr;
     class QLabel *m_imageResolutionValue = nullptr;
     class QPushButton *m_useImageResBtn = nullptr;
+    class QLabel *m_exifResolutionValue = nullptr;
+    class QPushButton *m_useExifResBtn = nullptr;
     class QLabel *m_screenResolutionValue = nullptr;
     class QPushButton *m_useScreenResBtn = nullptr;
     class QLabel *m_detectedGammaValue = nullptr;
@@ -57,6 +60,10 @@ private:
     class QPushButton *m_useMirrorBtn = nullptr;
     class QLabel *m_softwareValue = nullptr;
     class QLabel *m_sensorFillFactorValue = nullptr;
+    class QLabel *m_detectedSensorFillValue = nullptr;
+    class QPushButton *m_useDetectedSensorFillBtn = nullptr;
+    class QLabel *m_sensorWidthNotice = nullptr;
+    class QCheckBox *m_assumeRotationBox = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
     class QPushButton *m_cropBtn = nullptr;
 };

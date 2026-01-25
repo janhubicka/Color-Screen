@@ -616,7 +616,7 @@ struct render_parameters
 
         /* Output adjustment.  */
         white_balance ({ 1, 1, 1 }), presaturation (1),
-        color_model (color_model_none), age {1,1,1}, dye_density {1,1,1}, temperature (5000),
+        color_model (color_model_wratten_25_58_47_spectra), age {1,1,1}, dye_density {1,1,1}, temperature (5000),
         backlight_temperature (5000),
         observer_whitepoint (/*srgb_white*/ d50_white),
         dye_balance (dye_balance_bradford), saturation (1), brightness (1),

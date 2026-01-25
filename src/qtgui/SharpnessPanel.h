@@ -49,6 +49,7 @@ private:
   void onParametersRefreshed(const ParameterState &state) override;
 
   MTFChartWidget *m_mtfChart = nullptr;
+  class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
 
   // Cached parameters for change detection (moved from private to be used in

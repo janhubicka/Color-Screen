@@ -46,6 +46,19 @@ void SharpnessPanel::setupUi() {
 
   QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
 
+  m_diffractionNotice = new QLabel();
+  m_diffractionNotice->setWordWrap(true);
+  m_diffractionNotice->setTextFormat(Qt::RichText);
+  QFont noticeFont = m_diffractionNotice->font();
+  noticeFont.setItalic(true);
+  noticeFont.setPointSize(noticeFont.pointSize() - 1);
+  m_diffractionNotice->setFont(noticeFont);
+  
+  if (m_currentGroupForm)
+      m_currentGroupForm->addRow(m_diffractionNotice);
+  else
+      m_form->addRow(m_diffractionNotice);
+
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
   m_mtfChart->setMinimumHeight(250);
@@ -142,13 +155,6 @@ void SharpnessPanel::setupUi() {
         return !s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
       });
 
-  // Add "Autodetect regular screen" button
-  addButtonParameter("", "Autodetect regular screen", 
-      [this]() { emit autodetectRequested(); },
-      [this](const ParameterState &) {
-          auto img = m_imageGetter();
-          return img && img->has_rgb();
-      });
 
   // Add "Match measured data" button (visible only if measured data exists)
   addButtonParameter("", "Match measured data", 
@@ -299,6 +305,23 @@ void SharpnessPanel::updateMTFChart() {
   } else {
     // No measured data, clear it
     m_mtfChart->setMeasuredMTF({}, {});
+  }
+
+  // Update diffraction notice
+  bool canSimulate = state.rparams.sharpen.scanner_mtf.can_simulate_difraction_p();
+  if (canSimulate) {
+      m_diffractionNotice->hide();
+  } else {
+      m_diffractionNotice->show();
+      QStringList missing;
+      const auto &mtf = state.rparams.sharpen.scanner_mtf;
+      if (mtf.pixel_pitch <= 0) missing << "<b>Sensor pixel pitch</b>";
+      if (mtf.f_stop <= 0) missing << "<b>Nominal f-stop</b>";
+      if (mtf.wavelength <= 0) missing << "<b>Wavelength</b>";
+      if (mtf.scan_dpi <= 0) missing << "<b>Resolution</b>";
+      
+      m_diffractionNotice->setText(QString("To enable diffraction simulation, please set missing data: %1.")
+                                  .arg(missing.join(", ")));
   }
 }
 

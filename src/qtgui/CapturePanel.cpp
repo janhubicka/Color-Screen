@@ -1,4 +1,5 @@
 #include "CapturePanel.h"
+#include <QCheckBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -167,6 +168,12 @@ void CapturePanel::setupUi()
         if (img) onUseRes(img->focal_plane_x_resolution);
     });
 
+    // 6b. Image resolution by EXIF (Label) + Use
+    addValueWithUseButton("Image resolution by exif", &m_exifResolutionValue, &m_useExifResBtn, [this, onUseRes]() {
+        auto img = m_imageGetter();
+        if (img) onUseRes(img->exif_xdpi);
+    });
+
     // 7. Camera model (Label)
     m_cameraModelValue = new QLabel();
     m_cameraModelValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -244,8 +251,9 @@ void CapturePanel::setupUi()
         0.0,
         [this](double v) {
             auto img = m_imageGetter();
-            if (img && img->width > 0 && v > 0) {
-                double pitch = (v * 1000.0) / img->width;
+            int divisor = (img && m_assumeRotationBox->isChecked() && img->height > 0) ? img->height : (img ? img->width : 0);
+            if (img && divisor > 0 && v > 0) {
+                double pitch = (v * 1000.0) / divisor;
                 applyChange([pitch](ParameterState &s) {
                     s.rparams.sharpen.scanner_mtf.pixel_pitch = pitch;
                 }, "Sensor width");
@@ -256,6 +264,22 @@ void CapturePanel::setupUi()
             }
         }
     );
+
+    // 13b. Rotation assumption
+    m_assumeRotationBox = new QCheckBox("Assume 90 degrees rotation");
+    m_form->addRow("", m_assumeRotationBox);
+    connect(m_assumeRotationBox, &QCheckBox::toggled, this, [this]() {
+        updateUI();
+    });
+
+    // 13c. Notice
+    m_sensorWidthNotice = new QLabel("Sensor width computation is only correct if image was not cropped or rotated before loading to Color-Screen.");
+    m_sensorWidthNotice->setWordWrap(true);
+    QFont noticeFont = m_sensorWidthNotice->font();
+    noticeFont.setItalic(true);
+    noticeFont.setPointSize(noticeFont.pointSize() - 1);
+    m_sensorWidthNotice->setFont(noticeFont);
+    m_form->addRow("", m_sensorWidthNotice);
 
     // 14. Sensor pixel pitch (Slider)
     addSliderParameter(
@@ -279,6 +303,16 @@ void CapturePanel::setupUi()
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.sensor_fill_factor = v;
         });
+
+    // 16b. Detected sensor fill (Label) + Use
+    addValueWithUseButton("Detected sensor fill factor", &m_detectedSensorFillValue, &m_useDetectedSensorFillBtn, [this]() {
+        auto img = m_imageGetter();
+        if (img && img->sensor_fill_factor > 0) {
+            applyChange([img](ParameterState &s) {
+                s.rparams.sharpen.scanner_mtf.sensor_fill_factor = img->sensor_fill_factor;
+            }, "Use detected sensor fill");
+        }
+    });
 
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
         auto img = m_imageGetter();
@@ -410,7 +444,8 @@ void CapturePanel::setupUi()
 
         // Sensor width slider update (linked)
         if (img && img->width > 0) {
-            double width_mm = (state.rparams.sharpen.scanner_mtf.pixel_pitch * img->width) / 1000.0;
+            double divisor = (m_assumeRotationBox->isChecked() && img->height > 0) ? img->height : img->width;
+            double width_mm = (state.rparams.sharpen.scanner_mtf.pixel_pitch * divisor) / 1000.0;
             // Need to update the slider without triggering onChanged to avoid feedback loops?
             // ParameterPanel::addSlider returns the container. I need the slider inside.
             QSlider *slider = sensorWidthSlider->findChild<QSlider*>();
@@ -427,6 +462,31 @@ void CapturePanel::setupUi()
                 spin->blockSignals(false);
             }
         }
+
+        // 6b. EXIF Resolution
+        bool showExifRes = img && img->exif_xdpi > 0 && img->exif_ydpi > 0;
+        if (showExifRes) {
+            if (std::abs(img->exif_xdpi - img->exif_ydpi) < 1e-6) {
+                m_exifResolutionValue->setText(QString("%1 PPI").arg(img->exif_xdpi));
+            } else {
+                m_exifResolutionValue->setText(QString("%1x%2 PPI").arg(img->exif_xdpi).arg(img->exif_ydpi));
+            }
+            m_useExifResBtn->setVisible(std::abs(img->exif_xdpi - state.rparams.sharpen.scanner_mtf.scan_dpi) > 0.1);
+        }
+        setVisibleRow(m_exifResolutionValue->parentWidget(), showExifRes);
+
+        // 16b. Detected sensor fill
+        bool showDetectedFill = img && img->sensor_fill_factor > 0;
+        if (showDetectedFill) {
+            m_detectedSensorFillValue->setText(QString::number(img->sensor_fill_factor, 'f', 3));
+            m_useDetectedSensorFillBtn->setVisible(std::abs(img->sensor_fill_factor - state.rparams.sharpen.scanner_mtf.sensor_fill_factor) > 0.001);
+        }
+        setVisibleRow(m_detectedSensorFillValue->parentWidget(), showDetectedFill);
+
+        // Rotation box / notice visibility
+        bool showRotationTools = img && (img->width > 0 || img->height > 0);
+        m_assumeRotationBox->setVisible(showRotationTools);
+        m_sensorWidthNotice->setVisible(showRotationTools);
     };
 
     m_paramUpdaters.push_back(updateInfoLabels);
@@ -459,6 +519,13 @@ void CapturePanel::setupUi()
         }
     });
     
+    addButtonParameter("Try luck", "Autodetect regular screen", 
+        [this]() { emit autodetectRequested(); },
+        [this](const ParameterState &) {
+            auto img = m_imageGetter();
+            return img && img->has_rgb();
+        });
+
     // Initial update
     updateInfoLabels(m_stateGetter());
 

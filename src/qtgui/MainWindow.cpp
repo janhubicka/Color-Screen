@@ -265,7 +265,6 @@ void MainWindow::setupUi() {
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_sharpnessPanel, &SharpnessPanel::progressFinished, this, &MainWindow::removeProgress);
-  connect(m_sharpnessPanel, &SharpnessPanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
   
   connect(m_screenPanel, &ScreenPanel::progressStarted, this, &MainWindow::addProgress);
   connect(m_screenPanel, &ScreenPanel::progressFinished, this, &MainWindow::removeProgress);
@@ -496,6 +495,7 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
   connect(m_capturePanel, &CapturePanel::flatFieldRequested, this, &MainWindow::onFlatFieldRequested);
+  connect(m_capturePanel, &CapturePanel::autodetectRequested, this, &MainWindow::onAutodetectScreen);
   setupDock(m_backlightDock, m_capturePanel,
             &CapturePanel::detachBacklightRequested,
             &CapturePanel::reattachBacklight);
@@ -1017,6 +1017,32 @@ void MainWindow::updateModeMenu() {
   updateColorCheckBoxState();
 
   m_modeComboBox->blockSignals(false);
+}
+
+QIcon MainWindow::renderScreenIcon(colorscreen::scr_type type) {
+  int w = 64;
+  int h = 64;
+  std::vector<uint8_t> buffer(w * h * 3);
+
+  colorscreen::tile_parameters tile;
+  tile.pixels = buffer.data();
+  tile.rowstride = w * 3;
+  tile.pixelbytes = 3;
+  tile.width = w;
+  tile.height = h;
+  tile.pos = {0.0, 0.0};
+  tile.step = 1.0;
+
+  colorscreen::render_parameters rparams;
+
+  bool ok = colorscreen::render_screen_tile(tile, type, rparams, 1.0, colorscreen::original_screen,
+                               nullptr);
+
+  if (ok) {
+    QImage img(buffer.data(), w, h, w * 3, QImage::Format_RGB888);
+    return QIcon(QPixmap::fromImage(img.copy()));
+  }
+  return QIcon();
 }
 
 void MainWindow::onModeChanged(int index) {
@@ -2829,19 +2855,27 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   // Always ask if detected dye differs from current
   QString currentDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[m_rparams.color_model].name);
+      colorscreen::render_parameters::color_model_properties[m_rparams.color_model].pretty_name);
   QString detectedDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[tempParams.color_model].name);
+      colorscreen::render_parameters::color_model_properties[tempParams.color_model].pretty_name);
+  QString detectedScreen = QString::fromUtf8(
+      colorscreen::scr_names[(int)result.param.type].pretty_name);
+  
+  QMessageBox msgBox(this);
+  msgBox.setWindowTitle("Screen Detection");
+  msgBox.setIconPixmap(renderScreenIcon(result.param.type).pixmap(64, 64));
   
   if (currentDye != detectedDye) {
-    QMessageBox msgBox(this);
-    msgBox.setWindowTitle("Screen Detection");
-    msgBox.setText("Screen type detected successfully.");
+    msgBox.setText(QString("Detected Screen: <b>%1</b>").arg(detectedScreen));
     msgBox.setInformativeText(QString("Change color model (Dyes) from %1 to %2?")
                               .arg(currentDye).arg(detectedDye));
     msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
     msgBox.setDefaultButton(QMessageBox::Yes);
     updateColorModel = (msgBox.exec() == QMessageBox::Yes);
+  } else {
+    msgBox.setText(QString("Detected Screen: <b>%1</b> successfully.").arg(detectedScreen));
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
   }
   
   // Create undo snapshot before making changes

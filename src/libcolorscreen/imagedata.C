@@ -163,7 +163,7 @@ private:
 image_data::image_data ()
     : data (NULL), rgbdata (NULL), icc_profile (NULL), width (0), height (0),
       maxval (0), icc_profile_size (0), id (lru_caches::get ()), xdpi (0),
-      ydpi (0), stitch (NULL), primary_red{ 0.6400, 0.3300, 0.2126 },
+      ydpi (0), exif_xdpi (0), exif_ydpi (0), stitch (NULL), primary_red{ 0.6400, 0.3300, 0.2126 },
       primary_green{ 0.3000, 0.6000, 0.7152 },
       primary_blue{ 0.1500, 0.0600, 0.0722 },
       whitepoint{ 0.312700492, 0.329000939, 1.0 }, backlight_corr (nullptr), gamma (-2),
@@ -1200,6 +1200,56 @@ image_data::load_part (int *permille, const char **error,
       /* If color profile is available, parse it.  */
       if (icc_profile)
         parse_icc_profile (progress);
+      //printf ("%s %i %f %f\n", camera_model.c_str (), camera_model == "LS-9000", xdpi, ydpi);
+      /* Set sensor size of Nikon camera. see if DPI looks sane.
+         https://www.closeuphotography.com/scanner-nikkor-ed-lens
+	 Scanner-Nikkor ED 100mm f/2.8 lens
+		Part number: 9000ED: TB100-078, 8000ED: TB100-032
+		Type: multi format film reproduction scanner lens
+		Magnification range: 0.85x - 0.9x / 1.1x - 1.15x reverse, performs best in the range of 1.1 to 1.15x.
+		Wavelength range: chromatic aberration strictly controlled from 435.84 nm (blue) to 852.11 nm (infrared)
+		Reference wavelength: 546.07nm (e-line, green)
+		Distortion: 0%  
+		Focal length: 100mm
+		Lens configuration: 14 elements in 6 groups + 2 protective elements including 6 low dispersion glass elements
+		Fixed aperture: f/2.8 measured f/3.1 forward and f/3 in reverse on the 9000 type and f/3.0 and f/2.9 on the 8000 lens.
+		Reference magnification: 0.8664x (Nikon spec)
+		Working distance: 140mm at 1X
+		Coverage: 56mm ⌀ image circle 
+		Lens mount: none
+		Accessory thread: none
+		Source: Lens made in Japan
+		Design includes sensor cover glass: Yes, CCD sensor coverglass
+	  Models: Super COOLSCAN 8000 ED, LS-8000 ED, 9000 ED, LS-9000 ED 
+		Type: Multi-format, 35mm, 16mm, 120/220 film scanner 
+		System: Fixed optical system, movable media plane single-pass optical scanning system 
+		Light type: R / G / B / IR four-color LED light source (LED is the cool in Coolscan)
+		Planned production volume: 1,000 units per month
+		CCD sensor: Sony linear CCD ILX133A 28 pin CerDIP
+		CCD type: Tri-linear 3 x 10,000 pixel monochrome 
+		CCD width: 61.2mm (58mm active)
+		Maximum scan area: 56.9 x 83.7 max area for the 9000, 63.5mm x 88mm for the 8000.
+		Manufacturers optical resolution: 4000 dpi 
+		CCD maximum resolution: TBC
+		Maximum optical resolution: TBC
+		Production 8000 ED: 2001-2003
+		Production 9000 ED: 2003-2010 
+		Scanner street price 8000 ED: $2900 USD
+		Full retail price 8000 ED: $2900
+		Full retail price 9000 ED:$1900
+		Country of origin: made in Japan
+		Manufacturer: Nikon Japan
+	       	*/
+      if ((camera_model == "LS-9000" || camera_model == "LS-8000") && xdpi > 200 && xdpi <= 4000 && xdpi == ydpi)
+	{
+	  pixel_pitch = 5.800000 * 4000 / xdpi;
+	  /* It seems that fill factor at 4000 DPI is approximately 2 at least in vertical resolution.
+	     Lower resolutions can be either downscaled (which would make fill factor to converge to 1)
+	     or sampled which makes it smaller.  Assume sampling.  */
+	  sensor_fill_factor = 4 * ((xdpi * xdpi) / (4000.0 * 4000.0));
+	  f_stop = 2.8;
+	  //printf ("Nikon scanner detected\n");
+	}
     }
   return ret;
 }
@@ -1561,11 +1611,11 @@ image_data::load_exif (const char *name)
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.XResolution"));
       if (it != exifData.end () && it->count ())
-        xdpi = it->toRational ().first / (double)it->toRational ().second;
+        exif_xdpi = it->toRational ().first / (double)it->toRational ().second;
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.YResolution"));
       if (it != exifData.end () && it->count ())
-        ydpi = it->toRational ().first / (double)it->toRational ().second;
+        exif_ydpi = it->toRational ().first / (double)it->toRational ().second;
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.ResolutionUnit"));
       if (it != exifData.end () && it->count ())
@@ -1577,8 +1627,8 @@ image_data::load_exif (const char *name)
 #endif
           if (unit == 3) // Centimeter
             {
-              xdpi *= 2.54;
-              ydpi *= 2.54;
+              exif_xdpi *= 2.54;
+              exif_ydpi *= 2.54;
             }
         }
 

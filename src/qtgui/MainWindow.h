@@ -118,6 +118,7 @@ private:
   void pivotViewport(int oldRot, int newRot);
   void createToolbar();  // New helper
   void updateModeMenu(); // Updates combo box items
+  QIcon renderScreenIcon(colorscreen::scr_type type);
 
   // Window state management
   void saveWindowState();
