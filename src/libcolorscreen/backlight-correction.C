@@ -438,26 +438,24 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
   int rchannel = m_channel_enabled[0] ? 0 : 3;
   int gchannel = m_channel_enabled[1] ? 1 : m_channel_enabled[0] ? 0 : 3;
   int bchannel = m_channel_enabled[2] ? 2 : m_channel_enabled[0] ? 0 : 3;
-  assert (m_channel_enabled[rchannel] && m_channel_enabled[gchannel]
-	  && m_channel_enabled[bchannel]);
+  //assert (m_channel_enabled[rchannel] && m_channel_enabled[gchannel]
+	  //&& m_channel_enabled[bchannel]);
 
   luminosity_t rmin = 1, rmax = 0, gmin = 1, gmax = 0, bmin = 1, bmax = 0;
 
   for (int y = ystart; y < floor (yend); y++)
-    for (int x = xstart; x < floor (yend); x++)
+    for (int x = xstart; x < floor (xend); x++)
       {
 	rmin = std::min (rmin, m_luminosities[y * m_width + x].lum[rchannel]);
 	rmax = std::max (rmax, m_luminosities[y * m_width + x].lum[rchannel]);
-	gmin = std::min (gmin, m_luminosities[y * m_width + x].lum[rchannel]);
-	gmax = std::max (gmax, m_luminosities[y * m_width + x].lum[rchannel]);
-	bmin = std::min (bmin, m_luminosities[y * m_width + x].lum[rchannel]);
-	bmax = std::max (bmax, m_luminosities[y * m_width + x].lum[rchannel]);
+	gmin = std::min (gmin, m_luminosities[y * m_width + x].lum[gchannel]);
+	gmax = std::max (gmax, m_luminosities[y * m_width + x].lum[gchannel]);
+	bmin = std::min (bmin, m_luminosities[y * m_width + x].lum[bchannel]);
+	bmax = std::max (bmax, m_luminosities[y * m_width + x].lum[bchannel]);
       }
+  assert (fabs (xend - xstart - xstep * tile.width) <  2);
+  
 
-  // save (stdout);
-  // printf ("%i %i %i - %i %i - %f %f %f %f, chanels %i %i %i\n", tile.width,
-  // tile.height, tile.rowstride, m_width, m_height, xstart, xstep,
-  // ystart,ystep, rchannel, gchannel, bchannel);
 #pragma omp parallel for default(none) collapse (2) shared(tile,xstep,ystep,xstart,ystart,rmin,rmax,gmin,gmax,bmin,bmax,rchannel,gchannel,bchannel)
   for (int y = 0; y < tile.height; y++)
     for (int x = 0; x < tile.width; x++)
@@ -469,7 +467,7 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
 	  luminosity_t e01 =
 	    m_luminosities[yy * m_width + xx + 1].lum[channel];
 	  luminosity_t e10 =
-	    m_luminosities[(yy + 1) * m_width + xx + 1].lum[channel];
+	    m_luminosities[(yy + 1) * m_width + xx].lum[channel];
 	  luminosity_t e11 =
 	    m_luminosities[(yy + 1) * m_width + xx + 1].lum[channel];
 	  return (((e00 * (1 - rx) + e01 * rx) * (1 - ry) +
@@ -478,13 +476,10 @@ backlight_correction_parameters::render_preview (tile_parameters & tile,
 	};
 	int xx;
 	int yy;
-	coord_t rx = my_modf (xstart + x * xstep, &xx);
-	coord_t ry = my_modf (ystart + y * ystep, &yy);
+	coord_t rx = my_modf (xstart + (x + 0.5) * xstep, &xx);
+	coord_t ry = my_modf (ystart + (y + 0.5) * ystep, &yy);
 	xx = std::clamp (xx, 0, m_width - 2);
 	yy = std::clamp (yy, 0, m_height - 2);
-	// if (y == 0)
-	// printf ("[%i %i %i] %f", rchannel, xx,yy, /*sample (rchannel, xx,
-	// yy, rx, ry)*/m_luminosities[rchannel].lum[yy * m_width + xx]);
 	tile.pixels[y * tile.rowstride + 3 * x]
 	  = invert_gamma (sample (rchannel, xx, yy, rx, ry, rmin, rmax), -1)
 	  * 255 + 0.5;

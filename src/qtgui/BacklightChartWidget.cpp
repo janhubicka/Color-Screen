@@ -112,7 +112,7 @@ void BacklightChartWidget::updatePreview()
     tile.width = previewWidth;
     tile.height = previewHeight;
     tile.pixelbytes = 3;
-    tile.rowstride = previewWidth * 3;
+    tile.rowstride = img.bytesPerLine();
     tile.pixels = img.bits();
 
     colorscreen::int_image_area scanArea = m_scanArea;
