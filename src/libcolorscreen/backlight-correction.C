@@ -416,4 +416,10 @@ backlight_correction::backlight_correction (
 	m_weights[x].sub[i] = m_params.m_luminosities[x].sub[i];
       }
 }
+
+void
+render_preview (tile_parameters &tile, const int_image_area &scan_area, luminosity_t black)
+{
+  //coord_t xstep = width;
+}
 }

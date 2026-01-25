@@ -439,6 +439,7 @@ void CapturePanel::setupUi()
       nullptr, true);
 #endif
     
+    addButtonParameter("Field leveling", "Set reference", [this]() { emit fieldLevelingRequested(); });
     addButtonParameter("Crop image", "Change crop", [this]() { emit cropRequested(); });
     
     // Initial update

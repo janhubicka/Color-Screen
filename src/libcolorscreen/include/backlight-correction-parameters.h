@@ -7,6 +7,7 @@ namespace colorscreen
 class backlight_correction;
 class image_data;
 struct memory_buffer;
+struct tile_parameters;
 class backlight_correction_parameters
 {
   struct entry
@@ -63,6 +64,8 @@ public:
   static backlight_correction_parameters *
   load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   friend backlight_correction;
+
+  DLL_PUBLIC void render_preview (tile_parameters &tile, const int_image_area &scan_area, luminosity_t black) const
 
   /* Unique id of the image (used for caching).  */
   uint64_t id;

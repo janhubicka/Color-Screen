@@ -25,6 +25,7 @@ public:
 
 signals:
     void cropRequested();
+  void fieldLevelingRequested();
 
 private:
     void setupUi();

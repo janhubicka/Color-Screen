@@ -228,5 +228,75 @@ point_t::modf (int_point_t *val)
     *val = {(int64_t)xx, (int64_t)yy};
   return ret;
 }
+
+/* Hold coordinates of a rectangular tile within a bigger image.  */
+template<typename T>
+class image_area_base
+{
+public:
+  
+  /* Top left corner */
+  T x, y;
+  /* Size */
+  T width, height;
+  constexpr image_area_base ()
+  : x (0), y (0), width (0), height (0)
+  { }
+  constexpr image_area_base (T nx, T ny, T nwidth, T nheight)
+  : x (nx), y (ny), width (nwidth), height (nheight)
+  { }
+
+  bool
+  empty_p ()
+  {
+    return width <= 0 || height <= 0;
+  }
+
+  image_area_base<T>
+  intersect (image_area_base other) const
+  {
+    image_area_base<T> ret (x, y, width, height);
+    if (x < other.x)
+      {
+	ret.width -= other.x - x;
+	ret.x = other.x;
+      }
+    if (y < other.y)
+      {
+	ret.height -= other.y - y;
+	ret.y = other.y;
+      }
+    if (ret.x + ret.width > other.x + other.width)
+      ret.width = other.x + other.width - x;
+    if (ret.y + ret.height > other.y + other.height)
+      ret.height = other.y + other.height - y;
+    ret.width = std::max (width, (T)0);
+    ret.height = std::max (height, (T)0);
+    return ret;
+  }
+  bool
+  operator== (const image_area_base &other) const
+  {
+    return x == other.x && y == other.y && width == other.width && height == other.height;
+  }
+};
+/* Optinally hold area of an image. */
+template<typename T>
+class optional_image_area_base : public image_area_base<T>
+{
+public:
+  bool set;
+  constexpr optional_image_area_base ()
+  : set (false)
+  { }
+  bool
+  operator== (const optional_image_area_base &other) const
+  {
+    return (image_area_base<T>::operator==(other) && set == other.set);
+  }
+};
+
+typedef image_area_base<int> int_image_area;
+typedef optional_image_area_base<int> int_optional_image_area;
 }
 #endif

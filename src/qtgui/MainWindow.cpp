@@ -437,6 +437,7 @@ void MainWindow::setupUi() {
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
+  connect(m_capturePanel, &CapturePanel::fieldLevelingRequested, this, &MainWindow::onFieldLevelingRequested);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
@@ -2868,4 +2869,56 @@ void MainWindow::onCoordinateSystemChanged() {
                                           &m_renderTypeParams, &m_solverParams);
       }
   }
+}
+void MainWindow::onFieldLevelingRequested() {
+  QString whiteFile = QFileDialog::getOpenFileName(this, "Choose White Reference", m_currentImageFile,
+                                                    "Images (*.tiff *.tif *.jpg *.jpeg *.png *.dng *.arw *.cr2 *.nef *.orf *.raf);;All files (*.*)");
+  if (whiteFile.isEmpty()) return;
+
+  QString blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference (Optional)", m_currentImageFile,
+                                                    "Images (*.tiff *.tif *.jpg *.jpeg *.png *.dng *.arw *.cr2 *.nef *.orf *.raf);;All files (*.*)");
+  
+  // Create progress info
+  auto progress = std::make_shared<colorscreen::progress_info>();
+  progress->set_task("Field leveling analysis", 100);
+  addProgress(progress);
+
+  // Create worker and thread
+  FieldLevelingWorker *worker = new FieldLevelingWorker(
+      whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
+  QThread *thread = new QThread();
+  worker->moveToThread(thread);
+
+  // Connect signals
+  connect(thread, &QThread::started, worker, &FieldLevelingWorker::run);
+  connect(worker, &FieldLevelingWorker::finished, thread, &QThread::quit);
+  connect(worker, &FieldLevelingWorker::finished, worker, &QObject::deleteLater);
+  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+  // Connect results
+  connect(worker, &FieldLevelingWorker::finished, this,
+          [this, progress](bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+            onFieldLevelingFinished(success, result);
+            removeProgress(progress);
+          });
+
+  m_fieldLevelingThread = thread;
+  thread->start();
+}
+
+void MainWindow::onFieldLevelingFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+  m_fieldLevelingThread = nullptr;
+
+  if (!success || !result) {
+    QMessageBox::warning(this, "Field Leveling", "Field leveling analysis failed.");
+    return;
+  }
+
+  // Update parameters with undo support
+  ParameterState newState = getCurrentState();
+  newState.rparams.backlight_correction = result;
+  
+  changeParameters(newState, "Field leveling");
+  
+  QMessageBox::information(this, "Field Leveling", "Field leveling analysis successful.");
 }
