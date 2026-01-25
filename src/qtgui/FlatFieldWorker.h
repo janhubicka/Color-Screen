@@ -7,10 +7,10 @@
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/backlight-correction-parameters.h"
 
-class FieldLevelingWorker : public QObject {
+class FlatFieldWorker : public QObject {
   Q_OBJECT
 public:
-  FieldLevelingWorker(QString whiteFile, QString blackFile,
+  FlatFieldWorker(QString whiteFile, QString blackFile,
                       colorscreen::luminosity_t gamma,
                       colorscreen::image_data::demosaicing_t demosaic,
                       std::shared_ptr<colorscreen::progress_info> progress);

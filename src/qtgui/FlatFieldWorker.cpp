@@ -1,8 +1,8 @@
-#include "FieldLevelingWorker.h"
+#include "FlatFieldWorker.h"
 #include <QFile>
 #include <QDebug>
 
-FieldLevelingWorker::FieldLevelingWorker(
+FlatFieldWorker::FlatFieldWorker(
     QString whiteFile, QString blackFile,
     colorscreen::luminosity_t gamma,
     colorscreen::image_data::demosaicing_t demosaic,
@@ -11,7 +11,7 @@ FieldLevelingWorker::FieldLevelingWorker(
       m_gamma(gamma), m_demosaic(demosaic), m_progress(progress) {
 }
 
-void FieldLevelingWorker::run() {
+void FlatFieldWorker::run() {
   const char *error = nullptr;
   
   if (m_progress) {
@@ -55,7 +55,7 @@ void FieldLevelingWorker::run() {
   }
 
   if (m_progress) {
-    m_progress->set_task("Analyzing field leveling", 1);
+    m_progress->set_task("Analyzing flat field", 1);
   }
 
   colorscreen::backlight_correction_parameters *cor = 

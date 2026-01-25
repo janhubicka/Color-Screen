@@ -442,7 +442,7 @@ void MainWindow::setupUi() {
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
-  connect(m_capturePanel, &CapturePanel::fieldLevelingRequested, this, &MainWindow::onFieldLevelingRequested);
+  connect(m_capturePanel, &CapturePanel::flatFieldRequested, this, &MainWindow::onFlatFieldRequested);
   setupDock(m_backlightDock, m_capturePanel,
             &CapturePanel::detachBacklightRequested,
             &CapturePanel::reattachBacklight);
@@ -2884,7 +2884,7 @@ void MainWindow::onCoordinateSystemChanged() {
       }
   }
 }
-void MainWindow::onFieldLevelingRequested() {
+void MainWindow::onFlatFieldRequested() {
   QString filters = "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
                     "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
                     "(*)";
@@ -2892,44 +2892,44 @@ void MainWindow::onFieldLevelingRequested() {
   if (whiteFile.isEmpty()) return;
 
   QString blackFile;
-  if (QMessageBox::question(this, "Field Leveling", "Do you want to provide a black reference image (optional)?",
+  if (QMessageBox::question(this, "Flat Field", "Do you want to provide a black reference image (optional)?",
                             QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
     blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference", m_currentImageFile, filters);
   }
   
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Field leveling analysis", 100);
+  progress->set_task("Flat field analysis", 100);
   addProgress(progress);
 
   // Create worker and thread
-  FieldLevelingWorker *worker = new FieldLevelingWorker(
+  FlatFieldWorker *worker = new FlatFieldWorker(
       whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
   QThread *thread = new QThread();
   worker->moveToThread(thread);
 
   // Connect signals
-  connect(thread, &QThread::started, worker, &FieldLevelingWorker::run);
-  connect(worker, &FieldLevelingWorker::finished, thread, &QThread::quit);
-  connect(worker, &FieldLevelingWorker::finished, worker, &QObject::deleteLater);
+  connect(thread, &QThread::started, worker, &FlatFieldWorker::run);
+  connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit);
+  connect(worker, &FlatFieldWorker::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
   // Connect results
-  connect(worker, &FieldLevelingWorker::finished, this,
+  connect(worker, &FlatFieldWorker::finished, this,
           [this, progress](bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
-            onFieldLevelingFinished(success, result);
+            onFlatFieldFinished(success, result);
             removeProgress(progress);
           });
 
-  m_fieldLevelingThread = thread;
+  m_flatFieldThread = thread;
   thread->start();
 }
 
-void MainWindow::onFieldLevelingFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
-  m_fieldLevelingThread = nullptr;
+void MainWindow::onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
+  m_flatFieldThread = nullptr;
 
   if (!success || !result) {
-    QMessageBox::warning(this, "Field Leveling", "Field leveling analysis failed.");
+    QMessageBox::warning(this, "Flat Field", "Flat field analysis failed.");
     return;
   }
 
@@ -2937,7 +2937,7 @@ void MainWindow::onFieldLevelingFinished(bool success, std::shared_ptr<colorscre
   ParameterState newState = getCurrentState();
   newState.rparams.backlight_correction = result;
   
-  changeParameters(newState, "Field leveling");
+  changeParameters(newState, "Flat field");
   
-  QMessageBox::information(this, "Field Leveling", "Field leveling analysis successful.");
+  QMessageBox::information(this, "Flat Field", "Flat field analysis successful.");
 }

@@ -422,21 +422,22 @@ void
 backlight_correction_parameters::render_preview (tile_parameters &tile, int scan_width, int scan_height, const int_image_area &scan_area, luminosity_t black) const
 {
   coord_t scan_portion_x = scan_area.width / (coord_t)scan_width;
-  coord_t xstep = m_width / (tile.width * scan_portion_x);
+  coord_t xstep = m_width * scan_portion_x / (tile.width);
 
   coord_t xstart = m_width * scan_area.x / scan_width;
   coord_t ystart = m_height * scan_area.y / scan_height;
   coord_t scan_portion_y = scan_area.width / (coord_t)scan_height;
-  coord_t ystep = m_height / (tile.height * scan_portion_y);
+  coord_t ystep = m_height * scan_portion_y / (tile.height);
   int rchannel = m_channel_enabled[0] ? 0 : 3;
   int gchannel = m_channel_enabled[1] ? 1 : m_channel_enabled[0] ? 0 : 3;
   int bchannel = m_channel_enabled[2] ? 2 : m_channel_enabled[0] ? 0 : 3;
+  assert (m_channel_enabled[rchannel] && m_channel_enabled[gchannel]  && m_channel_enabled[bchannel] );
 
   auto sample = [&](int channel, int xx, int yy, coord_t rx, coord_t ry)
   {
-    return m_luminosities[channel].lum[yy * m_width + xx] - m_luminosities[channel].sub[yy * m_width + xx];
+    return m_luminosities[0].lum[yy * m_width + xx] - black/* - m_luminosities[channel].sub[yy * m_width + xx]*/;
   };
-  printf ("%i %i %i - %i %i - %f %f %f %f\n", tile.width, tile.height, tile.rowstride, m_width, m_height, xstart, xstep, ystart,ystep);
+  printf ("%i %i %i - %i %i - %f %f %f %f, chanels %i %i %i\n", tile.width, tile.height, tile.rowstride, m_width, m_height, xstart, xstep, ystart,ystep, rchannel, gchannel, bchannel);
   for (int y = 0; y < tile.height; y++)
     for (int x = 0; x < tile.width; x++)
       {
@@ -447,7 +448,7 @@ backlight_correction_parameters::render_preview (tile_parameters &tile, int scan
 	xx = std::clamp (xx, 0, m_width - 1);
 	yy = std::clamp (yy, 0, m_height - 1);
 	if (y == 0)
-		printf ("%i %f", xx, sample (rchannel, xx, yy, rx, ry));
+		printf ("[%i %i %i] %f", rchannel, xx,yy, /*sample (rchannel, xx, yy, rx, ry)*/m_luminosities[rchannel].lum[yy * m_width + xx]);
 	tile.pixels[y * tile.rowstride + 3 * x] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;
 	tile.pixels[y * tile.rowstride + 3 * x + 1] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;
 	tile.pixels[y * tile.rowstride + 3 * x + 2] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;

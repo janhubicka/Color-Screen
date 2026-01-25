@@ -31,7 +31,7 @@ class QPushButton;
 class QTimer;
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
-#include "FieldLevelingWorker.h"
+#include "FlatFieldWorker.h"
 #include "CapturePanel.h"
 #include "ColorPanel.h"
 #include "ParameterState.h"
@@ -228,9 +228,9 @@ private slots:
   void onOptimizeCoordinates();
   void onCoordinateSystemChanged();
   void onAutodetectScreen();
-  void onFieldLevelingRequested();
+  void onFlatFieldRequested();
   void onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
-  void onFieldLevelingFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result);
+  void onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result);
   void onMirrorHorizontally(bool checked);
 
   // Helper to update color checkbox state and visibility
@@ -312,7 +312,7 @@ private:
   
   // Detect Screen Worker
   QThread *m_detectScreenThread = nullptr;
-  QThread *m_fieldLevelingThread = nullptr;
+  QThread *m_flatFieldThread = nullptr;
   std::shared_ptr<colorscreen::mesh> m_detectedMesh; // Store mesh from autodetection
   
   // Solver Queue

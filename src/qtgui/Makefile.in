@@ -128,7 +128,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-GeometryPanel.$(OBJEXT) \
 	colorscreen_qt-GeometrySolverWorker.$(OBJEXT) \
 	colorscreen_qt-DetectScreenWorker.$(OBJEXT) \
-	colorscreen_qt-FieldLevelingWorker.$(OBJEXT) \
+	colorscreen_qt-FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-FinetuneWorker.$(OBJEXT) \
 	colorscreen_qt-WorkerBase.$(OBJEXT) \
 	colorscreen_qt-ColorPanel.$(OBJEXT) \
@@ -155,7 +155,7 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_GeometryPanel.$(OBJEXT) \
 	colorscreen_qt-moc_GeometrySolverWorker.$(OBJEXT) \
 	colorscreen_qt-moc_DetectScreenWorker.$(OBJEXT) \
-	colorscreen_qt-moc_FieldLevelingWorker.$(OBJEXT) \
+	colorscreen_qt-moc_FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FinetuneWorker.$(OBJEXT) \
 	colorscreen_qt-moc_WorkerBase.$(OBJEXT) \
 	colorscreen_qt-moc_ColorPanel.$(OBJEXT) \
@@ -207,8 +207,8 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po \
 	./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po \
-	./$(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
@@ -235,8 +235,8 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po \
@@ -463,7 +463,7 @@ colorscreen_qt_SOURCES = \
     GeometryPanel.cpp \
     GeometrySolverWorker.cpp \
     DetectScreenWorker.cpp \
-    FieldLevelingWorker.cpp \
+    FlatFieldWorker.cpp \
     FinetuneWorker.cpp \
     WorkerBase.cpp \
     ColorPanel.cpp \
@@ -495,7 +495,7 @@ MOC_SOURCES = \
     moc_GeometryPanel.cpp \
     moc_GeometrySolverWorker.cpp \
     moc_DetectScreenWorker.cpp \
-    moc_FieldLevelingWorker.cpp \
+    moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \
     moc_WorkerBase.cpp \
     moc_ColorPanel.cpp \
@@ -509,7 +509,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FieldLevelingWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -621,8 +621,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
@@ -649,8 +649,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po@am__quote@ # am--include-marker
@@ -911,19 +911,19 @@ colorscreen_qt-DetectScreenWorker.obj: DetectScreenWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-DetectScreenWorker.obj `if test -f 'DetectScreenWorker.cpp'; then $(CYGPATH_W) 'DetectScreenWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/DetectScreenWorker.cpp'; fi`
 
-colorscreen_qt-FieldLevelingWorker.o: FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FieldLevelingWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Tpo -c -o colorscreen_qt-FieldLevelingWorker.o `test -f 'FieldLevelingWorker.cpp' || echo '$(srcdir)/'`FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Tpo $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FieldLevelingWorker.cpp' object='colorscreen_qt-FieldLevelingWorker.o' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-FlatFieldWorker.o: FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FlatFieldWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Tpo -c -o colorscreen_qt-FlatFieldWorker.o `test -f 'FlatFieldWorker.cpp' || echo '$(srcdir)/'`FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FlatFieldWorker.cpp' object='colorscreen_qt-FlatFieldWorker.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FieldLevelingWorker.o `test -f 'FieldLevelingWorker.cpp' || echo '$(srcdir)/'`FieldLevelingWorker.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FlatFieldWorker.o `test -f 'FlatFieldWorker.cpp' || echo '$(srcdir)/'`FlatFieldWorker.cpp
 
-colorscreen_qt-FieldLevelingWorker.obj: FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FieldLevelingWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Tpo -c -o colorscreen_qt-FieldLevelingWorker.obj `if test -f 'FieldLevelingWorker.cpp'; then $(CYGPATH_W) 'FieldLevelingWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FieldLevelingWorker.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Tpo $(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FieldLevelingWorker.cpp' object='colorscreen_qt-FieldLevelingWorker.obj' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-FlatFieldWorker.obj: FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FlatFieldWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Tpo -c -o colorscreen_qt-FlatFieldWorker.obj `if test -f 'FlatFieldWorker.cpp'; then $(CYGPATH_W) 'FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FlatFieldWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FlatFieldWorker.cpp' object='colorscreen_qt-FlatFieldWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FieldLevelingWorker.obj `if test -f 'FieldLevelingWorker.cpp'; then $(CYGPATH_W) 'FieldLevelingWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FieldLevelingWorker.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FlatFieldWorker.obj `if test -f 'FlatFieldWorker.cpp'; then $(CYGPATH_W) 'FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/FlatFieldWorker.cpp'; fi`
 
 colorscreen_qt-FinetuneWorker.o: FinetuneWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FinetuneWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FinetuneWorker.Tpo -c -o colorscreen_qt-FinetuneWorker.o `test -f 'FinetuneWorker.cpp' || echo '$(srcdir)/'`FinetuneWorker.cpp
@@ -1289,19 +1289,19 @@ colorscreen_qt-moc_DetectScreenWorker.obj: moc_DetectScreenWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_DetectScreenWorker.obj `if test -f 'moc_DetectScreenWorker.cpp'; then $(CYGPATH_W) 'moc_DetectScreenWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_DetectScreenWorker.cpp'; fi`
 
-colorscreen_qt-moc_FieldLevelingWorker.o: moc_FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FieldLevelingWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Tpo -c -o colorscreen_qt-moc_FieldLevelingWorker.o `test -f 'moc_FieldLevelingWorker.cpp' || echo '$(srcdir)/'`moc_FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FieldLevelingWorker.cpp' object='colorscreen_qt-moc_FieldLevelingWorker.o' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-moc_FlatFieldWorker.o: moc_FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FlatFieldWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo -c -o colorscreen_qt-moc_FlatFieldWorker.o `test -f 'moc_FlatFieldWorker.cpp' || echo '$(srcdir)/'`moc_FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FlatFieldWorker.cpp' object='colorscreen_qt-moc_FlatFieldWorker.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FieldLevelingWorker.o `test -f 'moc_FieldLevelingWorker.cpp' || echo '$(srcdir)/'`moc_FieldLevelingWorker.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FlatFieldWorker.o `test -f 'moc_FlatFieldWorker.cpp' || echo '$(srcdir)/'`moc_FlatFieldWorker.cpp
 
-colorscreen_qt-moc_FieldLevelingWorker.obj: moc_FieldLevelingWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FieldLevelingWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Tpo -c -o colorscreen_qt-moc_FieldLevelingWorker.obj `if test -f 'moc_FieldLevelingWorker.cpp'; then $(CYGPATH_W) 'moc_FieldLevelingWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FieldLevelingWorker.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FieldLevelingWorker.cpp' object='colorscreen_qt-moc_FieldLevelingWorker.obj' libtool=no @AMDEPBACKSLASH@
+colorscreen_qt-moc_FlatFieldWorker.obj: moc_FlatFieldWorker.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FlatFieldWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo -c -o colorscreen_qt-moc_FlatFieldWorker.obj `if test -f 'moc_FlatFieldWorker.cpp'; then $(CYGPATH_W) 'moc_FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FlatFieldWorker.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FlatFieldWorker.cpp' object='colorscreen_qt-moc_FlatFieldWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FieldLevelingWorker.obj `if test -f 'moc_FieldLevelingWorker.cpp'; then $(CYGPATH_W) 'moc_FieldLevelingWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FieldLevelingWorker.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FlatFieldWorker.obj `if test -f 'moc_FlatFieldWorker.cpp'; then $(CYGPATH_W) 'moc_FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FlatFieldWorker.cpp'; fi`
 
 colorscreen_qt-moc_FinetuneWorker.o: moc_FinetuneWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Tpo -c -o colorscreen_qt-moc_FinetuneWorker.o `test -f 'moc_FinetuneWorker.cpp' || echo '$(srcdir)/'`moc_FinetuneWorker.cpp
@@ -1626,8 +1626,8 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
@@ -1654,8 +1654,8 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po
@@ -1727,8 +1727,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DetectScreenWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-FieldLevelingWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FinetuneWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
@@ -1755,8 +1755,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DeformationChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_DetectScreenWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FieldLevelingWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ImageWidget.Po

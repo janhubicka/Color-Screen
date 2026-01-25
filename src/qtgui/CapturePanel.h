@@ -25,7 +25,7 @@ public:
 
 signals:
     void cropRequested();
-  void fieldLevelingRequested();
+  void flatFieldRequested();
   void detachBacklightRequested(QWidget *w);
 
 public:

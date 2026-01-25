@@ -440,7 +440,7 @@ void CapturePanel::setupUi()
       nullptr, true);
 #endif
     
-    addButtonParameter("Field leveling", "Set reference", [this]() { emit fieldLevelingRequested(); });
+    addButtonParameter("Flat field", "Set reference", [this]() { emit flatFieldRequested(); });
     
     m_backlightWidget = new BacklightChartWidget();
     QWidget *backlightSection = createDetachableSection("Backlight", m_backlightWidget, [this]() {
