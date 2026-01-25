@@ -4,6 +4,7 @@
 #include <chrono>
 #include <atomic>
 #include <memory>
+#include <condition_variable>
 #include <include/progress-info.h>
 namespace colorscreen
 {
@@ -28,7 +29,36 @@ extern class lru_caches lru_caches;
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
    get_new is a function computing T based on P.  It is expected to
-   allocate memory via new and lru_cache will eventually delete it.  */
+   allocate memory via new and lru_cache will eventually delete it.
+
+   Synchronization Model:
+   The cache uses a combination of a global lock (std::timed_mutex) and per-entry
+   state ("computing" flag) to ensure thread-safety while maximizing concurrency.
+
+   1. Lock Granularity: The global "lock" protects the integrity of the linked list
+      ("entries") and metadata (nuses, last_used, id).
+
+   2. Non-blocking Computation: To prevent the cache from stalling the entire
+      application during a long "get_new" call, the implementation:
+        a) Identifies/allocates the target hit/miss while locked.
+        b) Sets "computing = true" on the entry.
+        c) Unlocks the global lock.
+        d) Executes "get_new" concurrently.
+        e) Re-locks to store the result and unset "computing".
+      Other threads can freely access, add, or release independent entries
+      while "get_new" is running.
+
+   3. Race Condition Prevention:
+        - Redundant Computation: If a second thread requests the same parameters
+          while an entry is already marked "computing", it waits on a
+          condition variable ("cond") until the first thread finishes.
+          It does NOT start a second "get_new" call.
+        - Premature Reuse: The "computing" flag ensures that "prune()" or lookup
+          logic for "longest_unused" will skip entries currently being generated
+          or updated out-of-lock.
+        - Task Cancellation: All wait loops (both for the global lock and the
+          condition variable) periodically wake up (333ms) to check if the
+          caller has requested task cancellation via the "progress" object.  */
 template <typename P, typename T, typename TP,
           TP get_new (P &, progress_info *progress), int base_cache_size>
 class lru_cache
@@ -44,7 +74,7 @@ public:
     cache_entry *next;
     uint64_t id;
     uint64_t last_used;
-    int nuses;
+    int nuses; bool computing = false;
   } *entries;
 
   lru_cache (const char *n)
@@ -110,6 +140,15 @@ public:
       {
         if (p == e->params)
           {
+            while (e->computing)
+              {
+                if (cond.wait_for (guard, std::chrono::milliseconds (333))
+                    == std::cv_status::timeout)
+                  {
+                    if (progress && progress->cancel_requested ())
+                      return NULL;
+                  }
+              }
             e->last_used = time;
             e->nuses++;
             if (verbose)
@@ -120,7 +159,7 @@ public:
               *id = e->id;
             return ret;
           }
-        if (!e->nuses
+        if (!e->nuses && !e->computing
             && (!longest_unused || longest_unused->last_used < e->last_used))
           longest_unused = e;
         size++;
@@ -146,10 +185,19 @@ public:
         entries = e;
       }
     e->params = p;
-    e->val = std::unique_ptr<T> (get_new (e->params, progress));
+    e->computing = true;
     e->nuses = 1;
     e->id = time;
     e->last_used = time;
+    
+    guard.unlock ();
+    std::unique_ptr<T> val(get_new (e->params, progress));
+    guard.lock ();
+
+    e->val = std::move(val);
+    e->computing = false;
+    cond.notify_all ();
+
     TP ret = e->val.get ();
     if (id)
       *id = e->id;
@@ -189,14 +237,16 @@ public:
 
 private:
   int cache_size;
-  std::timed_mutex lock;
+  std::timed_mutex lock; std::condition_variable_any cond;
   const char *name;
 };
 
-/* LRU cache used keep various data between invocations of renderers.
+/* LRU tile cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
    get_new is a function computing T based on P.  It is expected to
-   allocate memory via new and lru_cache will eventually delete it.  */
+   allocate memory via new and lru_cache will eventually delete it.  
+
+   The synchronization model and race condition prevention is identical to lru_cache class. */
 template <typename P, typename T, typename TP,
           TP get_new (P &, int xshift, int yshift, int width, int height,
                       progress_info *progress),
@@ -215,7 +265,7 @@ public:
     int xshift, yshift, width, height;
     uint64_t id;
     uint64_t last_used;
-    int nuses;
+    int nuses; bool computing = false;
   } *entries;
 
   lru_tile_cache (const char *n)
@@ -282,6 +332,15 @@ public:
             && width - xshift <= e->width - e->xshift
             && height - yshift <= e->height - e->yshift && p == e->params)
           {
+            while (e->computing)
+              {
+                if (cond.wait_for (guard, std::chrono::milliseconds (333))
+                    == std::cv_status::timeout)
+                  {
+                    if (progress && progress->cancel_requested ())
+                      return NULL;
+                  }
+              }
             e->last_used = time;
             e->nuses++;
             if (verbose)
@@ -292,7 +351,7 @@ public:
               *id = e->id;
             return ret;
           }
-        if (!e->nuses
+        if (!e->nuses && !e->computing
             && (!longest_unused || longest_unused->last_used < e->last_used))
           longest_unused = e;
         size++;
@@ -322,10 +381,19 @@ public:
     e->yshift = yshift;
     e->width = width;
     e->height = height;
-    e->val = std::unique_ptr<T> (get_new (e->params, xshift, yshift, width, height, progress));
+    e->computing = true;
     e->nuses = 1;
     e->id = time;
     e->last_used = time;
+
+    guard.unlock ();
+    std::unique_ptr<T> val(get_new (e->params, xshift, yshift, width, height, progress));
+    guard.lock ();
+
+    e->val = std::move(val);
+    e->computing = false;
+    cond.notify_all ();
+
     TP ret = e->val.get ();
     if (id)
       *id = e->id;
@@ -365,7 +433,7 @@ public:
 
 private:
   int cache_size;
-  std::timed_mutex lock;
+  std::timed_mutex lock; std::condition_variable_any cond;
   const char *name;
 };
 
