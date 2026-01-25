@@ -269,8 +269,19 @@ void SharpnessPanel::updateMTFChart() {
   // Pass simulation flag to chart
   bool canSimulateDifraction =
       state.rparams.sharpen.scanner_mtf.simulate_difraction_p();
+  // Calculate screen frequency if applicable
+  double screenFreq = -1;
+  auto img = m_imageGetter();
+  if (img && state.scrToImg.type != colorscreen::Random) {
+      colorscreen::scr_to_img scrToImgObj;
+      scrToImgObj.set_parameters(state.scrToImg, *img);
+      double pixel_size = scrToImgObj.pixel_size(img->width, img->height);
+      screenFreq = colorscreen::scr_names[(int)state.scrToImg.type].frequency * pixel_size;
+  }
+
   m_mtfChart->setMTFData(curves, canSimulateDifraction,
-                         state.rparams.sharpen.scanner_mtf.scan_dpi);
+                         state.rparams.sharpen.scanner_mtf.scan_dpi,
+                         screenFreq);
 
   // Extract measured MTF data if available
   const auto &scanner_mtf = state.rparams.sharpen.scanner_mtf;

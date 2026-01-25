@@ -10,7 +10,7 @@ class MTFChartWidget : public QWidget
 public:
     explicit MTFChartWidget(QWidget *parent = nullptr);
     
-    void setMTFData(const colorscreen::mtf_parameters::computed_mtf &data, bool canSimulateDifraction, double scanDpi);
+    void setMTFData(const colorscreen::mtf_parameters::computed_mtf &data, bool canSimulateDifraction, double scanDpi, double screenFreq = -1);
     void setMeasuredMTF(const std::vector<double> &freq, const std::vector<double> &contrast);
     void clear();
     
@@ -28,6 +28,7 @@ private:
     bool m_hasData = false;
     bool m_canSimulateDifraction = true;
     double m_scanDpi = 0;
+    double m_screenFreq = -1;
     
     std::vector<double> m_measuredFreq;
     std::vector<double> m_measuredContrast;

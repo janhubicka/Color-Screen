@@ -10,11 +10,12 @@ MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
 
 void MTFChartWidget::setMTFData(
     const colorscreen::mtf_parameters::computed_mtf &data,
-    bool canSimulateDifraction, double scanDpi) {
+    bool canSimulateDifraction, double scanDpi, double screenFreq) {
   m_data = data;
   m_hasData = !data.system_mtf.empty();
   m_canSimulateDifraction = canSimulateDifraction;
   m_scanDpi = scanDpi;
+  m_screenFreq = screenFreq;
   update();
 }
 
@@ -36,13 +37,13 @@ void MTFChartWidget::clear() {
 
 QSize MTFChartWidget::sizeHint() const {
   // Golden ratio: width:height = 1.61:1
-  // For 500px width -> height = 500/1.61 + margins = 310 + 175 = 485
-  return QSize(500, 485);
+  // For 500px width -> height = 500/1.61 + margins = 310 + 195 = 505
+  return QSize(500, 505);
 }
 
 QSize MTFChartWidget::minimumSizeHint() const {
   // Minimum for golden ratio
-  return QSize(300, 360);
+  return QSize(300, 380);
 }
 
 bool MTFChartWidget::hasHeightForWidth() const { return true; }
@@ -50,9 +51,9 @@ bool MTFChartWidget::hasHeightForWidth() const { return true; }
 int MTFChartWidget::heightForWidth(int width) const {
   // Maintain golden ratio: width:height = 1.61:1
   // Chart area height = width / 1.61
-  // Total height = chart height + margins (top 20 + bottom 155)
+  // Total height = chart height + margins (top 20 + bottom 175)
   int chartHeight = static_cast<int>(width / 1.61);
-  return chartHeight + 155; // 20 (top) + 135 (bottom)
+  return chartHeight + 175; // 20 (top) + 155 (bottom)
 }
 
 void MTFChartWidget::paintEvent(QPaintEvent *event) {
@@ -72,7 +73,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   const int marginLeft = 60;
   const int marginRight = 20;
   const int marginTop = 20;
-  const int marginBottom = 155; // More space for label + legend + MTF50
+  const int marginBottom = 175; // More space for label + legend + MTF50 + Screen info
 
   QRect chartRect(marginLeft, marginTop, width() - marginLeft - marginRight,
                   height() - marginTop - marginBottom);
@@ -128,12 +129,33 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   painter.setPen(QPen(QColor(150, 150, 150), 2, Qt::DashLine));
   painter.drawLine(nyquistX, chartRect.top(), nyquistX, chartRect.bottom());
 
+  // Draw Screen line if available
+  int screenX = -1;
+  if (m_screenFreq > 0 && m_screenFreq <= 1.0) {
+      screenX = chartRect.left() + (int)(m_screenFreq * chartRect.width());
+      painter.setPen(QPen(QColor(100, 100, 255), 2, Qt::DashLine));
+      painter.drawLine(screenX, chartRect.top(), screenX, chartRect.bottom());
+  }
+
   QFont smallFont = font;
   smallFont.setPointSize(8);
   painter.setFont(smallFont);
   painter.setPen(palette().text().color());
+
+  // Nyquist caption
   painter.drawText(nyquistX - 30, chartRect.top() - 15, 60, 15, Qt::AlignCenter,
                    "Nyquist");
+
+  // Screen caption (avoiding overlap)
+  if (screenX != -1) {
+      int yOff = 15;
+      if (std::abs(screenX - nyquistX) < 40) {
+          yOff = 30; // Move it higher up
+      }
+      painter.setPen(QColor(100, 100, 255));
+      painter.drawText(screenX - 30, chartRect.top() - yOff, 60, 15, Qt::AlignCenter,
+                       "Screen");
+  }
   painter.setFont(font);
 
   // Axis labels
@@ -268,18 +290,45 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   }
 
   int infoY = chartRect.bottom() + (m_scanDpi > 0 ? 85 : 45);
+  painter.setPen(palette().text().color());
   if (mtf50_freq >= 0) {
       QString mtf50Text = QString("MTF50: %1 px freq").arg(mtf50_freq, 0, 'f', 3);
       if (m_scanDpi > 0) {
           double lp_mm = mtf50_freq * (m_scanDpi / 25.4) / 2.0;
           mtf50Text += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
       }
-      painter.setPen(palette().text().color());
       painter.drawText(QRect(marginLeft, infoY, chartRect.width(), 20), Qt::AlignLeft | Qt::AlignVCenter, mtf50Text);
+      infoY += 20;
+  }
+
+  // Draw Screen info
+  if (m_screenFreq > 0) {
+      QString screenText = QString("Screen: %1 px freq").arg(m_screenFreq, 0, 'f', 3);
+      if (m_scanDpi > 0) {
+          double lp_mm = m_screenFreq * (m_scanDpi / 25.4) / 2.0;
+          screenText += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
+      }
+      
+      // Compute contrast at screen frequency
+      double contrast = 0;
+      if (!m_data.system_mtf.empty()) {
+          double idx_f = m_screenFreq * (m_data.system_mtf.size() - 1);
+          int idx = (int)idx_f;
+          if (idx >= 0 && idx < (int)m_data.system_mtf.size() - 1) {
+              double frac = idx_f - idx;
+              contrast = m_data.system_mtf[idx] * (1.0 - frac) + m_data.system_mtf[idx+1] * frac;
+          } else if (idx >= (int)m_data.system_mtf.size() - 1) {
+              contrast = m_data.system_mtf.back();
+          }
+      }
+      screenText += QString(" contrast: %1%").arg(contrast * 100.0, 0, 'f', 1);
+      
+      painter.drawText(QRect(marginLeft, infoY, chartRect.width(), 20), Qt::AlignLeft | Qt::AlignVCenter, screenText);
+      infoY += 20;
   }
 
   // Draw legend below "Pixel frequency" label
-  int legendY = infoY + 25; // Below the info label
+  int legendY = infoY + 15; // Below the info label
   int legendX = chartRect.left();
   int itemWidth = 120;
   int lineHeight = 20;

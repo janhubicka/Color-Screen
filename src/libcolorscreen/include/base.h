@@ -1,6 +1,7 @@
 #ifndef BASE_H
 #define BASE_H
 #include <cmath>
+#include <algorithm>
 #include <cstdint>
 #include "colorscreen-config.h"
 namespace colorscreen
