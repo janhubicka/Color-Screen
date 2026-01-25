@@ -1,6 +1,7 @@
 #ifndef LRU_CACHE_H
 #define LRU_CACHE_H
 #include <mutex>
+#include <chrono>
 #include <atomic>
 #include <memory>
 #include <include/progress-info.h>
@@ -54,7 +55,7 @@ public:
   void
   prune ()
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -81,7 +82,7 @@ public:
   void
   increase_capacity (int n)
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     cache_size = n * base_cache_size;
   }
 
@@ -97,7 +98,12 @@ public:
 
     if (progress)
       progress->wait ("unlocking cache");
-    std::unique_lock<std::mutex> guard (lock);
+    std::unique_lock<std::timed_mutex> guard (lock, std::defer_lock);
+    while (!guard.try_lock_for (std::chrono::milliseconds (333)))
+      {
+        if (progress && progress->cancel_requested ())
+          return NULL;
+      }
     
     time++;
     for (e = entries; e; e = e->next)
@@ -167,7 +173,7 @@ public:
   void
   release (TP val)
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     for (cache_entry *e = entries;; e = e->next)
       if (e->val.get () == val)
         {
@@ -183,7 +189,7 @@ public:
 
 private:
   int cache_size;
-  std::mutex lock;
+  std::timed_mutex lock;
   const char *name;
 };
 
@@ -220,7 +226,7 @@ public:
   void
   prune ()
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -247,7 +253,7 @@ public:
   void
   increase_capacity (int n)
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     cache_size = n * base_cache_size;
   }
 
@@ -263,7 +269,12 @@ public:
     struct cache_entry *longest_unused = NULL, *e;
     if (progress)
       progress->wait ("unlocking cache");
-    std::unique_lock<std::mutex> guard (lock);
+    std::unique_lock<std::timed_mutex> guard (lock, std::defer_lock);
+    while (!guard.try_lock_for (std::chrono::milliseconds (333)))
+      {
+        if (progress && progress->cancel_requested ())
+          return NULL;
+      }
     time++;
     for (e = entries; e; e = e->next)
       {
@@ -338,7 +349,7 @@ public:
   void
   release (TP val)
   {
-    std::lock_guard<std::mutex> guard (lock);
+    std::lock_guard<std::timed_mutex> guard (lock);
     for (cache_entry *e = entries;; e = e->next)
       if (e->val.get () == val)
         {
@@ -354,7 +365,7 @@ public:
 
 private:
   int cache_size;
-  std::mutex lock;
+  std::timed_mutex lock;
   const char *name;
 };
 
