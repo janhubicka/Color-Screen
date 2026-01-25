@@ -58,11 +58,10 @@ void FlatFieldWorker::run() {
     m_progress->set_task("Analyzing flat field", 1);
   }
 
-  colorscreen::backlight_correction_parameters *cor = 
+  std::shared_ptr<colorscreen::backlight_correction_parameters> cor = 
       colorscreen::backlight_correction_parameters::analyze_scan(whiteScan, m_gamma, blackScan.get());
 
   if (m_progress && m_progress->cancelled()) {
-    if (cor) delete cor;
     emit finished(false, nullptr);
     return;
   }
@@ -73,5 +72,5 @@ void FlatFieldWorker::run() {
     return;
   }
 
-  emit finished(true, std::shared_ptr<colorscreen::backlight_correction_parameters>(cor));
+  emit finished(true, cor);
 }

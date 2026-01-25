@@ -1,5 +1,6 @@
 #ifndef BACKLIGHT_CORRECTION_PARAMETERS_H
 #define BACKLIGHT_CORRECTION_PARAMETERS_H
+#include <memory>
 #include "base.h"
 #include "color.h"
 namespace colorscreen
@@ -17,6 +18,8 @@ class backlight_correction_parameters
   };
 
 public:
+  // Use vector instead of raw pointer for automatic memory management
+  typedef std::vector<entry> luminosities_t;
   enum channel
   {
     red,
@@ -27,12 +30,12 @@ public:
   };
   backlight_correction_parameters ();
   bool alloc (int width, int height, bool enabled[4]);
-  DLL_PUBLIC ~backlight_correction_parameters ();
-  DLL_PUBLIC static backlight_correction_parameters *
+  virtual ~backlight_correction_parameters () = default;
+  DLL_PUBLIC static std::shared_ptr <backlight_correction_parameters>
   load_captureone_lcc (FILE *f, bool verbose = false);
-  DLL_PUBLIC static backlight_correction_parameters *
+  DLL_PUBLIC static std::shared_ptr <backlight_correction_parameters>
   analyze_scan (image_data &scan, luminosity_t gamma = 1, image_data *black = NULL);
-  DLL_PUBLIC bool save (FILE *f);
+  DLL_PUBLIC bool save (FILE *f) const;
   DLL_PUBLIC const char *save_tiff (const char *name);
   DLL_PUBLIC bool load (FILE *f, const char **);
 
@@ -61,7 +64,7 @@ public:
   }
 
   /* Internal API.  */
-  static backlight_correction_parameters *
+  static std::shared_ptr <backlight_correction_parameters>
   load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   friend backlight_correction;
 
@@ -74,7 +77,7 @@ public:
 
 private:
   int m_width, m_height;
-  entry *m_luminosities;
+  std::vector<entry> m_luminosities;
   bool m_channel_enabled[4];
 };
 }

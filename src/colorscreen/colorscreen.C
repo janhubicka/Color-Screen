@@ -1213,7 +1213,7 @@ analyze_backlight (int argc, char **argv)
 	}
     }
   progress.set_task ("analyzing backlight", 1);
-  std::unique_ptr <backlight_correction_parameters> cor (backlight_correction_parameters::analyze_scan (scan, gamma, blacks_scan.get ()));
+  auto cor = backlight_correction_parameters::analyze_scan (scan, gamma, blacks_scan.get ());
   progress.set_task ("writting output", 1);
   FILE *out = fopen (out_file, "wt");
   if (!out)
@@ -1831,7 +1831,7 @@ dump_lcc (int argc, char **argv)
       fprintf (stderr, "Failed to load %s\n", argv[0]);
       return 1;
     }
-  delete c;
+  // delete c; // shared_ptr handles this
   return 0;
 }
 
@@ -1850,13 +1850,13 @@ export_lcc (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", argv[0], error);
       exit (1);
     }
-  if (!scan.lcc)
+  if (!scan.backlight_corr)
     {
       progress.pause_stdout ();
       fprintf (stderr, "No PhaseOne LCC in scan: %s\n", argv[0]);
       exit (1);
     }
-  backlight_correction_parameters *cor = scan.lcc;
+  auto cor = scan.backlight_corr;
   FILE *out = fopen (argv[1], "wt");
   if (!out)
     {
@@ -1879,7 +1879,7 @@ export_lcc (int argc, char **argv)
           exit (1);
         }
     }
-  delete cor;
+  // delete cor; // shared_ptr handles this
 }
 
 void

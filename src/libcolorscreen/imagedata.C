@@ -119,7 +119,7 @@ private:
 class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img) : lcc (NULL), m_img (img) {}
+  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img) {}
   virtual bool init_loader (const char *name, const char **error,
                             progress_info *, image_data::demosaicing_t);
   virtual bool load_part (int *permille, const char **error,
@@ -131,7 +131,7 @@ public:
   }
 
 private:
-  backlight_correction_parameters *lcc;
+  std::shared_ptr<backlight_correction_parameters> m_backlight_corr;
   image_data *m_img;
   LibRaw RawProcessor;
   bool monochromatic;
@@ -166,7 +166,7 @@ image_data::image_data ()
       ydpi (0), stitch (NULL), primary_red{ 0.6400, 0.3300, 0.2126 },
       primary_green{ 0.3000, 0.6000, 0.7152 },
       primary_blue{ 0.1500, 0.0600, 0.0722 },
-      whitepoint{ 0.312700492, 0.329000939, 1.0 }, lcc (NULL), gamma (-2),
+      whitepoint{ 0.312700492, 0.329000939, 1.0 }, backlight_corr (nullptr), gamma (-2),
       f_stop (-2), focal_plane_x_resolution (-2), focal_plane_y_resolution (-2),
       focal_length (-2), focal_length_in_35mm (-2), pixel_pitch (-2), sensor_fill_factor (-2),
       rotation (-1), mirror (-1), demosaiced_by (demosaic_max), own (false)
@@ -191,8 +191,8 @@ image_data::~image_data ()
       MapAlloc::Free (*rgbdata);
       free (rgbdata);
     }
-  if (lcc)
-    delete lcc;
+  /* if (backlight_corr)
+    delete backlight_corr; */
   prune_render_caches ();
   prune_render_scr_detect_caches ();
 }
@@ -684,7 +684,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
 		  return false;
 		}
 #endif
-              m_img->lcc = lcc;
+              m_img->backlight_corr = m_backlight_corr;
               free (mbuffer.data);
               zip_fclose (zip_file);
               break;

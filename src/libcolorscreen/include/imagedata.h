@@ -5,6 +5,7 @@
 #include "base.h"
 #include "color.h"
 #include "progress-info.h"
+#include "backlight-correction-parameters.h"
 #include <string>
 namespace colorscreen
 {
@@ -94,7 +95,7 @@ public:
   xyY primary_green;
   xyY primary_blue;
   xyz whitepoint;
-  class backlight_correction_parameters *lcc;
+  std::shared_ptr<backlight_correction_parameters> backlight_corr;
   DLL_PUBLIC void set_dpi (coord_t xdpi, coord_t ydpi);
   /* Gamma, -2 if unknown.  */
   luminosity_t gamma;

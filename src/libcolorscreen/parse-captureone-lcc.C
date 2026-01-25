@@ -68,7 +68,7 @@ read_uint32 (memory_buffer *f)
   return ret;
 }
 
-backlight_correction_parameters *
+std::shared_ptr <backlight_correction_parameters>
 backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool verbose)
 {
 	std::string s = read_string (f);
@@ -327,7 +327,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	//printf ("%i\n", bin4);
 	if (verbose)
 	  printf ("Bin %i %i %i %i\n",bin, bin2, bin3, bin4);
-	class backlight_correction_parameters *llci = new class backlight_correction_parameters ();
+	std::shared_ptr<backlight_correction_parameters> llci = std::make_shared<backlight_correction_parameters> ();
 	bool enabled[4] = {true, true, true, false};
 	llci->alloc (111, 84, enabled);
 	for (int y = 0; y < 84; y++)
@@ -386,7 +386,7 @@ backlight_correction_parameters::load_captureone_lcc (memory_buffer *f, bool ver
 	return llci;
 }
 
-backlight_correction_parameters *
+std::shared_ptr <backlight_correction_parameters>
 backlight_correction_parameters::load_captureone_lcc (FILE *f, bool verbose)
 {
   memory_buffer buf;

@@ -9,20 +9,20 @@ namespace colorscreen
 bool
 backlight_correction_parameters::alloc (int width, int height, bool enabled[4])
 {
-  m_luminosities = (entry *)calloc (width * height, sizeof (entry));
+  try {
+  m_luminosities.resize (width * height);
+  } catch (...)
+  {
+    return false;
+  }
   m_width = width;
   m_height = height;
   black_correction = false;
   for (int i = 0; i < 4; i++)
     m_channel_enabled[i] = enabled[i];
-  return (m_luminosities != NULL);
+  return true;
 }
 
-backlight_correction_parameters::~backlight_correction_parameters ()
-{
-  if (m_luminosities)
-    free (m_luminosities);
-}
 bool
 memory_buffer::load_file (FILE *f)
 {
@@ -48,13 +48,13 @@ memory_buffer::load_file (FILE *f)
 
 backlight_correction_parameters::backlight_correction_parameters ()
     : id (lru_caches::get ()), m_width (0), m_height (0),
-      m_luminosities (NULL), m_channel_enabled{ true, true, true, false }
+      m_channel_enabled{ true, true, true, false }
 {
 }
 
 /* SCAN is white reference, while BLACK, if non-null is balck refernece.  */
 
-backlight_correction_parameters *
+std::shared_ptr <backlight_correction_parameters>
 backlight_correction_parameters::analyze_scan (image_data &scan,
                                                luminosity_t gamma,
 					       image_data *black)
@@ -66,8 +66,8 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
     enabled[(int)ir] = true;
   if (scan.rgbdata)
     enabled[(int)red] = enabled[(int)green] = enabled[(int)blue] = true;
-  backlight_correction_parameters *ret
-      = new backlight_correction_parameters ();
+  std::shared_ptr <backlight_correction_parameters> ret
+      = std::make_shared<backlight_correction_parameters> ();
   ret->alloc (width, height, enabled);
   luminosity_t table[65536];
   for (int i = 0; i < scan.maxval; i++)
@@ -184,7 +184,7 @@ backlight_correction_parameters::analyze_scan (image_data &scan,
   return ret;
 }
 bool
-backlight_correction_parameters::save (FILE *f)
+backlight_correction_parameters::save (FILE *f) const
 {
   if (fprintf (f, "  backlight_correction_dimensions: %i %i\n", m_width,
                m_height)
@@ -437,6 +437,7 @@ backlight_correction_parameters::render_preview (tile_parameters &tile, int scan
   {
     return m_luminosities[0].lum[yy * m_width + xx] - black/* - m_luminosities[channel].sub[yy * m_width + xx]*/;
   };
+  save (stdout);
   printf ("%i %i %i - %i %i - %f %f %f %f, chanels %i %i %i\n", tile.width, tile.height, tile.rowstride, m_width, m_height, xstart, xstep, ystart,ystep, rchannel, gchannel, bchannel);
   for (int y = 0; y < tile.height; y++)
     for (int x = 0; x < tile.width; x++)
