@@ -372,17 +372,21 @@ void MainWindow::setupUi() {
       wrapper->setStyleSheet(
           "QFrame#DetachedWrapper { border: 1px solid #555; background: Palette(Window); }");
       
-      QVBoxLayout *wLayout = new QVBoxLayout(wrapper);
-      wLayout->setContentsMargins(2, 2, 2, 2);
-      wLayout->setSpacing(0);
-      wLayout->addWidget(w);
+      QVBoxLayout *outerLayout = new QVBoxLayout(wrapper);
+      outerLayout->setContentsMargins(1, 1, 1, 1);
+      outerLayout->setSpacing(0);
+
+      QWidget *container = new QWidget();
+      QGridLayout *gLayout = new QGridLayout(container);
+      gLayout->setContentsMargins(0, 0, 0, 0);
+      gLayout->setSpacing(0);
       
-      // Add a size grip for easier resizing
-      QHBoxLayout *gripLayout = new QHBoxLayout();
-      gripLayout->addStretch(1);
-      QSizeGrip *grip = new QSizeGrip(wrapper);
-      gripLayout->addWidget(grip);
-      wLayout->addLayout(gripLayout);
+      gLayout->addWidget(w, 0, 0);
+      
+      QSizeGrip *grip = new QSizeGrip(container);
+      gLayout->addWidget(grip, 0, 0, Qt::AlignRight | Qt::AlignBottom);
+
+      outerLayout->addWidget(container);
 
       dock->setWidget(wrapper);
       w->show(); // Ensure widget is visible
@@ -392,7 +396,7 @@ void MainWindow::setupUi() {
       // Use size hint of the original widget + some margins
       if (w->sizeHint().isValid()) {
           QSize s = w->sizeHint();
-          dock->resize(s.width() + 10, s.height() + 30);
+          dock->resize(s.width() + 4, s.height() + 4);
       }
     });
 
@@ -403,10 +407,18 @@ void MainWindow::setupUi() {
             // Find the original widget inside the wrapper
             QWidget *wrapper = dock->widget();
             QWidget *originalWidget = nullptr;
+            // The structure is Wrapper -> QVBoxLayout -> Container -> QGridLayout -> Widget
             if (wrapper->layout() && wrapper->layout()->count() > 0) {
-                QLayoutItem *item = wrapper->layout()->itemAt(0);
-                if (item && item->widget()) {
-                    originalWidget = item->widget();
+                QLayoutItem *containerItem = wrapper->layout()->itemAt(0);
+                if (containerItem && containerItem->widget() && containerItem->widget()->layout()) {
+                    QLayout *gLayout = containerItem->widget()->layout();
+                    for (int i = 0; i < gLayout->count(); ++i) {
+                        QWidget *child = gLayout->itemAt(i)->widget();
+                        if (child && !qobject_cast<QSizeGrip*>(child)) {
+                            originalWidget = child;
+                            break;
+                        }
+                    }
                 }
             }
 

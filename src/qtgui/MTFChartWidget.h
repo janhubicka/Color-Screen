@@ -24,6 +24,21 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     
 private:
+    struct LayoutInfo {
+        int baseFontSize;
+        int smallFontSize;
+        int lineHeight;
+        int marginLeft;
+        int marginRight;
+        int marginTop;
+        int marginBottom;
+        int infoSectionHeight;
+        int legendHeight;
+        QRect chartRect;
+    };
+    
+    LayoutInfo calculateLayout(int width, int height) const;
+
     colorscreen::mtf_parameters::computed_mtf m_data;
     bool m_hasData = false;
     bool m_canSimulateDifraction = true;

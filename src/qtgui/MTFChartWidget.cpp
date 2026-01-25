@@ -36,14 +36,13 @@ void MTFChartWidget::clear() {
 }
 
 QSize MTFChartWidget::sizeHint() const {
-  // Golden ratio: width:height = 1.61:1
-  // For 500px width -> height = 500/1.61 + margins = 310 + 195 = 505
-  return QSize(500, 505);
+  LayoutInfo layout = calculateLayout(500, 310 + 225); // Estimated for 500 width
+  return QSize(500, 310 + layout.marginTop + layout.marginBottom);
 }
 
 QSize MTFChartWidget::minimumSizeHint() const {
-  // Minimum for golden ratio
-  return QSize(300, 380);
+  LayoutInfo layout = calculateLayout(300, 186 + 225);
+  return QSize(300, 186 + layout.marginTop + layout.marginBottom);
 }
 
 bool MTFChartWidget::hasHeightForWidth() const { return true; }
@@ -51,9 +50,72 @@ bool MTFChartWidget::hasHeightForWidth() const { return true; }
 int MTFChartWidget::heightForWidth(int width) const {
   // Maintain golden ratio: width:height = 1.61:1
   // Chart area height = width / 1.61
-  // Total height = chart height + margins (top 20 + bottom 175)
   int chartHeight = static_cast<int>(width / 1.61);
-  return chartHeight + 175; // 20 (top) + 155 (bottom)
+  LayoutInfo layout = calculateLayout(width, chartHeight + 250);
+  return chartHeight + layout.marginTop + layout.marginBottom;
+}
+
+MTFChartWidget::LayoutInfo MTFChartWidget::calculateLayout(int w, int h) const {
+  LayoutInfo layout;
+  
+  // Calculate dynamic font sizes
+  layout.baseFontSize = 9;
+  layout.smallFontSize = 8;
+  if (w > 300) {
+      int delta = (w - 300) / 100;
+      layout.baseFontSize = std::min(9 + delta, 14);
+      layout.smallFontSize = std::min(8 + delta, 12);
+  }
+  layout.lineHeight = layout.baseFontSize + 10;
+
+  // Margin Left: Title + Space + Labels + Tick
+  layout.marginLeft = 45 + (layout.baseFontSize * 4); // Dynamic based on font
+  layout.marginLeft = std::max(layout.marginLeft, 90);
+
+  // Margin Top: Captions
+  layout.marginTop = 45; 
+  if (layout.baseFontSize > 11) layout.marginTop += (layout.baseFontSize - 11) * 8;
+
+  // Margin Right: Padding
+  layout.marginRight = 20;
+
+  // Margin Bottom components
+  int bottomItemsRows = 2; // Axis ticks + "Pixel frequency" title
+  if (m_scanDpi > 0) bottomItemsRows += 2; // lp/mm ticks + title
+  
+  layout.infoSectionHeight = 0;
+  if (m_hasData) layout.infoSectionHeight += layout.lineHeight;
+  if (m_screenFreq > 0) layout.infoSectionHeight += layout.lineHeight;
+  
+  // Legend items count
+  int numVisibleItems = 0;
+  if (m_canSimulateDifraction) numVisibleItems += 2; // Difraction, Defocus
+  else numVisibleItems += 1; // Hopkins
+  numVisibleItems += 5; // Gaussian, Lens, Sensor, System
+  if (m_hasMeasuredData) numVisibleItems += 1;
+  
+  // Legend wrap logic matches paintEvent
+  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
+  int col = 0;
+  int legendRows = 1;
+  for (int i = 0; i < numVisibleItems; ++i) {
+      int x = layout.marginLeft + col * itemWidth;
+      col++;
+      if (col >= 3 || (x + itemWidth * 2 > w)) {
+          col = 0;
+          if (i < numVisibleItems - 1) legendRows++;
+      }
+  }
+  layout.legendHeight = legendRows * layout.lineHeight + 20;
+  
+  layout.marginBottom = (bottomItemsRows + 0.5) * layout.lineHeight + layout.infoSectionHeight + layout.legendHeight;
+  if (m_scanDpi > 0) layout.marginBottom += 4;
+  
+  layout.chartRect = QRect(layout.marginLeft, layout.marginTop, 
+                           std::max(10, w - layout.marginLeft - layout.marginRight),
+                           std::max(10, h - layout.marginTop - layout.marginBottom));
+                           
+  return layout;
 }
 
 void MTFChartWidget::paintEvent(QPaintEvent *event) {
@@ -69,34 +131,30 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
     return;
   }
 
-  // Define margins and chart area
-  const int marginLeft = 60;
-  const int marginRight = 20;
-  const int marginTop = 20;
-  const int marginBottom = 175; // More space for label + legend + MTF50 + Screen info
-
-  QRect chartRect(marginLeft, marginTop, width() - marginLeft - marginRight,
-                  height() - marginTop - marginBottom);
+  LayoutInfo layout = calculateLayout(width(), height());
+  QRect chartRect = layout.chartRect;
 
   if (chartRect.width() < 10 || chartRect.height() < 10)
     return;
+
+  QFont baseFont = painter.font();
+  baseFont.setPointSize(layout.baseFontSize);
+  
+  QFont smallFont = baseFont;
+  smallFont.setPointSize(layout.smallFontSize);
 
   // Draw axes
   painter.setPen(QPen(palette().text().color(), 1));
   painter.drawRect(chartRect);
 
-  // Draw grid and labels
-  QFont font = painter.font();
-  font.setPointSize(9);
-  painter.setFont(font);
-
   // Y-axis labels (0-100%)
+  painter.setFont(baseFont);
   for (int i = 0; i <= 10; i++) {
     int y = chartRect.bottom() - (chartRect.height() * i / 10);
     painter.drawLine(chartRect.left() - 5, y, chartRect.left(), y);
 
     QString label = QString::number(i * 10);
-    QRect textRect(0, y - 10, marginLeft - 10, 20);
+    QRect textRect(0, y - 10, layout.marginLeft - 10, 20);
     painter.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
 
     // Grid line
@@ -137,55 +195,61 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       painter.drawLine(screenX, chartRect.top(), screenX, chartRect.bottom());
   }
 
-  QFont smallFont = font;
-  smallFont.setPointSize(8);
   painter.setFont(smallFont);
   painter.setPen(palette().text().color());
 
   // Nyquist caption
-  painter.drawText(nyquistX - 30, chartRect.top() - 15, 60, 15, Qt::AlignCenter,
+  painter.drawText(nyquistX - 40, chartRect.top() - (int)(layout.lineHeight * 1.0), 80, layout.lineHeight, Qt::AlignCenter,
                    "Nyquist");
 
   // Screen caption (avoiding overlap)
   if (screenX != -1) {
-      int yOff = 15;
-      if (std::abs(screenX - nyquistX) < 40) {
-          yOff = 30; // Move it higher up
+      int yOff = (int)(layout.lineHeight * 1.0);
+      if (std::abs(screenX - nyquistX) < 50) {
+          yOff = (int)(layout.lineHeight * 1.8); // Move it higher up
       }
       painter.setPen(QColor(100, 100, 255));
-      painter.drawText(screenX - 30, chartRect.top() - yOff, 60, 15, Qt::AlignCenter,
+      painter.drawText(screenX - 40, chartRect.top() - yOff, 80, layout.lineHeight, Qt::AlignCenter,
                        "Screen");
   }
-  painter.setFont(font);
+  
+  painter.setFont(baseFont);
 
   // Axis labels
   painter.setPen(palette().text().color());
-  painter.drawText(QRect(0, chartRect.bottom() + 25, width(), 15),
+  int labelY = chartRect.bottom() + (int)(layout.lineHeight * 0.8);
+  painter.drawText(QRect(layout.marginLeft, labelY, chartRect.width(), layout.lineHeight),
                    Qt::AlignCenter, "Pixel frequency");
+                   
+  labelY += layout.lineHeight;
 
   if (m_scanDpi > 0) {
+    labelY += 4; // Extra padding below Pixel frequency
     // Draw cycles per mm axis (lp/mm)
-    // 1 pixel frequency = 1 cycle / 2 pixels
-    // lp/mm = (pixel_freq) * (DPI / 25.4) / 2
     double lp_mm_max = (m_scanDpi / 25.4) / 2.0;
 
     for (int i = 0; i <= 10; i++) {
         int x = chartRect.left() + (chartRect.width() * i / 10);
-        painter.drawLine(x, chartRect.bottom() + 20, x, chartRect.bottom() + 25);
+        painter.drawLine(x, labelY - 5, x, labelY);
         
         double lp_mm = (i / 10.0) * lp_mm_max;
         QString label = QString::number(lp_mm, 'f', 1);
-        QRect textRect(x - 20, chartRect.bottom() + 45, 40, 20);
+        QRect textRect(x - 30, labelY, 60, layout.lineHeight);
         painter.drawText(textRect, Qt::AlignCenter, label);
     }
-    painter.drawText(QRect(0, chartRect.bottom() + 65, width(), 15),
+    labelY += layout.lineHeight;
+    painter.drawText(QRect(layout.marginLeft, labelY, chartRect.width(), layout.lineHeight),
                      Qt::AlignCenter, "Cycles per millimeter (lp/mm)");
+    labelY += (int)(layout.lineHeight * 1.5);
+  } else {
+    labelY += layout.lineHeight;
   }
 
   painter.save();
-  painter.translate(15, height() / 2);
+  // Move MTF title further left for larger fonts
+  painter.translate(std::max(10, layout.marginLeft - 75), (chartRect.top() + chartRect.bottom()) / 2);
   painter.rotate(-90);
-  painter.drawText(-50, 0, 100, 20, Qt::AlignCenter, "MTF (%)");
+  painter.drawText(-100, 0, 200, 30, Qt::AlignCenter, "MTF (%)");
   painter.restore();
 
   // Helper function to draw a curve
@@ -289,7 +353,8 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       }
   }
 
-  int infoY = chartRect.bottom() + (m_scanDpi > 0 ? 85 : 45);
+  int infoY = labelY;
+  painter.setFont(baseFont);
   painter.setPen(palette().text().color());
   if (mtf50_freq >= 0) {
       QString mtf50Text = QString("MTF50: %1 px freq").arg(mtf50_freq, 0, 'f', 3);
@@ -297,8 +362,8 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
           double lp_mm = mtf50_freq * (m_scanDpi / 25.4) / 2.0;
           mtf50Text += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
       }
-      painter.drawText(QRect(marginLeft, infoY, chartRect.width(), 20), Qt::AlignLeft | Qt::AlignVCenter, mtf50Text);
-      infoY += 20;
+      painter.drawText(QRect(layout.marginLeft, infoY, chartRect.width(), layout.lineHeight), Qt::AlignLeft | Qt::AlignVCenter, mtf50Text);
+      infoY += layout.lineHeight;
   }
 
   // Draw Screen info
@@ -323,15 +388,14 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       }
       screenText += QString(" contrast: %1%").arg(contrast * 100.0, 0, 'f', 1);
       
-      painter.drawText(QRect(marginLeft, infoY, chartRect.width(), 20), Qt::AlignLeft | Qt::AlignVCenter, screenText);
-      infoY += 20;
+      painter.drawText(QRect(layout.marginLeft, infoY, chartRect.width(), layout.lineHeight), Qt::AlignLeft | Qt::AlignVCenter, screenText);
+      infoY += layout.lineHeight;
   }
 
-  // Draw legend below "Pixel frequency" label
-  int legendY = infoY + 15; // Below the info label
+  // Draw legend
+  int legendY = infoY + (int)(layout.lineHeight * 0.5);
   int legendX = chartRect.left();
-  int itemWidth = 120;
-  int lineHeight = 20;
+  int itemWidth = std::max(120, (int)(120 * (layout.baseFontSize / 9.0)));
 
   int col = 0;
   for (const auto &item : items) {
@@ -342,18 +406,18 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
     // Line sample
     painter.setPen(QPen(item.color, item.width));
-    painter.drawLine(x, legendY + lineHeight / 2, x + 20,
-                     legendY + lineHeight / 2);
+    painter.drawLine(x, legendY + layout.lineHeight / 2, x + 20,
+                     legendY + layout.lineHeight / 2);
 
     // Text
     painter.setPen(palette().text().color());
-    painter.drawText(x + 25, legendY, 95, lineHeight,
+    painter.drawText(x + 25, legendY, itemWidth - 25, layout.lineHeight,
                      Qt::AlignLeft | Qt::AlignVCenter, item.name);
 
     col++;
-    if (col >= 3) { // 3 items per row
+    if (col >= 3 || (x + itemWidth * 2 > width())) { // wrap if no space
       col = 0;
-      legendY += lineHeight;
+      legendY += layout.lineHeight;
     }
   }
 }
