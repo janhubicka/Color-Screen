@@ -27,8 +27,14 @@ void GeometrySolverWorker::solve(
     if (computeMesh)
       solverParams.optimize_lens = false;
     
+    auto originalMesh = params.mesh_trans;
+
     // colorscreen::solver modifies params in place and returns sum of squares of error
     colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
+
+    if (!computeMesh)
+      params.mesh_trans = originalMesh;
+
     qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonliner " << computeMesh;
 
     if (progress && progress->cancelled()) {

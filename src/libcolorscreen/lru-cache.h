@@ -1,6 +1,6 @@
 #ifndef LRU_CACHE_H
 #define LRU_CACHE_H
-#include <pthread.h>
+#include <mutex>
 #include <atomic>
 #include <memory>
 #include <include/progress-info.h>
@@ -49,15 +49,12 @@ public:
   lru_cache (const char *n)
       : entries (NULL), cache_size (base_cache_size), name (n)
   {
-    if (pthread_mutex_init (&lock, NULL) != 0)
-      abort ();
   }
 
   void
   prune ()
   {
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::lock_guard<std::mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -73,7 +70,6 @@ public:
         else
           e = &(*e)->next;
       }
-    pthread_mutex_unlock (&lock);
   }
 
   ~lru_cache ()
@@ -81,16 +77,12 @@ public:
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
-    if (pthread_mutex_destroy (&lock) != 0)
-      abort ();
   }
   void
   increase_capacity (int n)
   {
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::lock_guard<std::mutex> guard (lock);
     cache_size = n * base_cache_size;
-    pthread_mutex_unlock (&lock);
   }
 
   /* Get T for parameters P; do caching.
@@ -103,19 +95,10 @@ public:
     uint64_t time = lru_caches::get ();
     struct cache_entry *longest_unused = NULL, *e;
 
-    /* Do not set task to unlocking cache if object is not locked.  */
-#if 0
-    struct timespec timeoutTime;
-    timeoutTime.tv_nsec = 0;
-    timeoutTime.tv_sec = 0;
-    if (/*pthread_mutex_timedlock(&lock, &timeoutTime)*/ true)
-#endif
-    {
-      if (progress)
-        progress->wait ("unlocking cache");
-      if (pthread_mutex_lock (&lock))
-        abort ();
-    }
+    if (progress)
+      progress->wait ("unlocking cache");
+    std::unique_lock<std::mutex> guard (lock);
+    
     time++;
     for (e = entries; e; e = e->next)
       {
@@ -127,8 +110,6 @@ public:
               fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name,
                        (int)e->id, e->nuses);
             TP ret = e->val.get ();
-            if (pthread_mutex_unlock (&lock))
-              abort ();
             if (id)
               *id = e->id;
             return ret;
@@ -153,7 +134,6 @@ public:
         e = new cache_entry;
         if (!e)
           {
-            pthread_mutex_unlock (&lock);
             return NULL;
           }
         e->next = entries;
@@ -180,7 +160,6 @@ public:
     if (verbose)
       fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id,
                (int)size);
-    pthread_mutex_unlock (&lock);
     return ret;
   }
 
@@ -188,8 +167,7 @@ public:
   void
   release (TP val)
   {
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::lock_guard<std::mutex> guard (lock);
     for (cache_entry *e = entries;; e = e->next)
       if (e->val.get () == val)
         {
@@ -198,7 +176,6 @@ public:
           if (verbose)
             fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name,
                      (int)e->id, e->nuses);
-          pthread_mutex_unlock (&lock);
           return;
         }
     fprintf (stderr, "Released data not found in cache %s\n", name);
@@ -206,7 +183,7 @@ public:
 
 private:
   int cache_size;
-  pthread_mutex_t lock;
+  std::mutex lock;
   const char *name;
 };
 
@@ -238,15 +215,12 @@ public:
   lru_tile_cache (const char *n)
       : entries (NULL), cache_size (base_cache_size), name (n)
   {
-    if (pthread_mutex_init (&lock, NULL) != 0)
-      abort ();
   }
 
   void
   prune ()
   {
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::lock_guard<std::mutex> guard (lock);
     struct cache_entry **e;
     for (e = &entries; *e;)
       {
@@ -262,7 +236,6 @@ public:
         else
           e = &(*e)->next;
       }
-    pthread_mutex_unlock (&lock);
   }
 
   ~lru_tile_cache ()
@@ -270,16 +243,12 @@ public:
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
-    if (pthread_mutex_destroy (&lock) != 0)
-      abort ();
   }
   void
   increase_capacity (int n)
   {
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::lock_guard<std::mutex> guard (lock);
     cache_size = n * base_cache_size;
-    pthread_mutex_unlock (&lock);
   }
 
   /* Get T for parameters P; do caching.
@@ -294,8 +263,7 @@ public:
     struct cache_entry *longest_unused = NULL, *e;
     if (progress)
       progress->wait ("unlocking cache");
-    if (pthread_mutex_lock (&lock))
-      abort ();
+    std::unique_lock<std::mutex> guard (lock);
     time++;
     for (e = entries; e; e = e->next)
       {
@@ -309,7 +277,6 @@ public:
               fprintf (stderr, "Cache %s: hit id %i nuses %i\n", name,
                        (int)e->id, (int)e->nuses);
             TP ret = e->val.get ();
-            pthread_mutex_unlock (&lock);
             if (id)
               *id = e->id;
             return ret;
@@ -334,7 +301,6 @@ public:
         e = new cache_entry;
         if (!e)
           {
-            pthread_mutex_unlock (&lock);
             return NULL;
           }
         e->next = entries;
@@ -365,7 +331,6 @@ public:
     if (verbose)
       fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id,
                (int)size);
-    pthread_mutex_unlock (&lock);
     return ret;
   }
 
@@ -373,7 +338,7 @@ public:
   void
   release (TP val)
   {
-    pthread_mutex_lock (&lock);
+    std::lock_guard<std::mutex> guard (lock);
     for (cache_entry *e = entries;; e = e->next)
       if (e->val.get () == val)
         {
@@ -382,7 +347,6 @@ public:
           if (verbose)
             fprintf (stderr, "Cache %s: reclaimed id %i nuses %i\n", name,
                      (int)e->id, e->nuses);
-          pthread_mutex_unlock (&lock);
           return;
         }
     fprintf (stderr, "Released data not found in cache %s\n", name);
@@ -390,7 +354,7 @@ public:
 
 private:
   int cache_size;
-  pthread_mutex_t lock;
+  std::mutex lock;
   const char *name;
 };
 
