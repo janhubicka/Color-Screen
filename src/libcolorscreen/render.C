@@ -11,28 +11,6 @@
 #include <cassert>
 namespace colorscreen
 {
-const constexpr render_type_property render_type_properties[render_type_max] =
-{
-   {"original", "Original digital caputre", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::SCAN_RESOLUTION},
-   {"interpolated-original", "Original digital capture with mosaic removed", render_type_property::OUTPUTS_SCAN_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"profiled-original", "profiled-original", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG /* currently only to compute patch propertions, but we have no profiling otherwise yeet */| render_type_property::NEEDS_RGB | render_type_property::SCAN_RESOLUTION},
-   {"interpolated-profiled-original", "interpolated-profiled-original",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"interpolated-diff", "interpolated-diff", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::NEEDS_RGB | render_type_property::PATCH_RESOLUTION},
-   {"preview-grid", "preview-grid",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"realistic", "realistic",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::SUPPORTS_IR_RGB_SWITCH | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"interpolated", "interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
-   {"interpolated-predictive", "interpolated-predictive",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"interpolated-combined", "interpolated-combined",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"fast", "fast", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::SCREEN_RESOLUTION},
-   {"extra", "extra", render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_TO_IMG | render_type_property::PATCH_RESOLUTION},
-   {"detected-adjusted-color", "detected-adjusted-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"detected-normalized-color", "detected-normalized-color", render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-screen-color", "detected-screen-color",render_type_property::OUTPUTS_SRGB_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::RESET_BRIGHTNESS_ETC},
-   {"detected-realistic", "detected-realistic",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION | render_type_property::ANTIALIAS},
-   {"detected-interpolated", "detected-interpolated",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"detected-interpolated-scaled", "detected-interpolated-scaled",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-   {"detected-relaxation-scaled", "detected-relaxation-scaled",render_type_property::OUTPUTS_PROCESS_PROFILE | render_type_property::NEEDS_SCR_DETECT | render_type_property::SCAN_RESOLUTION},
-};
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
 
@@ -615,7 +593,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
   return ret;
 }
 static lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *,
-                 get_new_gray_sharpened_data, 1>
+                 get_new_gray_sharpened_data, 2>
     gray_and_sharpened_data_cache ("gray and sharpened data");
 
 }

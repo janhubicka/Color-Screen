@@ -9,8 +9,8 @@
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/imagedata.h"
 
-CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
-    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
+CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, ReloadCallback reloadCallback, QWidget *parent)
+    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent), m_reloadCallback(reloadCallback)
 {
     setupUi();
 }
@@ -76,6 +76,39 @@ void CapturePanel::setupUi()
 
         m_form->addRow(label, container);
     };
+
+    // 0. Demosaic (Enum) + Reload
+    QWidget *demosaicContainer = new QWidget();
+    QHBoxLayout *demosaicHLayout = new QHBoxLayout(demosaicContainer);
+    demosaicHLayout->setContentsMargins(0, 0, 0, 0);
+    demosaicHLayout->setSpacing(5);
+
+    m_demosaicCombo = new QComboBox();
+    m_demosaicCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_demosaicCombo->setMinimumContentsLength(10);
+    m_demosaicCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    for (int i = 0; i < (int)colorscreen::image_data::demosaic_max; ++i) {
+        m_demosaicCombo->addItem(QString::fromUtf8(colorscreen::image_data::demosaic_names[i].pretty_name), i);
+        if (colorscreen::image_data::demosaic_names[i].help) {
+            m_demosaicCombo->setItemData(i, QString::fromUtf8(colorscreen::image_data::demosaic_names[i].help), Qt::ToolTipRole);
+        }
+    }
+    demosaicHLayout->addWidget(m_demosaicCombo, 1);
+
+    m_reloadDemosaicBtn = new QPushButton("Reload and demosaic");
+    m_reloadDemosaicBtn->setVisible(false);
+    demosaicHLayout->addWidget(m_reloadDemosaicBtn, 0);
+
+    m_form->addRow("Demosaic", demosaicContainer);
+
+    connect(m_demosaicCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+        int val = m_demosaicCombo->itemData(index).toInt();
+        applyChange([val](ParameterState &s) { s.rparams.demosaic = (colorscreen::image_data::demosaicing_t)val; }, "Demosaic");
+    });
+
+    connect(m_reloadDemosaicBtn, &QPushButton::clicked, this, [this]() {
+        if (m_reloadCallback) m_reloadCallback();
+    });
 
     // 1. Image gamma (Slider)
     std::map<double, QString> gammas;
@@ -179,6 +212,7 @@ void CapturePanel::setupUi()
     presets->addItem("Presets...", 0.0);
     presets->addItem("PhaseOne 53.4mm", 53.4);
     presets->addItem("PhaseOne 53.7mm", 53.7);
+    presets->addItem("Medium Format 43.8mm", 43.8);
     presets->addItem("Full Frame (36mm)", 36.0);
     presets->addItem("APS-H (28.3mm)", 28.3);
     presets->addItem("APS-C (23.0mm)", 23.0);
@@ -300,6 +334,19 @@ void CapturePanel::setupUi()
             }
         }
         setVisibleRow(m_screenResolutionValue->parentWidget(), showScreenRes);
+
+        // 0. Demosaic
+        bool canDemosaic = img && img->demosaiced_by != colorscreen::image_data::demosaic_max;
+        if (canDemosaic) {
+            m_demosaicCombo->blockSignals(true);
+            int idx = m_demosaicCombo->findData((int)state.rparams.demosaic);
+            if (idx != -1) m_demosaicCombo->setCurrentIndex(idx);
+            m_demosaicCombo->blockSignals(false);
+            
+            bool needsReload = (state.rparams.demosaic != img->demosaiced_by);
+            m_reloadDemosaicBtn->setVisible(needsReload);
+        }
+        setVisibleRow(m_demosaicCombo->parentWidget(), canDemosaic);
 
         // 6. Focal plane resolution
         bool showFocalPlane = img && img->focal_plane_x_resolution > 0 && img->focal_plane_y_resolution > 0;

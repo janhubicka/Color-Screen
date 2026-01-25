@@ -95,7 +95,7 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.sigma = v;
-      });
+      }, 3);
 
   // Wavelength
   // Range 0.0 - 1200.0 (0.0 = unknown)
@@ -123,7 +123,7 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.simulate_difraction_p();
-      });
+      }, 3);
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
@@ -240,7 +240,7 @@ void SharpnessPanel::setupUi() {
       1.0, // No gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
-      });
+      }, 3);
 
   // Unsharp mask amount
   // Range 0.0 - 100.0

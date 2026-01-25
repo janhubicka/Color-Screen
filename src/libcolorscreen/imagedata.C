@@ -871,6 +871,9 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
     }
   if (buffer)
     free (buffer);
+
+  m_img->load_exif (name);
+
   return true;
 }
 
@@ -1547,6 +1550,25 @@ image_data::load_exif (const char *name)
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Photo.LensModel"));
       if (it != exifData.end () && it->count ())
         lens = it->value ().toString ();
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.XResolution"));
+      if (it != exifData.end () && it->count ())
+        xdpi = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.YResolution"));
+      if (it != exifData.end () && it->count ())
+        ydpi = it->toRational ().first / (double)it->toRational ().second;
+
+      it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.ResolutionUnit"));
+      if (it != exifData.end () && it->count ())
+        {
+          long unit = it->toInt64 ();
+          if (unit == 3) // Centimeter
+            {
+              xdpi *= 2.54;
+              ydpi *= 2.54;
+            }
+        }
 
       it = exifData.findKey (Exiv2::ExifKey ("Exif.Image.Software"));
       if (it != exifData.end () && it->count ())

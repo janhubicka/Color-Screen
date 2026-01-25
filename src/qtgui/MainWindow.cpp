@@ -402,8 +402,16 @@ void MainWindow::setupUi() {
   // Create Digital Capture Panel
   m_capturePanel = new CapturePanel(
       [this]() { return getCurrentState(); },
-      [this](const ParameterState &s, const QString &desc) { changeParameters(s, desc); },
-      [this]() { return m_scan; }, this);
+      [this](const ParameterState &s, const QString &desc) {
+        changeParameters(s, desc);
+      },
+      [this]() { return m_scan; },
+      [this]() { 
+        if (!m_currentImageFile.isEmpty()) {
+          loadFile(m_currentImageFile, true); 
+        }
+      },
+      this);
 
   // Create Geometry Panel
   m_geometryPanel =
@@ -1575,6 +1583,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
+  m_currentImageFile = fileName;
+
   // Clear current image and stop rendering
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -2207,10 +2217,7 @@ void MainWindow::saveRecoveryState() {
   QFile imageFile(imagePath);
   if (imageFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
     QTextStream out(&imageFile);
-    // We need to track the current image path - for now use recent files
-    if (!m_recentFiles.isEmpty()) {
-      out << m_recentFiles.first();
-    }
+    out << m_currentImageFile;
     imageFile.close();
   }
 

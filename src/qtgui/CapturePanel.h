@@ -19,7 +19,8 @@ class CapturePanel : public ParameterPanel
 {
     Q_OBJECT
 public:
-    explicit CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent = nullptr);
+    using ReloadCallback = std::function<void()>;
+    explicit CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, ReloadCallback reloadCallback, QWidget *parent = nullptr);
     ~CapturePanel() override;
 
 signals:
@@ -27,6 +28,9 @@ signals:
 
 private:
     void setupUi();
+    ReloadCallback m_reloadCallback;
+    class QComboBox *m_demosaicCombo = nullptr;
+    class QPushButton *m_reloadDemosaicBtn = nullptr;
     class QLabel *m_imageResolutionValue = nullptr;
     class QPushButton *m_useImageResBtn = nullptr;
     class QLabel *m_screenResolutionValue = nullptr;
