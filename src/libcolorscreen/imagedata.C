@@ -1506,7 +1506,11 @@ image_data::load_exif (const char *name)
 {
   try
     {
+#if EXIV2_TEST_VERSION(0,27,99)
       Exiv2::Image::UniquePtr image = Exiv2::ImageFactory::open (name);
+#else
+      Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open (name);
+#endif
       if (image.get () == 0)
         return;
       image->readMetadata ();
