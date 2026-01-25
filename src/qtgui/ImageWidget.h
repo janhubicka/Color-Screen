@@ -181,6 +181,7 @@ private:
   double m_lastRenderedScale = 1.0;
   double m_lastRenderedX = 0.0;
   double m_lastRenderedY = 0.0;
+  int m_lastCompletedReqId = 0;
   
   // Pending render request (if queue is full)
   bool m_hasPendingRender = false;

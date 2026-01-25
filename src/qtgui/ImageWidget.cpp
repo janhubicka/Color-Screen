@@ -85,6 +85,9 @@ void ImageWidget::setZoom(double scale) {
     }
 
     requestRender();
+    if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
+         m_refreshTimer->start();
+    }
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
@@ -96,6 +99,9 @@ void ImageWidget::setPan(double x, double y) {
     m_viewX = x;
     m_viewY = y;
     requestRender();
+    if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
+         m_refreshTimer->start();
+    }
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
@@ -1102,6 +1108,9 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   m_viewY = mouseImageY - mouseY / m_scale;
 
   requestRender();
+  if (m_renderQueue.hasActiveTasks() && !m_refreshTimer->isActive()) {
+       m_refreshTimer->start();
+  }
   emit viewStateChanged(
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
@@ -1376,48 +1385,31 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);
     } else {
-        if (!m_refreshTimer->isActive()) {
+        // Only start refresh timer if current view params differ from last rendered image
+        // (i.e. we are zooming or panning and need "stretching" preview)
+        bool geometricChange = qAbs(m_scale - m_lastRenderedScale) > 1e-6 ||
+                               qAbs(m_viewX - m_lastRenderedX) > 0.1 ||
+                               qAbs(m_viewY - m_lastRenderedY) > 0.1;
+        
+        if (geometricChange && !m_refreshTimer->isActive()) {
             m_refreshTimer->start();
         }
     }
 }
 void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
 {
-    bool valid = success; // You might want to check tracking explicitly if needed, but Queue handles ID tracking.
-    
-    // We update m_pixmap only if this is a valid success.
-    // NOTE: RenderQueue::reportFinished manages the cancellation of older jobs.
-    // However, RenderQueue doesn't know about "is this image newer than what I have on screen?".
-    // Actually, RenderQueue just reports "Finished". It doesn't decide what to display.
-    // WE need to decide whether to show it.
-    
-    // But wait, RenderQueue::reportFinished cancels OLDER jobs.
-    // So if this job finishes successfully, we should tell queue.
-    
     m_renderQueue.reportFinished(reqId, success);
 
     if (success) {
-        // We simply trust that if it finished successfully and wasn't cancelled, it's good.
-        // Actually, we should check timestamps if we want to be super safe, but the queue logic 
-        // cancels stale ones. If a stale one arrives here, it means it wasn't cancelled *yet* or race.
-        // But since we are main thread, and cancellation sends signal, maybe we are OK?
-        
-        // Let's implement a simple check:
-        // We need a local tracker? No, the queue does it.
-        // But the queue logic "if reqId > m_lastCompletedReqId" is inside Queue now.
-        // We can't access it.
-        
-        // Actually, we should probably update display ALWAYS if success, 
-        // because the queue wouldn't have cancelled it if it was super outdated?
-        // Wait, the queue cancels older active jobs when a newer one finishes.
-        // But if an older one finishes *after* a newer one (race?), the queue handles it?
-        
-        // Let's assume we update.
-        m_pixmap = image;
-        m_lastRenderedScale = scale;
-        m_lastRenderedX = xOffset;
-        m_lastRenderedY = yOffset;
-        update(); 
+        // Sequencing check: only update if this request is newer than the last applied one
+        if (reqId > m_lastCompletedReqId) {
+            m_pixmap = image;
+            m_lastRenderedScale = scale;
+            m_lastRenderedX = xOffset;
+            m_lastRenderedY = yOffset;
+            m_lastCompletedReqId = reqId;
+            update(); 
+        }
     }
 
     if (!m_renderQueue.hasActiveTasks()) {
