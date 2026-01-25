@@ -235,6 +235,89 @@ public:
     fprintf (stderr, "Released data not found in cache %s\n", name);
   }
 
+  void
+  inc_nuses (TP val)
+  {
+    std::lock_guard<std::timed_mutex> guard (lock);
+    for (cache_entry *e = entries;; e = e->next)
+      if (e->val.get () == val)
+        {
+          e->nuses++;
+          return;
+        }
+  }
+
+  class cached_ptr
+  {
+    lru_cache *m_cache;
+    TP m_val;
+
+  public:
+    // Lifecycle: Ensure release() is called automatically
+    cached_ptr () : m_cache (nullptr), m_val (nullptr) {}
+    cached_ptr (std::nullptr_t) : m_cache (nullptr), m_val (nullptr) {}
+    cached_ptr (lru_cache *c, TP v) : m_cache (c), m_val (v) {}
+    ~cached_ptr ()
+    {
+      if (m_cache && m_val)
+        m_cache->release (m_val);
+    }
+
+    // Shared ownership: Increment reference count
+    cached_ptr (const cached_ptr &o) : m_cache (o.m_cache), m_val (o.m_val)
+    {
+      if (m_cache && m_val)
+        m_cache->inc_nuses (m_val);
+    }
+    cached_ptr &
+    operator= (const cached_ptr &o)
+    {
+      if (this != &o)
+        {
+          if (m_cache && m_val)
+            m_cache->release (m_val);
+          m_cache = o.m_cache;
+          m_val = o.m_val;
+          if (m_cache && m_val)
+            m_cache->inc_nuses (m_val);
+        }
+      return *this;
+    }
+
+    // Move semantics
+    cached_ptr (cached_ptr &&o) noexcept : m_cache (o.m_cache), m_val (o.m_val)
+    {
+      o.m_val = nullptr;
+    }
+    cached_ptr &
+    operator= (cached_ptr &&o) noexcept
+    {
+      if (this != &o)
+        {
+          if (m_cache && m_val)
+            m_cache->release (m_val);
+          m_cache = o.m_cache;
+          m_val = o.m_val;
+          o.m_val = nullptr;
+        }
+      return *this;
+    }
+
+    // Pointer ergonomics
+    TP operator-> () const { return m_val; }
+    TP get () const { return m_val; }
+    explicit operator bool () const { return m_val != nullptr; }
+
+    template <typename Index>
+    auto operator[] (Index i) const -> decltype(m_val[i]) { return m_val[i]; }
+  };
+
+  cached_ptr
+  get_cached (P &p, progress_info *progress, uint64_t *id = nullptr)
+  {
+    return cached_ptr (this, get (p, progress, id));
+  }
+
 private:
   int cache_size;
   std::timed_mutex lock; std::condition_variable_any cond;
@@ -429,6 +512,90 @@ public:
           return;
         }
     fprintf (stderr, "Released data not found in cache %s\n", name);
+  }
+
+  void
+  inc_nuses (TP val)
+  {
+    std::lock_guard<std::timed_mutex> guard (lock);
+    for (cache_entry *e = entries;; e = e->next)
+      if (e->val.get () == val)
+        {
+          e->nuses++;
+          return;
+        }
+  }
+
+  class cached_ptr
+  {
+    lru_tile_cache *m_cache;
+    TP m_val;
+
+  public:
+    // Lifecycle: Ensure release() is called automatically
+    cached_ptr () : m_cache (nullptr), m_val (nullptr) {}
+    cached_ptr (std::nullptr_t) : m_cache (nullptr), m_val (nullptr) {}
+    cached_ptr (lru_tile_cache *c, TP v) : m_cache (c), m_val (v) {}
+    ~cached_ptr ()
+    {
+      if (m_cache && m_val)
+        m_cache->release (m_val);
+    }
+
+    // Shared ownership: Increment reference count
+    cached_ptr (const cached_ptr &o) : m_cache (o.m_cache), m_val (o.m_val)
+    {
+      if (m_cache && m_val)
+        m_cache->inc_nuses (m_val);
+    }
+    cached_ptr &
+    operator= (const cached_ptr &o)
+    {
+      if (this != &o)
+        {
+          if (m_cache && m_val)
+            m_cache->release (m_val);
+          m_cache = o.m_cache;
+          m_val = o.m_val;
+          if (m_cache && m_val)
+            m_cache->inc_nuses (m_val);
+        }
+      return *this;
+    }
+
+    // Move semantics
+    cached_ptr (cached_ptr &&o) noexcept : m_cache (o.m_cache), m_val (o.m_val)
+    {
+      o.m_val = nullptr;
+    }
+    cached_ptr &
+    operator= (cached_ptr &&o) noexcept
+    {
+      if (this != &o)
+        {
+          if (m_cache && m_val)
+            m_cache->release (m_val);
+          m_cache = o.m_cache;
+          m_val = o.m_val;
+          o.m_val = nullptr;
+        }
+      return *this;
+    }
+
+    // Pointer ergonomics
+    TP operator-> () const { return m_val; }
+    TP get () const { return m_val; }
+    explicit operator bool () const { return m_val != nullptr; }
+
+    template <typename Index>
+    auto operator[] (Index i) const -> decltype(m_val[i]) { return m_val[i]; }
+  };
+
+  cached_ptr
+  get_cached (P &p, int xshift, int yshift, int width, int height,
+              progress_info *progress, uint64_t *id = nullptr)
+  {
+    return cached_ptr (this, get (p, xshift, yshift, width, height, progress, id));
   }
 
 private:

@@ -35,29 +35,12 @@ sharpened_data::~sharpened_data ()
   m_data = NULL;
 }
 
-namespace
-{
+
 /*****************************************************************************/
 /*                         Backlight correction cache.                       */
 /*****************************************************************************/
 
-struct backlight_correction_cache_params
-{
-  backlight_correction_parameters *backlight_correction_params;
-  uint64_t backlight_correction_id;
-  int width;
-  int height;
-  luminosity_t backlight_correction_black;
-  bool grayscale_needed;
-  bool
-  operator== (backlight_correction_cache_params &o)
-  {
-    return backlight_correction_id == o.backlight_correction_id
-           && width == o.width && height == o.height
-           && backlight_correction_black == o.backlight_correction_black
-           && grayscale_needed == o.grayscale_needed;
-  }
-};
+
 
 backlight_correction *
 get_new_backlight_correction (struct backlight_correction_cache_params &p,
@@ -82,46 +65,7 @@ static lru_cache<backlight_correction_cache_params, backlight_correction,
 /*****************************************************************************/
 
 /* Lookup table translates raw input data into linear values.  */
-struct lookup_table_params
-{
-  /* image_data are in range 0...img_maxval.  */
-  int maxval;
-  /* Input data are assumed to have gamma.  Inverse of gamma is applied to
-     get linear data.
-     if gamma is set to 0, then gamma_table is expected to be a vector
-     converting raw data to linear gamma  */
-  luminosity_t gamma;
-  std::vector<luminosity_t> gamma_table;
-  /* Dark point is subtracted from linear data and then the result is
-     multiplied by scan_exposure.  */
-  luminosity_t dark_point, scan_exposure;
-  /* True if we should invert positive to negative.  */
-  bool invert;
-  /* Characteristic curve.  TODO: Not really implemented  */
-  hd_curve *film_characteristic_curve;
 
-  /* True if curve should be inverted.  */
-  bool restore_original_luminosity;
-
-  lookup_table_params ()
-      : maxval (0), gamma (1), dark_point (0), scan_exposure (1), invert (0),
-        film_characteristic_curve (NULL), restore_original_luminosity (0)
-  {
-  }
-
-  bool
-  operator== (lookup_table_params &o)
-  {
-    return maxval == o.maxval && gamma == o.gamma
-           && (gamma || gamma_table == o.gamma_table)
-           && dark_point == o.dark_point && scan_exposure == o.scan_exposure
-           && invert == o.invert
-           /* TODO: Invent cache IDs for curves!
-              Pointer compare may not be safe if curve is released.  */
-           && film_characteristic_curve == o.film_characteristic_curve
-           && restore_original_luminosity == o.restore_original_luminosity;
-  }
-};
 
 /* Simulate linear photographic negative.  Given luminosity (exposure time)
    return luminosity of negative.  */
@@ -251,18 +195,7 @@ get_new_lookup_table (struct lookup_table_params &p, progress_info *)
 
 /* Output lookup table takes linear r,g,b values in range 0...65536
    and outputs r,g,b values in sRGB gamma curve in range 0...maxval.  */
-struct out_lookup_table_params
-{
-  int maxval;
-  luminosity_t output_gamma;
-  luminosity_t target_film_gamma;
-  bool
-  operator== (out_lookup_table_params &o)
-  {
-    return maxval == o.maxval && output_gamma == o.output_gamma
-           && target_film_gamma == o.target_film_gamma;
-  }
-};
+
 
 precomputed_function<luminosity_t> *
 get_new_out_lookup_table (struct out_lookup_table_params &p, progress_info *)
@@ -296,43 +229,13 @@ static lru_cache<out_lookup_table_params, precomputed_function <luminosity_t>, p
 /*        (in tables are applied, channels mixed and data sharpened          */
 /*****************************************************************************/
 
-struct graydata_params
-{
-  /* Pointers in image_data may become stale if image is freed. Use ID
-     to check cache entries.  */
-  uint64_t image_id;
-  const image_data *img;
-  luminosity_t gamma;
-  std::vector<luminosity_t> gamma_table[3];
-  /* Dark point for mixing. */
-  rgbdata dark;
-  /* Weights of individual channels.  */
-  luminosity_t red, green, blue;
-  bool invert;
-  /* Backlight correction.  */
-  backlight_correction *backlight;
-  uint64_t backlight_correction_id;
-  bool ignore_infrared;
-  bool
-  operator== (graydata_params &o)
-  {
-    return image_id == o.image_id && gamma == o.gamma
-           && (gamma
-               || (gamma_table[0] == o.gamma_table[0]
-                   && gamma_table[1] == o.gamma_table[1]
-                   && gamma_table[2] == o.gamma_table[2]))
-           && invert == o.invert && dark == o.dark && red == o.red
-           && green == o.green && blue == o.blue
-           && backlight_correction_id == o.backlight_correction_id
-           && ignore_infrared == o.ignore_infrared;
-  }
-};
+
 
 struct gray_data_tables
 {
-  luminosity_t *rtable;
-  luminosity_t *gtable;
-  luminosity_t *btable;
+  render::lookup_table_cache_t::cached_ptr rtable;
+  render::lookup_table_cache_t::cached_ptr gtable;
+  render::lookup_table_cache_t::cached_ptr btable;
   rgbdata dark;
   luminosity_t red, green, blue;
   backlight_correction *correction;
@@ -377,41 +280,32 @@ compute_gray_data_tables (struct graydata_params &p, bool correction,
   par.dark_point = correction ? 0 : dark.red;
   par.invert = p.invert;
   par.gamma_table = p.gamma_table[0];
-  ret.rtable = lookup_table_cache.get (par, progress);
+  ret.rtable = lookup_table_cache.get_cached (par, progress);
   if (!ret.rtable)
     return ret;
   par.scan_exposure = correction ? 1 : green;
   par.dark_point = correction ? 0 : dark.green;
   par.gamma_table = p.gamma_table[1];
-  ret.gtable = lookup_table_cache.get (par, progress);
+  ret.gtable = lookup_table_cache.get_cached (par, progress);
   if (!ret.gtable)
     {
-      lookup_table_cache.release (ret.rtable);
-      ret.rtable = NULL;
+      ret.rtable = {};
       return ret;
     }
   par.scan_exposure = correction ? 1 : blue;
   par.dark_point = correction ? 0 : dark.blue;
   par.gamma_table = p.gamma_table[2];
-  ret.btable = lookup_table_cache.get (par, progress);
+  ret.btable = lookup_table_cache.get_cached (par, progress);
   if (!ret.btable)
     {
-      lookup_table_cache.release (ret.rtable);
-      ret.rtable = NULL;
-      lookup_table_cache.release (ret.gtable);
-      ret.gtable = NULL;
+      ret.rtable = {};
+      ret.gtable = {};
       return ret;
     }
   return ret;
 }
 
-inline void
-free_gray_data_tables (gray_data_tables &t)
-{
-  lookup_table_cache.release (t.rtable);
-  lookup_table_cache.release (t.gtable);
-  lookup_table_cache.release (t.btable);
-}
+
 
 inline luminosity_t
 compute_gray_data (gray_data_tables &t, int width, int height, int x, int y,
@@ -440,20 +334,11 @@ compute_gray_data (gray_data_tables &t, int width, int height, int x, int y,
 }
 
 
-struct gray_and_sharpen_params
-{
-  graydata_params gp;
-  sharpen_parameters sp;
-  bool
-  operator== (gray_and_sharpen_params &o)
-  {
-    return gp == o.gp && sp == o.sp;
-  }
-};
+
 
 struct getdata_params
 {
-  luminosity_t *table;
+  render::lookup_table_cache_t::cached_ptr table;
   backlight_correction *correction;
   int width, height;
 };
@@ -461,7 +346,7 @@ struct getdata_params
 /* Helper for sharpening template for images with gray data.  */
 inline luminosity_t
 getdata_helper_no_correction (unsigned short **graydata, int x, int y, int,
-                              getdata_params d)
+                              getdata_params &d)
 {
   if (colorscreen_checking)
     assert (x >= 0 && x < d.width && y >= 0 && y < d.height);
@@ -471,7 +356,7 @@ getdata_helper_no_correction (unsigned short **graydata, int x, int y, int,
 /* Helper for sharpening template for images with gray data.  */
 inline luminosity_t
 getdata_helper_correction (unsigned short **graydata, int x, int y, int,
-                           getdata_params d)
+                           getdata_params &d)
 {
   luminosity_t v = d.table[graydata[y][x]];
   if (colorscreen_checking)
@@ -481,7 +366,7 @@ getdata_helper_correction (unsigned short **graydata, int x, int y, int,
 }
 /* Helper for sharpening template for images with RGB data only.  */
 inline luminosity_t
-getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables t)
+getdata_helper2 (const image_data *img, int x, int y, int, gray_data_tables &t)
 {
   // assert (x >= 0 && x < t.width && y >= 0 && y < t.height);
   luminosity_t val = compute_gray_data (
@@ -518,7 +403,7 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
          ??? This does not work with the argyll profiles I made for Nikon.  */
       // if (!p.gp.gamma)
       // par.gamma_table = p.gp.img->to_linear[2];
-      d.table = lookup_table_cache.get (par, progress);
+      d.table = lookup_table_cache.get_cached (par, progress);
       d.correction = p.gp.backlight;
       d.width = p.gp.img->width;
       d.height = p.gp.img->height;
@@ -532,14 +417,14 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           if (p.sp.deconvolution_p ())
             {
               ok = deconvolve<luminosity_t, mem_luminosity_t,
-                               unsigned short **, getdata_params,
+                               unsigned short **, getdata_params &,
                                getdata_helper_correction> (
                   out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
 		  p.sp, progress, true);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
-                         getdata_params, getdata_helper_correction> (
+                         getdata_params &, getdata_helper_correction> (
                 out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
                 p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
 	       	p.sp.usm_amount, progress);
@@ -547,17 +432,16 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
       else if (p.sp.deconvolution_p ())
         {
           ok = deconvolve<luminosity_t, mem_luminosity_t, unsigned short **,
-                           getdata_params, getdata_helper_no_correction> (
+                           getdata_params &, getdata_helper_no_correction> (
               out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
 	      p.sp, progress, true);
         }
       else
         ok = sharpen<luminosity_t, mem_luminosity_t, unsigned short **,
-                     getdata_params, getdata_helper_no_correction> (
+                     getdata_params &, getdata_helper_no_correction> (
             out, p.gp.img->data, d, p.gp.img->width, p.gp.img->height,
             p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
             p.sp.usm_amount, progress);
-      lookup_table_cache.release (d.table);
     }
   else
     {
@@ -571,18 +455,17 @@ get_new_gray_sharpened_data (struct gray_and_sharpen_params &p,
           if (p.sp.deconvolution_p ())
             {
               ok = deconvolve<luminosity_t, mem_luminosity_t,
-                               const image_data *, gray_data_tables,
+                               const image_data *, gray_data_tables &,
                                getdata_helper2> (
                   out, p.gp.img, t, p.gp.img->width, p.gp.img->height,
 		  p.sp, progress, true);
             }
           else
             ok = sharpen<luminosity_t, mem_luminosity_t, const image_data *,
-                         gray_data_tables, getdata_helper2> (
+                         gray_data_tables &, getdata_helper2> (
                 out, p.gp.img, t, p.gp.img->width, p.gp.img->height,
 		p.sp.get_mode () == sharpen_parameters::none ? 0 : p.sp.usm_radius,
                 p.sp.usm_amount, progress);
-          free_gray_data_tables (t);
         }
     }
   if (!ok)
@@ -596,7 +479,7 @@ static lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *,
                  get_new_gray_sharpened_data, 2>
     gray_and_sharpened_data_cache ("gray and sharpened data");
 
-}
+
 /* Prune render cache.  We need to do this so destruction order of MapAlloc and
    the cache does not yield an segfault.  */
 
@@ -622,7 +505,7 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
               m_img.height,
               m_params.backlight_correction_black,
               /*!grayscale_needed*/ true };
-      m_backlight_correction = backlight_correction_cache.get (
+      m_backlight_correction = backlight_correction_cache.get_cached (
           p, progress, &m_backlight_correction_id);
       if (!m_backlight_correction)
         return false;
@@ -635,26 +518,25 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
       if (!par.gamma)
         par.gamma_table = m_img.to_linear[0];
       par.invert = m_params.invert;
-      m_rgb_lookup_table[0] = lookup_table_cache.get (par, progress);
+      m_rgb_lookup_table[0] = lookup_table_cache.get_cached (par, progress);
       if (!m_rgb_lookup_table[0])
         return false;
       if (!par.gamma)
         {
           par.gamma_table = m_img.to_linear[1];
-          m_rgb_lookup_table[1] = lookup_table_cache.get (par, progress);
-          if (m_rgb_lookup_table[1] == m_rgb_lookup_table[0])
-            lookup_table_cache.release (m_rgb_lookup_table[1]);
+          m_rgb_lookup_table[1] = lookup_table_cache.get_cached (par, progress);
           par.gamma_table = m_img.to_linear[2];
-          m_rgb_lookup_table[2] = lookup_table_cache.get (par, progress);
-          if (m_rgb_lookup_table[2] == m_rgb_lookup_table[0])
-            lookup_table_cache.release (m_rgb_lookup_table[2]);
+          m_rgb_lookup_table[2] = lookup_table_cache.get_cached (par, progress);
         }
       else
-        m_rgb_lookup_table[1] = m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
+        {
+          m_rgb_lookup_table[1] = m_rgb_lookup_table[0];
+          m_rgb_lookup_table[2] = m_rgb_lookup_table[0];
+        }
     }
   out_lookup_table_params out_par
       = { m_dst_maxval, m_params.output_gamma, m_params.target_film_gamma };
-  m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
+  m_out_lookup_table = out_lookup_table_cache.get_cached (out_par, progress);
 
   if (grayscale_needed)
     {
@@ -668,11 +550,11 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
                 m_params.mix_green,
                 m_params.mix_blue,
                 m_params.invert,
-                m_backlight_correction,
+                m_backlight_correction.get (),
                 m_backlight_correction_id,
                 m_params.ignore_infrared }, m_params.sharpen };
       m_sharpened_data_holder
-          = gray_and_sharpened_data_cache.get (p, progress, &m_gray_data_id);
+          = gray_and_sharpened_data_cache.get_cached (p, progress, &m_gray_data_id);
       if (!m_sharpened_data_holder)
         return false;
       m_sharpened_data = m_sharpened_data_holder->m_data;
@@ -776,22 +658,6 @@ render::precompute_all (bool grayscale_needed, bool normalized_patches,
 
 render::~render ()
 {
-  if (m_out_lookup_table)
-    out_lookup_table_cache.release (m_out_lookup_table);
-  if (m_rgb_lookup_table[0])
-    {
-      lookup_table_cache.release (m_rgb_lookup_table[0]);
-      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[1]
-          && m_rgb_lookup_table[1])
-        lookup_table_cache.release (m_rgb_lookup_table[1]);
-      if (m_rgb_lookup_table[0] != m_rgb_lookup_table[2]
-          && m_rgb_lookup_table[2])
-        lookup_table_cache.release (m_rgb_lookup_table[2]);
-    }
-  if (m_sharpened_data)
-    gray_and_sharpened_data_cache.release (m_sharpened_data_holder);
-  if (m_backlight_correction)
-    backlight_correction_cache.release (m_backlight_correction);
   if (m_spectrum_dyes_to_xyz)
     delete m_spectrum_dyes_to_xyz;
 }

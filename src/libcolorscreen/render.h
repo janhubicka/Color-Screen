@@ -19,6 +19,8 @@
 #include "include/stitch.h"
 #include "backlight-correction.h"
 #include "mem-luminosity.h"
+#include "lru-cache.h"
+#include <vector>
 namespace colorscreen
 {
 /* Helper for downscaling template for color rendering
@@ -39,6 +41,109 @@ account_pixel (luminosity_t *data, luminosity_t lum, luminosity_t scale)
   *data += lum * scale;
 }
 
+struct backlight_correction_cache_params
+{
+  class backlight_correction_parameters *backlight_correction_params;
+  uint64_t backlight_correction_id;
+  int width;
+  int height;
+  luminosity_t backlight_correction_black;
+  bool grayscale_needed;
+  bool
+  operator== (backlight_correction_cache_params &o)
+  {
+    return backlight_correction_id == o.backlight_correction_id
+           && width == o.width && height == o.height
+           && backlight_correction_black == o.backlight_correction_black
+           && grayscale_needed == o.grayscale_needed;
+  }
+};
+
+struct lookup_table_params
+{
+  int maxval;
+  luminosity_t gamma;
+  std::vector<luminosity_t> gamma_table;
+  luminosity_t dark_point, scan_exposure;
+  bool invert;
+  class hd_curve *film_characteristic_curve;
+  bool restore_original_luminosity;
+
+  lookup_table_params ()
+      : maxval (0), gamma (1), dark_point (0), scan_exposure (1), invert (0),
+        film_characteristic_curve (NULL), restore_original_luminosity (0)
+  {
+  }
+
+  bool
+  operator== (lookup_table_params &o)
+  {
+    return maxval == o.maxval && gamma == o.gamma
+           && (gamma || gamma_table == o.gamma_table)
+           && dark_point == o.dark_point && scan_exposure == o.scan_exposure
+           && invert == o.invert
+           && film_characteristic_curve == o.film_characteristic_curve
+           && restore_original_luminosity == o.restore_original_luminosity;
+  }
+};
+
+struct out_lookup_table_params
+{
+  int maxval;
+  luminosity_t output_gamma;
+  luminosity_t target_film_gamma;
+  bool
+  operator== (out_lookup_table_params &o)
+  {
+    return maxval == o.maxval && output_gamma == o.output_gamma
+           && target_film_gamma == o.target_film_gamma;
+  }
+};
+
+struct graydata_params
+{
+  uint64_t image_id;
+  const class image_data *img;
+  luminosity_t gamma;
+  std::vector<luminosity_t> gamma_table[3];
+  rgbdata dark;
+  luminosity_t red, green, blue;
+  bool invert;
+  class backlight_correction *backlight;
+  uint64_t backlight_correction_id;
+  bool ignore_infrared;
+  bool
+  operator== (graydata_params &o)
+  {
+    return image_id == o.image_id && gamma == o.gamma
+           && (gamma
+               || (gamma_table[0] == o.gamma_table[0]
+                   && gamma_table[1] == o.gamma_table[1]
+                   && gamma_table[2] == o.gamma_table[2]))
+           && invert == o.invert && dark == o.dark && red == o.red
+           && green == o.green && blue == o.blue
+           && backlight_correction_id == o.backlight_correction_id
+           && ignore_infrared == o.ignore_infrared;
+  }
+};
+
+struct gray_and_sharpen_params
+{
+  graydata_params gp;
+  class sharpen_parameters sp;
+  bool
+  operator== (gray_and_sharpen_params &o)
+  {
+    return gp == o.gp && sp == o.sp;
+  }
+};
+
+class sharpened_data;
+backlight_correction * get_new_backlight_correction (struct backlight_correction_cache_params &, progress_info *);
+luminosity_t * get_new_lookup_table (struct lookup_table_params &, progress_info *);
+precomputed_function<luminosity_t> * get_new_out_lookup_table (struct out_lookup_table_params &, progress_info *);
+sharpened_data * get_new_gray_sharpened_data (struct gray_and_sharpen_params &, progress_info *);
+
 /* Base class for rendering routines.  It holds
      - scr-to-img transformation info
      - the scanned image data
@@ -48,8 +153,8 @@ class render
 {
 public:
   render (const image_data &img, const render_parameters &rparam, int dstmaxval)
-  : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (NULL), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
-    m_rgb_lookup_table {NULL, NULL, NULL}, m_out_lookup_table (NULL), m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (NULL), m_backlight_correction_id (0), m_tone_curve ()
+  : m_img (img), m_params (rparam), m_gray_data_id (img.id), m_sharpened_data (NULL), m_sharpened_data_holder (), m_maxval (img.data ? img.maxval : 65535), m_dst_maxval (dstmaxval),
+    m_spectrum_dyes_to_xyz (NULL), m_backlight_correction (), m_backlight_correction_id (0), m_tone_curve ()
   {
     if (m_params.invert)
       {
@@ -145,6 +250,11 @@ public:
   }
 
   static constexpr const size_t out_lookup_table_size = 65536 * 16;
+  typedef lru_cache<lookup_table_params, luminosity_t[], luminosity_t *, get_new_lookup_table, 4> lookup_table_cache_t;
+  typedef lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>, precomputed_function<luminosity_t> *, get_new_out_lookup_table, 4> out_lookup_table_cache_t;
+  typedef lru_cache<backlight_correction_cache_params, backlight_correction, backlight_correction *, get_new_backlight_correction, 10> backlight_cache_t;
+  typedef lru_cache<gray_and_sharpen_params, sharpened_data, sharpened_data *, get_new_gray_sharpened_data, 2> gray_cache_t;
+
 protected:
   void get_color_data (rgbdata *graydata, coord_t x, coord_t y, int width, int height, coord_t pixelsize, progress_info *progress);
 
@@ -174,15 +284,15 @@ protected:
   /* Sharpened data we render from.  */
   mem_luminosity_t *m_sharpened_data;
   /* Wrapping class to cause proper destruction.  */
-  class sharpened_data *m_sharpened_data_holder;
+  gray_cache_t::cached_ptr m_sharpened_data_holder;
   /* Maximal value in m_data.  */
   int m_maxval;
   /* Desired maximal value of output data (usually either 256 or 65536).  */
   int m_dst_maxval;
   /* Translates input rgb channel values into normalized range 0...1 gamma 1.  */
-  luminosity_t *m_rgb_lookup_table[3];
+  lookup_table_cache_t::cached_ptr m_rgb_lookup_table[3];
   /* Translates back to gamma 2.  */
-  precomputed_function<luminosity_t> *m_out_lookup_table;
+  out_lookup_table_cache_t::cached_ptr m_out_lookup_table;
   /* Color matrix.  For additvie processes it converts process RGB to prophoto RGB.
      For subtractive processes it only applies transformations does in process RGB.  */
   color_matrix m_color_matrix;
@@ -194,7 +304,7 @@ protected:
      corrections, like saturation control.  */
   color_matrix m_color_matrix2;
 
-  backlight_correction *m_backlight_correction;
+  backlight_cache_t::cached_ptr m_backlight_correction;
   uint64_t m_backlight_correction_id;
 
 private:
