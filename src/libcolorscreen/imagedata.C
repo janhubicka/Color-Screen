@@ -925,7 +925,7 @@ raw_image_data_loader::load_part (int *permille, const char **error,
             }
 	  luminosity_t rratio = rsum / grsum;
 	  luminosity_t bratio = bsum / gbsum;
-	  fprintf (stderr, "rratio %f bratio %f\n", rratio, bratio);
+	  //fprintf (stderr, "rratio %f bratio %f\n", rratio, bratio);
           rhistogram.set_range (1 - range, 1 + range, 65535 * 4);
           bhistogram.set_range (1 - range, 1 + range, 65535 * 4);
           for (int y = 0; y < m_img->height; y++)
@@ -964,7 +964,7 @@ raw_image_data_loader::load_part (int *permille, const char **error,
             }
           bscale = bhistogram.find_avg (0.2, 0.2) / bratio;
           rscale = rhistogram.find_avg (0.2, 0.2) / rratio;
-	  fprintf (stderr, "rscale %f bscale %f\n", rscale, bscale);
+	  //fprintf (stderr, "rscale %f bscale %f\n", rscale, bscale);
         }
 #pragma omp parallel for default(none)                                        \
     shared(m_img, RawProcessor, bscale, rscale)

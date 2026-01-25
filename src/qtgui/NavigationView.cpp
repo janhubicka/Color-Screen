@@ -440,15 +440,9 @@ void NavigationView::wheelEvent(QWheelEvent *event) {
   double numSteps = numDegrees / 15.0;
   double factor = qPow(1.1, numSteps);
 
-  // Mouse position in Image Coordinates
-  double mouseX = event->position().x() - m_imageRect.left();
-  double mouseY = event->position().y() - m_imageRect.top();
-  
-  CoordinateTransformer transformer(m_scan.get(), *m_rparams);
-  colorscreen::point_t scanPt = transformer.transformedToScanCrop({mouseX / m_previewScale, mouseY / m_previewScale});
-  
-  double imageX = scanPt.x;
-  double imageY = scanPt.y;
+  // Mouse position in transformed-crop coordinates (matching m_visibleRect)
+  double imageX = (event->position().x() - m_imageRect.left()) / m_previewScale;
+  double imageY = (event->position().y() - m_imageRect.top()) / m_previewScale;
 
   // Current main view state
   double oldScale = m_mainScale;
