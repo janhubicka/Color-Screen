@@ -15,26 +15,34 @@ void FlatFieldWorker::run() {
   const char *error = nullptr;
   
   if (m_progress) {
-    m_progress->set_task("Loading white reference", 100);
+    m_progress->set_task("Flat Field", 1);
   }
-
   colorscreen::image_data whiteScan;
-  if (!whiteScan.load(m_whiteFile.toLocal8Bit().constData(), false, &error, m_progress.get(), m_demosaic)) {
-    qWarning() << "Failed to load white reference:" << error;
-    emit finished(false, nullptr);
-    return;
-  }
+  colorscreen::sub_task task (m_progress.get ());  /* Keep so tasks are nsted. */
+  {
+    if (m_progress) {
+      m_progress->set_task("Loading white reference", 1);
+    }
+    colorscreen::sub_task task (m_progress.get ());  /* Keep so tasks are nsted. */
 
-  if (m_progress && m_progress->cancelled()) {
-    emit finished(false, nullptr);
-    return;
+    if (!whiteScan.load(m_whiteFile.toLocal8Bit().constData(), false, &error, m_progress.get(), m_demosaic)) {
+      qWarning() << "Failed to load white reference:" << error;
+      emit finished(false, nullptr);
+      return;
+    }
+
+    if (m_progress && m_progress->cancelled()) {
+      emit finished(false, nullptr);
+      return;
+    }
   }
 
   std::unique_ptr<colorscreen::image_data> blackScan;
   if (!m_blackFile.isEmpty()) {
     if (m_progress) {
-      m_progress->set_task("Loading black reference", 100);
+      m_progress->set_task("Loading black reference", 1);
     }
+    colorscreen::sub_task task (m_progress.get ());  /* Keep so tasks are nsted. */
     blackScan = std::make_unique<colorscreen::image_data>();
     // Black references usually don't have enough data for scaling weights, so use standard monochromatic for Bayer
     colorscreen::image_data::demosaicing_t blackDemosaic = m_demosaic;
@@ -57,6 +65,7 @@ void FlatFieldWorker::run() {
   if (m_progress) {
     m_progress->set_task("Analyzing flat field", 1);
   }
+  colorscreen::sub_task task2 (m_progress.get ());  /* Keep so tasks are nsted. */
 
   std::shared_ptr<colorscreen::backlight_correction_parameters> cor = 
       colorscreen::backlight_correction_parameters::analyze_scan(whiteScan, m_gamma, blackScan.get());
@@ -67,7 +76,7 @@ void FlatFieldWorker::run() {
   }
 
   if (!cor) {
-    qWarning() << "Backlight analysis failed";
+    qWarning() << "Flat field analysis failed";
     emit finished(false, nullptr);
     return;
   }

@@ -1742,6 +1742,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
   addProgress(progress);
 
   std::shared_ptr<colorscreen::image_data> tempScan =
@@ -2205,8 +2206,9 @@ void MainWindow::onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress
   
   // Update progress info
   if (progress) {
-      progress->set_task("Optimizing geometry", 100);
+      progress->set_task("Optimizing geometry", 1);
   }
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
 
   // Check if nonlinear corrections are enabled
   bool computeMesh = m_geometryPanel->isNonlinearEnabled();
@@ -2720,7 +2722,8 @@ void MainWindow::onAreaSelected(QRect area) {
   
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Finding registration points", 100);
+  progress->set_task("Finding registration points", 1);
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
   addProgress(progress);
   
   // Create worker and thread
@@ -2805,7 +2808,8 @@ void MainWindow::onAutodetectScreen() {
   
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Detecting screen", 100);
+  progress->set_task("Detecting screen", 1);
+  colorscreen::sub_task task (progress.get ());  /* Keep so tasks appear nested.  */
   addProgress(progress);
   
   // Create worker and thread
@@ -2863,7 +2867,7 @@ void MainWindow::onDetectScreenFinished(bool success, colorscreen::detected_scre
   
   QMessageBox msgBox(this);
   msgBox.setWindowTitle("Screen Detection");
-  msgBox.setIconPixmap(renderScreenIcon(result.param.type).pixmap(64, 64));
+  msgBox.setIconPixmap(renderScreenIcon(result.param.type).pixmap(128, 128));
   
   if (currentDye != detectedDye) {
     msgBox.setText(QString("Detected Screen: <b>%1</b>").arg(detectedScreen));

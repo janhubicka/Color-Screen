@@ -106,7 +106,7 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
        progress->set_task(taskName, 1);
     }
 
-    colorscreen::sub_task task (progress.get ());
+    colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
     try {
         colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
         
