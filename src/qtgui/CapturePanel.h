@@ -26,6 +26,10 @@ public:
 signals:
     void cropRequested();
   void fieldLevelingRequested();
+  void detachBacklightRequested(QWidget *w);
+
+public:
+  void reattachBacklight(QWidget *w);
 
 private:
     void setupUi();
@@ -52,6 +56,7 @@ private:
     class QPushButton *m_useMirrorBtn = nullptr;
     class QLabel *m_softwareValue = nullptr;
     class QLabel *m_sensorFillFactorValue = nullptr;
+    class BacklightChartWidget *m_backlightWidget = nullptr;
 };
 
 #endif // CAPTURE_PANEL_H

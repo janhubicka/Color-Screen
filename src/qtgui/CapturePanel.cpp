@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/imagedata.h"
+#include "BacklightChartWidget.h"
 
 CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, ReloadCallback reloadCallback, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent), m_reloadCallback(reloadCallback)
@@ -440,9 +441,62 @@ void CapturePanel::setupUi()
 #endif
     
     addButtonParameter("Field leveling", "Set reference", [this]() { emit fieldLevelingRequested(); });
+    
+    m_backlightWidget = new BacklightChartWidget();
+    QWidget *backlightSection = createDetachableSection("Backlight", m_backlightWidget, [this]() {
+      emit detachBacklightRequested(m_backlightWidget);
+    });
+    m_form->addRow(backlightSection);
+    
     addButtonParameter("Crop image", "Change crop", [this]() { emit cropRequested(); });
     
     // Initial update
     updateInfoLabels(m_stateGetter());
+
+    m_widgetStateUpdaters.push_back([this, backlightSection]() {
+        auto scan = m_imageGetter();
+        ParameterState s = m_stateGetter();
+        bool visible = scan != nullptr && s.rparams.backlight_correction != nullptr;
+        backlightSection->setVisible(visible);
+        if (visible && m_backlightWidget) {
+            m_backlightWidget->setBacklightData(s.rparams.backlight_correction,
+                                              scan->width, scan->height,
+                                              s.rparams.get_scan_crop(scan->width, scan->height),
+                                              s.rparams.backlight_correction_black,
+                                              s.rparams.scan_mirror,
+                                              s.rparams.scan_rotation);
+        }
+    });
+
+    updateUI();
 }
+
+void CapturePanel::reattachBacklight(QWidget *w) {
+    if (w != m_backlightWidget)
+        return;
+
+    for (int i = 0; i < m_form->rowCount(); ++i) {
+        QLayoutItem *item = m_form->itemAt(i, QFormLayout::SpanningRole);
+        if (item && item->widget()) {
+            QWidget *section = item->widget();
+            if (section->layout()) {
+                QVBoxLayout *vl = qobject_cast<QVBoxLayout*>(section->layout());
+                if (vl && vl->count() > 0) {
+                    QWidget *header = vl->itemAt(0)->widget();
+                    if (header) {
+                        QLabel *titleLabel = header->findChild<QLabel*>();
+                        if (titleLabel && titleLabel->text() == "Backlight") {
+                           vl->addWidget(w);
+                           w->show();
+                           header->show();
+                           updateUI();
+                           return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 

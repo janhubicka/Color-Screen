@@ -330,6 +330,11 @@ void MainWindow::setupUi() {
   addDockWidget(Qt::RightDockWidgetArea, m_nonlinearDock);
   m_nonlinearDock->hide();
 
+  m_backlightDock = new QDockWidget("Backlight", this);
+  m_backlightDock->setObjectName("BacklightDock");
+  m_backlightDock->setVisible(false);
+  addDockWidget(Qt::RightDockWidgetArea, m_backlightDock);
+
   // Event Filter for robust Close detection
   class DockCloseEventFilter : public QObject {
     std::function<void()> m_onClose;
@@ -438,6 +443,9 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   connect(m_capturePanel, &CapturePanel::cropRequested, this, &MainWindow::onCropRequested);
   connect(m_capturePanel, &CapturePanel::fieldLevelingRequested, this, &MainWindow::onFieldLevelingRequested);
+  setupDock(m_backlightDock, m_capturePanel,
+            &CapturePanel::detachBacklightRequested,
+            &CapturePanel::reattachBacklight);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
@@ -1770,6 +1778,12 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   if (m_geometryPanel) {
     m_geometryPanel->updateDeformationChart();
   }
+
+  // Handle backlight dock visibility
+  if (m_backlightDock) {
+    bool hasBacklight = state.rparams.backlight_correction != nullptr;
+    m_backlightDock->setVisible(hasBacklight && m_backlightDock->widget() != nullptr);
+  }
   
   updateRegistrationGroupVisibility();
 }
@@ -2871,12 +2885,17 @@ void MainWindow::onCoordinateSystemChanged() {
   }
 }
 void MainWindow::onFieldLevelingRequested() {
-  QString whiteFile = QFileDialog::getOpenFileName(this, "Choose White Reference", m_currentImageFile,
-                                                    "Images (*.tiff *.tif *.jpg *.jpeg *.png *.dng *.arw *.cr2 *.nef *.orf *.raf);;All files (*.*)");
+  QString filters = "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
+                    "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
+                    "(*)";
+  QString whiteFile = QFileDialog::getOpenFileName(this, "Choose White Reference", m_currentImageFile, filters);
   if (whiteFile.isEmpty()) return;
 
-  QString blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference (Optional)", m_currentImageFile,
-                                                    "Images (*.tiff *.tif *.jpg *.jpeg *.png *.dng *.arw *.cr2 *.nef *.orf *.raf);;All files (*.*)");
+  QString blackFile;
+  if (QMessageBox::question(this, "Field Leveling", "Do you want to provide a black reference image (optional)?",
+                            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+    blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference", m_currentImageFile, filters);
+  }
   
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();

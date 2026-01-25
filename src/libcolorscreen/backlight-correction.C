@@ -3,6 +3,7 @@
 #include "backlight-correction.h"
 #include "loadsave.h"
 #include "lru-cache.h"
+#include "include/colorscreen.h"
 namespace colorscreen
 {
 bool
@@ -418,8 +419,40 @@ backlight_correction::backlight_correction (
 }
 
 void
-render_preview (tile_parameters &tile, const int_image_area &scan_area, luminosity_t black)
+backlight_correction_parameters::render_preview (tile_parameters &tile, int scan_width, int scan_height, const int_image_area &scan_area, luminosity_t black) const
 {
-  //coord_t xstep = width;
+  coord_t scan_portion_x = scan_area.width / (coord_t)scan_width;
+  coord_t xstep = m_width / (tile.width * scan_portion_x);
+
+  coord_t xstart = m_width * scan_area.x / scan_width;
+  coord_t ystart = m_height * scan_area.y / scan_height;
+  coord_t scan_portion_y = scan_area.width / (coord_t)scan_height;
+  coord_t ystep = m_height / (tile.height * scan_portion_y);
+  int rchannel = m_channel_enabled[0] ? 0 : 3;
+  int gchannel = m_channel_enabled[1] ? 1 : m_channel_enabled[0] ? 0 : 3;
+  int bchannel = m_channel_enabled[2] ? 2 : m_channel_enabled[0] ? 0 : 3;
+
+  auto sample = [&](int channel, int xx, int yy, coord_t rx, coord_t ry)
+  {
+    return m_luminosities[channel].lum[yy * m_width + xx] - m_luminosities[channel].sub[yy * m_width + xx];
+  };
+  printf ("%i %i %i - %i %i - %f %f %f %f\n", tile.width, tile.height, tile.rowstride, m_width, m_height, xstart, xstep, ystart,ystep);
+  for (int y = 0; y < tile.height; y++)
+    for (int x = 0; x < tile.width; x++)
+      {
+	int xx;
+	int yy;
+	coord_t rx = my_modf (xstart + x * xstep, &xx);
+	coord_t ry = my_modf (ystart + y * ystep, &yy);
+	xx = std::clamp (xx, 0, m_width - 1);
+	yy = std::clamp (yy, 0, m_height - 1);
+	if (y == 0)
+		printf ("%i %f", xx, sample (rchannel, xx, yy, rx, ry));
+	tile.pixels[y * tile.rowstride + 3 * x] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;
+	tile.pixels[y * tile.rowstride + 3 * x + 1] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;
+	tile.pixels[y * tile.rowstride + 3 * x + 2] = invert_gamma (sample (rchannel, xx, yy, rx, ry), -1) * 255 + 0.5;
+      }
+		printf ("\n");
+
 }
 }

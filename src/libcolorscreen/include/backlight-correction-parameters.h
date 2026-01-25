@@ -65,7 +65,7 @@ public:
   load_captureone_lcc (memory_buffer *buf, bool verbose = false);
   friend backlight_correction;
 
-  DLL_PUBLIC void render_preview (tile_parameters &tile, const int_image_area &scan_area, luminosity_t black) const
+  DLL_PUBLIC void render_preview (tile_parameters &tile, int scan_width, int scan_height, const int_image_area &scan_area, luminosity_t black) const;
 
   /* Unique id of the image (used for caching).  */
   uint64_t id;

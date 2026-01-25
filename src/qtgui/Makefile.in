@@ -116,6 +116,7 @@ PROGRAMS = $(bin_PROGRAMS)
 am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-MainWindow.$(OBJEXT) \
 	colorscreen_qt-ImageWidget.$(OBJEXT) \
+	colorscreen_qt-BacklightChartWidget.$(OBJEXT) \
 	colorscreen_qt-Renderer.$(OBJEXT) \
 	colorscreen_qt-NavigationView.$(OBJEXT) \
 	colorscreen_qt-ParameterState.$(OBJEXT) \
@@ -143,6 +144,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-CoordinateTransformer.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ImageWidget.$(OBJEXT) \
+	colorscreen_qt-moc_BacklightChartWidget.$(OBJEXT) \
 	colorscreen_qt-moc_Renderer.$(OBJEXT) \
 	colorscreen_qt-moc_NavigationView.$(OBJEXT) \
 	colorscreen_qt-moc_CapturePanel.$(OBJEXT) \
@@ -197,7 +199,9 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src/libcolorscreen -I$(top_builddir)/src/gtkgui -I$(top_builddir)/src/libcolorscreen/include
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
+am__depfiles_remade =  \
+	./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po \
+	./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CapturePanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ColorPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-CoordinateTransformer.Po \
@@ -225,6 +229,7 @@ am__depfiles_remade = ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkerBase.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
+	./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po \
@@ -446,6 +451,7 @@ colorscreen_qt_SOURCES = \
     main.cpp \
     MainWindow.cpp \
     ImageWidget.cpp \
+    BacklightChartWidget.cpp \
     Renderer.cpp \
     NavigationView.cpp \
     ParameterState.cpp \
@@ -478,6 +484,7 @@ colorscreen_qt_SOURCES = \
 MOC_SOURCES = \
     moc_MainWindow.cpp \
     moc_ImageWidget.cpp \
+    moc_BacklightChartWidget.cpp \
     moc_Renderer.cpp \
     moc_NavigationView.cpp \
     moc_CapturePanel.cpp \
@@ -502,7 +509,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FieldLevelingWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FieldLevelingWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -607,6 +614,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CapturePanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ColorPanel.Po@am__quote@ # am--include-marker
@@ -635,6 +643,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkerBase.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po@am__quote@ # am--include-marker
@@ -733,6 +742,20 @@ colorscreen_qt-ImageWidget.obj: ImageWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ImageWidget.cpp' object='colorscreen_qt-ImageWidget.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ImageWidget.obj `if test -f 'ImageWidget.cpp'; then $(CYGPATH_W) 'ImageWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/ImageWidget.cpp'; fi`
+
+colorscreen_qt-BacklightChartWidget.o: BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-BacklightChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Tpo -c -o colorscreen_qt-BacklightChartWidget.o `test -f 'BacklightChartWidget.cpp' || echo '$(srcdir)/'`BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Tpo $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='BacklightChartWidget.cpp' object='colorscreen_qt-BacklightChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-BacklightChartWidget.o `test -f 'BacklightChartWidget.cpp' || echo '$(srcdir)/'`BacklightChartWidget.cpp
+
+colorscreen_qt-BacklightChartWidget.obj: BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-BacklightChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Tpo -c -o colorscreen_qt-BacklightChartWidget.obj `if test -f 'BacklightChartWidget.cpp'; then $(CYGPATH_W) 'BacklightChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/BacklightChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Tpo $(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='BacklightChartWidget.cpp' object='colorscreen_qt-BacklightChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-BacklightChartWidget.obj `if test -f 'BacklightChartWidget.cpp'; then $(CYGPATH_W) 'BacklightChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/BacklightChartWidget.cpp'; fi`
 
 colorscreen_qt-Renderer.o: Renderer.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-Renderer.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-Renderer.Tpo -c -o colorscreen_qt-Renderer.o `test -f 'Renderer.cpp' || echo '$(srcdir)/'`Renderer.cpp
@@ -1111,6 +1134,20 @@ colorscreen_qt-moc_ImageWidget.obj: moc_ImageWidget.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_ImageWidget.cpp' object='colorscreen_qt-moc_ImageWidget.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ImageWidget.obj `if test -f 'moc_ImageWidget.cpp'; then $(CYGPATH_W) 'moc_ImageWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ImageWidget.cpp'; fi`
+
+colorscreen_qt-moc_BacklightChartWidget.o: moc_BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_BacklightChartWidget.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Tpo -c -o colorscreen_qt-moc_BacklightChartWidget.o `test -f 'moc_BacklightChartWidget.cpp' || echo '$(srcdir)/'`moc_BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_BacklightChartWidget.cpp' object='colorscreen_qt-moc_BacklightChartWidget.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_BacklightChartWidget.o `test -f 'moc_BacklightChartWidget.cpp' || echo '$(srcdir)/'`moc_BacklightChartWidget.cpp
+
+colorscreen_qt-moc_BacklightChartWidget.obj: moc_BacklightChartWidget.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_BacklightChartWidget.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Tpo -c -o colorscreen_qt-moc_BacklightChartWidget.obj `if test -f 'moc_BacklightChartWidget.cpp'; then $(CYGPATH_W) 'moc_BacklightChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_BacklightChartWidget.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Tpo $(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_BacklightChartWidget.cpp' object='colorscreen_qt-moc_BacklightChartWidget.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_BacklightChartWidget.obj `if test -f 'moc_BacklightChartWidget.cpp'; then $(CYGPATH_W) 'moc_BacklightChartWidget.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_BacklightChartWidget.cpp'; fi`
 
 colorscreen_qt-moc_Renderer.o: moc_Renderer.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_Renderer.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_Renderer.Tpo -c -o colorscreen_qt-moc_Renderer.o `test -f 'moc_Renderer.cpp' || echo '$(srcdir)/'`moc_Renderer.cpp
@@ -1582,6 +1619,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
@@ -1610,6 +1648,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po
@@ -1681,6 +1720,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
+	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CapturePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ColorPanel.Po
@@ -1709,6 +1749,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilePreviewPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CIEChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_CapturePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_ColorPanel.Po

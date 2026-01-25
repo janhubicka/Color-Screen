@@ -37,6 +37,7 @@ class QTimer;
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
+#include "BacklightChartWidget.h"
 #include <QElapsedTimer>
 
 struct ProgressEntry {
@@ -289,6 +290,8 @@ private:
   QDockWidget *m_lensDock;
   QDockWidget *m_perspectiveDock;
   QDockWidget *m_nonlinearDock;
+  QDockWidget *m_backlightDock;
+  BacklightChartWidget *m_backlightChart;
 
   // Current parameters file path
   QString m_currentImageFile;
