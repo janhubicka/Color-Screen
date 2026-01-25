@@ -873,6 +873,8 @@ struct render_parameters
 	    return capture_negative_with_screen;
 	  return capture_negative_with_screen_and_infrared;
 	  break;
+	default:
+	  abort ();
       }
   }
   enum capture_type
