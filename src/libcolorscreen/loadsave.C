@@ -7,11 +7,17 @@
 namespace colorscreen
 {
 
+/* There are two squares diagonally.  Horisontally the frequency is 1
+   diagonally the frequency is higher since side of square with
+   diagonal 1 is sqrt(2)/2  */
+
+#define Paget_res (1/(1.41421356237/2))
+
 const scr_type_property_t scr_names[max_scr_type]  = {
   { "Random", "Random", "", 0 },
-  { "Paget", "Paget", "", 3.0 / 2.0 / 1.414},
-  { "Thames", "Thames", "", 3.0 / 2.0 / 1.414  },
-  { "Finlay", "Finlay", "", 3.0 / 2.0 / 1.414},
+  { "Paget", "Paget", "", Paget_res},
+  { "Thames", "Thames", "", Paget_res  },
+  { "Finlay", "Finlay", "", Paget_res},
   { "Dufay", "Dufay", "", 1 },
   { "Dioptichrome-B", "Dioptichrome-B", "", 1 },
   { "ImprovedDioptichrome-B", "ImprovedDioptichrome-B", "", 1 },

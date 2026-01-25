@@ -226,7 +226,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   if (m_scanDpi > 0) {
     labelY += 4; // Extra padding below Pixel frequency
     // Draw cycles per mm axis (lp/mm)
-    double lp_mm_max = (m_scanDpi / 25.4) / 2.0;
+    double lp_mm_max = (m_scanDpi / 25.4);
 
     for (int i = 0; i <= 10; i++) {
         int x = chartRect.left() + (chartRect.width() * i / 10);
@@ -359,7 +359,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   if (mtf50_freq >= 0) {
       QString mtf50Text = QString("MTF50: %1 px freq").arg(mtf50_freq, 0, 'f', 3);
       if (m_scanDpi > 0) {
-          double lp_mm = mtf50_freq * (m_scanDpi / 25.4) / 2.0;
+          double lp_mm = mtf50_freq * (m_scanDpi / 25.4);
           mtf50Text += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
       }
       painter.drawText(QRect(layout.marginLeft, infoY, chartRect.width(), layout.lineHeight), Qt::AlignLeft | Qt::AlignVCenter, mtf50Text);
@@ -370,7 +370,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   if (m_screenFreq > 0) {
       QString screenText = QString("Screen: %1 px freq").arg(m_screenFreq, 0, 'f', 3);
       if (m_scanDpi > 0) {
-          double lp_mm = m_screenFreq * (m_scanDpi / 25.4) / 2.0;
+          double lp_mm = m_screenFreq * (m_scanDpi / 25.4);
           screenText += QString(" (%1 lp/mm)").arg(lp_mm, 0, 'f', 1);
       }
       
