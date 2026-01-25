@@ -30,6 +30,7 @@ signals:
 
 public:
   void reattachBacklight(QWidget *w);
+  void setCropChecked(bool checked);
 
 private:
     void setupUi();
@@ -57,6 +58,7 @@ private:
     class QLabel *m_softwareValue = nullptr;
     class QLabel *m_sensorFillFactorValue = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
+    class QPushButton *m_cropBtn = nullptr;
 };
 
 #endif // CAPTURE_PANEL_H

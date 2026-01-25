@@ -140,6 +140,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-PagetAnimation.$(OBJEXT) \
 	colorscreen_qt-JolyAnimation.$(OBJEXT) \
 	colorscreen_qt-TaskQueue.$(OBJEXT) \
+	colorscreen_qt-Logging.$(OBJEXT) \
 	colorscreen_qt-SubtitleOverlay.$(OBJEXT) \
 	colorscreen_qt-CoordinateTransformer.$(OBJEXT)
 am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
@@ -213,6 +214,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-ImageWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po \
+	./$(DEPDIR)/colorscreen_qt-Logging.Po \
 	./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
 	./$(DEPDIR)/colorscreen_qt-NavigationView.Po \
@@ -475,6 +477,7 @@ colorscreen_qt_SOURCES = \
     PagetAnimation.cpp \
     JolyAnimation.cpp \
     TaskQueue.cpp \
+    Logging.cpp \
     SubtitleOverlay.cpp \
     CoordinateTransformer.cpp
 
@@ -509,7 +512,7 @@ MOC_SOURCES = \
     moc_JolyAnimation.cpp \
     moc_TaskQueue.cpp
 
-EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
+EXTRA_DIST = ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h WorkerBase.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp
@@ -627,6 +630,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ImageWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Logging.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MainWindow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-NavigationView.Po@am__quote@ # am--include-marker
@@ -1078,6 +1082,20 @@ colorscreen_qt-TaskQueue.obj: TaskQueue.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='TaskQueue.cpp' object='colorscreen_qt-TaskQueue.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-TaskQueue.obj `if test -f 'TaskQueue.cpp'; then $(CYGPATH_W) 'TaskQueue.cpp'; else $(CYGPATH_W) '$(srcdir)/TaskQueue.cpp'; fi`
+
+colorscreen_qt-Logging.o: Logging.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-Logging.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-Logging.Tpo -c -o colorscreen_qt-Logging.o `test -f 'Logging.cpp' || echo '$(srcdir)/'`Logging.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-Logging.Tpo $(DEPDIR)/colorscreen_qt-Logging.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='Logging.cpp' object='colorscreen_qt-Logging.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-Logging.o `test -f 'Logging.cpp' || echo '$(srcdir)/'`Logging.cpp
+
+colorscreen_qt-Logging.obj: Logging.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-Logging.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-Logging.Tpo -c -o colorscreen_qt-Logging.obj `if test -f 'Logging.cpp'; then $(CYGPATH_W) 'Logging.cpp'; else $(CYGPATH_W) '$(srcdir)/Logging.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-Logging.Tpo $(DEPDIR)/colorscreen_qt-Logging.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='Logging.cpp' object='colorscreen_qt-Logging.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-Logging.obj `if test -f 'Logging.cpp'; then $(CYGPATH_W) 'Logging.cpp'; else $(CYGPATH_W) '$(srcdir)/Logging.cpp'; fi`
 
 colorscreen_qt-SubtitleOverlay.o: SubtitleOverlay.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-SubtitleOverlay.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-SubtitleOverlay.Tpo -c -o colorscreen_qt-SubtitleOverlay.o `test -f 'SubtitleOverlay.cpp' || echo '$(srcdir)/'`SubtitleOverlay.cpp
@@ -1632,6 +1650,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-Logging.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-NavigationView.Po
@@ -1733,6 +1752,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ImageWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-JolyAnimation.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-Logging.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-NavigationView.Po

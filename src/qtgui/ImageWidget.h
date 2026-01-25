@@ -100,6 +100,7 @@ signals:
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
   void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
   void registrationPointsVisibilityChanged(bool visible);
+  void interactionModeChanged(ImageWidget::InteractionMode mode);
   void viewStateChanged(QRectF visibleRect, double scale);
   void selectionChanged();
   void pointAdded(colorscreen::point_t imgPos, colorscreen::point_t scrPos,

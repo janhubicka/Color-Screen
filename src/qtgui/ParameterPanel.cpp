@@ -576,6 +576,49 @@ QPushButton *ParameterPanel::addButtonParameter(
   return button;
 }
 
+QPushButton *ParameterPanel::addToggleButtonParameter(
+    const QString &label, const QString &text,
+    std::function<void(bool)> onToggled,
+    std::function<bool(const ParameterState &)> getter,
+    std::function<bool(const ParameterState &)> enabledCheck) {
+  QPushButton *button = new QPushButton(text);
+  button->setCheckable(true);
+  if (m_currentGroupForm) {
+    m_currentGroupForm->addRow(label, button);
+  } else {
+    m_form->addRow(label, button);
+  }
+
+  // Connect clicks
+  connect(button, &QPushButton::toggled, this, [onToggled](bool checked) {
+    if (onToggled)
+      onToggled(checked);
+  });
+
+  // Updater: State -> UI
+  if (getter) {
+      m_paramUpdaters.push_back([button, getter](const ParameterState &state) {
+        bool val = getter(state);
+        button->blockSignals(true);
+        button->setChecked(val);
+        button->blockSignals(false);
+      });
+  }
+
+  // Enable/Visibility Update
+  if (enabledCheck) {
+    m_widgetStateUpdaters.push_back([this, button, enabledCheck]() {
+      ParameterState state = m_stateGetter();
+      bool en = enabledCheck(state);
+      button->setEnabled(en);
+      QWidget *labelWidget = m_form->labelForField(button);
+      if (labelWidget)
+        labelWidget->setEnabled(en);
+    });
+  }
+  return button;
+}
+
 void ParameterPanel::addCorrelatedRGBParameter(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix,

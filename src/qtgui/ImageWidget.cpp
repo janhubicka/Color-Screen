@@ -8,6 +8,7 @@
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "Renderer.h"
 #include <QDebug>
+#include "Logging.h"
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -1306,6 +1307,7 @@ void ImageWidget::setInteractionMode(InteractionMode mode) {
   if (m_interactionMode == mode) return;
   m_interactionMode = mode;
   if (m_rubberBand) m_rubberBand->hide();
+  emit interactionModeChanged(mode);
   update();
 }
 
@@ -1350,7 +1352,8 @@ void ImageWidget::requestRender()
     m_pendingScale = m_scale;
     m_hasPendingRender = true;
     
-    m_renderQueue.requestRender();
+    int reqId = m_renderQueue.requestRender();
+    qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
 }
 
 void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress)
@@ -1369,6 +1372,8 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     double scale = m_pendingScale;
     int w = width();
     int h = height();
+    
+    qCDebug(lcRenderSync) << "ImageWidget::onTriggerRender - Starting render ID:" << reqId << " scale:" << scale;
     
     // Trigger generic render
     bool result = QMetaObject::invokeMethod(m_renderer, "render", Qt::QueuedConnection,
@@ -1398,17 +1403,21 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
 }
 void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
 {
+    qCDebug(lcRenderSync) << "ImageWidget::handleImageReady - Received ID:" << reqId << " success:" << success << " m_lastCompletedReqId:" << m_lastCompletedReqId;
     m_renderQueue.reportFinished(reqId, success);
 
     if (success) {
         // Sequencing check: only update if this request is newer than the last applied one
         if (reqId > m_lastCompletedReqId) {
+            qCDebug(lcRenderSync) << "  Applying render ID:" << reqId;
             m_pixmap = image;
             m_lastRenderedScale = scale;
             m_lastRenderedX = xOffset;
             m_lastRenderedY = yOffset;
             m_lastCompletedReqId = reqId;
             update(); 
+        } else {
+            qCDebug(lcRenderSync) << "  IGNORED older render ID:" << reqId;
         }
     }
 

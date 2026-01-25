@@ -60,7 +60,7 @@ set(SOURCES
     FinetuneWorker.cpp
     WorkerBase.cpp
     TaskQueue.cpp
-    TaskQueue.cpp
+    Logging.cpp
     SubtitleOverlay.cpp
     CoordinateTransformer.cpp
 )
@@ -89,6 +89,7 @@ set(HEADERS
     TaskQueue.h
     SubtitleOverlay.h
     SmartSpinBox.h
+    Logging.h
 )
 
 add_executable(colorscreen-qt

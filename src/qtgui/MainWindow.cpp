@@ -499,6 +499,12 @@ void MainWindow::setupUi() {
   setupDock(m_backlightDock, m_capturePanel,
             &CapturePanel::detachBacklightRequested,
             &CapturePanel::reattachBacklight);
+
+  connect(m_imageWidget, &ImageWidget::interactionModeChanged, this, [this](ImageWidget::InteractionMode mode) {
+      if (m_capturePanel) {
+          m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
+      }
+  });
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
   m_configTabs->addTab(m_screenPanel, "Screen");
   m_configTabs->addTab(m_geometryPanel, "Geometry");
@@ -2611,6 +2617,12 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos, colorscreen::point_t 
 
 void MainWindow::onCropRequested() {
   if (!m_scan) return;
+
+  if (m_imageWidget->interactionMode() == ImageWidget::CropMode) {
+      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+      statusBar()->clearMessage();
+      return;
+  }
 
   // Preserve center across crop state change
   colorscreen::point_t center = m_imageWidget->widgetToImage(m_imageWidget->rect().center());

@@ -126,6 +126,12 @@ protected:
       const QString &label, const QString &text, std::function<void()> onClicked,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr);
 
+  QPushButton *addToggleButtonParameter(
+      const QString &label, const QString &text,
+      std::function<void(bool)> onToggled,
+      std::function<bool(const ParameterState &)> getter = nullptr,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr);
+
   void addCorrelatedRGBParameter(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix,

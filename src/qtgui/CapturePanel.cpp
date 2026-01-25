@@ -448,7 +448,16 @@ void CapturePanel::setupUi()
     });
     m_form->addRow(backlightSection);
     
-    addButtonParameter("Crop image", "Change crop", [this]() { emit cropRequested(); });
+    m_cropBtn = addToggleButtonParameter("Crop image", "Change crop", [this](bool checked) {
+        if (checked) {
+            emit cropRequested();
+        } else {
+            // Signal MainWindow to cancel crop mode if button is untoggled manually
+            // Actually, we can just repurpose cropRequested or emit a new signal.
+            // Let's just emit cropRequested() and let MainWindow check the button state.
+            emit cropRequested();
+        }
+    });
     
     // Initial update
     updateInfoLabels(m_stateGetter());
@@ -499,4 +508,10 @@ void CapturePanel::reattachBacklight(QWidget *w) {
     }
 }
 
-
+void CapturePanel::setCropChecked(bool checked) {
+    if (m_cropBtn) {
+        m_cropBtn->blockSignals(true);
+        m_cropBtn->setChecked(checked);
+        m_cropBtn->blockSignals(false);
+    }
+}
