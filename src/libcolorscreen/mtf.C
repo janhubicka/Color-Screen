@@ -1,6 +1,7 @@
 #include "include/tiff-writer.h"
 #include "lru-cache.h"
 #include "mtf.h"
+#include "fft.h"
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include <cmath>
@@ -583,7 +584,7 @@ mtf_parameters::system_mtf (double pixel_freq) const
 /* Compute right half of LSF.  */
 
 void
-mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
+mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
                   luminosity_t subsample) const
 {
   int size = lsf.size ();
@@ -592,17 +593,17 @@ mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
       lsf[size - 1] = 0;
       size--;
     }
-  std::vector<double, fftw_allocator<double>> mtf_half (size);
+  std::vector<double, fft_allocator<double>> mtf_half (size);
   double scale = 1 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
     mtf_half[i] = get_mtf (i * scale);
 
-  fftw_lock.lock ();
+  fft_lock.lock ();
   fftw_plan plan = fftw_plan_r2r_1d (size, mtf_half.data (), lsf.data (),
                                      FFTW_REDFT00, FFTW_ESTIMATE);
-  fftw_lock.unlock ();
+  fft_lock.unlock ();
   fftw_execute (plan);
   double sum = 0;
   for (int i = 0; i < size; i++)
@@ -610,19 +611,19 @@ mtf::compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
   double fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
-  fftw_lock.lock ();
+  fft_lock.lock ();
   fftw_destroy_plan (plan);
-  fftw_lock.unlock ();
+  fft_lock.unlock ();
 }
 
-std::vector<double, fftw_allocator<double>>
+std::vector<double, fft_allocator<double>>
 mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
                      progress_info *progress)
 {
   int fft_size = psf_size / 2 + 1;
   const double psf_step = 1 / (psf_size * subscale);
   // Use unique_ptr with FFTW allocator for fftw_complex array
-  auto mtf_kernel = fftw_alloc_complex<double> (psf_size * fft_size);
+  auto mtf_kernel = fft_alloc_complex<double> (psf_size * fft_size);
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(fft_size, psf_step, mtf_kernel, psf_size)
   for (int y = 0; y < fft_size; y++)
@@ -639,15 +640,15 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
             mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
           }
       }
-  std::vector<double, fftw_allocator<double>> psf_data (psf_size * psf_size);
-  fftw_lock.lock ();
+  std::vector<double, fft_allocator<double>> psf_data (psf_size * psf_size);
+  fft_lock.lock ();
   fftw_plan plan = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.get (),
                                          psf_data.data (), FFTW_ESTIMATE);
-  fftw_lock.unlock ();
+  fft_lock.unlock ();
   fftw_execute (plan);
-  fftw_lock.lock ();
+  fft_lock.lock ();
   fftw_destroy_plan (plan);
-  fftw_lock.unlock ();
+  fft_lock.unlock ();
   return psf_data;
 }
 
@@ -663,7 +664,7 @@ mtf::estimate_psf_size (luminosity_t min_threshold,
   int lsf_size = 256;
   while (true)
     {
-      std::vector<double, fftw_allocator<double>> lsf (lsf_size);
+      std::vector<double, fft_allocator<double>> lsf (lsf_size);
       compute_lsf (lsf, subscale);
       double max = 0;
       for (auto v : lsf)
@@ -797,10 +798,10 @@ mtf::compute_psf (luminosity_t max_radius, luminosity_t subscale, const char *fi
               if (!renderedu.write_row ())
                 return false;
             }
-          std::vector<double, fftw_allocator<double>> lsf (radius);
+          std::vector<double, fft_allocator<double>> lsf (radius);
           compute_lsf (lsf, subscale);
           double lsf_max = lsf[0], collected_lsf_max = 0;
-          std::vector<double, fftw_allocator<double>> collected_lsf (width);
+          std::vector<double, fft_allocator<double>> collected_lsf (width);
           for (int x = 0; x < width; x++)
             {
               int xx = (x < radius ? radius - x - 1 : x - radius);
@@ -878,9 +879,9 @@ mtf::precompute (progress_info *progress)
       /* TODO: Implement.  */
       if (!regular_steps)
         {
-          std::vector<luminosity_t, fftw_allocator<double>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<double>> contrasts (size ()
                                                                        + 2);
-          std::vector<luminosity_t, fftw_allocator<double>> freqs (size ()
+          std::vector<luminosity_t, fft_allocator<double>> freqs (size ()
                                                                    + 2);
           for (size_t i = 0; i < size (); i++)
             {
@@ -898,7 +899,7 @@ mtf::precompute (progress_info *progress)
         }
       else
         {
-          std::vector<luminosity_t, fftw_allocator<double>> contrasts (size ()
+          std::vector<luminosity_t, fft_allocator<double>> contrasts (size ()
                                                                        + 2);
           for (size_t i = 0; i < size (); i++)
             contrasts[i] = get_contrast (i) * 0.01
@@ -935,7 +936,7 @@ mtf::precompute (progress_info *progress)
   else
     {
       const int entries = 512;
-      std::vector<luminosity_t, fftw_allocator<double>> contrasts (entries);
+      std::vector<luminosity_t, fft_allocator<double>> contrasts (entries);
       luminosity_t step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
         contrasts[i] = m_params.system_mtf (i * step);

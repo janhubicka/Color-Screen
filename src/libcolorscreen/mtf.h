@@ -13,65 +13,16 @@
 #include "include/render-parameters.h"
 #include "lru-cache.h"
 
+#include "fft.h"
+#include "include/base.h"
+#include "include/color.h"
+#include "include/precomputed-function.h"
+#include "include/progress-info.h"
+#include "include/render-parameters.h"
+#include "lru-cache.h"
+
 namespace colorscreen
 {
-extern std::mutex fftw_lock;
-
-/* Allocate aligned memory so vectorized loops works fast.
-   FFTW knows alignent, but it does not pass proper attributes
-   to GCC.  */
-template <class T> struct fftw_allocator
-{
-  typedef T value_type;
-  T *
-  allocate (std::size_t n)
-  {
-#ifdef HAVE_MEMALIGN
-    void *ptr = memalign (128, n * sizeof (T));
-#else
-    void *ptr = fftw_malloc (n * sizeof (T));
-#endif
-    if (!ptr)
-      throw std::bad_alloc ();
-    return static_cast<T *> (ptr);
-  }
-  void
-  deallocate (T *p, std::size_t)
-  {
-#ifdef HAVE_MEMALIGN
-    free (p);
-#else
-    fftw_free (p);
-#endif
-  }
-};
-
-template <typename T> struct fftw_complex_t;
-template <> struct fftw_complex_t<double> { typedef fftw_complex type; };
-template <> struct fftw_complex_t<float> { typedef fftwf_complex type; };
-
-template <typename T> struct fftw_deleter
-{
-  void operator() (T *p) const
-  {
-#ifdef HAVE_MEMALIGN
-    free (p);
-#else
-    fftw_free (p);
-#endif
-  }
-};
-
-template <typename T>
-using fftw_unique_ptr = std::unique_ptr<typename fftw_complex_t<T>::type[], fftw_deleter<typename fftw_complex_t<T>::type>>;
-
-template <typename T>
-fftw_unique_ptr<T>
-fftw_alloc_complex (size_t n)
-{
-  fftw_allocator<typename fftw_complex_t<T>::type> alloc;
-  return fftw_unique_ptr<T> (alloc.allocate (n));
-}
 
 class mtf
 {
@@ -154,7 +105,7 @@ public:
   typedef lru_cache<mtf_parameters, mtf, mtf *, get_new_mtf, 10> mtf_cache_t;
 
   static mtf_cache_t::cached_ptr get_mtf (const mtf_parameters &mtfp, progress_info *p);
-  std::vector<double, fftw_allocator<double>>
+  std::vector<double, fft_allocator<double>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
 		  progress_info *progress = NULL);
 
@@ -169,7 +120,7 @@ private:
   luminosity_t estimate_psf_size (luminosity_t min_threshold = 0.001, luminosity_t sum_threshold = 1.0 / 65535) const;
   bool compute_psf (luminosity_t max_radius, luminosity_t subsample,
                     const char *filename, const char **error);
-  void compute_lsf (std::vector<double, fftw_allocator<double>> &lsf,
+  void compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
                     luminosity_t subsample) const;
 };
 }

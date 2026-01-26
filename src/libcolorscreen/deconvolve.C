@@ -1,3 +1,4 @@
+#include "fft.h"
 #include "deconvolve.h"
 #include "render.h"
 #include <complex>
@@ -8,7 +9,6 @@ namespace colorscreen
 static const bool taper_edges = true;
 
 /* FFTW execute is thread safe. Everything else is not.  */
-std::mutex fftw_lock;
 
 namespace
 {
@@ -45,7 +45,7 @@ resample_line (deconvolution::deconvolution_data_t *output,
                int out_stride,
 	       int in_len,
 	       int supersample,
-	       std::vector<deconvolution::deconvolution_data_t,fftw_allocator<deconvolution::deconvolution_data_t>> kernels,
+	       std::vector<deconvolution::deconvolution_data_t,fft_allocator<deconvolution::deconvolution_data_t>> kernels,
 	       int a = 3)
 {
   /* Let compiler know that supersample is small integer.  */
@@ -160,7 +160,7 @@ deconvolution::deconvolution (mtf *mtf, luminosity_t mtf_scale,
      the FFT result is again a real function (all complex values should be 0 up
      to roundoff errors).  */
   m_fft_size = m_enlarged_tile_size / 2 + 1;
-  m_blur_kernel = fftw_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
+  m_blur_kernel = fft_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
   deconvolution_data_t scale
       = 1.0 / (m_enlarged_tile_size * m_enlarged_tile_size);
   deconvolution_data_t rev_tile_size
@@ -220,7 +220,7 @@ deconvolution::init (int thread_id)
 {
   if (m_data[thread_id].initialized)
     return;
-  m_data[thread_id].in = fftw_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
+  m_data[thread_id].in = fft_alloc_complex<double> (m_enlarged_tile_size * m_fft_size);
   m_data[thread_id].tile.resize (m_tile_size * m_tile_size);
   if (m_supersample > 1)
     {
@@ -236,10 +236,10 @@ deconvolution::init (int thread_id)
   m_data[thread_id].initialized = true;
   if (!m_plans_exists)
     {
-      fftw_lock.lock ();
+      fft_lock.lock ();
       if (m_plans_exists)
         {
-          fftw_lock.unlock ();
+          fft_lock.unlock ();
           return;
         }
       m_plan_2d_inv = fftw_plan_dft_c2r_2d (
@@ -249,7 +249,7 @@ deconvolution::init (int thread_id)
           = fftw_plan_dft_r2c_2d (m_enlarged_tile_size, m_enlarged_tile_size,
                                   m_data[thread_id].enlarged_tile->data (),
                                   m_data[thread_id].in.get (), FFTW_ESTIMATE);
-      fftw_lock.unlock ();
+      fft_lock.unlock ();
     }
 }
 
@@ -399,11 +399,11 @@ deconvolution::process_tile (int thread_id)
     }
   else
     {
-      std::vector<deconvolution_data_t,fftw_allocator<deconvolution::deconvolution_data_t>> observed
+      std::vector<deconvolution_data_t,fft_allocator<deconvolution::deconvolution_data_t>> observed
           = *m_data[thread_id].enlarged_tile;
-      std::vector<deconvolution_data_t,fftw_allocator<deconvolution::deconvolution_data_t>> &estimate
+      std::vector<deconvolution_data_t,fft_allocator<deconvolution::deconvolution_data_t>> &estimate
           = *m_data[thread_id].enlarged_tile;
-      std::vector<deconvolution_data_t,fftw_allocator<deconvolution::deconvolution_data_t>> &ratios = m_data[thread_id].ratios;
+      std::vector<deconvolution_data_t,fft_allocator<deconvolution::deconvolution_data_t>> &ratios = m_data[thread_id].ratios;
       deconvolution_data_t scale = 1;
       fftw_complex *in = m_data[thread_id].in.get ();
       deconvolution_data_t sigma = m_sigma;
@@ -538,12 +538,12 @@ deconvolution::process_tile (int thread_id)
 
 deconvolution::~deconvolution ()
 {
-  fftw_lock.lock ();
+  fft_lock.lock ();
   if (m_plans_exists)
     {
       fftw_destroy_plan (m_plan_2d);
       fftw_destroy_plan (m_plan_2d_inv);
     }
-  fftw_lock.unlock ();
+  fft_lock.unlock ();
 }
 }

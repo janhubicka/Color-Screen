@@ -6,6 +6,7 @@
 #include "include/progress-info.h"
 #include "include/render-parameters.h"
 #include "mtf.h"
+#include "fft.h"
 #include <mutex>
 #include <omp.h>
 namespace colorscreen
@@ -101,16 +102,16 @@ private:
   /* Supersampling */
   int m_supersample;
   /* Kernel for bluring or sharpening.  */
-  fftw_unique_ptr<double> m_blur_kernel;
+  fft_unique_ptr<double> m_blur_kernel;
 
   bool m_richardson_lucy;
   deconvolution_data_t m_sigma;
   int m_iterations;
 
   /* Weights of edge tapering.  */
-  std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> m_weights;
+  std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> m_weights;
 
-  std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> m_lanczos_kernels;
+  std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> m_lanczos_kernels;
 
   fftw_plan m_plan_2d_inv, m_plan_2d;
   bool m_plans_exists;
@@ -118,11 +119,11 @@ private:
   /* Plans used for FFT calclation.  */
   struct tile_data
   {
-    fftw_unique_ptr<double> in;
-    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> tile;
-    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> *enlarged_tile;
-    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> enlarged_tile_data;
-    std::vector<deconvolution_data_t,fftw_allocator<deconvolution_data_t>> ratios;
+    fft_unique_ptr<double> in;
+    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> tile;
+    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> *enlarged_tile;
+    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> enlarged_tile_data;
+    std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> ratios;
     bool initialized;
   };
   std::vector<tile_data> m_data;
