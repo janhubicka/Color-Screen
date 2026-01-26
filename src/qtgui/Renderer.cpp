@@ -108,12 +108,10 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
 
     colorscreen::sub_task task (progress.get ());  /* Keep so tasks are nested.  */
     try {
-        colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get());
-        
-        if (progress && progress->cancelled()) {
-            success = false;
-        } else {
+        if (colorscreen::render_tile(*m_scan, m_scrToImg, m_scrDetect, m_rparams, rtparams, tile, progress.get()))
             success = true;
+         else {
+            success = false;
         }
     } catch (const std::exception& e) {
         success = false;
@@ -136,8 +134,12 @@ void Renderer::render(int reqId, double xOffset, double yOffset, double scale, i
            transformed = true;
         }
         
+        progress->set_task("transforming final image", 1);
         if (transformed) {
-             image = image.transformed(transform);
+	     if (progress && progress->cancel_requested())
+		success = false;
+	     else
+                image = image.transformed(transform);
         }
     }
     

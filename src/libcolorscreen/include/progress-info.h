@@ -80,6 +80,16 @@ public:
     return false;
   }
 
+  /* Used by UI to pool if one of tasks is already cancelled.  This
+     check the flag without noting that cancellation did take an
+     effect.  */
+
+  bool
+  pool_cancel ()
+  {
+    return (m_cancelled);
+  }
+
   /* Set current task to NAME with MAX steps.  */
   DLL_PUBLIC virtual void set_task (const char *name, uint64_t max);
   /* Announce that the process is waiting (i.e. for cache lock).  */

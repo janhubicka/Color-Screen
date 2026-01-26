@@ -21,7 +21,7 @@ int TaskQueue::requestRender(const QVariant &userData)
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
         if (it->active && it->startTime.elapsed() > 5000) {
             qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out (>5000ms). Cancelling. State:" << formatQueueState();
-            if (it->progress && !it->progress->cancel_requested()) {
+            if (it->progress && !it->progress->pool_cancel()) {
                 it->progress->cancel();
                 emit progressFinished(it->progress);
                 it = m_tasks.erase(it);
@@ -33,14 +33,27 @@ int TaskQueue::requestRender(const QVariant &userData)
 
     // 2. Check concurrency limit (max 2 active)
     if (m_tasks.size() >= 2) {
-        auto lastIt = m_tasks.end();
-        if (!m_tasks.empty()) {
-            lastIt--; 
-            
-            if (lastIt->active && lastIt->progress && !lastIt->progress->cancel_requested()) {
-                qCDebug(lcRenderSync) << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room. State:" << formatQueueState();
-                lastIt->progress->cancel();
+        // Are we already cancelling something?
+        bool alreadyCancelling = false;
+        for (const auto &info : m_tasks) {
+            if (info.progress && info.progress->pool_cancel()) {
+                alreadyCancelling = true;
+                break;
             }
+        }
+
+        if (!alreadyCancelling) {
+            auto lastIt = m_tasks.end();
+            if (!m_tasks.empty()) {
+                lastIt--; 
+                
+                if (lastIt->active && lastIt->progress && !lastIt->progress->pool_cancel()) {
+                    qCDebug(lcRenderSync) << "  Queue Full. Cancelling younger task ID:" << lastIt->reqId << " to make room. State:" << formatQueueState();
+                    lastIt->progress->cancel();
+                }
+            }
+        } else {
+             qCDebug(lcRenderSync) << "  Queue Full, but already cancelling a task. Updating pending request only. State:" << formatQueueState();
         }
 
         qCDebug(lcRenderSync) << "  Queueing new task ID:" << newReqId;
