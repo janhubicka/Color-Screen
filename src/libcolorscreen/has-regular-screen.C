@@ -12,8 +12,8 @@ namespace
 constexpr const int tile_width=256;
 constexpr const int tile_height=tile_width;
 static constexpr const int fft_size = tile_width / 2 + 1;
-typedef std::array<double, tile_width * tile_height> tile_t;
-typedef std::array<fftw_complex, fft_size * tile_width> fft_2d;
+typedef std::vector<double, fft_allocator<double>> tile_t;
+typedef fft_unique_ptr<double> fft_2d_t;
 
 bool
 collect_tile (tile_t &tile, image_data &scan, const render &render, int x, int y)
@@ -30,9 +30,9 @@ collect_tile (tile_t &tile, image_data &scan, const render &render, int x, int y
   return true;
 }
 
-luminosity_t getval(fft_2d &fft_tile, int x, int y)
+static luminosity_t getval(fft_2d_t &fft_tile, int x, int y)
 {
-  return sqrt (fft_tile[y * fft_size + x][0] * fft_tile[y * fft_size + x][0] + fft_tile[y * fft_size + x][1] * fft_tile[y * fft_size + x][1]);
+  return sqrt (fft_tile.get ()[y * fft_size + x][0] * fft_tile.get ()[y * fft_size + x][0] + fft_tile.get ()[y * fft_size + x][1] * fft_tile.get ()[y * fft_size + x][1]);
 }
 
 
@@ -59,7 +59,7 @@ coord_t yperiod (int y)
 
 
 bool
-save_fft_tile (fft_2d &fft_tile, const std::string &base, int x, int y, coord_t min_period, coord_t max_period, const char **error)
+save_fft_tile (fft_2d_t &fft_tile, const std::string &base, int x, int y, coord_t min_period, coord_t max_period, const char **error)
 {
   char suf[30];
   sprintf (suf, "-%i-%i.tif", y, x);
@@ -99,7 +99,7 @@ save_fft_tile (fft_2d &fft_tile, const std::string &base, int x, int y, coord_t 
   for (int y = 0; y < tile_height; y++)
     for (int x = 0; x < fft_size; x++)
       for (int i = 0; i < 2; i++)
-	hist.pre_account (fabs (fft_tile[y * fft_size + x][i]));
+	hist.pre_account (fabs (fft_tile.get ()[y * fft_size + x][i]));
   hist.finalize_range (65536);
   hsum_hist.finalize_range (65536);
   vsum_hist.finalize_range (65536);
@@ -110,7 +110,7 @@ save_fft_tile (fft_2d &fft_tile, const std::string &base, int x, int y, coord_t 
   for (int y = 0; y < tile_height; y++)
     for (int x = 0; x < fft_size; x++)
       for (int i = 0; i < 2; i++)
-	hist.account (fabs (fft_tile[y * fft_size + x][i]));
+	hist.account (fabs (fft_tile.get ()[y * fft_size + x][i]));
   hist.finalize ();
   hsum_hist.finalize ();
   vsum_hist.finalize ();
@@ -123,7 +123,7 @@ save_fft_tile (fft_2d &fft_tile, const std::string &base, int x, int y, coord_t 
         {
           //float t = (min_period < yperiod (y) && max_period > yperiod (y)) * 0.5 + (min_period < xperiod (x) && max_period > xperiod (x)) * 0.5;
 	  float t = hsum[y] / hmax + vsum[x] / vmax;
-	  tiff.put_hdr_pixel (x, fabs (fft_tile[y * fft_size + x][0])/lmax, fabs (fft_tile[y * fft_size + x][1])/lmax, t);
+	  tiff.put_hdr_pixel (x, fabs (fft_tile.get ()[y * fft_size + x][0])/lmax, fabs (fft_tile.get ()[y * fft_size + x][1])/lmax, t);
 	}
       if (!tiff.write_row ())
         {
@@ -173,7 +173,7 @@ struct summary
 };
 
 void
-summarize (fft_2d &fft_tile, struct summary *sum)
+summarize (fft_2d_t &fft_tile, struct summary *sum)
 {
   memset (sum->hsum, 0, sizeof (sum->hsum));
   memset (sum->vsum, 0, sizeof (sum->vsum));
@@ -200,8 +200,8 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
       return ret;
     }
 
-  tile_t tile;
-  fft_2d fft_tile;
+  tile_t tile (tile_width * tile_height);
+  fft_2d_t fft_tile = fft_alloc_complex<double> (fft_size * tile_width);
   fft_plan<double> plan_2d (NULL);
   render_parameters rparams;
   std::vector <summary> sum (params.ntilesy * params.ntilesx);
@@ -212,14 +212,14 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
     rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
   render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
-  plan_2d = fft_plan_r2c_2d<double> (tile_width, tile_height, tile.data (), fft_tile.data ());
+  plan_2d = fft_plan_r2c_2d<double> (tile_width, tile_height, tile.data (), fft_tile.get ());
   if (progress)
     progress->set_task ("analyzing samples", params.ntilesy * params.ntilesx);
   for (int y = 0; y < params.ntilesy; y++)
     for (int x = 0; x < params.ntilesx; x++)
       {
 	collect_tile (tile, scan, render, scan.width * (x + 0.5) / params.ntilesx, scan.height * (y + 0.5) / params.ntilesy);
-        plan_2d.execute_r2c (tile.data (), fft_tile.data ());
+        plan_2d.execute_r2c (tile.data (), fft_tile.get ());
 	if (params.save_tiles && !save_tile (tile, params.tile_base, x, y, &ret.error))
 	  return ret;
 	if (params.save_fft && !save_fft_tile (fft_tile, params.fft_base, x, y, params.min_period, params.max_period, &ret.error))
