@@ -947,29 +947,29 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_complex_t<double>::type *out)
 
 static void
 initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
-                             const fft_1d weights, int cmin, int cmax)
+                             const fft_complex_t<double>::type *weights, int cmin, int cmax)
 {
-  fft_2d in;
-  double out[screen::size * screen::size];
+  auto in = fft_alloc_complex<double> (screen::size * fft_size);
+  std::vector<double, fft_allocator<double>> out (screen::size * screen::size);
 
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in, out);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out, in);
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in.get (), out.data ());
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out.data (), in.get ());
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
           out[y * screen::size + x] = scr.mult[y][x][c];
-      fftw_execute (plan_2d);
+      plan_2d.execute_r2c (out.data (), in.get ());
       for (int y = 0; y < fft_size; y++)
         {
           std::complex w2 (weights[y][0], weights[y][1]);
           for (int x = 0; x < fft_size; x++)
             {
               std::complex w1 (weights[x][0], weights[x][1]);
-              std::complex v (in[y * fft_size + x][0],
-                              in[y * fft_size + x][1]);
-              in[y * fft_size + x][0] = real (v * w1 * w2);
-              in[y * fft_size + x][1] = imag (v * w1 * w2);
+              std::complex v (in.get ()[y * fft_size + x][0],
+                              in.get ()[y * fft_size + x][1]);
+              in.get ()[y * fft_size + x][0] = real (v * w1 * w2);
+              in.get ()[y * fft_size + x][1] = imag (v * w1 * w2);
             }
         }
       for (int y = 1; y < fft_size; y++)
@@ -978,13 +978,13 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
           for (int x = 0; x < fft_size; x++)
             {
               std::complex w1 (weights[x][0], weights[x][1]);
-              std::complex v (in[(screen::size - y) * fft_size + x][0],
-                              in[(screen::size - y) * fft_size + x][1]);
-              in[(screen::size - y) * fft_size + x][0] = real (v * w1 * w2);
-              in[(screen::size - y) * fft_size + x][1] = imag (v * w1 * w2);
+              std::complex v (in.get ()[(screen::size - y) * fft_size + x][0],
+                              in.get ()[(screen::size - y) * fft_size + x][1]);
+              in.get ()[(screen::size - y) * fft_size + x][0] = real (v * w1 * w2);
+              in.get ()[(screen::size - y) * fft_size + x][1] = imag (v * w1 * w2);
             }
         }
-      plan_2d_inv.execute_c2r (in, out);
+      plan_2d_inv.execute_c2r (in.get (), out.data ());
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
           {
