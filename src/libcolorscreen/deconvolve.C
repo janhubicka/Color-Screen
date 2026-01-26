@@ -237,9 +237,13 @@ deconvolution::init (int thread_id)
   if (!m_plans_exists)
     {
       m_plan_2d_inv = fft_plan_c2r_2d<double> (m_enlarged_tile_size,
-                                               m_enlarged_tile_size);
+                                               m_enlarged_tile_size,
+                                               m_data[thread_id].in.get (),
+                                               m_data[thread_id].enlarged_tile->data ());
       m_plan_2d = fft_plan_r2c_2d<double> (m_enlarged_tile_size,
-                                           m_enlarged_tile_size);
+                                           m_enlarged_tile_size,
+                                           m_data[thread_id].enlarged_tile->data (),
+                                           m_data[thread_id].in.get ());
       m_plans_exists = true;
     }
 }

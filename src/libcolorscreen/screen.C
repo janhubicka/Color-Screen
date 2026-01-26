@@ -939,7 +939,7 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
       int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
       in[idx] += cmatrix[i] /** nrm*/;
     }
-  auto plan = fft_plan_r2c_1d<double> (screen::size);
+  auto plan = fft_plan_r2c_1d<double> (screen::size, in, out);
   plan.execute_r2c (in, out);
   // for (int i = 0; i < fft_size; i++)
   // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
@@ -954,8 +954,8 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
   fft_2d in;
   double out[screen::size * screen::size];
 
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in, out);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out, in);
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -1024,8 +1024,8 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
 {
   fft_2d in;
   double out[screen::size * screen::size];
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in, out);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out, in);
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -1055,8 +1055,8 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
   double estimate[screen::size * screen::size];
   double observed[screen::size * screen::size];
   double ratios[screen::size * screen::size];
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in, observed);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, observed, in);
   for (int c = cmin; c <= cmax; c++)
     {
       const double contrast = 0.8;
@@ -1233,7 +1233,7 @@ point_spread_fft (fft_2d &weights,
 {
   double data[screen::size * screen::size];
   compute_point_spread (data, point_spread, scale);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, data, weights);
 #if 0
   for (int x = 0; x < screen::size; x++)
     printf ("%i %f\n", x, data[x]);
@@ -1799,7 +1799,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			return;
 		    }
 		}
-	      auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+	      auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, wrapped_psf.data (), fft);
 	      plan_2d.execute_r2c (wrapped_psf.data (), fft);
 	      //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
 	      for (int x = 0; x < fft_size * screen::size; x++)

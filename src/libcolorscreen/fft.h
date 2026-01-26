@@ -119,16 +119,23 @@ public:
    These handle locking and caching.  */
 
 template <typename T>
-fft_plan<T> fft_plan_r2c_2d (int n0, int n1, unsigned flags = FFTW_MEASURE);
+fft_plan<T> fft_plan_r2c_2d (int n0, int n1, T *in = NULL,
+                              typename fft_complex_t<T>::type *out = NULL,
+                              unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
-fft_plan<T> fft_plan_c2r_2d (int n0, int n1, unsigned flags = FFTW_MEASURE);
+fft_plan<T> fft_plan_c2r_2d (int n0, int n1,
+                              typename fft_complex_t<T>::type *in = NULL,
+                              T *out = NULL, unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
-fft_plan<T> fft_plan_r2c_1d (int n, unsigned flags = FFTW_MEASURE);
+fft_plan<T> fft_plan_r2c_1d (int n, T *in = NULL,
+                              typename fft_complex_t<T>::type *out = NULL,
+                              unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
-fft_plan<T> fft_plan_r2r_1d (int n, fftw_r2r_kind kind, unsigned flags = FFTW_MEASURE);
+fft_plan<T> fft_plan_r2r_1d (int n, fftw_r2r_kind kind, T *in = NULL,
+                              T *out = NULL, unsigned flags = FFTW_ESTIMATE);
 
 }
 #endif
