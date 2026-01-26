@@ -926,7 +926,6 @@ typedef fftw_complex fft_2d[screen::size * fft_size];
 static int
 gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
 {
-  fftw_plan plan_1d;
   luminosity_t *cmatrix;
   // blur_radius = 0;
   int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
@@ -940,13 +939,8 @@ gaussian_blur_mtf_fast (coord_t blur_radius, fft_1d out)
       int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
       in[idx] += cmatrix[i] /** nrm*/;
     }
-  fft_lock.lock ();
-  plan_1d = fftw_plan_dft_r2c_1d (screen::size, in, out, FFTW_ESTIMATE);
-  fft_lock.unlock ();
-  fftw_execute (plan_1d);
-  fft_lock.lock ();
-  fftw_destroy_plan (plan_1d);
-  fft_lock.unlock ();
+  auto plan = fft_plan_r2c_1d<double> (screen::size);
+  plan.execute_r2c (in, out);
   // for (int i = 0; i < fft_size; i++)
   // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
   free (cmatrix);
@@ -957,16 +951,11 @@ static void
 initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
                              const fft_1d weights, int cmin, int cmax)
 {
-  fftw_plan plan_2d_inv, plan_2d;
   fft_2d in;
   double out[screen::size * screen::size];
 
-  fft_lock.lock ();
-  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out,
-                                      FFTW_ESTIMATE);
-  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in,
-                                  FFTW_ESTIMATE);
-  fft_lock.unlock ();
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -997,7 +986,7 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
               in[(screen::size - y) * fft_size + x][1] = imag (v * w1 * w2);
             }
         }
-      fftw_execute (plan_2d_inv);
+      plan_2d_inv.execute_c2r (in, out);
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
           {
@@ -1013,10 +1002,6 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
 #endif
           }
     }
-  fft_lock.lock ();
-  fftw_destroy_plan (plan_2d);
-  fftw_destroy_plan (plan_2d_inv);
-  fft_lock.unlock ();
 }
 
 static void
@@ -1037,33 +1022,24 @@ static void
 initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
                              const fft_2d weights, int cmin, int cmax)
 {
-  fftw_plan plan_2d_inv, plan_2d;
   fft_2d in;
   double out[screen::size * screen::size];
-  fft_lock.lock ();
-  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, out,
-                                      FFTW_ESTIMATE);
-  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, out, in,
-                                  FFTW_ESTIMATE);
-  fft_lock.unlock ();
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
           out[y * screen::size + x] = scr.mult[y][x][c];
-      fftw_execute (plan_2d);
+      plan_2d.execute_r2c (out, in);
       scale_by_weights (in, weights);
-      fftw_execute (plan_2d_inv);
+      plan_2d_inv.execute_c2r (in, out);
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
 	  out_scr.mult[y][x][c]
 	     //= std::clamp (out [y * screen::size + x], 0.0, 1.0);
 	     = out [y * screen::size + x];
     }
-  fft_lock.lock ();
-  fftw_destroy_plan (plan_2d);
-  fftw_destroy_plan (plan_2d_inv);
-  fft_lock.unlock ();
 }
 
 
@@ -1075,17 +1051,12 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 				 const fft_2d weights, int cmin, int cmax,
 				 int iterations, double sigma)
 {
-  fftw_plan plan_2d_inv, plan_2d;
   fft_2d in;
   double estimate[screen::size * screen::size];
   double observed[screen::size * screen::size];
   double ratios[screen::size * screen::size];
-  fft_lock.lock ();
-  plan_2d_inv = fftw_plan_dft_c2r_2d (screen::size, screen::size, in, observed,
-                                      FFTW_ESTIMATE);
-  plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, observed, in,
-                                  FFTW_ESTIMATE);
-  fft_lock.unlock ();
+  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size);
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
   for (int c = cmin; c <= cmax; c++)
     {
       const double contrast = 0.8;
@@ -1095,9 +1066,9 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
           observed[y * screen::size + x] = 0.5 + (scr.mult[y][x][c] - 0.5) * contrast;
 
       /* First blur the screen.  */
-      fftw_execute_dft_r2c (plan_2d, observed, in);
+      plan_2d.execute_r2c (observed, in);
       scale_by_weights (in, weights);
-      fftw_execute_dft_c2r (plan_2d_inv, in, observed);
+      plan_2d_inv.execute_c2r (in, observed);
 
       /* Now start sharpening back.  */
       memcpy (estimate, observed, sizeof (estimate));
@@ -1106,9 +1077,9 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
       for (int i = 0; i < iterations; i++)
 	{
 	  /* Step A: Re-blur the current estimate.  */
-	  fftw_execute_dft_r2c (plan_2d, estimate, in);
+	  plan_2d.execute_r2c (estimate, in);
 	  scale_by_weights (in, weights);
-	  fftw_execute_dft_c2r (plan_2d_inv, in, ratios);
+	  plan_2d_inv.execute_c2r (in, ratios);
 
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
 	  double epsilon = 1e-12 /*1e-7 for float*/;
@@ -1138,7 +1109,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	     estimate = estimate * result_of_Step_C  */
 
 	  /* Do FFT of ratio */
-          fftw_execute_dft_r2c (plan_2d, ratios, in);
+          plan_2d.execute_r2c (ratios, in);
 	  /* Scale by complex conjugate of blur kernel  */
 	  for (int i = 0; i < fft_size * screen::size; i++)
 	    {
@@ -1148,7 +1119,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	      in[i][1] = imag (v * w);
 	    }
 	  /* Now initialize ratios  */
-	  fftw_execute_dft_c2r (plan_2d_inv, in, ratios);
+	  plan_2d_inv.execute_c2r (in, ratios);
 
 	  /* estimate = estimate * result_of_Step_C  */
 	  for (int i = 0; i < screen::size * screen::size; i++)
@@ -1161,10 +1132,6 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	  out_scr.mult[y][x][c]
 	     = 0.5 + (estimate [y * screen::size + x] - 0.5) * (1 / contrast);
     }
-  fft_lock.lock ();
-  fftw_destroy_plan (plan_2d);
-  fftw_destroy_plan (plan_2d_inv);
-  fft_lock.unlock ();
 }
 
 template <typename T>
@@ -1266,18 +1233,12 @@ point_spread_fft (fft_2d &weights,
 {
   double data[screen::size * screen::size];
   compute_point_spread (data, point_spread, scale);
-  fft_lock.lock ();
-  fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, data,
-                                            weights, FFTW_ESTIMATE);
-  fft_lock.unlock ();
+  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
 #if 0
   for (int x = 0; x < screen::size; x++)
     printf ("%i %f\n", x, data[x]);
 #endif
-  fftw_execute (plan_2d);
-  fft_lock.lock ();
-  fftw_destroy_plan (plan_2d);
-  fft_lock.unlock ();
+  plan_2d.execute_r2c (data, weights);
 }
 
 /* Compute average error between the two implementations.  */
@@ -1838,14 +1799,8 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			return;
 		    }
 		}
-	      fft_lock.lock ();
-	      fftw_plan plan_2d = fftw_plan_dft_r2c_2d (screen::size, screen::size, wrapped_psf.data (), fft,
-							FFTW_ESTIMATE);
-	      fft_lock.unlock ();
-	      fftw_execute (plan_2d);
-	      fft_lock.lock ();
-	      fftw_destroy_plan (plan_2d);
-	      fft_lock.unlock ();
+	      auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size);
+	      plan_2d.execute_r2c (wrapped_psf.data (), fft);
 	      //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
 	      for (int x = 0; x < fft_size * screen::size; x++)
 		{

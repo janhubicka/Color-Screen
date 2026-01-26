@@ -236,20 +236,11 @@ deconvolution::init (int thread_id)
   m_data[thread_id].initialized = true;
   if (!m_plans_exists)
     {
-      fft_lock.lock ();
-      if (m_plans_exists)
-        {
-          fft_lock.unlock ();
-          return;
-        }
-      m_plan_2d_inv = fftw_plan_dft_c2r_2d (
-          m_enlarged_tile_size, m_enlarged_tile_size, m_data[thread_id].in.get (),
-          m_data[thread_id].enlarged_tile->data (), FFTW_ESTIMATE);
-      m_plan_2d
-          = fftw_plan_dft_r2c_2d (m_enlarged_tile_size, m_enlarged_tile_size,
-                                  m_data[thread_id].enlarged_tile->data (),
-                                  m_data[thread_id].in.get (), FFTW_ESTIMATE);
-      fft_lock.unlock ();
+      m_plan_2d_inv = fft_plan_c2r_2d<double> (m_enlarged_tile_size,
+                                               m_enlarged_tile_size);
+      m_plan_2d = fft_plan_r2c_2d<double> (m_enlarged_tile_size,
+                                           m_enlarged_tile_size);
+      m_plans_exists = true;
     }
 }
 
@@ -384,8 +375,7 @@ deconvolution::process_tile (int thread_id)
   if (!m_richardson_lucy)
     {
       fftw_complex *in = m_data[thread_id].in.get ();
-      fftw_execute_dft_r2c (m_plan_2d,
-                            m_data[thread_id].enlarged_tile->data (), in);
+      m_plan_2d.execute_r2c (m_data[thread_id].enlarged_tile->data (), in);
 #pragma omp simd
       for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
         {
@@ -394,8 +384,7 @@ deconvolution::process_tile (int thread_id)
           in[i][0] = real (v * w);
           in[i][1] = imag (v * w);
         }
-      fftw_execute_dft_c2r (m_plan_2d_inv, in,
-                            m_data[thread_id].enlarged_tile->data ());
+      m_plan_2d_inv.execute_c2r (in, m_data[thread_id].enlarged_tile->data ());
     }
   else
     {
@@ -412,7 +401,7 @@ deconvolution::process_tile (int thread_id)
           /* Step A: Re-blur the current estimate.  */
 
           /* Blur current estimate to IN.  */
-          fftw_execute_dft_r2c (m_plan_2d, estimate.data (), in);
+          m_plan_2d.execute_r2c (estimate.data (), in);
 #pragma omp simd
           for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
             {
@@ -421,7 +410,7 @@ deconvolution::process_tile (int thread_id)
               in[i][0] = real (v * w);
               in[i][1] = imag (v * w);
             }
-          fftw_execute_dft_c2r (m_plan_2d_inv, in, ratios.data ());
+          m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
           /* Step B: ratio = observed / (re-blurred + epsilon)  */
 
@@ -460,7 +449,7 @@ deconvolution::process_tile (int thread_id)
              estimate = estimate * result_of_Step_C  */
 
           /* Do FFT of ratio */
-          fftw_execute_dft_r2c (m_plan_2d, ratios.data (), in);
+          m_plan_2d.execute_r2c (ratios.data (), in);
           /* Scale by complex conjugate of blur kernel  */
 #pragma omp simd
           for (int i = 0; i < m_fft_size * m_enlarged_tile_size; i++)
@@ -474,7 +463,7 @@ deconvolution::process_tile (int thread_id)
               in[i][1] = imag (v * w);
             }
           /* Now initialize ratios  */
-          fftw_execute_dft_c2r (m_plan_2d_inv, in, ratios.data ());
+          m_plan_2d_inv.execute_c2r (in, ratios.data ());
 
           /* estimate = estimate * result_of_Step_C  */
 #pragma omp simd
@@ -538,12 +527,5 @@ deconvolution::process_tile (int thread_id)
 
 deconvolution::~deconvolution ()
 {
-  fft_lock.lock ();
-  if (m_plans_exists)
-    {
-      fftw_destroy_plan (m_plan_2d);
-      fftw_destroy_plan (m_plan_2d_inv);
-    }
-  fft_lock.unlock ();
 }
 }

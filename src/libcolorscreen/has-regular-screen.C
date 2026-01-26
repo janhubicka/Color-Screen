@@ -1,5 +1,5 @@
 #include <array>
-#include "fftw3.h"
+#include "fft.h"
 #include "icc.h"
 #include "include/colorscreen.h"
 #include "include/tiff-writer.h"
@@ -202,7 +202,7 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
 
   tile_t tile;
   fft_2d fft_tile;
-  fftw_plan plan_2d;
+  fft_plan<double> plan_2d (NULL);
   render_parameters rparams;
   std::vector <summary> sum (params.ntilesy * params.ntilesx);
 
@@ -212,14 +212,14 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
     rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
   render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
-  plan_2d = fftw_plan_dft_r2c_2d (tile_width, tile_height, tile.data (), fft_tile.data (), FFTW_ESTIMATE);
+  plan_2d = fft_plan_r2c_2d<double> (tile_width, tile_height);
   if (progress)
     progress->set_task ("analyzing samples", params.ntilesy * params.ntilesx);
   for (int y = 0; y < params.ntilesy; y++)
     for (int x = 0; x < params.ntilesx; x++)
       {
 	collect_tile (tile, scan, render, scan.width * (x + 0.5) / params.ntilesx, scan.height * (y + 0.5) / params.ntilesy);
-        fftw_execute (plan_2d);
+        plan_2d.execute_r2c (tile.data (), fft_tile.data ());
 	if (params.save_tiles && !save_tile (tile, params.tile_base, x, y, &ret.error))
 	  return ret;
 	if (params.save_fft && !save_fft_tile (fft_tile, params.fft_base, x, y, params.min_period, params.max_period, &ret.error))

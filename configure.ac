@@ -43,6 +43,8 @@ if test -n "$with_fftw3"; then echo "option: with_fftw3 $with_fftw3"; fi
 if test "$with_fftw3" != "no"; then
 AC_SEARCH_LIBS(fftw_plan_null_destroy,[fftw3],[check_fftw3_h="fftw3.h"],
  [ echo " * * * try option --with-fftw3=PATH"])
+AC_SEARCH_LIBS(fftwf_plan_dft_r2c_1d,[fftw3f],[check_fftw3f_h="fftw3.h"],
+ [ echo " * * * try option --with-fftw3=PATH"])
 fi
 
 AC_ARG_WITH(libtiff,

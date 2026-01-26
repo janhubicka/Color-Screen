@@ -113,7 +113,7 @@ private:
 
   std::vector<deconvolution_data_t,fft_allocator<deconvolution_data_t>> m_lanczos_kernels;
 
-  fftw_plan m_plan_2d_inv, m_plan_2d;
+  fft_plan<double> m_plan_2d_inv, m_plan_2d;
   bool m_plans_exists;
 
   /* Plans used for FFT calclation.  */

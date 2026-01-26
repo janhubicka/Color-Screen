@@ -5,6 +5,8 @@
 #include <mutex>
 #include <memory>
 #include <vector>
+#include <map>
+#include <tuple>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
@@ -46,6 +48,10 @@ template <typename T> struct fft_complex_t;
 template <> struct fft_complex_t<double> { typedef fftw_complex type; };
 template <> struct fft_complex_t<float> { typedef fftwf_complex type; };
 
+template <typename T> struct fft_plan_t;
+template <> struct fft_plan_t<double> { typedef fftw_plan type; };
+template <> struct fft_plan_t<float> { typedef fftwf_plan type; };
+
 template <typename T> struct fft_deleter
 {
   void operator() (T *p) const
@@ -68,6 +74,61 @@ fft_alloc_complex (size_t n)
   fft_allocator<typename fft_complex_t<T>::type> alloc;
   return fft_unique_ptr<T> (alloc.allocate (n));
 }
+
+template <typename T>
+class fft_plan
+{
+  typename fft_plan_t<T>::type m_plan;
+public:
+  fft_plan () : m_plan (NULL) {}
+  fft_plan (typename fft_plan_t<T>::type p) : m_plan (p) {}
+  operator typename fft_plan_t<T>::type () { return m_plan; }
+
+  /* Execute real-to-complex DFT (1D or 2D)  */
+  void execute_r2c (T *in, typename fft_complex_t<T>::type *out)
+  {
+    if (!m_plan) return;
+    if constexpr (std::is_same_v<T, double>)
+      fftw_execute_dft_r2c (m_plan, in, out);
+    else
+      fftwf_execute_dft_r2c (m_plan, in, out);
+  }
+
+  /* Execute complex-to-real DFT (1D or 2D)  */
+  void execute_c2r (typename fft_complex_t<T>::type *in, T *out)
+  {
+    if (!m_plan) return;
+    if constexpr (std::is_same_v<T, double>)
+      fftw_execute_dft_c2r (m_plan, in, out);
+    else
+      fftwf_execute_dft_c2r (m_plan, in, out);
+  }
+
+  /* Execute real-to-real transform (1D or 2D)  */
+  void execute_r2r (T *in, T *out)
+  {
+    if (!m_plan) return;
+    if constexpr (std::is_same_v<T, double>)
+      fftw_execute_r2r (m_plan, in, out);
+    else
+      fftwf_execute_r2r (m_plan, in, out);
+  }
+};
+
+/* Factory functions for creating/retrieving plans.
+   These handle locking and caching.  */
+
+template <typename T>
+fft_plan<T> fft_plan_r2c_2d (int n0, int n1, unsigned flags = FFTW_MEASURE);
+
+template <typename T>
+fft_plan<T> fft_plan_c2r_2d (int n0, int n1, unsigned flags = FFTW_MEASURE);
+
+template <typename T>
+fft_plan<T> fft_plan_r2c_1d (int n, unsigned flags = FFTW_MEASURE);
+
+template <typename T>
+fft_plan<T> fft_plan_r2r_1d (int n, fftw_r2r_kind kind, unsigned flags = FFTW_MEASURE);
 
 }
 #endif

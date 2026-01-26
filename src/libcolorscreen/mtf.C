@@ -600,20 +600,15 @@ mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
   for (int i = 0; i < size; i++)
     mtf_half[i] = get_mtf (i * scale);
 
-  fft_lock.lock ();
-  fftw_plan plan = fftw_plan_r2r_1d (size, mtf_half.data (), lsf.data (),
-                                     FFTW_REDFT00, FFTW_ESTIMATE);
-  fft_lock.unlock ();
-  fftw_execute (plan);
+  auto plan = fft_plan_r2r_1d<double> (size, FFTW_REDFT00);
+  plan.execute_r2r (mtf_half.data (), lsf.data ());
+
   double sum = 0;
   for (int i = 0; i < size; i++)
     sum += lsf[i];
   double fin_scale = 1.0 / sum;
   for (int i = 0; i < size; i++)
     lsf[i] *= fin_scale;
-  fft_lock.lock ();
-  fftw_destroy_plan (plan);
-  fft_lock.unlock ();
 }
 
 std::vector<double, fft_allocator<double>>
@@ -641,14 +636,9 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
           }
       }
   std::vector<double, fft_allocator<double>> psf_data (psf_size * psf_size);
-  fft_lock.lock ();
-  fftw_plan plan = fftw_plan_dft_c2r_2d (psf_size, psf_size, mtf_kernel.get (),
-                                         psf_data.data (), FFTW_ESTIMATE);
-  fft_lock.unlock ();
-  fftw_execute (plan);
-  fft_lock.lock ();
-  fftw_destroy_plan (plan);
-  fft_lock.unlock ();
+  auto plan = fft_plan_c2r_2d<double> (psf_size, psf_size);
+  plan.execute_c2r (mtf_kernel.get (), psf_data.data ());
+
   return psf_data;
 }
 
