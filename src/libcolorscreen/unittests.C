@@ -467,7 +467,7 @@ test_render_linearity ()
   render_parameters rparam;
   image_data img;
   img.set_dimensions (65536, 1, true, false);
-  for (int i = 0; i < 65535; i++)
+  for (int i = 0; i < 65536; i++)
     {
       img.rgbdata[0][i].r=i;
       img.rgbdata[0][i].g=i;
@@ -541,7 +541,7 @@ main ()
   report ("matrix tests", true);
   test_color ();
   report ("color tests", true);
-  report ("render lineary tests", test_render_linearity ());
+  report ("render linearity tests", test_render_linearity ());
   report ("screen blur tests", test_screen_blur ());
   report ("homography tests", test_homography (false, false, 0.000001));
   report ("lens correction tests", test_homography (true, false, 0.15));
