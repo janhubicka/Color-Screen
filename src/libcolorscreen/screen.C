@@ -14,6 +14,7 @@
 #include <memory>
 namespace colorscreen
 {
+typedef float screen_fft_t;
 /* Produce empty screen.  */
 void
 screen::empty ()
@@ -234,8 +235,8 @@ screen::paget_finlay ()
         add[yy][xx][2] = 0;
       }
   if (0)
-    printf ("screen ratios: %f %f %f\n", r / (double)(size * size),
-            g / (double)(size * size), b / (double)(size * size));
+    printf ("screen ratios: %f %f %f\n", r / (screen_fft_t)(size * size),
+            g / (screen_fft_t)(size * size), b / (screen_fft_t)(size * size));
 }
 
 void
@@ -920,40 +921,50 @@ screen::initialize_with_gaussian_blur (screen &scr, coord_t blur_radius,
    the FFT result is again a real function (all complex values should be 0 up
    to roundoff errors).  */
 static constexpr const int fft_size = screen::size / 2 + 1;
-typedef fftw_complex fft_1d[fft_size];
-typedef fftw_complex fft_2d[screen::size * fft_size];
 
-static int
-gaussian_blur_mtf_fast (coord_t blur_radius, fft_complex_t<double>::type *out)
+static void
+gaussian_blur_mtf_fast (coord_t blur_radius, fft_complex_t<screen_fft_t>::type *out)
 {
+#if 1
   luminosity_t *cmatrix;
   // blur_radius = 0;
   int clen = fir_blur::gen_convolve_matrix (blur_radius, &cmatrix);
   int half_clen = clen / 2;
   // luminosity_t nrm = std::sqrt(screen::size);
-  std::vector<double, fft_allocator<double>> in (screen::size, 0.0);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> in (screen::size, 0);
+  auto plan = fft_plan_r2c_1d<screen_fft_t> (screen::size, NULL /* Do not overwtie */, out);
+  // be sure that after plan initialization value is 0
   for (int i = 0; i < clen; i++)
     {
       int idx = (i - half_clen /*+ screen::size / 4*/) & (screen::size - 1);
       in[idx] += cmatrix[i] /** nrm*/;
     }
-  auto plan = fft_plan_r2c_1d<double> (screen::size, in.data (), out);
   plan.execute_r2c (in.data (), out);
   // for (int i = 0; i < fft_size; i++)
   // printf ("%i: %f %f\n", i, out[i][0], out[i][1]);
   free (cmatrix);
-  return clen;
+#else
+  /* This should also work but have problem with wrapping.  */
+  for (int i = 0; i < fft_size; i++)
+    {
+      screen_fft_t exponent = constant_factor * (i * i);
+      printf (" %f:", out[i][0]);
+      out[i][0] = std::exp (exponent);
+      out[i][0] = std::exp (-2.0 * M_PI * M_PI * blur_radius * blur_radius * freq * freq);
+    }
+  printf ("\n");
+#endif
 }
 
 static void
 initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
-                             const fft_complex_t<double>::type *weights, int cmin, int cmax)
+                             const fft_complex_t<screen_fft_t>::type *weights, int cmin, int cmax)
 {
-  auto in = fft_alloc_complex<double> (screen::size * fft_size);
-  std::vector<double, fft_allocator<double>> out (screen::size * screen::size);
+  auto in = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> out (screen::size * screen::size);
 
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in.get (), out.data ());
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out.data (), in.get ());
+  auto plan_2d_inv = fft_plan_c2r_2d<screen_fft_t> (screen::size, screen::size, in.get (), out.data ());
+  auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, out.data (), in.get ());
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -1003,7 +1014,7 @@ initialize_with_1D_fft_fast (screen &out_scr, const screen &scr,
 }
 
 static void
-scale_by_weights (fft_complex_t<double>::type *in, const fft_2d weights)
+scale_by_weights (fft_complex_t<screen_fft_t>::type *in, const fft_complex_t<screen_fft_t>::type *weights)
 {
   for (int i = 0; i < fft_size * screen::size; i++)
     {
@@ -1018,12 +1029,12 @@ scale_by_weights (fft_complex_t<double>::type *in, const fft_2d weights)
 
 static void
 initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
-                             const fft_2d weights, int cmin, int cmax)
+                             const fft_complex_t<screen_fft_t>::type *weights, int cmin, int cmax)
 {
-  auto in = fft_alloc_complex<double> (screen::size * fft_size);
-  std::vector<double, fft_allocator<double>> out (screen::size * screen::size);
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in.get (), out.data ());
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, out.data (), in.get ());
+  auto in = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> out (screen::size * screen::size);
+  auto plan_2d_inv = fft_plan_c2r_2d<screen_fft_t> (screen::size, screen::size, in.get (), out.data ());
+  auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, out.data (), in.get ());
   for (int c = cmin; c <= cmax; c++)
     {
       for (int y = 0; y < screen::size; y++)
@@ -1046,18 +1057,18 @@ initialize_with_2D_fft_fast (screen &out_scr, const screen &scr,
 
 static void
 initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
-				 const fft_2d weights, int cmin, int cmax,
-				 int iterations, double sigma)
+				 const fft_complex_t<screen_fft_t>::type *weights, int cmin, int cmax,
+				 int iterations, screen_fft_t sigma)
 {
-  auto in = fft_alloc_complex<double> (screen::size * fft_size);
-  std::vector<double, fft_allocator<double>> estimate (screen::size * screen::size);
-  std::vector<double, fft_allocator<double>> observed (screen::size * screen::size);
-  std::vector<double, fft_allocator<double>> ratios (screen::size * screen::size);
-  auto plan_2d_inv = fft_plan_c2r_2d<double> (screen::size, screen::size, in.get (), observed.data ());
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, observed.data (), in.get ());
+  auto in = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> estimate (screen::size * screen::size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> observed (screen::size * screen::size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> ratios (screen::size * screen::size);
+  auto plan_2d_inv = fft_plan_c2r_2d<screen_fft_t> (screen::size, screen::size, in.get (), observed.data ());
+  auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, observed.data (), in.get ());
   for (int c = cmin; c <= cmax; c++)
     {
-      const double contrast = 0.8;
+      const screen_fft_t contrast = 0.8;
       /* Be sure that observed has no zeros by reducing contrast.  */
       for (int y = 0; y < screen::size; y++)
         for (int x = 0; x < screen::size; x++)
@@ -1069,7 +1080,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
       plan_2d_inv.execute_c2r (in.get (), observed.data ());
 
       /* Now start sharpening back.  */
-      memcpy (estimate.data (), observed.data (), estimate.size () * sizeof (double));
+      memcpy (estimate.data (), observed.data (), estimate.size () * sizeof (screen_fft_t));
 
       /* TODO: one FFT can be saved first iteration.  */
       for (int i = 0; i < iterations; i++)
@@ -1077,20 +1088,16 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	  /* Step A: Re-blur the current estimate.  */
 	  plan_2d.execute_r2c (estimate.data (), in.get ());
 	  scale_by_weights (in.get (), weights);
-          /* We used plan_2d_inv with observed.data(), we need it with ratios.data().
-             But wait, plan_2d_inv was created with in.get() and observed.data().
-             Since caching is used, we can just create a new plan here and it will be cached.  */
-          auto plan_ratios = fft_plan_c2r_2d<double> (screen::size, screen::size, in.get (), ratios.data ());
-	  plan_ratios.execute_c2r (in.get (), ratios.data ());
+	  plan_2d_inv.execute_c2r (in.get (), ratios.data ());
 
 	  /* Step B: ratio = observed / (re-blurred + epsilon)  */
-	  double epsilon = 1e-12 /*1e-7 for float*/;
-	  double scale = 1;
+	  screen_fft_t epsilon = 1e-12 /*1e-7 for screen_fft_t*/;
+	  screen_fft_t scale = 1;
 	  if (sigma > 0)
 	    for (int j = 0; j < screen::size * screen::size; j++)
 	      {
-		double reblurred = ratios[j] * scale;
-		double diff = observed[j] - reblurred;
+		screen_fft_t reblurred = ratios[j] * scale;
+		screen_fft_t diff = observed[j] - reblurred;
 		if (reblurred > epsilon && std::abs (diff) > 2 * sigma)
 		  ratios[j] = 1.0 + (reblurred * diff) / (reblurred * reblurred + sigma * sigma);
 		else
@@ -1099,7 +1106,7 @@ initialize_with_richardson_lucy (screen &out_scr, const screen &scr,
 	  else
 	    for (int j = 0; j < screen::size * screen::size; j++)
 	      {
-		double reblurred = ratios[j] * scale;
+		screen_fft_t reblurred = ratios[j] * scale;
 		if (reblurred > epsilon)
 		  ratios[j] = observed[j] / reblurred;
 		else
@@ -1228,13 +1235,13 @@ compute_point_spread (T *data,
 }
 
 static void
-point_spread_fft (fft_complex_t<double>::type *weights,
+point_spread_fft (fft_complex_t<screen_fft_t>::type *weights,
                   precomputed_function<luminosity_t> &point_spread,
                   luminosity_t scale)
 {
-  std::vector<double, fft_allocator<double>> data (screen::size * screen::size);
+  std::vector<screen_fft_t, fft_allocator<screen_fft_t>> data (screen::size * screen::size);
   compute_point_spread (data.data (), point_spread, scale);
-  auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, data.data (), weights);
+  auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, data.data (), NULL/* Do not overwrite*/);
 #if 0
   for (int x = 0; x < screen::size; x++)
     printf ("%i %f\n", x, data[x]);
@@ -1309,7 +1316,7 @@ initialize_with_gaussian_blur_fft2d (screen &dst, const screen &scr,
     assert ((fir_blur::gaussian_func_1d (i, radius) - point_spread.apply (i * (1 / (luminosity_t)screen::size))) < 0.000000001);
   }
 #endif
-  auto mtf = fft_alloc_complex<double> (screen::size * fft_size);
+  auto mtf = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   point_spread_fft (mtf.get (), point_spread, 1);
   initialize_with_2D_fft_fast (dst, scr, mtf.get (), cmin, cmax);
 }
@@ -1378,7 +1385,7 @@ screen::initialize_with_gaussian_blur (screen &scr, rgbdata blur_radius,
 #else
       else
         {
-          auto weights = fft_alloc_complex<double> (fft_size);
+          auto weights = fft_alloc_complex<screen_fft_t> (fft_size);
           gaussian_blur_mtf_fast (blur_radius[c] * screen::size, weights.get ());
           initialize_with_1D_fft_fast (*this, scr, weights.get (), c, all ? 2 : c);
         }
@@ -1681,7 +1688,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 					    sharpen_parameters *sharpen[3],
 					    bool anticipate_sharpening)
 {
-  auto fft = fft_alloc_complex<double> (screen::size * fft_size);
+  auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   bool all = *sharpen[0] == *sharpen[1] && *sharpen[0] == *sharpen[2];
 #if 0
   printf ("Initial patch proportions:");
@@ -1696,9 +1703,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
       if (!c || !(*sharpen[c] == *sharpen[c - 1]))
         {
           luminosity_t step = sharpen[c]->scanner_mtf_scale;
-          luminosity_t data_scale = 1.0 / (screen::size * screen::size);
+          screen_fft_t data_scale = 1.0 / (screen::size * screen::size);
 	  luminosity_t snr = sharpen[c]->scanner_snr;
-          luminosity_t k_const = snr > 0 ? 1.0f / snr : 0;
+          screen_fft_t k_const = snr > 0 ? 1.0f / snr : 0;
 	  mtf::mtf_cache_t::cached_ptr mtf = mtf::get_mtf (sharpen[c]->scanner_mtf, NULL);
 	  mtf->precompute ();
 	  int this_psf_size = mtf->psf_size (sharpen[c]->scanner_mtf_scale * screen::size);
@@ -1717,9 +1724,9 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		for (int x = 0; x < fft_size; x++)
 		  {
 		    std::complex ker (
-			std::clamp (mtf->get_mtf (x, y, step),
-				    (luminosity_t)0, (luminosity_t)1),
-			(luminosity_t)0);
+			std::clamp ((screen_fft_t)mtf->get_mtf (x, y, step),
+				    (screen_fft_t)0, (screen_fft_t)1),
+			(screen_fft_t)0);
 		    if (mode == sharpen_parameters::wiener_deconvolution)
 		      ker = ker * (conj (ker) / (std::norm (ker) + k_const));
 		    else if (mode == sharpen_parameters::blur_deconvolution)
@@ -1737,7 +1744,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	  /* Large PSF: Compute its periodic form and do FFT.  */
 	  else
 	    {
-	      std::vector <double> wrapped_psf (screen::size * screen::size, 0.0);
+	      std::vector <screen_fft_t> wrapped_psf (screen::size * screen::size, 0.0);
 	      //printf ("This psf size %i\n", this_psf_size);
 
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
@@ -1745,7 +1752,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 	      for (int yy = 0; yy < screen::size; yy++)
 	        for (int xx = 0; xx < screen::size; xx++)
 		  {
-		    double sum = 0.0;
+		    screen_fft_t sum = 0.0;
 		    for (int y = yy; y < this_psf_size; y += screen::size)
 		      for (int x = xx; x < this_psf_size; x += screen::size)
 			sum += mtf->get_psf (x, y, (step * screen::size));
@@ -1764,10 +1771,10 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		    
 		    wrapped_psf[yy * screen::size + xx] = sum;
 		  }
-	      double sum = 0;
+	      screen_fft_t sum = 0;
 	      for (int x = 0; x < screen::size * screen::size; x++)
 		  sum += wrapped_psf [x];
-	      double sum_inv = 1 / sum;
+	      screen_fft_t sum_inv = 1 / sum;
 	      if (snr == 0)
 		sum_inv /= screen::size * screen::size;
 	      for (int x = 0; x < screen::size * screen::size; x++)
@@ -1784,7 +1791,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 		  tiff_writer out (p, &error);
 		  if (error)
 		    return;
-		  double max = 0;
+		  screen_fft_t max = 0;
 		  for (int x = 0; x < screen::size * screen::size; x++)
 		    max = std::max (max, wrapped_psf[x]);
 		  for (int y = 0; y < screen::size * tiles; y++)
@@ -1800,7 +1807,7 @@ screen::initialize_with_sharpen_parameters (screen &scr,
 			return;
 		    }
 		}
-	      auto plan_2d = fft_plan_r2c_2d<double> (screen::size, screen::size, wrapped_psf.data (), fft.get ());
+	      auto plan_2d = fft_plan_r2c_2d<screen_fft_t> (screen::size, screen::size, NULL /* Do not overwrite */, fft.get ());
 	      plan_2d.execute_r2c (wrapped_psf.data (), fft.get ());
 	      //printf ("screen snr %f mtf0 %f %f", snr, fft[0][0], fft[0][1]);
 	      for (int x = 0; x < fft_size * screen::size; x++)
@@ -1831,7 +1838,7 @@ screen::initialize_with_point_spread (
     screen &scr, precomputed_function<luminosity_t> *point_spread[3],
     rgbdata scale)
 {
-  auto mtf = fft_alloc_complex<double> (screen::size * fft_size);
+  auto mtf = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
   for (int c = 0; c < 3; c++)
     {
       point_spread_fft (mtf.get (), *(point_spread[c]), scale[c]);
@@ -1868,7 +1875,7 @@ screen::initialize_with_fft_blur (screen &scr, rgbdata blur_radius)
                  && (blur_radius.red == blur_radius.blue);
       for (int c = 0; c < 3; c++)
         {
-          auto weights = fft_alloc_complex<double> (fft_size);
+          auto weights = fft_alloc_complex<screen_fft_t> (fft_size);
           /* blur_radius is blur in the screen dimensions.
              step should be 1 / size, but blur_radius of 1 corresponds to size
              so this evens out. Compensate so the blur is approximately same as

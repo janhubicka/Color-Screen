@@ -594,13 +594,13 @@ mtf::compute_lsf (std::vector<double, fft_allocator<double>> &lsf,
       size--;
     }
   std::vector<double, fft_allocator<double>> mtf_half (size);
+  auto plan = fft_plan_r2r_1d<double> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
   double scale = 1 / (size * subsample * 2);
 
   /* Mirror mtf.  */
   for (int i = 0; i < size; i++)
     mtf_half[i] = get_mtf (i * scale);
 
-  auto plan = fft_plan_r2r_1d<double> (size, FFTW_REDFT00, mtf_half.data (), lsf.data ());
   plan.execute_r2r (mtf_half.data (), lsf.data ());
 
   double sum = 0;
@@ -619,6 +619,8 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
   const double psf_step = 1 / (psf_size * subscale);
   // Use unique_ptr with FFTW allocator for fftw_complex array
   auto mtf_kernel = fft_alloc_complex<double> (psf_size * fft_size);
+  std::vector<double, fft_allocator<double>> psf_data (psf_size * psf_size);
+  auto plan = fft_plan_c2r_2d<double> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
 #pragma omp parallel for default(none) schedule(dynamic) collapse(2)          \
     shared(fft_size, psf_step, mtf_kernel, psf_size)
   for (int y = 0; y < fft_size; y++)
@@ -635,8 +637,6 @@ mtf::compute_2d_psf (int psf_size, luminosity_t subscale,
             mtf_kernel.get ()[(psf_size - y) * fft_size + x][1] = imag (ker);
           }
       }
-  std::vector<double, fft_allocator<double>> psf_data (psf_size * psf_size);
-  auto plan = fft_plan_c2r_2d<double> (psf_size, psf_size, mtf_kernel.get (), psf_data.data ());
   plan.execute_c2r (mtf_kernel.get (), psf_data.data ());
 
   return psf_data;

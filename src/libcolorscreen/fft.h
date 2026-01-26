@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include <tuple>
+#include <cstdlib>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
@@ -90,8 +91,10 @@ public:
     if (!m_plan) return;
     if constexpr (std::is_same_v<T, double>)
       fftw_execute_dft_r2c (m_plan, in, out);
-    else
+    else if constexpr (std::is_same_v<T, float>)
       fftwf_execute_dft_r2c (m_plan, in, out);
+    else
+      abort ();
   }
 
   /* Execute complex-to-real DFT (1D or 2D)  */
@@ -100,8 +103,10 @@ public:
     if (!m_plan) return;
     if constexpr (std::is_same_v<T, double>)
       fftw_execute_dft_c2r (m_plan, in, out);
-    else
+    else if constexpr (std::is_same_v<T, float>)
       fftwf_execute_dft_c2r (m_plan, in, out);
+    else
+      abort ();
   }
 
   /* Execute real-to-real transform (1D or 2D)  */
@@ -110,8 +115,10 @@ public:
     if (!m_plan) return;
     if constexpr (std::is_same_v<T, double>)
       fftw_execute_r2r (m_plan, in, out);
-    else
+    else if constexpr (std::is_same_v<T, float>)
       fftwf_execute_r2r (m_plan, in, out);
+    else
+      abort ();
   }
 };
 
@@ -121,21 +128,21 @@ public:
 template <typename T>
 fft_plan<T> fft_plan_r2c_2d (int n0, int n1, T *in = NULL,
                               typename fft_complex_t<T>::type *out = NULL,
-                              unsigned flags = FFTW_MEASURE);
+                              unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
 fft_plan<T> fft_plan_c2r_2d (int n0, int n1,
                               typename fft_complex_t<T>::type *in = NULL,
-                              T *out = NULL, unsigned flags = FFTW_MEASURE);
+                              T *out = NULL, unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
 fft_plan<T> fft_plan_r2c_1d (int n, T *in = NULL,
                               typename fft_complex_t<T>::type *out = NULL,
-                              unsigned flags = FFTW_MEASURE);
+                              unsigned flags = FFTW_ESTIMATE);
 
 template <typename T>
 fft_plan<T> fft_plan_r2r_1d (int n, fftw_r2r_kind kind, T *in = NULL,
-                              T *out = NULL, unsigned flags = FFTW_MEASURE);
+                              T *out = NULL, unsigned flags = FFTW_ESTIMATE);
 
 }
 #endif

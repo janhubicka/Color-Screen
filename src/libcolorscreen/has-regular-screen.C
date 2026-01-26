@@ -202,7 +202,7 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
 
   tile_t tile (tile_width * tile_height);
   fft_2d_t fft_tile = fft_alloc_complex<double> (fft_size * tile_width);
-  fft_plan<double> plan_2d (NULL);
+  fft_plan<double> plan_2d = fft_plan_r2c_2d<double> (tile_width, tile_height, tile.data (), fft_tile.get ());
   render_parameters rparams;
   std::vector <summary> sum (params.ntilesy * params.ntilesx);
 
@@ -212,7 +212,6 @@ has_regular_screen (image_data &scan, const has_regular_screen_params &params, p
     rparams.gamma = scan.gamma;
   render render (scan, rparams, 256);
   render.precompute_all (true, false, (rgbdata){1.0/3, 1.0/3, 1.0/3}, progress);
-  plan_2d = fft_plan_r2c_2d<double> (tile_width, tile_height, tile.data (), fft_tile.get ());
   if (progress)
     progress->set_task ("analyzing samples", params.ntilesy * params.ntilesx);
   for (int y = 0; y < params.ntilesy; y++)

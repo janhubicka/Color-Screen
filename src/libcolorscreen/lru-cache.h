@@ -75,7 +75,8 @@ public:
     cache_entry *next;
     uint64_t id;
     uint64_t last_used;
-    int nuses; bool computing = false;
+    int nuses;
+    bool computing = false;
   } *entries;
 
   lru_cache (const char *n)
@@ -143,6 +144,8 @@ public:
           {
             while (e->computing)
               {
+		if (progress && e->computing)
+		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
                     == std::cv_status::timeout)
                   {
@@ -426,6 +429,8 @@ public:
           {
             while (e->computing)
               {
+		if (progress && e->computing)
+		  progress->wait ("waiting for other thread to finish computation");
                 if (cond.wait_for (guard, std::chrono::milliseconds (333))
                     == std::cv_status::timeout)
                   {
