@@ -99,6 +99,7 @@ jobs:
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - name: Verify application
       shell: msys2 {0}
+      if: matrix.suffix == ''
       run: |
         APP_BIN="/c/Color-Screen-install/bin/colorscreen-qt.exe"
         CLI_BIN="/c/Color-Screen-install/bin/colorscreen.exe"
@@ -122,7 +123,7 @@ jobs:
         
     - name: Upload GUI Screenshots
       uses: actions/upload-artifact@v4
-      if: always()
+      if: always() && matrix.suffix == ''
       with:
         name: gui_screenshots-${{matrix.sys}}${{matrix.suffix}}
         path: |
