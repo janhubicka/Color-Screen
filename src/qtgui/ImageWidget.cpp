@@ -1358,6 +1358,7 @@ void ImageWidget::requestRender()
 
 void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress)
 {
+    progress->set_task ("Preparing renderer", 1);
     if (!m_renderer) {
          m_renderQueue.reportFinished(reqId, false);
          return; 

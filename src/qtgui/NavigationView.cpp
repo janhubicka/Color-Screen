@@ -128,6 +128,7 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
 void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress) {
 //    qDebug() << "NavigationView::onTriggerRender reqId:" << reqId << " renderer:" << m_renderer << " scan:" << m_scan.get();
     
+    progress->set_task ("Preparing navigation renderer", 1);
     if (!m_renderer || !m_scan) {
 //        qDebug() << "NavigationView::onTriggerRender - missing renderer or scan";
         m_renderQueue.reportFinished(reqId, false);

@@ -144,7 +144,10 @@ QString TaskQueue::formatQueueState() const
 {
     QString state;
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
-        state += QString(" [%1: %2ms]").arg(it.key()).arg(it.value().startTime.elapsed());
+        const char *t;
+	float s;
+	it.value().progress->get_status (&t, &s);
+        state += QString(" [%1: %2ms %3 %4]").arg(it.key()).arg(it.value().startTime.elapsed()).arg(t).arg(s);
     }
     if (m_pendingReqId.has_value()) {
         state += QString(" [Pending: %1]").arg(m_pendingReqId.value());
